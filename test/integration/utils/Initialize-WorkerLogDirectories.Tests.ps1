@@ -55,7 +55,10 @@ Describe 'Initialize-WorkerLogDirectories' {
         (& stat -c '%a' $script:workerDir).Trim() | Should -Be '777'
     }
 
-    It 'throws an actionable error when a directory cannot be made writable' -Skip:(-not ($IsLinux -or $IsMacOS)) {
+    # Skipped for root as well as for Windows: uid 0 writes through the 0500 parent this test
+    # relies on, so the probe never fails and no exception is thrown. See the sibling
+    # Test-PathWritable test for the same guard.
+    It 'throws an actionable error when a directory cannot be made writable' -Skip:(-not ($IsLinux -or $IsMacOS) -or ((& id -u) -eq '0')) {
         # Mirror the real failure: the directories already exist (as they would after a
         # non-runner stack-up) but the parent is not writable by the current user. We cannot
         # reproduce true root-ownership without sudo, so a 0500 parent stands in; it exercises
@@ -84,7 +87,10 @@ Describe 'Test-PathWritable' {
         Test-PathWritable -Path $script:tempDir | Should -BeTrue
     }
 
-    It 'returns false for a non-writable directory' -Skip:(-not ($IsLinux -or $IsMacOS)) {
+    # Also skipped for root, which bypasses the permission bits entirely: chmod 0500 does not
+    # stop uid 0 writing, so the assertion is not merely untestable there but actively wrong.
+    # The cloud sandbox runs as root; CI and the devcontainer do not.
+    It 'returns false for a non-writable directory' -Skip:(-not ($IsLinux -or $IsMacOS) -or ((& id -u) -eq '0')) {
         & chmod 0500 $script:tempDir 2>$null
         Test-PathWritable -Path $script:tempDir | Should -BeFalse
     }
