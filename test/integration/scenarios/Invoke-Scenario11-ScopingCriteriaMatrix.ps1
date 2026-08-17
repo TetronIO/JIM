@@ -717,3 +717,14 @@ Write-Host "  Result: $(if ($overallPass) { 'PASS' } else { 'FAIL' })" -Foregrou
 if (-not $overallPass) {
     throw "Scenario 11 failed: $cellFail cell(s) and $roundTripFail round-trip case(s) did not match expected results."
 }
+
+# The runner reads this rather than $LASTEXITCODE, which a scenario that returns instead of
+# exiting cannot set; without it the verdict would be whatever the last native command left
+# behind. See utils/Invoke-IntegrationScenario.ps1 and #1382.
+return @{
+    Scenario  = "Scoping Criteria Matrix"
+    Tier      = $activeTier
+    Cells     = $cellPass
+    RoundTrip = $roundTripPass
+    Success   = $overallPass
+}
