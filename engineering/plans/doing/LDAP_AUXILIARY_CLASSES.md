@@ -85,7 +85,35 @@ TDD throughout: each phase's tests are written red-first. AD-path code (`GetSche
 
 ### Phase 9: Integration testing
 
-- New OpenLDAP-backed scenario via `Run-IntegrationTests.ps1` (reusing the existing OpenLDAP container infrastructure, cf. Scenario 8): merge selection > import aux attributes > export flows add the class per entry (delta convergence) > aux-typed provisioning with carrier > full-scan discovery run end-to-end.
+New OpenLDAP-backed scenario via `Run-IntegrationTests.ps1` (reusing the existing OpenLDAP container infrastructure, cf. Scenario 8): merge selection > import aux attributes > export flows add the class per entry (delta convergence) > aux-typed provisioning with carrier > full-scan discovery run end-to-end.
+
+**This phase must be authored in the devcontainer, against a running stack.** Every assertion below depends on what the test directory actually serves, and the phase starts by changing the image that serves it. Written from the Windows host it would be unverifiable in a way the earlier phases were not: those had unit coverage standing behind them, and an integration scenario has nothing behind it but the run.
+
+#### 9a. Test directory schema (prerequisite; changes the shared image)
+
+`test/integration/docker/openldap/scripts/01-add-second-suffix.sh` already loads a `cn=jim-extensions` schema block on the `1.3.6.1.4.1.99999` test arc. Add to it:
+
+- a **JIM-owned auxiliary class**, so the scenario does not depend on whichever schemas the `bitnamilegacy/openldap` base image happens to load. Give it one MUST and two MAYs, so both the MUST-enforcement path and the ordinary merge path are exercisable.
+- a **DIT Content Rule** on `jimPerson` naming that class, so the "suggested: DIT Content Rule" path has something real to read. This is the only fixture in the estate that would exercise `Rfc4512SchemaParser`'s DIT Content Rule support against a live directory.
+
+Then rebuild via `test/integration/docker/openldap/Build-OpenLdapImage.ps1` and confirm the existing OpenLDAP scenarios (1, 8, 9, 14) still pass: the new class and rule change what every schema import on that container discovers, and they are a shared fixture.
+
+#### 9b. Scenario 18
+
+Two Connected Systems on the two suffixes, following Scenario 14's shape (which avoids needing a CSV source connector): Yellowstone imports and projects, Glitterband exports. `Populate-OpenLDAP-Scenario18.ps1` seeds, in Yellowstone, entries that carry the auxiliary class and entries that do not, and in Glitterband the corresponding entries without it.
+
+Steps, each mapping to a success criterion:
+
+1. **Merge** – `Set-JIMConnectedSystemAuxiliaryClass` merges the class into `jimPerson`, then `Import-JIMConnectedSystemSchema`; assert the contributed attributes appear on the Object Type carrying the class in their `ClassName`.
+2. **Import** – Full Import on Yellowstone; assert the auxiliary attributes' values arrive, and that an entry carrying both `jimPerson` and the auxiliary class produces exactly one Connected System Object (the Phase 6 criterion, which only a real directory's `objectClass` ordering can test).
+3. **Delta convergence** – flow one auxiliary attribute to a Glitterband entry that lacks the class; assert the export adds the class in the same modify, read back over `ldapsearch`.
+4. **MUST enforcement** – flow an auxiliary attribute to an entry that cannot satisfy the class's MUST; assert the export is refused and the RPEI names the missing attribute.
+5. **Carrier provisioning** – select the auxiliary class as its own Object Type, set a Structural Carrier Class, provision; assert the created entry carries both classes.
+6. **Discovery** – run a full scan; assert the run completes and its results name the class with the count the seed created. Then run a quick sample and assert its count is bounded by the sample size.
+
+#### 9c. Runner registration
+
+Scenario 18 is OpenLDAP-only and self-populating, so it needs the same six touchpoints Scenario 14 has in `Run-IntegrationTests.ps1`: the description line, the no-template-scaling list, the OpenLDAP-only filter, the snapshot exclusions (two), and the `SkipPopulate` exclusion.
 
 ## Success Criteria
 
