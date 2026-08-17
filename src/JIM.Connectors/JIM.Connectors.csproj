@@ -19,7 +19,7 @@
          non-goal for this Connector (see engineering/prd/doing/PRD_SQL_DATABASE_CONNECTOR.md). -->
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.300" />
-    <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.10" />
+    <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup>
