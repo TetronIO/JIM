@@ -196,5 +196,22 @@ return @{ Success = $true }
 
             $emitted | Should -BeLike '*a line the operator needs to see*'
         }
+
+        It 'returns a single outcome even when the scenario also writes pipeline output' {
+            # The regression this pins: passing non-result objects back out through the function's own
+            # output stream turned the return value into an array whenever a scenario emitted anything,
+            # and the runner's $outcome.ExitCode then threw under strict mode. Scenario 16 (all
+            # Write-Host) never tripped it; Scenario 8 did, on the first Phase 0 baseline run for #288.
+            $path = New-TestScenario -Name 'NoisyPipeline' -NoDirtyExitCode -Body @'
+Write-Output "pipeline noise before the verdict"
+"another stray pipeline object"
+return @{ Success = $true }
+'@
+
+            $outcome = Invoke-IntegrationScenario -Path $path 6> $null
+
+            $outcome -is [System.Collections.IDictionary] | Should -BeTrue
+            $outcome.ExitCode | Should -Be 0
+        }
     }
 }

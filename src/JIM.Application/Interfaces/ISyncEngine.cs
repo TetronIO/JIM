@@ -165,4 +165,20 @@ public interface ISyncEngine
     /// <param name="pendingExports">All Pending Exports to scan for reconcilable pairs.</param>
     /// <returns>Result describing which exports should be cancelled.</returns>
     PreExportReconciliationResult ReconcileCreateDeletePairs(IReadOnlyList<PendingExportSummary> pendingExports);
+
+    /// <summary>
+    /// Decides whether deleting a Metaverse Object stages a Delete export for one of its joined CSOs (#655:
+    /// the matching export Synchronisation Rules' OutboundDeprovisionAction drives the verdict, Delete wins a
+    /// conflict, and the one-Pending-Export-per-CSO collision policy chooses reuse, replace or create). The
+    /// disconnect itself is unconditional and is the orchestrator's to apply.
+    /// </summary>
+    /// <param name="cso">The joined CSO, with attribute values loaded so the secondary external identifier can be captured.</param>
+    /// <param name="metaverseObjectTypeId">The deleted Metaverse Object's type id, or null when it carries none.</param>
+    /// <param name="exportRulesByMetaverseObjectTypeId">Enabled export Synchronisation Rules grouped by Metaverse Object Type id.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to the CSO, if any, from the caller's pre-read or working set.</param>
+    MvoDeletionExportDecision DecideMvoDeletionExport(
+        ConnectedSystemObject cso,
+        int? metaverseObjectTypeId,
+        IReadOnlyDictionary<int, List<SyncRule>> exportRulesByMetaverseObjectTypeId,
+        PendingExport? existingPendingExport);
 }

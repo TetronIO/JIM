@@ -3,6 +3,7 @@
 
 using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
+using JIM.Application.Interfaces;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -26,6 +27,12 @@ public class ExportEvaluationServer
     private ISyncRepository SyncRepo { get; }
     private IExpressionEvaluator ExpressionEvaluator { get; }
     private ScopingEvaluationServer ScopingEvaluation { get; }
+
+    /// <summary>
+    /// The pure decision engine the outbound verdicts are being extracted into (#288). Stateless and
+    /// zero-dependency by design, so constructed inline as <see cref="ExportExecutionServer"/> already does.
+    /// </summary>
+    private readonly ISyncEngine _syncEngine = new SyncEngine();
 
     internal ExportEvaluationServer(JimApplication application, ISyncRepository syncRepo)
     {
@@ -567,8 +574,9 @@ public class ExportEvaluationServer
     /// when omitted, the enabled export Synchronisation Rules are loaded from the repository.</param>
     public async Task<List<PendingExport>> EvaluateMvoDeletionAsync(
         MetaverseObject mvo,
-        ExportEvaluationCache? exportEvaluationCache = null)
-        => await EvaluateMvoDeletionsAsync([mvo], exportEvaluationCache);
+        ExportEvaluationCache? exportEvaluationCache = null,
+        ExportEvaluationWorkingSet? workingSet = null)
+        => await EvaluateMvoDeletionsAsync([mvo], exportEvaluationCache, workingSet);
 
     /// <summary>
     /// Set-based form of <see cref="EvaluateMvoDeletionAsync(MetaverseObject, ExportEvaluationCache?)"/>
@@ -586,8 +594,14 @@ public class ExportEvaluationServer
     /// Delete: newly created ones plus any existing Delete Pending Exports that were reused.</returns>
     public async Task<List<PendingExport>> EvaluateMvoDeletionsAsync(
         IReadOnlyCollection<MetaverseObject> mvos,
-        ExportEvaluationCache? exportEvaluationCache = null)
+        ExportEvaluationCache? exportEvaluationCache = null,
+        ExportEvaluationWorkingSet? workingSet = null)
     {
+        // The working set accumulates this run's decisions so a later evaluation path touching the same CSO
+        // consults a dictionary rather than reading this run's own writes back from the database (#288 Phase 1a).
+        // Callers that evaluate once may omit it; the local instance then simply records and is discarded.
+        workingSet ??= new ExportEvaluationWorkingSet();
+
         var pendingExports = new List<PendingExport>();
         if (mvos.Count == 0)
             return pendingExports;
@@ -610,56 +624,54 @@ public class ExportEvaluationServer
         var mvoTypeIdsByMvoId = mvos.ToDictionary(m => m.Id, m => m.Type?.Id);
 
         // The fetched dictionary is iterated directly: its keys are exactly the given MVOs that
-        // have joined CSOs, so no per-MVO lookup or implicit filtering is needed.
+        // have joined CSOs, so no per-MVO lookup or implicit filtering is needed. The verdict per CSO comes
+        // from the pure engine (#288 extraction); this loop is orchestration: resolve inputs, call, log, sort
+        // the CSOs into their fates. The engine is called here without the existing Pending Export (verdict
+        // only) and again below with it once the batch pre-read has run; it is a pure function, so the second
+        // call costs nothing and keeps one implementation of the semantics.
         var csoIdsToDisconnect = new List<Guid>();
         var csosToDelete = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
         var disconnectedByRuleCount = 0;
         var noMatchingRuleCount = 0;
         foreach (var (mvoId, joinedCsos) in csosByMvo)
         {
-            List<SyncRule>? typeExportRules = null;
             if (!mvoTypeIdsByMvoId.TryGetValue(mvoId, out var mvoTypeId) || mvoTypeId == null)
             {
+                mvoTypeId = null;
                 Log.Warning("EvaluateMvoDeletionsAsync: MVO {MvoId} has no Type set; cannot match export Synchronisation Rules. Its CSOs will be disconnected only.",
                     mvoId);
-            }
-            else
-            {
-                exportRulesByMvoTypeId.TryGetValue(mvoTypeId.Value, out typeExportRules);
             }
 
             foreach (var cso in joinedCsos)
             {
                 csoIdsToDisconnect.Add(cso.Id);
 
-                var matchingRules = typeExportRules?
-                    .Where(r => r.ConnectedSystemId == cso.ConnectedSystemId && r.ConnectedSystemObjectTypeId == cso.TypeId)
-                    .ToList();
-                if (matchingRules == null || matchingRules.Count == 0)
+                var verdict = _syncEngine.DecideMvoDeletionExport(cso, mvoTypeId, exportRulesByMvoTypeId, existingPendingExport: null);
+                switch (verdict.Reason)
                 {
-                    noMatchingRuleCount++;
-                    Log.Debug("EvaluateMvoDeletionsAsync: No export Synchronisation Rule matches CSO {CsoId} (system {SystemId}, object type {TypeId}); disconnecting only",
-                        cso.Id, cso.ConnectedSystemId, cso.TypeId);
-                    continue;
+                    case MvoDeletionExportReason.NoMetaverseObjectType:
+                    case MvoDeletionExportReason.NoMatchingExportRule:
+                        noMatchingRuleCount++;
+                        workingSet.RecordDeleteDecision(cso.Id, verdict);
+                        Log.Debug("EvaluateMvoDeletionsAsync: No export Synchronisation Rule matches CSO {CsoId} (system {SystemId}, object type {TypeId}); disconnecting only",
+                            cso.Id, cso.ConnectedSystemId, cso.TypeId);
+                        continue;
+                    case MvoDeletionExportReason.MatchingRulesDeclineDeletion:
+                        disconnectedByRuleCount++;
+                        workingSet.RecordDeleteDecision(cso.Id, verdict);
+                        Log.Debug("EvaluateMvoDeletionsAsync: CSO {CsoId} matches export Synchronisation Rule(s) whose action is Disconnect; disconnecting only",
+                            cso.Id);
+                        continue;
                 }
 
-                var deleteRule = matchingRules.Find(r => r.OutboundDeprovisionAction == OutboundDeprovisionAction.Delete);
-                if (deleteRule == null)
-                {
-                    disconnectedByRuleCount++;
-                    Log.Debug("EvaluateMvoDeletionsAsync: CSO {CsoId} matches export Synchronisation Rule(s) whose action is Disconnect; disconnecting only",
-                        cso.Id);
-                    continue;
-                }
-
-                if (matchingRules.Count > 1 && matchingRules.Exists(r => r.OutboundDeprovisionAction != OutboundDeprovisionAction.Delete))
+                if (verdict.RulesConflicted)
                 {
                     Log.Information("EvaluateMvoDeletionsAsync: {RuleCount} export Synchronisation Rules match CSO {CsoId} with conflicting deprovisioning actions; Delete wins via rule '{RuleName}'",
-                        matchingRules.Count, cso.Id, LogSanitiser.Sanitise(deleteRule.Name));
+                        verdict.MatchingRuleCount, cso.Id, LogSanitiser.Sanitise(verdict.WinningRule!.Name));
                 }
 
                 Log.Information("EvaluateMvoDeletionsAsync: Staging delete Pending Export for CSO {CsoId} (join type {JoinType}) per export Synchronisation Rule '{RuleName}'",
-                    cso.Id, cso.JoinType, LogSanitiser.Sanitise(deleteRule.Name));
+                    cso.Id, cso.JoinType, LogSanitiser.Sanitise(verdict.WinningRule!.Name));
                 csosToDelete.Add((cso, mvoId));
             }
         }
@@ -677,40 +689,46 @@ public class ExportEvaluationServer
             var newPendingExports = new List<PendingExport>();
             foreach (var (cso, mvoId) in csosToDelete)
             {
-                if (existingPesByCsoId.TryGetValue(cso.Id, out var existingPe))
-                {
-                    if (existingPe.ChangeType == PendingExportChangeType.Delete)
-                    {
-                        Log.Information("EvaluateMvoDeletionsAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
-                            existingPe.Id, cso.Id, existingPe.Status);
-                        pendingExports.Add(existingPe);
-                        continue;
-                    }
+                // The definitive decision, now that the existing Pending Export is known; recorded in the
+                // working set so anything else this run asks about the CSO gets this answer without a query.
+                var decision = _syncEngine.DecideMvoDeletionExport(
+                    cso, mvoTypeIdsByMvoId[mvoId], exportRulesByMvoTypeId,
+                    existingPesByCsoId.GetValueOrDefault(cso.Id));
+                workingSet.RecordDeleteDecision(cso.Id, decision);
 
+                if (decision.ExistingPendingExportToReuse is { } reusedPe)
+                {
+                    Log.Information("EvaluateMvoDeletionsAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
+                        reusedPe.Id, cso.Id, reusedPe.Status);
+                    pendingExports.Add(reusedPe);
+                    continue;
+                }
+
+                if (decision.MustReplaceExistingPendingExport)
+                {
+                    var existingPe = existingPesByCsoId[cso.Id];
                     Log.Information("EvaluateMvoDeletionsAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
                         existingPe.ChangeType, existingPe.Id, cso.Id);
                     replacedPeCsoIds.Add(cso.Id);
                 }
 
-                // Build the secondary external ID (e.g. DN for LDAP) as an attribute change to
-                // attach to the PE. The CSO will be disconnected from the MVO right after this and
-                // may be deleted by housekeeping before the export runs; connectors like LDAP need
-                // the DN preserved on the PE to perform the actual delete.
+                // The secondary external ID (e.g. DN for LDAP) was captured on the decision, because the CSO
+                // is disconnected right after this and may be deleted by housekeeping before the export runs;
+                // connectors like LDAP need the DN preserved on the PE to perform the actual delete.
                 var attributeValueChanges = new List<PendingExportAttributeValueChange>();
-                var secondaryIdAttrValue = cso.SecondaryExternalIdAttributeValue;
-                if (secondaryIdAttrValue?.Attribute != null && !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue))
+                if (decision.SecondaryExternalIdAttribute != null && decision.SecondaryExternalIdValue != null)
                 {
                     attributeValueChanges.Add(new PendingExportAttributeValueChange
                     {
                         Id = Guid.NewGuid(),
-                        Attribute = secondaryIdAttrValue.Attribute,
-                        AttributeId = secondaryIdAttrValue.Attribute.Id,
-                        StringValue = secondaryIdAttrValue.StringValue,
+                        Attribute = decision.SecondaryExternalIdAttribute,
+                        AttributeId = decision.SecondaryExternalIdAttribute.Id,
+                        StringValue = decision.SecondaryExternalIdValue,
                         ChangeType = PendingExportAttributeChangeType.Update
                     });
 
                     Log.Debug("EvaluateMvoDeletionsAsync: Will store secondary external ID '{Value}' (attr {AttrName}) on delete PE for CSO {CsoId}",
-                        LogSanitiser.Sanitise(secondaryIdAttrValue.StringValue), secondaryIdAttrValue.Attribute.Name, cso.Id);
+                        LogSanitiser.Sanitise(decision.SecondaryExternalIdValue), decision.SecondaryExternalIdAttribute.Name, cso.Id);
                 }
                 else
                 {
