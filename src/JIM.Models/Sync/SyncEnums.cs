@@ -16,3 +16,20 @@ public enum MvoDeletionFate
     /// <summary>MVO was marked for deferred deletion by housekeeping (grace period configured).</summary>
     DeletionScheduled
 }
+
+/// <summary>
+/// Why an MVO-deletion export decision came out the way it did (#288 outbound extraction; the #655 semantics).
+/// The disconnect itself is unconditional and is not part of this verdict: every joined CSO is disconnected when
+/// its Metaverse Object is deleted, and this reason explains only whether a Delete export was staged besides.
+/// </summary>
+public enum MvoDeletionExportReason
+{
+    /// <summary>The Metaverse Object carries no Type, so no export Synchronisation Rule can be matched. The remedy is the object, not the rules.</summary>
+    NoMetaverseObjectType,
+    /// <summary>No enabled export Synchronisation Rule matches the CSO's (Connected System, Connected System Object Type) pair.</summary>
+    NoMatchingExportRule,
+    /// <summary>Rules match, and every one of them says Disconnect rather than Delete.</summary>
+    MatchingRulesDeclineDeletion,
+    /// <summary>A matching rule with OutboundDeprovisionAction.Delete won; Delete beats Disconnect when rules conflict (#655).</summary>
+    DeleteRuleWon
+}
