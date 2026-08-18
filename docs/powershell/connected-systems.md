@@ -701,7 +701,7 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeI
 ```
 
 ```powershell title="Correct the data type of an Oracle NUMBER column"
-# Oracle has one numeric type, so a NUMBER(10) employee identifier is read as a Decimal by default.
+# Oracle has one numeric type, so a NUMBER(10) employee identifier is read as a Long Number by default.
 # Recording it as a whole number lets it flow into the built-in Employee Number Metaverse Attribute.
 Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 5 -Type Integer
 ```

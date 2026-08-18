@@ -57,4 +57,7 @@ RUN dotnet publish "JIM.Scheduler.csproj" -c Release -o /app/publish /p:VersionS
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+# Third-party licence texts the image is bound to carry (the Oracle managed driver in particular);
+# see third-party-notices/README.md.
+COPY ["third-party-notices/", "./third-party-notices/"]
 ENTRYPOINT ["dotnet", "JIM.Scheduler.dll"]
