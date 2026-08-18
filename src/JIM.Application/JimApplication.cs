@@ -88,6 +88,7 @@ public class JimApplication : IDisposable
     public SecurityServer Security { get; }
     public SecurityAuditServer SecurityAudit { get; }
     public ServiceSettingsServer ServiceSettings { get; }
+    public SyncPreviewServer SyncPreview { get; }
     public SystemServer System { get; }
     public TaskingServer Tasking { get; }
 
@@ -133,6 +134,7 @@ public class JimApplication : IDisposable
                                      // Bootstrap calls (SSO init, auth) don't use SyncRepo.
         ExportEvaluation = new ExportEvaluationServer(this, SyncRepo);
         ExportExecution = new ExportExecutionServer(this, SyncRepo);
+        SyncPreview = new SyncPreviewServer(this, SyncRepo);
         PasswordGenerator = new PasswordGeneratorService();
         // Credential protection is reached through a delegate because the hosts assign CredentialProtection after
         // constructing this facade, so a value read here would always be the null that precedes it. The fallback

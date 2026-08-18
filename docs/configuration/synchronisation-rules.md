@@ -234,6 +234,25 @@ An expression mapping applies a transformation using the JIM [expression languag
 | `mv["First Name"] + " " + mv["Last Name"]` | `displayName` |
 | `IIF(Eq(mv["Employee Status"], "Active"), 512, 514)` | `userAccountControl` |
 
+#### Missing Input Behaviour
+
+An expression whose input has no value on the object does not fail; it evaluates and produces a structurally broken value (`jane.@company.com`, `CN=,OU=Users,...`) that nothing downstream can tell from a good one. **Missing Input Behaviour**, set beside the expression on each expression source, decides what JIM does instead:
+
+| Behaviour | Effect |
+|-----------|--------|
+| **Evaluate anyway** (default) | Runs the expression regardless; correct where the expression guards the absence itself with `IIF()` or `Coalesce()`. |
+| **Contribute no value** | Skips the mapping without reporting anything; the outcome is resolved by [Attribute Priority](../concepts/attribute-priority.md). |
+| **Fail this mapping** | Skips the mapping and records an **Expression Missing Input** error; the object's other attributes still flow. |
+| **Fail the object** | Nothing flows for the object at all, and it is recorded as an **Expression Missing Input** error. For identity-critical values such as a Distinguished Name. |
+
+JIM derives the inputs from the `mv["..."]` and `cs["..."]` accessors in the expression; you do not list them. An absent attribute, a null and an empty string all count as no value. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess) for the full guidance.
+
+#### Changing a mapping after it is created
+
+A mapping's **settings**, meaning how it behaves rather than what it reads and writes, can be changed at any time: Missing Input Behaviour and the expression itself, "Null is a value" and [inbound value processing](#value-processing-inbound) on an import mapping, and Initial Export Only on an export mapping. Use the portal, `PATCH /sync-rules/{id}/mappings/{mappingId}`, or `Set-JIMSyncRuleMapping`.
+
+What a mapping **targets**, and whether its source is an attribute or an expression, is not editable. Retargeting revalidates against attribute types and plurality, and for an import mapping it reopens the mapping's place in the [Attribute Priority](../concepts/attribute-priority.md) order, so it is a delete and a create rather than an edit. That is deliberate: the priority position is lost either way, and an interface that hid it would lose it silently.
+
 ### Multi-source mappings
 
 A multi-source mapping combines several source attributes into one target. This is the concept-level pattern; in practice, you typically express multi-source flows through expression mappings that reference each contributing attribute.

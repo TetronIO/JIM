@@ -714,6 +714,25 @@ public abstract class SyncTaskProcessorBase
             Log.Error(expressionEx, "ProcessActiveConnectedSystemObjectAsync: Expression evaluation error during pass 2 for {CsoId}. Target attribute '{Attribute}', expression '{Expression}'.",
                 connectedSystemObject.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
         }
+        catch (SyncExpressionMissingInputException missingInputEx)
+        {
+            // An Expression read an attribute this object has no value for, and the mapping's Missing Input
+            // Behaviour is Fail the object: the administrator has said a partially populated object is worse than
+            // none here, so error it and leave the Metaverse Object untouched (the CSO's pending attribute changes
+            // are discarded), while every other object in the run carries on. Nothing failed to evaluate, which is
+            // why this is not an ExpressionEvaluationError.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
+            runProfileExecutionItem.ErrorMessage = missingInputEx.Message +
+                " Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.";
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            Log.Warning("ProcessActiveConnectedSystemObjectAsync: Expression not evaluated for {CsoId}; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
+                connectedSystemObject.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
+                LogSanitiser.Sanitise(missingInputEx.TargetAttributeName), LogSanitiser.Sanitise(missingInputEx.Expression));
+        }
         catch (Exception e)
         {
             // Create execution item for unhandled error tracking
@@ -1470,10 +1489,9 @@ public abstract class SyncTaskProcessorBase
                 var errorRpei = _activity.PrepareRunProfileExecutionItem();
                 errorRpei.ConnectedSystemObject = connectedSystemObject;
                 errorRpei.ConnectedSystemObjectId = connectedSystemObject.Id;
-                errorRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued;
-                errorRpei.ErrorMessage = $"Multi-valued source attribute '{attributeFlowError.SourceAttributeName}' has {attributeFlowError.ValueCount} values " +
-                    $"but target attribute '{attributeFlowError.TargetAttributeName}' is single-valued, so no value was flowed for this attribute. " +
-                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.";
+                var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: false, targetSystemName: null);
+                errorRpei.ErrorType = errorType;
+                errorRpei.ErrorMessage = errorMessage;
                 _activity.RunProfileExecutionItems.Add(errorRpei);
             }
 
@@ -1713,6 +1731,23 @@ public abstract class SyncTaskProcessorBase
                     mvo.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
                 return;
             }
+            catch (SyncExpressionMissingInputException missingInputEx)
+            {
+                // An export Expression read an attribute this Metaverse Object has no value for, and the mapping's
+                // Missing Input Behaviour is Fail the object. Export evaluation aborted before any Pending Export
+                // was collected, so nothing partial is staged for this object; every other object still exports.
+                var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+                runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
+                runProfileExecutionItem.ErrorMessage = missingInputEx.Message +
+                    $" No Pending Export was generated for Metaverse Object {mvo.Id} on '{_connectedSystem.Name}'. Supply the missing value, " +
+                    "handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.";
+                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+                Log.Warning("EvaluateOutboundExportsAsync: Expression not evaluated for MVO {MvoId}; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
+                    mvo.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
+                    LogSanitiser.Sanitise(missingInputEx.TargetAttributeName), LogSanitiser.Sanitise(missingInputEx.Expression));
+                return;
+            }
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
@@ -1723,10 +1758,9 @@ public abstract class SyncTaskProcessorBase
             foreach (var attributeFlowError in result.AttributeFlowErrors)
             {
                 var errorRpei = _activity.PrepareRunProfileExecutionItem();
-                errorRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued;
-                errorRpei.ErrorMessage = $"Multi-valued Metaverse source attribute '{attributeFlowError.SourceAttributeName}' has {attributeFlowError.ValueCount} values " +
-                    $"but target attribute '{attributeFlowError.TargetAttributeName}' on '{_connectedSystem.Name}' is single-valued, so no value was exported for this attribute. " +
-                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.";
+                var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: true, targetSystemName: _connectedSystem.Name);
+                errorRpei.ErrorType = errorType;
+                errorRpei.ErrorMessage = errorMessage;
                 _activity.RunProfileExecutionItems.Add(errorRpei);
             }
 
@@ -4150,6 +4184,42 @@ public abstract class SyncTaskProcessorBase
         Log.Debug("ResolvePendingExportReferenceSnapshotsAsync: Resolved {ResolvedCount} of {TotalCount} " +
             "previously unresolved Pending Export reference snapshots across {CsCount} Connected System(s)",
             resolvedCount, unresolvedValueChanges.Count, unresolvedByCs.Count);
+    }
+
+    /// <summary>
+    /// Turns an Attribute Flow error into the execution item's error type and message. One place, so the two call
+    /// sites (inbound flow and export evaluation) cannot describe the same fault differently, and so a new
+    /// <see cref="AttributeFlowErrorKind"/> has exactly one place to be worded.
+    /// </summary>
+    /// <param name="error">The error the flow recorded.</param>
+    /// <param name="exporting">True when describing an export, which generates no Pending Export rather than flowing no value.</param>
+    /// <param name="targetSystemName">The Connected System being exported to, named in the message; null when importing.</param>
+    private static (ActivityRunProfileExecutionItemErrorType ErrorType, string Message) DescribeAttributeFlowError(
+        AttributeFlowError error, bool exporting, string? targetSystemName)
+    {
+        var target = exporting && targetSystemName != null
+            ? $"'{error.TargetAttributeName}' on '{targetSystemName}'"
+            : $"'{error.TargetAttributeName}'";
+        var outcome = exporting ? "no Pending Export was generated for this attribute" : "no value was flowed for this attribute";
+
+        switch (error.Kind)
+        {
+            case AttributeFlowErrorKind.ExpressionMissingInput:
+                return (ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput,
+                    $"The Expression for target attribute {target} was not evaluated because this object has no value for " +
+                    $"{string.Join(", ", error.MissingInputs)}, so {outcome}; the object's other attributes were unaffected. " +
+                    "Missing Input Behaviour is set to Fail this mapping on this Attribute Flow. Supply the missing value, " +
+                    "handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.");
+
+            case AttributeFlowErrorKind.MultiValuedToSingleValued:
+            default:
+                var source = exporting
+                    ? $"Multi-valued Metaverse source attribute '{error.SourceAttributeName}'"
+                    : $"Multi-valued source attribute '{error.SourceAttributeName}'";
+                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
+                    $"{source} has {error.ValueCount} values but target attribute {target} is single-valued, so {outcome}. " +
+                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.");
+        }
     }
 
     /// <summary>

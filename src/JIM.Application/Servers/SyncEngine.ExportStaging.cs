@@ -105,6 +105,29 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// Selects the Object Matching Rules export matching should try for an export Synchronisation Rule, in
+    /// the order to try them (#288 plan item 1e). The Connected System's matching mode chooses the source:
+    /// Connected System mode reads the Connected System Object Type's shared rules, Advanced mode reads the
+    /// Synchronisation Rule's own. An empty answer means matching is not attempted and provisioning proceeds
+    /// as though no match existed; a rule whose Connected System or Connected System Object Type navigation is
+    /// not loaded answers empty for the same reason, because the mode cannot be read. The per-rule candidate
+    /// query stays with the orchestrator, where the data access is.
+    /// </summary>
+    /// <param name="exportRule">The export Synchronisation Rule about to provision, with its Connected System
+    /// and Connected System Object Type navigations loaded.</param>
+    public IReadOnlyList<ObjectMatchingRule> SelectExportMatchingRules(SyncRule exportRule)
+    {
+        if (exportRule.ConnectedSystem == null || exportRule.ConnectedSystemObjectType == null)
+            return [];
+
+        var rules = exportRule.ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem
+            ? exportRule.ConnectedSystemObjectType.ObjectMatchingRules
+            : exportRule.ObjectMatchingRules;
+
+        return rules.OrderBy(r => r.Order).ToList();
+    }
+
+    /// <summary>
     /// Decides whether an outbound Synchronisation Rule may export to the Connected System Object already
     /// occupying a Metaverse Object's single slot in the target Connected System, returning a conflict when
     /// that Object is of a different Connected System Object Type than the Rule targets (#1331).
@@ -347,6 +370,35 @@ public partial class SyncEngine
                     mvAttributeDictionary ??= BuildAttributeDictionary(mvo);
                     var context = new ExpressionContext(mvAttributeDictionary, null);
 
+                    // Missing Input Behaviour (#1361): an Expression whose input is absent evaluates cleanly and
+                    // produces a structurally broken value that the Connected System is then asked to accept. Only
+                    // Metaverse inputs are considered, because export evaluation runs against the Metaverse Object
+                    // alone; a cs[...] accessor in an export Expression is unsupported rather than an object
+                    // missing a value.
+                    if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
+                    {
+                        var missingInputs = ExpressionInputResolver.FindMissingInputs(source.Expression, ExpressionInputSource.Metaverse, mvAttributeDictionary);
+                        if (missingInputs.Count > 0)
+                        {
+                            if (source.MissingInputBehaviour == MissingInputBehaviour.FailObject)
+                                throw new SyncExpressionMissingInputException(source.Expression,
+                                    mapping.TargetConnectedSystemAttribute.Name, missingInputs);
+
+                            if (source.MissingInputBehaviour == MissingInputBehaviour.FailMapping)
+                                flowErrors?.Add(new AttributeFlowError
+                                {
+                                    Kind = AttributeFlowErrorKind.ExpressionMissingInput,
+                                    TargetAttributeName = mapping.TargetConnectedSystemAttribute.Name,
+                                    Expression = source.Expression,
+                                    MissingInputs = missingInputs
+                                });
+
+                            // ContributeNoValue and FailMapping alike stage nothing for this attribute, so the
+                            // Connected System keeps whatever it holds; the difference is whether it is reported.
+                            continue;
+                        }
+                    }
+
                     // Only the evaluation itself is guarded. A thrown export expression must be surfaced as
                     // an errored object, never swallowed and never conflated with a deliberate null result.
                     // Known failure modes are rethrown as SyncExpressionEvaluationException for the worker to
@@ -458,6 +510,7 @@ public partial class SyncEngine
 
                         flowErrors?.Add(new AttributeFlowError
                         {
+                            Kind = AttributeFlowErrorKind.MultiValuedToSingleValued,
                             SourceAttributeName = source.MetaverseAttribute.Name,
                             TargetAttributeName = mapping.TargetConnectedSystemAttribute.Name,
                             ValueCount = mvoValueCount

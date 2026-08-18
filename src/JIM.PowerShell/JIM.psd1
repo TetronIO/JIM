@@ -84,6 +84,7 @@
         'Get-JIMSyncRuleMapping',
         'New-JIMSyncRuleMapping',
         'Remove-JIMSyncRuleMapping',
+        'Set-JIMSyncRuleMapping',
 
         # Object Matching Rules
         'Get-JIMMatchingRule',

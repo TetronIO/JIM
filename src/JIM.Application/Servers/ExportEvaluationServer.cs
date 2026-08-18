@@ -2487,28 +2487,185 @@ public class ExportEvaluationServer
     internal static HashSet<int> GetWholeAttributeReplacementAttributeIds(IEnumerable<PendingExportAttributeValueChange> changes)
         => SyncEngine.GetWholeAttributeReplacementAttributeIds(changes);
 
+    #region Outbound preview (#288 plan Phase 2)
+
+    /// <summary>
+    /// Runs the extracted outbound evaluation core over a population of Metaverse Objects and returns the
+    /// decision records a real evaluation would act on, staging nothing and persisting nothing (#288 plan
+    /// Phase 2; the evaluation-only path #1115 consumes). Zero side effects is delivered as defence in depth
+    /// (PRD requirement 8): the engine verdicts are structurally pure; every read this method performs goes
+    /// through a <see cref="ReadOnlySyncRepositoryGuard"/> that throws on any write attempt (including the
+    /// export matching claim, which a preview must never make); and the whole evaluation runs inside a
+    /// transaction that is unconditionally rolled back, so anything that slipped both guards is discarded.
+    /// </summary>
+    /// <param name="metaverseObjectIds">The Metaverse Objects to preview. Bounded by the caller; the sampling
+    /// strategy over whole Connected Systems arrives with the plan's Phase 4.</param>
+    /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope (its own
+    /// DbContext), so the rolled-back transaction can never entangle a live run's context. When omitted, the
+    /// ambient repository is used behind the guard; the worker's callers should pass their scope factory.</param>
+    public async Task<OutboundPreviewResult> EvaluateOutboundPreviewAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        Func<ISyncRepositoryScope>? repositoryFactory = null)
+    {
+        var result = new OutboundPreviewResult();
+        if (metaverseObjectIds.Count == 0)
+            return result;
+
+        using var scope = repositoryFactory?.Invoke();
+        var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
+
+        // A sibling server over the guarded repository, so every reused read path (cache build, page
+        // refresh, matching probe) runs under the guard; a future edit that adds a write to any of them
+        // fails loudly here instead of committing.
+        var previewServer = new ExportEvaluationServer(Application, guardedRepository);
+
+        await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
+
+        // The cache spans every export rule's target system: a preview is a state assertion, so no source
+        // system is excluded (the same reasoning as reference recall's cache).
+        var cache = await previewServer.BuildExportEvaluationCacheAsync();
+        await previewServer.RefreshExportEvaluationCacheForPageAsync(cache, metaverseObjectIds);
+
+        var mvos = await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync(metaverseObjectIds);
+        result = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync(mvos, cache);
+        result.SkippedMetaverseObjectCount += metaverseObjectIds.Count - mvos.Count;
+        return result;
+    }
+
+    /// <summary>
+    /// The per-object core of <see cref="EvaluateOutboundPreviewAsync"/>, over Metaverse Objects the caller
+    /// has already materialised. Exists so <see cref="SyncPreviewServer"/> can evaluate the outbound chain
+    /// for a prospective in-memory Metaverse Object (a projection preview's object has no id and no row) as
+    /// well as for a loaded one. Call it on a server whose repository is a
+    /// <see cref="ReadOnlySyncRepositoryGuard"/>; it stages nothing and persists nothing, but that guard is
+    /// what turns a future regression into a loud failure rather than a write.
+    /// </summary>
+    internal async Task<OutboundPreviewResult> EvaluateOutboundPreviewForMaterialisedMvosAsync(
+        IReadOnlyCollection<MetaverseObject> mvos,
+        ExportEvaluationCache cache)
+    {
+        var result = new OutboundPreviewResult();
+
+        foreach (var mvo in mvos)
+        {
+            if (mvo.Type == null)
+            {
+                result.SkippedMetaverseObjectCount++;
+                continue;
+            }
+
+            result.EvaluatedMetaverseObjectCount++;
+            if (!cache.ExportRulesByMvoTypeId.TryGetValue(mvo.Type.Id, out var exportRules))
+                continue;
+
+            // What a synchronisation of this object now would consider: its current values (asserted-null
+            // markers excluded, exactly as evaluation sources them).
+            var changedAttributes = mvo.AttributeValues.Where(av => !av.NullValue).ToList();
+
+            foreach (var exportRule in exportRules)
+            {
+                cache.CsoLookup.TryGetValue((mvo.Id, exportRule.ConnectedSystemId), out var existingCso);
+
+                if (IsMvoInScopeForExportRule(mvo, exportRule))
+                {
+                    result.Entries.Add(await BuildStagingPreviewEntryAsync(
+                        this, cache, mvo, exportRule, existingCso, changedAttributes));
+                    continue;
+                }
+
+                // Out of scope: meaningful only for a joined object of this rule's own Object Type (#1331,
+                // #1399 parity with the real out-of-scope path).
+                if (existingCso is not { MetaverseObjectId: not null })
+                    continue;
+                if (DetectObjectTypeConflict(mvo, exportRule, existingCso) != null)
+                    continue;
+
+                var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(existingCso.Id);
+                result.Entries.Add(new OutboundPreviewEntry
+                {
+                    Kind = OutboundPreviewEntryKind.Deprovisioning,
+                    MetaverseObjectId = mvo.Id,
+                    SyncRuleId = exportRule.Id,
+                    SyncRuleName = exportRule.Name,
+                    ConnectedSystemId = exportRule.ConnectedSystemId,
+                    ExistingTargetCsoId = existingCso.Id,
+                    DeprovisioningDecision = _syncEngine.DecideOutOfScopeDeprovisioning(exportRule, existingPe)
+                });
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Builds the staging decision record for one in-scope (Metaverse Object, export Synchronisation Rule)
+    /// pair: the engine's verdict, a read-only export matching probe where the verdict provisions (a real
+    /// run would claim the match and stage an Update; the preview never claims), and the attribute changes a
+    /// real evaluation would stage, with no-net-change detection against the cached target values.
+    /// </summary>
+    private async Task<OutboundPreviewEntry> BuildStagingPreviewEntryAsync(
+        ExportEvaluationServer previewServer,
+        ExportEvaluationCache cache,
+        MetaverseObject mvo,
+        SyncRule exportRule,
+        ConnectedSystemObject? existingCso,
+        List<MetaverseObjectAttributeValue> changedAttributes)
+    {
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false);
+
+        Guid? wouldJoinCsoId = null;
+        var effectiveChangeType = decision.ChangeType;
+        var effectiveExistingCso = existingCso;
+        if (decision.Outcome == OutboundStagingOutcome.ProvisionNewCso)
+        {
+            var matched = await previewServer.AttemptExportMatchingAsync(mvo, exportRule);
+            if (matched != null)
+            {
+                wouldJoinCsoId = matched.Id;
+                effectiveChangeType = PendingExportChangeType.Update;
+                effectiveExistingCso = matched;
+            }
+        }
+
+        var attributeChanges = new List<PendingExportAttributeValueChange>();
+        var noNetChangeSkipped = 0;
+        if (effectiveChangeType.HasValue)
+        {
+            attributeChanges = _syncEngine.ComputeAttributeValueChanges(
+                mvo, exportRule, changedAttributes, effectiveChangeType.Value,
+                existingCso: effectiveExistingCso, csoAttributeCache: cache.CsoAttributeValues,
+                out noNetChangeSkipped, ExpressionEvaluator);
+        }
+
+        return new OutboundPreviewEntry
+        {
+            Kind = OutboundPreviewEntryKind.Staging,
+            MetaverseObjectId = mvo.Id,
+            SyncRuleId = exportRule.Id,
+            SyncRuleName = exportRule.Name,
+            ConnectedSystemId = exportRule.ConnectedSystemId,
+            StagingOutcome = decision.Outcome,
+            EffectiveChangeType = effectiveChangeType,
+            ExistingTargetCsoId = existingCso?.Id,
+            WouldJoinCsoId = wouldJoinCsoId,
+            AttributeChanges = attributeChanges,
+            NoNetChangeSkippedCount = noNetChangeSkipped
+        };
+    }
+
+    #endregion
+
     /// <summary>
     /// Attempts to find an existing CSO in the target system that matches the MVO using Object Matching Rules.
     /// This prevents provisioning duplicates when the object already exists in the target.
     /// </summary>
     private async Task<ConnectedSystemObject?> AttemptExportMatchingAsync(MetaverseObject mvo, SyncRule exportRule)
     {
-        if (exportRule.ConnectedSystem == null || exportRule.ConnectedSystemObjectType == null)
-            return null;
-
-        // Resolve matching rules based on mode
-        List<ObjectMatchingRule> matchingRules;
-        if (exportRule.ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
-        {
-            // Simple mode: rules from the object type
-            matchingRules = exportRule.ConnectedSystemObjectType.ObjectMatchingRules?.ToList() ?? new List<ObjectMatchingRule>();
-        }
-        else
-        {
-            // Advanced mode: rules from the Synchronisation Rule
-            matchingRules = exportRule.ObjectMatchingRules?.ToList() ?? new List<ObjectMatchingRule>();
-        }
-
+        // Which rules to try, and in what order, is the pure engine's verdict (#288 extraction); an empty
+        // answer (no rules configured, or the mode unreadable because a navigation is not loaded) means
+        // matching is not attempted and provisioning proceeds. The per-rule candidate query below stays here,
+        // where the data access is.
+        var matchingRules = _syncEngine.SelectExportMatchingRules(exportRule);
         if (matchingRules.Count == 0)
             return null;
 
@@ -2518,7 +2675,7 @@ public class ExportEvaluationServer
                 mvo,
                 exportRule.ConnectedSystem,
                 exportRule.ConnectedSystemObjectType,
-                matchingRules);
+                matchingRules.ToList());
         }
         catch (Exception ex)
         {

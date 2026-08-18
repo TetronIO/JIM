@@ -280,6 +280,12 @@ public class ExportEvaluationTests
             });
         }
 
+        // Attach the stored values to the CSO entity too: the hand-built cache below serves the cached
+        // evaluation tests, while the preview tests build their own cache through the repository, which
+        // reads the entity's own values.
+        foreach (var av in csoAttributeValues)
+            cso.AttributeValues.Add(av);
+
         var cache = new ExportEvaluationCache(
             new Dictionary<int, List<SyncRule>> { { mvUserType.Id, new List<SyncRule> { exportRule } } },
             new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> { { (mvo.Id, sourceSystem.Id), cso } },
@@ -2798,6 +2804,117 @@ public class ExportEvaluationTests
         Assert.That(secondResult, Is.False, "A second claim on an already-claimed CSO must fail");
         Assert.That(cso.MetaverseObjectId, Is.EqualTo(firstMvoId), "The CSO must remain claimed by the first Metaverse Object");
         Assert.That(cso.DateJoined, Is.EqualTo(firstDateJoined), "The first claim's DateJoined must be untouched by the failed second claim");
+    }
+
+    #endregion
+
+    #region Outbound preview evaluation (#288 plan Phase 2)
+
+    [Test]
+    public async Task EvaluateOutboundPreviewAsync_JoinedCsoMissingTheFlowedValue_ReportsAnUpdateWithTheDeltaAndPersistsNothing()
+    {
+        // Arrange - the writeback topology: a joined CSO that does not hold the flowed value
+        var (mvo, sourceSystem, exportRule, csEmployeeIdAttr, cso, _) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: null);
+        SyncRepo.SeedMetaverseObject(mvo);
+        var pendingExportCountBefore = PendingExportsData.Count;
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutboundPreviewAsync([mvo.Id]);
+
+        // Assert - the decision record says an Update would be staged, and nothing was
+        Assert.That(result.Entries, Has.Count.EqualTo(1));
+        var entry = result.Entries[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.Kind, Is.EqualTo(OutboundPreviewEntryKind.Staging));
+            Assert.That(entry.MetaverseObjectId, Is.EqualTo(mvo.Id));
+            Assert.That(entry.ConnectedSystemId, Is.EqualTo(sourceSystem.Id));
+            Assert.That(entry.SyncRuleId, Is.EqualTo(exportRule.Id));
+            Assert.That(entry.StagingOutcome, Is.EqualTo(OutboundStagingOutcome.UpdateExistingCso));
+            Assert.That(entry.EffectiveChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(entry.ExistingTargetCsoId, Is.EqualTo(cso.Id));
+            Assert.That(entry.AttributeChanges.Any(avc => avc.AttributeId == csEmployeeIdAttr.Id && avc.StringValue == "EMP001"),
+                Is.True, "The previewed change must carry the flowed value");
+            Assert.That(PendingExportsData, Has.Count.EqualTo(pendingExportCountBefore), "A preview must persist nothing");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateOutboundPreviewAsync_TargetAlreadyHoldsTheValue_ReportsNoChangesNeeded()
+    {
+        // Arrange - the CSO already holds EMP001, so a real evaluation would stage nothing (no net change)
+        var (mvo, _, _, _, _, _) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: "EMP001");
+        SyncRepo.SeedMetaverseObject(mvo);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutboundPreviewAsync([mvo.Id]);
+
+        // Assert - the entry is still reported (the administrator sees the rule was evaluated), carrying no changes
+        Assert.That(result.Entries, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Entries[0].AttributeChanges, Is.Empty);
+            Assert.That(result.Entries[0].NoNetChangeSkippedCount, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateOutboundPreviewAsync_NoTargetPresenceAndProvisioningEnabled_ReportsACreateWithoutCreatingAnything()
+    {
+        // Arrange - remove the joined CSO so the provisioning path is taken
+        var (mvo, _, _, csEmployeeIdAttr, cso, _) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: null);
+        SyncRepo.SeedMetaverseObject(mvo);
+        SyncRepo.RemoveConnectedSystemObject(cso);
+        var csoCountBefore = SyncRepo.ConnectedSystemObjectCount;
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutboundPreviewAsync([mvo.Id]);
+
+        // Assert - a Create decision record; no pending provisioning CSO and no Pending Export were created
+        Assert.That(result.Entries, Has.Count.EqualTo(1));
+        var entry = result.Entries[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.StagingOutcome, Is.EqualTo(OutboundStagingOutcome.ProvisionNewCso));
+            Assert.That(entry.EffectiveChangeType, Is.EqualTo(PendingExportChangeType.Create));
+            Assert.That(entry.AttributeChanges.Any(avc => avc.AttributeId == csEmployeeIdAttr.Id && avc.StringValue == "EMP001"),
+                Is.True, "A Create preview must carry the mapped attributes");
+            Assert.That(SyncRepo.ConnectedSystemObjectCount, Is.EqualTo(csoCountBefore),
+                "A preview must not create a pending provisioning CSO");
+            Assert.That(PendingExportsData, Is.Empty, "A preview must persist nothing");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateOutboundPreviewAsync_MvoOutOfScopeWithAJoinedCso_ReportsTheDeprovisioningVerdict()
+    {
+        // Arrange - scope the rule so the MVO falls outside it; the joined CSO would be deprovisioned
+        var (mvo, _, exportRule, _, cso, _) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: null);
+        SyncRepo.SeedMetaverseObject(mvo);
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        var scopingGroup = new SyncRuleScopingCriteriaGroup();
+        scopingGroup.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = MetaverseObjectTypesData.Single( t => t.Name == "User").Attributes
+                .Single(a => a.Name == Constants.BuiltInAttributes.DisplayName),
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "a display name this Metaverse Object does not have"
+        });
+        exportRule.ObjectScopingCriteriaGroups.Add(scopingGroup);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutboundPreviewAsync([mvo.Id]);
+
+        // Assert - a deprovisioning decision record; the CSO is untouched
+        Assert.That(result.Entries, Has.Count.EqualTo(1));
+        var entry = result.Entries[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.Kind, Is.EqualTo(OutboundPreviewEntryKind.Deprovisioning));
+            Assert.That(entry.DeprovisioningDecision!.Value.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeleteExport));
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "A preview must not disconnect the CSO");
+            Assert.That(PendingExportsData, Is.Empty, "A preview must persist nothing");
+        }
     }
 
     #endregion

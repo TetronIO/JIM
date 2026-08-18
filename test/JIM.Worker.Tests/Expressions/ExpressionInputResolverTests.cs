@@ -89,4 +89,70 @@ public class ExpressionInputResolverTests
     {
         Assert.That(ExpressionInputResolver.Resolve(expression), Is.Empty);
     }
+
+    /// <summary>
+    /// The synchronisation path resolves the same Expression once per object, so it takes the cached route. The
+    /// cache must be a pure optimisation: same answer, repeatable, and the same empty result for nothing to find.
+    /// </summary>
+    [Test]
+    public void ResolveCached_ReturnsTheSameInputsAsResolve_AndRepeats()
+    {
+        const string expression = "Lower(cs[\"givenName\"]) + \".\" + Lower(cs[\"sn\"]) + mv[\"Domain\"]";
+
+        var uncached = ExpressionInputResolver.Resolve(expression);
+        var first = ExpressionInputResolver.ResolveCached(expression);
+        var second = ExpressionInputResolver.ResolveCached(expression);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first, Is.EqualTo(uncached));
+            Assert.That(second, Is.EqualTo(uncached));
+        }
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    public void ResolveCached_NothingToFind_ReturnsEmpty(string? expression)
+    {
+        Assert.That(ExpressionInputResolver.ResolveCached(expression), Is.Empty);
+    }
+
+    /// <summary>
+    /// The three states that count as no value, and the one that does not. Both the inbound and the outbound
+    /// paths ask this question, so it is answered in one place rather than twice.
+    /// </summary>
+    [Test]
+    public void FindMissingInputs_AbsentNullAndEmptyCountAsNoValue_WhitespaceDoesNot()
+    {
+        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["present"] = "Ada",
+            ["nulled"] = null,
+            ["empty"] = string.Empty,
+            ["blank"] = "   "
+        };
+
+        var missing = ExpressionInputResolver.FindMissingInputs(
+            "cs[\"present\"] + cs[\"nulled\"] + cs[\"empty\"] + cs[\"blank\"] + cs[\"absent\"]",
+            ExpressionInputSource.ConnectedSystem,
+            attributes);
+
+        // Whitespace is not judged here: whether it counts as a value is the mapping's own "treat whitespace as
+        // no value" setting, applied later, and second-guessing it here would override the administrator.
+        Assert.That(missing, Is.EqualTo(new[] { "cs[\"nulled\"]", "cs[\"empty\"]", "cs[\"absent\"]" }));
+    }
+
+    [Test]
+    public void FindMissingInputs_InputsFromTheOtherSide_AreLeftAlone()
+    {
+        // An inbound evaluation carries Connected System values only, so an mv[...] accessor is not an object
+        // missing a value; it resolves to null by design and is the Expression author's business.
+        var missing = ExpressionInputResolver.FindMissingInputs(
+            "cs[\"sn\"] + mv[\"Display Name\"]",
+            ExpressionInputSource.ConnectedSystem,
+            new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase) { ["sn"] = "Lovelace" });
+
+        Assert.That(missing, Is.Empty);
+    }
 }
