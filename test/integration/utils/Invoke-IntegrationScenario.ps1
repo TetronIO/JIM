@@ -49,12 +49,19 @@ function Invoke-IntegrationScenario {
 
     # Collected through a list rather than a variable assignment because the ForEach-Object
     # block runs in its own scope; a method call on an object resolved from this scope works
-    # regardless. Everything that is not the result object is passed straight back out, so
-    # the scenario's output still streams to the operator as it is produced.
+    # regardless. Everything that is not the result object goes to the information stream via
+    # Write-Host, NOT back out of this function: the caller assigns this function's output to
+    # a variable, so anything emitted here would be captured into that variable rather than
+    # shown, and the return value would become an array whose .ExitCode throws under strict
+    # mode the moment a scenario writes anything to the pipeline (Scenario 8 does; the all-
+    # Write-Host scenarios never tripped it). Out-String preserves the console formatting the
+    # object would have had; per-object formatting can repeat table headers across a sequence,
+    # which scenario output (overwhelmingly strings) does not encounter in practice.
     $results = [System.Collections.Generic.List[object]]::new()
 
     & $Path @Parameters | ForEach-Object {
-        if (Test-ScenarioResultObject -Candidate $_) { $results.Add($_) } else { $_ }
+        if (Test-ScenarioResultObject -Candidate $_) { $results.Add($_) }
+        else { ($_ | Out-String).TrimEnd() | Write-Host }
     }
 
     $exitCode = $LASTEXITCODE
