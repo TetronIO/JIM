@@ -299,6 +299,7 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
 . "$scriptRoot/utils/Initialize-WorkerLogDirectories.ps1"
+. "$scriptRoot/utils/Invoke-IntegrationScenario.ps1"
 
 # Hydrate JIM_BENCH_* from .env when not already set in the process environment.
 # .env is the canonical config surface for the project, but Docker Compose only
@@ -2653,11 +2654,14 @@ if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
 # PostgreSQL and MySQL stay dormant; they are staged for the priority 2 providers, which Scenario 16
 # does not yet cover.
 if ($Scenario -like "*Scenario16*") {
-    $phase2Services = switch ($Provider) {
+    # @(...) around the switch is load-bearing: PowerShell unwraps a single-element array returned from
+    # a switch to a bare string, and splatting a string passes it one character at a time, so a
+    # single-provider run asked Compose to start a service called "o". Only -Provider Both survived.
+    $phase2Services = @(switch ($Provider) {
         "SqlServer" { @("sqlserver-hris-a") }
         "Oracle"    { @("oracle-hris-b") }
         default     { @("sqlserver-hris-a", "oracle-hris-b") }
-    }
+    })
 
     Write-Step "Starting database containers for Scenario 16 ($($phase2Services -join ', '))..."
     $phase2Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 up -d @phase2Services 2>&1
@@ -3285,8 +3289,12 @@ $errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $st
 $env:JIM_RUNPROFILE_ABORT_SENTINEL = $errWatcherSentinel
 
 try {
-    & $scenarioScript @scenarioParams
-    $scenarioExitCode = $LASTEXITCODE
+    # Not `& $scenarioScript; $scenarioExitCode = $LASTEXITCODE`. PowerShell does not set
+    # $LASTEXITCODE for a .ps1 that returns rather than exits, so that read picked up
+    # whatever the last native command inside the scenario had left behind and the
+    # scenario's own verdict was never consulted. See Invoke-IntegrationScenario and #1382.
+    $scenarioOutcome = Invoke-IntegrationScenario -Path $scenarioScript -Parameters $scenarioParams
+    $scenarioExitCode = $scenarioOutcome.ExitCode
 }
 catch {
     $scenarioExitCode = 1

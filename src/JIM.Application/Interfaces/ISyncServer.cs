@@ -251,16 +251,14 @@ public interface ISyncServer
         List<PendingExport>? existingPendingExports = null);
 
     /// <summary>
-    /// Evaluates if an MVO has fallen out of scope for any export rules (deprovisioning).
+    /// Evaluates if an MVO has fallen out of scope for any export rules (deprovisioning). A Connected
+    /// System Object of a different Connected System Object Type than a Rule targets is skipped quietly
+    /// (#1331, #1399): its own type's Rule owns its lifecycle, so there is nothing here to report.
     /// </summary>
-    /// <param name="objectTypeConflicts">Collects Synchronisation Rules that could not deprovision because the
-    /// Metaverse Object's Connected System Object is of a different Connected System Object Type than the Rule
-    /// targets (#1331), for the caller to report as Run Profile Execution Items.</param>
     Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
         ConnectedSystem? sourceSystem,
-        ExportEvaluationCache cache,
-        List<ExportObjectTypeConflict>? objectTypeConflicts = null);
+        ExportEvaluationCache cache);
 
     /// <summary>
     /// Evaluates export rules for an MVO being deleted. Creates delete exports for CSOs matched by

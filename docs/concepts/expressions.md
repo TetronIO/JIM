@@ -443,9 +443,25 @@ If the attribute has the values Admin, Users, and Developers, this produces: `Ad
 
 ## Validation and Troubleshooting
 
+### Testing an expression
+
+The Attribute Flow dialog tests an expression as you write it, so you find out what it produces before you save it rather than from the next synchronisation.
+
+Choose **Expression** as the source type and type your expression. JIM reads the attributes the expression references and offers a box for each one, labelled as the expression addresses it (`cs["givenName"]`, `mv["Display Name"]`). Fill in sample values, choose **Run test**, and the output appears below with the type it evaluated to.
+
+**Leave a box empty to see what happens when the object has no value for that attribute.** An empty box is passed to the expression as no value, not as an empty string, so this is how you check an expression against the hazard the previous section describes:
+
+```csharp
+Lower(cs["givenName"]) + "." + Lower(cs["sn"]) + "@corp.local"
+```
+
+With both values supplied this produces `ada.lovelace@corp.local`. Clear the surname box and it produces `ada.@corp.local`: a syntactically fine string that is not an email address, which nothing downstream can tell apart from a good one. Seeing that before saving is the point.
+
+The same evaluation is available outside the portal, over [`Test-JIMExpression`](../powershell/expressions.md) and the REST API, for testing an expression from a script.
+
 ### Validation
 
-JIM validates expressions when you save a Synchronisation Rule. If an expression has a syntax error, you will see an error message indicating what went wrong and where in the expression the problem is.
+JIM validates expressions when you save a Synchronisation Rule. If an expression has a syntax error, you will see an error message indicating what went wrong and where in the expression the problem is. The tester reports the same errors, so a malformed expression is caught while you are writing it.
 
 Common errors:
 
@@ -461,7 +477,7 @@ When an expression does not produce the result you expect:
 1. **Check the attribute name spelling**<br /> Attribute names are matched case-insensitively, so `mv["department"]` and `mv["Department"]` are equivalent; casing is never the cause. Do check the name is spelled correctly and matches an attribute that exists in the JIM admin UI.
 2. **Use `Eq()` for text comparisons**<br /> Using `==` for text is a common mistake (see [String Comparison](#string-comparison)).
 3. **Check for missing values**<br /> If an attribute does not exist on the object, it returns nothing (null), which can clear the target or, in a concatenation, produce a malformed value. Use `Coalesce()` or `IsNullOrEmpty()` to handle this; see [Nulls, Missing Inputs, and Whitespace](#nulls-missing-inputs-and-whitespace) for the full picture.
-4. **Test with sample data**<br /> Use the expression test feature in the Synchronisation Rule editor to try your expression with real attribute values before saving.
+4. **Test with sample data**<br /> Use the tester in the Attribute Flow dialog to try your expression with sample values, including leaving an input empty to see what an object without that attribute would produce (see [Testing an expression](#testing-an-expression)).
 5. **Check the worker logs**<br /> If expressions fail during sync, the worker service logs the error details.
 
 ## Best Practices

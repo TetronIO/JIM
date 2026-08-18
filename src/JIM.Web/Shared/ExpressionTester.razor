@@ -1,0 +1,149 @@
+@using JIM.Models.Expressions
+@using JIM.Models.Interfaces
+@using JIM.Application.Expressions
+@inject IExpressionEvaluator ExpressionEvaluator
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@if (!string.IsNullOrWhiteSpace(Expression))
+{
+    <MudText Typo="Typo.subtitle2" Class="mt-5">Test this Expression</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        Supply a sample value for each attribute the Expression reads and see what it produces, before saving it and
+        finding out from a Synchronisation. Leave an input empty to see what the Expression does when the object has
+        no value for it.
+    </MudText>
+
+    @if (_inputs.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            This Expression reads no attributes, so it produces the same value for every object. Run the test to see it.
+        </MudText>
+    }
+    else
+    {
+        <MudGrid Spacing="2" Class="mt-1">
+            @foreach (var input in _inputs)
+            {
+                var accessor = input.Accessor;
+                <MudItem xs="12" sm="6">
+                    <MudTextField T="string" Label="@accessor" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Immediate="true" Clearable="true"
+                                  Value="@GetSampleValue(accessor)"
+                                  ValueChanged="@(v => SetSampleValue(accessor, v))" />
+                </MudItem>
+            }
+        </MudGrid>
+    }
+
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="mt-3"
+               OnClick="RunTest">Run test</MudButton>
+
+    @if (_result != null)
+    {
+        @if (_result.IsValid)
+        {
+            <MudPaper Outlined="true" Class="pa-3 mt-3">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Output</MudText>
+                @if (_result.Result == null)
+                {
+                    <MudText Typo="Typo.body1"><EmptyValue /></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        The Expression returned no value. JIM treats that as an authoritative "no value" from this
+                        contribution, resolved by Attribute Priority and "Null is a value".
+                    </MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1" Class="jim-expression-output">@_result.Result.ToString()</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Type: @_result.ResultType</MudText>
+                }
+            </MudPaper>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-3">
+                @_result.ErrorMessage
+                @if (_errorPosition.HasValue)
+                {
+                    var position = _errorPosition.Value;
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Position @position</MudText>
+                }
+            </MudAlert>
+        }
+    }
+}
+
+@code {
+    /// <summary>
+    /// The Expression to test. The inputs offered below are resolved from it, so they follow it as it is edited.
+    /// </summary>
+    [Parameter]
+    public string? Expression { get; set; }
+
+    private IReadOnlyList<ExpressionInput> _inputs = Array.Empty<ExpressionInput>();
+    private readonly Dictionary<string, string?> _sampleValues = new();
+    private ExpressionTestResult? _result;
+    private int? _errorPosition;
+    private string? _resolvedFrom;
+
+    protected override void OnParametersSet()
+    {
+        // Re-resolve only when the Expression itself changed: the sample values are keyed on accessors, so
+        // re-resolving on every render would discard nothing, but the result below must not outlive its Expression.
+        if (_resolvedFrom == Expression)
+            return;
+
+        _resolvedFrom = Expression;
+        _inputs = ExpressionInputResolver.Resolve(Expression);
+        _result = null;
+        _errorPosition = null;
+    }
+
+    private string? GetSampleValue(string accessor) => _sampleValues.GetValueOrDefault(accessor);
+
+    private void SetSampleValue(string accessor, string? value)
+    {
+        _sampleValues[accessor] = value;
+
+        // The displayed output belongs to the values that produced it; keeping it beside changed inputs would
+        // read as the answer to a question that was not asked.
+        _result = null;
+        _errorPosition = null;
+    }
+
+    private void RunTest()
+    {
+        if (string.IsNullOrWhiteSpace(Expression))
+            return;
+
+        var validation = ExpressionEvaluator.Validate(Expression);
+        if (!validation.IsValid)
+        {
+            _result = ExpressionTestResult.Failure(validation.ErrorMessage ?? "The Expression could not be parsed.");
+            _errorPosition = validation.ErrorPosition;
+            return;
+        }
+
+        _errorPosition = null;
+
+        var metaverseAttributes = new Dictionary<string, object?>();
+        var connectedSystemAttributes = new Dictionary<string, object?>();
+
+        foreach (var input in _inputs)
+        {
+            // An empty box means the object has no value for that attribute, which is the case worth being able to
+            // see: an Expression that reads it will produce whatever it produces from nothing.
+            var sampleValue = _sampleValues.GetValueOrDefault(input.Accessor);
+            var value = string.IsNullOrEmpty(sampleValue) ? null : (object)sampleValue;
+
+            if (input.Source == ExpressionInputSource.Metaverse)
+                metaverseAttributes[input.AttributeName] = value;
+            else
+                connectedSystemAttributes[input.AttributeName] = value;
+        }
+
+        _result = ExpressionEvaluator.Test(Expression, new ExpressionContext(metaverseAttributes, connectedSystemAttributes));
+    }
+}
