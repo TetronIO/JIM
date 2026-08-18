@@ -1,6 +1,6 @@
 # Synchronisation Preview / What-If Evaluation Engine
 
-- **Status:** Doing (decisions D1 to D5 settled Aug 2026; outbound extraction complete (plan Phases 0 and 1); the evaluation-only outbound path (plan Phase 2) underway)
+- **Status:** Doing (decisions D1 to D5 settled Aug 2026; plan Phases 0 to 3 complete: outbound extraction, the evaluation-only outbound path, and the per-object preview server with its outcome tree and paired fidelity test; full-system sampling (plan Phase 4) next)
 - **Created:** 2026-07-07
 - **Author:** Jay Van der Zant
 - **Issue:** [#288](https://github.com/TetronIO/JIM/issues/288)

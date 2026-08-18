@@ -2527,7 +2527,24 @@ public class ExportEvaluationServer
         await previewServer.RefreshExportEvaluationCacheForPageAsync(cache, metaverseObjectIds);
 
         var mvos = await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync(metaverseObjectIds);
-        result.SkippedMetaverseObjectCount = metaverseObjectIds.Count - mvos.Count;
+        result = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync(mvos, cache);
+        result.SkippedMetaverseObjectCount += metaverseObjectIds.Count - mvos.Count;
+        return result;
+    }
+
+    /// <summary>
+    /// The per-object core of <see cref="EvaluateOutboundPreviewAsync"/>, over Metaverse Objects the caller
+    /// has already materialised. Exists so <see cref="SyncPreviewServer"/> can evaluate the outbound chain
+    /// for a prospective in-memory Metaverse Object (a projection preview's object has no id and no row) as
+    /// well as for a loaded one. Call it on a server whose repository is a
+    /// <see cref="ReadOnlySyncRepositoryGuard"/>; it stages nothing and persists nothing, but that guard is
+    /// what turns a future regression into a loud failure rather than a write.
+    /// </summary>
+    internal async Task<OutboundPreviewResult> EvaluateOutboundPreviewForMaterialisedMvosAsync(
+        IReadOnlyCollection<MetaverseObject> mvos,
+        ExportEvaluationCache cache)
+    {
+        var result = new OutboundPreviewResult();
 
         foreach (var mvo in mvos)
         {
@@ -2549,10 +2566,10 @@ public class ExportEvaluationServer
             {
                 cache.CsoLookup.TryGetValue((mvo.Id, exportRule.ConnectedSystemId), out var existingCso);
 
-                if (previewServer.IsMvoInScopeForExportRule(mvo, exportRule))
+                if (IsMvoInScopeForExportRule(mvo, exportRule))
                 {
                     result.Entries.Add(await BuildStagingPreviewEntryAsync(
-                        previewServer, cache, mvo, exportRule, existingCso, changedAttributes));
+                        this, cache, mvo, exportRule, existingCso, changedAttributes));
                     continue;
                 }
 
@@ -2563,7 +2580,7 @@ public class ExportEvaluationServer
                 if (DetectObjectTypeConflict(mvo, exportRule, existingCso) != null)
                     continue;
 
-                var existingPe = await guardedRepository.GetPendingExportLightweightByConnectedSystemObjectIdAsync(existingCso.Id);
+                var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(existingCso.Id);
                 result.Entries.Add(new OutboundPreviewEntry
                 {
                     Kind = OutboundPreviewEntryKind.Deprovisioning,
