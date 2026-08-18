@@ -341,36 +341,6 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Returns the inputs an Expression reads that the object has no value for, as the Expression addresses them.
-    /// </summary>
-    /// <remarks>
-    /// "No value" is an absent key, a null, or an empty string: an attribute present but blank is no value
-    /// everywhere else in Attribute Flow, and an Expression concatenating it produces the same broken output as one
-    /// reading an attribute that is not there at all.
-    /// </remarks>
-    /// <param name="expression">The Expression whose inputs to check.</param>
-    /// <param name="availableAttributes">The attribute values the evaluation will run against.</param>
-    /// <param name="side">Which side those values are, so inputs from the other side are left alone.</param>
-    private static IReadOnlyList<string> FindMissingInputs(
-        string? expression,
-        IDictionary<string, object?> availableAttributes,
-        ExpressionInputSource side)
-    {
-        var missing = new List<string>();
-
-        foreach (var input in ExpressionInputResolver.ResolveCached(expression).Where(i => i.Source == side))
-        {
-            if (!availableAttributes.TryGetValue(input.AttributeName, out var value) || value == null ||
-                (value is string text && text.Length == 0))
-            {
-                missing.Add(input.Accessor);
-            }
-        }
-
-        return missing;
-    }
-
-    /// <summary>
     /// Processes an expression-based Synchronisation Rule mapping source.
     /// </summary>
     private static void ProcessExpressionMapping(
@@ -413,7 +383,7 @@ public partial class SyncEngine
         // would fail every object on a mapping that is misconfigured in a different way entirely.
         if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
         {
-            var missingInputs = FindMissingInputs(source.Expression, csAttributeDictionary, ExpressionInputSource.ConnectedSystem);
+            var missingInputs = ExpressionInputResolver.FindMissingInputs(source.Expression, ExpressionInputSource.ConnectedSystem, csAttributeDictionary);
             if (missingInputs.Count > 0)
             {
                 switch (source.MissingInputBehaviour)

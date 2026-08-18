@@ -2542,28 +2542,6 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
-    /// Returns the Metaverse inputs an export Expression reads that this Metaverse Object has no value for, as the
-    /// Expression addresses them. "No value" is an absent key, a null, or an empty string, matching the inbound
-    /// side and matching what a concatenation would turn into a broken value.
-    /// </summary>
-    private static IReadOnlyList<string> FindMissingExpressionInputs(string? expression, IDictionary<string, object?> metaverseAttributes)
-    {
-        var missing = new List<string>();
-
-        foreach (var input in ExpressionInputResolver.ResolveCached(expression)
-                     .Where(i => i.Source == ExpressionInputSource.Metaverse))
-        {
-            if (!metaverseAttributes.TryGetValue(input.AttributeName, out var value) || value == null ||
-                (value is string text && text.Length == 0))
-            {
-                missing.Add(input.Accessor);
-            }
-        }
-
-        return missing;
-    }
-
-    /// <summary>
     /// Builds a <see cref="SyncExpressionEvaluationException"/> carrying the failing export expression and
     /// the target connected system attribute name, so the worker can record an ExpressionEvaluationError
     /// RPEI for the Metaverse Object being evaluated.
@@ -2685,7 +2663,7 @@ public class ExportEvaluationServer
                     // missing a value.
                     if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
                     {
-                        var missingInputs = FindMissingExpressionInputs(source.Expression, mvAttributeDictionary);
+                        var missingInputs = ExpressionInputResolver.FindMissingInputs(source.Expression, ExpressionInputSource.Metaverse, mvAttributeDictionary);
                         if (missingInputs.Count > 0)
                         {
                             if (source.MissingInputBehaviour == MissingInputBehaviour.FailObject)

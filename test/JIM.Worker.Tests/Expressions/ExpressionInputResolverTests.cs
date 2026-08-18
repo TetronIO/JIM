@@ -117,4 +117,42 @@ public class ExpressionInputResolverTests
     {
         Assert.That(ExpressionInputResolver.ResolveCached(expression), Is.Empty);
     }
+
+    /// <summary>
+    /// The three states that count as no value, and the one that does not. Both the inbound and the outbound
+    /// paths ask this question, so it is answered in one place rather than twice.
+    /// </summary>
+    [Test]
+    public void FindMissingInputs_AbsentNullAndEmptyCountAsNoValue_WhitespaceDoesNot()
+    {
+        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["present"] = "Ada",
+            ["nulled"] = null,
+            ["empty"] = string.Empty,
+            ["blank"] = "   "
+        };
+
+        var missing = ExpressionInputResolver.FindMissingInputs(
+            "cs[\"present\"] + cs[\"nulled\"] + cs[\"empty\"] + cs[\"blank\"] + cs[\"absent\"]",
+            ExpressionInputSource.ConnectedSystem,
+            attributes);
+
+        // Whitespace is not judged here: whether it counts as a value is the mapping's own "treat whitespace as
+        // no value" setting, applied later, and second-guessing it here would override the administrator.
+        Assert.That(missing, Is.EqualTo(new[] { "cs[\"nulled\"]", "cs[\"empty\"]", "cs[\"absent\"]" }));
+    }
+
+    [Test]
+    public void FindMissingInputs_InputsFromTheOtherSide_AreLeftAlone()
+    {
+        // An inbound evaluation carries Connected System values only, so an mv[...] accessor is not an object
+        // missing a value; it resolves to null by design and is the Expression author's business.
+        var missing = ExpressionInputResolver.FindMissingInputs(
+            "cs[\"sn\"] + mv[\"Display Name\"]",
+            ExpressionInputSource.ConnectedSystem,
+            new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase) { ["sn"] = "Lovelace" });
+
+        Assert.That(missing, Is.Empty);
+    }
 }
