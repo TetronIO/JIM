@@ -32,6 +32,16 @@ function New-JIMSyncRuleMapping {
         Can be a single value or an array for multiple sources.
         Mutually exclusive with -Expression.
 
+    .PARAMETER MissingInputBehaviour
+        For expression mappings: what to do when an attribute the expression reads has no value on the object
+        being synchronised. Omit for EvaluateAnyway, which evaluates the expression regardless and is what JIM
+        has always done.
+        - EvaluateAnyway: evaluate with the input absent and contribute whatever it returns.
+        - ContributeNoValue: do not evaluate; contribute nothing, resolved by Attribute Priority. Not an error.
+        - FailMapping: do not evaluate; record an ExpressionMissingInput error. The object's other attributes
+          still flow.
+        - FailObject: do not evaluate anything for the object; it is errored and left untouched.
+
     .PARAMETER Expression
         An expression to evaluate for the source value.
         Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access.
@@ -82,6 +92,12 @@ function New-JIMSyncRuleMapping {
         New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=domain,DC=local"'
 
         Creates an export mapping that uses an expression to construct a Distinguished Name.
+
+    .EXAMPLE
+        New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=domain,DC=local"' -MissingInputBehaviour FailObject
+
+        Builds a Distinguished Name, and refuses to export an object with no Display Name rather than exporting
+        "CN=,OU=TestUsers,DC=domain,DC=local".
 
     .EXAMPLE
         New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -Expression 'Lower(cs["FirstName"]) + "." + Lower(cs["LastName"]) + "@company.com"'
@@ -140,6 +156,13 @@ function New-JIMSyncRuleMapping {
         [Parameter(ParameterSetName = 'ImportExpression')]
         [Parameter(ParameterSetName = 'ExportExpression')]
         [string]$Expression,
+
+        # What the Expression does when an attribute it reads has no value on the object being synchronised.
+        # Omit for EvaluateAnyway, which is what JIM has always done.
+        [Parameter(ParameterSetName = 'ImportExpression')]
+        [Parameter(ParameterSetName = 'ExportExpression')]
+        [ValidateSet('EvaluateAnyway', 'ContributeNoValue', 'FailMapping', 'FailObject')]
+        [string]$MissingInputBehaviour,
 
         # Inbound value processing (import mappings only). Whitespace-only/empty text values are treated as
         # no value by default; use -PreserveWhitespace to keep them as literal values instead.
@@ -200,10 +223,15 @@ function New-JIMSyncRuleMapping {
 
             if ($hasExpression) {
                 # Expression-based import mapping
-                $body.sources += @{
+                $expressionSource = @{
                     order = 0
                     expression = $Expression
                 }
+                if ($PSBoundParameters.ContainsKey('MissingInputBehaviour')) {
+                    # Sent as the enum member name; the API rejects numeric ordinals.
+                    $expressionSource.missingInputBehaviour = $MissingInputBehaviour
+                }
+                $body.sources += $expressionSource
             }
             elseif ($SourceConnectedSystemAttributeId) {
                 # Attribute-based import mapping
@@ -240,10 +268,15 @@ function New-JIMSyncRuleMapping {
 
             if ($hasExpression) {
                 # Expression-based export mapping
-                $body.sources += @{
+                $expressionSource = @{
                     order = 0
                     expression = $Expression
                 }
+                if ($PSBoundParameters.ContainsKey('MissingInputBehaviour')) {
+                    # Sent as the enum member name; the API rejects numeric ordinals.
+                    $expressionSource.missingInputBehaviour = $MissingInputBehaviour
+                }
+                $body.sources += $expressionSource
             }
             elseif ($SourceMetaverseAttributeId) {
                 # Attribute-based export mapping

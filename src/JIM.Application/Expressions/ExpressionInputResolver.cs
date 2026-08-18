@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using JIM.Models.Expressions;
 
@@ -22,6 +23,58 @@ namespace JIM.Application.Expressions;
 /// </remarks>
 public static partial class ExpressionInputResolver
 {
+    /// <summary>
+    /// Resolved inputs by Expression text. Resolution depends on nothing but the text, and the synchronisation
+    /// path resolves the same handful of Expressions once per object, which at customer scale is a regex sweep per
+    /// object per mapping for an answer that cannot have changed. Bounded by the number of distinct Expressions in
+    /// the configuration.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, IReadOnlyList<ExpressionInput>> Cache = new();
+
+    /// <summary>
+    /// Returns every attribute the Expression reads, resolving each distinct Expression once. Use this on the
+    /// synchronisation path; use <see cref="Resolve"/> where the Expression is one an administrator just typed.
+    /// </summary>
+    public static IReadOnlyList<ExpressionInput> ResolveCached(string? expression)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+            return Array.Empty<ExpressionInput>();
+
+        return Cache.GetOrAdd(expression, Resolve);
+    }
+
+    /// <summary>
+    /// Returns the inputs an Expression reads from one side of the Metaverse that the object has no value for, as
+    /// the Expression addresses them (for example <c>cs["lastName"]</c>).
+    /// </summary>
+    /// <remarks>
+    /// "No value" is an absent key, a null, or an empty string: an attribute present but blank is no value
+    /// everywhere else in Attribute Flow, and an Expression concatenating it produces the same broken output as
+    /// one reading an attribute that is not there at all. Inputs from the other side are left alone, because each
+    /// evaluation only carries one side's values (#1361).
+    /// </remarks>
+    /// <param name="expression">The Expression whose inputs to check.</param>
+    /// <param name="side">Which side the supplied values are.</param>
+    /// <param name="availableAttributes">The attribute values the evaluation will run against.</param>
+    public static IReadOnlyList<string> FindMissingInputs(
+        string? expression,
+        ExpressionInputSource side,
+        IDictionary<string, object?> availableAttributes)
+    {
+        return ResolveCached(expression)
+            .Where(input => input.Source == side && HasNoValue(availableAttributes, input.AttributeName))
+            .Select(input => input.Accessor)
+            .ToList();
+    }
+
+    private static bool HasNoValue(IDictionary<string, object?> availableAttributes, string attributeName)
+    {
+        if (!availableAttributes.TryGetValue(attributeName, out var value))
+            return true;
+
+        return value == null || (value is string text && text.Length == 0);
+    }
+
     /// <summary>
     /// Returns every attribute the Expression reads, in the order it first mentions them, without duplicates.
     /// </summary>

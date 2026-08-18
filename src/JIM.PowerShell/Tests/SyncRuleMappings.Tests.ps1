@@ -177,6 +177,71 @@ Describe 'New-JIMSyncRuleMapping' {
         }
     }
 
+    Context 'Missing Input Behaviour (#1361)' {
+
+        BeforeAll {
+            $command = Get-Command New-JIMSyncRuleMapping
+        }
+
+        It 'MissingInputBehaviour should be available only on expression parameter sets' {
+            # It governs what happens when an attribute the Expression reads has no value, so it means nothing
+            # on a direct attribute mapping.
+            $setNames = $command.Parameters['MissingInputBehaviour'].ParameterSets.Keys
+            $setNames | Should -Contain 'ImportExpression'
+            $setNames | Should -Contain 'ExportExpression'
+            $setNames | Should -Not -Contain 'ImportAttribute'
+            $setNames | Should -Not -Contain 'ExportAttribute'
+        }
+
+        It 'MissingInputBehaviour should validate against the four behaviours' {
+            $param = $command.Parameters['MissingInputBehaviour']
+            $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet | Should -Not -BeNullOrEmpty
+            $validateSet.ValidValues | Should -Be @('EvaluateAnyway', 'ContributeNoValue', 'FailMapping', 'FailObject')
+        }
+
+        It 'Sends missingInputBehaviour on the source for an export Expression mapping' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -Expression 'mv["Display Name"]' `
+                    -MissingInputBehaviour FailObject -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.sources[0].missingInputBehaviour -eq 'FailObject'
+                }
+            }
+        }
+
+        It 'Sends missingInputBehaviour on the source for an import Expression mapping' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -Expression 'cs["sn"]' `
+                    -MissingInputBehaviour FailMapping -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.sources[0].missingInputBehaviour -eq 'FailMapping'
+                }
+            }
+        }
+
+        It 'Omits missingInputBehaviour when not supplied, leaving the server default' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -Expression 'mv["Display Name"]' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.sources[0].ContainsKey('missingInputBehaviour')
+                }
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
@@ -189,6 +254,10 @@ Describe 'New-JIMSyncRuleMapping' {
 
         It 'Should document the NullIsValue parameter' {
             ($help.Parameters.Parameter | Where-Object { $_.Name -eq 'NullIsValue' }) | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should document the MissingInputBehaviour parameter' {
+            ($help.Parameters.Parameter | Where-Object { $_.Name -eq 'MissingInputBehaviour' }) | Should -Not -BeNullOrEmpty
         }
 
         It 'Should have examples' {

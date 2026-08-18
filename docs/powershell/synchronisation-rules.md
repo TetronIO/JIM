@@ -411,6 +411,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `SourceConnectedSystemAttributeId` | `int[]` | Yes (ImportAttribute set) | | One or more Connected System attribute IDs to read from |
 | `SourceMetaverseAttributeId` | `int[]` | Yes (ExportAttribute set) | | One or more metaverse attribute IDs to read from |
 | `Expression` | `string` | Yes (ImportExpression, ExportExpression sets) | | A DynamicExpresso expression. Use `mv["Name"]` for metaverse attributes and `cs["Name"]` for Connected System attributes. |
+| `MissingInputBehaviour` | `string` | No (ImportExpression, ExportExpression sets) | `EvaluateAnyway` | What to do when an attribute the expression reads has no value on the object: `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess). |
 
 ### Output
 
@@ -422,6 +423,7 @@ Returns the created mapping object.
 
 - When multiple source attributes are provided, they are automatically ordered by position (0, 1, 2, and so on).
 - Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` accessors.
+- `MissingInputBehaviour` applies to expression mappings only; a direct Attribute Flow has no inputs to be missing. Omit it to leave the mapping on `EvaluateAnyway`, which is how every mapping created before this parameter existed behaves.
 
 ### Examples
 
@@ -435,6 +437,13 @@ New-JIMSyncRuleMapping -SyncRuleId 5 `
 New-JIMSyncRuleMapping -SyncRuleId 5 `
     -Expression 'cs["givenName"] + " " + cs["sn"]' `
     -TargetMetaverseAttributeId 7
+```
+
+```powershell title="Expression export: refuse to build a Distinguished Name from a missing value"
+New-JIMSyncRuleMapping -SyncRuleId 8 `
+    -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=company,DC=local"' `
+    -TargetConnectedSystemAttributeId 30 `
+    -MissingInputBehaviour FailObject
 ```
 
 ```powershell title="Direct export: map MV 'email' to CS 'mail'"
