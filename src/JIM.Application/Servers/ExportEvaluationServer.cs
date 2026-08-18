@@ -186,11 +186,15 @@ public class ExportEvaluationServer
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed</param>
     /// <param name="sourceSystem">The Connected System that caused this change (for Q3 circular prevention)</param>
+    /// <param name="workingSet">Optional working set accumulating this run's staging decisions (#288 Phase 1a);
+    /// when omitted, a local instance records for this call only.</param>
     /// <returns>List of PendingExports for deprovisioning actions</returns>
     public async Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
-        ConnectedSystem? sourceSystem = null)
+        ConnectedSystem? sourceSystem = null,
+        ExportEvaluationWorkingSet? workingSet = null)
     {
+        workingSet ??= new ExportEvaluationWorkingSet();
         var pendingExports = new List<PendingExport>();
 
         if (mvo.Type == null)
@@ -248,7 +252,7 @@ public class ExportEvaluationServer
                 mvo.Id, exportRule.Name, existingCso.Id);
 
             // Handle based on OutboundDeprovisionAction
-            var pendingExport = await HandleOutboundDeprovisioningAsync(mvo, existingCso, exportRule);
+            var pendingExport = await HandleOutboundDeprovisioningAsync(mvo, existingCso, exportRule, workingSet);
             if (pendingExport != null)
             {
                 pendingExports.Add(pendingExport);
@@ -459,12 +463,16 @@ public class ExportEvaluationServer
     /// <param name="mvo">The Metaverse Object that changed.</param>
     /// <param name="sourceSystem">The Connected System that caused this change (for Q3 circular prevention).</param>
     /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
+    /// <param name="workingSet">Optional working set accumulating this run's staging decisions (#288 Phase 1a);
+    /// when omitted, a local instance records for this call only.</param>
     /// <returns>List of PendingExports for deprovisioning actions.</returns>
     public async Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
         ConnectedSystem? sourceSystem,
-        ExportEvaluationCache cache)
+        ExportEvaluationCache cache,
+        ExportEvaluationWorkingSet? workingSet = null)
     {
+        workingSet ??= new ExportEvaluationWorkingSet();
         var pendingExports = new List<PendingExport>();
 
         if (mvo.Type == null)
@@ -526,7 +534,7 @@ public class ExportEvaluationServer
                 mvo.Id, exportRule.Name, existingCso.Id);
 
             // Handle based on OutboundDeprovisionAction
-            var pendingExport = await HandleOutboundDeprovisioningAsync(mvo, existingCso, exportRule);
+            var pendingExport = await HandleOutboundDeprovisioningAsync(mvo, existingCso, exportRule, workingSet);
             if (pendingExport != null)
             {
                 pendingExports.Add(pendingExport);
@@ -538,15 +546,21 @@ public class ExportEvaluationServer
 
     /// <summary>
     /// Handles deprovisioning based on the Synchronisation Rule's OutboundDeprovisionAction setting.
+    /// The verdict comes from the pure engine (#288 extraction); this method is orchestration: apply the
+    /// join-break mutations, persist, and stage the Delete export where the engine says so.
     /// </summary>
     private async Task<PendingExport?> HandleOutboundDeprovisioningAsync(
         MetaverseObject mvo,
         ConnectedSystemObject cso,
-        SyncRule exportRule)
+        SyncRule exportRule,
+        ExportEvaluationWorkingSet workingSet)
     {
-        switch (exportRule.OutboundDeprovisionAction)
+        // Verdict call only: the existing Pending Export is resolved inside the staging path, where the
+        // engine is consulted again with it (a pure function, so the second call costs nothing).
+        var decision = _syncEngine.DecideOutOfScopeDeprovisioning(exportRule, existingPendingExport: null);
+        switch (decision.Action)
         {
-            case OutboundDeprovisionAction.Disconnect:
+            case OutOfScopeDeprovisioningAction.Disconnect:
                 // Break the join between CSO and MVO, but leave CSO in the target system
                 Log.Information("HandleOutboundDeprovisioningAsync: Disconnecting CSO {CsoId} from MVO {MvoId} (OutboundDeprovisionAction=Disconnect)",
                     cso.Id, mvo.Id);
@@ -563,28 +577,24 @@ public class ExportEvaluationServer
                 // Update the CSO in the database
                 await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
 
-                // Check if this was the last connector for the MVO
-                if (mvo.ConnectedSystemObjects.Count == 0 && mvo.Origin == MetaverseObjectOrigin.Projected)
+                // Was that the last connector? (Asked after the removal above, per the engine's contract.)
+                if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo))
                 {
-                    // Handle MVO deletion rules (set LastConnectorDisconnectedDate)
-                    if (mvo.Type?.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected)
-                    {
-                        mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
-                        Log.Information("HandleOutboundDeprovisioningAsync: MVO {MvoId} has no more connectors. LastConnectorDisconnectedDate set to {Date}",
-                            mvo.Id, mvo.LastConnectorDisconnectedDate);
-                    }
+                    mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+                    Log.Information("HandleOutboundDeprovisioningAsync: MVO {MvoId} has no more connectors. LastConnectorDisconnectedDate set to {Date}",
+                        mvo.Id, mvo.LastConnectorDisconnectedDate);
                 }
 
                 return null; // No Pending Export needed for disconnect
 
-            case OutboundDeprovisionAction.Delete:
+            case OutOfScopeDeprovisioningAction.StageDeleteExport:
                 // Create (or reclaim) a Delete PendingExport for this CSO. The helper handles
                 // the collision case where a previous export's PE is still attached to the CSO
                 // because the next confirming import hasn't run yet to reconcile it away.
                 Log.Information("HandleOutboundDeprovisioningAsync: Ensuring delete PendingExport for CSO {CsoId} (OutboundDeprovisionAction=Delete)",
                     cso.Id);
 
-                return await EnsureDeletePendingExportAsync(cso, mvo.Id);
+                return await EnsureDeletePendingExportAsync(cso, mvo.Id, exportRule, workingSet);
 
             default:
                 Log.Warning("HandleOutboundDeprovisioningAsync: Unknown OutboundDeprovisionAction {Action} for rule {RuleName}",
@@ -723,24 +733,28 @@ public class ExportEvaluationServer
             {
                 // The definitive decision, now that the existing Pending Export is known; recorded in the
                 // working set so anything else this run asks about the CSO gets this answer without a query.
+                // A Delete Pending Export this run already staged (working set) takes precedence over the
+                // batched pre-read: it is this run's own write, and by construction the reuse case.
+                var existingPe = workingSet.TryGetStagedDeleteExport(cso.Id, out var stagedPe)
+                    ? stagedPe
+                    : existingPesByCsoId.GetValueOrDefault(cso.Id);
                 var decision = _syncEngine.DecideMvoDeletionExport(
-                    cso, mvoTypeIdsByMvoId[mvoId], exportRulesByMvoTypeId,
-                    existingPesByCsoId.GetValueOrDefault(cso.Id));
+                    cso, mvoTypeIdsByMvoId[mvoId], exportRulesByMvoTypeId, existingPe);
                 workingSet.RecordDeleteDecision(cso.Id, decision);
 
                 if (decision.ExistingPendingExportToReuse is { } reusedPe)
                 {
                     Log.Information("EvaluateMvoDeletionsAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
                         reusedPe.Id, cso.Id, reusedPe.Status);
+                    workingSet.RecordStagedDeleteExport(cso.Id, reusedPe);
                     pendingExports.Add(reusedPe);
                     continue;
                 }
 
                 if (decision.MustReplaceExistingPendingExport)
                 {
-                    var existingPe = existingPesByCsoId[cso.Id];
                     Log.Information("EvaluateMvoDeletionsAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
-                        existingPe.ChangeType, existingPe.Id, cso.Id);
+                        existingPe!.ChangeType, existingPe.Id, cso.Id);
                     replacedPeCsoIds.Add(cso.Id);
                 }
 
@@ -795,6 +809,12 @@ public class ExportEvaluationServer
             {
                 await SyncRepo.CreatePendingExportsAsync(newPendingExports);
                 pendingExports.AddRange(newPendingExports);
+
+                // Recorded after the bulk create succeeds, so a failed write cannot leave the working set
+                // claiming Pending Exports that were never persisted (the per-MVO fallback re-evaluates with
+                // this same working set and must not reuse a phantom).
+                foreach (var newPendingExport in newPendingExports)
+                    workingSet.RecordStagedDeleteExport(newPendingExport.ConnectedSystemObjectId!.Value, newPendingExport);
             }
         }
 
@@ -841,6 +861,10 @@ public class ExportEvaluationServer
     /// </remarks>
     /// <param name="cso">The CSO to deprovision.</param>
     /// <param name="sourceMetaverseObjectId">The MVO that triggered the deprovisioning, recorded on the PE for causality tracing.</param>
+    /// <param name="exportRule">The export Synchronisation Rule whose Delete action asked for this, consulted
+    /// (via the pure engine) for the collision policy once the existing Pending Export is known.</param>
+    /// <param name="workingSet">The run's working set, consulted for a Delete Pending Export this run already
+    /// staged for the CSO before the per-object database read is paid (#288 Phase 1a).</param>
     /// <param name="attributeValueChanges">
     /// Optional attribute value changes to attach to a freshly-created PE (for example, the
     /// secondary external ID so a connector can still resolve the target DN after the CSO
@@ -850,8 +874,20 @@ public class ExportEvaluationServer
     private async Task<PendingExport> EnsureDeletePendingExportAsync(
         ConnectedSystemObject cso,
         Guid sourceMetaverseObjectId,
+        SyncRule exportRule,
+        ExportEvaluationWorkingSet workingSet,
         List<PendingExportAttributeValueChange>? attributeValueChanges = null)
     {
+        // This run's own writes are answered from the working set: a Delete Pending Export staged earlier in
+        // the run is by construction the reuse case, so the per-object read below is only paid for Pending
+        // Exports that existed before the run began.
+        if (workingSet.TryGetStagedDeleteExport(cso.Id, out var stagedPe))
+        {
+            Log.Information("EnsureDeletePendingExportAsync: Delete PendingExport {ExistingPeId} already staged for CSO {CsoId} this run (status: {Status}). Reusing without a database read.",
+                stagedPe.Id, cso.Id, stagedPe.Status);
+            return stagedPe;
+        }
+
         // Lean fetch (issue #986): this method only reads ChangeType/Id/Status off the existing
         // Pending Export and passes it to DeletePendingExportAsync, which needs AttributeValueChanges
         // loaded for EF-tracked child-row disposal. The heavy fetch also loaded the CSO's and source
@@ -859,17 +895,22 @@ public class ExportEvaluationServer
         // deprovisioning) runs into the hundreds of thousands of rows, none of them read here.
         var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id);
 
-        if (existingPe != null)
-        {
-            if (existingPe.ChangeType == PendingExportChangeType.Delete)
-            {
-                Log.Information("EnsureDeletePendingExportAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
-                    existingPe.Id, cso.Id, existingPe.Status);
-                return existingPe;
-            }
+        // The definitive decision, now that the existing Pending Export is known: the engine owns the
+        // one-Pending-Export-per-CSO collision policy (reuse a Delete, replace anything else).
+        var decision = _syncEngine.DecideOutOfScopeDeprovisioning(exportRule, existingPe);
 
+        if (decision.ExistingPendingExportToReuse is { } reusedPe)
+        {
+            Log.Information("EnsureDeletePendingExportAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
+                reusedPe.Id, cso.Id, reusedPe.Status);
+            workingSet.RecordStagedDeleteExport(cso.Id, reusedPe);
+            return reusedPe;
+        }
+
+        if (decision.MustReplaceExistingPendingExport)
+        {
             Log.Information("EnsureDeletePendingExportAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
-                existingPe.ChangeType, existingPe.Id, cso.Id);
+                existingPe!.ChangeType, existingPe.Id, cso.Id);
             await SyncRepo.DeletePendingExportAsync(existingPe);
         }
 
@@ -893,6 +934,10 @@ public class ExportEvaluationServer
         }
 
         await SyncRepo.CreatePendingExportAsync(pendingExport);
+
+        // Recorded after the create succeeds, so the working set never claims a Pending Export that a failed
+        // write left unpersisted.
+        workingSet.RecordStagedDeleteExport(cso.Id, pendingExport);
 
         Log.Information("EnsureDeletePendingExportAsync: Created delete PendingExport {ExportId} for CSO {CsoId} in system {SystemId}",
             pendingExport.Id, cso.Id, cso.ConnectedSystemId);

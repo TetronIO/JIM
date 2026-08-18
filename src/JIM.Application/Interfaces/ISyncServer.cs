@@ -258,7 +258,8 @@ public interface ISyncServer
     Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
         ConnectedSystem? sourceSystem,
-        ExportEvaluationCache cache);
+        ExportEvaluationCache cache,
+        ExportEvaluationWorkingSet? workingSet = null);
 
     /// <summary>
     /// Evaluates export rules for an MVO being deleted. Creates delete exports for CSOs matched by
@@ -266,13 +267,15 @@ public interface ISyncServer
     /// disconnects every joined CSO. Pass the run-scoped cache where one exists; otherwise the
     /// enabled export rules are loaded from the repository.
     /// </summary>
-    Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null);
+    Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null,
+        ExportEvaluationWorkingSet? workingSet = null);
 
     /// <summary>
     /// Set-based form of <see cref="EvaluateMvoDeletionAsync"/> (issue #993): one CSO fetch,
     /// Pending Export ensure and CSO disconnect pass for the whole batch of MVOs.
     /// </summary>
-    Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos, ExportEvaluationCache? exportEvaluationCache = null);
+    Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos, ExportEvaluationCache? exportEvaluationCache = null,
+        ExportEvaluationWorkingSet? workingSet = null);
 
     /// <summary>
     /// Captures the referencing-object and resolution state reference recall needs before Metaverse

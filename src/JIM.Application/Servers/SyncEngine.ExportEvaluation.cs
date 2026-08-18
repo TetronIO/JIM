@@ -80,4 +80,50 @@ public partial class SyncEngine
             SecondaryExternalIdAttribute = hasSecondaryId ? secondaryIdAttributeValue!.Attribute : null
         };
     }
+
+    /// <summary>
+    /// Decides what an export Synchronisation Rule's OutboundDeprovisionAction means for a CSO that has fallen
+    /// out of the rule's scope: disconnect, stage a Delete export (with the one-Pending-Export-per-CSO collision
+    /// policy choosing reuse, replace or create), or nothing at all for an action this engine does not recognise.
+    /// An unrecognised action is deliberately not defaulted to disconnect: deprovisioning semantics are never
+    /// guessed at, and the orchestrator surfaces the non-action as a warning.
+    /// </summary>
+    /// <param name="exportRule">The export Synchronisation Rule the CSO fell out of scope for.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to the CSO, if any; the caller
+    /// resolves this from the run's working set or the database.</param>
+    public OutOfScopeDeprovisioningDecision DecideOutOfScopeDeprovisioning(
+        SyncRule exportRule,
+        PendingExport? existingPendingExport)
+    {
+        switch (exportRule.OutboundDeprovisionAction)
+        {
+            case OutboundDeprovisionAction.Disconnect:
+                return new OutOfScopeDeprovisioningDecision { Action = OutOfScopeDeprovisioningAction.Disconnect };
+
+            case OutboundDeprovisionAction.Delete:
+                var reuseExisting = existingPendingExport?.ChangeType == PendingExportChangeType.Delete;
+                return new OutOfScopeDeprovisioningDecision
+                {
+                    Action = OutOfScopeDeprovisioningAction.StageDeleteExport,
+                    ExistingPendingExportToReuse = reuseExisting ? existingPendingExport : null,
+                    MustReplaceExistingPendingExport = existingPendingExport != null && !reuseExisting
+                };
+
+            default:
+                return new OutOfScopeDeprovisioningDecision { Action = OutOfScopeDeprovisioningAction.UnknownAction };
+        }
+    }
+
+    /// <summary>
+    /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
+    /// LastConnectorDisconnectedDate, starting the deletion grace period. Ask AFTER removing the disconnected
+    /// CSO from the object's collection: no connectors remaining is the collection being empty. Only a Projected
+    /// object whose Type's Deletion Rule is WhenLastConnectorDisconnected qualifies; an Internal object, or one
+    /// with no Type loaded, is never marked.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object the CSO was just disconnected from.</param>
+    public bool ShouldMarkLastConnectorDisconnected(MetaverseObject mvo) =>
+        mvo.ConnectedSystemObjects.Count == 0 &&
+        mvo.Origin == MetaverseObjectOrigin.Projected &&
+        mvo.Type?.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
 }
