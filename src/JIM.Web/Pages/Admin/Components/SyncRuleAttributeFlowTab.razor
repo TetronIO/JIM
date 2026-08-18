@@ -427,6 +427,11 @@
                         Label="Expression" Placeholder="e.g. IIF(mv[&quot;Active&quot;] == true, Upper(cs[&quot;Name&quot;]), null)"
                         Required="true" Class="mt-5" Variant="Variant.Outlined"
                         Lines="3" MaxLines="10" Sizing="InputSizing.Auto" Immediate="true" />
+
+                    @* Expression tester (#1405): the Expression field is where an administrator finds out whether
+                       their Expression does what they meant, and until now the answer only arrived from a
+                       Synchronisation. Immediate="true" above is what lets the tester follow the text as it is typed. *@
+                    <ExpressionTester Expression="@_attributeFlowMappingSource.Expression" />
                     break;
             }
 
