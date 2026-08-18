@@ -209,12 +209,20 @@ public class ExportEvaluationServer
             }
 
             // The object retrieved is the Metaverse Object's only one in this system whatever its Object Type,
-            // so it may not be the one this Rule targets (#1331). Deprovisioning it would disconnect or delete
-            // an object this Rule never owned, so skip rather than act.
+            // so it may not be the one this Rule targets (#1331). Deprovisioning an object this Rule never
+            // owned would disconnect or delete another Rule's object, so skip; and skip QUIETLY (#1399),
+            // because deprovisioning is always the duty of the Rule targeting the object's own type, and two
+            // Rules with disjoint scopes sharing a Connected System make this encounter the configuration's
+            // normal state, once per correctly provisioned object per sync. The in-scope staging path keeps
+            // the #1331 report, which is where an overlapping-scope misconfiguration actually surfaces.
             var deprovisionConflict = DetectObjectTypeConflict(mvo, exportRule, existingCso);
             if (deprovisionConflict != null)
             {
-                LogObjectTypeConflict(nameof(EvaluateOutOfScopeExportsAsync), deprovisionConflict, exportRule.ConnectedSystemId);
+                Log.Debug("EvaluateOutOfScopeExportsAsync: MVO {MvoId} is out of scope for rule {RuleName}, but its object " +
+                    "in system {SystemId} is a '{ExistingType}', not this rule's '{TargetType}'; its own rule owns its lifecycle.",
+                    mvo.Id, exportRule.Name, exportRule.ConnectedSystemId,
+                    LogSanitiser.Sanitise(deprovisionConflict.ExistingObjectTypeName),
+                    LogSanitiser.Sanitise(deprovisionConflict.TargetObjectTypeName));
                 continue;
             }
 
@@ -419,8 +427,7 @@ public class ExportEvaluationServer
     /// <returns>List of PendingExports for deprovisioning actions.</returns>
     public async Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
-        ExportEvaluationCache cache,
-        List<ExportObjectTypeConflict>? objectTypeConflicts = null)
+        ExportEvaluationCache cache)
     {
         var pendingExports = new List<PendingExport>();
 
@@ -458,13 +465,21 @@ public class ExportEvaluationServer
             }
 
             // The lookup carries no Object Type, so the object found may belong to a different Object Type
-            // than this Rule targets (#1331). Deprovisioning it would disconnect or delete an object this
-            // Rule never owned, which is a worse outcome than the export case, so skip rather than act.
+            // than this Rule targets (#1331). Deprovisioning an object this Rule never owned would disconnect
+            // or delete another Rule's object, so skip; and skip QUIETLY (#1399), because deprovisioning is
+            // always the duty of the Rule targeting the object's own type, and two Rules with disjoint scopes
+            // sharing a Connected System make this encounter the configuration's normal state, once per
+            // correctly provisioned object per sync. Reporting it here raised a warning RPEI against every
+            // clean run of such a configuration. The in-scope staging path keeps the #1331 report, which is
+            // where an overlapping-scope misconfiguration actually surfaces.
             var deprovisionConflict = DetectObjectTypeConflict(mvo, exportRule, existingCso);
             if (deprovisionConflict != null)
             {
-                objectTypeConflicts?.Add(deprovisionConflict);
-                LogObjectTypeConflict(nameof(EvaluateOutOfScopeExportsAsync), deprovisionConflict, exportRule.ConnectedSystemId);
+                Log.Debug("EvaluateOutOfScopeExportsAsync: MVO {MvoId} is out of scope for rule {RuleName}, but its object " +
+                    "in system {SystemId} is a '{ExistingType}', not this rule's '{TargetType}'; its own rule owns its lifecycle.",
+                    mvo.Id, exportRule.Name, exportRule.ConnectedSystemId,
+                    LogSanitiser.Sanitise(deprovisionConflict.ExistingObjectTypeName),
+                    LogSanitiser.Sanitise(deprovisionConflict.TargetObjectTypeName));
                 continue;
             }
 

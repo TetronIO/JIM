@@ -339,9 +339,8 @@ public class SyncServer : ISyncServer
 
     public Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
-        ExportEvaluationCache cache,
-        List<ExportObjectTypeConflict>? objectTypeConflicts = null)
-        => _exportEval.EvaluateOutOfScopeExportsAsync(mvo, cache, objectTypeConflicts);
+        ExportEvaluationCache cache)
+        => _exportEval.EvaluateOutOfScopeExportsAsync(mvo, cache);
 
     public Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null)
         => _exportEval.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);

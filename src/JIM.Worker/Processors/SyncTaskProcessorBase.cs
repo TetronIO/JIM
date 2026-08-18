@@ -1909,20 +1909,16 @@ public abstract class SyncTaskProcessorBase
             }
         }
 
-        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
+        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data.
+        // A Connected System Object of a different Object Type than a Rule targets is skipped quietly inside
+        // the evaluation (#1331, #1399): its own type's Rule owns its lifecycle, so there is nothing to report
+        // here, and reporting it raised a warning per correctly provisioned object on every synchronisation
+        // of a system whose Rules split their Object Types across disjoint scopes.
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
-            var deprovisionConflicts = new List<ExportObjectTypeConflict>();
             var deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
                 mvo,
-                _exportEvaluationCache!,
-                deprovisionConflicts);
-
-            // A Rule that went out of scope for a Metaverse Object whose Connected System Object belongs to a
-            // different Object Type deprovisioned nothing (#1331). Report it rather than leaving an object an
-            // administrator believes was deprovisioned still sitting in the Connected System.
-            foreach (var conflict in deprovisionConflicts)
-                _activity.RunProfileExecutionItems.Add(BuildObjectTypeConflictRpei(conflict));
+                _exportEvaluationCache!);
 
             // Track CSOs deprovisioned this page (newly staged or reused Delete Pending Exports; they
             // always reference a CSO) so the stale Delete Pending Export cancellation at the page flush
