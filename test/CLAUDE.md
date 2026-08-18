@@ -259,10 +259,14 @@ These flags are for human developer iteration only. Claude must not use them bec
 
 When the sandbox has a working Docker daemon (the SessionStart hook starts one where the environment supports it; `docker info` confirms), the full `Run-IntegrationTests.ps1` path works, including the Docker image builds, with ONE bridge: `dotnet restore` inside the build stages fails with `NU1301 ... UntrustedRoot` because the egress proxy re-terminates TLS and the build containers do not trust its CA.
 
-**Set one environment variable; do not edit the Dockerfiles.** All three build stages already accept an `EXTRA_CA_CERTS_BASE64` build argument for exactly this case (corporate TLS inspection), and `docker-compose.yml` wires it to `JIM_BUILD_EXTRA_CA_BASE64` for `jim.web`, `jim.worker` and `jim.scheduler`:
+**Set one environment variable; do not edit the Dockerfiles.** All three build stages already accept an `EXTRA_CA_CERTS_BASE64` build argument for exactly this case (corporate TLS inspection), and `docker-compose.yml` wires it to `JIM_BUILD_EXTRA_CA_BASE64` for `jim.web`, `jim.worker` and `jim.scheduler`. **Do NOT base64 the whole of `/root/.ccr/ca-bundle.crt` into it**: at ~310KB encoded it exceeds the kernel's 128KB per-argument `execve` limit, so every child process in the pipeline dies with "Argument list too long" before Docker is even reached. And `agent-proxy-ca.crt` alone is not enough either: containers cannot reach the local agent proxy on 127.0.0.1, so their traffic is intercepted by the **outer egress gateway**, which signs with a different CA ("Egress Gateway SDS Issuing CA") that only appears inside the big bundle. Capture the gateway's own chain from inside a container and use that (verified 2026-08-18):
 
 ```bash
-export JIM_BUILD_EXTRA_CA_BASE64=$(base64 -w0 /root/.ccr/ca-bundle.crt)
+docker run --rm mcr.microsoft.com/dotnet/sdk:10.0-noble bash -c \
+  'echo | openssl s_client -connect api.nuget.org:443 -servername api.nuget.org -showcerts 2>/dev/null' \
+  | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/' | awk 'BEGIN{c=-1} /BEGIN CERTIFICATE/{c++} c>=1' > /tmp/egress-cas.pem
+cat /root/.ccr/agent-proxy-ca.crt >> /tmp/egress-cas.pem   # ~9KB base64 total; well under the limit
+export JIM_BUILD_EXTRA_CA_BASE64=$(base64 -w0 /tmp/egress-cas.pem)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario14-AttributePriority -DirectoryType OpenLDAP
 ```
 
