@@ -3303,6 +3303,75 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Update an Attribute Flow Mapping's settings
+    /// </summary>
+    /// <remarks>
+    /// Changes how an existing Attribute Flow behaves, leaving what it reads and writes alone. Omit a field to
+    /// leave that setting as it is. Retargeting a mapping, or swapping its source between an attribute and an
+    /// Expression, is not supported here: delete the mapping and create it again.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="mappingId">The unique identifier of the mapping to update.</param>
+    /// <param name="request">The settings to change.</param>
+    /// <returns>The updated mapping.</returns>
+    /// <response code="200">Returns the updated mapping.</response>
+    /// <response code="400">The request named no setting, named one that does not apply to this mapping, or carried an invalid Expression.</response>
+    /// <response code="404">Synchronisation Rule or mapping not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPatch("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "UpdateSyncRuleMapping")]
+    [ProducesResponseType(typeof(SyncRuleMappingDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateSyncRuleMappingAsync(int syncRuleId, int mappingId, [FromBody] UpdateSyncRuleMappingRequest request)
+    {
+        _logger.LogInformation("Updating mapping {MappingId} for Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for mapping update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var existing = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
+        if (existing == null || (existing.SyncRule?.Id ?? existing.SyncRuleId) != syncRuleId)
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
+
+        // Validated here rather than in the application layer, so that a bad Expression is refused by the same
+        // evaluator, with the same message, as when the mapping was created.
+        if (request.Expression != null)
+        {
+            var validationResult = _expressionEvaluator.Validate(request.Expression);
+            if (!validationResult.IsValid)
+                return BadRequest(ApiErrorResponse.BadRequest($"Invalid expression: {validationResult.ErrorMessage}"));
+        }
+
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            var updated = apiKey != null
+                ? await _application.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(mappingId, request.ToSettingsUpdate(), apiKey)
+                : await _application.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(mappingId, request.ToSettingsUpdate(), initiatedBy);
+
+            if (updated == null)
+                return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
+
+            _logger.LogInformation("Updated mapping {MappingId} on Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
+            return Ok(SyncRuleMappingDto.FromEntity(updated));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to update Synchronisation Rule mapping: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
     /// Delete an Attribute Flow Mapping
     /// </summary>
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>

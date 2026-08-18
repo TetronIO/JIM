@@ -306,7 +306,7 @@ IIF(IsNullOrWhitespace(cs["Last Name"]), mv["Email"], Lower(cs["First Name"]) + 
 "CN=" + EscapeDN(mv["Account Name"]) + ",OU=Users,DC=company,DC=local"
 ```
 
-Set it from PowerShell with `New-JIMSyncRuleMapping -MissingInputBehaviour`, or over the REST API with `missingInputBehaviour` on the mapping source.
+Set it from PowerShell with `New-JIMSyncRuleMapping -MissingInputBehaviour`, or over the REST API with `missingInputBehaviour` on the mapping source. Change it on a mapping that already exists with `Set-JIMSyncRuleMapping -MissingInputBehaviour`, or `PATCH /sync-rules/{id}/mappings/{mappingId}`.
 
 ### Summary
 
