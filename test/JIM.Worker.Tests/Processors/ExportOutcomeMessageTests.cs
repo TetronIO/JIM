@@ -31,6 +31,16 @@ public class ExportOutcomeMessageTests
     }
 
     [Test]
+    public void ForExport_SomeWrittenInPart_SaysSoBesideSucceeded()
+    {
+        // #1398: an export written without its unresolved references counts as succeeded (something was
+        // written) but is not finished; "succeeded" alone would read as though it were.
+        var message = ExportOutcomeMessage.ForExport(succeeded: 43, failed: 0, deferred: 0, throughput: string.Empty, writtenInPart: 4);
+
+        Assert.That(message, Is.EqualTo("Export complete: 43 succeeded (4 written in part, awaiting references), 0 failed, 0 deferred"));
+    }
+
+    [Test]
     public void ForPreview_LargeCount_GroupsTheDigits()
     {
         var message = ExportOutcomeMessage.ForPreview(pendingExports: 10_000);

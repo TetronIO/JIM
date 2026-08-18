@@ -390,11 +390,16 @@ public class SyncExportTaskProcessor
             {
                 Activity = _activity,
                 ActivityId = _activity.Id,
-                ObjectChangeType = exportItem.ChangeType switch
-                {
-                    PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
-                    _ => ObjectChangeType.Exported
-                },
+                // An export that wrote nothing this run (deferred whole, issue #1398) is a Pending Export
+                // still staged, not something exported; its item exists to carry why it is waiting.
+                ObjectChangeType = exportItem.Deferred
+                    ? ObjectChangeType.PendingExport
+                    : exportItem.ChangeType switch
+                    {
+                        PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
+                        _ => ObjectChangeType.Exported
+                    },
+                PendingExportId = exportItem.Deferred ? exportItem.PendingExportId : null
             };
 
             // Link to the Connected System Object if available.
@@ -416,7 +421,7 @@ public class SyncExportTaskProcessor
                 ObjectNaming.ConnectedSystemNameRank);
 
             // Set error information if the export failed
-            if (!exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
+            if (!exportItem.Deferred && !exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
                 executionItem.ErrorType = exportItem.ErrorType switch
                 {
@@ -429,9 +434,19 @@ public class SyncExportTaskProcessor
                         ? $"Export failed: {exportItem.ErrorMessage}"
                         : exportItem.ErrorMessage;
             }
+            else if (!string.IsNullOrEmpty(exportItem.UnresolvedReferenceMessage))
+            {
+                // Issue #1398: the export (written in part, or deferred whole) refers to an object that has
+                // no Connected System Object in this system. Reported as the import side reports its own
+                // unresolved references: an Unresolved Reference error on the object, which completes the
+                // Activity with a warning. Only raised under Error handling; see
+                // ExportExecutionServer.BuildUnresolvedReferenceNotesAsync.
+                executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+                executionItem.ErrorMessage = exportItem.UnresolvedReferenceMessage;
+            }
 
-            // Build sync outcome
-            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            // Build sync outcome. A deferred item wrote nothing, so there is no export outcome to record.
+            if (!exportItem.Deferred && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var outcomeType = exportItem.ChangeType switch
                 {
@@ -519,6 +534,18 @@ public class SyncExportTaskProcessor
         // Update activity progress
         _activity.ObjectsProcessed = result.TotalPendingExports;
 
+        // Issue #1398: under Warn handling, references that could not be written because the referenced
+        // object has no Connected System Object in this system are summarised on the Activity rather than
+        // marked per object; under Error handling the per-object items above carry them, and under Ignore
+        // they are logged only. Mirrors the import side's Warn summary.
+        if (_connectedSystem.UnresolvedReferenceHandling == UnresolvedReferenceHandling.Warn && result.UnresolvableReferenceCount > 0)
+        {
+            var warningSummary = $"{result.UnresolvableReferenceCount} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System. The referenced objects are out of scope for every Synchronisation Rule into this system, or have not been provisioned yet; view the affected Pending Exports for details.";
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+                ? warningSummary
+                : $"{_activity.WarningMessage}\n{warningSummary}";
+        }
+
         // Set completion message based on mode and results
         string completionMessage;
         if (_runMode == SyncRunMode.PreviewOnly)
@@ -529,7 +556,8 @@ public class SyncExportTaskProcessor
         {
             var processed = result.SuccessCount + result.FailedCount + result.DeferredCount;
             completionMessage = ExportOutcomeMessage.ForExport(
-                result.SuccessCount, result.FailedCount, result.DeferredCount, throughput.FormatCompletion(processed));
+                result.SuccessCount, result.FailedCount, result.DeferredCount, throughput.FormatCompletion(processed),
+                result.PartiallyExportedCount);
         }
 
         await _syncRepo.UpdateActivityAsync(_activity);

@@ -89,7 +89,7 @@ An Export writes Pending Exports to the Object Type's table. Each object is writ
 | Update | Updates only the columns whose values changed. Anchor columns are never rewritten: an update that would touch one is refused with an explanation, because a rewritten primary key would orphan the object without any error. |
 | Delete | Deletes the related rows first, then the parent row, without relying on the schema declaring a cascade. A row that has already gone counts as success. |
 | Multi-valued add / remove | Inserts or deletes rows of the related table. |
-| Reference | Writes the referenced Connected System Object's own identifier, converted to whatever type the column holds. An export whose reference has not yet been provisioned into this database is deferred and retried once it has. |
+| Reference | Writes the referenced Connected System Object's own identifier, converted to whatever type the column holds. A row whose reference cannot be resolved yet is still inserted, without that column; the reference is written once the referenced object has been provisioned into this database and its key is known. A reference column declared `NOT NULL` therefore refuses such a row, and the export reports an ordinary error for it. See [Unresolved reference handling](../configuration/connected-systems.md#on-export). |
 
 Every write reads its affected-row count back and answers for it. A statement that raised no error but changed nothing (a trigger discarding the insert, a row deleted outside JIM) fails that object with a message saying what to check, rather than confirming an object the table does not hold. A failure is confined to its object; the batch continues, and the failed export enters JIM's normal retry and backoff.
 
