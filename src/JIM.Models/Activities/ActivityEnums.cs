@@ -139,7 +139,33 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// object leaving scope loses JIM nothing; a joined one takes its contributed attribute values out of the
     /// Metaverse with it and may leave its Metaverse Object with no connectors at all.
     /// </summary>
-    WouldDisconnectFromMetaverseObject
+    WouldDisconnectFromMetaverseObject,
+
+    /// <summary>
+    /// Preview only (#1115): the next synchronisation would stage a Pending Export of type Delete for this object,
+    /// removing it from its target Connected System. The preview sibling of <see cref="DeprovisionQueued"/>, used
+    /// where a proposed Outbound Deprovision Action of Delete would turn an out-of-scope disconnection into a
+    /// deletion in the target system; the destructive count an administrator consents to.
+    /// </summary>
+    WouldStageDeleteExport,
+
+    /// <summary>
+    /// Preview only (#1115): a joined object that the current configuration would disconnect on its next
+    /// synchronisation would instead keep its Metaverse Object join under the proposal ("once managed, always
+    /// managed"). The relaxing direction of the Inbound Out-of-Scope Action toggle; nothing is destroyed, and the
+    /// preview states it so the administrator knows the disconnections they may have been expecting stop.
+    /// </summary>
+    WouldRemainJoined,
+
+    /// <summary>
+    /// Preview only (#1115): the object is joined and in scope today, so nothing happens to it on save, but the
+    /// fate a future scope exit would hand it changes with the proposed Outbound Deprovision Action (disconnect
+    /// versus delete in the target system). The exposure tier of the destructive-toggle preview: it counts every
+    /// object the changed action now stands over, which is the number that makes "3,400 objects in this system
+    /// move from Disconnect to Delete" readable at a glance. The direction of the change is carried in the
+    /// delta's old and new values.
+    /// </summary>
+    WouldChangeDeprovisionAction
 }
 
 /// <summary>
