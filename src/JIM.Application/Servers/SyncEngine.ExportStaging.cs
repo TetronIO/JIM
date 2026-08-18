@@ -105,6 +105,29 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// Selects the Object Matching Rules export matching should try for an export Synchronisation Rule, in
+    /// the order to try them (#288 plan item 1e). The Connected System's matching mode chooses the source:
+    /// Connected System mode reads the Connected System Object Type's shared rules, Advanced mode reads the
+    /// Synchronisation Rule's own. An empty answer means matching is not attempted and provisioning proceeds
+    /// as though no match existed; a rule whose Connected System or Connected System Object Type navigation is
+    /// not loaded answers empty for the same reason, because the mode cannot be read. The per-rule candidate
+    /// query stays with the orchestrator, where the data access is.
+    /// </summary>
+    /// <param name="exportRule">The export Synchronisation Rule about to provision, with its Connected System
+    /// and Connected System Object Type navigations loaded.</param>
+    public IReadOnlyList<ObjectMatchingRule> SelectExportMatchingRules(SyncRule exportRule)
+    {
+        if (exportRule.ConnectedSystem == null || exportRule.ConnectedSystemObjectType == null)
+            return [];
+
+        var rules = exportRule.ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem
+            ? exportRule.ConnectedSystemObjectType.ObjectMatchingRules
+            : exportRule.ObjectMatchingRules;
+
+        return rules.OrderBy(r => r.Order).ToList();
+    }
+
+    /// <summary>
     /// Decides whether an outbound Synchronisation Rule may export to the Connected System Object already
     /// occupying a Metaverse Object's single slot in the target Connected System, returning a conflict when
     /// that Object is of a different Connected System Object Type than the Rule targets (#1331).

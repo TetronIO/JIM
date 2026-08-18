@@ -1,6 +1,6 @@
 # Synchronisation Preview / What-If Evaluation Engine
 
-- **Status:** Doing (decisions D1 to D5 settled Aug 2026; outbound extraction underway: Phase 0 and plan items 1a to 1d complete)
+- **Status:** Doing (decisions D1 to D5 settled Aug 2026; outbound extraction underway: Phase 0 and all Phase 1 extraction slices (1a to 1e) complete)
 - **Created:** 2026-07-07
 - **Author:** Jay Van der Zant
 - **Issue:** [#288](https://github.com/TetronIO/JIM/issues/288)

@@ -2493,22 +2493,11 @@ public class ExportEvaluationServer
     /// </summary>
     private async Task<ConnectedSystemObject?> AttemptExportMatchingAsync(MetaverseObject mvo, SyncRule exportRule)
     {
-        if (exportRule.ConnectedSystem == null || exportRule.ConnectedSystemObjectType == null)
-            return null;
-
-        // Resolve matching rules based on mode
-        List<ObjectMatchingRule> matchingRules;
-        if (exportRule.ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
-        {
-            // Simple mode: rules from the object type
-            matchingRules = exportRule.ConnectedSystemObjectType.ObjectMatchingRules?.ToList() ?? new List<ObjectMatchingRule>();
-        }
-        else
-        {
-            // Advanced mode: rules from the Synchronisation Rule
-            matchingRules = exportRule.ObjectMatchingRules?.ToList() ?? new List<ObjectMatchingRule>();
-        }
-
+        // Which rules to try, and in what order, is the pure engine's verdict (#288 extraction); an empty
+        // answer (no rules configured, or the mode unreadable because a navigation is not loaded) means
+        // matching is not attempted and provisioning proceeds. The per-rule candidate query below stays here,
+        // where the data access is.
+        var matchingRules = _syncEngine.SelectExportMatchingRules(exportRule);
         if (matchingRules.Count == 0)
             return null;
 
@@ -2518,7 +2507,7 @@ public class ExportEvaluationServer
                 mvo,
                 exportRule.ConnectedSystem,
                 exportRule.ConnectedSystemObjectType,
-                matchingRules);
+                matchingRules.ToList());
         }
         catch (Exception ex)
         {
