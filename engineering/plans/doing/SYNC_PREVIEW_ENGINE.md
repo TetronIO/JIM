@@ -1,0 +1,119 @@
+# Sync Preview Engine - Implementation Plan
+
+- **Status:** Doing (Phase 0 starting)
+- **Created:** 2026-08-16
+- **Issue:** [#288](https://github.com/TetronIO/JIM/issues/288)
+- **PRD:** [PRD_SYNC_PREVIEW_ENGINE.md](../../prd/doing/PRD_SYNC_PREVIEW_ENGINE.md) (decisions D1 to D5 settled Aug 2026; recorded there)
+
+## Overview
+
+One pure evaluation core, called by two callers: the real synchronisation pipeline (which then applies and persists) and the preview paths (which return a speculative outcome tree and persist nothing). This is PRD decision **D1 = Option C**, and it is delivered **outbound first**: the outbound extraction is the risky half, it is the half #1115 (the destructive-toggle preview adapter) is blocked on, and the Scenario 8 performance baselines exist to gate it.
+
+The decision rests on two facts verified against the code, not on preference:
+
+1. **The inbound half of Option C already exists.** `SyncEngine` (four partials) is a pure decision engine; its own doc comment: "no I/O, no async, no database access; plain objects in, decision records out". `SyncImportTaskProcessor` orchestrates it, accumulates its decisions in memory, and bulk-persists at page boundaries. Nothing inbound needs restructuring; it needs a preview orchestrator.
+2. **The outbound half is the braid, and the braid is not the performance work.** `ExportEvaluationServer` (3,280 lines) interleaves evaluation with staging: six staging call sites, thirty-nine repository touchpoints. The export performance programme (`plans/done/EXPORT_PERFORMANCE_OPTIMISATION.md`, PR #334 onward) optimised the *execution* pipeline (per-CSO save round-trips, LDAP pipelining, `MaxParallelism`), and its optimised staging paths already accumulate and bulk-persist (the plural `CreatePendingExportsAsync` sites). The four remaining singular per-object staging sites are the unoptimised older shape. Unbraiding converts them to the batch pattern: it continues the performance programme's direction, and the expectation is neutral-to-positive throughput, proven against the recorded baseline rather than argued.
+
+## Business Value
+
+- Unblocks the remainder of the Configuration Change Preview framework (#827): #1115 needs the evaluation-only outbound path; Wave 3 (G1/G2) needs the whole engine.
+- Delivers the #288 capability itself: previewing the full causal chain for an object with a provable zero-side-effect guarantee.
+- Leaves the sync engine architecturally better than it found it: outbound evaluation gains the pure-core shape inbound already has, and future caching and parallelism redesigns operate on the orchestration and persistence layers without touching (or threatening) the semantics.
+
+## Technical Architecture
+
+### Target shape
+
+```
+                       +---------------------------------------------+
+                       |          SyncEngine (pure, partials)        |
+                       |  inbound: projection / join / Attribute     |
+                       |  Flow (exists today, untouched)             |
+                       |  outbound: SyncEngine.ExportEvaluation.*    |
+                       |  (new partials, extracted in Phase 1)       |
+                       +-----------+---------------------+-----------+
+                                   |                     |
+                 decisions         |                     |         decisions
+                                   v                     v
+   +-------------------------------+----+     +----------+----------------------------+
+   | Real path (persists)               |     | Preview path (never persists)         |
+   | SyncImportTaskProcessor (inbound)  |     | SyncPreviewServer                     |
+   | ExportEvaluationServer (outbound:  |     | returns SyncOutcomeNode tree (D4)     |
+   |  orchestrate -> accumulate ->      |     | backstop: rolled-back transaction     |
+   |  bulk persist -> apply)            |     |  + read-only facade (defence in depth)|
+   +------------------------------------+     +---------------------------------------+
+```
+
+- **Purity is structural, not disciplinary:** the `SyncEngine` class carries no repository, context, or connector field today, and the new partials keep it that way. A preview cannot write because the code it calls has nothing to write with; the transaction/facade backstop exists for the orchestration around it.
+- **Configuration is a parameter (D5):** `SyncEngine`'s existing methods already take their configuration as arguments (`EvaluateProjection(cso, activeSyncRules)`); the extracted outbound methods follow the same style, which is what lets #827 adapters later pass a *proposed* configuration.
+- **In-run working set:** evaluation currently reads back what the same run staged (e.g. `EnsureDeletePendingExportAsync`'s per-object lookup) to avoid duplicate decisions. Unbraided, "what have we already decided this run" is an in-memory index the core consults; the database is only asked about *pre-existing* Pending Exports, through the already-batched lightweight lookups.
+- **Reads stay prefetched:** `BuildExportEvaluationCacheAsync` / `RefreshExportEvaluationCacheForPageAsync` already page-batch evaluation inputs; the orchestrator keeps them. Mid-evaluation point reads move orchestrator-side: export matching (`AttemptExportMatchingAsync`) resolves candidates before the engine decides, mirroring how the inbound processor feeds `EvaluateJoin`.
+- **What is apply, not evaluation:** `CreatePendingProvisioningCsoAsync`, `AddSecondaryExternalIdToCsoAsync`, and all staging remain orchestrator-side. The decide/apply line is drawn per method during extraction and recorded in the code as it is drawn.
+
+### Delivery mechanics
+
+Each phase lands as its own PR (Phase 1 as a short sequence of PRs, one per method family). `main` moves quickly and CodeQL reviews whole PR diffs at open time; small sequential PRs avoid both the long-lived-branch findings wave and conflict debt. Every extraction PR must leave the full suite and the touched integration scenarios green: there is no "broken until the last PR" state.
+
+## Implementation Phases
+
+### Phase 0: Baseline and guardrails
+
+- [ ] Capture the Scenario 8 performance baseline on current `main` (default fast-writes mode, recorded in `results/performance/`), so every Phase 1 PR has a fixed comparison point. Record template and host alongside.
+- [ ] Add the isolation-assertion helper the PRD requires (req. 10): given a database, snapshot Pending Export count, MVO count and attribute versions, CSO count, RPEI count, Activity count; assert unchanged after a preview call. Built now so every later phase can use it from its first test.
+
+### Phase 1: Outbound extraction (the unbraiding)
+
+Method family by method family, each PR: write characterisation tests over the family's current decisions first, extract the pure decision into a `SyncEngine.ExportEvaluation.*` partial, convert the family's staging to accumulate-and-bulk-persist, prove the characterisation tests still pass, run the affected integration scenarios.
+
+- [ ] **1a: In-run working set.** Introduce the staged-decision index; convert `EnsureDeletePendingExportAsync`'s per-object read-back (line ~827) to consult it, retaining the batched database lookups for pre-existing Pending Exports.
+- [ ] **1b: Attribute delta and create/update decisions.** The `CreateOrUpdatePendingExportAsync` pair and `CreateOrUpdatePendingExportWithNoNetChangeAsync`: delta computation and change-type verdicts into the engine; the two singular staging sites become accumulation.
+- [ ] **1c: Deprovisioning and deletion decisions.** `HandleOutboundDeprovisioningAsync`, `EvaluateMvoDeletionAsync` / `EvaluateMvoDeletionsAsync`, `EnsureDeletePendingExportAsync`'s verdict.
+- [ ] **1d: Reference recall decisions.** The fast path and fallback (`StageRecallFastPathAsync` / `StageRecallFallbackAsync`): the merge/supersede verdicts into the engine; both paths' staging already bulk-persists and stays orchestrator-side.
+- [ ] **1e: Export matching.** Orchestrator resolves candidates (the `AttemptExportMatchingAsync` query stays where the data access is); the engine decides against supplied candidates.
+- [ ] **Phase gate:** `dotnet build`/`test JIM.sln` green; integration Scenarios 1, 2, 4 and 8 green; Scenario 8 wall-clock within 10% of the Phase 0 baseline (any regression beyond that is investigated before the next PR, not deferred).
+
+### Phase 2: Evaluation-only outbound path (what #1115 consumes)
+
+- [ ] An evaluate-without-apply entry point on `SyncServer` / `JimApplication`: run the Phase 1 core over a population and return decision records; nothing staged, nothing persisted. `SyncRunMode.PreviewOnly` generalised to mean "evaluate, never persist" across the pipeline rather than gating execution only.
+- [ ] Defence-in-depth backstops around the preview orchestration (PRD req. 8): unconditionally rolled-back transaction plus a read-only facade that throws on write, so a future orchestration bug fails loudly instead of committing.
+- [ ] Isolation assertions (Phase 0 helper) wired into the integration coverage for the new path.
+- [ ] Notify #1115: its outbound blocker is gone; the adapter issue can start.
+
+### Phase 3: Preview server and outcome tree
+
+- [ ] `SyncPreviewResult` (`JIM.Models/Transactional/`), composing `ExportEvaluationPreviewResult`; the speculative tree as unpersisted `SyncOutcomeNode` DTOs (D4), with one mapping shared by the RPEI display path so preview and reality render through the same component.
+- [ ] `SyncPreviewServer` with `PreviewSyncForCsoAsync` and `PreviewSyncForMvoAsync`: orchestrate the existing pure inbound `SyncEngine` plus the Phase 2 outbound path; blocking `Errors` distinct from `Warnings` programmatically.
+- [ ] **Fidelity paired test (release-blocking, PRD req. 9):** preview an object, really sync it, diff the two outcome trees; a mismatch is the preview lying.
+
+### Phase 4: Full-system preview with sampling (D2)
+
+- [ ] `PreviewFullSyncAsync`: whole-population count tier plus a bounded per-outcome-category sample of full trees; explicit work budget (object cap and/or time); truncation flagged in the result. Verified at a Scale template within the budget.
+
+### Phase 5: Consumption surface (D3 = engine + API only)
+
+- [ ] The `JimApplication` API is the v1.0 surface; #827's adapters are the consumer. No portal button, REST endpoint, or cmdlet ships in this milestone (D3's record in the PRD explains why: a portal-only surface would violate the surface parity rule, and full parity is more than the milestone needs). The administrator-facing surface is filed as its own parity-complete issue when wanted.
+- [ ] Engineering documentation: the zero-side-effect design (what is structural, what is backstop) written up so future contributors do not introduce a persisting path into preview. No `docs/` or changelog entry: this is a foundation, not yet an administrator-facing feature.
+- [ ] Update the #827 plan: Phase 1 marked delivered; Wave 3 (G1/G2) becomes fileable.
+
+## Success Criteria
+
+- The PRD's acceptance criteria, all of them, with the fidelity test and isolation assertions as the release gates.
+- Scenario 8 within 10% of the Phase 0 baseline after the last Phase 1 PR.
+- `ExportEvaluationServer` contains no evaluation semantics at the end of Phase 1: decisions live in `SyncEngine` partials; the server orchestrates, accumulates, persists, applies.
+- #1115 unblocked at the end of Phase 2, without waiting for Phases 3 to 5.
+
+## Dependencies
+
+- None inbound: `SyncEngine`, `SyncOutcomeBuilder` (#363), `ExportEvaluationPreviewResult`, and the integration suite all exist.
+- #827's framework consumes the result; #1115 consumes Phase 2 specifically.
+
+## Risks & Mitigations
+
+| Risk | Mitigation |
+|---|---|
+| Performance regression in export evaluation | Phase 0 baseline; 10% gate on every Phase 1 PR; the conversion direction (per-object writes to batch) is the same one PR #334 measured as a win |
+| Half-extraction: core methods accepting tracked entity graphs, quietly reintroducing side-effect risk | `SyncEngine` has no repository/context field, and a test asserts the class's constructor dependencies stay empty; extracted methods take plain objects and return records, reviewed per PR |
+| Hot-path landmines (tracked-entity fix-ups, raw SQL writers, `AutoDetectChangesEnabled`) documented in `src/CLAUDE.md` | The apply side is deliberately not restructured: staging conversion reuses the existing plural bulk paths; detach/fix-up code moves untouched |
+| Behaviour drift during extraction | Characterisation tests written against current decisions before each family moves; integration scenarios per PR; the Phase 3 fidelity test as the end-to-end proof |
+| Reconciliation paths left braided, so previews stop where they take over | `SyncEngine.PreExportReconciliation.cs` is already pure; Phase 1c/1d cover the deprovisioning and recall paths; anything found still braided is extracted in-phase, not deferred |
+| Long-lived branch accumulating CodeQL findings and merge debt | One PR per method family, each independently green and merged |
