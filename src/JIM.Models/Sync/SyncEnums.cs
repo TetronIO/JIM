@@ -48,3 +48,31 @@ public enum OutOfScopeDeprovisioningAction
     /// <summary>The rule carries an OutboundDeprovisionAction this engine does not recognise; do nothing, visibly.</summary>
     UnknownAction
 }
+
+/// <summary>
+/// What kind of export, if any, a Metaverse Object change stages against one export Synchronisation Rule's
+/// target (#288 outbound extraction; the verdict behind the <c>CreateOrUpdatePendingExport*</c> entry points).
+/// </summary>
+public enum OutboundStagingOutcome
+{
+    /// <summary>The Metaverse Object's one CSO in this Connected System is of a different Connected System
+    /// Object Type than the rule targets (#1331); the conflict is reported and nothing is staged.</summary>
+    ObjectTypeConflict,
+    /// <summary>Reference recall found no exportable presence in the target (#1003); nothing is staged and
+    /// nothing is provisioned.</summary>
+    RecallSkippedNoTargetPresence,
+    /// <summary>The target holds no presence for the object (or only a pending provisioning) and the rule
+    /// does not provision; nothing is staged.</summary>
+    ProvisioningDeclined,
+    /// <summary>The rule wants a presence created: a Create export. The orchestrator interposes export
+    /// matching first, and a matched CSO turns this into an update instead.</summary>
+    ProvisionNewCso,
+    /// <summary>A pending provisioning CSO already exists and the changes are relevant to this rule; its
+    /// Create export is restaged from the latest Metaverse Object state.</summary>
+    ReusePendingProvisioningCso,
+    /// <summary>A pending provisioning CSO exists but none of the changed attributes map to this rule;
+    /// restaging would misattribute the existing Create export in the causality tree, so nothing is staged.</summary>
+    PendingProvisioningChangesIrrelevant,
+    /// <summary>The object exists in the target: an Update export carrying only the changed attributes.</summary>
+    UpdateExistingCso
+}
