@@ -138,6 +138,13 @@ $schema = $config.Schema
 # is stated explicitly rather than inferred, which is the connector's contract; a foreign key would
 # only ever be a suggestion, and a view carries none at all.
 #
+# Every Object Type carries BOTH a changeLog and a watermarkColumn, and every related table a
+# watermarkColumn, because each Delta Import Mode is refused at save time unless every Object Type in
+# the document is equipped for it, selected or not. The one document serves all three Connected
+# Systems, and the delta rows switch the identity system between the two modes mid-run, so the document
+# has to satisfy both. The export targets' change logs stay empty and their watermark columns move only
+# by default; nothing outside JIM writes to those tables.
+#
 # TWO ANCHOR CHOICES BELOW ARE WORKAROUNDS, NOT PREFERENCES. PersonView is anchored on EMAIL rather
 # than the view's own EMPLOYEE_ID, and the seeder starts APP_USERS' generated key at 1,000,000 rather
 # than 1. Both exist for the same reason: JIM resolves references against one flat per-Connected-System
@@ -206,6 +213,7 @@ $objectTypesJson = @"
       "schema": "$schema",
       "table": "APP_USERS",
       "anchorColumns": [ "ID" ],
+      "watermarkColumn": "LAST_MODIFIED",
       "columns": [
         { "name": "MANAGER_ID", "referencesObjectType": "AppUser" }
       ],
@@ -215,7 +223,8 @@ $objectTypesJson = @"
           "schema": "$schema",
           "table": "APP_USER_ROLES",
           "valueColumn": "ROLE_NAME",
-          "joinColumns": [ "USER_ID" ]
+          "joinColumns": [ "USER_ID" ],
+          "watermarkColumn": "LAST_MODIFIED"
         }
       ],
       "changeLog": {
@@ -234,6 +243,7 @@ $objectTypesJson = @"
       "schema": "$schema",
       "table": "APP_ACCOUNTS_NATURAL",
       "anchorColumns": [ "ACCOUNT_CODE" ],
+      "watermarkColumn": "LAST_MODIFIED",
       "changeLog": {
         "schema": "$schema",
         "table": "APP_ACCOUNTS_CHANGE_LOG",
@@ -251,6 +261,7 @@ $objectTypesJson = @"
       "schema": "$schema",
       "table": "GUID_KEYED_PEOPLE",
       "anchorColumns": [ "PERSON_ID" ],
+      "watermarkColumn": "LAST_MODIFIED",
       "changeLog": {
         "schema": "$schema",
         "table": "GUID_PEOPLE_CHANGE_LOG",
