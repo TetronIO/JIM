@@ -93,3 +93,14 @@ public enum RecallPendingExportMergeOutcome
     /// this unreachable in practice.</summary>
     SkippedCreateProtected
 }
+
+/// <summary>
+/// What kind of outbound decision an <c>OutboundPreviewEntry</c> records (#288 plan Phase 2).
+/// </summary>
+public enum OutboundPreviewEntryKind
+{
+    /// <summary>An in-scope staging decision: what export, if any, would be staged against the rule's target.</summary>
+    Staging,
+    /// <summary>An out-of-scope deprovisioning decision for a joined target object.</summary>
+    Deprovisioning
+}

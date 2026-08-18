@@ -132,6 +132,24 @@ public class SyncRepository : ISyncRepository
         _syncRules[syncRule.Id] = syncRule;
     }
 
+    /// <summary>
+    /// Test support: removes a previously seeded CSO, for scenarios that need the object gone again
+    /// (for example previewing provisioning after removing the joined object).
+    /// </summary>
+    public void RemoveConnectedSystemObject(ConnectedSystemObject cso)
+    {
+        _csos.Remove(cso.Id);
+        if (_csosByConnectedSystem.TryGetValue(cso.ConnectedSystemId, out var csSet))
+            csSet.Remove(cso.Id);
+        if (cso.MetaverseObjectId.HasValue && _csosByMvo.TryGetValue(cso.MetaverseObjectId.Value, out var mvoSet))
+            mvoSet.Remove(cso.Id);
+    }
+
+    /// <summary>
+    /// Test support: how many CSOs the repository holds, for zero-side-effect assertions.
+    /// </summary>
+    public int ConnectedSystemObjectCount => _csos.Count;
+
     public void SeedConnectedSystemObject(ConnectedSystemObject cso)
     {
         _csos[cso.Id] = cso;
@@ -2674,4 +2692,11 @@ public class SyncRepository : ISyncRepository
     }
 
     #endregion
+
+    /// <summary>
+    /// No transaction to hold in memory (#288 preview backstop); the preview's other defence-in-depth
+    /// layers (structural purity, the read-only guard) still apply against this repository.
+    /// </summary>
+    public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
+        => Task.FromResult<IAsyncDisposable?>(null);
 }
