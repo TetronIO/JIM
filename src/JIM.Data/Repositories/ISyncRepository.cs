@@ -1153,4 +1153,18 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
 
     #endregion
+
+    #region Preview Backstops (#288)
+
+    /// <summary>
+    /// Begins a database transaction that is unconditionally rolled back when the returned scope is disposed,
+    /// whatever happened inside it: the outermost defence-in-depth layer around the synchronisation preview's
+    /// zero-side-effect guarantee (PRD requirement 8). Any write that slipped past the preview path's other
+    /// guards is discarded rather than committed. Returns null when the underlying provider is not relational
+    /// (the in-memory test repository), where there is no transaction to hold; the preview's other layers
+    /// still apply there.
+    /// </summary>
+    Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync();
+
+    #endregion
 }
