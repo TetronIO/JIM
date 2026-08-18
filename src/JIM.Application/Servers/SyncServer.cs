@@ -339,14 +339,17 @@ public class SyncServer : ISyncServer
 
     public Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
-        ExportEvaluationCache cache)
-        => _exportEval.EvaluateOutOfScopeExportsAsync(mvo, cache);
+        ExportEvaluationCache cache,
+        ExportEvaluationWorkingSet? workingSet = null)
+        => _exportEval.EvaluateOutOfScopeExportsAsync(mvo, cache, workingSet);
 
-    public Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null)
-        => _exportEval.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);
+    public Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null,
+        ExportEvaluationWorkingSet? workingSet = null)
+        => _exportEval.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache, workingSet);
 
-    public Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos, ExportEvaluationCache? exportEvaluationCache = null)
-        => _exportEval.EvaluateMvoDeletionsAsync(mvos, exportEvaluationCache);
+    public Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos, ExportEvaluationCache? exportEvaluationCache = null,
+        ExportEvaluationWorkingSet? workingSet = null)
+        => _exportEval.EvaluateMvoDeletionsAsync(mvos, exportEvaluationCache, workingSet);
 
     public Task<ReferenceRecallContext> CaptureReferenceRecallContextAsync(IReadOnlyCollection<Guid> deletionCandidateMvoIds)
         => _exportEval.CaptureReferenceRecallContextAsync(deletionCandidateMvoIds);
