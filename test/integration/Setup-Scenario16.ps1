@@ -177,7 +177,7 @@ $objectTypesJson = @"
         "schema": "$schema",
         "table": "IDM_CHANGE_LOG",
         "anchorColumns": [ "EMPLOYEE_ID" ],
-        "sequenceColumn": "CHANGED_AT",
+        "sequenceColumn": "CHANGE_ID",
         "changeTypeColumn": "CHANGE_TYPE",
         "createValues": [ "I" ],
         "updateValues": [ "U" ],
@@ -194,7 +194,7 @@ $objectTypesJson = @"
         "schema": "$schema",
         "table": "V_EMPLOYEES_CHANGE_LOG",
         "anchorColumns": [ "EMAIL" ],
-        "sequenceColumn": "CHANGED_AT",
+        "sequenceColumn": "CHANGE_ID",
         "changeTypeColumn": "CHANGE_TYPE",
         "createValues": [ "I" ],
         "updateValues": [ "U" ],
@@ -222,7 +222,7 @@ $objectTypesJson = @"
         "schema": "$schema",
         "table": "APP_USERS_CHANGE_LOG",
         "anchorColumns": [ "ID" ],
-        "sequenceColumn": "CHANGED_AT",
+        "sequenceColumn": "CHANGE_ID",
         "changeTypeColumn": "CHANGE_TYPE",
         "createValues": [ "I" ],
         "updateValues": [ "U" ],
@@ -238,7 +238,7 @@ $objectTypesJson = @"
         "schema": "$schema",
         "table": "APP_ACCOUNTS_CHANGE_LOG",
         "anchorColumns": [ "ACCOUNT_CODE" ],
-        "sequenceColumn": "CHANGED_AT",
+        "sequenceColumn": "CHANGE_ID",
         "changeTypeColumn": "CHANGE_TYPE",
         "createValues": [ "I" ],
         "updateValues": [ "U" ],
@@ -255,7 +255,7 @@ $objectTypesJson = @"
         "schema": "$schema",
         "table": "GUID_PEOPLE_CHANGE_LOG",
         "anchorColumns": [ "PERSON_ID" ],
-        "sequenceColumn": "CHANGED_AT",
+        "sequenceColumn": "CHANGE_ID",
         "changeTypeColumn": "CHANGE_TYPE",
         "createValues": [ "I" ],
         "updateValues": [ "U" ],
@@ -373,7 +373,10 @@ foreach ($typeName in $SelectTypeNames) {
     $attributeUpdates = @{}
     foreach ($attribute in $objectType.attributes) {
         $attributeUpdates[$attribute.id] = @{
-            selected     = $true
+            # SQL Server's rowversion is a version stamp, not a value anyone flows anywhere: it is here
+            # only to serve as a Delta Import watermark (the Delta.RowversionWatermark row), and a
+            # watermark column need not be a selected attribute.
+            selected     = ($attribute.name -ne 'ROW_VERSION')
             isExternalId = ($attribute.name -eq $anchor)
         }
     }
@@ -763,6 +766,15 @@ Write-Host "  Synchronisation Rules: 1 inbound, $(if ($Provider -eq 'Oracle') { 
 return @{
     Provider           = $Provider
     ConnectedSystemId  = $system.id
+
+    # What the delta rows need to change the identity system's Delta Import Mode and its Object Types
+    # document mid-run, and to put both back: the setting ids, and the document exactly as saved.
+    SettingIds = @{
+        DeltaImportMode = (Get-SettingId "Delta Import Mode")
+        ObjectTypes     = (Get-SettingId "Object Types")
+    }
+    ObjectTypesJson    = $objectTypesJson
+    DeltaImportMode    = "Change-Log Table"
 
     # The two account systems. Every Object Type also carries its own connectedSystemId, so a row that
     # reads Connected System Objects resolves the right system from the type rather than choosing
