@@ -1317,37 +1317,14 @@ public class ExportEvaluationServer
                     resolvedBySystem.TryGetValue(systemId, out var resolvedValueForSystem))
                     removalValue = resolvedValueForSystem;
 
-                PendingExportAttributeValueChange change;
-                if (flow.SourcePlurality == AttributePlurality.MultiValued)
+                // The removal-change verdict comes from the pure engine (#288 extraction): a value-carrying
+                // Remove for a multi-valued source, a null-clearing Update for a single-valued one, or null
+                // when a multi-valued removal has no resolvable value and cannot be staged.
+                var change = _syncEngine.DecideRecallRemovalChange(flow, removalValue);
+                if (change == null)
                 {
-                    // A multi-valued removal must name the value to remove; a matched row with no
-                    // resolvable value (matched by resolved reference only) cannot be staged.
-                    if (removalValue == null)
-                    {
-                        result.UnresolvableChangesDropped++;
-                        continue;
-                    }
-                    change = new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        Attribute = flow.TargetAttribute,
-                        AttributeId = flow.TargetAttribute.Id,
-                        ChangeType = PendingExportAttributeChangeType.Remove,
-                        StringValue = removalValue
-                    };
-                }
-                else
-                {
-                    // Single-valued reference removal: an all-null clearing Update, the same shape
-                    // full evaluation produces. Staged only because the target still holds the
-                    // deleted reference (the existence query matched it).
-                    change = new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        Attribute = flow.TargetAttribute,
-                        AttributeId = flow.TargetAttribute.Id,
-                        ChangeType = PendingExportAttributeChangeType.Update
-                    };
+                    result.UnresolvableChangesDropped++;
+                    continue;
                 }
 
                 if (!changesByCso.TryGetValue(match.ConnectedSystemObjectId, out var changesByMergeKey))
@@ -1373,62 +1350,32 @@ public class ExportEvaluationServer
 
         foreach (var (csoId, changesByMergeKey) in changesByCso)
         {
-            if (existingPendingExports.TryGetValue(csoId, out var existingPendingExport))
+            // The collision policy and merge live in the pure engine (#288 extraction): an existing Delete
+            // wins, a Create is protected, an Update merges in with recall winning key collisions and
+            // deleted-object references purged.
+            var existingPendingExport = existingPendingExports.GetValueOrDefault(csoId);
+            var mergeResult = _syncEngine.MergeRecallChangesWithExistingPendingExport(
+                changesByMergeKey, existingPendingExport, deletedIds);
+
+            if (mergeResult.Outcome == RecallPendingExportMergeOutcome.SkippedDeleteSupersedes)
             {
-                if (existingPendingExport.ChangeType == PendingExportChangeType.Delete)
-                {
-                    result.SkippedDueToExistingDeletePendingExport++;
-                    Log.Information("StageRecallFastPathAsync: CSO {CsoId} has a pending Delete export; skipping " +
-                        "{ChangeCount} recall change(s) (deprovisioning supersedes membership updates)",
-                        csoId, changesByMergeKey.Count);
-                    continue;
-                }
-                if (existingPendingExport.ChangeType == PendingExportChangeType.Create)
-                {
-                    Log.Warning("StageRecallFastPathAsync: CSO {CsoId} has a pending Create export but is not " +
-                        "PendingProvisioning; skipping recall changes to preserve the provisioning export", csoId);
-                    continue;
-                }
-
-                // Merge the existing Update export's changes in (recall wins on merge-key
-                // collisions), cloning with fresh ids because the delete-then-create persistence
-                // removes the old rows. Changes whose unresolved reference is a deleted object are
-                // purged: they can never resolve, and would wedge the merged export in
-                // deferred-resolution limbo.
-                foreach (var existingChange in existingPendingExport.AttributeValueChanges)
-                {
-                    if (existingChange.UnresolvedReferenceValue != null &&
-                        Guid.TryParse(existingChange.UnresolvedReferenceValue, out var unresolvedMvoId) &&
-                        deletedIds.Contains(unresolvedMvoId))
-                    {
-                        Log.Debug("StageRecallFastPathAsync: Purged change {ChangeId} from Pending Export {PendingExportId}: " +
-                            "its unresolved reference is deleted Metaverse Object {MvoId}",
-                            existingChange.Id, existingPendingExport.Id, unresolvedMvoId);
-                        continue;
-                    }
-
-                    var mergeKey = GetAttributeChangeMergeKey(existingChange);
-                    if (changesByMergeKey.ContainsKey(mergeKey))
-                        continue;
-
-                    changesByMergeKey[mergeKey] = new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        AttributeId = existingChange.AttributeId,
-                        Attribute = existingChange.Attribute,
-                        StringValue = existingChange.StringValue,
-                        DateTimeValue = existingChange.DateTimeValue,
-                        IntValue = existingChange.IntValue,
-                        LongValue = existingChange.LongValue,
-                        DecimalValue = existingChange.DecimalValue,
-                        ByteValue = existingChange.ByteValue,
-                        GuidValue = existingChange.GuidValue,
-                        BoolValue = existingChange.BoolValue,
-                        UnresolvedReferenceValue = existingChange.UnresolvedReferenceValue,
-                        ResolvedReferenceCsoId = existingChange.ResolvedReferenceCsoId,
-                        ChangeType = existingChange.ChangeType
-                    };
-                }
+                result.SkippedDueToExistingDeletePendingExport++;
+                Log.Information("StageRecallFastPathAsync: CSO {CsoId} has a pending Delete export; skipping " +
+                    "{ChangeCount} recall change(s) (deprovisioning supersedes membership updates)",
+                    csoId, changesByMergeKey.Count);
+                continue;
+            }
+            if (mergeResult.Outcome == RecallPendingExportMergeOutcome.SkippedCreateProtected)
+            {
+                Log.Warning("StageRecallFastPathAsync: CSO {CsoId} has a pending Create export but is not " +
+                    "PendingProvisioning; skipping recall changes to preserve the provisioning export", csoId);
+                continue;
+            }
+            if (mergeResult.PurgedChangeCount > 0)
+            {
+                Log.Debug("StageRecallFastPathAsync: Purged {PurgedCount} change(s) from Pending Export {PendingExportId}: " +
+                    "their unresolved references are deleted Metaverse Objects",
+                    mergeResult.PurgedChangeCount, existingPendingExport!.Id);
             }
 
             var attributeChanges = changesByMergeKey.Values.ToList();
@@ -1507,17 +1454,10 @@ public class ExportEvaluationServer
 
         // Drop changes that could not be pre-resolved: the deleted object had no presence in that
         // target system, so the removal is a no-op there (and could never resolve at export time).
-        var deletedIdStrings = deletedIds.Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // The purge lives in the pure engine (#288 extraction).
         foreach (var pendingExport in fallbackPendingExports)
         {
-            var unresolvable = pendingExport.AttributeValueChanges
-                .Where(avc => avc.UnresolvedReferenceValue != null && deletedIdStrings.Contains(avc.UnresolvedReferenceValue))
-                .ToList();
-            foreach (var change in unresolvable)
-            {
-                pendingExport.AttributeValueChanges.Remove(change);
-                result.UnresolvableChangesDropped++;
-            }
+            result.UnresolvableChangesDropped += _syncEngine.PurgeChangesReferencingDeletedObjects(pendingExport, deletedIds);
 
             if (pendingExport.AttributeValueChanges.Count == 0)
                 continue;

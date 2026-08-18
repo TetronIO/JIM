@@ -267,4 +267,39 @@ public interface ISyncEngine
         Dictionary<string, object?>? mvAttributeDictionary = null,
         IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
         List<AttributeFlowError>? flowErrors = null);
+
+    /// <summary>
+    /// Decides the removal change a reference recall stages for one matched target row (#908/#1003): a
+    /// multi-valued source synthesises a Remove carrying the resolved value, a single-valued source a
+    /// null-clearing Update, and a multi-valued removal with no resolvable value returns null (nothing can be
+    /// staged; the orchestrator counts it as dropped).
+    /// </summary>
+    /// <param name="flow">The direct reference flow whose target attribute still holds the deleted value.</param>
+    /// <param name="resolvedRemovalValue">The deleted object's resolved value in the flow's target system, or null.</param>
+    PendingExportAttributeValueChange? DecideRecallRemovalChange(
+        ReferenceRecallDirectFlow flow,
+        string? resolvedRemovalValue);
+
+    /// <summary>
+    /// Decides how recall changes combine with the Pending Export already attached to the target CSO (#1003):
+    /// an existing Delete wins, an existing Create is protected, and an existing Update merges into the recall
+    /// changes (recall wins a merge-key collision; surviving changes cloned with fresh ids; changes whose
+    /// unresolved reference is a deleted object purged). Pure in-memory mutation of the dictionary.
+    /// </summary>
+    /// <param name="recallChangesByMergeKey">The recall changes staged for the CSO, keyed by merge key; mutated in place.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to the CSO, if any.</param>
+    /// <param name="deletedMvoIds">The Metaverse Objects deleted in this operation.</param>
+    RecallPendingExportMergeResult MergeRecallChangesWithExistingPendingExport(
+        Dictionary<string, PendingExportAttributeValueChange> recallChangesByMergeKey,
+        PendingExport? existingPendingExport,
+        HashSet<Guid> deletedMvoIds);
+
+    /// <summary>
+    /// Removes from a Pending Export every attribute value change whose unresolved reference is one of the
+    /// deleted Metaverse Objects: the removal is a no-op in that target and could never resolve at export
+    /// time. Pure in-memory mutation; returns how many changes were removed.
+    /// </summary>
+    /// <param name="pendingExport">The Pending Export to purge, mutated in place.</param>
+    /// <param name="deletedMvoIds">The Metaverse Objects deleted in this operation.</param>
+    int PurgeChangesReferencingDeletedObjects(PendingExport pendingExport, HashSet<Guid> deletedMvoIds);
 }

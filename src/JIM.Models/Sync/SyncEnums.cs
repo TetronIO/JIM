@@ -76,3 +76,20 @@ public enum OutboundStagingOutcome
     /// <summary>The object exists in the target: an Update export carrying only the changed attributes.</summary>
     UpdateExistingCso
 }
+
+/// <summary>
+/// How reference recall changes combined with a Pending Export already attached to the target CSO (#288
+/// outbound extraction; the #908/#1003 semantics).
+/// </summary>
+public enum RecallPendingExportMergeOutcome
+{
+    /// <summary>Stage the recall changes (merged with any existing Update export's surviving changes).</summary>
+    Proceed,
+    /// <summary>An existing Delete export wins: the object is being deprovisioned, so a membership removal is
+    /// moot, and replacing the Delete would leave the object alive in the target forever (#1003).</summary>
+    SkippedDeleteSupersedes,
+    /// <summary>An existing Create export is protected: recall never provisions, and replacing a provisioning
+    /// export with a recall Update would silently lose it. Defensive; the pending-provisioning filter makes
+    /// this unreachable in practice.</summary>
+    SkippedCreateProtected
+}
