@@ -514,11 +514,15 @@ public class SyncPreviewServer
             return FullSyncPreviewCategory.BlockedByErrors;
         if (preview.Warnings.Any(w => w.Code == SyncPreviewMessageCode.OutOfScope))
             return FullSyncPreviewCategory.OutOfScope;
-        if (preview.Inbound?.WouldProject == true)
+
+        var inbound = preview.Inbound;
+        if (inbound == null)
+            return FullSyncPreviewCategory.NotConnected;
+        if (inbound.WouldProject)
             return FullSyncPreviewCategory.WouldProject;
-        if (preview.Inbound?.WouldJoinMetaverseObjectId != null)
+        if (inbound.WouldJoinMetaverseObjectId.HasValue)
             return FullSyncPreviewCategory.WouldJoin;
-        if (preview.Inbound?.AlreadyJoinedMetaverseObjectId != null)
+        if (inbound.AlreadyJoinedMetaverseObjectId.HasValue)
             return FullSyncPreviewCategory.AttributeFlow;
         return FullSyncPreviewCategory.NotConnected;
     }
