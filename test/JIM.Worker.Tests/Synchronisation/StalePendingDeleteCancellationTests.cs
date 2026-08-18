@@ -108,13 +108,13 @@ public class StalePendingDeleteCancellationTests : WorkflowTestBase
         var (mvo, targetCso, cache) = ArrangeDirectEvaluationScenario();
 
         var recallResult = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, [], sourceSystem: null, cache, recallSemantics: true);
+            mvo, [], cache, recallSemantics: true);
 
         Assert.That(recallResult.InScopeJoinedCsoIds, Is.Empty,
             "Reference recall must not nominate CSOs for stale Delete Pending Export cancellation (#1018).");
 
         var desiredStateResult = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, [], sourceSystem: null, cache);
+            mvo, [], cache);
 
         Assert.That(desiredStateResult.InScopeJoinedCsoIds, Is.EquivalentTo(new[] { targetCso.Id }),
             "A desired-state evaluation must collect the joined, non-PendingProvisioning CSO even when " +
@@ -133,7 +133,7 @@ public class StalePendingDeleteCancellationTests : WorkflowTestBase
         targetCso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
 
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, [], sourceSystem: null, cache);
+            mvo, [], cache);
 
         Assert.That(result.InScopeJoinedCsoIds, Is.Empty,
             "A PendingProvisioning CSO has no target account to assert existence for and must not be " +

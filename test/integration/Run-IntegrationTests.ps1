@@ -625,7 +625,7 @@ function Show-ScenarioMenu {
                 "*Scenario15*" { "SCIM 2.0 Client Connector (import, join, bulk export, confirm)" }
                 "*Scenario16*" { "JIM SQL Connector provider x capability matrix (SQL Server, Oracle)" }
                 "*Scenario17*" { "Initial Password provisioning (account holder signs in and changes it)" }
-                "*Scenario18*" { "Writeback into the source Connected System (EXPECTED TO FAIL until #1284)" }
+                "*Scenario18*" { "Writeback into the source Connected System (derived values flow; contributed values are not echoed)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1685,17 +1685,6 @@ if ($Scenario -eq "All") {
             continue
         }
         $implementedScenarios += ($file.BaseName -replace '^Invoke-', '')
-    }
-
-    # Scenario 18 states an open defect (#1284) rather than recording one: its writeback assertion is
-    # written against the behaviour JIM should have, so it fails by design until the fix lands. It is
-    # excluded from the sweep so a full regression stays a signal about regressions, and run
-    # explicitly (-Scenario Scenario18-WritebackToSource) when the question is being worked on.
-    # DELETE THIS BLOCK when #1284 is resolved; the scenario should then pass with no edit.
-    $knownFailing = @($implementedScenarios | Where-Object { $_ -like "*Scenario18*" })
-    if ($knownFailing.Count -gt 0) {
-        Write-Host "${YELLOW}Skipping known-failing scenario(s) pending #1284: $($knownFailing -join ', ')${NC}"
-        $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario18*" })
     }
 
     # Scenario 14 (Attribute Priority) is OpenLDAP only (two-suffix topology); skip it on a

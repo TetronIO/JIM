@@ -369,7 +369,7 @@ public class DeletionCascadeExportReportingTests
         /// concrete processors do at run start (source system 0: deletions consider every target system).
         /// </summary>
         public async Task PrepareRecallExportEvaluationCacheAsync() =>
-            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync();
 
         /// <summary>
         /// Records what Pass 1 or Pass 2 records when a disconnection triggers an immediate deletion: an

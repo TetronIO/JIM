@@ -23,12 +23,13 @@
       3. The same writeback rule during the CONTROL system's synchronisation. Nothing about the rule,
          the scope or the Metaverse Objects has changed; only the identity of the system whose run is
          executing. This is what separates "the rule is broken" from "the rule is skipped while its
-         own system is the one being synchronised", and it is the difference #1284 describes.
+         own system is the one being synchronised", and it is the difference #1284 described.
 
-    EXPECTED TO FAIL until #1284 is resolved. Assertion 2 is written against the behaviour JIM should
-    have, not the behaviour it has, so the scenario is a live statement of the defect rather than a
-    record of it. When the fix lands this scenario should go green with no edit, and assertion 3's
-    diagnostic contrast should collapse (both runs stage the writeback).
+    Written red-first against #1284 (export evaluation skipped every rule targeting the system being
+    synchronised) and green since its fix: circular sync is prevented at value level by no-net-change
+    detection (an echo of a value the target already holds stages nothing), so a genuine writeback
+    stages during the source system's own run and assertion 3's diagnostic contrast reports
+    "not applicable".
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200)
@@ -241,8 +242,7 @@ try {
     if ($testResults.Success) {
         Write-Host "  Result: PASS (a writeback into the source Connected System is staged)" -ForegroundColor Green
     } else {
-        Write-Host "  Result: FAIL (#1284: no writeback is staged into the Connected System being synchronised)" -ForegroundColor Red
-        Write-Host "  This scenario is expected to fail until #1284 is resolved; it states the defect rather than recording it." -ForegroundColor DarkYellow
+        Write-Host "  Result: FAIL (#1284 regression: no writeback was staged into the Connected System being synchronised)" -ForegroundColor Red
     }
 }
 catch {

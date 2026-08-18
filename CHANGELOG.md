@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- 🔄 An outbound Synchronisation Rule can now write back into the same Connected System an inbound rule reads from, so a value JIM derives (an email address, an account name) reaches the system that supplied the identity. Export evaluation previously skipped every rule targeting the system being synchronised, so these rules were silently never evaluated; circular synchronisation is prevented by staging only values the target does not already hold. (#1284)
+
 ### Fixed
 
 - 🐛 Exporting an object that references another whose database-generated key is large, such as a row keyed by an Oracle `NUMBER(10)` identity column, no longer fails the object. When JIM resolved the reference to the object it points at, it read the target's key from only some of the places a key can be stored: a key held as a large whole number or as a high-precision decimal was missed, the reference was marked resolved with no value at all, and the export then failed at the target database complaining the reference carried nothing to write, on every affected object, every cycle. Manager hierarchies were the visible casualty: only the people with no manager were ever created. Objects whose keys are text, GUIDs or small whole numbers were unaffected, which is why SQL Server tables keyed by `INT` exported cleanly while Oracle tables keyed by `NUMBER` did not. A reference whose target genuinely holds no key yet, because its own export has not been confirmed, is now held back and retried rather than sent to fail; the same reading gap is also closed where JIM works out which references to withdraw when an object is deleted. (#1398)

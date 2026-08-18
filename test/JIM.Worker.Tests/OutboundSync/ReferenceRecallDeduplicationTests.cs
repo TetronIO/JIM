@@ -230,7 +230,7 @@ public class ReferenceRecallDeduplicationTests
     /// Rule whose ConnectedSystem navigation resolves <paramref name="connectedSystemId"/> to
     /// <paramref name="connectedSystemName"/>. Mirrors the shape SyncFullSyncTaskProcessor /
     /// SyncDeltaSyncTaskProcessor build once per run into _recallExportEvaluationCache via
-    /// BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0).
+    /// BuildExportEvaluationCacheAsync().
     /// </summary>
     private static ExportEvaluationCache BuildRecallExportEvaluationCache(int connectedSystemId, string connectedSystemName)
     {

@@ -46,10 +46,10 @@ public abstract class SyncTaskProcessorBase
     protected Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
     protected ExportEvaluationCache? _exportEvaluationCache;
 
-    // Run-scoped export evaluation cache for reference recall staging (#1003), built once per run
-    // with sourceConnectedSystemId 0: recall is state assertion, so no source system is excluded
-    // (Q3 does not apply to deletions), which is why _exportEvaluationCache cannot be shared.
-    // Eliminates the per-flush Synchronisation Rule reload inside StageReferenceRecallExportsAsync.
+    // Run-scoped export evaluation cache for reference recall staging (#1003), built once per run.
+    // A separate instance from _exportEvaluationCache because each cache's per-page refresh loads a
+    // different Metaverse Object set, and sharing one would let each refresh clobber the other's
+    // lookups. Eliminates the per-flush Synchronisation Rule reload inside StageReferenceRecallExportsAsync.
     protected ExportEvaluationCache? _recallExportEvaluationCache;
 
     // Cache for drift detection: maps (ConnectedSystemId, MvoAttributeId) to import mappings
@@ -1693,7 +1693,6 @@ public abstract class SyncTaskProcessorBase
                 result = await _syncServer.EvaluateExportRulesWithNoNetChangeDetectionAsync(
                     mvo,
                     changedAttributes,
-                    _connectedSystem,
                     _exportEvaluationCache,
                     deferSave: true,
                     removedAttributes: removedAttributes,
@@ -1916,7 +1915,6 @@ public abstract class SyncTaskProcessorBase
             var deprovisionConflicts = new List<ExportObjectTypeConflict>();
             var deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
                 mvo,
-                _connectedSystem,
                 _exportEvaluationCache!,
                 deprovisionConflicts);
 

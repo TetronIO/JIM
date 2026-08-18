@@ -39,12 +39,14 @@ public class ExportEvaluationServer
     /// Builds a cache of export rules and CSO lookups for optimised batch evaluation.
     /// Call this once at the start of sync, then pass the cache to evaluation methods.
     /// Also loads target CSO attribute values for no-net-change detection during export evaluation.
+    /// Every export rule's target system is included, the run's own source system among them: an
+    /// outbound rule targeting the system being synchronised is evaluated like any other (#1284), and
+    /// excluding the source here would blind the per-page CSO load, making every source-system object
+    /// look unprovisioned and no-net-change detection impossible for it.
     /// </summary>
-    /// <param name="sourceConnectedSystemId">The source system ID (to exclude from export evaluation via Q3).</param>
     /// <param name="preloadedSyncRules">Optional pre-loaded Synchronisation Rules to avoid redundant database query.</param>
     /// <returns>A cache object to pass to evaluation methods.</returns>
     public async Task<ExportEvaluationCache> BuildExportEvaluationCacheAsync(
-        int sourceConnectedSystemId,
         List<SyncRule>? preloadedSyncRules = null)
     {
         // Use pre-loaded Synchronisation Rules if available, otherwise load from database
@@ -59,10 +61,9 @@ public class ExportEvaluationServer
             .GroupBy(sr => sr.MetaverseObjectTypeId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Get all target system IDs (excluding source system - Q3)
+        // Every distinct target system, the run's source included (#1284)
         var targetSystemIds = exportRules
             .Select(sr => sr.ConnectedSystemId)
-            .Where(id => id != sourceConnectedSystemId)
             .Distinct()
             .ToList();
 
@@ -126,12 +127,10 @@ public class ExportEvaluationServer
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed</param>
     /// <param name="changedAttributes">The attributes that changed on the MVO</param>
-    /// <param name="sourceSystem">The Connected System that caused this change (for Q3 circular prevention)</param>
     /// <returns>List of PendingExports that were created</returns>
     public async Task<List<PendingExport>> EvaluateExportRulesAsync(
         MetaverseObject mvo,
-        List<MetaverseObjectAttributeValue> changedAttributes,
-        ConnectedSystem? sourceSystem = null)
+        List<MetaverseObjectAttributeValue> changedAttributes)
     {
         var pendingExports = new List<PendingExport>();
 
@@ -141,19 +140,16 @@ public class ExportEvaluationServer
             return pendingExports;
         }
 
-        // Get all enabled export rules for this MVO's object type
+        // Get all enabled export rules for this MVO's object type. Rules targeting the system whose
+        // synchronisation raised the change are evaluated like any other (#1284): circular sync is
+        // prevented at value level by no-net-change detection (an echo of a value the target already
+        // holds stages nothing), not by excluding the whole system, which silenced every legitimate
+        // writeback into a source system. Q3's original whole-system skip is superseded; see
+        // EvaluateExportRulesWithNoNetChangeDetectionAsync for the production path.
         var exportRules = await GetExportRulesForObjectTypeAsync(mvo.Type.Id);
 
         foreach (var exportRule in exportRules)
         {
-            // Q3: Skip if this is the source system (circular sync prevention)
-            if (sourceSystem != null && exportRule.ConnectedSystemId == sourceSystem.Id)
-            {
-                Log.Debug("EvaluateExportRulesAsync: Skipping export to {System} - it is the source of these changes (Q3 circular prevention)",
-                    exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString());
-                continue;
-            }
-
             // Check if MVO is in scope for this export rule
             if (!IsMvoInScopeForExportRule(mvo, exportRule))
             {
@@ -178,11 +174,8 @@ public class ExportEvaluationServer
     /// Called when MVO attributes change to check if scoping criteria no longer match.
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed</param>
-    /// <param name="sourceSystem">The Connected System that caused this change (for Q3 circular prevention)</param>
     /// <returns>List of PendingExports for deprovisioning actions</returns>
-    public async Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
-        MetaverseObject mvo,
-        ConnectedSystem? sourceSystem = null)
+    public async Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(MetaverseObject mvo)
     {
         var pendingExports = new List<PendingExport>();
 
@@ -192,17 +185,13 @@ public class ExportEvaluationServer
             return pendingExports;
         }
 
-        // Get all enabled export rules for this MVO's object type
+        // Get all enabled export rules for this MVO's object type. Rules targeting the run's own
+        // source system are included (#1284): scope-out is a state assertion, and skipping the source
+        // silently left objects provisioned that the administrator's scoping said to deprovision.
         var exportRules = await GetExportRulesForObjectTypeAsync(mvo.Type.Id);
 
         foreach (var exportRule in exportRules)
         {
-            // Q3: Skip if this is the source system (circular sync prevention)
-            if (sourceSystem != null && exportRule.ConnectedSystemId == sourceSystem.Id)
-            {
-                continue;
-            }
-
             // Check if MVO is in scope for this export rule
             if (IsMvoInScopeForExportRule(mvo, exportRule))
             {
@@ -249,13 +238,11 @@ public class ExportEvaluationServer
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed.</param>
     /// <param name="changedAttributes">The attributes that changed on the MVO.</param>
-    /// <param name="sourceSystem">The Connected System that caused this change (for Q3 circular prevention).</param>
     /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
     /// <returns>List of PendingExports that were created.</returns>
     public async Task<List<PendingExport>> EvaluateExportRulesAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> changedAttributes,
-        ConnectedSystem? sourceSystem,
         ExportEvaluationCache cache)
     {
         var pendingExports = new List<PendingExport>();
@@ -266,7 +253,8 @@ public class ExportEvaluationServer
             return pendingExports;
         }
 
-        // Get export rules from cache instead of database query
+        // Get export rules from cache instead of database query. Rules targeting the run's own source
+        // system are evaluated like any other (#1284); see the class notes on circular sync prevention.
         if (!cache.ExportRulesByMvoTypeId.TryGetValue(mvo.Type.Id, out var exportRules))
         {
             // No export rules for this MVO type
@@ -275,14 +263,6 @@ public class ExportEvaluationServer
 
         foreach (var exportRule in exportRules)
         {
-            // Q3: Skip if this is the source system (circular sync prevention)
-            if (sourceSystem != null && exportRule.ConnectedSystemId == sourceSystem.Id)
-            {
-                Log.Debug("EvaluateExportRulesAsync: Skipping export to {System} - it is the source of these changes (Q3 circular prevention)",
-                    exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString());
-                continue;
-            }
-
             // Check if MVO is in scope for this export rule
             if (!IsMvoInScopeForExportRule(mvo, exportRule))
             {
@@ -310,7 +290,6 @@ public class ExportEvaluationServer
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed.</param>
     /// <param name="changedAttributes">The attributes that changed on the MVO.</param>
-    /// <param name="sourceSystem">The Connected System that caused this change (for Q3 circular prevention).</param>
     /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync (includes target CSO attributes).</param>
     /// <param name="deferSave">When true, Pending Exports are not saved to the database. The caller is responsible
     /// for batch saving the Pending Exports returned in the result. Default is false for backwards compatibility.</param>
@@ -322,7 +301,6 @@ public class ExportEvaluationServer
     public async Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> changedAttributes,
-        ConnectedSystem? sourceSystem,
         ExportEvaluationCache cache,
         bool deferSave = false,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
@@ -345,7 +323,6 @@ public class ExportEvaluationServer
             return result;
         }
 
-        var skippedDueToSource = 0;
         var skippedDueToScope = 0;
 
         // Build the MVO attribute dictionary once for all export rules — avoids rebuilding
@@ -356,17 +333,14 @@ public class ExportEvaluationServer
         loopSpan.SetTag("ruleCount", exportRules.Count);
         loopSpan.SetTag("mvoId", mvo.Id);
 
+        // Rules targeting the run's own source system are evaluated like any other (#1284). Circular
+        // sync is prevented at value level rather than by excluding the system: a flow whose value the
+        // target Connected System Object already holds is dropped by no-net-change detection below, so
+        // an echo of an imported value stages nothing, while a genuine writeback (a value the source
+        // system does not hold, however it was derived) stages normally. The old whole-system skip
+        // silenced every writeback into a source system, and consumed the triggering change with it.
         foreach (var exportRule in exportRules)
         {
-            // Q3: Skip if this is the source system (circular sync prevention)
-            if (sourceSystem != null && exportRule.ConnectedSystemId == sourceSystem.Id)
-            {
-                Log.Debug("EvaluateExportRulesWithNoNetChangeDetectionAsync: Skipping export to {System} - it is the source of these changes (Q3 circular prevention)",
-                    exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString());
-                skippedDueToSource++;
-                continue;
-            }
-
             // Check if MVO is in scope for this export rule
             if (!IsMvoInScopeForExportRule(mvo, exportRule))
             {
@@ -429,7 +403,6 @@ public class ExportEvaluationServer
             }
         }
 
-        loopSpan.SetTag("skippedDueToSource", skippedDueToSource);
         loopSpan.SetTag("skippedDueToScope", skippedDueToScope);
         loopSpan.SetTag("pendingExportsCreated", result.PendingExports.Count);
         loopSpan.SetSuccess();
@@ -442,12 +415,10 @@ public class ExportEvaluationServer
     /// Avoids O(N×M) database queries by using cached export rules and CSO lookups.
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed.</param>
-    /// <param name="sourceSystem">The Connected System that caused this change (for Q3 circular prevention).</param>
     /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
     /// <returns>List of PendingExports for deprovisioning actions.</returns>
     public async Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
-        ConnectedSystem? sourceSystem,
         ExportEvaluationCache cache,
         List<ExportObjectTypeConflict>? objectTypeConflicts = null)
     {
@@ -459,7 +430,9 @@ public class ExportEvaluationServer
             return pendingExports;
         }
 
-        // Get export rules from cache instead of database query
+        // Get export rules from cache instead of database query. Rules targeting the run's own source
+        // system are included (#1284): scope-out is a state assertion, and skipping the source silently
+        // left objects provisioned that the administrator's scoping said to deprovision.
         if (!cache.ExportRulesByMvoTypeId.TryGetValue(mvo.Type.Id, out var exportRules))
         {
             // No export rules for this MVO type
@@ -468,11 +441,6 @@ public class ExportEvaluationServer
 
         foreach (var exportRule in exportRules)
         {
-            // Q3: Skip if this is the source system (circular sync prevention)
-            if (sourceSystem != null && exportRule.ConnectedSystemId == sourceSystem.Id)
-            {
-                continue;
-            }
 
             // Check if MVO is in scope for this export rule
             if (IsMvoInScopeForExportRule(mvo, exportRule))
@@ -977,14 +945,13 @@ public class ExportEvaluationServer
         if (byReferencingMvo.Count == 0)
             return result;
 
-        // Run-scoped cache preferred (#1003): the sync processors build one recall cache per run
-        // (sourceConnectedSystemId 0: recall is state assertion, so no source system is excluded;
-        // Q3 does not apply to deletions). Callers without one (housekeeping) build it ad hoc.
+        // Run-scoped cache preferred (#1003): the sync processors build one recall cache per run.
+        // Callers without one (housekeeping) build it ad hoc.
         var cache = recallCache;
         if (cache == null)
         {
             using var cacheSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallBuildCache");
-            cache = await BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+            cache = await BuildExportEvaluationCacheAsync();
             cacheSpan.SetTag("ruleCount", cache.ExportRulesByMvoTypeId.Values.Sum(rules => rules.Count));
             cacheSpan.SetSuccess();
         }
@@ -1412,7 +1379,7 @@ public class ExportEvaluationServer
                     .ToList();
 
                 var evaluation = await EvaluateExportRulesWithNoNetChangeDetectionAsync(
-                    referencingMvo, removedRows, sourceSystem: null, cache, deferSave: true,
+                    referencingMvo, removedRows, cache, deferSave: true,
                     removedAttributes: [.. removedRows], existingPendingExports: fallbackPendingExports,
                     preResolvedReferences: context.ResolvedReferenceValuesBySystem,
                     recallSemantics: true);
