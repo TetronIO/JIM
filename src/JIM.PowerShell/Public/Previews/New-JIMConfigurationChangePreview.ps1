@@ -10,7 +10,7 @@ function New-JIMConfigurationChangePreview {
         Starts a Configuration Change Preview: JIM evaluates a proposed change against the objects
         already in the metaverse and reports what would happen to them, changing nothing.
 
-        Two surfaces can be previewed, selected by which identifier you pass:
+        Three surfaces can be previewed, selected by which identifier you pass:
 
         - -MetaverseObjectTypeId previews a change to that type's deletion settings. The field semantics
           match Set-JIMMetaverseObjectType exactly, so an omitted parameter previews the stored value.
@@ -20,6 +20,10 @@ function New-JIMConfigurationChangePreview {
           the whole selection rather than one flag: what a deselection costs depends on the rest of the
           selection, because an object leaves import scope only when nothing else still covers it. Apply
           the previewed change with Set-JIMConnectedSystemPartition and Set-JIMConnectedSystemContainer.
+        - -SyncRuleId previews a change to that Synchronisation Rule's two destructive toggles: the
+          Outbound Deprovision Action (Disconnect or Delete on a scope exit) and the Inbound Out-of-Scope
+          Action (RemainJoined or Disconnect). The field semantics match Set-JIMSyncRule exactly, so an
+          omitted parameter previews the stored value. Apply the previewed change with Set-JIMSyncRule.
 
         Evaluation is asynchronous. Without -Wait this returns as soon as the proposal itself has been
         validated, carrying the ActivityId to poll with Get-JIMConfigurationChangePreview. With -Wait it
@@ -79,6 +83,22 @@ function New-JIMConfigurationChangePreview {
     .PARAMETER DeletionTriggerMode
         The proposed trigger mode. Omitted previews the stored mode. Read at the same moment as the
         trigger list, and so with the same standing impact: none.
+
+    .PARAMETER SyncRuleId
+        The Synchronisation Rule whose destructive toggles are being proposed. Selects the destructive
+        toggles surface.
+
+    .PARAMETER OutboundDeprovisionAction
+        The proposed action for a joined target object whose Metaverse Object leaves this export rule's
+        scope: Disconnect leaves the object in the target Connected System; Delete stages a Delete export
+        that removes it. Omitted previews the stored action. Read only by export Synchronisation Rules,
+        and the preview says so honestly when the rule is an import rule.
+
+    .PARAMETER InboundOutOfScopeAction
+        The proposed action for a joined Connected System Object that leaves this import rule's scope or
+        is obsoleted: RemainJoined keeps the join ("once managed, always managed"); Disconnect breaks it,
+        recalls what the object contributed and can trigger the Metaverse Object's deletion rules.
+        Omitted previews the stored action. Read only by import Synchronisation Rules.
 
     .PARAMETER FullDataSet
         Keep every object-level detail row rather than the per-group cap's worth. Summary counts are
@@ -143,6 +163,23 @@ function New-JIMConfigurationChangePreview {
         Narrows the managed partitions to one and reads how many Metaverse Objects the resulting
         disconnections would put on course for deletion.
 
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -OutboundDeprovisionAction Delete -Wait
+        $preview.ImpactCounts
+
+        Reports what flipping an export Synchronisation Rule's Deprovisioning Action to Delete would do:
+        how many joined objects already out of scope would be removed from the target Connected System at
+        the next synchronisation, and how many managed objects' fate on a future scope exit changes.
+
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -InboundOutOfScopeAction Disconnect -Wait
+        if (($preview.ImpactCounts | Measure-Object objectCount -Sum).Sum -eq 0) {
+            Set-JIMSyncRule -Id 42 -InboundOutOfScopeAction Disconnect -PreviewActivityId $preview.ActivityId
+        }
+
+        Applies the tightened Out-of-Scope Action only when the preview found no object would be
+        disconnected by it today, and records the preview against the change.
+
     .LINK
         Get-JIMConfigurationChangePreview
         Get-JIMConfigurationChangePreviewDelta
@@ -150,6 +187,7 @@ function New-JIMConfigurationChangePreview {
         Set-JIMMetaverseObjectType
         Set-JIMConnectedSystemPartition
         Set-JIMConnectedSystemContainer
+        Set-JIMSyncRule
     #>
     [CmdletBinding(DefaultParameterSetName = 'MetaverseObjectTypeDeletionSettings')]
     [OutputType([PSCustomObject])]
@@ -183,6 +221,17 @@ function New-JIMConfigurationChangePreview {
         [Parameter(ParameterSetName = 'ConnectedSystemScopeSelection')]
         [AllowEmptyCollection()]
         [int[]]$ExcludedContainerIds,
+
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleDestructiveToggles', ValueFromPipelineByPropertyName)]
+        [int]$SyncRuleId,
+
+        [Parameter(ParameterSetName = 'SyncRuleDestructiveToggles')]
+        [ValidateSet('Disconnect', 'Delete')]
+        [string]$OutboundDeprovisionAction,
+
+        [Parameter(ParameterSetName = 'SyncRuleDestructiveToggles')]
+        [ValidateSet('RemainJoined', 'Disconnect')]
+        [string]$InboundOutOfScopeAction,
 
         [Parameter()]
         [switch]$FullDataSet,
@@ -237,6 +286,18 @@ function New-JIMConfigurationChangePreview {
             $body.deletionTriggerMode = $DeletionTriggerMode
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'SyncRuleDestructiveToggles') {
+            if ($OutboundDeprovisionAction) {
+                # Enum sent as its string name; the API rejects numeric ordinals
+                # (JsonStringEnumConverter allowIntegerValues:false).
+                $body.outboundDeprovisionAction = $OutboundDeprovisionAction
+            }
+
+            if ($InboundOutOfScopeAction) {
+                $body.inboundOutOfScopeAction = $InboundOutOfScopeAction
+            }
+        }
+
         if ($FullDataSet) {
             $body.deltaPersistence = 'Full'
         }
@@ -244,6 +305,10 @@ function New-JIMConfigurationChangePreview {
         if ($PSCmdlet.ParameterSetName -eq 'ConnectedSystemScopeSelection') {
             $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/scope-selection/preview"
             $subject = "Connected System $ConnectedSystemId"
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleDestructiveToggles') {
+            $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/destructive-toggles/preview"
+            $subject = "Synchronisation Rule $SyncRuleId"
         }
         else {
             $endpoint = "/api/v1/metaverse/object-types/$MetaverseObjectTypeId/deletion-settings/preview"

@@ -7116,7 +7116,11 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
     }
 
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null)
     {
         // validate the Synchronisation Rule
         if (syncRule == null)
@@ -7201,7 +7205,8 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            ParentActivityId = parentActivity?.Id
+            ParentActivityId = parentActivity?.Id,
+            PreviewActivityId = previewActivityId
         };
 
         if (syncRule.Id == 0)
@@ -7264,7 +7269,11 @@ public class ConnectedSystemServer
     /// <summary>
     /// Creates or updates a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null)
     {
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
@@ -7320,7 +7329,8 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            ParentActivityId = parentActivity?.Id
+            ParentActivityId = parentActivity?.Id,
+            PreviewActivityId = previewActivityId
         };
 
         if (syncRule.Id == 0)

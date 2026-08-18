@@ -2682,9 +2682,9 @@ public class SynchronisationController(
         var apiKey = await GetCurrentApiKeyAsync();
         bool success;
         if (apiKey != null)
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason);
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId);
         else
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason);
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId);
         if (!success)
         {
             var validationErrors = syncRule.Validate();
@@ -2697,6 +2697,79 @@ public class SynchronisationController(
         // Retrieve the updated Synchronisation Rule
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         return Ok(SyncRuleHeader.FromEntity(updated!));
+    }
+
+    /// <summary>
+    /// Preview what changing a Synchronisation Rule's destructive toggles would do
+    /// </summary>
+    /// <remarks>
+    /// Evaluates a proposed Outbound Deprovision Action and/or Inbound Out-of-Scope Action against the rule's
+    /// persisted configuration, without saving either: which joined objects the next synchronisation would
+    /// disconnect, keep joined, or remove from the target Connected System, and which Metaverse Objects would
+    /// become eligible for deletion once the disconnections land.
+    ///
+    /// This matters because both toggles are silently destructive. Flipping the Deprovisioning Action to Delete
+    /// converts every future scope exit into a deletion in the target system; flipping the Out-of-Scope Action to
+    /// Disconnect can mass-disconnect joined objects, recalling what they contributed to the Metaverse.
+    ///
+    /// An omitted or null field previews the stored rule's value, matching the update endpoint's semantics
+    /// exactly. Apply the previewed change through <c>PUT sync-rules/{id}</c>.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    ///
+    /// A toggle the rule's direction never reads (the Outbound Deprovision Action on an import rule, and the
+    /// reverse) comes back with a validation finding saying so and no counted impact; that is the answer the
+    /// caller asked for, not a reason to refuse the request.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed toggles.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/destructive-toggles/preview", Name = "StartSyncRuleDestructiveTogglesPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleDestructiveTogglesPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleDestructiveTogglesPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        // An omitted toggle means "as the rule stands", so a caller proposing one change is never silently
+        // proposing a second; the adapter then reports honestly that the unchanged one changes nothing.
+        var proposal = new SyncRuleDestructiveToggleProposal(
+            request.OutboundDeprovisionAction ?? syncRule.OutboundDeprovisionAction,
+            request.InboundOutOfScopeAction ?? syncRule.InboundOutOfScopeAction);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRule,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started destructive-toggle preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
     }
 
     /// <summary>
