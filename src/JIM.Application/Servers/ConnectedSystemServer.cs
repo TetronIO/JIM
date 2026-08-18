@@ -6661,7 +6661,62 @@ public class ConnectedSystemServer
     /// total change counts, or null if not found.</returns>
     public async Task<PendingExportDetailResult?> GetPendingExportDetailAsync(Guid id)
     {
-        return await Application.Repository.ConnectedSystems.GetPendingExportDetailAsync(id);
+        var result = await Application.Repository.ConnectedSystems.GetPendingExportDetailAsync(id);
+        if (result == null)
+            return null;
+
+        result.UnresolvedReferences = await DescribeUnresolvedReferencesAsync(result.PendingExport);
+        return result;
+    }
+
+    /// <summary>
+    /// Explains each reference change on a Pending Export that has not been written yet (issue #1398), against
+    /// the target's current state rather than anything recorded at export time, so the explanation is always
+    /// current: the referenced Metaverse Object has a Connected System Object in the target with an anchor
+    /// (resolvable on the next export run), one without an anchor (waiting on its own export), or none at all
+    /// (cannot resolve as things stand). Costs nothing when the export has no unresolved references.
+    /// </summary>
+    private async Task<List<PendingExportUnresolvedReference>> DescribeUnresolvedReferencesAsync(PendingExport pendingExport)
+    {
+        var unresolved = pendingExport.AttributeValueChanges
+            .Where(c => !string.IsNullOrEmpty(c.UnresolvedReferenceValue) && Guid.TryParse(c.UnresolvedReferenceValue, out _))
+            .Select(c => (Change: c, MvoId: Guid.Parse(c.UnresolvedReferenceValue!)))
+            .ToList();
+
+        if (unresolved.Count == 0)
+            return [];
+
+        var mvoIds = unresolved.Select(u => u.MvoId).Distinct().ToList();
+        var csosByMvo = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, pendingExport.ConnectedSystemId);
+        var names = await Application.Repository.Metaverse.GetMetaverseObjectDisplayNamesAsync(mvoIds);
+
+        return unresolved.Select(u => new PendingExportUnresolvedReference
+        {
+            AttributeChangeId = u.Change.Id,
+            AttributeName = u.Change.Attribute?.Name ?? $"attribute {u.Change.AttributeId}",
+            ReferencedMetaverseObjectId = u.MvoId,
+            ReferencedMetaverseObjectDisplayName = names.TryGetValue(u.MvoId, out var name) ? name : null,
+            Reason = ClassifyUnresolvedReference(csosByMvo.TryGetValue(u.MvoId, out var cso) ? cso : null)
+        }).ToList();
+    }
+
+    /// <summary>
+    /// The one classification the export's deferred pass and this detail share (issue #1398): no object in the
+    /// target means the reference cannot resolve as things stand; an object without an anchor is waiting; an
+    /// object with an anchor resolves on the next run. The anchor is read the way export resolution reads it,
+    /// preferring the secondary external id (a DN) over the primary.
+    /// </summary>
+    internal static UnresolvedReferenceReason ClassifyUnresolvedReference(ConnectedSystemObject? referencedCso)
+    {
+        if (referencedCso == null)
+            return UnresolvedReferenceReason.NotInTargetSystem;
+
+        var anchor = referencedCso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsSecondaryExternalId == true)
+                     ?? referencedCso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsExternalId == true);
+
+        return anchor?.ToReferenceValueString() != null
+            ? UnresolvedReferenceReason.Resolvable
+            : UnresolvedReferenceReason.AwaitingAnchor;
     }
 
     /// <summary>

@@ -19,8 +19,14 @@ internal static class ExportOutcomeMessage
     /// <see cref="ThroughputTracker.FormatCompletion"/>, or empty where there was too little work
     /// to average.
     /// </param>
-    internal static string ForExport(int succeeded, int failed, int deferred, string throughput) =>
-        $"Export complete: {succeeded:N0} succeeded, {failed:N0} failed, {deferred:N0} deferred{throughput}";
+    /// <param name="writtenInPart">
+    /// How many of the succeeded exports were written in part and are still waiting on a reference
+    /// (issue #1398); named in the sentence so "succeeded" does not read as "finished".
+    /// </param>
+    internal static string ForExport(int succeeded, int failed, int deferred, string throughput, int writtenInPart = 0) =>
+        writtenInPart > 0
+            ? $"Export complete: {succeeded:N0} succeeded ({writtenInPart:N0} written in part, awaiting references), {failed:N0} failed, {deferred:N0} deferred{throughput}"
+            : $"Export complete: {succeeded:N0} succeeded, {failed:N0} failed, {deferred:N0} deferred{throughput}";
 
     internal static string ForPreview(int pendingExports) =>
         $"Preview complete: {pendingExports:N0} export(s) would be processed";

@@ -36,12 +36,14 @@ internal static class PendingExportBulkColumns
 
     /// <summary>
     /// Update columns for the export-result bulk update (ConnectedSystemRepository): as the retry
-    /// update, minus ChangeType (fixed once evaluated on this path), plus ConnectedSystemObjectId
-    /// (a provisioning export gains its CSO when the target object is created).
+    /// update, plus ConnectedSystemObjectId (a provisioning export gains its CSO when the target
+    /// object is created). ChangeType is included because a Create written in part, without the
+    /// reference changes it could not resolve, becomes an Update at execution time (issue #1398):
+    /// the row now exists, so what is sent later must never be a second insert.
     /// </summary>
     internal static readonly string[] PendingExportsExportResultUpdate =
     [
-        "Status", "ErrorCount", "MaxRetries", "LastAttemptedAt", "NextRetryAt",
+        "Status", "ChangeType", "ErrorCount", "MaxRetries", "LastAttemptedAt", "NextRetryAt",
         "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences", "ConnectedSystemObjectId"
     ];
 

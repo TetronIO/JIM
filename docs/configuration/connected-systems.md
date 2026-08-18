@@ -185,6 +185,19 @@ Whichever mode is selected, genuine data-quality issues remain discoverable:
 
 Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
 
+### On export
+
+The same setting governs the export side. When JIM writes a reference attribute (a manager, a group's members) it needs the referenced object's own identifier in the target Connected System, which it can only have once that object exists there. A Pending Export whose references cannot all be resolved yet is not held back whole: everything that can be written is written now (a Create inserts the row without the reference columns; a group gains the members that can be resolved), and the Pending Export stays pending, carrying only the reference values still owed, until they resolve. It is retried on the deferred cadence and finished when the referenced objects can be addressed.
+
+JIM tells two situations apart at export time:
+
+| Situation | What it means | What happens |
+|-----------|---------------|--------------|
+| **Awaiting anchor** | The referenced object has a Connected System Object in this Connected System, but its own export has not been executed or confirmed yet, so it has no anchor to point at. | Ordinary ordering. Nothing is reported; the reference is written on a later run. |
+| **Not in this Connected System** | The referenced object has no Connected System Object in this Connected System at all: it is out of scope for every Synchronisation Rule into the system, or has not been provisioned. | The reference cannot be written as things stand, and is reported per the mode above: **Error** marks the referring object's Run Profile execution item with an Unresolved Reference error naming the attribute and the referenced object, and the Activity completes with a warning; **Warn** completes the Activity with a warning carrying a summary count; **Ignore** logs only. |
+
+An export that wrote in part is counted as succeeded on the Activity ("43 succeeded (4 written in part, awaiting references)"), because something was written; the Pending Export detail page lists each reference still owed with its reason, and the same detail is available from `Get-JIMPendingExport -Id` and the REST API as `unresolvedReferences`. A partial write that the target refuses (a reference column declared `NOT NULL`, say) fails that object with an ordinary export error, and is retried like any other failure.
+
 ## Attribute writability
 
 When JIM retrieves a Connected System's schema, each discovered attribute is recorded with how the system will let JIM write to it. You can see this in the Schema tab's **Writability** column, filter the attribute list by it, and read it from the REST API and PowerShell as the attribute's `writability` value. It is discovered, never set by an administrator: it reflects what the Connected System told JIM.

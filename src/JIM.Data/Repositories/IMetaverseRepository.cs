@@ -70,6 +70,13 @@ public interface IMetaverseRepository
     public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// The cached display names of the given Metaverse Objects, keyed by id, for naming an object in a
+    /// message without loading its attribute values (issue #1398). Objects that do not exist are absent
+    /// from the result; objects with no cached name map to null.
+    /// </summary>
+    public Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
     /// Returns up to <paramref name="maxResults"/> Metaverse Object ids currently flagged
     /// <c>ScopeReviewPending</c> by the Temporal Scope Reconciler (issue #892), ordered by id. Backed by a
     /// partial index so the query stays O(flagged). Used by the sync engine to drain flagged Metaverse Objects

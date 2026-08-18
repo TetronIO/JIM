@@ -1069,6 +1069,27 @@ public class MetaverseRepository : IMetaverseRepository
             .ToListAsync();
     }
 
+    public async Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids)
+    {
+        if (ids.Count == 0)
+            return new Dictionary<Guid, string?>();
+
+        // Deduplicated on the way in, and chunked so a caller naming tens of thousands of objects
+        // (a large group's members, say) does not build one unbounded IN list.
+        var result = new Dictionary<Guid, string?>();
+        foreach (var chunk in ids.Distinct().Chunk(5000))
+        {
+            var rows = await Repository.Database.MetaverseObjects
+                .AsNoTracking()
+                .Where(mvo => chunk.Contains(mvo.Id))
+                .Select(mvo => new { mvo.Id, mvo.CachedDisplayName })
+                .ToListAsync();
+            foreach (var row in rows)
+                result[row.Id] = row.CachedDisplayName;
+        }
+        return result;
+    }
+
     public async Task<List<Guid>> GetMetaverseObjectIdsWithScopeReviewPendingAsync(int maxResults)
     {
         // O(transitions) via the partial index on ScopeReviewPending. Ordered by Id for stable paging across

@@ -132,3 +132,29 @@ public enum ExportPhase
     /// </summary>
     Completed
 }
+
+/// <summary>
+/// Why a reference attribute change on a Pending Export has not been written yet (issue #1398).
+/// </summary>
+public enum UnresolvedReferenceReason
+{
+    /// <summary>
+    /// The referenced Metaverse Object has a Connected System Object in the target and that object now
+    /// carries its anchor, so the reference will resolve and be written on the next export run.
+    /// </summary>
+    Resolvable = 0,
+
+    /// <summary>
+    /// The referenced Metaverse Object has a Connected System Object in the target but it does not
+    /// carry an anchor yet: typically its own Create has not been executed or confirmed. The reference
+    /// is waiting, not failing.
+    /// </summary>
+    AwaitingAnchor = 1,
+
+    /// <summary>
+    /// The referenced Metaverse Object has no Connected System Object in the target at all: it is out
+    /// of scope for every rule into this system, or has not been provisioned. The reference cannot
+    /// resolve as things stand and is surfaced per the Connected System's Unresolved Reference Handling.
+    /// </summary>
+    NotInTargetSystem = 2
+}

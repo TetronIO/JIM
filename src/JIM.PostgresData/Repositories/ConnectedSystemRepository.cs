@@ -6301,12 +6301,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Batch updates PendingExport rows using UPDATE ... FROM (VALUES ...) pattern.
-    /// Updates: Status, ErrorCount, MaxRetries, LastAttemptedAt, NextRetryAt, LastErrorMessage,
-    /// LastErrorStackTrace, HasUnresolvedReferences, ConnectedSystemObjectId.
+    /// Updates: Status, ChangeType, ErrorCount, MaxRetries, LastAttemptedAt, NextRetryAt,
+    /// LastErrorMessage, LastErrorStackTrace, HasUnresolvedReferences, ConnectedSystemObjectId.
     /// </summary>
     private async Task BulkUpdatePendingExportsRawAsync(List<PendingExport> exports)
     {
-        const int columnsPerRow = 10; // Id + 9 mutable columns
+        const int columnsPerRow = 11; // Id + 10 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
@@ -6322,11 +6322,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::integer, {{{offset + 4}}}::timestamp with time zone, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::text, {{{offset + 7}}}::text, {{{offset + 8}}}::boolean, {{{offset + 9}}}::uuid)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::integer, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::timestamp with time zone, {{{offset + 7}}}::text, {{{offset + 8}}}::text, {{{offset + 9}}}::boolean, {{{offset + 10}}}::uuid)");
 
                 var pe = chunk[i];
                 parameters.Add(pe.Id);
                 parameters.Add((int)pe.Status);
+                parameters.Add((int)pe.ChangeType);
                 parameters.Add(pe.ErrorCount);
                 parameters.Add(pe.MaxRetries);
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
