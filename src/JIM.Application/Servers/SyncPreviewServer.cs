@@ -112,8 +112,6 @@ public class SyncPreviewServer
         Guid connectedSystemObjectId,
         Func<ISyncRepositoryScope>? repositoryFactory = null)
     {
-        var result = new SyncPreviewResult();
-
         using var scope = repositoryFactory?.Invoke();
         var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
         var previewServer = new ExportEvaluationServer(Application, guardedRepository);
@@ -122,21 +120,176 @@ public class SyncPreviewServer
         var cso = await guardedRepository.GetConnectedSystemObjectAsync(connectedSystemId, connectedSystemObjectId);
         if (cso == null)
         {
-            result.Errors.Add(new SyncPreviewMessage
+            var notFound = new SyncPreviewResult();
+            notFound.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ObjectNotFound,
                 Detail = $"Connected System Object {connectedSystemObjectId} does not exist in Connected System {connectedSystemId}.",
                 ConnectedSystemId = connectedSystemId
             });
-            return result;
+            return notFound;
         }
+
+        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer);
+        return await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true);
+    }
+
+    /// <summary>
+    /// Previews what a full synchronisation of one Connected System would do now (#288 plan Phase 4, PRD
+    /// decision D2): every object is classified into the whole-population count tier, a bounded number of
+    /// full outcome trees is retained per category, and an explicit work budget (object cap and/or time)
+    /// stops the walk with the truncation flagged, so a 100K+ system cannot run unbounded and cannot hold
+    /// 100K trees in memory. Runs under the same defence-in-depth backstops as the single-object previews.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to preview.</param>
+    /// <param name="options">The work budget and sampling bounds; defaults applied when omitted.</param>
+    /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
+    /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    public async Task<FullSyncPreviewResult> PreviewFullSyncAsync(
+        int connectedSystemId,
+        FullSyncPreviewOptions? options = null,
+        Func<ISyncRepositoryScope>? repositoryFactory = null)
+    {
+        options ??= new FullSyncPreviewOptions();
+        var result = new FullSyncPreviewResult { ConnectedSystemId = connectedSystemId };
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        using var scope = repositoryFactory?.Invoke();
+        var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
+        var previewServer = new ExportEvaluationServer(Application, guardedRepository);
+        await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
+
+        result.TotalObjectCount = await guardedRepository.GetConnectedSystemObjectCountAsync(connectedSystemId);
+        if (result.TotalObjectCount == 0)
+            return result;
+
+        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer);
+        var sampleCountsByCategory = new Dictionary<FullSyncPreviewCategory, int>();
+
+        // Keyset pagination from the zero GUID, matching the sync processors' population walk.
+        var afterId = Guid.Empty;
+        var stopped = false;
+        while (!stopped)
+        {
+            var page = await guardedRepository.GetConnectedSystemObjectsAsync(
+                connectedSystemId, page: 1, pageSize: options.PageSize,
+                knownTotalCount: result.TotalObjectCount, afterId: afterId);
+            if (page.Results.Count == 0)
+                break;
+            afterId = page.Results[^1].Id;
+
+            // One outbound-cache refresh per page for the joined objects' Metaverse Objects, instead of
+            // one per object inside the core.
+            var joinedMvoIds = page.Results
+                .Where(c => c.MetaverseObjectId.HasValue)
+                .Select(c => c.MetaverseObjectId!.Value)
+                .ToList();
+            if (joinedMvoIds.Count > 0)
+                await previewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, joinedMvoIds);
+
+            foreach (var cso in page.Results)
+            {
+                if (options.TimeBudget.HasValue && stopwatch.Elapsed >= options.TimeBudget.Value)
+                {
+                    result.Truncated = true;
+                    result.TruncationReason = FullSyncPreviewTruncationReason.TimeBudgetExhausted;
+                    stopped = true;
+                    break;
+                }
+                if (options.MaxObjects.HasValue && result.EvaluatedObjectCount >= options.MaxObjects.Value)
+                {
+                    result.Truncated = true;
+                    result.TruncationReason = FullSyncPreviewTruncationReason.ObjectCapReached;
+                    stopped = true;
+                    break;
+                }
+                if (cso.Status == ConnectedSystemObjectStatus.Obsolete)
+                {
+                    result.SkippedObjectCount++;
+                    continue;
+                }
+
+                var preview = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: false);
+                result.EvaluatedObjectCount++;
+
+                var category = Categorise(preview);
+                AddToCounts(result.Counts, category, preview);
+
+                var retained = sampleCountsByCategory.GetValueOrDefault(category);
+                if (retained < options.SampleTreesPerCategory)
+                {
+                    sampleCountsByCategory[category] = retained + 1;
+                    result.Samples.Add(new FullSyncPreviewSample
+                    {
+                        Category = category,
+                        ConnectedSystemObjectId = cso.Id,
+                        Preview = preview
+                    });
+                }
+            }
+
+            if (page.Results.Count < options.PageSize)
+                break;
+        }
+
+        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Skipped} skipped), " +
+            "{Project} would project, {Join} would join, {Flow} attribute flow, {OutOfScope} out of scope, {NotConnected} not connected, {Blocked} blocked; " +
+            "{Creates} creates, {Updates} updates, {Deletes} deletes proposed; truncated: {Truncated} ({Reason}); {Elapsed:0.0}s.",
+            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.SkippedObjectCount,
+            result.Counts.WouldProject, result.Counts.WouldJoin, result.Counts.AttributeFlow, result.Counts.OutOfScope,
+            result.Counts.NotConnected, result.Counts.BlockedByErrors,
+            result.Counts.ObjectsToCreate, result.Counts.ObjectsToUpdate, result.Counts.ObjectsToDelete,
+            result.Truncated, result.TruncationReason, stopwatch.Elapsed.TotalSeconds);
+        return result;
+    }
+
+    #endregion
+
+    #region private methods
+
+    /// <summary>
+    /// Builds the shared, read-only inputs one Connected System's CSO previews evaluate against: the
+    /// enabled Synchronisation Rules, the object types, the outbound evaluation cache and the target
+    /// system name lookup. Built once per single-object preview, and once for a whole full-system walk.
+    /// </summary>
+    private static async Task<CsoPreviewContext> BuildCsoPreviewContextAsync(
+        int connectedSystemId,
+        ISyncRepository guardedRepository,
+        ExportEvaluationServer previewServer)
+    {
+        var syncRules = await guardedRepository.GetSyncRulesAsync(connectedSystemId, includeDisabled: false);
+        var objectTypes = await guardedRepository.GetObjectTypesAsync(connectedSystemId);
+        var cache = await previewServer.BuildExportEvaluationCacheAsync();
+        return new CsoPreviewContext(connectedSystemId, previewServer, syncRules, objectTypes, cache,
+            BuildConnectedSystemNameLookup(cache), guardedRepository);
+    }
+
+    /// <summary>
+    /// The per-object CSO preview core shared by <see cref="PreviewSyncForCsoAsync"/> and
+    /// <see cref="PreviewFullSyncAsync"/>: the inbound chain evaluated read-only against the context's
+    /// shared inputs, then the outbound chain over the prospective Metaverse Object state.
+    /// </summary>
+    /// <param name="cso">The Connected System Object to preview.</param>
+    /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    /// <param name="refreshCacheForWorkingMvo">Whether to refresh the outbound cache for the working
+    /// Metaverse Object before evaluating outbound. Single-object previews pass true; the full-system walk
+    /// passes false, having refreshed the whole page's joined Metaverse Objects in one call.</param>
+    private async Task<SyncPreviewResult> PreviewCsoCoreAsync(
+        ConnectedSystemObject cso,
+        CsoPreviewContext context,
+        bool refreshCacheForWorkingMvo)
+    {
+        var result = new SyncPreviewResult();
+        var connectedSystemId = context.ConnectedSystemId;
+        var guardedRepository = context.GuardedRepository;
+        var previewServer = context.PreviewServer;
+        var objectTypes = context.ObjectTypes;
 
         var inbound = new SyncPreviewInboundSummary();
         result.Inbound = inbound;
 
         // The applicable import Synchronisation Rules, per the real processor's filter.
-        var syncRules = await guardedRepository.GetSyncRulesAsync(connectedSystemId, includeDisabled: false);
-        var importRules = syncRules
+        var importRules = context.SyncRules
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == cso.TypeId)
             .ToList();
         if (importRules.Count == 0)
@@ -167,8 +320,6 @@ public class SyncPreviewServer
             });
             return result;
         }
-
-        var objectTypes = await guardedRepository.GetObjectTypesAsync(connectedSystemId);
 
         // Resolve the working Metaverse Object: the joined one, a read-only probed match (never claimed),
         // or a prospective in-memory projection. The working object is always the preview's own copy, so
@@ -284,11 +435,10 @@ public class SyncPreviewServer
 
         _syncEngine.ApplyPendingAttributeChanges(workingMvo);
 
-        // The outbound chain over the prospective Metaverse Object state.
-        var cache = await previewServer.BuildExportEvaluationCacheAsync();
-        if (workingMvo.Id != Guid.Empty)
-            await previewServer.RefreshExportEvaluationCacheForPageAsync(cache, [workingMvo.Id]);
-        var outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], cache);
+        // The outbound chain over the prospective Metaverse Object state, against the context's shared cache.
+        if (refreshCacheForWorkingMvo && workingMvo.Id != Guid.Empty)
+            await previewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
+        var outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache);
         ComposeOutbound(result, outbound);
 
         foreach (var rule in inScopeRules.Where(rule => result.AffectedSyncRules.All(r => r.Id != rule.Id)))
@@ -330,21 +480,69 @@ public class SyncPreviewServer
             // outcomes are built; so in the tree a real run actually records, export outcomes are the
             // root's children. Fidelity (PRD requirement 9, the paired test) mirrors recorded behaviour,
             // not intent; if the real builder is ever fixed to match its comment, this must move with it.
-            BuildOutboundOutcomeNodes(root.Children, outbound, BuildConnectedSystemNameLookup(cache));
+            BuildOutboundOutcomeNodes(root.Children, outbound, context.SystemNames);
         }
         else
         {
-            BuildOutboundOutcomeNodes(result.OutcomeTree, outbound, BuildConnectedSystemNameLookup(cache));
+            BuildOutboundOutcomeNodes(result.OutcomeTree, outbound, context.SystemNames);
         }
 
-        Log.Debug("PreviewSyncForCsoAsync: Previewed CSO {CsoId} in system {SystemId}: {FlowCount} inbound flow(s), {EntryCount} outbound decision(s), {ErrorCount} error(s), {WarningCount} warning(s).",
-            connectedSystemObjectId, connectedSystemId, flowCount, outbound.Entries.Count, result.Errors.Count, result.Warnings.Count);
+        Log.Debug("PreviewCsoCoreAsync: Previewed CSO {CsoId} in system {SystemId}: {FlowCount} inbound flow(s), {EntryCount} outbound decision(s), {ErrorCount} error(s), {WarningCount} warning(s).",
+            cso.Id, connectedSystemId, flowCount, outbound.Entries.Count, result.Errors.Count, result.Warnings.Count);
         return result;
     }
 
-    #endregion
+    /// <summary>
+    /// The shared, read-only inputs one Connected System's CSO previews evaluate against.
+    /// </summary>
+    private sealed record CsoPreviewContext(
+        int ConnectedSystemId,
+        ExportEvaluationServer PreviewServer,
+        List<SyncRule> SyncRules,
+        List<ConnectedSystemObjectType> ObjectTypes,
+        ExportEvaluationCache Cache,
+        Dictionary<int, string> SystemNames,
+        ISyncRepository GuardedRepository);
 
-    #region private methods
+    /// <summary>
+    /// Classifies one per-object preview into its full-system category. Blocking errors take precedence:
+    /// an object that both projects and errors is a problem to fix before it is a projection.
+    /// </summary>
+    private static FullSyncPreviewCategory Categorise(SyncPreviewResult preview)
+    {
+        if (preview.HasBlockingErrors)
+            return FullSyncPreviewCategory.BlockedByErrors;
+        if (preview.Warnings.Any(w => w.Code == SyncPreviewMessageCode.OutOfScope))
+            return FullSyncPreviewCategory.OutOfScope;
+        if (preview.Inbound?.WouldProject == true)
+            return FullSyncPreviewCategory.WouldProject;
+        if (preview.Inbound?.WouldJoinMetaverseObjectId != null)
+            return FullSyncPreviewCategory.WouldJoin;
+        if (preview.Inbound?.AlreadyJoinedMetaverseObjectId != null)
+            return FullSyncPreviewCategory.AttributeFlow;
+        return FullSyncPreviewCategory.NotConnected;
+    }
+
+    /// <summary>
+    /// Folds one per-object preview into the whole-population count tier.
+    /// </summary>
+    private static void AddToCounts(FullSyncPreviewCounts counts, FullSyncPreviewCategory category, SyncPreviewResult preview)
+    {
+        switch (category)
+        {
+            case FullSyncPreviewCategory.WouldProject: counts.WouldProject++; break;
+            case FullSyncPreviewCategory.WouldJoin: counts.WouldJoin++; break;
+            case FullSyncPreviewCategory.AttributeFlow: counts.AttributeFlow++; break;
+            case FullSyncPreviewCategory.OutOfScope: counts.OutOfScope++; break;
+            case FullSyncPreviewCategory.NotConnected: counts.NotConnected++; break;
+            case FullSyncPreviewCategory.BlockedByErrors: counts.BlockedByErrors++; break;
+        }
+
+        counts.ObjectsToCreate += preview.Outbound.ObjectsToCreate;
+        counts.ObjectsToUpdate += preview.Outbound.ObjectsToUpdate;
+        counts.ObjectsToDelete += preview.Outbound.ObjectsToDelete;
+        counts.TotalAttributeChanges += preview.Outbound.TotalAttributeChanges;
+    }
 
     /// <summary>
     /// Probes the Object Matching Rules for an existing Metaverse Object the Connected System Object would
