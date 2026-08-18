@@ -762,7 +762,20 @@ function Invoke-S16RunProfile {
     }
 
     $result = Start-JIMRunProfile -ConnectedSystemId $systemId -RunProfileName $Name -Wait -PassThru
-    Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($label)"
+
+    # The app users export is the one run allowed a warning, and only one kind. Every employee past the
+    # tenth has a manager among the first ten, and employee 7 is disabled, so the four people who report
+    # to employee 7 reference someone the outbound rule never provisions. JIM writes their rows without
+    # the manager and reports the reference it cannot resolve on each of them, under the Connected
+    # System's default (Error) handling; that warning is the surfacing being exercised, not a defect,
+    # and Test-S16ExportCreate asserts on the Pending Exports it leaves behind. Anything else that warns
+    # or errors on the run still fails it.
+    if ($System -eq 'AppUsers' -and $Name -eq 'Export') {
+        Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($label)" -AllowWarnings -AllowedWarningTypes @('UnresolvedReference')
+    }
+    else {
+        Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($label)"
+    }
     return $result
 }
 
@@ -973,7 +986,30 @@ function Test-S16ExportCreate {
         return @{ Status = 'fail'; Detail = "$($unusable.Count) exported object(s) carry an external ID that is not the integer the IDENTITY column generates: '$(($unusable | Select-Object -First 5) -join "', '")'." }
     }
 
-    return @{ Status = 'pass'; Detail = "$expected row(s) inserted with a database-generated key, and the confirming import composed the same anchor token for every one." }
+    # The people whose manager is disabled employee 7 (issue #1398). Their rows were inserted without the
+    # manager, and each carries a Pending Export holding only the reference still owed, explained as a
+    # reference to an object that has no Connected System Object in this system. Derived arithmetically:
+    # employee n past the tenth reports to (n modulo 10) + 1, and only employee 7 of the first ten is
+    # disabled, so it is every enabled n with n modulo 10 equal to 6.
+    $expectedWaiting = @(11..$Context.RowCount | Where-Object { ($_ % 10) -eq 6 -and ($_ % 7) -ne 0 })
+    $waitingExports = @(Get-JIMPendingExport -ConnectedSystemId $appUserSystemId -All)
+    if ($waitingExports.Count -ne $expectedWaiting.Count) {
+        return @{ Status = 'fail'; Detail = "$($expectedWaiting.Count) employee(s) report to disabled employee 7, whose account is never provisioned, so $($expectedWaiting.Count) Pending Export(s) should remain for the manager reference each still owes; found $($waitingExports.Count)." }
+    }
+    foreach ($waiting in $waitingExports) {
+        $detail = Get-JIMPendingExport -Id $waiting.id
+        $owed = @($detail.unresolvedReferences)
+        if ($owed.Count -ne 1 -or $owed[0].attributeName -ne 'MANAGER_ID' -or $owed[0].reason -ne 'NotInTargetSystem') {
+            $described = ($owed | ForEach-Object { "$($_.attributeName)=$($_.reason)" }) -join ', '
+            return @{ Status = 'fail'; Detail = "Pending Export $($waiting.id) should owe exactly the MANAGER_ID reference, explained as NotInTargetSystem; it reports [$described]." }
+        }
+        $writtenElsewhere = @($detail.attributeChanges | Where-Object { $_.attributeName -ne 'MANAGER_ID' })
+        if ($writtenElsewhere.Count -gt 0) {
+            return @{ Status = 'fail'; Detail = "Pending Export $($waiting.id) still carries $($writtenElsewhere.Count) non-reference change(s) after the confirming import; everything but the owed reference should have been written and confirmed." }
+        }
+    }
+
+    return @{ Status = 'pass'; Detail = "$expected row(s) inserted with a database-generated key, and the confirming import composed the same anchor token for every one; $($expectedWaiting.Count) row(s) whose manager is not provisioned were inserted without the reference and remain pending for it, explained as such." }
 }
 
 function Test-S16ExportUpdate {

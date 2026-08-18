@@ -1137,6 +1137,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids)
+    {
+        var result = ids.Distinct().Where(_mvos.ContainsKey).ToDictionary(id => id, id => _mvos[id].Name);
+        return Task.FromResult(result);
+    }
+
     public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
     {
         foreach (var stored in ids.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
