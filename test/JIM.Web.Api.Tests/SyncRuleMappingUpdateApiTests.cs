@@ -114,9 +114,8 @@ public class SyncRuleMappingUpdateApiTests
         _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(ExportRuleId)).ReturnsAsync(exportRule);
         foreach (var mapping in new[] { _expressionMapping, _attributeMapping, _exportMapping })
         {
-            var captured = mapping;
-            _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingForUpdateAsync(captured.Id)).ReturnsAsync(captured);
-            _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(captured.Id)).ReturnsAsync(captured);
+            _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingForUpdateAsync(mapping.Id)).ReturnsAsync(mapping);
+            _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(mapping.Id)).ReturnsAsync(mapping);
         }
         _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
 
