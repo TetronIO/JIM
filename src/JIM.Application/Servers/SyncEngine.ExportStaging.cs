@@ -483,16 +483,11 @@ public partial class SyncEngine
                             .Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue)
                             .ToList();
 
-                        if (changedValues.Count > 0)
-                        {
-                            mvoValues = changedValues;
-                        }
-                        else
-                        {
-                            // Fall back to MVO's current attribute values (excluding asserted-null markers, #91)
-                            mvoValues = mvo.AttributeValues
-                                .Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
-                        }
+                        // Fall back to the MVO's current attribute values (excluding asserted-null markers,
+                        // #91) when nothing relevant changed.
+                        mvoValues = changedValues.Count > 0
+                            ? changedValues
+                            : mvo.AttributeValues.Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
                     }
                     else
                     {
@@ -518,19 +513,12 @@ public partial class SyncEngine
                     var changedValue = changedAttributes
                         .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
 
-                    MetaverseObjectAttributeValue? mvoValue;
-                    if (isCreateOperation)
-                    {
-                        // For Create operations, include all mapped attributes (not just changed ones)
-                        mvoValue = changedValue ?? mvo.AttributeValues
-                            .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
-                    }
-                    else
-                    {
-                        // For Update operations, only include attributes that actually changed
-                        mvoValue = changedValue;
-                    }
-
+                    // Create operations include all mapped attributes (not just changed ones); Update
+                    // operations only include attributes that actually changed.
+                    var mvoValue = isCreateOperation
+                        ? changedValue ?? mvo.AttributeValues
+                            .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue)
+                        : changedValue;
 
                     mvoValues = mvoValue != null ? [mvoValue] : [];
                 }
@@ -741,18 +729,15 @@ public partial class SyncEngine
         // while the CSO stores a resolved reference to another CSO (which has a MetaverseObjectId).
         // Compare using the MVO ID that both ultimately represent.
         var pendingHasUnresolvedRef = !string.IsNullOrEmpty(pendingChange.UnresolvedReferenceValue);
-        var existingHasResolvedRef = existingValue.ReferenceValue != null;
 
         if (pendingHasUnresolvedRef)
         {
             // Pending Export has an MVO GUID - compare with the MVO that the existing CSO reference points to
-            if (existingHasResolvedRef && existingValue.ReferenceValue!.MetaverseObjectId.HasValue)
+            var existingReferencedMvoId = existingValue.ReferenceValue?.MetaverseObjectId;
+            if (existingReferencedMvoId.HasValue &&
+                Guid.TryParse(pendingChange.UnresolvedReferenceValue, out var pendingMvoId))
             {
-                // Compare MVO GUIDs
-                if (Guid.TryParse(pendingChange.UnresolvedReferenceValue, out var pendingMvoId))
-                {
-                    return pendingMvoId == existingValue.ReferenceValue.MetaverseObjectId.Value;
-                }
+                return pendingMvoId == existingReferencedMvoId.Value;
             }
 
             // Fallback: compare as DN strings if the Pending Export has a resolved DN
