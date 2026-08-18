@@ -56,10 +56,10 @@ Each phase lands as its own PR (Phase 1 as a short sequence of PRs, one per meth
 
 ## Implementation Phases
 
-### Phase 0: Baseline and guardrails
+### Phase 0: Baseline and guardrails ✅
 
-- [ ] Capture the Scenario 8 performance baseline on current `main` (default fast-writes mode, recorded in `results/performance/`), so every Phase 1 PR has a fixed comparison point. Record template and host alongside.
-- [ ] Add the isolation-assertion helper the PRD requires (req. 10): given a database, snapshot Pending Export count, MVO count and attribute versions, CSO count, RPEI count, Activity count; assert unchanged after a preview call. Built now so every later phase can use it from its first test.
+- [x] Capture the Scenario 8 performance baseline on current `main` (default fast-writes mode, recorded in `results/performance/`), so every Phase 1 PR has a fixed comparison point. Record template and host alongside. **Captured 2026-08-18** in the cloud sandbox: Small template, OpenLDAP, scenario execution **329.0s** (`TestDurationMs` 328,980; 67 operation timings in the JSON), full scenario green. One caveat that binds every later gate: `results/` is gitignored and sandbox hosts are ephemeral, so a baseline is only comparable **within the session that captured it**. Each Phase 1 session therefore baselines `main` first and compares its branch in the same sandbox; the figure recorded here is the shape of the cost, not a cross-host constant. Two sandbox potholes hit and recorded on the way: the CA guidance in `test/CLAUDE.md` was wrong twice over (fixed there), and the first passing run still exited 1 because of a #1382 regression in the scenario invoker, fixed as this phase's stack layer so Phase 1's gates can trust the exit code.
+- [x] Add the isolation-assertion helper the PRD requires (req. 10): given a database, snapshot Pending Export count, MVO count and attribute versions, CSO count, RPEI count, Activity count; assert unchanged after a preview call. Built now so every later phase can use it from its first test. **Delivered** as `DatabaseIsolationSnapshot` (JIM.TestSupport), watching eight tables (the PRD's five populations plus the attribute-value and change child tables that give them content) with a row count **and a content digest** per table, because an in-place UPDATE leaves the count identical and is exactly the leak a count-only assertion cannot see. Reads through raw Npgsql so the instrument shares nothing with the code it checks; a watched table going missing fails the capture by name rather than silently narrowing the guarantee. Written red-first; six pure comparison tests plus four `RequiresPostgres` tests, including the update-in-place case, all green.
 
 ### Phase 1: Outbound extraction (the unbraiding)
 
