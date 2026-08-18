@@ -22,7 +22,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Built-in scheduler that supports parallel operations
 - Validated at 500,000-user scale (with tens of thousands of groups of up to 495,000 members)
 - Transform data using expressions with extensive built-in functions for common identity operations
-- Built-in LDAP and File connectors, more in development, including a custom connector framework
+- Built-in LDAP, File, SCIM 2.0 and SQL (Microsoft SQL Server, Oracle Database) connectors, plus a custom connector framework
 - Modern Web Portal and REST API with interactive Scalar [API reference](https://docs.junctional.io/api/reference/)
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Real-time activity monitoring, pushed from the database rather than polled
@@ -148,6 +148,8 @@ JIM is built in the open and we'd love to hear from people running it, evaluatin
 
 ## Licensing
 JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://junctional.io/license).
+
+Third-party components shipped inside the images carry their own licences; see [third-party-notices](third-party-notices/README.md).
 
 ## More Information
 - **Product site:** [junctional.io](https://junctional.io)

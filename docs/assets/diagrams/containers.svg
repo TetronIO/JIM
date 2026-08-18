@@ -15,7 +15,7 @@
 <!-- snippets inlines this into markdown); structure uses <g> groups. -->
 <svg class="jim-diagram" viewBox="0 0 1160 750" role="img" aria-labelledby="jimdg-ct-title jimdg-ct-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-ct-title">JIM Containers</title>
-  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline and hosts the Connectors, connecting to Directory Services, HR systems, file systems and cloud applications, with enterprise database connectivity in development.</desc>
+  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline and hosts the Connectors, connecting to Directory Services, HR systems, file systems, enterprise databases and cloud applications.</desc>
   <defs>
     <mask id="jimdg-ct-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="750">
       <rect x="0" y="0" width="1160" height="750" fill="#ffffff"/>
@@ -91,9 +91,9 @@
     <line class="jimdg-spoke" x1="580" y1="516" x2="580" y2="656"/>
     <circle class="jimdg-link-end" cx="580" cy="516" r="3.5"/>
     <circle class="jimdg-link-end" cx="580" cy="656" r="3.5"/>
-    <line class="jimdg-spoke-planned" x1="630" y1="516" x2="810" y2="656"/>
-    <circle class="jimdg-link-end-planned" cx="630" cy="516" r="3.5"/>
-    <circle class="jimdg-link-end-planned" cx="810" cy="656" r="3.5"/>
+    <line class="jimdg-spoke" x1="630" y1="516" x2="810" y2="656"/>
+    <circle class="jimdg-link-end" cx="630" cy="516" r="3.5"/>
+    <circle class="jimdg-link-end" cx="810" cy="656" r="3.5"/>
     <line class="jimdg-spoke" x1="680" y1="516" x2="1040" y2="656"/>
     <circle class="jimdg-link-end" cx="680" cy="516" r="3.5"/>
     <circle class="jimdg-link-end" cx="1040" cy="656" r="3.5"/>
@@ -109,9 +109,9 @@
     <rect class="jimdg-system" x="480" y="656" width="200" height="64" rx="8"/>
     <text class="jimdg-system-name" x="580" y="684">File Systems</text>
     <text class="jimdg-system-sub" x="580" y="705">CSV &amp; flat files</text>
-    <rect class="jimdg-system-planned" x="710" y="656" width="200" height="64" rx="8"/>
-    <text class="jimdg-system-name-planned" x="810" y="684">Enterprise Databases</text>
-    <text class="jimdg-system-sub-planned" x="810" y="705">SQL (in development)</text>
+    <rect class="jimdg-system" x="710" y="656" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="810" y="684">Enterprise Databases</text>
+    <text class="jimdg-system-sub" x="810" y="705">SQL Server · Oracle</text>
     <rect class="jimdg-system" x="940" y="656" width="200" height="64" rx="8"/>
     <text class="jimdg-system-name" x="1040" y="684">Cloud Applications</text>
     <text class="jimdg-system-sub" x="1040" y="705">SCIM 2.0</text>
@@ -133,6 +133,10 @@
     <circle class="jimdg-packet" r="4.5">
       <animateMotion dur="3s" begin="-2.25s" repeatCount="indefinite" path="M680,516 L1040,656"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-2.25s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="-1.1s" repeatCount="indefinite" path="M810,656 L630,516"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-1.1s" repeatCount="indefinite"/>
     </circle>
   </g>
   </g>
