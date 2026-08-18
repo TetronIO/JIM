@@ -205,7 +205,7 @@ public class PendingExportMergeSemanticsTests
         var changedAttributes = new List<MetaverseObjectAttributeValue> { newEmployeeIdValue };
 
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem: null, cache);
+            mvo, changedAttributes, cache);
 
         Assert.That(result.PendingExports, Has.Count.EqualTo(1));
         var merged = result.PendingExports.Single();
@@ -248,7 +248,7 @@ public class PendingExportMergeSemanticsTests
         var changedAttributes = new List<MetaverseObjectAttributeValue> { newEmployeeIdValue };
 
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem: null, cache);
+            mvo, changedAttributes, cache);
 
         Assert.That(result.PendingExports, Has.Count.EqualTo(1));
         var merged = result.PendingExports.Single();
@@ -288,7 +288,7 @@ public class PendingExportMergeSemanticsTests
         var changedAttributes = new List<MetaverseObjectAttributeValue> { newEmployeeIdValue };
 
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem: null, cache);
+            mvo, changedAttributes, cache);
 
         Assert.That(result.PendingExports, Has.Count.EqualTo(1));
         var merged = result.PendingExports.Single();
@@ -393,7 +393,7 @@ public class PendingExportMergeSemanticsTests
         var changedAttributes = new List<MetaverseObjectAttributeValue> { aliceValue, carolValue };
 
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem: null, cache);
+            mvo, changedAttributes, cache);
 
         Assert.That(result.PendingExports, Has.Count.EqualTo(1));
         var merged = result.PendingExports.Single();
@@ -441,7 +441,7 @@ public class PendingExportMergeSemanticsTests
         var changedAttributes = new List<MetaverseObjectAttributeValue> { newEmployeeIdValue };
 
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem: null, cache);
+            mvo, changedAttributes, cache);
 
         Assert.That(result.PendingExports, Has.Count.EqualTo(1));
         var replacement = result.PendingExports.Single();
@@ -469,7 +469,7 @@ public class PendingExportMergeSemanticsTests
         var changedAttributes = new List<MetaverseObjectAttributeValue> { newEmployeeIdValue };
 
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem: null, cache);
+            mvo, changedAttributes, cache);
 
         Assert.That(result.PendingExports, Has.Count.EqualTo(1));
         var created = result.PendingExports.Single();

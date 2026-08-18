@@ -76,6 +76,12 @@ Outbound sync evaluates MVOs against outbound Synchronisation Rules and determin
 
 4. **Pending Exports**<br /> Changes to CSOs are recorded as **Pending Exports** rather than being sent to the target system immediately. This allows administrators to review queued changes before they are applied.
 
+### Writing Back to a Source System
+
+An outbound Synchronisation Rule may target the same Connected System an inbound rule reads from. This is how attribute writeback works: HR supplies the identity, JIM derives a value (an email address, an account name), and the derived value is written back into HR. Rules targeting the system being synchronised are evaluated during that system's own synchronisation run, exactly like rules targeting any other system.
+
+What prevents this from looping is value-level change detection, not a special case: before staging a Pending Export, JIM compares each flowed value against what the target Connected System Object already holds, and a value the target already has is not staged. Importing a value and flowing it straight back to the same attribute therefore produces no export at all, while a genuine writeback (a value the system does not yet hold) is staged normally. One configuration deserves care: mapping the same attribute in both directions with transformations that do not mirror each other (for example, importing a lower-cased copy while exporting an upper-cased one) can cause the two systems to re-assert their own form on every run; keep bidirectional mappings symmetric, or map the derived value to an attribute that does not flow back inbound.
+
 ### Full Sync vs Delta Sync
 
 - **Full Sync** re-evaluates every CSO against the Synchronisation Rules. Use this after changing Synchronisation Rule configuration or for periodic reconciliation.

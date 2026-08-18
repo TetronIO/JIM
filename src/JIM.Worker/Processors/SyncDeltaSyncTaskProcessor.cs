@@ -119,13 +119,13 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // Pre-load export evaluation cache
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
         {
-            _exportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
+            _exportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(preloadedSyncRules: allSyncRules);
 
-            // Separate run-scoped cache for reference recall staging (#1003): recall must not
-            // exclude the source system (Q3 does not apply to deletions), so the stable tier is
-            // built with sourceConnectedSystemId 0, reusing the already-loaded rules (no new query).
-            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(
-                sourceConnectedSystemId: 0, preloadedSyncRules: allSyncRules);
+            // Separate run-scoped cache instance for reference recall staging (#1003). The two now
+            // build identically (no system is excluded from export evaluation any more, #1284), but
+            // they stay separate instances because each is refreshed per page with different Metaverse
+            // Object sets, and sharing one would let the recall refresh clobber the main flow's lookups.
+            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(preloadedSyncRules: allSyncRules);
         }
 
         // Load settings once at start of sync
