@@ -202,4 +202,69 @@ public interface ISyncEngine
     /// </summary>
     /// <param name="mvo">The Metaverse Object the CSO was just disconnected from.</param>
     bool ShouldMarkLastConnectorDisconnected(MetaverseObject mvo);
+
+    /// <summary>
+    /// Decides what kind of export, if any, a Metaverse Object change stages against one export
+    /// Synchronisation Rule's target: nothing (a reported Object Type conflict, provisioning declined, a
+    /// reference recall against no exportable presence, or changes irrelevant to a pending provisioning), a
+    /// Create (provision new, or restage the pending provisioning CSO's Create), or an Update. The
+    /// orchestrator interposes export matching before acting on a ProvisionNewCso verdict.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object whose change is being evaluated.</param>
+    /// <param name="exportRule">The export Synchronisation Rule under evaluation.</param>
+    /// <param name="existingCso">The Metaverse Object's CSO in the rule's Connected System, if any.</param>
+    /// <param name="changedAttributes">The changed attributes, for the pending provisioning relevance check.</param>
+    /// <param name="recallSemantics">True when evaluating a reference recall (#1003), which must never provision.</param>
+    OutboundStagingDecision DecideOutboundStaging(
+        MetaverseObject mvo,
+        SyncRule exportRule,
+        ConnectedSystemObject? existingCso,
+        List<MetaverseObjectAttributeValue> changedAttributes,
+        bool recallSemantics);
+
+    /// <summary>
+    /// Merges newly evaluated attribute changes into a Pending Export this run has already staged for the
+    /// same CSO, mutating the staged export in place. Export evaluation wins a merge-key collision; an
+    /// incoming whole-attribute replace supersedes every staged change for that attribute first (#1199).
+    /// Pure in-memory mutation: nothing is persisted.
+    /// </summary>
+    /// <param name="stagedPendingExport">The Pending Export already staged for the CSO, mutated in place.</param>
+    /// <param name="newChanges">The newly evaluated attribute changes to merge in.</param>
+    PendingExportMergeResult MergeAttributeChangesIntoPendingExport(
+        PendingExport stagedPendingExport,
+        List<PendingExportAttributeValueChange> newChanges);
+
+    /// <summary>
+    /// Creates the Pending Export attribute value changes an export Synchronisation Rule's Attribute Flow
+    /// mappings produce for a Metaverse Object change (the outbound delta computation, #288 extraction):
+    /// Create operations carry all mapped attributes, Update operations only what changed, with optional
+    /// no-net-change detection against the target CSO's cached attribute values.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object to create changes for.</param>
+    /// <param name="exportRule">The export rule containing attribute mappings.</param>
+    /// <param name="changedAttributes">The MVO attributes that changed.</param>
+    /// <param name="changeType">Whether this is a Create or Update operation.</param>
+    /// <param name="existingCso">The existing CSO (for Update operations only) to compare values against.</param>
+    /// <param name="csoAttributeCache">Optional cache of target CSO attribute values for no-net-change detection.</param>
+    /// <param name="csoAlreadyCurrentCount">Output: count of attributes skipped because the CSO already has the value.</param>
+    /// <param name="expressionEvaluator">The evaluator for expression-based mappings; a caller that passes
+    /// none gets a per-call default.</param>
+    /// <param name="removedAttributes">Optional set of attribute values removed from the MVO (multi-valued
+    /// removals become Remove changes; single-valued removals become null-clearing Updates).</param>
+    /// <param name="mvAttributeDictionary">Optional pre-built MVO attribute dictionary for expression evaluation.</param>
+    /// <param name="preResolvedReferenceValues">Optional pre-resolved reference values (reference recall, #908).</param>
+    /// <param name="flowErrors">Optional collector for Attribute Flow errors (multi-valued to single-valued truncation).</param>
+    List<PendingExportAttributeValueChange> ComputeAttributeValueChanges(
+        MetaverseObject mvo,
+        SyncRule exportRule,
+        List<MetaverseObjectAttributeValue> changedAttributes,
+        PendingExportChangeType changeType,
+        ConnectedSystemObject? existingCso,
+        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache,
+        out int csoAlreadyCurrentCount,
+        IExpressionEvaluator? expressionEvaluator = null,
+        HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
+        Dictionary<string, object?>? mvAttributeDictionary = null,
+        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
+        List<AttributeFlowError>? flowErrors = null);
 }
