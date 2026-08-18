@@ -1,4 +1,5 @@
 @using JIM.Models.Core
+@using JIM.Models.Expressions
 @using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Models.Utility
@@ -432,6 +433,57 @@
                        their Expression does what they meant, and until now the answer only arrived from a
                        Synchronisation. Immediate="true" above is what lets the tester follow the text as it is typed. *@
                     <ExpressionTester Expression="@_attributeFlowMappingSource.Expression" />
+
+                    @* Missing Input Behaviour (#1361): an Expression whose input is absent does not fail, it
+                       produces a structurally broken value. Whether that matters is the administrator's call. *@
+                    <div class="mt-5">
+                        <MudText Typo="Typo.subtitle2" Class="mb-1">Missing Input Behaviour</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                            What to do when an attribute this Expression reads has no value on the object being synchronised.
+                        </MudText>
+                        <MudRadioGroup T="MissingInputBehaviour" @bind-Value="_attributeFlowMappingSource.MissingInputBehaviour">
+                            <MudStack Spacing="1">
+                                <MudRadio Value="MissingInputBehaviour.EvaluateAnyway" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">Evaluate anyway</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Run the Expression with the input absent and contribute whatever it returns. Correct for a
+                                        null-aware Expression built on IIF or IsNullOrEmpty. This is the default.
+                                    </MudText>
+                                </MudRadio>
+                                <MudRadio Value="MissingInputBehaviour.ContributeNoValue" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">Contribute no value</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Do not evaluate. The mapping contributes nothing, resolved by Attribute Priority and
+                                        "Null is a value" like any other no-value outcome, so a lower-priority contributor can
+                                        still win the attribute. Nothing is reported as an error.
+                                    </MudText>
+                                </MudRadio>
+                                <MudRadio Value="MissingInputBehaviour.FailMapping" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">Fail this mapping</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Do not evaluate, and record an error against the object. Every other Attribute Flow on this
+                                        Synchronisation Rule still runs, and the target attribute keeps whatever it already held.
+                                    </MudText>
+                                </MudRadio>
+                                <MudRadio Value="MissingInputBehaviour.FailObject" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">Fail the object</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Do not evaluate anything for this object: no Attribute Flow on this Synchronisation Rule
+                                        runs, nothing flows and nothing is exported. For an input feeding identity-critical output,
+                                        such as a Distinguished Name or an account name.
+                                    </MudText>
+                                </MudRadio>
+                            </MudStack>
+                        </MudRadioGroup>
+                        @if (_attributeFlowMappingSource.MissingInputBehaviour == MissingInputBehaviour.FailObject)
+                        {
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                                While this is set, an object missing any attribute this Expression reads will not synchronise at
+                                all: none of its attributes flow, and it is reported as an error on every run until the missing
+                                value is supplied.
+                            </MudAlert>
+                        }
+                    </div>
                     break;
             }
 

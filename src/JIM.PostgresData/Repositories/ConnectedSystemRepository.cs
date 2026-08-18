@@ -5579,6 +5579,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Gets a Synchronisation Rule mapping for modification: tracked, with the sources and the names needed to
+    /// validate and report the change.
+    /// </summary>
+    /// <remarks>
+    /// JIM.Web runs the context NoTracking, so a mapping loaded by <see cref="GetSyncRuleMappingAsync"/> and then
+    /// mutated would save nothing at all while reporting success (see "Mutating Repository Methods Must Assert
+    /// They Got a Tracked Entity" in src/CLAUDE.md). The explicit AsTracking here is what makes the settings
+    /// update actually persist, and identity resolution returns instances already tracked where the caller
+    /// loaded the Synchronisation Rule first, as the API's handler does to answer 404.
+    /// </remarks>
+    public async Task<SyncRuleMapping?> GetSyncRuleMappingForUpdateAsync(int id)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .AsTracking()
+            .AsSplitQuery()
+            .Include(m => m.SyncRule)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+            .Include(m => m.TargetMetaverseAttribute)
+            .Include(m => m.TargetConnectedSystemAttribute)
+            .SingleOrDefaultAsync(m => m.Id == id);
+    }
+
+    /// <summary>
     /// Creates a new Synchronisation Rule mapping.
     /// </summary>
     public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping)

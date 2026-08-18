@@ -411,6 +411,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `SourceConnectedSystemAttributeId` | `int[]` | Yes (ImportAttribute set) | | One or more Connected System attribute IDs to read from |
 | `SourceMetaverseAttributeId` | `int[]` | Yes (ExportAttribute set) | | One or more metaverse attribute IDs to read from |
 | `Expression` | `string` | Yes (ImportExpression, ExportExpression sets) | | A DynamicExpresso expression. Use `mv["Name"]` for metaverse attributes and `cs["Name"]` for Connected System attributes. |
+| `MissingInputBehaviour` | `string` | No (ImportExpression, ExportExpression sets) | `EvaluateAnyway` | What to do when an attribute the expression reads has no value on the object: `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess). |
 
 ### Output
 
@@ -422,6 +423,7 @@ Returns the created mapping object.
 
 - When multiple source attributes are provided, they are automatically ordered by position (0, 1, 2, and so on).
 - Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` accessors.
+- `MissingInputBehaviour` applies to expression mappings only; a direct Attribute Flow has no inputs to be missing. Omit it to leave the mapping on `EvaluateAnyway`, which is how every mapping created before this parameter existed behaves.
 
 ### Examples
 
@@ -437,6 +439,13 @@ New-JIMSyncRuleMapping -SyncRuleId 5 `
     -TargetMetaverseAttributeId 7
 ```
 
+```powershell title="Expression export: refuse to build a Distinguished Name from a missing value"
+New-JIMSyncRuleMapping -SyncRuleId 8 `
+    -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=company,DC=local"' `
+    -TargetConnectedSystemAttributeId 30 `
+    -MissingInputBehaviour FailObject
+```
+
 ```powershell title="Direct export: map MV 'email' to CS 'mail'"
 New-JIMSyncRuleMapping -SyncRuleId 8 `
     -SourceMetaverseAttributeId 15 `
@@ -447,6 +456,74 @@ New-JIMSyncRuleMapping -SyncRuleId 8 `
 New-JIMSyncRuleMapping -SyncRuleId 5 `
     -SourceConnectedSystemAttributeId 10, 11 `
     -TargetMetaverseAttributeId 7
+```
+
+---
+
+## Set-JIMSyncRuleMapping
+
+Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone. Only the parameters you supply are changed.
+
+### Syntax
+
+```powershell
+# By IDs
+Set-JIMSyncRuleMapping -SyncRuleId <int>
+    -MappingId <int>
+    [-Expression <string>]
+    [-MissingInputBehaviour <string>]
+    [-NullIsValue <bool>]
+    [-InboundValueProcessing <string>]
+    [-CaseNormalisation <string>]
+    [-InitialExportOnly <bool>]
+    [-PassThru]
+
+# From the pipeline
+Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <int> [-MissingInputBehaviour <string>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule the mapping belongs to |
+| `MappingId` | `int` | Yes (ById set) | | The ID of the mapping to update. Accepts pipeline input by property name. Alias: `Id` |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A mapping object from the pipeline |
+| `Expression` | `string` | No | | Replaces the mapping's expression. Expression mappings only |
+| `MissingInputBehaviour` | `string` | No | | `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. Expression mappings only. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess) |
+| `NullIsValue` | `bool` | No | | Whether a contribution of no value is authoritative. Import mappings only |
+| `InboundValueProcessing` | `string` | No | | Comma-separated flag names, e.g. `'TreatWhitespaceAsNoValue, TrimWhitespace'`. Import mappings only |
+| `CaseNormalisation` | `string` | No | | `None`, `Upper`, `Lower` or `Title`. Import mappings only |
+| `InitialExportOnly` | `bool` | No | | Whether the mapping flows only during the initial provisioning export. Export mappings only |
+| `PassThru` | `switch` | No | `$false` | Returns the updated mapping |
+
+### Output
+
+Nothing by default; the updated mapping when `-PassThru` is supplied.
+
+**ShouldProcess impact level:** Medium.
+
+### Notes
+
+- What a mapping **targets**, and whether its source is an attribute or an expression, cannot be changed here. Those revalidate against attribute types and plurality, and for an import mapping they reopen its place in the [Attribute Priority](../concepts/attribute-priority.md) order, so they remain a `Remove-JIMSyncRuleMapping` followed by a `New-JIMSyncRuleMapping`.
+- A setting that does not apply to the mapping is refused rather than ignored: `-NullIsValue` on an export mapping, `-InitialExportOnly` on an import mapping, or any expression setting on a direct Attribute Flow all return an error.
+- A call naming no setting is refused too, rather than reported as a successful update.
+- Attribute Priority is ordered through its own endpoint and is not settable here.
+
+### Examples
+
+```powershell title="Refuse to export a Distinguished Name built around a missing value"
+Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -MissingInputBehaviour FailObject
+```
+
+```powershell title="Rewrite an import mapping's expression"
+Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Expression 'Lower(cs["mail"])' -PassThru
+```
+
+```powershell title="Report every expression mapping on a Rule that meets a missing input"
+Get-JIMSyncRuleMapping -SyncRuleId 1 |
+    Where-Object { $_.sourceType -eq 'ExpressionMapping' } |
+    Set-JIMSyncRuleMapping -SyncRuleId 1 -MissingInputBehaviour FailMapping
 ```
 
 ---

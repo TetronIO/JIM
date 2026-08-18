@@ -5651,6 +5651,135 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone.
+    /// </summary>
+    /// <param name="mappingId">The mapping to change.</param>
+    /// <param name="settings">The settings to change; anything not named is left as it is.</param>
+    /// <param name="initiatedBy">The user who initiated the change.</param>
+    /// <returns>The updated mapping, or null when no mapping has that id.</returns>
+    /// <exception cref="ArgumentException">The update names a setting that does not apply to this mapping.</exception>
+    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy)
+    {
+        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, initiatedBy, null);
+    }
+
+    /// <summary>
+    /// Changes the settings on an existing Attribute Flow (initiated by API key).
+    /// </summary>
+    /// <param name="mappingId">The mapping to change.</param>
+    /// <param name="settings">The settings to change; anything not named is left as it is.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the change.</param>
+    /// <returns>The updated mapping, or null when no mapping has that id.</returns>
+    /// <exception cref="ArgumentException">The update names a setting that does not apply to this mapping.</exception>
+    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, ApiKey initiatedByApiKey)
+    {
+        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, null, initiatedByApiKey);
+    }
+
+    /// <summary>
+    /// Loads the mapping tracked, applies the settings, and records the change as an audited Update Activity.
+    /// </summary>
+    /// <remarks>
+    /// The mapping is loaded here rather than accepted from the caller, because it must be tracked for the save
+    /// to do anything at all: JIM.Web runs the context NoTracking, so a mapping the caller loaded and mutated
+    /// would save nothing while reporting success.
+    /// </remarks>
+    private async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsCoreAsync(
+        int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (!settings.HasChanges)
+            throw new ArgumentException("No settings were supplied to change.", nameof(settings));
+
+        var mapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingForUpdateAsync(mappingId);
+        if (mapping == null)
+            return null;
+
+        // Validation before the Activity, so a rejected update leaves no trace of an Update that never happened.
+        ApplySyncRuleMappingSettings(mapping, settings);
+        ValidateMappingTypeCompatibility(mapping);
+        ValidateMappingWritability(mapping);
+
+        Log.Debug("UpdateSyncRuleMappingSettingsAsync() called for mapping {Id}", mapping.Id);
+
+        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+        var activity = new Activity
+        {
+            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetContext = mapping.SyncRule?.Name,
+            TargetType = ActivityTargetType.SynchronisationRule,
+            SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+
+        if (initiatedByApiKey != null)
+        {
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+            AuditHelper.SetUpdated(mapping, initiatedByApiKey);
+        }
+        else
+        {
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+            AuditHelper.SetUpdated(mapping, initiatedBy);
+        }
+
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
+
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
+        await Application.Activities.CompleteActivityAsync(activity);
+
+        return mapping;
+    }
+
+    /// <summary>
+    /// Applies a settings update to a mapping, refusing any setting that does not apply to it.
+    /// </summary>
+    /// <remarks>
+    /// A setting that cannot apply is refused rather than ignored. Silently dropping "Null is a value" on an
+    /// export mapping would leave an administrator believing an authoritative-null contribution had been
+    /// configured, and it is exactly the kind of misconfiguration that only shows up as missing data later.
+    /// </remarks>
+    private static void ApplySyncRuleMappingSettings(SyncRuleMapping mapping, SyncRuleMappingSettingsUpdate settings)
+    {
+        var isImport = mapping.TargetMetaverseAttributeId.HasValue;
+        var expressionSources = mapping.Sources.Where(s => !string.IsNullOrWhiteSpace(s.Expression)).ToList();
+
+        if ((settings.Expression != null || settings.MissingInputBehaviour.HasValue) && expressionSources.Count == 0)
+            throw new ArgumentException("This Attribute Flow has no Expression source, so Expression settings do not apply to it. " +
+                "Delete the mapping and create it with an Expression source instead.");
+
+        if (settings.Expression != null && expressionSources.Count > 1)
+            throw new ArgumentException("This Attribute Flow has more than one Expression source, so it is ambiguous which Expression to replace.");
+
+        if (!isImport && (settings.NullIsValue.HasValue || settings.InboundValueProcessing.HasValue || settings.CaseNormalisation.HasValue))
+            throw new ArgumentException("Null is a value, inbound value processing and case normalisation apply to import mappings only.");
+
+        if (isImport && settings.InitialExportOnly.HasValue)
+            throw new ArgumentException("Initial Export Only applies to export mappings only.");
+
+        if (settings.Expression != null)
+            expressionSources[0].Expression = settings.Expression;
+
+        if (settings.MissingInputBehaviour.HasValue)
+            foreach (var source in expressionSources)
+                source.MissingInputBehaviour = settings.MissingInputBehaviour.Value;
+
+        if (settings.NullIsValue.HasValue)
+            mapping.NullIsValue = settings.NullIsValue.Value;
+
+        if (settings.InboundValueProcessing.HasValue)
+            mapping.InboundValueProcessing = settings.InboundValueProcessing.Value;
+
+        if (settings.CaseNormalisation.HasValue)
+            mapping.CaseNormalisation = settings.CaseNormalisation.Value;
+
+        if (settings.InitialExportOnly.HasValue)
+            mapping.InitialExportOnly = settings.InitialExportOnly.Value;
+    }
+
+    /// <summary>
     /// Deletes a Synchronisation Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>

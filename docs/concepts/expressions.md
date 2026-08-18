@@ -218,7 +218,7 @@ These functions are primarily used with Active Directory's `userAccountControl` 
 
 This is the most important section to read before you write an expression that references an attribute which might be absent. How JIM treats a missing input decides whether a target value is **cleared**, **kept**, or **silently filled with malformed data**. Get this wrong and an expression can quietly clear good data, or write a broken value that passes straight through to the target system.
 
-When you reference an attribute the object does not have (for example `cs["middleName"]` on a person with no middle name), the expression sees **null**. There are three behaviours to understand.
+When you reference an attribute the object does not have (for example `cs["middleName"]` on a person with no middle name), the expression sees **null**. There are four behaviours to understand, and a per-mapping setting (point 5) that lets you have JIM refuse the outcome rather than guess at it.
 
 ### 1. A null result means "no value", never "leave it alone"
 
@@ -275,9 +275,38 @@ Steer around it by validating or supplying fallbacks **before** composing the va
 
 `EscapeDN()` protects against special characters such as commas in a value; it does **not** protect against a value being absent. A missing required component still yields a malformed DN, so guard for presence as well as escaping for safety.
 
+Where a component simply has no safe fallback, guarding is not enough and you want JIM to refuse the value outright: set the mapping's **Missing Input Behaviour** (point 5).
+
 ### 4. Whitespace-only results become no value (by default)
 
 A result that is only whitespace (spaces, tabs, newlines) is, by default, collapsed to **no value** and clears the target, exactly like null. This is governed per import mapping by the **Treat whitespace as no value** control in [inbound value processing](../configuration/synchronisation-rules.md#value-processing-inbound), which is **on by default**. Switch it off for a mapping where whitespace is genuinely meaningful, and a whitespace-only result is stored as a literal value instead (the portal flags it with a `(whitespace)` indicator so it is not mistaken for an empty cell).
+
+### 5. Missing Input Behaviour: have JIM refuse rather than guess
+
+Points 1 to 4 are about writing an expression that copes with an absent input. **Missing Input Behaviour** is the other half: it lets you tell JIM what to do when an attribute your expression reads has no value, so a mapping you have not guarded cannot quietly produce a malformed value.
+
+It is set per expression source on an Attribute Flow, in the portal beside the expression itself, and applies to import and export mappings alike. JIM works out which attributes the expression reads from the `mv["..."]` and `cs["..."]` accessors in it; you do not list them. An input counts as missing when the object has no value for it, when the value is null, or when it is an empty string.
+
+| Behaviour | What happens when an input is missing | Choose it when |
+|-----------|----------------------------------------|----------------|
+| **Evaluate anyway** (default) | The expression runs with the input absent and contributes whatever it returns; points 1 to 4 apply in full. | The expression handles absence itself, with `IIF()`, `Coalesce()` or an `IsNullOrEmpty` check. |
+| **Contribute no value** | The expression is not evaluated. The mapping contributes nothing, resolved by [Attribute Priority](attribute-priority.md) and "Null is a value" like any other no-value outcome. Nothing is reported. | The attribute is optional, and another contributor or the existing value should stand. |
+| **Fail this mapping** | The expression is not evaluated and an **Expression Missing Input** error is recorded against the object. Every other Attribute Flow on the Synchronisation Rule still runs, and the target attribute keeps whatever it already held. | The attribute matters enough to investigate, but not enough to hold up the rest of the object. |
+| **Fail the object** | The expression is not evaluated and nothing at all flows for the object, which is recorded as an **Expression Missing Input** error. | The value is identity-critical, such as a Distinguished Name or an account name, and a partially populated object is worse than none. |
+
+Both failure behaviours report against the object on every run until the missing value is supplied or the configuration changes, so the errors are a work queue rather than a one-off notification. Neither behaviour writes anything: "Fail this mapping" leaves the target attribute exactly as it was, and "Fail the object" leaves the whole object untouched.
+
+The default is **Evaluate anyway** on every existing and newly created mapping, so nothing changes until you choose otherwise. Guarding the expression and setting a behaviour are complementary rather than alternatives: guard where the absence is expected and you know the right answer, and set a behaviour where it is not.
+
+```csharp
+// Guarded, so Evaluate anyway is correct: the expression knows what to do without an input
+IIF(IsNullOrWhitespace(cs["Last Name"]), mv["Email"], Lower(cs["First Name"]) + "." + Lower(cs["Last Name"]) + "@company.com")
+
+// Unguardable, so set Fail the object: there is no safe DN for a person with no Account Name
+"CN=" + EscapeDN(mv["Account Name"]) + ",OU=Users,DC=company,DC=local"
+```
+
+Set it from PowerShell with `New-JIMSyncRuleMapping -MissingInputBehaviour`, or over the REST API with `missingInputBehaviour` on the mapping source. Change it on a mapping that already exists with `Set-JIMSyncRuleMapping -MissingInputBehaviour`, or `PATCH /sync-rules/{id}/mappings/{mappingId}`.
 
 ### Summary
 
@@ -291,7 +320,7 @@ A result that is only whitespace (spaces, tabs, newlines) is, by default, collap
 
 The "Effect on target" column describes an attribute with a single contributing Synchronisation Rule. Where several rules contribute, a "no value" outcome feeds [Attribute Priority](attribute-priority.md) resolution instead of clearing outright (see point 1).
 
-The rule of thumb: **reference a possibly-absent attribute and you risk clearing the target; concatenate one and you risk writing malformed data.** Guard with `Coalesce()`, `IIF()`, and the `IsNullOrEmpty` / `IsNullOrWhitespace` checks, and test with sample data (including the missing-input case) before you deploy.
+The rule of thumb: **reference a possibly-absent attribute and you risk clearing the target; concatenate one and you risk writing malformed data.** Guard with `Coalesce()`, `IIF()`, and the `IsNullOrEmpty` / `IsNullOrWhitespace` checks, set a **Missing Input Behaviour** (point 5) where there is no safe fallback, and test with sample data (including the missing-input case) before you deploy.
 
 ## Common Scenarios
 
