@@ -136,7 +136,7 @@ GRANT SELECT ON HR.IDM_CHANGE_LOG TO jim_sync;
 
 ## 4. Configure the Object Type
 
-Add a `changeLog` to **every** Object Type in the Connected System's **Object Types** document. Choosing Change-Log Table mode with an Object Type that has no `changeLog` is refused when you save, because a Delta Import that skipped an Object Type would report success while leaving its objects to drift.
+Add a `changeLog` to **every Object Type that is selected for synchronisation** in the Connected System's **Object Types** document. Choosing Change-Log Table mode while a selected Object Type has no `changeLog` is refused when you save, because a Delta Import that skipped an Object Type would report success while leaving its objects to drift. An Object Type that is not selected (a table JIM only exports to, say) takes no part in a Delta Import and needs no change log.
 
 ```json title="Object Types with a change log"
 {
@@ -183,7 +183,7 @@ A value may appear in only one list, and no value may be blank. Where your appli
 
 ## 5. Choose the mode and save
 
-On the Connected System's Settings tab, set **Delta Import Mode** to **Change-Log Table** and save. Validation runs at this point: any Object Type without a `changeLog`, any change-type value that means two things, and any missing field is reported now, at the keyboard, rather than by an overnight run.
+On the Connected System's Settings tab, set **Delta Import Mode** to **Change-Log Table** and save. Validation runs at this point: any selected Object Type without a `changeLog`, any change-type value that means two things, and any missing field is reported now, at the keyboard, rather than by an overnight run. The same check runs when you select an Object Type on the Schema tab (or through the REST API or PowerShell), so selecting one that lacks a `changeLog` while this mode is set is refused at that point rather than by the next Delta Import; deselect it, or give it a change log.
 
 ## 6. Baseline with a Full Import
 

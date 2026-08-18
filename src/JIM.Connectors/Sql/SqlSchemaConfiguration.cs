@@ -244,21 +244,32 @@ internal sealed record SqlSchemaConfiguration
     /// </para>
     /// </remarks>
     /// <exception cref="SqlSchemaConfigurationException">An Object Type has nothing for this mode to read.</exception>
-    internal void ValidateDeltaImportMode(SqlDeltaImportMode mode)
+    /// <summary>
+    /// Whether the Object Types selected for synchronisation carry what the configured Delta Import Mode
+    /// needs to read them. Only the selected ones are asked (#1424): an unselected Object Type takes no part
+    /// in any Run Profile, so a Delta Import cannot leave its objects to drift, and demanding a watermark
+    /// column or a change log on a table JIM only ever writes to would be a schema change for nothing.
+    /// </summary>
+    /// <param name="mode">The mode the Connected System is configured for.</param>
+    /// <param name="isSelected">Whether the named Object Type is selected for synchronisation.</param>
+    /// <exception cref="SqlSchemaConfigurationException">A selected Object Type lacks what the mode needs.</exception>
+    internal void ValidateDeltaImportMode(SqlDeltaImportMode mode, Func<string, bool> isSelected)
     {
-        foreach (var objectType in ObjectTypes)
+        foreach (var objectType in ObjectTypes.Where(objectType => isSelected(objectType.Name)))
         {
             switch (mode)
             {
                 case SqlDeltaImportMode.ChangeLogTable when objectType.ChangeLog == null:
                     throw new SqlSchemaConfigurationException(
-                        $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeChangeLogTable}', but Object Type '{objectType.Name}' has no 'changeLog'. " +
-                        "A Delta Import that skipped an object type would report success while leaving its objects to drift, so every object type needs one.");
+                        $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeChangeLogTable}', but Object Type '{objectType.Name}' is selected for synchronisation and has no 'changeLog'. " +
+                        "A Delta Import that skipped an object type would report success while leaving its objects to drift, so every selected object type needs one. " +
+                        "Give it a 'changeLog', or deselect it if JIM never imports from it.");
 
                 case SqlDeltaImportMode.WatermarkColumn when objectType.WatermarkColumn == null:
                     throw new SqlSchemaConfigurationException(
-                        $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}', but Object Type '{objectType.Name}' has no 'watermarkColumn'. " +
-                        "A Delta Import that skipped an object type would report success while leaving its objects to drift, so every object type needs one.");
+                        $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}', but Object Type '{objectType.Name}' is selected for synchronisation and has no 'watermarkColumn'. " +
+                        "A Delta Import that skipped an object type would report success while leaving its objects to drift, so every selected object type needs one. " +
+                        "Give it a 'watermarkColumn', or deselect it if JIM never imports from it.");
 
                 case SqlDeltaImportMode.WatermarkColumn:
                     ValidateRelatedTableWatermarkColumns(objectType);

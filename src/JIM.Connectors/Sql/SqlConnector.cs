@@ -25,7 +25,7 @@ namespace JIM.Connectors.Sql;
 /// Everything a database server does differently from another one lives behind
 /// <see cref="ISqlProvider"/>, so this class never branches on which server it is talking to.
 /// </remarks>
-public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IDisposable
+public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IDisposable
 {
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -309,7 +309,9 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         SqlConnectorConstants.DeltaConfigurationExample;
 
     /// <summary>
-    /// Validates SqlConnector setting values using custom business logic.
+    /// Validates SqlConnector setting values using custom business logic. Whether the configured Delta Import
+    /// Mode can be served is not judged here: that depends on which Object Types are selected, and is answered
+    /// by <see cref="ValidateObjectTypeSelection"/> wherever JIM has the schema in hand.
     /// </summary>
     public List<ConnectorSettingValueValidationResult> ValidateSettingValues(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
@@ -333,6 +335,62 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             response.Add(connectivityResult);
 
         return response;
+    }
+    #endregion
+
+    #region IConnectorObjectTypeSelectionValidation members
+    /// <summary>
+    /// Whether the Object Types selected for synchronisation carry what the configured Delta Import Mode
+    /// needs (a 'changeLog' or a 'watermarkColumn', per <see cref="SqlSchemaConfiguration.ValidateDeltaImportMode"/>).
+    /// Asked of the values and the schema alone, so it is safe on the schema tab's save path. A document
+    /// that does not parse is left to <see cref="ValidateSettingValues"/>, which reports it with the parser's
+    /// own account; reporting it here too would show the same error twice.
+    /// </summary>
+    public List<ConnectorSettingValueValidationResult> ValidateObjectTypeSelection(List<ConnectedSystemSettingValue> settingValues, IReadOnlyCollection<ConnectedSystemObjectType> objectTypes, ILogger logger)
+    {
+        logger.Verbose($"ValidateObjectTypeSelection() called for {Name}");
+
+        var settingValue = settingValues.SingleOrDefault(sv => sv.Setting.Name == SqlConnectorConstants.SettingObjectTypes);
+        if (settingValue == null || string.IsNullOrWhiteSpace(settingValue.StringValue))
+            return [];
+
+        var deltaImportMode = ResolveDeltaImportMode(settingValues);
+        if (deltaImportMode == SqlDeltaImportMode.NotSet)
+            return [];
+
+        SqlSchemaConfiguration configuration;
+        try
+        {
+            configuration = SqlSchemaConfiguration.Parse(settingValue.StringValue);
+        }
+        catch (SqlSchemaConfigurationException)
+        {
+            return [];
+        }
+
+        var selectedNames = objectTypes
+            .Where(objectType => objectType.Selected)
+            .Select(objectType => objectType.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            configuration.ValidateDeltaImportMode(deltaImportMode, selectedNames.Contains);
+            return [];
+        }
+        catch (SqlSchemaConfigurationException ex)
+        {
+            return
+            [
+                new ConnectorSettingValueValidationResult
+                {
+                    IsValid = false,
+                    ErrorMessage = ex.Message,
+                    SettingValue = settingValue,
+                    Exception = ex
+                }
+            ];
+        }
     }
     #endregion
 
@@ -962,16 +1020,10 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
 
         try
         {
-            var configuration = SqlSchemaConfiguration.Parse(settingValue.StringValue);
-
-            // The document is written without reference to the mode, so whether it can serve the one
-            // that is configured is a question only asked once both are in hand. Asked here, and not
-            // when a Delta Import runs, because an administrator finds out at the keyboard rather than
-            // from an overnight run.
-            var deltaImportMode = ResolveDeltaImportMode(settingValues);
-            if (deltaImportMode != SqlDeltaImportMode.NotSet)
-                configuration.ValidateDeltaImportMode(deltaImportMode);
-
+            // Whether the document can serve the configured Delta Import Mode is a question about the
+            // selected Object Types, so it is asked by ValidateObjectTypeSelection wherever JIM has the
+            // schema in hand, and by the import itself as a backstop; here the document only has to parse.
+            SqlSchemaConfiguration.Parse(settingValue.StringValue);
             return null;
         }
         catch (SqlSchemaConfigurationException ex)
