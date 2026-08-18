@@ -244,6 +244,9 @@ $matrixRows = @(
 # should not hide the state of the other nineteen, and the point of a matrix is the whole grid.
 
 $cellResults = New-Object System.Collections.Generic.List[object]
+# One entry per provider that ran the scale row: wall-clock, rows per second and peak memory (see
+# Test-S16ScaleImport), reported in the summary and returned alongside the cells.
+$scaleMetrics = New-Object System.Collections.Generic.List[object]
 $cellPass = 0
 $cellFail = 0
 $cellSkip = 0
@@ -304,55 +307,70 @@ foreach ($currentProvider in $providers) {
 
     Write-TestSection "Provider: $($config.DisplayName) ($($rowsForProvider.Count) row(s))"
 
-    # The scale row needs a different database from the functional rows, so it decides the seed size.
-    $needsScale = @($rowsForProvider | Where-Object { $_.name -eq 'Scale.FullImport500k' }).Count -gt 0
-    $seedRowCount = if ($needsScale) { $scaleRowCount } else { $functionalRowCount }
+    # The scale row needs a different database from the functional rows, so the rows are run in seed
+    # groups: every functional row against the 50-row database first, then the scale row against its own
+    # 500,000-row one. Running the functional rows at 500,000 would exercise nothing the 50-row database
+    # does not (the assertions scale with the row count) while turning every export row into a
+    # 400,000-object export, and the seeder's content hash means the second seed is a full drop-and-reseed
+    # either way. Each group gets its own Setup, because Setup removes and recreates the Connected Systems
+    # and the Run Profiles' page size follows the row count.
+    $seedGroups = @(
+        @{ RowCount = $functionalRowCount; Rows = @($rowsForProvider | Where-Object { $_.name -ne 'Scale.FullImport500k' }) }
+        @{ RowCount = $scaleRowCount;      Rows = @($rowsForProvider | Where-Object { $_.name -eq 'Scale.FullImport500k' }) }
+    ) | Where-Object { $_.Rows.Count -gt 0 }
 
-    Write-TestStep "Seed" "Seeding $($config.DisplayName) with $seedRowCount employee row(s)"
-    & "$PSScriptRoot/../New-Scenario16TestDatabase.ps1" -Provider $currentProvider -RowCount $seedRowCount | Out-Null
+    foreach ($seedGroup in $seedGroups) {
+        $seedRowCount = $seedGroup.RowCount
 
-    Write-TestStep "Setup" "Configuring JIM against $($config.DisplayName)"
-    $context = & "$PSScriptRoot/../Setup-Scenario16.ps1" `
-        -JIMUrl $JIMUrl -ApiKey $ApiKey `
-        -Provider $currentProvider -RowCount $seedRowCount
+        Write-TestStep "Seed" "Seeding $($config.DisplayName) with $seedRowCount employee row(s)"
+        & "$PSScriptRoot/../New-Scenario16TestDatabase.ps1" -Provider $currentProvider -RowCount $seedRowCount | Out-Null
 
-    if (-not $context) {
-        throw "Setup-Scenario16.ps1 returned no configuration for $currentProvider."
-    }
+        Write-TestStep "Setup" "Configuring JIM against $($config.DisplayName)"
+        $context = & "$PSScriptRoot/../Setup-Scenario16.ps1" `
+            -JIMUrl $JIMUrl -ApiKey $ApiKey `
+            -Provider $currentProvider -RowCount $seedRowCount
 
-    Write-TestStep "Matrix" "Running $($rowsForProvider.Count) capability row(s)"
-
-    foreach ($row in $rowsForProvider) {
-        # Start each row on an empty sentinel. Start-JIMRunProfile aborts its wait whenever the watcher
-        # has captured anything, and the sentinel accumulates for the whole run, so without this one
-        # row's errors abort every Run Profile after it and the rest of the matrix reports failures it
-        # never had. That is not hypothetical: four export errors on the first provider once cost every
-        # remaining SQL Server row and all nineteen Oracle rows, which made a two-defect run look like
-        # twenty-three.
-        $leakedFromPreviousRow = @(Clear-JimErrorWatcher)
-        if ($leakedFromPreviousRow.Count -gt 0) {
-            Write-Host "    (cleared $($leakedFromPreviousRow.Count) error line(s) left by the previous row)" -ForegroundColor DarkGray
+        if (-not $context) {
+            throw "Setup-Scenario16.ps1 returned no configuration for $currentProvider."
         }
 
-        try {
-            $outcome = Invoke-Scenario16Row -Row $row -Context $context -Config $config
-            $detail = $outcome.Detail
-        }
-        catch {
-            $outcome = @{ Status = 'fail' }
-            $detail = $_.Exception.Message
-        }
+        Write-TestStep "Matrix" "Running $($seedGroup.Rows.Count) capability row(s) against $seedRowCount row(s)"
 
-        # Errors this row provoked are named on the row itself rather than left to abort the next one.
-        # A row that passed while the services logged an error is still reported as passing: the row's
-        # own assertion is what decides, and Assert-NoWorkerErrors at the end of the run is what holds
-        # the whole run to account for the errors themselves.
-        $rowErrors = @(Clear-JimErrorWatcher)
-        if ($rowErrors.Count -gt 0) {
-            $detail = "$detail Services logged $($rowErrors.Count) error line(s) during this row; first: $($rowErrors[0])"
-        }
+        foreach ($row in $seedGroup.Rows) {
+            # Start each row on an empty sentinel. Start-JIMRunProfile aborts its wait whenever the watcher
+            # has captured anything, and the sentinel accumulates for the whole run, so without this one
+            # row's errors abort every Run Profile after it and the rest of the matrix reports failures it
+            # never had. That is not hypothetical: four export errors on the first provider once cost every
+            # remaining SQL Server row and all nineteen Oracle rows, which made a two-defect run look like
+            # twenty-three.
+            $leakedFromPreviousRow = @(Clear-JimErrorWatcher)
+            if ($leakedFromPreviousRow.Count -gt 0) {
+                Write-Host "    (cleared $($leakedFromPreviousRow.Count) error line(s) left by the previous row)" -ForegroundColor DarkGray
+            }
 
-        Add-CellResult -Provider $currentProvider -Row $row.name -Status $outcome.Status -Detail $detail
+            try {
+                $outcome = Invoke-Scenario16Row -Row $row -Context $context -Config $config
+                $detail = $outcome.Detail
+                if ($outcome.ContainsKey('Metrics') -and $outcome.Metrics) {
+                    $scaleMetrics.Add($outcome.Metrics) | Out-Null
+                }
+            }
+            catch {
+                $outcome = @{ Status = 'fail' }
+                $detail = $_.Exception.Message
+            }
+
+            # Errors this row provoked are named on the row itself rather than left to abort the next one.
+            # A row that passed while the services logged an error is still reported as passing: the row's
+            # own assertion is what decides, and Assert-NoWorkerErrors at the end of the run is what holds
+            # the whole run to account for the errors themselves.
+            $rowErrors = @(Clear-JimErrorWatcher)
+            if ($rowErrors.Count -gt 0) {
+                $detail = "$detail Services logged $($rowErrors.Count) error line(s) during this row; first: $($rowErrors[0])"
+            }
+
+            Add-CellResult -Provider $currentProvider -Row $row.name -Status $outcome.Status -Detail $detail
+        }
     }
 }
 
@@ -374,6 +392,13 @@ if ($cellSkip -gt 0) {
         Write-Host "    - $($skipped.provider) / $($skipped.row): $($skipped.detail)" -ForegroundColor DarkGray
     }
 }
+if ($scaleMetrics.Count -gt 0) {
+    Write-Host ""
+    Write-Host "  Scale import (500,000 rows):" -ForegroundColor Cyan
+    foreach ($metric in $scaleMetrics) {
+        Write-Host "    - $($metric.Provider): $($metric.Rows.ToString('N0')) rows read as $($metric.Objects.ToString('N0')) objects in $($metric.WallClock) ($($metric.RowsPerSecond.ToString('N0')) objects/s, page size $($metric.PageSize)); Activity execution time $($metric.ActivityExecutionTime); peak memory: worker $($metric.WorkerPeakMemory), JIM database $($metric.DatabasePeakMemory), $($metric.SourceContainer) $($metric.SourcePeakMemory)" -ForegroundColor Gray
+    }
+}
 Write-Host ""
 Write-Host "  Result: $(if ($overallPass) { 'PASS' } else { 'FAIL' })" -ForegroundColor $(if ($overallPass) { 'Green' } else { 'Red' })
 
@@ -386,5 +411,6 @@ return @{
     Scenario = "JIM SQL Connector Matrix"
     Tier     = $activeTier
     Cells    = $cellResults
+    Scale    = $scaleMetrics
     Success  = $overallPass
 }

@@ -2386,7 +2386,12 @@ Initialize-WorkerLogDirectories -LogDirectory (Join-Path $scriptRoot "results" "
 # writes), so spacing them out reduces total I/O, not just stalls. lz4 WAL compression
 # shrinks the full-page images that dominate bulk-load WAL. shm_size must exceed
 # shared_buffers with ~25% headroom (see docker-compose.yml).
-$jimDbProfile = switch -Wildcard ($Template) {
+#
+# Scenario 16 does not use the templates (its data lives in the phase2 database servers), but its
+# -FullMatrix tier imports 500,000 rows into JIM, which is exactly the load the Scale500k profile was
+# sized for; the default profile would checkpoint-storm through it just as it did for the CSV template.
+$jimDbProfileTemplate = if ($FullMatrix -and $Scenario -like "*Scenario16*") { "Scale500k65Groups" } else { $Template }
+$jimDbProfile = switch -Wildcard ($jimDbProfileTemplate) {
     "Scale1m*"   { @{ SharedBuffers = "8GB"; EffectiveCache = "16GB"; ShmSize = "10gb"; MaxWal = "24GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
     "Scale750k*" { @{ SharedBuffers = "6GB"; EffectiveCache = "12GB"; ShmSize = "8gb";  MaxWal = "20GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
     "Scale500k*" { @{ SharedBuffers = "4GB"; EffectiveCache = "8GB";  ShmSize = "5gb";  MaxWal = "16GB"; MinWal = "1GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
@@ -2408,7 +2413,7 @@ $env:JIM_DB_WAL_BUFFERS          = $jimDbProfile.WalBuffers
 $env:JIM_DB_CHECKPOINT_TIMEOUT   = $jimDbProfile.CheckpointTimeout
 $env:JIM_DB_WAL_COMPRESSION      = $jimDbProfile.WalCompression
 if ($jimDbProfile.SharedBuffers) {
-    Write-Host "  PostgreSQL scaled for $Template template: shared_buffers=$($jimDbProfile.SharedBuffers), max_wal_size=$($jimDbProfile.MaxWal), checkpoint_timeout=$($jimDbProfile.CheckpointTimeout), wal_compression=$($jimDbProfile.WalCompression)" -ForegroundColor Gray
+    Write-Host "  PostgreSQL scaled for $jimDbProfileTemplate profile: shared_buffers=$($jimDbProfile.SharedBuffers), max_wal_size=$($jimDbProfile.MaxWal), checkpoint_timeout=$($jimDbProfile.CheckpointTimeout), wal_compression=$($jimDbProfile.WalCompression)" -ForegroundColor Gray
 }
 
 Write-Step "Starting JIM stack..."

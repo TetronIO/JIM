@@ -429,8 +429,10 @@ foreach ($typeName in $SelectTypeNames) {
 Write-TestStep "Step 10" "Creating Run Profiles"
 
 # A page size well below the row count, so keyset paging is genuinely exercised across several pages
-# rather than swallowing the whole table in one.
-$pageSize = 10
+# rather than swallowing the whole table in one. The functional matrix (50 rows) pages by ten; the scale
+# row (500,000 rows) pages by a thousand, which is the size an administrator would actually configure and
+# still gives keyset paging five hundred pages to get wrong.
+$pageSize = if ($RowCount -ge 100000) { 1000 } else { 10 }
 
 $runProfiles = @(
     @{ Name = "Full Import";           RunType = "FullImport"           }
