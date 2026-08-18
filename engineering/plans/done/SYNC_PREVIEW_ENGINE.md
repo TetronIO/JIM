@@ -1,9 +1,10 @@
 # Sync Preview Engine - Implementation Plan
 
-- **Status:** Doing (Phases 0 to 4 complete bar the deferred Scale-template verification; Phase 5, the consumption surface record and documentation, next)
+- **Status:** Done
+- **Note:** Scale-template (100K+) verification of `PreviewFullSyncAsync`'s constant factors deferred to a 20+ GB host (the bounding mechanics are proven at 10^3 on live PostgreSQL; see Phase 4). The administrator-facing surface is deliberately not shipped (D3): it is filed as its own parity-complete issue when wanted.
 - **Created:** 2026-08-16
 - **Issue:** [#288](https://github.com/TetronIO/JIM/issues/288)
-- **PRD:** [PRD_SYNC_PREVIEW_ENGINE.md](../../prd/doing/PRD_SYNC_PREVIEW_ENGINE.md) (decisions D1 to D5 settled Aug 2026; recorded there)
+- **PRD:** [PRD_SYNC_PREVIEW_ENGINE.md](../../prd/done/PRD_SYNC_PREVIEW_ENGINE.md) (decisions D1 to D5 settled Aug 2026; recorded there)
 
 ## Overview
 
@@ -90,11 +91,11 @@ Method family by method family, each PR: write characterisation tests over the f
 - [x] `PreviewFullSyncAsync`: whole-population count tier plus a bounded per-outcome-category sample of full trees; explicit work budget (object cap and/or time); truncation flagged in the result. **Delivered:** `JimApplication.SyncPreview.PreviewFullSyncAsync(connectedSystemId, FullSyncPreviewOptions?, repositoryFactory?)` walks the population by keyset pagination under the same guard/rollback backstops, classifying every evaluated object into `FullSyncPreviewCounts` (project/join/attribute-flow/out-of-scope/not-connected/blocked, plus aggregated create/update/delete/attribute-change counters) and retaining at most `SampleTreesPerCategory` full per-object trees per `FullSyncPreviewCategory`, so memory stays flat however large the system. The work budget defaults on (`MaxObjects` 10,000; optional `TimeBudget`), and truncation is explicit (`Truncated` + `FullSyncPreviewTruncationReason`), with `TotalObjectCount` always reporting the full population (PRD req. 14). The per-CSO evaluation core was factored out of `PreviewSyncForCsoAsync` into a shared context-driven core (rules, object types, outbound cache and name lookup built once per walk; the outbound cache refreshed once per page rather than per object). Six unit tests plus a live-PostgreSQL scale-mechanics test (`FullSyncPreviewScaleDatabaseTests`: 2,000 objects, two full walks, counts exact, samples bounded, cap truncates exactly, integrity tables byte-identical). **Gate:** full solution suite green (8,378 tests, zero warnings); Scenario 8 Small ran every step green at **333.3s against a fresh same-session 325.1s `main` baseline (+2.5%, within the 10% tolerance; the sandbox restarted after Phase 3, so both figures are from the new session)**.
 - [ ] **Scale-template verification (deferred to a 20+ GB host):** the cloud sandbox cannot host a Scale template (Scale100k50Groups needs 20+ GB; this host has ~15 GB), so the 100K+ verification within the budget remains to be run from the devcontainer: populate via Scenario 8 at a Scale template with `-SetupOnly`, then call `PreviewFullSyncAsync` with the default budget and confirm bounded wall-clock and memory. The live-PostgreSQL scale-mechanics test above proves the bounding behaviour at 10^3; the Scale run proves the constant factors.
 
-### Phase 5: Consumption surface (D3 = engine + API only)
+### Phase 5: Consumption surface (D3 = engine + API only) ✅
 
-- [ ] The `JimApplication` API is the v1.0 surface; #827's adapters are the consumer. No portal button, REST endpoint, or cmdlet ships in this milestone (D3's record in the PRD explains why: a portal-only surface would violate the surface parity rule, and full parity is more than the milestone needs). The administrator-facing surface is filed as its own parity-complete issue when wanted.
-- [ ] Engineering documentation: the zero-side-effect design (what is structural, what is backstop) written up so future contributors do not introduce a persisting path into preview. No `docs/` or changelog entry: this is a foundation, not yet an administrator-facing feature.
-- [ ] Update the #827 plan: Phase 1 marked delivered; Wave 3 (G1/G2) becomes fileable.
+- [x] The `JimApplication` API is the v1.0 surface; #827's adapters are the consumer. No portal button, REST endpoint, or cmdlet ships in this milestone (D3's record in the PRD explains why: a portal-only surface would violate the surface parity rule, and full parity is more than the milestone needs). The administrator-facing surface is filed as its own parity-complete issue when wanted. **Recorded:** `JimApplication.SyncPreview` (both per-object methods plus `PreviewFullSyncAsync`) is the shipped surface; nothing portal/REST/PowerShell shipped, deliberately.
+- [x] Engineering documentation: the zero-side-effect design (what is structural, what is backstop) written up so future contributors do not introduce a persisting path into preview. No `docs/` or changelog entry: this is a foundation, not yet an administrator-facing feature. **Delivered:** `engineering/SYNC_PREVIEW_ZERO_SIDE_EFFECTS.md` records the three layers (structural purity, the write-throwing guard, the rollback-only transaction), the proofs that must stay, and the contributor rules.
+- [x] Update the #827 plan: Phase 1 marked delivered; Wave 3 (G1/G2) becomes fileable. **Done** in `CONFIGURATION_CHANGE_PREVIEW.md` (Phase 1 ✅ with delivery notes; status line and Wave 3 text updated).
 
 ## Success Criteria
 
