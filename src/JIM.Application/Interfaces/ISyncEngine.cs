@@ -302,4 +302,14 @@ public interface ISyncEngine
     /// <param name="pendingExport">The Pending Export to purge, mutated in place.</param>
     /// <param name="deletedMvoIds">The Metaverse Objects deleted in this operation.</param>
     int PurgeChangesReferencingDeletedObjects(PendingExport pendingExport, HashSet<Guid> deletedMvoIds);
+
+    /// <summary>
+    /// Selects the Object Matching Rules export matching should try for an export Synchronisation Rule, in
+    /// the order to try them: the Connected System's matching mode chooses between the Connected System
+    /// Object Type's shared rules and the Synchronisation Rule's own. Empty means matching is not attempted
+    /// (including when the rule's Connected System or Connected System Object Type navigation is not loaded).
+    /// The per-rule candidate query stays with the orchestrator.
+    /// </summary>
+    /// <param name="exportRule">The export Synchronisation Rule about to provision.</param>
+    IReadOnlyList<ObjectMatchingRule> SelectExportMatchingRules(SyncRule exportRule);
 }
