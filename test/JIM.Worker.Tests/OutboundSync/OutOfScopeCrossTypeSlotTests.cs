@@ -130,7 +130,7 @@ public class OutOfScopeCrossTypeSlotTests
         var existing = JoinedCso(guidKeyedType, mvo);
         var rule = OutOfScopeExportRule(naturalKeyType, "NaturalKeyAccount Export");
 
-        var pendingExports = await _server.EvaluateOutOfScopeExportsAsync(mvo, sourceSystem: null, CacheFor(mvo, rule, existing));
+        var pendingExports = await _server.EvaluateOutOfScopeExportsAsync(mvo, CacheFor(mvo, rule, existing));
 
         using (Assert.EnterMultipleScope())
         {
@@ -156,7 +156,7 @@ public class OutOfScopeCrossTypeSlotTests
         _syncRepo = TestUtilities.CreateSyncRepository(csos: [existing]);
         _server = new ExportEvaluationServer(_jim, _syncRepo);
 
-        await _server.EvaluateOutOfScopeExportsAsync(mvo, sourceSystem: null, CacheFor(mvo, rule, existing));
+        await _server.EvaluateOutOfScopeExportsAsync(mvo, CacheFor(mvo, rule, existing));
 
         Assert.That(existing.MetaverseObjectId, Is.Null,
             "OutboundDeprovisionAction.Disconnect must break the join for the rule's own type.");

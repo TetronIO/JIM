@@ -276,6 +276,27 @@ OpenLDAP is the sensible directory type here; Samba AD images may not be cached.
 
 Mind host resources: a Small-template Scenario 8 run fits in a 15 GB sandbox; the Scale templates do not.
 
+**The proxy's port changes when a session resumes, and `.env` remembers the old one.** A previous session may have written `JIM_BUILD_HTTPS_PROXY=http://127.0.0.1:<port>` (and `JIM_BUILD_NETWORK=host`) into `.env`, which `docker-compose.yml` passes to every build stage. On resume the agent proxy comes back on a **different** port, so the stored value points at nothing and `dotnet restore` fails inside the build with:
+
+```
+error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json.
+error NU1301: Connection refused (127.0.0.1:42447)
+```
+
+Note this is `Connection refused`, **not** the `UntrustedRoot` failure the CA bridge above fixes; reaching for `JIM_BUILD_EXTRA_CA_BASE64` here will not help. Re-point the stored value at the live port before blaming anything else:
+
+```bash
+PORT=$(curl -sS "$HTTPS_PROXY/__agentproxy/status" | grep -o '"port": *[0-9]*' | grep -o '[0-9]*')
+sed -i -E "s#^JIM_BUILD_HTTPS_PROXY=http://127\.0\.0\.1:[0-9]+#JIM_BUILD_HTTPS_PROXY=http://127.0.0.1:$PORT#" .env
+```
+
+`.env` is gitignored, so this never reaches a commit. **Re-run that on every resume, not once per session**: it bit twice within an hour of first being written down, because each resume moves the port again (42447, then 42933, then 44067), and a value corrected earlier in the same session is stale by the next resume. Two further things make the failure hard to recognise:
+
+- **It hides until the build cache goes cold.** The restore layer depends only on the `.csproj`/`packages.lock.json` files, so a cached one is reused and the stale proxy is never contacted; builds keep working for hours. When the disk fills, buildkit's GC evicts that layer, restore runs for real, and the "new" failure looks like something the session just changed.
+- **`JIM_BUILD_NETWORK=host` is required and is already set.** The agent proxy binds loopback only, so a build container cannot reach it via the bridge gateway or `host.docker.internal` (both time out); only host networking works, and `docker-compose.yml` already parameterises `network: ${JIM_BUILD_NETWORK:-default}` for this. Do not add a network override to a compose file.
+
+Related, from the same class of "believe the tooling, not the warning": the SessionStart hook prints `WARNING: Docker daemon failed to start` when its wait expires, and the daemon frequently comes up moments later. **Run `docker info` before accepting that warning** (root `CLAUDE.md` says the same); treating a working sandbox as Docker-less costs an entire session.
+
 ### Running a scenario in the Claude Code cloud sandbox (native stack; no Docker daemon)
 
 When the sandbox has NO working Docker daemon, `Run-IntegrationTests.ps1` cannot run unmodified: Step 2/3 do `docker compose build` + `up -d` for the `jim.web`/`jim.worker` containers, and building those images fails here (the egress proxy re-terminates TLS, so `dotnet restore` inside a Docker build stage cannot validate certificates, and the SDK/runtime base images are not cached). This is why root `CLAUDE.md` says never `jim-build` in a sandbox. You can still run a **single scenario** against the **native light stack** (`dotnet run`, which restores through the proxy fine). The scenario scripts talk to the JIM Web API over HTTP and drive the worker via run profiles, so they do not care whether web/worker are containers or native, *provided* you bridge these sandbox-specific gaps first (each one bit us; documented so future sessions skip the discovery):
