@@ -77,6 +77,67 @@ public class SyncRuleMappingDto
 }
 
 /// <summary>
+/// Request to change the settings on an existing Attribute Flow.
+/// </summary>
+/// <remarks>
+/// Every field is optional and an omitted one leaves the mapping's current value alone; a request naming no
+/// field at all is rejected rather than answered as a successful no-op. What the mapping targets, and whether
+/// its source is an attribute or an Expression, cannot be changed here: those revalidate against attribute types
+/// and reopen an import mapping's Attribute Priority position, so they remain a delete and a create.
+/// </remarks>
+public class UpdateSyncRuleMappingRequest
+{
+    /// <summary>
+    /// Replaces the mapping's Expression. Expression mappings only; rejected for an attribute mapping, and for a
+    /// mapping carrying more than one Expression source.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>
+    /// What the Expression does when an attribute it reads has no value on the object being synchronised.
+    /// Expression mappings only.
+    /// </summary>
+    public MissingInputBehaviour? MissingInputBehaviour { get; set; }
+
+    /// <summary>
+    /// Whether a contribution of no value from this mapping is authoritative ("Null is a value"). Import
+    /// mappings only.
+    /// </summary>
+    public bool? NullIsValue { get; set; }
+
+    /// <summary>
+    /// Text value-processing transforms applied as the value flows to the Metaverse. Import mappings only.
+    /// </summary>
+    public InboundValueProcessing? InboundValueProcessing { get; set; }
+
+    /// <summary>
+    /// Case normalisation applied as the value flows to the Metaverse. Import mappings only.
+    /// </summary>
+    public InboundCaseNormalisation? CaseNormalisation { get; set; }
+
+    /// <summary>
+    /// Whether the mapping flows only during the initial provisioning export. Export mappings only.
+    /// </summary>
+    public bool? InitialExportOnly { get; set; }
+
+    /// <summary>
+    /// Converts the request into the settings change the application layer understands.
+    /// </summary>
+    public SyncRuleMappingSettingsUpdate ToSettingsUpdate()
+    {
+        return new SyncRuleMappingSettingsUpdate
+        {
+            Expression = Expression,
+            MissingInputBehaviour = MissingInputBehaviour,
+            NullIsValue = NullIsValue,
+            InboundValueProcessing = InboundValueProcessing,
+            CaseNormalisation = CaseNormalisation,
+            InitialExportOnly = InitialExportOnly
+        };
+    }
+}
+
+/// <summary>
 /// API representation of a SyncRuleMappingSource.
 /// </summary>
 public class SyncRuleMappingSourceDto

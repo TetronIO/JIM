@@ -265,3 +265,111 @@ Describe 'New-JIMSyncRuleMapping' {
         }
     }
 }
+
+Describe 'Set-JIMSyncRuleMapping' {
+
+    Context 'Parameters' {
+
+        BeforeAll {
+            $command = Get-Command Set-JIMSyncRuleMapping
+        }
+
+        It 'Should have a <Name> parameter' -ForEach @(
+            @{ Name = 'Expression' }
+            @{ Name = 'MissingInputBehaviour' }
+            @{ Name = 'NullIsValue' }
+            @{ Name = 'InboundValueProcessing' }
+            @{ Name = 'CaseNormalisation' }
+            @{ Name = 'InitialExportOnly' }
+            @{ Name = 'PassThru' }
+        ) {
+            $command.Parameters[$Name] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'MissingInputBehaviour should validate against the four behaviours' {
+            $validateSet = $command.Parameters['MissingInputBehaviour'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet.ValidValues | Should -Be @('EvaluateAnyway', 'ContributeNoValue', 'FailMapping', 'FailObject')
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Request body composition' {
+
+        It 'PATCHes only the settings that were supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 15 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -MissingInputBehaviour FailObject -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and
+                    $Endpoint -eq '/api/v1/synchronisation/sync-rules/2/mappings/15' -and
+                    $Body.missingInputBehaviour -eq 'FailObject' -and
+                    -not $Body.ContainsKey('expression') -and
+                    -not $Body.ContainsKey('nullIsValue') -and
+                    -not $Body.ContainsKey('initialExportOnly')
+                }
+            }
+        }
+
+        It 'Sends a false switch value rather than omitting it' {
+            # -NullIsValue:$false is how an administrator turns the setting off; omitting it from the body
+            # would make that call a silent no-op.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 8 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -NullIsValue $false -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('nullIsValue') -and $Body.nullIsValue -eq $false
+                }
+            }
+        }
+
+        It 'Refuses a call that names no setting rather than PATCHing nothing' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 8 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable err
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+                $err | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It 'Returns nothing unless -PassThru is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 15 } }
+
+                $quiet = Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -InitialExportOnly $true -Confirm:$false
+                $passed = Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -InitialExportOnly $true -PassThru -Confirm:$false
+
+                $quiet | Should -BeNullOrEmpty
+                $passed.id | Should -Be 15
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Set-JIMSyncRuleMapping -Full
+        }
+
+        It 'Should document the MissingInputBehaviour parameter' {
+            ($help.Parameters.Parameter | Where-Object { $_.Name -eq 'MissingInputBehaviour' }) | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+    }
+}

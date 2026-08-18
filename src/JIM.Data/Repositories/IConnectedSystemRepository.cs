@@ -796,6 +796,14 @@ public interface IConnectedSystemRepository
     Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id);
 
     /// <summary>
+    /// Gets a specific Synchronisation Rule mapping by ID, tracked, so that a caller mutating and saving it
+    /// actually persists the change. Use this only on write paths; ordinary reads take
+    /// <see cref="GetSyncRuleMappingAsync"/>.
+    /// </summary>
+    /// <param name="id">The unique identifier of the mapping.</param>
+    Task<SyncRuleMapping?> GetSyncRuleMappingForUpdateAsync(int id);
+
+    /// <summary>
     /// Creates a new Synchronisation Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to create.</param>
