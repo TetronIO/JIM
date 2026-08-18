@@ -1421,25 +1421,21 @@ public class ConnectedSystemServer
         if (connectedSystem.ConnectorDefinition == null || connectedSystem.SettingValues is not { Count: > 0 })
             return;
 
+        // connectors that hold connections or temporary files are disposable; the rest are not, and a null here is fine.
         var connector = CreateConnector(connectedSystem);
-        try
-        {
-            if (connector is not IConnectorObjectTypeSelectionValidation selectionValidation)
-                return;
+        using var disposableConnector = connector as IDisposable;
 
-            var problems = selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, objectTypes, Log.Logger)
-                .Where(result => !result.IsValid)
-                .Select(result => result.ErrorMessage)
-                .Where(message => !string.IsNullOrWhiteSpace(message))
-                .ToList();
+        if (connector is not IConnectorObjectTypeSelectionValidation selectionValidation)
+            return;
 
-            if (problems.Count > 0)
-                throw new InvalidSettingValuesException(string.Join(" ", problems));
-        }
-        finally
-        {
-            (connector as IDisposable)?.Dispose();
-        }
+        var problems = selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, objectTypes, Log.Logger)
+            .Where(result => !result.IsValid)
+            .Select(result => result.ErrorMessage)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .ToList();
+
+        if (problems.Count > 0)
+            throw new InvalidSettingValuesException(string.Join(" ", problems));
     }
 
     /// <summary>
