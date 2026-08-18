@@ -89,4 +89,32 @@ public class ExpressionInputResolverTests
     {
         Assert.That(ExpressionInputResolver.Resolve(expression), Is.Empty);
     }
+
+    /// <summary>
+    /// The synchronisation path resolves the same Expression once per object, so it takes the cached route. The
+    /// cache must be a pure optimisation: same answer, repeatable, and the same empty result for nothing to find.
+    /// </summary>
+    [Test]
+    public void ResolveCached_ReturnsTheSameInputsAsResolve_AndRepeats()
+    {
+        const string expression = "Lower(cs[\"givenName\"]) + \".\" + Lower(cs[\"sn\"]) + mv[\"Domain\"]";
+
+        var uncached = ExpressionInputResolver.Resolve(expression);
+        var first = ExpressionInputResolver.ResolveCached(expression);
+        var second = ExpressionInputResolver.ResolveCached(expression);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first, Is.EqualTo(uncached));
+            Assert.That(second, Is.EqualTo(uncached));
+        }
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    public void ResolveCached_NothingToFind_ReturnsEmpty(string? expression)
+    {
+        Assert.That(ExpressionInputResolver.ResolveCached(expression), Is.Empty);
+    }
 }

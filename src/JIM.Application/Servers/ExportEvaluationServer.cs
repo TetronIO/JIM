@@ -2542,6 +2542,28 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
+    /// Returns the Metaverse inputs an export Expression reads that this Metaverse Object has no value for, as the
+    /// Expression addresses them. "No value" is an absent key, a null, or an empty string, matching the inbound
+    /// side and matching what a concatenation would turn into a broken value.
+    /// </summary>
+    private static IReadOnlyList<string> FindMissingExpressionInputs(string? expression, IDictionary<string, object?> metaverseAttributes)
+    {
+        var missing = new List<string>();
+
+        foreach (var input in ExpressionInputResolver.ResolveCached(expression)
+                     .Where(i => i.Source == ExpressionInputSource.Metaverse))
+        {
+            if (!metaverseAttributes.TryGetValue(input.AttributeName, out var value) || value == null ||
+                (value is string text && text.Length == 0))
+            {
+                missing.Add(input.Accessor);
+            }
+        }
+
+        return missing;
+    }
+
+    /// <summary>
     /// Builds a <see cref="SyncExpressionEvaluationException"/> carrying the failing export expression and
     /// the target connected system attribute name, so the worker can record an ExpressionEvaluationError
     /// RPEI for the Metaverse Object being evaluated.
@@ -2656,6 +2678,35 @@ public class ExportEvaluationServer
                     mvAttributeDictionary ??= BuildAttributeDictionary(mvo);
                     var context = new ExpressionContext(mvAttributeDictionary, null);
 
+                    // Missing Input Behaviour (#1361): an Expression whose input is absent evaluates cleanly and
+                    // produces a structurally broken value that the Connected System is then asked to accept. Only
+                    // Metaverse inputs are considered, because export evaluation runs against the Metaverse Object
+                    // alone; a cs[...] accessor in an export Expression is unsupported rather than an object
+                    // missing a value.
+                    if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
+                    {
+                        var missingInputs = FindMissingExpressionInputs(source.Expression, mvAttributeDictionary);
+                        if (missingInputs.Count > 0)
+                        {
+                            if (source.MissingInputBehaviour == MissingInputBehaviour.FailObject)
+                                throw new SyncExpressionMissingInputException(source.Expression,
+                                    mapping.TargetConnectedSystemAttribute.Name, missingInputs);
+
+                            if (source.MissingInputBehaviour == MissingInputBehaviour.FailMapping)
+                                flowErrors?.Add(new AttributeFlowError
+                                {
+                                    Kind = AttributeFlowErrorKind.ExpressionMissingInput,
+                                    TargetAttributeName = mapping.TargetConnectedSystemAttribute.Name,
+                                    Expression = source.Expression,
+                                    MissingInputs = missingInputs
+                                });
+
+                            // ContributeNoValue and FailMapping alike stage nothing for this attribute, so the
+                            // Connected System keeps whatever it holds; the difference is whether it is reported.
+                            continue;
+                        }
+                    }
+
                     // Only the evaluation itself is guarded. A thrown export expression must be surfaced as
                     // an errored object, never swallowed and never conflated with a deliberate null result.
                     // Known failure modes are rethrown as SyncExpressionEvaluationException for the worker to
@@ -2767,6 +2818,7 @@ public class ExportEvaluationServer
 
                         flowErrors?.Add(new AttributeFlowError
                         {
+                            Kind = AttributeFlowErrorKind.MultiValuedToSingleValued,
                             SourceAttributeName = source.MetaverseAttribute.Name,
                             TargetAttributeName = mapping.TargetConnectedSystemAttribute.Name,
                             ValueCount = mvoValueCount

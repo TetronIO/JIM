@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using DynamicExpresso.Exceptions;
+using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -127,6 +128,7 @@ public partial class SyncEngine
 
                                 errors?.Add(new AttributeFlowError
                                 {
+                                    Kind = AttributeFlowErrorKind.MultiValuedToSingleValued,
                                     SourceAttributeName = csotAttribute.Name,
                                     TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute.Name,
                                     ValueCount = effectiveValueCount
@@ -188,7 +190,7 @@ public partial class SyncEngine
             }
             else if (!string.IsNullOrWhiteSpace(source.Expression))
             {
-                ProcessExpressionMapping(cso, mvo, syncRuleMapping, source, csoType, expressionEvaluator, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
+                ProcessExpressionMapping(cso, mvo, syncRuleMapping, source, csoType, expressionEvaluator, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext, errors);
             }
             else if (source.MetaverseAttribute != null)
                 throw new InvalidDataException("SyncRuleMappingSource.MetaverseAttribute being populated is not supported for synchronisation operations. " +
@@ -339,6 +341,36 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// Returns the inputs an Expression reads that the object has no value for, as the Expression addresses them.
+    /// </summary>
+    /// <remarks>
+    /// "No value" is an absent key, a null, or an empty string: an attribute present but blank is no value
+    /// everywhere else in Attribute Flow, and an Expression concatenating it produces the same broken output as one
+    /// reading an attribute that is not there at all.
+    /// </remarks>
+    /// <param name="expression">The Expression whose inputs to check.</param>
+    /// <param name="availableAttributes">The attribute values the evaluation will run against.</param>
+    /// <param name="side">Which side those values are, so inputs from the other side are left alone.</param>
+    private static IReadOnlyList<string> FindMissingInputs(
+        string? expression,
+        IDictionary<string, object?> availableAttributes,
+        ExpressionInputSource side)
+    {
+        var missing = new List<string>();
+
+        foreach (var input in ExpressionInputResolver.ResolveCached(expression).Where(i => i.Source == side))
+        {
+            if (!availableAttributes.TryGetValue(input.AttributeName, out var value) || value == null ||
+                (value is string text && text.Length == 0))
+            {
+                missing.Add(input.Accessor);
+            }
+        }
+
+        return missing;
+    }
+
+    /// <summary>
     /// Processes an expression-based Synchronisation Rule mapping source.
     /// </summary>
     private static void ProcessExpressionMapping(
@@ -351,7 +383,8 @@ public partial class SyncEngine
         int? contributingSystemId,
         int? contributingSyncRuleId,
         int mvoObjectTypeId,
-        AttributePriorityContext? priorityContext)
+        AttributePriorityContext? priorityContext,
+        List<AttributeFlowError>? errors)
     {
         if (expressionEvaluator == null)
         {
@@ -367,6 +400,51 @@ public partial class SyncEngine
         var context = new ExpressionContext(
             metaverseAttributes: null,
             connectedSystemAttributes: csAttributeDictionary);
+
+        // Missing Input Behaviour (#1361): an Expression whose input is absent does not fail, it evaluates cleanly
+        // and returns a structurally broken value ("ada.@corp.local" for a person with no surname) that no layer
+        // downstream can tell from a good one. Whether that matters is the administrator's call, not JIM's: an
+        // Expression built on IIF or IsNullOrEmpty handles the absence itself, and one building an identifier
+        // must not run at all.
+        //
+        // Only Connected System inputs are considered here. Inbound Attribute Flow evaluates against the Connected
+        // System Object alone (metaverseAttributes above is deliberately null), so an mv[...] accessor in an
+        // inbound Expression is unsupported rather than an object missing a value, and treating it as missing
+        // would fail every object on a mapping that is misconfigured in a different way entirely.
+        if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
+        {
+            var missingInputs = FindMissingInputs(source.Expression, csAttributeDictionary, ExpressionInputSource.ConnectedSystem);
+            if (missingInputs.Count > 0)
+            {
+                switch (source.MissingInputBehaviour)
+                {
+                    case MissingInputBehaviour.ContributeNoValue:
+                        // Not a fault: the same outcome an Expression returning null produces, resolved by
+                        // Attribute Priority and "Null is a value", so a lower-priority contributor can win.
+                        Log.Debug("ProcessExpressionMapping: not evaluating for CSO {CsoId}; no value for {MissingInputs}. Contributing no value.",
+                            cso.Id, string.Join(", ", missingInputs));
+                        ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
+                        return;
+
+                    case MissingInputBehaviour.FailMapping:
+                        // One attribute lost, the object's others unaffected: the shape MultiValuedToSingleValued
+                        // already uses, recorded by the worker as an ExpressionMissingInput execution item.
+                        errors?.Add(new AttributeFlowError
+                        {
+                            Kind = AttributeFlowErrorKind.ExpressionMissingInput,
+                            TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute!.Name,
+                            Expression = source.Expression,
+                            MissingInputs = missingInputs
+                        });
+                        return;
+
+                    case MissingInputBehaviour.FailObject:
+                        // The whole object is left untouched, exactly as for an Expression that threw.
+                        throw new SyncExpressionMissingInputException(source.Expression,
+                            syncRuleMapping.TargetMetaverseAttribute?.Name, missingInputs);
+                }
+            }
+        }
 
         // Only the evaluation itself is guarded. A thrown expression must be surfaced as an errored
         // object, never swallowed and never conflated with a deliberate null (which clears the value).

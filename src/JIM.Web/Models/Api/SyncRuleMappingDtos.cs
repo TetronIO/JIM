@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 
 namespace JIM.Web.Models.Api;
@@ -93,6 +94,14 @@ public class SyncRuleMappingSourceDto
     /// </summary>
     public string? Expression { get; set; }
 
+    /// <summary>
+    /// For expression sources: what happens when an attribute the expression reads has no value on the object
+    /// being synchronised. EvaluateAnyway (the default) runs the expression regardless, ContributeNoValue skips it
+    /// without reporting anything, FailMapping skips it and records an error, and FailObject leaves the whole
+    /// object untouched.
+    /// </summary>
+    public MissingInputBehaviour MissingInputBehaviour { get; set; }
+
     public static SyncRuleMappingSourceDto FromEntity(SyncRuleMappingSource entity)
     {
         return new SyncRuleMappingSourceDto
@@ -103,7 +112,8 @@ public class SyncRuleMappingSourceDto
             MetaverseAttributeName = entity.MetaverseAttribute?.Name,
             ConnectedSystemAttributeId = entity.ConnectedSystemAttributeId,
             ConnectedSystemAttributeName = entity.ConnectedSystemAttribute?.Name,
-            Expression = entity.Expression
+            Expression = entity.Expression,
+            MissingInputBehaviour = entity.MissingInputBehaviour
         };
     }
 }
@@ -186,6 +196,15 @@ public class CreateSyncRuleMappingSourceRequest
     /// Example: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"
     /// </summary>
     public string? Expression { get; set; }
+
+    /// <summary>
+    /// For expression sources: what to do when an attribute the expression reads has no value on the object being
+    /// synchronised. Omit for EvaluateAnyway, which runs the expression regardless and is what JIM has always
+    /// done. ContributeNoValue skips the mapping and resolves by Attribute Priority without reporting anything;
+    /// FailMapping skips it and records an ExpressionMissingInput error while the object's other attributes still
+    /// flow; FailObject leaves the whole object untouched. Ignored for attribute sources.
+    /// </summary>
+    public MissingInputBehaviour? MissingInputBehaviour { get; set; }
 }
 
 /// <summary>

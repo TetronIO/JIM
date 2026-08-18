@@ -3223,6 +3223,12 @@ public class SynchronisationController(
                     return BadRequest(ApiErrorResponse.BadRequest($"Invalid expression: {validationResult.ErrorMessage}"));
 
                 source.Expression = sourceRequest.Expression;
+
+                // Missing Input Behaviour applies to expression sources only: an attribute source has no inputs to
+                // be missing. Left at the entity default (EvaluateAnyway) when the request omits it, so an existing
+                // caller's mappings behave exactly as they did.
+                if (sourceRequest.MissingInputBehaviour.HasValue)
+                    source.MissingInputBehaviour = sourceRequest.MissingInputBehaviour.Value;
             }
             else if (syncRule.Direction == SyncRuleDirection.Import)
             {

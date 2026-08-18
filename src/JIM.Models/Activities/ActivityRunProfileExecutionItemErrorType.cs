@@ -95,6 +95,16 @@ public enum ActivityRunProfileExecutionItemErrorType
     ExpressionEvaluationError,
 
     /// <summary>
+    /// An Expression-based Attribute Flow read an attribute the object has no value for, and the mapping's
+    /// Missing Input Behaviour says that is a fault rather than something the Expression handles. The message
+    /// names the Expression, the target attribute, the missing input, and whether the mapping alone was skipped
+    /// (Fail this mapping: the object's other attributes still flowed) or the whole object was left untouched
+    /// (Fail the object). Distinct from <see cref="ExpressionEvaluationError"/>, which is an Expression that
+    /// threw: this one evaluated fine, or would have, and the administrator asked to be told instead.
+    /// </summary>
+    ExpressionMissingInput,
+
+    /// <summary>
     /// During Attribute Flow, a multi-valued source attribute held more than one value but the target
     /// attribute is single-valued. A single-valued target can hold only one value, and JIM will not
     /// select one arbitrarily, so no value was flowed for that attribute (import) or no Pending Export
