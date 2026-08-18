@@ -277,18 +277,17 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         var metaverseObjectsById = (await _application.Metaverse.GetMetaverseObjectsByIdsNoTrackingAsync(metaverseObjectIds))
             .ToDictionary(mvo => mvo.Id);
 
-        foreach (var cso in batch)
+        // An object joined to a Metaverse Object of another type is never governed by this rule: export rules
+        // apply per Metaverse Object Type, so its scope exits are decided elsewhere. Null-state does not flow
+        // through Where, hence the ! dereferences below.
+        var governed = batch
+            .Select(cso => (Cso: cso, Mvo: cso.MetaverseObjectId is { } metaverseObjectId &&
+                metaverseObjectsById.TryGetValue(metaverseObjectId, out var mvo) ? mvo : null))
+            .Where(pair => pair.Mvo != null && pair.Mvo.Type?.Id == rule.MetaverseObjectTypeId);
+
+        foreach (var (cso, mvo) in governed)
         {
-            if (cso.MetaverseObjectId is not { } metaverseObjectId ||
-                !metaverseObjectsById.TryGetValue(metaverseObjectId, out var mvo))
-                continue;
-
-            // An object joined to a Metaverse Object of another type is never governed by this rule: export rules
-            // apply per Metaverse Object Type, so its scope exits are decided elsewhere.
-            if (mvo.Type?.Id != rule.MetaverseObjectTypeId)
-                continue;
-
-            var inScope = _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, asAt);
+            var inScope = _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo!, rule, asAt);
             var transition = inScope
                 ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction
                 : proposedAction == OutOfScopeDeprovisioningAction.StageDeleteExport
@@ -299,7 +298,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
                 transition,
                 ObjectDisplayName: cso.NameOrId,
                 ObjectTypeName: cso.Type?.Name,
-                MetaverseObjectTypeId: mvo.Type?.Id,
+                MetaverseObjectTypeId: mvo!.Type?.Id,
                 MetaverseObjectId: mvo.Id,
                 ConnectedSystemObjectId: cso.Id,
                 ConnectedSystemId: rule.ConnectedSystemId,
