@@ -1,10 +1,11 @@
 # Synchronisation Preview / What-If Evaluation Engine
 
-- **Status:** Doing (decisions D1 to D5 settled Aug 2026; plan Phases 0 to 3 complete: outbound extraction, the evaluation-only outbound path, and the per-object preview server with its outcome tree and paired fidelity test; full-system sampling (plan Phase 4) next)
+- **Status:** Done
+- **Note:** Delivered Aug 2026 across PRs #1416 to #1419, #1422, #1423 and #1425. Scale-template (100K+) verification of the full-system preview's constant factors deferred to a 20+ GB host (bounding mechanics proven at 10^3 on live PostgreSQL). The administrator-facing surface is deliberately deferred per decision D3 (engine + `JimApplication` API is the v1.0 surface); it is filed as its own parity-complete issue when wanted. The zero-side-effect design is documented in `engineering/SYNC_PREVIEW_ZERO_SIDE_EFFECTS.md`.
 - **Created:** 2026-07-07
 - **Author:** Jay Van der Zant
 - **Issue:** [#288](https://github.com/TetronIO/JIM/issues/288)
-- **Plan:** [SYNC_PREVIEW_ENGINE.md](../../plans/doing/SYNC_PREVIEW_ENGINE.md)
+- **Plan:** [SYNC_PREVIEW_ENGINE.md](../../plans/done/SYNC_PREVIEW_ENGINE.md)
 
 ## Problem Statement
 
