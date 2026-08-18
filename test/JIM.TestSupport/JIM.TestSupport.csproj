@@ -9,6 +9,10 @@
 
   <ItemGroup>
     <PackageReference Include="NUnit" Version="4.6.1" />
+    <!-- Same version the solution already resolves transitively via Npgsql.EntityFrameworkCore.PostgreSQL 10.0.3
+         in JIM.PostgresData; referenced directly here so DatabaseIsolationSnapshot reads through raw ADO rather
+         than an EF context, sharing nothing with the code it checks. Not a new dependency. -->
+    <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 
 </Project>

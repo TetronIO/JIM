@@ -196,6 +196,14 @@
           "Microsoft.TestPlatform.ObjectModel": "18.9.0"
         }
       },
+      "Npgsql": {
+        "type": "Transitive",
+        "resolved": "10.0.3",
+        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w==",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
+        }
+      },
       "Serilog": {
         "type": "Transitive",
         "resolved": "4.4.0",
@@ -204,15 +212,15 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0, )"
+          "JIM.Models": "[0.14.0-dev.20260818.604, )"
         }
       },
       "jim.inmemorydata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.14.0, )",
-          "JIM.Models": "[0.14.0, )",
-          "JIM.Utilities": "[0.14.0, )"
+          "JIM.Data": "[0.14.0-dev.20260818.604, )",
+          "JIM.Models": "[0.14.0-dev.20260818.604, )",
+          "JIM.Utilities": "[0.14.0-dev.20260818.604, )"
         }
       },
       "jim.models": {
@@ -225,13 +233,14 @@
       "jim.testsupport": {
         "type": "Project",
         "dependencies": {
-          "NUnit": "[4.6.1, )"
+          "NUnit": "[4.6.1, )",
+          "Npgsql": "[10.0.3, )"
         }
       },
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0, )",
+          "JIM.Models": "[0.14.0-dev.20260818.604, )",
           "Serilog": "[4.4.0, )"
         }
       }
