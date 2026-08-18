@@ -199,7 +199,7 @@ Modifies an existing Synchronisation Rule. Supports renaming, toggling enabled s
 Set-JIMSyncRule -Id <int> [-Name <string>] [-Description <string>]
     [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
     [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
-    [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
+    [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 
 # Enable shortcut
 Set-JIMSyncRule -Id <int> -Enable [-ChangeReason <string>] [-PassThru]
@@ -211,7 +211,7 @@ Set-JIMSyncRule -Id <int> -Disable [-ChangeReason <string>] [-PassThru]
 Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <string>]
     [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
     [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
-    [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
+    [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 ```
 
 ### Parameters
@@ -230,6 +230,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 | `OutboundDeprovisionAction` | `string` | No | | Export rules: action when an MVO falls out of the rule's scope or is deleted. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
 | `EnforceState` | `bool` | No | | Enables drift detection: re-asserts the rule's expected attribute values when the target system has drifted from them |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
+| `PreviewActivityId` | `guid` | No | | The [Configuration Change Preview](previews.md) this change was made after reading, as returned by `New-JIMConfigurationChangePreview -SyncRuleId`. Recorded on the change's Activity so "previewed, then applied" is auditable. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Synchronisation Rule object |
 
 ### Output
@@ -268,8 +269,9 @@ Get-JIMSyncRule -ConnectedSystemName "HR System" | Set-JIMSyncRule -Disable
 Set-JIMSyncRule -Id 5 -ProjectToMetaverse $true -PassThru
 ```
 
-```powershell title="Set out-of-scope handling and drift detection on an export rule"
-Set-JIMSyncRule -Id 5 -OutboundDeprovisionAction Delete -EnforceState $true
+```powershell title="Preview, then set, the Deprovisioning Action on an export rule"
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 5 -OutboundDeprovisionAction Delete -Wait
+Set-JIMSyncRule -Id 5 -OutboundDeprovisionAction Delete -EnforceState $true -PreviewActivityId $preview.ActivityId
 ```
 
 ```powershell title="Disable a rule and record why (shown in the change history)"
