@@ -33,3 +33,18 @@ public enum MvoDeletionExportReason
     /// <summary>A matching rule with OutboundDeprovisionAction.Delete won; Delete beats Disconnect when rules conflict (#655).</summary>
     DeleteRuleWon
 }
+
+/// <summary>
+/// What an export Synchronisation Rule's OutboundDeprovisionAction means for a CSO that has fallen out of the
+/// rule's scope (#288 outbound extraction). Unlike an MVO deletion, where disconnection is unconditional, here
+/// the action decides everything: an unrecognised action does nothing at all rather than guessing.
+/// </summary>
+public enum OutOfScopeDeprovisioningAction
+{
+    /// <summary>Break the join between the CSO and the MVO; the object stays in the Connected System.</summary>
+    Disconnect,
+    /// <summary>Stage a Delete export for the CSO (and break the join), per the rule's Delete action.</summary>
+    StageDeleteExport,
+    /// <summary>The rule carries an OutboundDeprovisionAction this engine does not recognise; do nothing, visibly.</summary>
+    UnknownAction
+}

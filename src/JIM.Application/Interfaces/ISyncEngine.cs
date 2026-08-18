@@ -181,4 +181,25 @@ public interface ISyncEngine
         int? metaverseObjectTypeId,
         IReadOnlyDictionary<int, List<SyncRule>> exportRulesByMetaverseObjectTypeId,
         PendingExport? existingPendingExport);
+
+    /// <summary>
+    /// Decides what an export Synchronisation Rule's OutboundDeprovisionAction means for a CSO that has fallen
+    /// out of the rule's scope: disconnect, stage a Delete export (with the one-Pending-Export-per-CSO collision
+    /// policy choosing reuse, replace or create), or nothing at all for an unrecognised action, which is
+    /// deliberately never defaulted to disconnect.
+    /// </summary>
+    /// <param name="exportRule">The export Synchronisation Rule the CSO fell out of scope for.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to the CSO, if any, from the run's working set or the database.</param>
+    OutOfScopeDeprovisioningDecision DecideOutOfScopeDeprovisioning(
+        SyncRule exportRule,
+        PendingExport? existingPendingExport);
+
+    /// <summary>
+    /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
+    /// LastConnectorDisconnectedDate, starting the deletion grace period. Ask AFTER removing the disconnected
+    /// CSO from the object's collection. Only a Projected object whose Type's Deletion Rule is
+    /// WhenLastConnectorDisconnected qualifies.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object the CSO was just disconnected from.</param>
+    bool ShouldMarkLastConnectorDisconnected(MetaverseObject mvo);
 }
