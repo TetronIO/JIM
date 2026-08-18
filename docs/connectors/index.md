@@ -14,7 +14,7 @@ When a connector imports data from an external system, it does not write directl
 
 --8<-- "assets/diagrams/hub-and-spoke.svg"
 
-<p class="jim-diagram-caption">Connectors sit at JIM's edge, carrying data between Connected Systems and the synchronisation pipeline; every flow passes through the Metaverse, never directly between systems. Dashed elements are not yet available.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
+<p class="jim-diagram-caption">Connectors sit at JIM's edge, carrying data between Connected Systems and the synchronisation pipeline; every flow passes through the Metaverse, never directly between systems.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 Each Connected System in JIM has:
 
@@ -35,17 +35,7 @@ JIM ships with the following built-in connectors:
 | [JIM File Connector](jim-file-connector.md) | CSV and delimited text files | Full Import, Export |
 | [JIM LDAP Connector](jim-ldap-connector.md) | Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories | Full Import, Delta Import, Export |
 | [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) | Any system exposing a SCIM 2.0 service provider interface (RFC 7643/7644) | Full Import, Delta Import, Export |
-| JIM SQL Connector | Microsoft SQL Server and Oracle Database, through fully managed ADO.NET drivers | Full Import, Delta Import, Export |
-
-The JIM SQL Connector is selectable when creating a Connected System. Its settings document themselves:
-each one explains what it is for and what goes wrong if it is not right. A full guide, covering the Object
-Types document and a worked example for each supported database, is still being written.
-
-One Connected System covers several tables and views at once. Each Object Type names its own table or
-view, the columns forming its anchor, any column carrying another object's anchor as a reference, and any
-related table whose rows gather onto the parent as a multi-valued attribute. Date and time columns that
-carry no offset are interpreted in the Database Time Zone declared on the Connected System, and that
-interpretation is inverted on export; columns stating their own offset are left alone.
+| [JIM SQL Connector](jim-sql-connector.md) | Microsoft SQL Server and Oracle Database, through fully managed ADO.NET drivers | Full Import, Delta Import, Export |
 
 ## 🗺️ Upcoming Connectors
 

@@ -123,10 +123,9 @@ SELECT EMPLOYEE_ID, CONCAT('+44 161 496 ', RIGHT(CONCAT('0000', CAST(EMPLOYEE_ID
 FROM hr.EMPLOYEES WHERE (EMPLOYEE_ID % 3) = 0;
 GO
 
--- One creation entry per employee, so a Delta Import from a zero watermark sees the whole population.
-INSERT INTO hr.IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE, CHANGED_AT)
-SELECT EMPLOYEE_ID, 'I', LAST_MODIFIED FROM hr.EMPLOYEES;
-GO
+-- The change logs are not seeded by hand: the triggers write one creation entry per employee (and the
+-- phone rows' update entries) as the rows above go in, so a Delta Import from a zero watermark sees the
+-- whole population and the log holds exactly what the triggers write.
 "@
 }
 
@@ -179,11 +178,17 @@ CREATE TABLE hr.EMPLOYEES (
     IS_ACTIVE            $($config.Types.Boolean)      NOT NULL,
     -- Zoneless: the Connected System's Database Time Zone decides what instant this names.
     START_DATE           $($config.Types.ZonelessDate) NOT NULL,
-    LAST_MODIFIED        $($config.Types.ZonelessDate) NOT NULL,
+    -- The Watermark Column mode's column, defaulted on insert and moved by a trigger on update, exactly
+    -- as docs/connectors/jim-sql-connector-delta-import-watermark.md prescribes.
+    LAST_MODIFIED        $($config.Types.ZonelessDate) NOT NULL DEFAULT SYSUTCDATETIME(),
     -- Offset-carrying: unambiguous at the wire level, so no setting applies to it.
     HIRED_AT             $($config.Types.OffsetDate)   NOT NULL,
     EMPLOYEE_GUID        $($config.Types.Guid)         NOT NULL,
-    PHOTO                $($config.Types.Binary)       NULL
+    PHOTO                $($config.Types.Binary)       NULL,
+    -- SQL Server's own version stamp: unique and increasing across the database, maintained without a
+    -- trigger, and discovered by JIM as a Binary attribute. The Delta.RowversionWatermark row names it
+    -- as the watermark column to prove the Binary watermark round-trips.
+    ROW_VERSION          rowversion                    NOT NULL
 );
 GO
 
@@ -200,29 +205,109 @@ CREATE TABLE hr.EMPLOYEE_PHONES (
     PHONE_ID       $($config.Types.Anchor)       NOT NULL PRIMARY KEY,
     EMPLOYEE_ID    $($config.Types.Integer)      NOT NULL,
     PHONE_NUMBER   $($config.Types.Text)         NOT NULL,
-    LAST_MODIFIED  $($config.Types.ZonelessDate) NOT NULL,
+    LAST_MODIFIED  $($config.Types.ZonelessDate) NOT NULL DEFAULT SYSUTCDATETIME(),
+    ROW_VERSION    rowversion                    NOT NULL,
     CONSTRAINT FK_PHONES_EMPLOYEE FOREIGN KEY (EMPLOYEE_ID) REFERENCES hr.EMPLOYEES (EMPLOYEE_ID)
 );
 GO
 
--- The change-log Delta Import mode's source: the only mode that observes a deletion.
+-- The change-log Delta Import mode's source: the only mode that observes a deletion. The shape is the
+-- one docs/connectors/jim-sql-connector-delta-import-change-log.md prescribes: an identity sequence as
+-- the watermark, the anchor, a change type, and a timestamp JIM ignores.
 CREATE TABLE hr.IDM_CHANGE_LOG (
     CHANGE_ID    $($config.Types.Anchor)       NOT NULL PRIMARY KEY,
     EMPLOYEE_ID  $($config.Types.Integer)      NOT NULL,
     CHANGE_TYPE  nchar(1)                      NOT NULL,
-    CHANGED_AT   $($config.Types.ZonelessDate) NOT NULL
+    CHANGED_AT   $($config.Types.ZonelessDate) NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
 
 -- The view's own change log. Keyed on EMAIL because PersonView is anchored on EMAIL; see the anchor
--- comment in Setup-Scenario16.ps1 for why the view cannot be anchored on EMPLOYEE_ID. Left empty, like
--- the export targets' change logs.
+-- comment in Setup-Scenario16.ps1 for why the view cannot be anchored on EMPLOYEE_ID. Written by the
+-- same triggers as IDM_CHANGE_LOG, logging the anchor as the view exposes it, which is what the guide
+-- says to do for a view-backed Object Type.
 CREATE TABLE hr.V_EMPLOYEES_CHANGE_LOG (
     CHANGE_ID    $($config.Types.Anchor)       NOT NULL PRIMARY KEY,
     EMAIL        $($config.Types.Text)         NOT NULL,
     CHANGE_TYPE  nchar(1)                      NOT NULL,
-    CHANGED_AT   $($config.Types.ZonelessDate) NOT NULL
+    CHANGED_AT   $($config.Types.ZonelessDate) NOT NULL DEFAULT SYSUTCDATETIME()
 );
+GO
+
+-- The triggers the two Delta Import guides prescribe, verbatim in shape: the change-log triggers write
+-- one row per changed employee (a related-table change is an update to its parent), and the
+-- last-modified triggers move the watermark column on update. Created before the rows are seeded, so
+-- the seeded population's creation entries come from the trigger rather than from a hand-written
+-- insert that could drift from what the trigger writes.
+CREATE TRIGGER hr.TR_EMPLOYEES_IDM_CHANGE_LOG
+ON hr.EMPLOYEES
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Inserts and updates: rows in "inserted"; an update also has the row in "deleted".
+    INSERT INTO hr.IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE)
+    SELECT i.EMPLOYEE_ID, CASE WHEN d.EMPLOYEE_ID IS NULL THEN 'I' ELSE 'U' END
+    FROM inserted AS i
+    LEFT JOIN deleted AS d ON d.EMPLOYEE_ID = i.EMPLOYEE_ID;
+
+    INSERT INTO hr.V_EMPLOYEES_CHANGE_LOG (EMAIL, CHANGE_TYPE)
+    SELECT i.EMAIL, CASE WHEN d.EMPLOYEE_ID IS NULL THEN 'I' ELSE 'U' END
+    FROM inserted AS i
+    LEFT JOIN deleted AS d ON d.EMPLOYEE_ID = i.EMPLOYEE_ID;
+
+    -- Deletes: rows in "deleted" with no counterpart in "inserted".
+    INSERT INTO hr.IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE)
+    SELECT d.EMPLOYEE_ID, 'D'
+    FROM deleted AS d
+    LEFT JOIN inserted AS i ON i.EMPLOYEE_ID = d.EMPLOYEE_ID
+    WHERE i.EMPLOYEE_ID IS NULL;
+
+    INSERT INTO hr.V_EMPLOYEES_CHANGE_LOG (EMAIL, CHANGE_TYPE)
+    SELECT d.EMAIL, 'D'
+    FROM deleted AS d
+    LEFT JOIN inserted AS i ON i.EMPLOYEE_ID = d.EMPLOYEE_ID
+    WHERE i.EMPLOYEE_ID IS NULL;
+END;
+GO
+
+-- A related table's change is a change to its parent.
+CREATE TRIGGER hr.TR_EMPLOYEE_PHONES_IDM_CHANGE_LOG
+ON hr.EMPLOYEE_PHONES
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO hr.IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE)
+    SELECT EMPLOYEE_ID, 'U' FROM inserted
+    UNION
+    SELECT EMPLOYEE_ID, 'U' FROM deleted;
+END;
+GO
+
+CREATE TRIGGER hr.TR_EMPLOYEES_LAST_MODIFIED
+ON hr.EMPLOYEES
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE e SET LAST_MODIFIED = SYSUTCDATETIME()
+    FROM hr.EMPLOYEES AS e
+    INNER JOIN inserted AS i ON i.EMPLOYEE_ID = e.EMPLOYEE_ID;
+END;
+GO
+
+CREATE TRIGGER hr.TR_EMPLOYEE_PHONES_LAST_MODIFIED
+ON hr.EMPLOYEE_PHONES
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE p SET LAST_MODIFIED = SYSUTCDATETIME()
+    FROM hr.EMPLOYEE_PHONES AS p
+    INNER JOIN inserted AS i ON i.PHONE_ID = p.PHONE_ID;
+END;
 GO
 
 -- Export target with a database-generated key, returned as the external ID via OUTPUT INSERTED.
@@ -238,14 +323,21 @@ CREATE TABLE hr.APP_USERS (
     FTE           $($config.Types.Decimal)      NULL,
     IS_ENABLED    $($config.Types.Boolean)      NOT NULL,
     STARTS_ON     $($config.Types.ZonelessDate) NULL,
-    STARTS_AT     $($config.Types.OffsetDate)   NULL
+    STARTS_AT     $($config.Types.OffsetDate)   NULL,
+    -- Every table in the shared Object Types document carries a watermark column, for the same reason
+    -- every Object Type carries a change log (below): Watermark Column mode is refused at save time
+    -- unless every Object Type in the document names one, whether or not the Connected System has
+    -- selected it. Nothing here writes to it beyond the default; the delta rows drive the identity
+    -- tables, and these exist so the mode can be declared at all.
+    LAST_MODIFIED $($config.Types.ZonelessDate) NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
 
 CREATE TABLE hr.APP_USER_ROLES (
-    ROLE_ID    $($config.Types.Anchor)  NOT NULL PRIMARY KEY,
-    USER_ID    $($config.Types.Integer) NOT NULL,
-    ROLE_NAME  $($config.Types.Text)    NOT NULL,
+    ROLE_ID        $($config.Types.Anchor)       NOT NULL PRIMARY KEY,
+    USER_ID        $($config.Types.Integer)      NOT NULL,
+    ROLE_NAME      $($config.Types.Text)         NOT NULL,
+    LAST_MODIFIED  $($config.Types.ZonelessDate) NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_ROLES_USER FOREIGN KEY (USER_ID) REFERENCES hr.APP_USERS (ID) ON DELETE CASCADE
 );
 GO
@@ -254,7 +346,8 @@ GO
 CREATE TABLE hr.APP_ACCOUNTS_NATURAL (
     ACCOUNT_CODE  $($config.Types.NaturalAnchor) NOT NULL PRIMARY KEY,
     DISPLAY_NAME  $($config.Types.Text)          NULL,
-    IS_ENABLED    $($config.Types.Boolean)       NOT NULL
+    IS_ENABLED    $($config.Types.Boolean)       NOT NULL,
+    LAST_MODIFIED $($config.Types.ZonelessDate)  NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
 
@@ -340,9 +433,8 @@ SELECT EMPLOYEE_ID, '+44 161 496 ' || LPAD(TO_CHAR(EMPLOYEE_ID), 4, '0'), LAST_M
 FROM EMPLOYEES WHERE MOD(EMPLOYEE_ID, 3) = 0
 /
 
-INSERT INTO IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE, CHANGED_AT)
-SELECT EMPLOYEE_ID, 'I', LAST_MODIFIED FROM EMPLOYEES
-/
+-- The change logs are not seeded by hand: the triggers write the creation entries as the rows go in;
+-- see the SQL Server script.
 "@
 }
 
@@ -368,7 +460,7 @@ BEGIN
     END IF;
     -- Least privilege is the documented deployment guidance, but a test schema has to be able to build
     -- itself; UNLIMITED TABLESPACE is what lets the 500,000-row seed fit.
-    EXECUTE IMMEDIATE 'GRANT CREATE SESSION, CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, UNLIMITED TABLESPACE TO JIMTEST';
+    EXECUTE IMMEDIATE 'GRANT CREATE SESSION, CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE TRIGGER, UNLIMITED TABLESPACE TO JIMTEST';
 END;
 /
 
@@ -400,7 +492,9 @@ CREATE TABLE EMPLOYEES (
     FTE                  $($config.Types.Decimal)      NOT NULL,
     IS_ACTIVE            $($config.Types.Boolean)      NOT NULL,
     START_DATE           $($config.Types.ZonelessDate) NOT NULL,
-    LAST_MODIFIED        $($config.Types.ZonelessDate) NOT NULL,
+    -- The Watermark Column mode's column, defaulted on insert and moved by a trigger on update, as
+    -- docs/connectors/jim-sql-connector-delta-import-watermark.md prescribes.
+    LAST_MODIFIED        $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL,
     HIRED_AT             $($config.Types.OffsetDate)   NOT NULL,
     -- Oracle's third date and time shape, which has no SQL Server equivalent. The catalogue reports it
     -- as offset-carrying; what ODP.NET returns for it is what the matrix is here to establish.
@@ -420,16 +514,18 @@ CREATE TABLE EMPLOYEE_PHONES (
     PHONE_ID       $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     EMPLOYEE_ID    $($config.Types.Integer)      NOT NULL,
     PHONE_NUMBER   $($config.Types.Text)         NOT NULL,
-    LAST_MODIFIED  $($config.Types.ZonelessDate) NOT NULL,
+    LAST_MODIFIED  $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL,
     CONSTRAINT FK_PHONES_EMPLOYEE FOREIGN KEY (EMPLOYEE_ID) REFERENCES EMPLOYEES (EMPLOYEE_ID)
 )
 /
 
+-- The change-log Delta Import mode's source, in the shape the guide prescribes; see the SQL Server
+-- script for the commentary.
 CREATE TABLE IDM_CHANGE_LOG (
     CHANGE_ID    $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     EMPLOYEE_ID  $($config.Types.Integer)      NOT NULL,
     CHANGE_TYPE  CHAR(1)                       NOT NULL,
-    CHANGED_AT   $($config.Types.ZonelessDate) NOT NULL
+    CHANGED_AT   $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL
 )
 /
 
@@ -438,8 +534,52 @@ CREATE TABLE V_EMPLOYEES_CHANGE_LOG (
     CHANGE_ID    $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     EMAIL        $($config.Types.Text)         NOT NULL,
     CHANGE_TYPE  CHAR(1)                       NOT NULL,
-    CHANGED_AT   $($config.Types.ZonelessDate) NOT NULL
+    CHANGED_AT   $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL
 )
+/
+
+-- The triggers the two Delta Import guides prescribe; see the SQL Server script for the commentary.
+CREATE OR REPLACE TRIGGER TRG_EMPLOYEES_IDM_CHANGE_LOG
+AFTER INSERT OR UPDATE OR DELETE ON EMPLOYEES
+FOR EACH ROW
+BEGIN
+    IF INSERTING THEN
+        INSERT INTO IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE) VALUES (:NEW.EMPLOYEE_ID, 'I');
+        INSERT INTO V_EMPLOYEES_CHANGE_LOG (EMAIL, CHANGE_TYPE) VALUES (:NEW.EMAIL, 'I');
+    ELSIF UPDATING THEN
+        INSERT INTO IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE) VALUES (:NEW.EMPLOYEE_ID, 'U');
+        INSERT INTO V_EMPLOYEES_CHANGE_LOG (EMAIL, CHANGE_TYPE) VALUES (:NEW.EMAIL, 'U');
+    ELSE
+        INSERT INTO IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE) VALUES (:OLD.EMPLOYEE_ID, 'D');
+        INSERT INTO V_EMPLOYEES_CHANGE_LOG (EMAIL, CHANGE_TYPE) VALUES (:OLD.EMAIL, 'D');
+    END IF;
+END;
+/
+
+-- A related table's change is a change to its parent.
+CREATE OR REPLACE TRIGGER TRG_EMPLOYEE_PHONES_IDM_CHANGE_LOG
+AFTER INSERT OR UPDATE OR DELETE ON EMPLOYEE_PHONES
+FOR EACH ROW
+BEGIN
+    INSERT INTO IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE)
+    VALUES (COALESCE(:NEW.EMPLOYEE_ID, :OLD.EMPLOYEE_ID), 'U');
+END;
+/
+
+CREATE OR REPLACE TRIGGER TRG_EMPLOYEES_LAST_MODIFIED
+BEFORE UPDATE ON EMPLOYEES
+FOR EACH ROW
+BEGIN
+    :NEW.LAST_MODIFIED := SYSTIMESTAMP;
+END;
+/
+
+CREATE OR REPLACE TRIGGER TRG_EMPLOYEE_PHONES_LAST_MODIFIED
+BEFORE UPDATE ON EMPLOYEE_PHONES
+FOR EACH ROW
+BEGIN
+    :NEW.LAST_MODIFIED := SYSTIMESTAMP;
+END;
 /
 
 -- Export target with a sequence-generated key, returned via RETURNING ... INTO an output parameter.
@@ -454,14 +594,17 @@ CREATE TABLE APP_USERS (
     FTE           $($config.Types.Decimal),
     IS_ENABLED    $($config.Types.Boolean)      NOT NULL,
     STARTS_ON     $($config.Types.ZonelessDate),
-    STARTS_AT     $($config.Types.OffsetDate)
+    STARTS_AT     $($config.Types.OffsetDate),
+    -- A watermark column on every table in the shared document; see the SQL Server script.
+    LAST_MODIFIED $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL
 )
 /
 
 CREATE TABLE APP_USER_ROLES (
-    ROLE_ID    $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    USER_ID    $($config.Types.Integer) NOT NULL,
-    ROLE_NAME  $($config.Types.Text)    NOT NULL,
+    ROLE_ID        $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    USER_ID        $($config.Types.Integer)      NOT NULL,
+    ROLE_NAME      $($config.Types.Text)         NOT NULL,
+    LAST_MODIFIED  $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL,
     CONSTRAINT FK_ROLES_USER FOREIGN KEY (USER_ID) REFERENCES APP_USERS (ID) ON DELETE CASCADE
 )
 /
@@ -469,7 +612,8 @@ CREATE TABLE APP_USER_ROLES (
 CREATE TABLE APP_ACCOUNTS_NATURAL (
     ACCOUNT_CODE  $($config.Types.NaturalAnchor) NOT NULL PRIMARY KEY,
     DISPLAY_NAME  $($config.Types.Text),
-    IS_ENABLED    $($config.Types.Boolean)       NOT NULL
+    IS_ENABLED    $($config.Types.Boolean)       NOT NULL,
+    LAST_MODIFIED $($config.Types.ZonelessDate)  DEFAULT SYSTIMESTAMP NOT NULL
 )
 /
 
@@ -478,9 +622,10 @@ CREATE TABLE APP_ACCOUNTS_NATURAL (
 -- driver hands a RAW(16) back as bytes on import, and that a generated one comes back from
 -- RETURNING ... INTO on export.
 CREATE TABLE GUID_KEYED_PEOPLE (
-    PERSON_ID   $($config.Types.Guid) DEFAULT SYS_GUID() NOT NULL PRIMARY KEY,
-    FULL_NAME   $($config.Types.Text) NOT NULL,
-    DEPARTMENT  $($config.Types.Text)
+    PERSON_ID      $($config.Types.Guid) DEFAULT SYS_GUID() NOT NULL PRIMARY KEY,
+    FULL_NAME      $($config.Types.Text) NOT NULL,
+    DEPARTMENT     $($config.Types.Text),
+    LAST_MODIFIED  $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL
 )
 /
 
@@ -571,9 +716,13 @@ GO
 -- the export rows failed against residue rather than against the code under test. The source rows are
 -- restored wholesale from the same SQL the seed uses, so any cell mutation, present or future, is
 -- undone without this script having to know about it.
-DELETE FROM hr.IDM_CHANGE_LOG;
+-- The change logs are cleared AFTER the source rows go (the triggers log the deletions as they go)
+-- and BEFORE they come back (the triggers log the creations), so the log ends exactly as a fresh
+-- seed leaves it.
 DELETE FROM hr.EMPLOYEE_PHONES;
 DELETE FROM hr.EMPLOYEES;
+DELETE FROM hr.IDM_CHANGE_LOG;
+DELETE FROM hr.V_EMPLOYEES_CHANGE_LOG;
 GO
 
 $(New-SqlServerSourceRowInserts -Rows $Rows)
@@ -603,9 +752,11 @@ DELETE FROM GUID_PEOPLE_CHANGE_LOG;
 
 -- The matrix's rows mutate the SOURCE tables too (see the SQL Server reset above for the history);
 -- restore them wholesale from the same SQL the seed uses.
-DELETE FROM IDM_CHANGE_LOG;
+-- Change logs cleared after the source rows go and before they come back; see the SQL Server reset.
 DELETE FROM EMPLOYEE_PHONES;
 DELETE FROM EMPLOYEES;
+DELETE FROM IDM_CHANGE_LOG;
+DELETE FROM V_EMPLOYEES_CHANGE_LOG;
 
 $(New-OracleSourceRowInserts -Rows $Rows)
 

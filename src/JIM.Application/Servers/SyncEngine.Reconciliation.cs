@@ -40,11 +40,18 @@ public partial class SyncEngine
             return;
         }
 
-        // Only process exports that have been executed and are awaiting confirmation
+        // Only process exports that have been executed and are awaiting confirmation. An export
+        // written in part (issue #1398: the row went, a reference is still owed) sits Pending while
+        // it waits, but its written changes still need confirming, so a Pending export with changes
+        // awaiting confirmation is reconciled too. A Pending export that has written nothing yet has
+        // nothing to confirm and is left exactly as it is, status included.
         if (pendingExport.Status != PendingExportStatus.Exported &&
-            pendingExport.Status != PendingExportStatus.ExportNotConfirmed)
+            pendingExport.Status != PendingExportStatus.ExportNotConfirmed &&
+            !pendingExport.AttributeValueChanges.Any(ac =>
+                ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
+                ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed))
         {
-            Log.Debug("ReconcileCsoAgainstPendingExport: PendingExport {ExportId} status is {Status}, not awaiting confirmation. Skipping.",
+            Log.Debug("ReconcileCsoAgainstPendingExport: PendingExport {ExportId} status is {Status} with nothing awaiting confirmation. Skipping.",
                 pendingExport.Id, pendingExport.Status);
             return;
         }
@@ -578,17 +585,23 @@ public partial class SyncEngine
     {
         var allFailed = pendingExport.AttributeValueChanges.All(ac => ac.Status == PendingExportAttributeChangeStatus.Failed);
         var anyFailed = pendingExport.AttributeValueChanges.Any(ac => ac.Status == PendingExportAttributeChangeStatus.Failed);
-        var anyPendingOrRetry = pendingExport.AttributeValueChanges.Any(ac =>
-            ac.Status == PendingExportAttributeChangeStatus.Pending ||
-            ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+        var anyRetry = pendingExport.AttributeValueChanges.Any(ac => ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+        var anyPending = pendingExport.AttributeValueChanges.Any(ac => ac.Status == PendingExportAttributeChangeStatus.Pending);
 
         if (allFailed)
         {
             pendingExport.Status = PendingExportStatus.Failed;
         }
-        else if (anyPendingOrRetry)
+        else if (anyRetry)
         {
             pendingExport.Status = PendingExportStatus.ExportNotConfirmed;
+        }
+        else if (anyPending)
+        {
+            // Nothing sent and unconfirmed; what remains has simply not been sent yet (a reference
+            // still owed after a partial write, issue #1398, or a change merged in since the last
+            // export). ExportNotConfirmed would claim a write that did not stick.
+            pendingExport.Status = PendingExportStatus.Pending;
         }
         else if (anyFailed)
         {

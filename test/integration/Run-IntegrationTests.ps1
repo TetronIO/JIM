@@ -625,6 +625,7 @@ function Show-ScenarioMenu {
                 "*Scenario15*" { "SCIM 2.0 Client Connector (import, join, bulk export, confirm)" }
                 "*Scenario16*" { "JIM SQL Connector provider x capability matrix (SQL Server, Oracle)" }
                 "*Scenario17*" { "Initial Password provisioning (account holder signs in and changes it)" }
+                "*Scenario18*" { "Writeback into the source Connected System (derived values flow; contributed values are not echoed)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1251,7 +1252,8 @@ $templateIrrelevantScenarios = @(
     "*Scenario14*",  # Attribute Priority - fixed six-user dataset per suffix, no template scaling
     "*Scenario15*",  # SCIM Connector - data comes from the SCIM test provider's own seed and a bespoke CSV
     "*Scenario16*",  # JIM SQL Connector matrix - its own deterministic SQL seeder sizes the data, not Template
-    "*Scenario17*"   # Initial Password - asserts against one account; a larger template only lengthens the export
+    "*Scenario17*",  # Initial Password - asserts against one account; a larger template only lengthens the export
+    "*Scenario18*"   # Writeback To Source - three seeded people; the question is per-object, not per-population
 )
 
 function Test-TemplateRelevant {

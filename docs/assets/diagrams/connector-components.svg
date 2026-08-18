@@ -18,7 +18,7 @@
 <!-- expressed with <g> groups instead. -->
 <svg class="jim-diagram" viewBox="0 0 1160 500" role="img" aria-labelledby="jimdg-cc-title jimdg-cc-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-cc-title">Inside the Connectors library</title>
-  <desc id="jimdg-cc-desc">The JIM.Worker import and export processors invoke the connectors in the JIM.Connectors library. The LDAP Connector reads and writes Directory Services over LDAP and LDAPS; the File Connector reads and writes CSV and flat files, including HR exports; the SCIM 2.0 Connector reads and writes cloud applications that publish a SCIM 2.0 service provider interface. The SQL Connector, one connector covering SQL Server, PostgreSQL, MySQL and Oracle, is in development.</desc>
+  <desc id="jimdg-cc-desc">The JIM.Worker import and export processors invoke the connectors in the JIM.Connectors library. The LDAP Connector reads and writes Directory Services over LDAP and LDAPS; the File Connector reads and writes CSV and flat files, including HR exports; the SCIM 2.0 Connector reads and writes cloud applications that publish a SCIM 2.0 service provider interface; the SQL Connector reads and writes enterprise databases, Microsoft SQL Server and Oracle Database, through managed drivers.</desc>
   <g id="jimdg-cc-worker">
     <rect class="jimdg-stage" x="430" y="20" width="300" height="64" rx="8"/>
     <text class="jimdg-stage-label" x="580" y="46">JIM.Worker</text>
@@ -34,9 +34,9 @@
     <rect class="jimdg-chip" x="355" y="220" width="210" height="70" rx="8"/>
     <text class="jimdg-chip-label" x="460" y="250">File Connector</text>
     <text class="jimdg-chip-sub" x="460" y="270">CSV &amp; flat files</text>
-    <rect class="jimdg-chip-planned" x="595" y="220" width="210" height="70" rx="8"/>
-    <text class="jimdg-chip-label-planned" x="700" y="250">SQL Connector</text>
-    <text class="jimdg-chip-sub-planned" x="700" y="270">(in development)</text>
+    <rect class="jimdg-chip" x="595" y="220" width="210" height="70" rx="8"/>
+    <text class="jimdg-chip-label" x="700" y="250">SQL Connector</text>
+    <text class="jimdg-chip-sub" x="700" y="270">SQL Server · Oracle</text>
     <rect class="jimdg-chip" x="835" y="220" width="210" height="70" rx="8"/>
     <text class="jimdg-chip-label" x="940" y="250">SCIM 2.0 Connector</text>
     <text class="jimdg-chip-sub" x="940" y="270">SCIM 2.0 · HTTPS</text>
@@ -48,9 +48,9 @@
     <rect class="jimdg-system" x="350" y="410" width="220" height="64" rx="8"/>
     <text class="jimdg-system-name" x="460" y="438">File Systems</text>
     <text class="jimdg-system-sub" x="460" y="459">CSV · HR exports</text>
-    <rect class="jimdg-system-planned" x="590" y="410" width="220" height="64" rx="8"/>
-    <text class="jimdg-system-name-planned" x="700" y="438">Enterprise Databases</text>
-    <text class="jimdg-system-sub-planned" x="700" y="459">SQL (in development)</text>
+    <rect class="jimdg-system" x="590" y="410" width="220" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="700" y="438">Enterprise Databases</text>
+    <text class="jimdg-system-sub" x="700" y="459">SQL Server · Oracle</text>
     <rect class="jimdg-system" x="830" y="410" width="220" height="64" rx="8"/>
     <text class="jimdg-system-name" x="940" y="438">Cloud Applications</text>
     <text class="jimdg-system-sub" x="940" y="459">SCIM 2.0 service providers</text>
@@ -60,8 +60,8 @@
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(220,220) rotate(159.3)"/>
     <line class="jimdg-flow" x1="580" y1="84" x2="466.6" y2="212.5"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(460,220) rotate(131.4)"/>
-    <line class="jimdg-spoke-planned" x1="580" y1="84" x2="693.4" y2="212.5"/>
-    <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(700,220) rotate(48.6)"/>
+    <line class="jimdg-flow" x1="580" y1="84" x2="693.4" y2="212.5"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(700,220) rotate(48.6)"/>
     <line class="jimdg-flow" x1="580" y1="84" x2="930.6" y2="216.5"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(940,220) rotate(20.7)"/>
     <line class="jimdg-spoke" x1="220" y1="300" x2="220" y2="400"/>
@@ -70,8 +70,9 @@
     <line class="jimdg-spoke" x1="460" y1="300" x2="460" y2="400"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(460,290) rotate(-90)"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(460,410) rotate(90)"/>
-    <line class="jimdg-spoke-planned" x1="700" y1="290" x2="700" y2="400"/>
-    <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(700,410) rotate(90)"/>
+    <line class="jimdg-spoke" x1="700" y1="300" x2="700" y2="400"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(700,290) rotate(-90)"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(700,410) rotate(90)"/>
     <line class="jimdg-spoke" x1="940" y1="300" x2="940" y2="400"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(940,290) rotate(-90)"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(940,410) rotate(90)"/>
@@ -92,6 +93,14 @@
     <circle class="jimdg-packet" r="4.5">
       <animateMotion dur="2.4s" begin="-1.6s" repeatCount="indefinite" path="M580,86 L468,211"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-1.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.2s" begin="-0.3s" repeatCount="indefinite" path="M700,302 L700,398"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.2s" begin="-0.3s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.2s" begin="-1.4s" repeatCount="indefinite" path="M700,398 L700,302"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.2s" begin="-1.4s" repeatCount="indefinite"/>
     </circle>
     <circle class="jimdg-packet" r="4.5">
       <animateMotion dur="2.2s" begin="-1.7s" repeatCount="indefinite" path="M940,302 L940,398"/>

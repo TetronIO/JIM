@@ -135,21 +135,27 @@ $matrixRows = @(
     }
     @{
         name = 'Delta.ChangeLogTable'
-        description = 'Creates, updates and deletes propagated; watermark persisted and honoured'
+        description = 'Creates, updates, a related-table change and a deletion propagated from the change log; watermark persisted and honoured'
         tiers = @('Quick', 'Default', 'FullMatrix')
         providers = @('SqlServer', 'Oracle')
     }
     @{
         name = 'Delta.WatermarkColumn'
-        description = 'Creates and updates propagated; a deletion is NOT detected, as documented'
+        description = 'Creates, updates and a related-table change propagated from watermark columns; a deletion is NOT detected, as documented'
         tiers = @('Default', 'FullMatrix')
         providers = @('SqlServer', 'Oracle')
     }
     @{
         name = 'Delta.Fallback'
-        description = 'Missing watermark falls back to Full Import with the standard warning'
+        description = 'An unusable watermark (the mode changed) falls back to Full Import with the standard warning'
         tiers = @('Default', 'FullMatrix')
         providers = @('SqlServer', 'Oracle')
+    }
+    @{
+        name = 'Delta.RowversionWatermark'
+        description = 'A SQL Server rowversion column as the watermark: the Binary watermark round-trips as a boundary'
+        tiers = @('Default', 'FullMatrix')
+        providers = @('SqlServer')
     }
     @{
         name = 'Export.Create'

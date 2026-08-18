@@ -881,7 +881,8 @@
       "jim.testsupport": {
         "type": "Project",
         "dependencies": {
-          "NUnit": "[4.6.1, )"
+          "NUnit": "[4.6.1, )",
+          "Npgsql": "[10.0.3, )"
         }
       },
       "jim.utilities": {

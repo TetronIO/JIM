@@ -187,7 +187,7 @@ Consequence for this plan: no preview-specific notifier is built (see Progress n
 
 ### Phase 1: #288 engine core (separate issue)
 
-The other true build dependency. Scope belongs to #288; this plan defines only what the framework consumes:
+The other true build dependency. Scope belongs to #288; this plan defines only what the framework consumes. **Underway (Aug 2026):** D1 to D5 settled and the work planned in [SYNC_PREVIEW_ENGINE.md](SYNC_PREVIEW_ENGINE.md), outbound extraction first; its Phase 2 delivers the evaluation-only outbound path #1115 waits on.
 
 - [ ] Inbound: `SyncEngine` is already a pure decision engine; expose an orchestration path that evaluates projection, join, and Attribute Flow decisions for a given CSO/MVO population **without persisting**, returning decision records.
 - [ ] Outbound: extract an evaluation-only path from `ExportEvaluationServer` (today it stages Pending Exports as it evaluates); generalise `SyncRunMode.PreviewOnly` beyond export execution so the mode means "evaluate, never persist" across the pipeline.

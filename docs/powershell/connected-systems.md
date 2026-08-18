@@ -701,7 +701,7 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeI
 ```
 
 ```powershell title="Correct the data type of an Oracle NUMBER column"
-# Oracle has one numeric type, so a NUMBER(10) employee identifier is read as a Decimal by default.
+# Oracle has one numeric type, so a NUMBER(10) employee identifier is read as a Long Number by default.
 # Recording it as a whole number lets it flow into the built-in Employee Number Metaverse Attribute.
 Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 5 -Type Integer
 ```
@@ -1370,7 +1370,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All 
 ### Output
 
 - **List / ListAll**: Pending Export operations with export type (Add, Update, Delete) and summary of changes.
-- **ById**: Detailed view of a single Pending Export, including all attribute changes.
+- **ById**: Detailed view of a single Pending Export, including all attribute changes. `UnresolvedReferences` lists each reference change not yet written (`AttributeName`, `ReferencedMetaverseObjectId`, `ReferencedMetaverseObjectDisplayName`) with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object exists in this Connected System but has no anchor yet) or `NotInTargetSystem` (the referenced object has no Connected System Object in this Connected System). See [Unresolved reference handling on export](../configuration/connected-systems.md#on-export).
 - **AttributeChanges / AttributeChangesAll**: Paged or complete list of changes for a specific multi-valued attribute.
 
 ### Examples

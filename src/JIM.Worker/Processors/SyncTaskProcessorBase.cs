@@ -46,10 +46,10 @@ public abstract class SyncTaskProcessorBase
     protected Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
     protected ExportEvaluationCache? _exportEvaluationCache;
 
-    // Run-scoped export evaluation cache for reference recall staging (#1003), built once per run
-    // with sourceConnectedSystemId 0: recall is state assertion, so no source system is excluded
-    // (Q3 does not apply to deletions), which is why _exportEvaluationCache cannot be shared.
-    // Eliminates the per-flush Synchronisation Rule reload inside StageReferenceRecallExportsAsync.
+    // Run-scoped export evaluation cache for reference recall staging (#1003), built once per run.
+    // A separate instance from _exportEvaluationCache because each cache's per-page refresh loads a
+    // different Metaverse Object set, and sharing one would let each refresh clobber the other's
+    // lookups. Eliminates the per-flush Synchronisation Rule reload inside StageReferenceRecallExportsAsync.
     protected ExportEvaluationCache? _recallExportEvaluationCache;
 
     // Cache for drift detection: maps (ConnectedSystemId, MvoAttributeId) to import mappings
@@ -1711,7 +1711,6 @@ public abstract class SyncTaskProcessorBase
                 result = await _syncServer.EvaluateExportRulesWithNoNetChangeDetectionAsync(
                     mvo,
                     changedAttributes,
-                    _connectedSystem,
                     _exportEvaluationCache,
                     deferSave: true,
                     removedAttributes: removedAttributes,
@@ -1953,7 +1952,6 @@ public abstract class SyncTaskProcessorBase
         {
             var deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
                 mvo,
-                _connectedSystem,
                 _exportEvaluationCache!);
 
             // Track CSOs deprovisioned this page (newly staged or reused Delete Pending Exports; they
@@ -3280,6 +3278,11 @@ public abstract class SyncTaskProcessorBase
                 deletionCandidatesByCsoId[cso.Id] = mvo;
         }
 
+        // One working set for the whole flush (#288 Phase 1a): the bulk evaluation records the Delete Pending
+        // Exports it stages, so when the per-MVO fallback below re-evaluates the same objects it reuses them
+        // from the working set instead of reading this flush's own writes back from the database.
+        var exportEvaluationWorkingSet = new ExportEvaluationWorkingSet();
+
         var deletedMvoIds = new List<Guid>();
         try
         {
@@ -3295,7 +3298,8 @@ public abstract class SyncTaskProcessorBase
                     // consider export Synchronisation Rules to every system, including this
                     // run's source (Q3 does not apply to deletions).
                     var deleteExports = await _syncServer.EvaluateMvoDeletionsAsync(
-                        deletionsToProcess.Select(d => d.Mvo).ToList(), _recallExportEvaluationCache);
+                        deletionsToProcess.Select(d => d.Mvo).ToList(), _recallExportEvaluationCache,
+                        exportEvaluationWorkingSet);
                     if (deleteExports.Count > 0)
                     {
                         foreach (var deleteExport in deleteExports)
@@ -3338,7 +3342,8 @@ public abstract class SyncTaskProcessorBase
             // succeeded and only the delete failed, its CSO disconnects are already persisted, so the
             // fallback's re-evaluation finds no joined CSOs and returns nothing. Anything the fallback does
             // stage is merged over the top, deduplicated by Pending Export id.
-            deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(deletionsToProcess, deletePendingExports));
+            deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(
+                deletionsToProcess, deletePendingExports, exportEvaluationWorkingSet));
         }
 
         // Deletion cascade (#1044): fold the staged delete Pending Exports into Activity reporting, so the
@@ -3617,9 +3622,13 @@ public abstract class SyncTaskProcessorBase
     /// Export id, so the caller can report them on the Activity (#1044). A Pending Export ensured for an object
     /// whose deletion then failed is still collected: the export is staged and pending, so an administrator must
     /// see it.</param>
+    /// <param name="exportEvaluationWorkingSet">The flush's working set (#288 Phase 1a), carrying the Delete
+    /// Pending Exports the failed bulk attempt already staged so this fallback reuses them without re-reading
+    /// the flush's own writes from the database.</param>
     private async Task<List<Guid>> ProcessMvoDeletionsIndividuallyAsync(
         List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletionsToProcess,
-        Dictionary<Guid, PendingExport> deletePendingExports)
+        Dictionary<Guid, PendingExport> deletePendingExports,
+        ExportEvaluationWorkingSet exportEvaluationWorkingSet)
     {
         var deletedMvoIds = new List<Guid>();
         foreach (var (mvo, finalAttributeValues) in deletionsToProcess)
@@ -3629,7 +3638,8 @@ public abstract class SyncTaskProcessorBase
                 // Create delete Pending Exports for CSOs whose export Synchronisation Rule action
                 // is Delete (issue #655). This handles WhenAuthoritativeSourceDisconnected where
                 // target CSOs still exist. Recall cache: Q3 does not apply to deletions.
-                var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(mvo, _recallExportEvaluationCache);
+                var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(
+                    mvo, _recallExportEvaluationCache, exportEvaluationWorkingSet);
                 if (deleteExports.Count > 0)
                 {
                     foreach (var deleteExport in deleteExports)

@@ -1,9 +1,10 @@
 # Synchronisation Preview / What-If Evaluation Engine
 
-- **Status:** Planned
+- **Status:** Doing (decisions D1 to D5 settled Aug 2026; outbound extraction underway: Phase 0 and all Phase 1 extraction slices (1a to 1e) complete)
 - **Created:** 2026-07-07
 - **Author:** Jay Van der Zant
 - **Issue:** [#288](https://github.com/TetronIO/JIM/issues/288)
+- **Plan:** [SYNC_PREVIEW_ENGINE.md](../../plans/doing/SYNC_PREVIEW_ENGINE.md)
 
 ## Problem Statement
 
@@ -209,7 +210,16 @@ These are the substantive design questions. Each is carried into "Decisions Need
 
 ## Decisions Needed
 
-The product owner must settle the following before the implementation plan is generated. Each carries a recommendation.
+All five were settled in Aug 2026; the record below each option list states the outcome. Two facts found during the pre-decision code review informed them, and are worth keeping with the decisions: `SyncEngine` is already a pure decision engine (no I/O, no async, no database access; its own doc comment says so), so the inbound half of Option C already exists; and the export performance work (PR #334 onward) optimised the *execution* pipeline, not the evaluation braid, with the optimised staging paths already accumulating and bulk-persisting, so unbraiding continues that direction rather than reversing it.
+
+- **D1: DECIDED, Option C** (product owner, Aug 2026). Extract the shared pure evaluation core; persistence becomes a separate apply step. The extracted outbound decisions join `SyncEngine` as partials (precedent: `SyncEngine.PreExportReconciliation.cs` already holds export-adjacent decisions), and `ExportEvaluationServer` shrinks to orchestration plus apply, symmetric with `SyncImportTaskProcessor` inbound.
+- **D2: DECIDED, Option B with C's budget and truncation flag**, per the recommendation.
+- **D3: DECIDED, Option B for v1.0** (engine plus `JimApplication` API; no administrator surface yet). This deliberately departs from the PRD's recommendation of A: a portal-only "Preview Sync" button would violate the surface parity rule added after #1104, and shipping all three surfaces (C) is more than the milestone needs while #1115 waits on the engine. The administrator surface follows as its own issue with full parity when it comes.
+- **D4: DECIDED, Option B** (unpersisted `SyncOutcomeNode` DTO), which follows from D1 = C per the recommendation.
+- **D5: DECIDED, Option B** (configuration as a parameter). `SyncEngine`'s existing methods already take their configuration as arguments (`EvaluateProjection(cso, activeSyncRules)`), so this is the established style, not an addition; the outbound extraction must follow it.
+- **Sequencing (not a lettered decision in this PRD, settled alongside them): outbound first.** The outbound extraction is the risky half and the one #1115 is blocked on, and the Scenario 8 performance baselines exist to gate it; the inbound preview orchestration follows on the settled contract.
+
+Each option list is retained below as the point-in-time record of what was considered.
 
 ### D1. Read-only reuse of the real sync code paths, vs a separate shadow evaluator
 

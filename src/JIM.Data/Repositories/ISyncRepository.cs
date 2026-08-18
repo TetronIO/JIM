@@ -377,6 +377,13 @@ public interface ISyncRepository
     Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// The cached display names of the given Metaverse Objects, keyed by id, for naming a referenced
+    /// object in an export's unresolved-reference message without loading it (issue #1398). Objects
+    /// that do not exist are absent from the result.
+    /// </summary>
+    Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on Metaverse Objects the sync engine has re-evaluated for export
     /// scope (issue #892). No-op when <paramref name="ids"/> is empty.
     /// </summary>

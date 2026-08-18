@@ -9,7 +9,7 @@ hide:
 
 --8<-- "assets/diagrams/system-context.svg"
 
-<p class="jim-diagram-caption">JIM in context: administrators and automation work through its UI and API while it synchronises identity data with your systems. Dashed elements are not yet available.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
+<p class="jim-diagram-caption">JIM in context: administrators and automation work through its UI and API while it synchronises identity data with your systems.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ## ✨ Key Features
 

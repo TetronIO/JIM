@@ -17,4 +17,12 @@ public class PendingExportDetailResult
     /// count of changes in the database for that attribute.
     /// </summary>
     public Dictionary<string, int> AttributeChangeTotalCounts { get; set; } = new();
+
+    /// <summary>
+    /// The reference changes among the loaded attribute value changes that have not been written
+    /// yet, each with the reason (issue #1398). Empty when the Pending Export has no unresolved
+    /// references. Covers the loaded (capped) changes only; a multi-valued attribute beyond the cap
+    /// is paged through the attribute-changes endpoint.
+    /// </summary>
+    public List<PendingExportUnresolvedReference> UnresolvedReferences { get; set; } = new();
 }

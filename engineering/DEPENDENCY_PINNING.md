@@ -38,6 +38,8 @@ Pinning stops substitution at build time; the following controls verify what is 
 
 Adding a **new** NuGet package or other third-party dependency is a separate process from updating a pinned version: it requires explicit user approval before it is added. See root `CLAUDE.md` > "Third-Party Dependency Governance" for the full notify-research-present-approve flow and the maintainer preference order (Microsoft-maintained > established corporate-backed > .NET Foundation > well-maintained OSS with identifiable maintainers).
 
+Where an approved dependency's licence obliges a distribution to carry its terms (the Oracle managed driver's Free Distribution, Hosting, and Use Terms do), the licence text goes in `third-party-notices/` with a row in its `README.md`; every image copies that directory to `/app/third-party-notices/`, and the customer-facing connector page states the terms.
+
 ## Operations
 
 **When a locked-mode restore fails locally** (a direct package version changed and the lock file has not caught up):

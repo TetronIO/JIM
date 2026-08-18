@@ -1098,7 +1098,7 @@ public class ExportEvaluationNoChangeTests
 
         // Act: evaluate export rules with removed attributes
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem, cache,
+            mvo, changedAttributes, cache,
             removedAttributes: removedAttributes);
 
         // Assert: a Pending Export should be created with null-clearing attribute changes

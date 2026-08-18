@@ -757,8 +757,7 @@ public class Worker : BackgroundService
 
             // One export evaluation cache for the batch, so per-MVO deletion evaluation (issue #655)
             // and reference recall staging do not re-load Synchronisation Rules for every object.
-            // Source system 0: deletions must consider export rules to every system.
-            var exportEvaluationCache = await jim.ExportEvaluation.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+            var exportEvaluationCache = await jim.ExportEvaluation.BuildExportEvaluationCacheAsync();
 
             // Connected System id to name, so each staged export names the system it targets (the convention for
             // every PendingExportCreated outcome; the object concerned is named by the execution item beside it).
