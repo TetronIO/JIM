@@ -3072,17 +3072,19 @@ public class SyncImportTaskProcessor
                 if (UsesSecondaryReferenceResolution(attrValue, externalIdAttribute))
                 {
                     unresolvedSecondaryValues.Add(attrValue.UnresolvedReferenceValue!);
-                    continue;
                 }
-
-                foreach (var candidate in FallbackCandidatesFor(attrValue, candidatesByTypeId, primaryAnchorCandidates))
+                else
                 {
-                    if (!primaryValueGroups.TryGetValue(candidate.AnchorAttribute.Id, out var values))
+                    foreach (var candidate in FallbackCandidatesFor(attrValue, candidatesByTypeId, primaryAnchorCandidates))
                     {
-                        values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        primaryValueGroups[candidate.AnchorAttribute.Id] = values;
+                        if (!primaryValueGroups.TryGetValue(candidate.AnchorAttribute.Id, out var values))
+                        {
+                            values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            primaryValueGroups[candidate.AnchorAttribute.Id] = values;
+                        }
+
+                        values.Add(attrValue.UnresolvedReferenceValue!);
                     }
-                    values.Add(attrValue.UnresolvedReferenceValue!);
                 }
             }
 
@@ -3130,13 +3132,16 @@ public class SyncImportTaskProcessor
                 {
                     // Probe each candidate Object Type's results; more than one hit is an ambiguity, handled
                     // alongside the in-memory ambiguities below rather than resolved by guessing.
-                    var hits = new List<(ConnectedSystemObject Cso, string TypeName)>();
-                    foreach (var candidate in FallbackCandidatesFor(attrValue, candidatesByTypeId, primaryAnchorCandidates))
-                    {
-                        if (dbPrimaryResultsByAttribute.TryGetValue(candidate.AnchorAttribute.Id, out var groupResults) &&
-                            groupResults.TryGetValue(attrValue.UnresolvedReferenceValue!, out var hit))
-                            hits.Add((hit, candidate.ObjectType.Name));
-                    }
+                    var hits = FallbackCandidatesFor(attrValue, candidatesByTypeId, primaryAnchorCandidates)
+                        .Select(candidate => (
+                            Cso: dbPrimaryResultsByAttribute.TryGetValue(candidate.AnchorAttribute.Id, out var groupResults) &&
+                                 groupResults.TryGetValue(attrValue.UnresolvedReferenceValue!, out var hit)
+                                ? hit
+                                : null,
+                            TypeName: candidate.ObjectType.Name))
+                        .Where(pair => pair.Cso != null)
+                        .Select(pair => (Cso: pair.Cso!, pair.TypeName))
+                        .ToList();
 
                     if (hits.Count > 1)
                     {
@@ -3398,31 +3403,26 @@ public class SyncImportTaskProcessor
             return InMemoryReferenceOutcome.NotFound;
         }
 
-        var matches = new List<(ConnectedSystemObject Match, string TypeName)>();
-        if (externalIdAttribute.IsSecondaryExternalId)
-        {
-            // Secondary External ID resolution (LDAP DN semantics) stays type-agnostic by design: a DN is
-            // unique across the directory, so every partition is probed and more than one hit means the
-            // system's own data contradicts that.
-            foreach (var (partitionTypeId, partition) in lookups.Partitions)
-            {
-                var partitionMatch = ProbeSecondaryLookup(partition, externalIdAttribute, unresolvedValue);
-                if (partitionMatch != null)
-                    matches.Add((partitionMatch, candidatesByTypeId.TryGetValue(partitionTypeId, out var candidate) ? candidate.ObjectType.Name : partitionMatch.Type?.Name ?? partitionTypeId.ToString()));
-            }
-        }
-        else
-        {
-            foreach (var candidate in allCandidates)
-            {
-                if (!lookups.Partitions.TryGetValue(candidate.ObjectType.Id, out var partition))
-                    continue;
-
-                var partitionMatch = ProbePrimaryLookup(partition, candidate.AnchorAttribute, unresolvedValue);
-                if (partitionMatch != null)
-                    matches.Add((partitionMatch, candidate.ObjectType.Name));
-            }
-        }
+        // Secondary External ID resolution (LDAP DN semantics) stays type-agnostic by design: a DN is
+        // unique across the directory, so every partition is probed and more than one hit means the
+        // system's own data contradicts that.
+        var matches = externalIdAttribute.IsSecondaryExternalId
+            ? lookups.Partitions
+                .Select(partition => (
+                    Match: ProbeSecondaryLookup(partition.Value, externalIdAttribute, unresolvedValue),
+                    TypeName: candidatesByTypeId.TryGetValue(partition.Key, out var candidate) ? candidate.ObjectType.Name : partition.Key.ToString()))
+                .Where(pair => pair.Match != null)
+                .Select(pair => (Match: pair.Match!, pair.TypeName))
+                .ToList()
+            : allCandidates
+                .Select(candidate => (
+                    Match: lookups.Partitions.TryGetValue(candidate.ObjectType.Id, out var partition)
+                        ? ProbePrimaryLookup(partition, candidate.AnchorAttribute, unresolvedValue)
+                        : null,
+                    TypeName: candidate.ObjectType.Name))
+                .Where(pair => pair.Match != null)
+                .Select(pair => (Match: pair.Match!, pair.TypeName))
+                .ToList();
 
         switch (matches.Count)
         {

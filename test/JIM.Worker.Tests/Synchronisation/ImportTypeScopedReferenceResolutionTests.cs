@@ -249,13 +249,13 @@ public class ImportTypeScopedReferenceResolutionTests
         // contrived (a manager who is a group), deliberately: it is the exact mirror of MEMBER -> SOURCE_USER,
         // so the two tests together prove the declared target decides the partition, not the partition order.
         var userType = connectedSystem!.ObjectTypes!.Single(t => t.Name == "SOURCE_USER");
-        var groupType = connectedSystem.ObjectTypes!.Single(t => t.Name == "SOURCE_GROUP");
+        var groupType = connectedSystem!.ObjectTypes!.Single(t => t.Name == "SOURCE_GROUP");
         var managerAttribute = userType.Attributes.Single(a => a.Name == MockSourceSystemAttributeNames.MANAGER.ToString());
         managerAttribute.ReferencedObjectTypeId = groupType.Id;
         managerAttribute.ReferencedObjectType = groupType;
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformImportAsync();
 
@@ -289,7 +289,7 @@ public class ImportTypeScopedReferenceResolutionTests
         connectedSystem!.UnresolvedReferenceHandling = UnresolvedReferenceHandling.Warn;
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformImportAsync();
 
@@ -321,7 +321,7 @@ public class ImportTypeScopedReferenceResolutionTests
         connectedSystem!.UnresolvedReferenceHandling = UnresolvedReferenceHandling.Ignore;
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformImportAsync();
 
@@ -464,8 +464,8 @@ public class ImportTypeScopedReferenceResolutionTests
     /// </summary>
     private static void DeclareMemberTargetsUsers(ConnectedSystem connectedSystem)
     {
-        var userType = connectedSystem.ObjectTypes!.Single(t => t.Name == "SOURCE_USER");
-        var groupType = connectedSystem.ObjectTypes!.Single(t => t.Name == "SOURCE_GROUP");
+        var userType = connectedSystem!.ObjectTypes!.Single(t => t.Name == "SOURCE_USER");
+        var groupType = connectedSystem!.ObjectTypes!.Single(t => t.Name == "SOURCE_GROUP");
         var memberAttribute = groupType.Attributes.Single(a => a.Name == MockSourceSystemAttributeNames.MEMBER.ToString());
         memberAttribute.ReferencedObjectTypeId = userType.Id;
         memberAttribute.ReferencedObjectType = userType;
