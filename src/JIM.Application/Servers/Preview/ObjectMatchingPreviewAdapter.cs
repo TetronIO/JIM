@@ -107,15 +107,20 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
         foreach (var finding in DescribeUnusableRules(proposal, configuration))
             findings.Add(finding);
 
+        // The types the proposal still covers, gathered once: a Connected System with many Object Types would
+        // otherwise re-scan the proposal for every stored type.
+        var proposedObjectTypeIds = proposal.Rules
+            .Select(rule => ObjectTypeOf(rule, configuration))
+            .Where(objectTypeId => objectTypeId != null)
+            .ToHashSet();
+
         foreach (var objectTypeId in configuration.StoredProposal.Rules
                      .Select(rule => ObjectTypeOf(rule, configuration))
-                     .Where(id => id != null)
+                     .Where(objectTypeId => objectTypeId != null && !proposedObjectTypeIds.Contains(objectTypeId))
+                     .Select(objectTypeId => objectTypeId!.Value)
                      .Distinct())
         {
-            if (proposal.Rules.Any(rule => ObjectTypeOf(rule, configuration) == objectTypeId))
-                continue;
-
-            var objectTypeName = configuration.ObjectTypesById.GetValueOrDefault(objectTypeId!.Value)?.Name ?? "this type";
+            var objectTypeName = configuration.ObjectTypesById.GetValueOrDefault(objectTypeId)?.Name ?? "this type";
             findings.Add(new PreviewValidationFinding(
                 PreviewValidationSeverity.Warning,
                 $"The proposal leaves '{objectTypeName}' with no Object Matching Rule, so no object of that type " +
