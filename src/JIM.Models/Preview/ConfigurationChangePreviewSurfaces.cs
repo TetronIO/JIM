@@ -23,6 +23,7 @@ public static class ConfigurationChangePreviewSurfaces
     public static ActivityTargetType ToActivityTargetType(ConfigurationChangePreviewSurface surface) => surface switch
     {
         ConfigurationChangePreviewSurface.SynchronisationRule => ActivityTargetType.SynchronisationRule,
+        ConfigurationChangePreviewSurface.SynchronisationRuleScope => ActivityTargetType.SynchronisationRule,
         ConfigurationChangePreviewSurface.ConnectedSystem => ActivityTargetType.ConnectedSystem,
         ConfigurationChangePreviewSurface.MetaverseObjectType => ActivityTargetType.MetaverseObjectType,
         ConfigurationChangePreviewSurface.MetaverseAttribute => ActivityTargetType.MetaverseAttribute,
