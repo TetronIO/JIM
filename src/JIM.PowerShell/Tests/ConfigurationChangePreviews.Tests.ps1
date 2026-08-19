@@ -206,6 +206,96 @@ Describe 'New-JIMConfigurationChangePreview' {
         }
     }
 
+    Context 'Synchronisation Rule Scoping Criteria' {
+        It 'Posts the proposed criteria to the scoping-criteria preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $group = @{
+                    Type = 'All'
+                    Criteria = @(
+                        @{ ConnectedSystemAttributeId = 101; ComparisonType = 'Equals'; StringValue = 'Sales' }
+                    )
+                }
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup $group | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/42/scoping-criteria/preview'
+                $script:capturedBody.criteriaGroups.Count | Should -Be 1
+                $script:capturedBody.criteriaGroups[0].Criteria[0].StringValue | Should -BeExactly 'Sales'
+            }
+        }
+
+        It 'Sends an empty array as an empty array, because that proposes removing every criterion' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup @() | Out-Null
+
+                # Omitting the field would preview the stored criteria; an empty array is the opposite question,
+                # and dropping it would silently turn the widest proposal available into no proposal at all.
+                $script:capturedBody.ContainsKey('criteriaGroups') | Should -BeTrue
+                @($script:capturedBody.criteriaGroups).Count | Should -Be 0
+            }
+        }
+
+        It 'Keeps a nested group intact on the way to the API' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $group = @{
+                    Type = 'All'
+                    Criteria = @(@{ ConnectedSystemAttributeId = 101; ComparisonType = 'Equals'; StringValue = 'Sales' })
+                    ChildGroups = @(
+                        @{
+                            Type = 'Any'
+                            Criteria = @(
+                                @{ ConnectedSystemAttributeId = 102; ComparisonType = 'Equals'; StringValue = 'UK' },
+                                @{ ConnectedSystemAttributeId = 102; ComparisonType = 'Equals'; StringValue = 'IE' }
+                            )
+                        }
+                    )
+                }
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup $group | Out-Null
+
+                $script:capturedBody.criteriaGroups[0].ChildGroups[0].Type | Should -BeExactly 'Any'
+                $script:capturedBody.criteriaGroups[0].ChildGroups[0].Criteria.Count | Should -Be 2
+            }
+        }
+
+        It 'Requires the criteria to be stated rather than inferred from silence' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['ScopingCriteriaGroup']
+            $mandatory = $parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'SyncRuleScopingCriteria'
+            }
+            $mandatory.Mandatory | Should -BeTrue
+        }
+
+        It 'Allows the empty collection its mandatory parameter would otherwise reject' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['ScopingCriteriaGroup']
+            ($parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.AllowEmptyCollectionAttribute]
+            }) | Should -Not -BeNullOrEmpty
+        }
+    }
+
     Context 'Waiting' {
         It 'Returns the start result without polling when the proposal is blocked' {
             InModuleScope JIM {

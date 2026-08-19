@@ -35,6 +35,7 @@ Previews are available where a surface has an evaluator for it:
 - A Metaverse Object Type's [deletion settings](metaverse.md#previewing-a-deletion-settings-change), the change most worth asking about because it is the one that can make existing objects eligible for deletion the moment it is saved.
 - A Connected System's [partitions and containers](connected-systems.md#previewing-a-partition-or-container-change), where deselecting one container quietly takes everything beneath it out of import scope.
 - A Synchronisation Rule's [destructive toggles](synchronisation-rules.md#previewing-a-destructive-toggle-change): the Deprovisioning Action, which decides whether a scope exit disconnects an object or deletes it from the target system, and the Inbound Out-of-Scope Action, which decides whether objects leaving import scope keep their join.
+- A Synchronisation Rule's [Scoping Criteria](synchronisation-rules.md#previewing-a-scope-change), which decide which objects the rule manages at all: narrowing them takes objects out of scope and hands them to whichever of the two toggles above applies, while widening them projects and provisions identities nobody has counted.
 
 The panel opens with what saving would do, in one sentence, worst consequence first: a change that disconnects forty thousand objects and makes two eligible for deletion leads with the two deletions, because that is the part you cannot take back. The breakdown sits beneath it, and selecting a row lists the objects behind it.
 

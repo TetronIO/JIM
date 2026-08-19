@@ -100,6 +100,19 @@ function New-JIMConfigurationChangePreview {
         recalls what the object contributed and can trigger the Metaverse Object's deletion rules.
         Omitted previews the stored action. Read only by import Synchronisation Rules.
 
+    .PARAMETER ScopingCriteriaGroup
+        The proposed Scoping Criteria, as one hashtable per top-level criteria group. Groups are combined
+        with OR, exactly as a synchronisation combines them. Each group takes a Type of 'All' or 'Any', a
+        Criteria array, and an optional ChildGroups array of further groups nested inside it. Each
+        criterion names one attribute by id (ConnectedSystemAttributeId on an import rule,
+        MetaverseAttributeId on an export rule), a ComparisonType, and the value to compare against in the
+        field matching the attribute's data type (StringValue, IntValue, LongValue, DecimalValue,
+        DateTimeValue, BoolValue or GuidValue).
+
+        Mandatory, and an empty array is a valid and deliberate value: it proposes removing every criterion,
+        which hands the rule every object of its type. That is the widest change the Scope tab can make, so
+        it has to be asked for rather than arrived at by omission.
+
     .PARAMETER FullDataSet
         Keep every object-level detail row rather than the per-group cap's worth. Summary counts are
         exact either way; this decides only how much of the detail behind them can be read back with
@@ -172,6 +185,27 @@ function New-JIMConfigurationChangePreview {
         the next synchronisation, and how many managed objects' fate on a future scope exit changes.
 
     .EXAMPLE
+        $group = @{
+            Type = 'All'
+            Criteria = @(
+                @{ ConnectedSystemAttributeId = 101; ComparisonType = 'Equals'; StringValue = 'Sales' }
+            )
+        }
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup $group -Wait
+        $preview.ImpactCounts
+
+        Reports what narrowing an import Synchronisation Rule to the Sales department would do: how many
+        joined objects would leave scope and disconnect from their Metaverse Objects, how many unjoined
+        ones simply stop matching, and how many objects would newly enter scope and be projected.
+
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup @() -Wait
+        $preview.ImpactCounts | Where-Object transitionType -eq 'Projected'
+
+        Reports what removing every Scoping Criterion would do, which puts every object of the rule's type
+        in scope. The Projected count is how many Metaverse Objects that would create.
+
+    .EXAMPLE
         $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -InboundOutOfScopeAction Disconnect -Wait
         if (($preview.ImpactCounts | Measure-Object objectCount -Sum).Sum -eq 0) {
             Set-JIMSyncRule -Id 42 -InboundOutOfScopeAction Disconnect -PreviewActivityId $preview.ActivityId
@@ -223,6 +257,7 @@ function New-JIMConfigurationChangePreview {
         [int[]]$ExcludedContainerIds,
 
         [Parameter(Mandatory, ParameterSetName = 'SyncRuleDestructiveToggles', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleScopingCriteria', ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,
 
         [Parameter(ParameterSetName = 'SyncRuleDestructiveToggles')]
@@ -232,6 +267,10 @@ function New-JIMConfigurationChangePreview {
         [Parameter(ParameterSetName = 'SyncRuleDestructiveToggles')]
         [ValidateSet('RemainJoined', 'Disconnect')]
         [string]$InboundOutOfScopeAction,
+
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleScopingCriteria')]
+        [AllowEmptyCollection()]
+        [hashtable[]]$ScopingCriteriaGroup,
 
         [Parameter()]
         [switch]$FullDataSet,
@@ -298,6 +337,14 @@ function New-JIMConfigurationChangePreview {
             }
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'SyncRuleScopingCriteria') {
+            # Always sent, including as an empty array: omitting the field previews the rule's stored criteria,
+            # while an empty array proposes removing every one of them. The two are different questions, and the
+            # parameter is mandatory so the caller has to say which they are asking.
+            # Wrapped in @() so a single group serialises as a JSON array rather than a bare object.
+            $body.criteriaGroups = @($ScopingCriteriaGroup)
+        }
+
         if ($FullDataSet) {
             $body.deltaPersistence = 'Full'
         }
@@ -308,6 +355,10 @@ function New-JIMConfigurationChangePreview {
         }
         elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleDestructiveToggles') {
             $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/destructive-toggles/preview"
+            $subject = "Synchronisation Rule $SyncRuleId"
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleScopingCriteria') {
+            $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/preview"
             $subject = "Synchronisation Rule $SyncRuleId"
         }
         else {

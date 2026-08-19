@@ -1867,6 +1867,15 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Streams every Metaverse Object of a type with the attribute values and Connected System Object joins an
+    /// export rule's Scoping Criteria evaluation reads, for previewing a change to that rule's scope (#1436).
+    /// </summary>
+    public IAsyncEnumerable<MetaverseObject> StreamMetaverseObjectsOfType(int metaverseObjectTypeId)
+    {
+        return Application.Repository.Metaverse.StreamMetaverseObjectsOfType(metaverseObjectTypeId);
+    }
+
+    /// <summary>
     /// How many objects a single fetch of disconnection candidates asks the database for. Bounded because the id
     /// list becomes an <c>IN</c> clause, and a preview's population can run to hundreds of thousands.
     /// </summary>
