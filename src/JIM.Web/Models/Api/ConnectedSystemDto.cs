@@ -219,6 +219,21 @@ public class ConnectedSystemAttributeDto
     /// </remarks>
     public string Writability { get; set; } = null!;
 
+    /// <summary>
+    /// For a Reference attribute, the id of the Object Type this reference points at, when the Connected
+    /// System's schema declares one (the SQL Connector's <c>referencesObjectType</c>). Import reference
+    /// resolution resolves the reference within that Object Type alone; null means the schema does not say
+    /// and resolution requires the value to be unambiguous across Object Types.
+    /// </summary>
+    /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
+    public int? ReferencedObjectTypeId { get; set; }
+
+    /// <summary>
+    /// The name of the Object Type identified by <see cref="ReferencedObjectTypeId"/>, when declared.
+    /// </summary>
+    /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
+    public string? ReferencedObjectTypeName { get; set; }
+
     public static ConnectedSystemAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute entity)
     {
         return new ConnectedSystemAttributeDto
@@ -235,7 +250,9 @@ public class ConnectedSystemAttributeDto
             IsExternalId = entity.IsExternalId,
             IsSecondaryExternalId = entity.IsSecondaryExternalId,
             SelectionLocked = entity.SelectionLocked,
-            Writability = entity.Writability.ToString()
+            Writability = entity.Writability.ToString(),
+            ReferencedObjectTypeId = entity.ReferencedObjectTypeId,
+            ReferencedObjectTypeName = entity.ReferencedObjectType?.Name
         };
     }
 }
