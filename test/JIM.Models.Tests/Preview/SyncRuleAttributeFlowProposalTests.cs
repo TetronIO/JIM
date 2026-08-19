@@ -135,6 +135,74 @@ public class SyncRuleAttributeFlowProposalTests
         Assert.That(original.DescribesSameMappingsAs(restored), Is.True);
     }
 
+    // ── The unsaved shape the portal editors build ───────────────────────────────────────────────────────────
+
+    [Test]
+    public void FromCurrentMappings_MappingCarriesOnlyItsTargetNavigation_StillReadsTheAttributeId()
+    {
+        // The shape the Attribute Flow editor builds when an administrator ADDS a mapping: the navigation is set,
+        // and the foreign key stays unassigned because nothing has been saved. Reading the key alone made a mapping
+        // the editor plainly shows invisible to the proposal, so the preview refused it as "names no target
+        // attribute" and, in the same breath, reported the attribute as no longer written at all.
+        var email = new MetaverseAttribute { Id = 201, Name = "Email", Type = AttributeDataType.Text };
+        var source = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "mail", Type = AttributeDataType.Text };
+        var rule = new SyncRule { Id = 1, Name = "HR Import", Direction = SyncRuleDirection.Import };
+
+        var unsaved = new SyncRuleMapping { TargetMetaverseAttribute = email };
+        unsaved.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = source });
+        rule.AttributeFlowRules.Add(unsaved);
+
+        var proposal = SyncRuleAttributeFlowProposal.FromCurrentMappings(rule);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(proposal.Mappings[0].TargetMetaverseAttributeId, Is.EqualTo(email.Id));
+            Assert.That(proposal.Mappings[0].Sources[0].ConnectedSystemAttributeId, Is.EqualTo(source.Id));
+        }
+    }
+
+    [Test]
+    public void FromCurrentMappings_ExportMappingCarriesOnlyItsNavigations_StillReadsBothAttributeIds()
+    {
+        var target = new ConnectedSystemObjectTypeAttribute { Id = 103, Name = "mail", Type = AttributeDataType.Text };
+        var source = new MetaverseAttribute { Id = 201, Name = "Email", Type = AttributeDataType.Text };
+        var rule = new SyncRule { Id = 2, Name = "Directory Export", Direction = SyncRuleDirection.Export };
+
+        var unsaved = new SyncRuleMapping { TargetConnectedSystemAttribute = target };
+        unsaved.Sources.Add(new SyncRuleMappingSource { Order = 0, MetaverseAttribute = source });
+        rule.AttributeFlowRules.Add(unsaved);
+
+        var proposal = SyncRuleAttributeFlowProposal.FromCurrentMappings(rule);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(proposal.Mappings[0].TargetConnectedSystemAttributeId, Is.EqualTo(target.Id));
+            Assert.That(proposal.Mappings[0].Sources[0].MetaverseAttributeId, Is.EqualTo(source.Id));
+        }
+    }
+
+    [Test]
+    public void FromCurrentMappings_SavedAndUnsavedFormsOfTheSameMapping_CompareAsTheSameProposal()
+    {
+        // The staleness check runs the two forms against each other every render, so a saved mapping and the
+        // editor's unsaved copy of it must not read as different proposals.
+        var email = new MetaverseAttribute { Id = 201, Name = "Email", Type = AttributeDataType.Text };
+        var source = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "mail", Type = AttributeDataType.Text };
+
+        var savedRule = new SyncRule { Id = 1, Direction = SyncRuleDirection.Import };
+        var saved = new SyncRuleMapping { TargetMetaverseAttribute = email, TargetMetaverseAttributeId = email.Id };
+        saved.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = source, ConnectedSystemAttributeId = source.Id });
+        savedRule.AttributeFlowRules.Add(saved);
+
+        var unsavedRule = new SyncRule { Id = 1, Direction = SyncRuleDirection.Import };
+        var unsaved = new SyncRuleMapping { TargetMetaverseAttribute = email };
+        unsaved.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = source });
+        unsavedRule.AttributeFlowRules.Add(unsaved);
+
+        Assert.That(SyncRuleAttributeFlowProposal.FromCurrentMappings(savedRule)
+            .DescribesSameMappingsAs(SyncRuleAttributeFlowProposal.FromCurrentMappings(unsavedRule)), Is.True);
+    }
+
     #region helpers
 
     private const int DisplayNameAttributeId = 11;
