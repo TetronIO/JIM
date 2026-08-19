@@ -3620,6 +3620,16 @@ public class ConnectedSystemServer
     /// Gets a Connected System Object Type by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the object type.</param>
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a lightweight projection for resolving
+    /// a Reference attribute's declared target name (#1285) without loading a navigation into an entity
+    /// graph a mutating path might attach.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId);
+    }
+
     public async Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id)
     {
         return await Application.Repository.ConnectedSystems.GetObjectTypeAsync(id);

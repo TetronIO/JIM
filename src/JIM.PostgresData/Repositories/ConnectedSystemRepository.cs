@@ -695,7 +695,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
-            .Include(ot => ot.Attributes).ThenInclude(a => a.ReferencedObjectType)
+            .Include(ot => ot.Attributes)
             .Include(ot => ot.Tags)
             .Include(ot => ot.ConnectedSystem)
             .SingleOrDefaultAsync(ot => ot.Id == id);
@@ -3219,13 +3219,28 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
-            .Include(q => q.Attributes).ThenInclude(a => a.ReferencedObjectType)
+            .Include(q => q.Attributes)
             .Include(q => q.Tags)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(x => x.ConnectedSystemId == connectedSystemId).OrderBy(x => x.Name)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a Summary-tier projection for
+    /// resolving a Reference attribute's declared target name (#1285) without loading the
+    /// ReferencedObjectType navigation. That navigation is deliberately never eager-loaded here: under
+    /// the web host's no-tracking queries a self-referencing Object Type materialises twice, and the
+    /// update path's graph attach then fails on the duplicate key.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemObjectTypes
+            .Where(ot => ot.ConnectedSystemId == connectedSystemId)
+            .Select(ot => new { ot.Id, ot.Name })
+            .ToDictionaryAsync(ot => ot.Id, ot => ot.Name);
     }
 
     /// <summary>
