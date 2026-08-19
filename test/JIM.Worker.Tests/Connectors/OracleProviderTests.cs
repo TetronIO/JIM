@@ -81,6 +81,17 @@ public class OracleProviderTests
         Assert.That(parameter.Value, Is.EqualTo(DBNull.Value), "ADO.NET represents a SQL NULL as DBNull, never as a CLR null.");
     }
 
+    [Test]
+    public void CreateParameter_DateTimeValue_BindsAsATimestampWithItsFractionalSeconds()
+    {
+        // The SQL Server sibling of this test exists because SqlClient infers the legacy datetime for a
+        // DateTime and rounds it; ODP.NET infers TIMESTAMP, which keeps the fraction, and this pins that
+        // so a driver upgrade cannot quietly move a watermark by rounding it to DATE's whole seconds.
+        var parameter = (OracleParameter)_provider.CreateParameter("watermark", new DateTime(2026, 7, 15, 12, 0, 0, 124, DateTimeKind.Utc));
+
+        Assert.That(parameter.OracleDbType, Is.EqualTo(OracleDbType.TimeStamp));
+    }
+
     #endregion
 
     #region Identifier quoting
