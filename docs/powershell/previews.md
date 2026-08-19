@@ -30,9 +30,13 @@ New-JIMConfigurationChangePreview -ConnectedSystemId <int>
     [-SelectedPartitionIds <int[]>] [-SelectedContainerIds <int[]>]
     [-ExcludedContainerIds <int[]>]
     [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -SyncRuleId <int>
+    [-OutboundDeprovisionAction <string>] [-InboundOutOfScopeAction <string>]
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
 ```
 
-Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews that type's deletion settings, `-ConnectedSystemId` previews that system's partition and container selection.
+Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews that type's deletion settings, `-ConnectedSystemId` previews that system's partition and container selection, and `-SyncRuleId` previews that Synchronisation Rule's destructive toggles.
 
 ### Parameters
 
@@ -47,13 +51,16 @@ Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews
 | `DeletionGracePeriod` | `TimeSpan` | No | stored value | The proposed grace period. `[TimeSpan]::Zero` previews no grace period. |
 | `DeletionTriggerConnectedSystemIds` | `int[]` | No | stored value | The proposed authoritative sources. |
 | `DeletionTriggerMode` | `string` | No | stored value | `AllSourcesDisconnect` or `SpecificSourcesDisconnect`. |
+| `SyncRuleId` | `int` | Yes | | The Synchronisation Rule whose destructive toggles are being proposed. Accepts pipeline input by property name. |
+| `OutboundDeprovisionAction` | `string` | No | stored value | `Disconnect` or `Delete`: what happens to a joined target object when its Metaverse Object leaves this export rule's scope. |
+| `InboundOutOfScopeAction` | `string` | No | stored value | `RemainJoined` or `Disconnect`: what happens to a joined Connected System Object that leaves this import rule's scope or is obsoleted. |
 | `FullDataSet` | `switch` | No | off | Keep every object-level detail row rather than the per-group cap's worth. Summary counts are exact either way. |
 | `Wait` | `switch` | No | off | Poll until the preview finishes and return the finished preview. |
 | `TimeoutSeconds` | `int` | No | `300` | How long `-Wait` polls before giving up. The preview keeps running; read it later with `Get-JIMConfigurationChangePreview`. |
 
-`MetaverseObjectTypeId` and `ConnectedSystemId` are mutually exclusive: each is mandatory in its own parameter set.
+`MetaverseObjectTypeId`, `ConnectedSystemId` and `SyncRuleId` are mutually exclusive: each is mandatory in its own parameter set.
 
-An omitted deletion setting previews the stored value, exactly as [`Set-JIMMetaverseObjectType`](metaverse.md#set-jimmetaverseobjecttype) treats an omitted parameter. Pass the same parameters to both and the preview describes precisely what the change will do.
+An omitted deletion setting previews the stored value, exactly as [`Set-JIMMetaverseObjectType`](metaverse.md#set-jimmetaverseobjecttype) treats an omitted parameter. Pass the same parameters to both and the preview describes precisely what the change will do. The destructive toggles work the same way against [`Set-JIMSyncRule`](synchronisation-rules.md#set-jimsyncrule): an omitted toggle previews the stored action.
 
 An omitted selection list likewise previews the stored selection. Pass the whole selection rather than one flag, because what a deselection costs depends on the rest of it: an object leaves import scope only when nothing else still covers it. An **empty** list is a real proposal and is sent as one, so `-SelectedContainerIds @()` previews deselecting every container, and `-ExcludedContainerIds @()` previews lifting every exclusion, which brings those branches back into scope.
 
@@ -98,6 +105,18 @@ $preview.ImpactCounts | Format-Table TransitionType, ObjectCount
 ```powershell title="Check what a narrowed scope would put on course for deletion"
 $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedPartitionIds 5 -Wait
 $preview.ImpactCounts | Where-Object TransitionType -eq 'WouldBecomeDeletionEligible'
+```
+
+```powershell title="Preview flipping an export rule's Deprovisioning Action to Delete"
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -OutboundDeprovisionAction Delete -Wait
+$preview.ImpactCounts | Format-Table TransitionType, ObjectCount
+```
+
+```powershell title="Apply a tightened Out-of-Scope Action only when nothing disconnects today"
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -InboundOutOfScopeAction Disconnect -Wait
+if (-not $preview.HasFailed -and ($preview.ImpactCounts | Measure-Object ObjectCount -Sum).Sum -eq 0) {
+    Set-JIMSyncRule -Id 42 -InboundOutOfScopeAction Disconnect -PreviewActivityId $preview.ActivityId
+}
 ```
 
 ---
@@ -239,5 +258,7 @@ Stop-JIMConfigurationChangePreview -ActivityId "019fc824-f8c6-7588-8d9a-24a295e7
 
 - [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it) -- what previews are and how to read them
 - [Metaverse](../configuration/metaverse.md#previewing-a-deletion-settings-change) -- what a deletion settings preview evaluates
+- [Synchronisation Rules](../configuration/synchronisation-rules.md#previewing-a-destructive-toggle-change) -- what a destructive toggle preview evaluates
 - [Metaverse cmdlets](metaverse.md#set-jimmetaverseobjecttype) -- applying a previewed change with `-PreviewActivityId`
+- [Synchronisation Rule cmdlets](synchronisation-rules.md#set-jimsyncrule) -- applying a previewed toggle change with `-PreviewActivityId`
 - [Activities](activities.md) -- the Activity a preview runs as, and the one the change it informed is recorded under

@@ -131,10 +131,12 @@ public static class CausalityModelBuilder
                 or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected
                 => CausalityLane.Source,
 
-            // Provisioning and export-side events: what it caused
+            // Provisioning and export-side events: what it caused. WouldStageDeleteExport is preview-only but
+            // describes the same export-side event as DeprovisionQueued, so it lives in the same lane.
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
                 or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
                 or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed

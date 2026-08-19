@@ -109,7 +109,20 @@ public static class OutcomeDisplayMap
         // the same left the preview's severity column encoding nothing on the change that most needs it.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] =
             new OutcomeDisplay("Disconnects from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Warning, Icons.Material.Filled.LinkOff,
-                "disconnect from their Metaverse Object")
+                "disconnect from their Metaverse Object"),
+        // The destructive-toggle preview's fates (#1115). Error tone on the delete because a deletion in the
+        // target system past its recycle window does not come back; Success on the join kept because nothing is
+        // destroyed; Warning on the exposure change because nothing happens on save, but the standing consequence
+        // of every future scope exit changes.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] =
+            new OutcomeDisplay("Removed from the target system", "Would Stage Delete Export", CausalityTone.Error, Icons.Material.Filled.AutoDelete,
+                "be removed from their target Connected System"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] =
+            new OutcomeDisplay("Keeps its Metaverse Object join", "Would Remain Joined", CausalityTone.Success, Icons.Material.Filled.Link,
+                "keep their Metaverse Object join"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] =
+            new OutcomeDisplay("Scope-exit action changes", "Would Change Deprovision Action", CausalityTone.Warning, Icons.Material.Filled.SwapHoriz,
+                "have their scope-exit action changed")
     };
 
     /// <summary>

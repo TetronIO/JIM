@@ -139,6 +139,19 @@ Every delete queued by a Deprovisioning Action is reported on the Activity of th
 
 This applies wherever the deletion happens: during a Synchronisation Run Profile (when the Metaverse Object Type's [deletion rule](../concepts/jml-lifecycle.md#deletion-rules) has no grace period, so the identity is deleted inline), and in the background [Metaverse Object Housekeeping](activities.md#metaverse-object-housekeeping) batch that deletes identities once their grace period expires.
 
+### Previewing a destructive toggle change
+
+Two of a Synchronisation Rule's settings can turn a routine scope exit into something you cannot take back: the **Deprovisioning Action** above, and an import rule's **Out-of-Scope Action** (whether objects that leave import scope keep their Metaverse Object join or are disconnected). Both are single dropdowns, and before this preview existed the first sign of what one meant was the synchronisation run that acted on it.
+
+The **Preview Deprovisioning Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the toggles as they stand on the form, evaluated against the rule's saved configuration, changing nothing. It answers two different questions and keeps them apart:
+
+- **What the next synchronisation would do differently.** Objects the rule already has something to act on: a joined object whose Metaverse Object is already outside an export rule's scope would be deleted from the target system rather than disconnected (or the reverse), and a joined object outside import scope, or already marked obsolete, would be disconnected rather than keep its join (or the reverse). Where those disconnections would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
+- **What changes for every object the rule manages.** Flipping an export rule's action to Delete deletes nothing today, but it changes what every future scope exit means for every managed object. The preview states that exposure as its own count ("scope-exit action changes"), so "3,400 objects in this system move from Disconnect to Delete" reads at a glance without overstating what the save itself does.
+
+Where several import rules cover the same object type, the Out-of-Scope Action that applies is taken from the first applicable rule. If that is not the rule you are editing, the preview says so by name and counts nothing, because your change would do nothing while that rule exists.
+
+Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit either toggle afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -SyncRuleId`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/destructive-toggles/preview` endpoint.
+
 ## Initial password
 
 An account a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** tab of an export Synchronisation Rule tells JIM to set one on every account that rule creates.

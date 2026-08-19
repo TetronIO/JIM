@@ -92,7 +92,12 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] = CausalityLane.Identity,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = CausalityLane.Identity
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = CausalityLane.Identity,
+            // WouldStageDeleteExport describes the same export-side event as DeprovisionQueued, so it shares
+            // its Downstream lane; the other two destructive-toggle preview transitions are Metaverse-side.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = CausalityLane.Identity
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
