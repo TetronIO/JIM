@@ -77,6 +77,17 @@ public class OutboundPreviewEntry
     public int NoNetChangeSkippedCount { get; init; }
 
     /// <summary>
+    /// The changes counted by <see cref="NoNetChangeSkippedCount"/>, unpersisted (#1443).
+    /// </summary>
+    /// <remarks>
+    /// The value a change was skipped for is the target's CURRENT state for that attribute, which is what lets a
+    /// configuration change preview state an old-to-new pair. A preview diffs what two configurations would stage,
+    /// and a value the target already holds is staged by neither, so reading <see cref="AttributeChanges"/> alone
+    /// would report "would now write X" with nothing to compare X against.
+    /// </remarks>
+    public List<PendingExportAttributeValueChange> NoNetChangeSkippedChanges { get; init; } = [];
+
+    /// <summary>
     /// The out-of-scope deprovisioning verdict, for a Deprovisioning entry.
     /// </summary>
     public OutOfScopeDeprovisioningDecision? DeprovisioningDecision { get; init; }

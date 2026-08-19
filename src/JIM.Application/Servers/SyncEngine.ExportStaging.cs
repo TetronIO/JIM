@@ -285,6 +285,12 @@ public partial class SyncEngine
     /// target value for this export rule's Connected System (reference recall, #908). When a reference points
     /// at an object in this map, the change is staged with the resolved value instead of an unresolved
     /// Metaverse Object ID, because export-time resolution cannot resolve a deleted object.</param>
+    /// <param name="noNetChangeSkipped">Optional collector for the changes skipped because the Connected System
+    /// Object already holds the value (#1443). The value a change was skipped for IS the target's current state for
+    /// that attribute, and it is the only thing that can put an old-to-new pair on a configuration change preview:
+    /// a preview diffs what two configurations would stage, and where the stored one stages nothing because the
+    /// target is already correct, the pair would otherwise have no old side. Opt-in like <paramref name="flowErrors"/>
+    /// beside it, so the export hot path allocates nothing and behaves identically when no caller asks.</param>
     /// <returns>List of attribute value changes to export.</returns>
     public List<PendingExportAttributeValueChange> ComputeAttributeValueChanges(
         MetaverseObject mvo,
@@ -298,7 +304,8 @@ public partial class SyncEngine
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
         IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
-        List<AttributeFlowError>? flowErrors = null)
+        List<AttributeFlowError>? flowErrors = null,
+        List<PendingExportAttributeValueChange>? noNetChangeSkipped = null)
     {
         var changes = new List<PendingExportAttributeValueChange>();
         var isCreateOperation = changeType == PendingExportChangeType.Create;
@@ -479,6 +486,7 @@ public partial class SyncEngine
                                 Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
                                     change.AttributeId, existingCso.Id);
                                 csoAlreadyCurrentCount++;
+                                noNetChangeSkipped?.Add(change);
                                 continue;
                             }
                         }
@@ -712,6 +720,7 @@ public partial class SyncEngine
                             Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (direct)",
                                 attributeChange.AttributeId, existingCso.Id);
                             csoAlreadyCurrentCount++;
+                            noNetChangeSkipped?.Add(attributeChange);
                             continue;
                         }
                     }

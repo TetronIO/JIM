@@ -355,11 +355,13 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     // ── Export ───────────────────────────────────────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task EvaluateDeltasAsync_ExportMappingRetargeted_ReportsWhatWouldBeStagedForTheTargetSystemAsync()
+    public async Task EvaluateDeltasAsync_ExportMappingRetargeted_ReportsTheTargetsCurrentValueAsTheOldOneAsync()
     {
-        // An export delta states what the rule would STAGE, which is a different question from the inbound one: a
-        // value the target already holds is staged by neither configuration, so the old side of the pair is what
-        // the stored configuration would write rather than what the target currently holds.
+        // The export direction's hardest case, and the one a domain cutover actually is: the target already holds
+        // what the rule writes today, so the STORED configuration stages nothing for the attribute and only the
+        // proposal stages anything. Reading the staged changes alone would give "would now write X" with nothing to
+        // compare X against; the engine's no-net-change skips (#1443) carry the value it declined to stage, which
+        // is the target's current state and the old side of the pair.
         GivenExportRule();
         GivenMvoWithJoinedTargetObject(email: "ada@corp.local", alternateEmail: "ada.lovelace@corp.local",
             targetStoredEmail: "ada@corp.local");
@@ -370,10 +372,27 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         Assert.That(delta, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(delta!.OldValue, Is.EqualTo("ada@corp.local"),
+                "the value the target holds today, recovered from the change the stored configuration declined to stage");
             Assert.That(delta!.NewValue, Is.EqualTo("ada.lovelace@corp.local"));
             Assert.That(delta!.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow));
             Assert.That(delta!.ConnectedSystemId, Is.EqualTo(SystemId));
         }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportMappingUnchangedForAnObject_YieldsNoDeltaForItAsync()
+    {
+        // The counterpart: where both configurations would leave the target holding the same value, the two
+        // no-net-change skips cancel and nothing is reported. Without that cancellation every object the rule
+        // manages would appear in a preview of a change that does not touch it.
+        GivenExportRule();
+        GivenMvoWithJoinedTargetObject(email: "ada@corp.local", alternateEmail: "ada@corp.local",
+            targetStoredEmail: "ada@corp.local");
+
+        var deltas = await EvaluateAsync(ExportProposalWritingMailFrom(MvAlternateEmailAttributeId));
+
+        Assert.That(deltas, Is.Empty);
     }
 
     // ── Contract ─────────────────────────────────────────────────────────────────────────────────────────────
