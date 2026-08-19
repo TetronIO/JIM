@@ -138,11 +138,14 @@ Three adjacent defects live in the same path and are folded into this PRD rather
 
 ## Open Questions
 
-1. **Ambiguity handling**: route through the existing per-system Unresolved Reference Handling setting (as written in FR4), or always error on ambiguity regardless of the setting?
-2. **Read-only surface parity for the declared target** (FR7): in scope, or deferred with explicit agreement?
-3. **Scenario 16 workaround removal** (Scenario 6): same delivery (recommended; it is the acceptance test), or follow-up?
+None. All four decisions were confirmed by Jay on 2026-08-19:
 
-> Decided: Option A (declared-target, type-scoped resolution) confirmed by Jay, 2026-08-19. Option B (partition only, no schema change) rejected because it leaves shared-value references unresolvable. The declared-target field is connector-neutral; only the SQL Connector populates it in this delivery because it is the only connector whose schema source states a target (see FR2 for the per-connector rationale).
+1. **Option A** (declared-target, type-scoped resolution).
+2. **Ambiguity handling** routes through the existing per-system Unresolved Reference Handling setting (FR4).
+3. **Read-only surface parity** for the declared target (FR7) is in scope.
+4. **Scenario 16 workaround removal** ships in the same delivery (Scenario 6).
+
+> Option B (partition only, no schema change) was rejected because it leaves shared-value references unresolvable. The declared-target field is connector-neutral; only the SQL Connector populates it in this delivery because it is the only connector whose schema source states a target (see FR2 for the per-connector rationale).
 
 ## Acceptance Criteria
 
