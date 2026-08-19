@@ -117,6 +117,16 @@ The queue survives restarts with no loss or duplication: rows are only deleted a
 
 Requirements 28 to 30 plus divergence 6: a new `ScheduleStepType.HistoryRetentionCleanup` executing the existing `ChangeHistoryServer.DeleteExpiredChangeHistoryAsync` (extended with the password queue's terminal rows and a new `History.PasswordEventRetentionPeriod` Service Setting for password Activities), seeded as a built-in daily Schedule via `SeedBuiltInSchedulesAsync` and restored by factory reset, with the worker-housekeeping history-cleanup timer removed in the same change. This deliberately delivers #1118 for all retention types at once rather than running two trim mechanisms side by side; it is the largest scope decision in this plan and is isolated in its own phase so it can be deferred without blocking the rest.
 
+### Connector coverage
+
+The queue, fan-out, and delivery speak only `IConnectorPasswordManagement`, and requirement 4 hides Password Synchronisation configuration on any Connected System whose connector does not declare `SupportsPasswordSet`. Nothing in this plan is LDAP-specific; a connector that later implements the capability joins the feature with no queue changes.
+
+- **LDAP Connector: in scope now.** The only production implementer today; this plan's one connector change is `RequireSecureTransport` hardening.
+- **SCIM 2.0 Client Connector: natural follow-on, not this plan.** SCIM's `password` is a standard write-only attribute, so an outbound set is a PATCH away; the connector currently declares the capability false precisely so JIM does not call into a gap. Implementing `IConnectorPasswordManagement` there is a small self-contained feature (no policy discovery exists over SCIM, which does not matter for synchronised passwords because JIM never generates them). Raise as its own issue once this plan's delivery path exists to consume it.
+- **SQL Connector: needs its own design decision first.** Writing a password into a table column persists cleartext (or forces JIM to guess the application's hash format), which is the same hazard the PRD's rejected file channel names. The defensible shape is delegating to a customer-supplied stored procedure so the target system owns its own hashing, and that is a design conversation for when the connector completes, not an assumption to bake in here.
+- **File Connector: never, by design.** A password written to a file is cleartext at rest with no audit and no revocation; the PRD's "Rejected and deferred inbound channels" reasoning applies equally outbound. The capability stays false and the configuration stays hidden.
+- **Mock connector: already implements the capability** and is how Phases 2 and 3 are unit tested.
+
 ## Implementation Phases
 
 Each phase is TDD, red first, and lands with its tests, docs, and changelog entries; write parity ships with each surface in its own phase per the surface-parity rule.
