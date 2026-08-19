@@ -40,6 +40,7 @@ Three adjacent defects live in the same path and are folded into this PRD rather
 - Changing LDAP reference semantics: Distinguished Name references remain type-agnostic, resolved against Secondary External IDs across all Object Types, as DNs are unique system-wide.
 - Making the declared reference target administrator-editable. It is connector-declared, read-only.
 - Cross-Connected-System references (not a JIM concept; all operations flow through the metaverse).
+- A File Connector target-declaration surface (per-attribute target Object Type configuration with REST/PowerShell parity). New capability, not part of this defect; raise as its own issue if wanted.
 
 ## User Stories
 
@@ -52,7 +53,7 @@ Three adjacent defects live in the same path and are folded into this PRD rather
 ### Functional Requirements
 
 1. `ConnectorSchemaAttribute` gains an optional referenced-Object-Type name; `ConnectedSystemObjectTypeAttribute` gains a nullable `ReferencedObjectTypeId` (with navigation), persisted by an EF migration and populated during schema sync by name match within the Connected System.
-2. The SQL Connector populates the referenced-Object-Type name from `referencesObjectType` for both reference columns and related-table attributes. Other connectors leave it null (no behaviour change).
+2. The SQL Connector populates the referenced-Object-Type name from `referencesObjectType` for both reference columns and related-table attributes. The field is connector-neutral; the other connectors leave it null, each for a stated reason rather than as deferred debt: LDAP directory schemas do not constrain a DN attribute's target class (so there is nothing to declare, and DN uniqueness makes any-type resolution unambiguous); the SCIM Connector surfaces no Reference-typed attributes today (the field is ready when it does); the File Connector has no metadata source, so declaring a target would be a new administrator configuration surface (see Non-Goals).
 3. `BuildExternalIdLookups` partitions every lookup dictionary by Object Type. An intra-type duplicate anchor still throws, and the message names the Object Type, the anchor attribute name and the value.
 4. In-memory resolution: when the Reference attribute declares a target Object Type, look up in that type's partition only. When it does not (LDAP, CSV, legacy schemas), search all partitions: exactly one hit resolves; zero hits fall through to the DB fallback and then the existing per-system Unresolved Reference Handling; two or more hits are reported as an ambiguous reference via the per-system Unresolved Reference Handling, with a message naming the candidate Object Types. The run never aborts for a cross-type value collision.
 5. DB fallback: still-unresolved primary references are grouped and queried per referenced Object Type's anchor attribute (fixing the `primaryAttributeId` collapse). Secondary External ID (DN) fallback remains any-type.
@@ -137,10 +138,11 @@ Three adjacent defects live in the same path and are folded into this PRD rather
 
 ## Open Questions
 
-1. **Option A vs B** (see explainer artifact): this PRD is written to Option A (declared-target, type-scoped). Option B (partition only, no schema change) avoids the migration but leaves shared-value references unresolvable. Confirm A.
-2. **Ambiguity handling**: route through the existing per-system Unresolved Reference Handling setting (as written in FR4), or always error on ambiguity regardless of the setting?
-3. **Read-only surface parity for the declared target** (FR7): in scope, or deferred with explicit agreement?
-4. **Scenario 16 workaround removal** (Scenario 6): same delivery (recommended; it is the acceptance test), or follow-up?
+1. **Ambiguity handling**: route through the existing per-system Unresolved Reference Handling setting (as written in FR4), or always error on ambiguity regardless of the setting?
+2. **Read-only surface parity for the declared target** (FR7): in scope, or deferred with explicit agreement?
+3. **Scenario 16 workaround removal** (Scenario 6): same delivery (recommended; it is the acceptance test), or follow-up?
+
+> Decided: Option A (declared-target, type-scoped resolution) confirmed by Jay, 2026-08-19. Option B (partition only, no schema change) rejected because it leaves shared-value references unresolvable. The declared-target field is connector-neutral; only the SQL Connector populates it in this delivery because it is the only connector whose schema source states a target (see FR2 for the per-connector rationale).
 
 ## Acceptance Criteria
 
