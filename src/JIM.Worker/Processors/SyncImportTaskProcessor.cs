@@ -211,6 +211,9 @@ public class SyncImportTaskProcessor
         // Load sync outcome tracking level once at start of import
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
 
+        // The whole-run average for the completion message; started here so it covers reading, processing and saving.
+        var throughput = new ThroughputTracker();
+
         // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
         var connectedSystemObjectsToBeUpdated = new List<ConnectedSystemObject>();
@@ -949,6 +952,16 @@ public class SyncImportTaskProcessor
         // from them now so tests that check stats before CompleteActivityBasedOnExecutionResultsAsync work.
         if (_activity.RunProfileExecutionItems.Count > 0)
             Worker.CalculateActivitySummaryStats(_activity);
+
+        // The run is done: leave the Activity describing the whole of it, not its last internal phase. Every
+        // phase above set the counters to its own work (the flush just now to the handful of items it had
+        // left, usually none) and the phase label as the message, so a finished import read "0 / 0" and
+        // "Recording results" for ever after. The message follows the synchronisation and export processors'
+        // shape, average throughput included, so the three run types read alike on the Activity list.
+        _activity.ObjectsToProcess = totalObjectsImported;
+        _activity.ObjectsProcessed = totalObjectsImported;
+        _activity.Message = ImportOutcomeMessage.ForImport(totalObjectsImported, createdCount, connectedSystemObjectsToBeUpdated.Count,
+            _hashSkippedCount, _activity.TotalErrors, throughput.FormatCompletion(totalObjectsImported));
 
         await _syncRepo.UpdateActivityAsync(_activity);
 

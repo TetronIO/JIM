@@ -125,6 +125,8 @@ A Decimal attribute holds 28 to 29 significant digits. A value wider than that f
 
 JIM stores every date and time in UTC. A column that carries its own offset (`datetimeoffset`, `TIMESTAMP WITH TIME ZONE`) needs no interpreting and is converted exactly. A column that carries none (`datetime2`, `DATE`, `TIMESTAMP`) is interpreted in the Connected System's **Database Time Zone** on import, and converted back into that zone on export. The default is UTC, which is the one answer that never silently shifts a value by an hour twice a year; enter an IANA name such as `Europe/London` where the application genuinely records local time.
 
+A zone that observes daylight saving has two wall-clock hours a year that need a rule. A time in the hour the clocks skip when daylight saving starts never happened, but a column can hold one all the same (a `LAST_MODIFIED` defaulted to "now" by a server whose own clock is UTC, or a value migrated in from another zone); JIM reads it with the offset in force just before the clocks moved, which is where the clock jumped to, exactly as PostgreSQL and Java do, rather than failing the row. A time in the hour the clocks repeat when daylight saving ends happens twice, and JIM takes the later, standard-time reading. Neither case arises with UTC.
+
 On Oracle, JIM also pins the session's time zone to the same value when it connects, which is what makes `TIMESTAMP WITH LOCAL TIME ZONE` read consistently. An Oracle Database whose own time zone file does not know the region you named refuses the connection with a message saying so, rather than reading dates in whatever zone the JIM host happens to use.
 
 ## Connection Settings

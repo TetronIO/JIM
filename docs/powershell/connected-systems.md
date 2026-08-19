@@ -650,6 +650,7 @@ Set-JIMConnectedSystemObjectType -ConnectedSystemId 3 -ObjectTypeId 2 -Selected 
 ### Notes
 
 - Supports `ShouldProcess` (Medium impact).
+- Selecting an Object Type is refused, with the Connector's own message, when the Connected System's settings cannot serve it: for the JIM SQL Connector, selecting an Object Type that lacks a `watermarkColumn` or a `changeLog` while the matching Delta Import Mode is set. Deselecting is always accepted.
 
 ---
 

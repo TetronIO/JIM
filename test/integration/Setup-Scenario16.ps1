@@ -138,12 +138,13 @@ $schema = $config.Schema
 # is stated explicitly rather than inferred, which is the connector's contract; a foreign key would
 # only ever be a suggestion, and a view carries none at all.
 #
-# Every Object Type carries BOTH a changeLog and a watermarkColumn, and every related table a
-# watermarkColumn, because each Delta Import Mode is refused at save time unless every Object Type in
-# the document is equipped for it, selected or not. The one document serves all three Connected
-# Systems, and the delta rows switch the identity system between the two modes mid-run, so the document
-# has to satisfy both. The export targets' change logs stay empty and their watermark columns move only
-# by default; nothing outside JIM writes to those tables.
+# The identity Object Types (Person, PersonView) carry BOTH a changeLog and a watermarkColumn, and
+# Person's related table a watermarkColumn, because the delta rows switch the identity system between
+# the two modes mid-run, so the document has to satisfy both. The export targets (AppUser and its Roles
+# table, NaturalKeyAccount, GuidKeyedPerson) carry neither: nothing outside JIM writes to them, the
+# Connected Systems that select them never run a Delta Import and set no Delta Import Mode, and a mode's
+# requirements apply to the Object Types selected for synchronisation on the Connected System that has
+# it set (#1424). The one document serves all three Connected Systems.
 #
 # TWO ANCHOR CHOICES BELOW ARE WORKAROUNDS, NOT PREFERENCES. PersonView is anchored on EMAIL rather
 # than the view's own EMPLOYEE_ID, and the seeder starts APP_USERS' generated key at 1,000,000 rather
@@ -213,7 +214,6 @@ $objectTypesJson = @"
       "schema": "$schema",
       "table": "APP_USERS",
       "anchorColumns": [ "ID" ],
-      "watermarkColumn": "LAST_MODIFIED",
       "columns": [
         { "name": "MANAGER_ID", "referencesObjectType": "AppUser" }
       ],
@@ -223,55 +223,22 @@ $objectTypesJson = @"
           "schema": "$schema",
           "table": "APP_USER_ROLES",
           "valueColumn": "ROLE_NAME",
-          "joinColumns": [ "USER_ID" ],
-          "watermarkColumn": "LAST_MODIFIED"
+          "joinColumns": [ "USER_ID" ]
         }
-      ],
-      "changeLog": {
-        "schema": "$schema",
-        "table": "APP_USERS_CHANGE_LOG",
-        "anchorColumns": [ "ID" ],
-        "sequenceColumn": "CHANGE_ID",
-        "changeTypeColumn": "CHANGE_TYPE",
-        "createValues": [ "I" ],
-        "updateValues": [ "U" ],
-        "deleteValues": [ "D" ]
-      }
+      ]
     },
     {
       "name": "NaturalKeyAccount",
       "schema": "$schema",
       "table": "APP_ACCOUNTS_NATURAL",
-      "anchorColumns": [ "ACCOUNT_CODE" ],
-      "watermarkColumn": "LAST_MODIFIED",
-      "changeLog": {
-        "schema": "$schema",
-        "table": "APP_ACCOUNTS_CHANGE_LOG",
-        "anchorColumns": [ "ACCOUNT_CODE" ],
-        "sequenceColumn": "CHANGE_ID",
-        "changeTypeColumn": "CHANGE_TYPE",
-        "createValues": [ "I" ],
-        "updateValues": [ "U" ],
-        "deleteValues": [ "D" ]
-      }
+      "anchorColumns": [ "ACCOUNT_CODE" ]
     }$(if ($Provider -eq "Oracle") { @"
 ,
     {
       "name": "GuidKeyedPerson",
       "schema": "$schema",
       "table": "GUID_KEYED_PEOPLE",
-      "anchorColumns": [ "PERSON_ID" ],
-      "watermarkColumn": "LAST_MODIFIED",
-      "changeLog": {
-        "schema": "$schema",
-        "table": "GUID_PEOPLE_CHANGE_LOG",
-        "anchorColumns": [ "PERSON_ID" ],
-        "sequenceColumn": "CHANGE_ID",
-        "changeTypeColumn": "CHANGE_TYPE",
-        "createValues": [ "I" ],
-        "updateValues": [ "U" ],
-        "deleteValues": [ "D" ]
-      }
+      "anchorColumns": [ "PERSON_ID" ]
     }
 "@ })
   ]
@@ -292,7 +259,10 @@ function New-Scenario16ConnectedSystem {
     param(
         [Parameter(Mandatory=$true)][string]$Name,
         [Parameter(Mandatory=$true)][string]$Purpose,
-        [Parameter(Mandatory=$true)][string[]]$SelectTypeNames
+        [Parameter(Mandatory=$true)][string[]]$SelectTypeNames,
+        # Only the identity system runs Delta Imports, so only it declares how (#1424). The export-only
+        # systems leave the mode unset, which is the answer for a Connected System that never runs one.
+        [Parameter(Mandatory=$false)][string]$DeltaImportMode
     )
 
 Write-TestStep "Step 6" "Creating the Connected System '$Name'"
@@ -308,7 +278,9 @@ $settings = @{
     (Get-SettingId "Password")          = @{ stringValue = $config.Password }
     (Get-SettingId "Database Time Zone")= @{ stringValue = $DatabaseTimeZone }
     (Get-SettingId "Object Types")      = @{ stringValue = $objectTypesJson }
-    (Get-SettingId "Delta Import Mode") = @{ stringValue = "Change-Log Table" }
+}
+if ($DeltaImportMode) {
+    $settings[(Get-SettingId "Delta Import Mode")] = @{ stringValue = $DeltaImportMode }
 }
 
 if ($Provider -eq "SqlServer") {
@@ -429,8 +401,10 @@ foreach ($typeName in $SelectTypeNames) {
 Write-TestStep "Step 10" "Creating Run Profiles"
 
 # A page size well below the row count, so keyset paging is genuinely exercised across several pages
-# rather than swallowing the whole table in one.
-$pageSize = 10
+# rather than swallowing the whole table in one. The functional matrix (50 rows) pages by ten; the scale
+# row (500,000 rows) pages by a thousand, which is the size an administrator would actually configure and
+# still gives keyset paging five hundred pages to get wrong.
+$pageSize = if ($RowCount -ge 100000) { 1000 } else { 10 }
 
 $runProfiles = @(
     @{ Name = "Full Import";           RunType = "FullImport"           }
@@ -451,7 +425,8 @@ foreach ($runProfile in $runProfiles) {
 # The source of identity: the employee table and the view over it.
 $importSystem = New-Scenario16ConnectedSystem -Name $systemName `
     -Purpose "The source of identity: employees and the view over them." `
-    -SelectTypeNames @("Person", "PersonView")
+    -SelectTypeNames @("Person", "PersonView") `
+    -DeltaImportMode "Change-Log Table"
 
 # AppUser gets a Connected System to itself, and that is not symmetry for its own sake. Its MANAGER_ID
 # column is a self-reference: an AppUser's manager is another AppUser, so a manager can only be resolved

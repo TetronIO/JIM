@@ -59,7 +59,18 @@ internal class SqlServerProvider : SqlProviderBase
         SqlIdentifier.ValidateParameterName(parameterName, nameof(parameterName));
 
         // SqlClient accepts the bare name and adds the '@' itself, so the name is stored unprefixed.
-        return new SqlParameter(parameterName, value ?? DBNull.Value);
+        var parameter = new SqlParameter(parameterName, value ?? DBNull.Value);
+
+        // Left to infer, SqlClient binds a DateTime as the legacy datetime type, which rounds to a
+        // 1/300-second grid (.000, .003, .007). Every datetime2 value JIM binds (a watermark, a keyset
+        // position, an exported column) would be moved by up to two milliseconds on the way in: a Delta
+        // Import re-reads the row at the top of the last run, or silently skips rows committed inside
+        // the gap. datetime2 carries the full value, and converts implicitly to every other date type
+        // a column might be.
+        if (value is DateTime)
+            parameter.SqlDbType = SqlDbType.DateTime2;
+
+        return parameter;
     }
 
     public override DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType)

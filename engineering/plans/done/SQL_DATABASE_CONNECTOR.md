@@ -1,8 +1,9 @@
 # SQL Database Connector: Implementation Plan
 
-- **Status:** Doing (Phases 1-6 and 8 complete; Phase 7 matrix at 29 of 36 cells, the Delta cells and the 500,000-row import outstanding)
+- **Status:** Done (all eight phases complete; the full matrix, the 500,000-row import included, is green on both providers, 2026-08-18)
+- **Note:** Deferred beyond this plan: the Priority 2 providers (PostgreSQL, MySQL) and stored-procedure export, both fast-follows by design; and the two platform defects the matrix surfaced, [#1285](https://github.com/TetronIO/JIM/issues/1285) and [#1287](https://github.com/TetronIO/JIM/issues/1287), which are not the connector's to fix.
 - **Issue:** [#170](https://github.com/TetronIO/JIM/issues/170)
-- **PRD:** [PRD_SQL_DATABASE_CONNECTOR.md](../../prd/doing/PRD_SQL_DATABASE_CONNECTOR.md)
+- **PRD:** [PRD_SQL_DATABASE_CONNECTOR.md](../../prd/done/PRD_SQL_DATABASE_CONNECTOR.md)
 
 ## Overview
 
@@ -101,7 +102,7 @@ Test-driven throughout: each phase writes failing tests first, in `test/JIM.Work
 - `SupportsAutoConfirmExport => true` (committed transaction is a verified write); `SupportsParallelExport => false` with the provider seam keeping a later flip config-only.
 - Unit tests: transaction boundaries, generated-key capture, related-table add/remove, error isolation, Decimal export formatting via `DecimalAttributeValue.ToCanonicalString`.
 
-### Phase 7: Integration tests (provider × capability matrix)
+### Phase 7: Integration tests (provider × capability matrix) ✅
 
 - New `scenarios/Invoke-Scenario16-SqlConnectorMatrix.ps1` + `Setup-Scenario16.ps1` (filesystem convention self-registers it in the runner menu; add the `*Scenario16*` fallback description). Scenario 15 was consumed by the SCIM 2.0 Connector (#545); `engineering/INTEGRATION_TESTING.md`'s road-mapped database scenario numbering (15-17) is stale and must be renumbered in this phase. Parameterise by provider via a `Get-DatabaseConfig -Provider SqlServer|Oracle` helper in `utils/Test-Helpers.ps1` (the `Get-DirectoryConfig` analogue), with `-Provider`/`-Quick`/`-FullMatrix` filters following the Scenario 11 precedent: representative subset for the regular gate, full matrix before release.
 - Deterministic SQL seeder with a row-count parameter and content-hash caching (the `Generate-TestCSV.ps1` model). The 500,000-row scale requirement is satisfied by the seeder directly; LDAP data-scale templates do not apply to this scenario and the `Scale500k25kGroups` OpenLDAP-only guards are left untouched.
@@ -109,6 +110,8 @@ Test-driven throughout: each phase writes failing tests first, in `test/JIM.Work
 - Matrix coverage per the PRD Testing Requirements table (12 capability rows × both Priority 1 providers), including the type-mapping round-trip and configuration-validation rows.
 - Test strategy (PRD, decided 2026-08-02): this matrix scenario is the correctness gate; cross-technology regression breadth follows via the road-mapped Multi-Source Aggregation scenario once the matrix is green. Databases are not retrofitted into scenarios 1-14; if regressions slip past both vehicles, parameterising Scenario 1's HR source (CSV vs SQL) is the one retrofit worth considering.
 - Update `engineering/INTEGRATION_TESTING.md` (Phase 2 sections, port tables, Oracle start-up troubleshooting) and `test/integration/README.md`.
+
+Delivered 2026-08-18: Scenario 16 runs green at every tier on both providers (18 of 18 cells on SQL Server and 20 of 20 on Oracle at `-FullMatrix`, none not exercised). The matrix grew beyond the PRD's twelve rows as it was built: the delta rows cover both modes, the fallback and a `rowversion` watermark; the export rows cover an `IDENTITY` key, a natural key and Oracle's `RAW(16) DEFAULT SYS_GUID()`; four Oracle-only driver-shape rows exist because the unit suite cannot reach the driver. The 500,000-row import reads the table and the view over it (1,000,000 objects) in 17m 31s on SQL Server and 14m 45s on Oracle at page size 1,000, with the connector's own read phase at ~6,000 objects a second on both and the remainder JIM's save phase; the measured numbers and what they mean live in `engineering/INTEGRATION_TESTING.md`. Building the matrix found and fixed, in the product: duplicate Pending Export detection (#1386), partial writes for exports with unresolved references (#1398), the sync engine's handling of a Decimal anchor (#1283), writeback to a source system (#1284), the blank non-text external ID in the Connector Space (#1286), Oracle numerics into built-in numeric attributes (#1354), delta-mode requirements scoped to selected Object Types (#1424), zoneless times in the daylight-saving gap, the finished import's Activity counters, and SQL Server date and time parameters bound as `datetime2`. The container memory sizing item needed no change: at 500,000 rows SQL Server peaked at 1.6 GiB of its 6 GiB and Oracle Free at 2.8 GiB of its 8 GiB.
 
 ### Phase 8: Documentation and release polish ✅
 
