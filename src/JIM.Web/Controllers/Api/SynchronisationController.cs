@@ -2106,7 +2106,7 @@ public class SynchronisationController(
     /// <param name="id">The unique identifier of the Connector Definition.</param>
     /// <returns>The Connector Definition details including all settings and capabilities.</returns>
     [HttpGet("connector-definitions/{id:int}", Name = "GetConnectorDefinition")]
-    [ProducesResponseType(typeof(ConnectorDefinition), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectorDefinitionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectorDefinitionAsync(int id)
@@ -2116,7 +2116,7 @@ public class SynchronisationController(
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with ID {id} not found."));
 
-        return Ok(definition);
+        return Ok(ConnectorDefinitionDto.FromEntity(definition));
     }
 
     /// <summary>
@@ -2125,7 +2125,7 @@ public class SynchronisationController(
     /// <param name="name">The name of the Connector Definition (e.g., "CSV File", "LDAP").</param>
     /// <returns>The Connector Definition details including all settings and capabilities.</returns>
     [HttpGet("connector-definitions/by-name/{name}", Name = "GetConnectorDefinitionByName")]
-    [ProducesResponseType(typeof(ConnectorDefinition), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectorDefinitionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectorDefinitionByNameAsync(string name)
@@ -2135,7 +2135,7 @@ public class SynchronisationController(
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with name '{name}' not found."));
 
-        return Ok(definition);
+        return Ok(ConnectorDefinitionDto.FromEntity(definition));
     }
 
     #endregion
