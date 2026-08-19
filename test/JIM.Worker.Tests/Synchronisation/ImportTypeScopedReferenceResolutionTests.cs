@@ -227,6 +227,113 @@ public class ImportTypeScopedReferenceResolutionTests
     }
 
     /// <summary>
+    /// The mirror of the declared-target test above: a Reference attribute declaring the GROUP Object Type
+    /// resolves to the group even when a user holds the same anchor value. Both directions are tested because
+    /// a resolver that always preferred one partition (first built, lowest id) would pass a single direction.
+    /// </summary>
+    [Test]
+    public async Task FullImport_ADeclaredReferenceTarget_ResolvesWithinThatObjectTypeInTheOtherDirectionAsync()
+    {
+        var sharedAnchorValue = Guid.NewGuid();
+        var referencingUserAnchor = Guid.NewGuid();
+
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(CreateUserImportObject(sharedAnchorValue, "Decoy User"));
+        mockFileConnector.TestImportObjects.Add(CreateGroupImportObject(sharedAnchorValue, "Referenced Group"));
+        mockFileConnector.TestImportObjects.Add(CreateUserImportObject(referencingUserAnchor, "Referencing User", managerRef: sharedAnchorValue.ToString()));
+
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null);
+
+        // Declare SOURCE_USER's MANAGER attribute as referencing the SOURCE_GROUP Object Type. Semantically
+        // contrived (a manager who is a group), deliberately: it is the exact mirror of MEMBER -> SOURCE_USER,
+        // so the two tests together prove the declared target decides the partition, not the partition order.
+        var userType = connectedSystem!.ObjectTypes!.Single(t => t.Name == "SOURCE_USER");
+        var groupType = connectedSystem.ObjectTypes!.Single(t => t.Name == "SOURCE_GROUP");
+        var managerAttribute = userType.Attributes.Single(a => a.Name == MockSourceSystemAttributeNames.MANAGER.ToString());
+        managerAttribute.ReferencedObjectTypeId = groupType.Id;
+        managerAttribute.ReferencedObjectType = groupType;
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        await importProcessor.PerformImportAsync();
+
+        var referencingUser = SyncRepo.ConnectedSystemObjects.Values.Single(cso =>
+            cso.AttributeValues.Any(av => av.GuidValue == referencingUserAnchor));
+        var manager = referencingUser.AttributeValues.Single(av => av.Attribute.Name == MockSourceSystemAttributeNames.MANAGER.ToString());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(manager.ReferenceValue, Is.Not.Null);
+            Assert.That(manager.ReferenceValue!.Type.Name, Is.EqualTo("SOURCE_GROUP"),
+                "The attribute declares it references groups, so the decoy user holding the same anchor value must never be chosen.");
+        }
+    }
+
+    /// <summary>
+    /// Ambiguity honours the Warn handling mode: no per-object error, a summary warning on the Activity.
+    /// </summary>
+    [Test]
+    public async Task FullImport_AnAmbiguousReferenceUnderWarnHandling_WarnsTheActivityWithoutErroringTheObjectAsync()
+    {
+        var sharedAnchorValue = Guid.NewGuid();
+        var referencingGroupUid = Guid.NewGuid();
+
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(CreateUserImportObject(sharedAnchorValue, "Ambiguous User"));
+        mockFileConnector.TestImportObjects.Add(CreateGroupImportObject(sharedAnchorValue, "Ambiguous Group"));
+        mockFileConnector.TestImportObjects.Add(CreateGroupImportObject(referencingGroupUid, "Referencing Group", sharedAnchorValue.ToString()));
+
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null);
+        connectedSystem!.UnresolvedReferenceHandling = UnresolvedReferenceHandling.Warn;
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        await importProcessor.PerformImportAsync();
+
+        var errorItem = activity.RunProfileExecutionItems.FirstOrDefault(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.UnresolvedReference);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errorItem, Is.Null, "Warn mode must not mark the Run Profile Execution Item as errored.");
+            Assert.That(activity.WarningMessage, Does.Contain("more than one Object Type"),
+                "Warn mode carries the ambiguity as an Activity warning, so it is worth a glance without reading as a failure.");
+        }
+    }
+
+    /// <summary>
+    /// Ambiguity honours the Ignore handling mode: no per-object error and no Activity warning.
+    /// </summary>
+    [Test]
+    public async Task FullImport_AnAmbiguousReferenceUnderIgnoreHandling_IsSilentAsync()
+    {
+        var sharedAnchorValue = Guid.NewGuid();
+        var referencingGroupUid = Guid.NewGuid();
+
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(CreateUserImportObject(sharedAnchorValue, "Ambiguous User"));
+        mockFileConnector.TestImportObjects.Add(CreateGroupImportObject(sharedAnchorValue, "Ambiguous Group"));
+        mockFileConnector.TestImportObjects.Add(CreateGroupImportObject(referencingGroupUid, "Referencing Group", sharedAnchorValue.ToString()));
+
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null);
+        connectedSystem!.UnresolvedReferenceHandling = UnresolvedReferenceHandling.Ignore;
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        await importProcessor.PerformImportAsync();
+
+        var errorItem = activity.RunProfileExecutionItems.FirstOrDefault(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.UnresolvedReference);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errorItem, Is.Null, "Ignore mode must not mark the Run Profile Execution Item as errored.");
+            Assert.That(activity.WarningMessage, Is.Null.Or.Empty, "Ignore mode must not set the Activity warning message.");
+        }
+    }
+
+    /// <summary>
     /// References to objects that already exist in JIM but are not part of the run's batches (the Delta Import
     /// norm: the referenced object did not change) resolve through the database fallback. Before #1285 the
     /// fallback batched every unresolved value onto the first item's anchor attribute, guessed the referencer's
