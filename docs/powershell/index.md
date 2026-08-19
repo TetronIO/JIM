@@ -82,7 +82,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
 | [History](history.md) | 4 | Query configuration change history, query deleted objects, and manage change history retention |
-| [Example Data](example-data.md) | 6 | Generate sample data for testing and evaluation, and create, update, and remove reusable Example Data Sets |
+| [Example Data](example-data.md) | 10 | Generate sample data for testing and evaluation, create, update, and remove reusable Example Data Sets, and build Data Generation Templates including their per-attribute generation configuration |
 | [Expressions](expressions.md) | 1 | Test Synchronisation Rule expressions before deployment |
 | [Worker Tasks](worker-tasks.md) | 2 | Monitor and cancel in-flight background worker tasks |
 | [File System](file-system.md) | 2 | Browse and validate server-side paths when configuring file-based connectors |

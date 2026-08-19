@@ -5,6 +5,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
+using JIM.Models.Staging;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using System.Diagnostics;
@@ -207,8 +208,10 @@ public class ExampleDataRepository : IExampleDataRepository
 
     public async Task CreateTemplateAsync(ExampleDataTemplate template)
     {
-        Repository.Database.ExampleDataTemplates.Add(template);
-        await Repository.Database.SaveChangesAsync();
+        // A submitted template graph always references already-persisted entities (Metaverse Object Types, Metaverse
+        // Attributes, Connected System Object Type Attributes and Example Data Sets), so creation is graph-safe by
+        // definition; there is no separate "plain insert" case to preserve.
+        await CreateTemplateGraphAsync(template);
     }
 
     public async Task CreateTemplateGraphAsync(ExampleDataTemplate template)
@@ -223,8 +226,30 @@ public class ExampleDataRepository : IExampleDataRepository
         await Repository.Database.SaveChangesAsync();
     }
 
-    public async Task UpdateTemplateAsync(ExampleDataTemplate template)
+    public async Task UpdateTemplateAsync(ExampleDataTemplate template, bool replaceObjectTypes)
     {
+        // The hosts that serve the portal, REST API and PowerShell all run the context NoTracking, and no template
+        // retrieval returns a tracked entity, so the incoming template is always detached: mutating it and calling
+        // SaveChangesAsync would write nothing at all. Load the persisted template tracked and copy onto it instead.
+        var trackedTemplate = await Repository.Database.ExampleDataTemplates.
+            Include(t => t.ObjectTypes).
+            ThenInclude(ot => ot.TemplateAttributes).
+            ThenInclude(ta => ta.AttributeDependency).
+            AsTracking().
+            SingleOrDefaultAsync(t => t.Id == template.Id);
+
+        if (trackedTemplate == null)
+            throw new InvalidOperationException($"UpdateTemplateAsync: No Data Generation Template exists with id {template.Id}.");
+
+        trackedTemplate.Name = template.Name;
+        trackedTemplate.LastUpdated = template.LastUpdated;
+        trackedTemplate.LastUpdatedByType = template.LastUpdatedByType;
+        trackedTemplate.LastUpdatedById = template.LastUpdatedById;
+        trackedTemplate.LastUpdatedByName = template.LastUpdatedByName;
+
+        if (replaceObjectTypes)
+            await ReplaceTemplateObjectTypesAsync(trackedTemplate, template);
+
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -355,6 +380,127 @@ public class ExampleDataRepository : IExampleDataRepository
     }
 
     #region private methods
+    /// <summary>
+    /// Replaces a tracked Data Generation Template's Object Types (and everything below them) with the submitted graph:
+    /// the superseded template-owned rows are explicitly deleted, and the incoming subtree is re-pointed at the
+    /// persisted entities it references so those are never re-inserted or modified.
+    /// </summary>
+    private async Task ReplaceTemplateObjectTypesAsync(ExampleDataTemplate trackedTemplate, ExampleDataTemplate incomingTemplate)
+    {
+        var database = Repository.Database;
+
+        // Go through the superseded template tree and remove all descendant template objects. Cascade delete is
+        // deliberately not used here (as in DeleteTemplateAsync) because the tree references non-template objects we
+        // definately don't want to delete. Attribute dependencies are principals of the attribute row, so removing
+        // the attribute alone would orphan them.
+        foreach (var objectType in trackedTemplate.ObjectTypes)
+        {
+            var dependencies = objectType.TemplateAttributes.Where(ta => ta.AttributeDependency != null).Select(ta => ta.AttributeDependency!);
+            database.ExampleDataTemplateAttributeDependencies.RemoveRange(dependencies);
+            database.ExampleDataTemplateAttributes.RemoveRange(objectType.TemplateAttributes);
+        }
+
+        database.ExampleDataObjectTypes.RemoveRange(trackedTemplate.ObjectTypes);
+        trackedTemplate.ObjectTypes.Clear();
+
+        // Re-point the incoming subtree at freshly-loaded, tracked instances of the entities it references. The
+        // submitted graph's own instances are detached copies loaded elsewhere, often carrying navigation collections
+        // of their own (a Metaverse Object Type usually arrives with its Attributes loaded), and attaching those would
+        // have EF re-insert the many-to-many bindings between them. Loading each referenced entity by key gives one
+        // canonical tracked instance per key, so an entity referenced twice (a Metaverse Object Type that is both an
+        // Object Type's target and a reference attribute's permitted type) attaches exactly once.
+        var references = new PersistedTemplateReferences(database);
+        foreach (var objectType in incomingTemplate.ObjectTypes)
+        {
+            // the template-owned rows are all new inserts; any ids the submitted graph carries belong to the rows just
+            // removed above, and reusing them would collide with those deletions.
+            objectType.Id = 0;
+            objectType.MetaverseObjectType = await references.ResolveMetaverseObjectTypeAsync(objectType.MetaverseObjectType);
+
+            foreach (var attribute in objectType.TemplateAttributes)
+            {
+                attribute.Id = 0;
+
+                if (attribute.MetaverseAttribute != null)
+                    attribute.MetaverseAttribute = await references.ResolveMetaverseAttributeAsync(attribute.MetaverseAttribute);
+
+                if (attribute.ConnectedSystemObjectTypeAttribute != null)
+                    attribute.ConnectedSystemObjectTypeAttribute = await references.ResolveConnectedSystemObjectTypeAttributeAsync(attribute.ConnectedSystemObjectTypeAttribute);
+
+                foreach (var instance in attribute.ExampleDataSetInstances)
+                {
+                    instance.Id = 0;
+                    instance.ExampleDataSet = await references.ResolveExampleDataSetAsync(instance.ExampleDataSet);
+                }
+
+                if (attribute.WeightedStringValues != null)
+                    foreach (var weightedValue in attribute.WeightedStringValues)
+                        weightedValue.Id = 0;
+
+                if (attribute.ReferenceMetaverseObjectTypes != null)
+                    for (var i = 0; i < attribute.ReferenceMetaverseObjectTypes.Count; i++)
+                        attribute.ReferenceMetaverseObjectTypes[i] = await references.ResolveMetaverseObjectTypeAsync(attribute.ReferenceMetaverseObjectTypes[i]);
+
+                if (attribute.AttributeDependency != null)
+                {
+                    attribute.AttributeDependency.Id = 0;
+                    attribute.AttributeDependency.MetaverseAttribute = await references.ResolveMetaverseAttributeAsync(attribute.AttributeDependency.MetaverseAttribute);
+                }
+            }
+
+            // Adding the new subtree to the tracked template's collection is what marks it for insertion: EF's change
+            // detection walks it and stops at every entity already tracked (the referenced entities resolved above),
+            // so only the genuinely new template-owned rows are inserted.
+            trackedTemplate.ObjectTypes.Add(objectType);
+        }
+    }
+
+    /// <summary>
+    /// Loads and caches the persisted entities a submitted Data Generation Template graph references, so each is
+    /// tracked exactly once (as Unchanged) however many times the graph mentions it.
+    /// </summary>
+    private sealed class PersistedTemplateReferences
+    {
+        private readonly JimDbContext _database;
+        private readonly Dictionary<int, MetaverseObjectType> _metaverseObjectTypes = new();
+        private readonly Dictionary<int, MetaverseAttribute> _metaverseAttributes = new();
+        private readonly Dictionary<int, ConnectedSystemObjectTypeAttribute> _connectedSystemObjectTypeAttributes = new();
+        private readonly Dictionary<int, ExampleDataSet> _exampleDataSets = new();
+
+        internal PersistedTemplateReferences(JimDbContext database)
+        {
+            _database = database;
+        }
+
+        internal async Task<MetaverseObjectType> ResolveMetaverseObjectTypeAsync(MetaverseObjectType incoming) =>
+            await ResolveAsync(_metaverseObjectTypes, incoming.Id, "Metaverse Object Type",
+                id => _database.MetaverseObjectTypes.AsTracking().SingleOrDefaultAsync(t => t.Id == id));
+
+        internal async Task<MetaverseAttribute> ResolveMetaverseAttributeAsync(MetaverseAttribute incoming) =>
+            await ResolveAsync(_metaverseAttributes, incoming.Id, "Metaverse Attribute",
+                id => _database.MetaverseAttributes.AsTracking().SingleOrDefaultAsync(a => a.Id == id));
+
+        internal async Task<ConnectedSystemObjectTypeAttribute> ResolveConnectedSystemObjectTypeAttributeAsync(ConnectedSystemObjectTypeAttribute incoming) =>
+            await ResolveAsync(_connectedSystemObjectTypeAttributes, incoming.Id, "Connected System Object Type Attribute",
+                id => _database.ConnectedSystemAttributes.AsTracking().SingleOrDefaultAsync(a => a.Id == id));
+
+        internal async Task<ExampleDataSet> ResolveExampleDataSetAsync(ExampleDataSet incoming) =>
+            await ResolveAsync(_exampleDataSets, incoming.Id, "Example Data Set",
+                id => _database.ExampleDataSets.AsTracking().SingleOrDefaultAsync(s => s.Id == id));
+
+        private static async Task<T> ResolveAsync<T>(Dictionary<int, T> cache, int id, string entityDescription, Func<int, Task<T?>> loadAsync) where T : class
+        {
+            if (cache.TryGetValue(id, out var cached))
+                return cached;
+
+            var resolved = await loadAsync(id) ??
+                throw new InvalidOperationException($"UpdateTemplateAsync: The submitted Data Generation Template references a {entityDescription} with id {id} that does not exist.");
+
+            cache[id] = resolved;
+            return resolved;
+        }
+    }
+
     private static void SortExampleDataSetInstances(ExampleDataTemplate template)
     {
         foreach (var ta in template.ObjectTypes.SelectMany(ot => ot.TemplateAttributes))
