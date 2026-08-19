@@ -399,6 +399,58 @@ public class ImportCreateObjectTests
     /// Tests that when the connector throws an exception during import (simulating connectivity errors),
     /// the exception propagates up and can be handled by the caller (Worker).
     /// </summary>
+    /// <summary>
+    /// A finished import's Activity should read like a finished synchronisation's: the counters describe the
+    /// whole run and the message says what was done and how fast. Until now the import left the counters at
+    /// whatever its last internal phase set them to (the "Recording results" flush, whose count is 0 once the
+    /// items have been written in batches) and the phase label as the message, so a 1,000,000-object import
+    /// showed "0 / 0" and "Recording results" for ever after (#170).
+    /// </summary>
+    [Test]
+    public async Task FullImport_OnCompletion_ActivityCountersAndMessageDescribeTheWholeRunAsync()
+    {
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => {
+            var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+            foreach (var entity in connectedSystemObjects)
+                entity.Id = Guid.NewGuid();
+            connectedSystemObjectData.AddRange(connectedSystemObjects);
+        });
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        var mockFileConnector = new MockFileConnector();
+        foreach (var (hrId, employeeId) in new[] { (TestConstants.CS_OBJECT_1_HR_ID, 1), (TestConstants.CS_OBJECT_2_HR_ID, 2) })
+        {
+            mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = "SOURCE_USER",
+                Attributes =
+                [
+                    new() { Name = MockSourceSystemAttributeNames.HR_ID.ToString(), GuidValues = [hrId] },
+                    new() { Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(), IntValues = [employeeId] },
+                    new() { Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(), StringValues = [$"Person {employeeId}"] }
+                ]
+            });
+        }
+
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var processor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+
+        await processor.PerformImportAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.ObjectsToProcess, Is.EqualTo(2), "The expected count is the whole run's, not the last phase's.");
+            Assert.That(activity.ObjectsProcessed, Is.EqualTo(2), "A completed run has processed everything it read.");
+            Assert.That(activity.Message, Does.StartWith("Import complete: 2 objects").And.Contain("2 created").And.Contain("0 updated"),
+                "The message summarises the run the way a synchronisation's does, rather than naming its last phase.");
+        }
+    }
+
     [Test]
     public void FullImportConnectorExceptionPropagatesAsync()
     {
