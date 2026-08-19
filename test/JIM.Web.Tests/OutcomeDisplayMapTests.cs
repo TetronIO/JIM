@@ -54,7 +54,8 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, "Disconnects from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Warning, Icons.Material.Filled.LinkOff),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, "Removed from the target system", "Would Stage Delete Export", CausalityTone.Error, Icons.Material.Filled.AutoDelete),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined, "Keeps its Metaverse Object join", "Would Remain Joined", CausalityTone.Success, Icons.Material.Filled.Link),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction, "Scope-exit action changes", "Would Change Deprovision Action", CausalityTone.Warning, Icons.Material.Filled.SwapHoriz)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction, "Scope-exit action changes", "Would Change Deprovision Action", CausalityTone.Warning, Icons.Material.Filled.SwapHoriz),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow, "Attribute Flow does not evaluate", "Would Fail Attribute Flow", CausalityTone.Error, Icons.Material.Filled.RuleFolder)
     ];
 
     /// <summary>
@@ -73,7 +74,8 @@ public class OutcomeDisplayMapTests
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined,
-        ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow
     ];
 
     [Test]

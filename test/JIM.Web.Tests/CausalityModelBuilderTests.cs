@@ -97,7 +97,10 @@ public class CausalityModelBuilderTests
             // its Downstream lane; the other two destructive-toggle preview transitions are Metaverse-side.
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] = CausalityLane.Downstream,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] = CausalityLane.Identity,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = CausalityLane.Identity
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = CausalityLane.Identity,
+            // A mapping that would not evaluate leaves a Metaverse Object attribute unwritten, so it belongs beside
+            // the other Metaverse-side transitions rather than in the export-side Downstream lane.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = CausalityLane.Identity
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

@@ -296,6 +296,92 @@ Describe 'New-JIMConfigurationChangePreview' {
         }
     }
 
+    Context 'Synchronisation Rule Attribute Flow' {
+        It 'Posts the proposed mappings to the Attribute Flow preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $mapping = @{
+                    TargetMetaverseAttributeId = 201
+                    Priority = 1
+                    Sources = @(
+                        @{ Order = 1; ConnectedSystemAttributeId = 101 }
+                    )
+                }
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/42/mappings/preview'
+                $script:capturedBody.mappings.Count | Should -Be 1
+                $script:capturedBody.mappings[0].TargetMetaverseAttributeId | Should -Be 201
+                $script:capturedBody.mappings[0].Priority | Should -Be 1
+            }
+        }
+
+        It 'Sends an empty array as an empty array, because that proposes a rule that flows nothing' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping @() | Out-Null
+
+                # Omitting the field would preview the stored mappings; an empty array is the opposite question.
+                $script:capturedBody.ContainsKey('mappings') | Should -BeTrue
+                @($script:capturedBody.mappings).Count | Should -Be 0
+            }
+        }
+
+        It 'Keeps an Expression source and its Missing Input Behaviour intact on the way to the API' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $mapping = @{
+                    TargetMetaverseAttributeId = 201
+                    Sources = @(
+                        @{ Order = 1; Expression = 'cs["givenName"] + "." + cs["sn"] + "@corp.local"'; MissingInputBehaviour = 'FailMapping' }
+                    )
+                }
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping | Out-Null
+
+                # Missing Input Behaviour decides whether the Expression runs at all for an object with a value
+                # missing, which is exactly the population this preview exists to find.
+                $script:capturedBody.mappings[0].Sources[0].MissingInputBehaviour | Should -BeExactly 'FailMapping'
+                $script:capturedBody.mappings[0].Sources[0].Expression | Should -Match 'givenName'
+            }
+        }
+
+        It 'Requires the mappings to be stated rather than inferred from silence' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['AttributeFlowMapping']
+            $mandatory = $parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'SyncRuleAttributeFlow'
+            }
+            $mandatory.Mandatory | Should -BeTrue
+        }
+
+        It 'Allows the empty collection its mandatory parameter would otherwise reject' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['AttributeFlowMapping']
+            ($parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.AllowEmptyCollectionAttribute]
+            }) | Should -Not -BeNullOrEmpty
+        }
+    }
+
     Context 'Waiting' {
         It 'Returns the start result without polling when the proposal is blocked' {
             InModuleScope JIM {

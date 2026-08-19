@@ -24,6 +24,10 @@ function New-JIMConfigurationChangePreview {
           Outbound Deprovision Action (Disconnect or Delete on a scope exit) and the Inbound Out-of-Scope
           Action (RemainJoined or Disconnect). The field semantics match Set-JIMSyncRule exactly, so an
           omitted parameter previews the stored value. Apply the previewed change with Set-JIMSyncRule.
+        - -SyncRuleId with -ScopingCriteriaGroup previews a change to that rule's Scoping Criteria: which
+          objects it would manage at all, and what each movement in or out of scope would cost.
+        - -SyncRuleId with -AttributeFlowMapping previews a change to that rule's Attribute Flow: what
+          value every object it manages would end up with, per attribute.
 
         Evaluation is asynchronous. Without -Wait this returns as soon as the proposal itself has been
         validated, carrying the ActivityId to poll with Get-JIMConfigurationChangePreview. With -Wait it
@@ -112,6 +116,23 @@ function New-JIMConfigurationChangePreview {
         Mandatory, and an empty array is a valid and deliberate value: it proposes removing every criterion,
         which hands the rule every object of its type. That is the widest change the Scope tab can make, so
         it has to be asked for rather than arrived at by omission.
+
+    .PARAMETER AttributeFlowMapping
+        The proposed Attribute Flow, as one hashtable per mapping. Each mapping names the attribute it
+        writes (TargetMetaverseAttributeId on an import rule, TargetConnectedSystemAttributeId on an
+        export rule) and a Sources array; a source takes an Order, and either an attribute id
+        (ConnectedSystemAttributeId on an import rule, MetaverseAttributeId on an export rule) or an
+        Expression with an optional MissingInputBehaviour. A mapping may also carry Priority,
+        NullIsValue, InitialExportOnly, InboundValueProcessing and CaseNormalisation, which default to
+        the same values the editor uses.
+
+        Mandatory, and an empty array is a valid and deliberate value: it proposes removing every mapping,
+        so the rule flows nothing.
+
+        Priority is worth passing deliberately on an import mapping. It defaults to the lowest, so a
+        mapping proposed for an attribute another rule already contributes to would be evaluated and then
+        write nothing; the preview reports that as a validation finding rather than as values that would
+        never be written.
 
     .PARAMETER FullDataSet
         Keep every object-level detail row rather than the per-group cap's worth. Summary counts are
@@ -206,6 +227,28 @@ function New-JIMConfigurationChangePreview {
         in scope. The Projected count is how many Metaverse Objects that would create.
 
     .EXAMPLE
+        $mapping = @{
+            TargetMetaverseAttributeId = 201
+            Priority = 1
+            Sources = @(
+                @{ Order = 1; Expression = 'cs["givenName"] + "." + cs["sn"] + "@corp.local"'; MissingInputBehaviour = 'FailMapping' }
+            )
+        }
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping -Wait
+        $preview.ImpactCounts
+
+        Reports what an email cutover would write: how many identities' addresses change, and how many
+        objects the Expression could not be evaluated for at all because a required input is missing.
+
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping -FullDataSet -Wait
+        Get-JIMConfigurationChangePreviewDelta -ActivityId $preview.ActivityId |
+            Where-Object transitionType -eq 'WouldFailAttributeFlow'
+
+        Keeps every detail row and lists the objects the proposed Expression would not evaluate for, which
+        is the handful the cutover would otherwise leave without an address.
+
+    .EXAMPLE
         $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -InboundOutOfScopeAction Disconnect -Wait
         if (($preview.ImpactCounts | Measure-Object objectCount -Sum).Sum -eq 0) {
             Set-JIMSyncRule -Id 42 -InboundOutOfScopeAction Disconnect -PreviewActivityId $preview.ActivityId
@@ -258,6 +301,7 @@ function New-JIMConfigurationChangePreview {
 
         [Parameter(Mandatory, ParameterSetName = 'SyncRuleDestructiveToggles', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'SyncRuleScopingCriteria', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleAttributeFlow', ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,
 
         [Parameter(ParameterSetName = 'SyncRuleDestructiveToggles')]
@@ -271,6 +315,10 @@ function New-JIMConfigurationChangePreview {
         [Parameter(Mandatory, ParameterSetName = 'SyncRuleScopingCriteria')]
         [AllowEmptyCollection()]
         [hashtable[]]$ScopingCriteriaGroup,
+
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleAttributeFlow')]
+        [AllowEmptyCollection()]
+        [hashtable[]]$AttributeFlowMapping,
 
         [Parameter()]
         [switch]$FullDataSet,
@@ -345,6 +393,13 @@ function New-JIMConfigurationChangePreview {
             $body.criteriaGroups = @($ScopingCriteriaGroup)
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'SyncRuleAttributeFlow') {
+            # Always sent, including as an empty array, for the same reason as the criteria groups above: omitting
+            # the field previews the rule's stored mappings, while an empty array proposes removing every one of
+            # them. Wrapped in @() so a single mapping serialises as a JSON array rather than a bare object.
+            $body.mappings = @($AttributeFlowMapping)
+        }
+
         if ($FullDataSet) {
             $body.deltaPersistence = 'Full'
         }
@@ -359,6 +414,10 @@ function New-JIMConfigurationChangePreview {
         }
         elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleScopingCriteria') {
             $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/preview"
+            $subject = "Synchronisation Rule $SyncRuleId"
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleAttributeFlow') {
+            $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings/preview"
             $subject = "Synchronisation Rule $SyncRuleId"
         }
         else {

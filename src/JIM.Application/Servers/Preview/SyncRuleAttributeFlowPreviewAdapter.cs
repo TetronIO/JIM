@@ -246,11 +246,9 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
         var proposed = await _application.SyncPreview.PreviewSyncForCsosAsync(
             rule.ConnectedSystemId, ids, standIn, cancellationToken);
 
-        foreach (var cso in batch)
+        foreach (var cso in batch.Where(cso => proposed.ContainsKey(cso.Id)))
         {
-            if (!proposed.TryGetValue(cso.Id, out var proposedPreview))
-                continue;
-
+            var proposedPreview = proposed[cso.Id];
             baseline.TryGetValue(cso.Id, out var baselinePreview);
 
             deltas.AddRange(DescribeIntroducedFailures(baselinePreview, proposedPreview)
@@ -314,11 +312,9 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
         var baseline = await _application.SyncPreview.PreviewSyncForMvosAsync(ids, null, cancellationToken);
         var proposed = await _application.SyncPreview.PreviewSyncForMvosAsync(ids, standIn, cancellationToken);
 
-        foreach (var mvo in batch)
+        foreach (var mvo in batch.Where(mvo => proposed.ContainsKey(mvo.Id)))
         {
-            if (!proposed.TryGetValue(mvo.Id, out var proposedPreview))
-                continue;
-
+            var proposedPreview = proposed[mvo.Id];
             baseline.TryGetValue(mvo.Id, out var baselinePreview);
 
             var targetObjectId = ExportTargetObjectId(proposedPreview, rule) ?? ExportTargetObjectId(baselinePreview, rule);

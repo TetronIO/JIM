@@ -65,7 +65,11 @@ public class SyncOutcomeTypeOrdinalTests
         // Synchronisation Rule destructive-toggle preview (#1115): the fates the two Class A toggles decide.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] = 27,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] = 28,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = 29
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = 29,
+
+        // Synchronisation Rule Attribute Flow preview (#1437): the proposed mapping that would not evaluate at all,
+        // so the attribute it targets is not written.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = 30
     };
 
     [Test]

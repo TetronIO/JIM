@@ -37,9 +37,12 @@ New-JIMConfigurationChangePreview -SyncRuleId <int>
 
 New-JIMConfigurationChangePreview -SyncRuleId <int> -ScopingCriteriaGroup <hashtable[]>
     [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -SyncRuleId <int> -AttributeFlowMapping <hashtable[]>
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
 ```
 
-Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews that type's deletion settings, `-ConnectedSystemId` previews that system's partition and container selection, and `-SyncRuleId` previews a Synchronisation Rule. A rule has two previewable surfaces and the parameters you pass choose between them: the destructive toggles, or, with `-ScopingCriteriaGroup`, its Scoping Criteria.
+Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews that type's deletion settings, `-ConnectedSystemId` previews that system's partition and container selection, and `-SyncRuleId` previews a Synchronisation Rule. A rule has three previewable surfaces and the parameters you pass choose between them: the destructive toggles, or, with `-ScopingCriteriaGroup`, its Scoping Criteria, or, with `-AttributeFlowMapping`, its Attribute Flow.
 
 ### Parameters
 
@@ -58,6 +61,7 @@ Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews
 | `OutboundDeprovisionAction` | `string` | No | stored value | `Disconnect` or `Delete`: what happens to a joined target object when its Metaverse Object leaves this export rule's scope. |
 | `InboundOutOfScopeAction` | `string` | No | stored value | `RemainJoined` or `Disconnect`: what happens to a joined Connected System Object that leaves this import rule's scope or is obsoleted. |
 | `ScopingCriteriaGroup` | `hashtable[]` | Yes | | The proposed Scoping Criteria, one hashtable per top-level group. Groups are combined with OR. Each takes a `Type` of `All` or `Any`, a `Criteria` array, and an optional `ChildGroups` array of further groups. Each criterion names one attribute by id (`ConnectedSystemAttributeId` on an import rule, `MetaverseAttributeId` on an export rule), a `ComparisonType`, and the value in the field matching the attribute's data type. |
+| `AttributeFlowMapping` | `hashtable[]` | Yes | | The proposed Attribute Flow, one hashtable per mapping. Each names the attribute it writes (`TargetMetaverseAttributeId` on an import rule, `TargetConnectedSystemAttributeId` on an export rule) and a `Sources` array; a source takes an `Order` and either an attribute id (`ConnectedSystemAttributeId` on an import rule, `MetaverseAttributeId` on an export rule) or an `Expression` with an optional `MissingInputBehaviour`. A mapping may also carry `Priority`, `NullIsValue`, `InitialExportOnly`, `InboundValueProcessing` and `CaseNormalisation`. |
 | `FullDataSet` | `switch` | No | off | Keep every object-level detail row rather than the per-group cap's worth. Summary counts are exact either way. |
 | `Wait` | `switch` | No | off | Poll until the preview finishes and return the finished preview. |
 | `TimeoutSeconds` | `int` | No | `300` | How long `-Wait` polls before giving up. The preview keeps running; read it later with `Get-JIMConfigurationChangePreview`. |
@@ -67,6 +71,8 @@ Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews
 An omitted deletion setting previews the stored value, exactly as [`Set-JIMMetaverseObjectType`](metaverse.md#set-jimmetaverseobjecttype) treats an omitted parameter. Pass the same parameters to both and the preview describes precisely what the change will do. The destructive toggles work the same way against [`Set-JIMSyncRule`](synchronisation-rules.md#set-jimsyncrule): an omitted toggle previews the stored action.
 
 `ScopingCriteriaGroup` is mandatory, and `@()` is a valid and deliberate value: it proposes removing every criterion, which puts every object of the rule's type in scope. That is the widest change the Scope tab can make, so the cmdlet requires it to be asked for rather than arrived at by omitting a parameter.
+
+`AttributeFlowMapping` is mandatory for the same reason, and `@()` likewise proposes removing every mapping, so the rule flows nothing. Pass `Priority` deliberately on an import mapping: it defaults to the lowest, so a mapping proposed for an attribute another rule already contributes to would be evaluated and then write nothing, and the preview reports that as a validation finding rather than as values that would never be written.
 
 An omitted selection list likewise previews the stored selection. Pass the whole selection rather than one flag, because what a deselection costs depends on the rest of it: an object leaves import scope only when nothing else still covers it. An **empty** list is a real proposal and is sent as one, so `-SelectedContainerIds @()` previews deselecting every container, and `-ExcludedContainerIds @()` previews lifting every exclusion, which brings those branches back into scope.
 
@@ -137,6 +143,28 @@ $preview.ImpactCounts | Where-Object transitionType -eq 'Projected'
 ```
 
 Reports what removing every Scoping Criterion would do, which puts every object of the rule's type in scope. The `Projected` count is how many Metaverse Objects that would create.
+
+```powershell
+$mapping = @{
+    TargetMetaverseAttributeId = 201
+    Priority = 1
+    Sources = @(
+        @{ Order = 1; Expression = 'cs["givenName"] + "." + cs["sn"] + "@corp.local"'; MissingInputBehaviour = 'FailMapping' }
+    )
+}
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping -Wait
+$preview.ImpactCounts
+```
+
+Reports what an email cutover would write: how many identities' addresses change, and how many objects the Expression could not be evaluated for at all because a required input is missing.
+
+```powershell
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping -FullDataSet -Wait
+Get-JIMConfigurationChangePreviewDelta -ActivityId $preview.ActivityId |
+    Where-Object transitionType -eq 'WouldFailAttributeFlow'
+```
+
+Keeps every detail row and lists the objects the proposed Expression would not evaluate for, which is the handful the cutover would otherwise leave without an address.
 
 ```powershell title="Apply a tightened Out-of-Scope Action only when nothing disconnects today"
 $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -InboundOutOfScopeAction Disconnect -Wait

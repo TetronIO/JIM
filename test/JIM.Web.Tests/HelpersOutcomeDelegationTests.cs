@@ -47,6 +47,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, "Would Stage Delete Export")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined, "Would Remain Joined")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction, "Would Change Deprovision Action")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow, "Would Fail Attribute Flow")]
     public void GetOutcomeTypeDisplayName_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
     {
@@ -66,6 +67,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, "Removed from the target system")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined, "Keeps its Metaverse Object join")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction, "Scope-exit action changes")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow, "Attribute Flow does not evaluate")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, "Identity created")]
     public void GetOutcomeTypePlainName_EveryOutcomeType_ReturnsThePlainLabel(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
@@ -103,6 +105,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, Color.Error)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined, Color.Success)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow, Color.Error)]
     public void GetOutcomeTypeMudBlazorColor_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, Color expected)
     {
@@ -143,7 +146,8 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = Icons.Material.Filled.LinkOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] = Icons.Material.Filled.AutoDelete,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] = Icons.Material.Filled.Link,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = Icons.Material.Filled.SwapHoriz
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = Icons.Material.Filled.SwapHoriz,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = Icons.Material.Filled.RuleFolder
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
