@@ -525,6 +525,7 @@ public class ConfigurationChangePreviewServer
             // previewed, and the column says which object it was about.
             case ConfigurationChangePreviewSurface.SynchronisationRule:
             case ConfigurationChangePreviewSurface.SynchronisationRuleScope:
+            case ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow:
                 activity.SyncRuleId = request.TargetId;
                 break;
             case ConfigurationChangePreviewSurface.ConnectedSystem:

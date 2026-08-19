@@ -260,8 +260,17 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
     }
 
+    /// <summary>
+    /// The Connected System Objects <see cref="GetConnectedSystemObjectAsync"/> has been asked for, in call order.
+    /// Lets a test prove which objects an evaluation actually put to the engine, rather than only what it reported
+    /// (#1437: an Attribute Flow preview skips objects the rule does not manage, and skipping them is the whole
+    /// difference between a preview that runs over a subset and one that evaluates a whole system twice).
+    /// </summary>
+    public List<Guid> RequestedConnectedSystemObjectIds { get; } = [];
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
     {
+        RequestedConnectedSystemObjectIds.Add(csoId);
         _csos.TryGetValue(csoId, out var cso);
         if (cso != null && cso.ConnectedSystemId != connectedSystemId)
             cso = null;

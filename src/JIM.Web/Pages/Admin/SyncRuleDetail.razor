@@ -149,6 +149,14 @@ else if (_syncRule != null)
                     Disabled="@_startingPreview">
                     Preview Scope Impact
                 </MudButton>
+                @* Preview (#1437): an Attribute Flow edit rewrites values on every object the rule already      *@
+                @* manages, which is a third question again: scope decides WHICH objects, the toggles decide what *@
+                @* leaving costs them, and this decides what the ones staying end up holding.                     *@
+                <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Outlined" Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.SyncAlt" OnClick="PreviewAttributeFlowAsync"
+                    Disabled="@_startingPreview">
+                    Preview Attribute Flow Impact
+                </MudButton>
             }
         </MudStack>
 
@@ -187,6 +195,25 @@ else if (_syncRule != null)
             <ConfigurationChangePreviewPanel ActivityId="@scopePreviewActivityId"
                                              Title="Preview: Scope Impact"
                                              OnPreviewChanged="OnScopingPreviewChanged"
+                                             Class="mt-6" />
+        }
+
+        @if (_attributeFlowPreviewActivityId.HasValue)
+        {
+            var attributeFlowPreviewActivityId = _attributeFlowPreviewActivityId.Value;
+
+            @if (AttributeFlowPreviewIsStale)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                          data-testid="jim-attribute-flow-preview-stale">
+                    The Attribute Flow has been edited since this preview ran, so it no longer describes what saving
+                    would do. Preview again for an answer about the current mappings.
+                </MudAlert>
+            }
+
+            <ConfigurationChangePreviewPanel ActivityId="@attributeFlowPreviewActivityId"
+                                             Title="Preview: Attribute Flow Impact"
+                                             OnPreviewChanged="OnAttributeFlowPreviewChanged"
                                              Class="mt-6" />
         }
     </div>
@@ -485,20 +512,91 @@ else if (_syncRule != null)
 
     private void OnScopingPreviewChanged(ConfigurationChangePreview? preview) => _scopePreview = preview;
 
+    // ─── Attribute Flow preview (#1437) ───
+
+    private Guid? _attributeFlowPreviewActivityId;
+    private SyncRuleAttributeFlowProposal? _previewedAttributeFlowProposal;
+    private ConfigurationChangePreview? _attributeFlowPreview;
+
+    /// <summary>
+    /// The Attribute Flow as it stands on the form. The Attribute Flow tab edits the loaded rule's mappings in
+    /// place, so this is already the proposal; the adapter re-reads the stored mappings from the database to
+    /// compare against, which is why the page does not need to snapshot them itself.
+    /// </summary>
+    private SyncRuleAttributeFlowProposal BuildAttributeFlowProposal() =>
+        SyncRuleAttributeFlowProposal.FromCurrentMappings(_syncRule!);
+
+    /// <summary>
+    /// Whether the mappings have moved on from the ones the visible preview was run against.
+    /// </summary>
+    private bool AttributeFlowPreviewIsStale =>
+        _previewedAttributeFlowProposal is not null
+        && !BuildAttributeFlowProposal().DescribesSameMappingsAs(_previewedAttributeFlowProposal);
+
+    private async Task PreviewAttributeFlowAsync()
+    {
+        if (_syncRule is not { Id: > 0 } || _startingPreview)
+            return;
+
+        _startingPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var proposal = BuildAttributeFlowProposal();
+
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow,
+                TargetId = _syncRule.Id,
+                TargetName = _syncRule.Name,
+                ProposedConfiguration = proposal,
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user?.Id,
+                InitiatedByName = user?.Name
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _attributeFlowPreviewActivityId = activityId;
+            _previewedAttributeFlowProposal = proposal;
+            _attributeFlowPreview = null;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            _attributeFlowPreviewActivityId = null;
+            _previewedAttributeFlowProposal = null;
+            _attributeFlowPreview = null;
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingPreview = false;
+        }
+    }
+
+    private void OnAttributeFlowPreviewChanged(ConfigurationChangePreview? preview) => _attributeFlowPreview = preview;
+
     /// <summary>
     /// The preview whose counts the save confirmation states, and the Activity the change is linked to.
     /// </summary>
     /// <remarks>
-    /// A fresh Scoping Criteria preview wins over a fresh destructive-toggle one, because a scope change moves
-    /// objects between scopes and its counts already describe what leaving costs them, whereas the toggle preview
-    /// describes the fate of objects whose scope is unchanged. Where BOTH have been edited in one sitting neither
-    /// preview is complete on its own (each evaluated the other's setting as stored), so the administrator is
-    /// answering with the larger of the two questions in front of them; the panels above show both in full.
+    /// A fresh Scoping Criteria preview wins over a fresh Attribute Flow one, which in turn wins over a fresh
+    /// destructive-toggle one, in order of how much of the population each moves: a scope change decides which
+    /// objects the rule manages at all and its counts already describe what leaving costs them, an Attribute Flow
+    /// change rewrites values on the objects that stay, and the toggle preview describes the fate of objects whose
+    /// scope is unchanged. Where several have been edited in one sitting no single preview is complete on its own
+    /// (each evaluated the others' settings as stored), so the administrator is answering with the largest of the
+    /// questions in front of them; the panels above show all of them in full.
     /// </remarks>
     private (ConfigurationChangePreview? Preview, bool IsStale, Guid? ActivityId) ConfirmingPreview =>
         _scopePreviewActivityId.HasValue && !ScopingPreviewIsStale
             ? (_scopePreview, false, _scopePreviewActivityId)
-            : (_preview, DestructiveTogglePreviewIsStale, _previewActivityId);
+            : _attributeFlowPreviewActivityId.HasValue && !AttributeFlowPreviewIsStale
+                ? (_attributeFlowPreview, false, _attributeFlowPreviewActivityId)
+                : (_preview, DestructiveTogglePreviewIsStale, _previewActivityId);
 
     private async Task HandleCreateOrUpdateSyncRuleAsync()
     {

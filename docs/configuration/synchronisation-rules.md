@@ -349,6 +349,26 @@ Two behaviours to be aware of:
 
 Initial Export Only is your choice about an attribute the Connected System would happily let JIM keep writing. Where the Connected System itself only accepts a value at creation, JIM applies the same create-once behaviour on its own, without the setting: see [Attribute writability](connected-systems.md#attribute-writability).
 
+### Previewing an Attribute Flow change
+
+Changing a mapping rewrites an attribute on every object the rule manages, on the next synchronisation, and nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
+
+The **Preview Attribute Flow Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the mappings as they stand on the form, evaluated against the rule's saved mappings, changing nothing. It reports, per object and per attribute:
+
+- **The value the object would end up with**<br /> Stated as an old-to-new pair, so a domain cutover reads as `ada@old.example` becoming `ada@new.example` rather than as a count. JIM groups identical pairs together and recognises the shape of the change (a changed domain, a changed container, a casing change, an added or removed prefix or suffix), so a thousand identical rewrites read as one line with a count beside it.
+- **Values that would be withdrawn**<br /> Where a mapping would stop producing a value for an object, the attribute is left blank rather than rewritten, and that is counted separately.
+- **Objects the mapping could not be evaluated for**<br /> An Expression that throws, or one whose [Missing Input Behaviour](#expression-mappings) fails the mapping because a required attribute has no value on that object. These are the handful of objects a cutover would otherwise leave without an address, and they are reported as their own outcome rather than as no change.
+
+The evaluation is the synchronisation engine's own, run twice per object (once against the saved configuration and once against the proposal) and compared, so [Attribute Priority](#attribute-priority), Missing Input Behaviour and Expression evaluation are answered by the engine rather than approximated.
+
+Three answers are deliberately negative rather than reassuring:
+
+- A proposed mapping that would **lose Attribute Priority** to another contributing rule is called out: a synchronisation would evaluate it and then write nothing, so reporting the values it produces would describe a write that never happens.
+- **Removing a mapping outright changes no value.** Inbound Attribute Flow contributes what its mappings produce, so a mapping that no longer exists leaves the values it last wrote in place; they stay as they are and stop being maintained. The preview says so rather than reporting a withdrawal.
+- The preview covers **this Connected System only**. Where another Connected System's rule also writes the attribute, that rule takes its turn on its own next synchronisation, so what it would write instead is named rather than guessed at.
+
+Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the mappings afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -AttributeFlowMapping`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/mappings/preview` endpoint.
+
 ## Attribute Priority
 
 When more than one import rule maps to the same Metaverse Object attribute, **Attribute Priority** decides which contributor wins, so the result never depends on the order your synchronisations happen to run in. It is an inbound concern: it governs how values flow from Connected Systems into the metaverse, and does not change how the metaverse is exported back out.

@@ -112,6 +112,21 @@ public class SyncRuleScopingProposalMaterialiserTests
     }
 
     [Test]
+    public void Materialise_CarriesTheRulesAttributeFlowOntoTheStandIn()
+    {
+        // The stand-in is handed to the preview engine to answer what an object entering scope would become, and
+        // the engine evaluates the whole chain from it. A stand-in carrying no mappings would have it answer for a
+        // projection that flows nothing, which is a different rule from the one being previewed.
+        var storedRule = BuildImportRule();
+        storedRule.AttributeFlowRules.Add(new SyncRuleMapping { TargetMetaverseAttributeId = 55 });
+        var proposal = new SyncRuleScopingProposal([Group(CsCriterion(DepartmentAttributeId, "Sales"))]);
+
+        var standIn = SyncRuleScopingProposalMaterialiser.Materialise(storedRule, proposal, ConnectedSystemAttributes(), []);
+
+        Assert.That(standIn.AttributeFlowRules.Select(m => m.TargetMetaverseAttributeId), Does.Contain(55));
+    }
+
+    [Test]
     public void Materialise_LeavesTheStoredRuleUntouched()
     {
         // The stand-in must never be the loaded rule with its criteria swapped: the adapter compares the two, and

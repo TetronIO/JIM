@@ -122,7 +122,10 @@ public static class OutcomeDisplayMap
                 "keep their Metaverse Object join"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] =
             new OutcomeDisplay("Scope-exit action changes", "Would Change Deprovision Action", CausalityTone.Warning, Icons.Material.Filled.SwapHoriz,
-                "have their scope-exit action changed")
+                "have their scope-exit action changed"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] =
+            new OutcomeDisplay("Attribute Flow does not evaluate", "Would Fail Attribute Flow", CausalityTone.Error, Icons.Material.Filled.RuleFolder,
+                "have an Attribute Flow that would not evaluate")
     };
 
     /// <summary>

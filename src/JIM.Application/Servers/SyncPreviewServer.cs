@@ -98,6 +98,83 @@ public class SyncPreviewServer
     }
 
     /// <summary>
+    /// Previews a set of Metaverse Objects in one pass, optionally against a proposed export Synchronisation Rule,
+    /// building the shared export evaluation cache once for the whole set (#1437).
+    /// </summary>
+    /// <remarks>
+    /// The outbound sibling of <see cref="PreviewSyncForCsosAsync"/>, and it exists for the same reason: a
+    /// configuration change preview asks the same question of many objects, and the cache of export rules, target
+    /// systems and system names is identical for every one of them.
+    /// </remarks>
+    /// <param name="metaverseObjectIds">The Metaverse Objects to preview.</param>
+    /// <param name="proposedSyncRule">
+    /// An unsaved export rule to evaluate in place of the stored rule of the same id. Substituted into the rule set
+    /// the export evaluation cache is built from, so the whole outbound chain answers for the proposal; substituted
+    /// by id and never added, exactly as the inbound path does.
+    /// </param>
+    /// <param name="cancellationToken">Honoured between objects; a cancelled preview stops rather than completing.</param>
+    /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
+    /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    public async Task<Dictionary<Guid, SyncPreviewResult>> PreviewSyncForMvosAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        SyncRule? proposedSyncRule = null,
+        CancellationToken cancellationToken = default,
+        Func<ISyncRepositoryScope>? repositoryFactory = null)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObjectIds);
+
+        var results = new Dictionary<Guid, SyncPreviewResult>();
+        if (metaverseObjectIds.Count == 0)
+            return results;
+
+        using var scope = repositoryFactory?.Invoke();
+        var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
+        var previewServer = new ExportEvaluationServer(Application, guardedRepository);
+        await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
+
+        var cache = await previewServer.BuildExportEvaluationCacheAsync(
+            await LoadRulesForCacheAsync(guardedRepository, proposedSyncRule));
+        var systemNames = BuildConnectedSystemNameLookup(cache);
+
+        var mvos = await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync([.. metaverseObjectIds]);
+        if (mvos.Count == 0)
+            return results;
+
+        await previewServer.RefreshExportEvaluationCacheForPageAsync(cache, [.. mvos.Select(mvo => mvo.Id)]);
+
+        foreach (var mvo in mvos)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var result = new SyncPreviewResult();
+            var outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([mvo], cache);
+            ComposeOutbound(result, outbound);
+            BuildOutboundOutcomeNodes(result.OutcomeTree, outbound, systemNames);
+            results[mvo.Id] = result;
+        }
+
+        Log.Debug("PreviewSyncForMvosAsync: Previewed {Count} Metaverse Object(s){Proposed}.",
+            results.Count, proposedSyncRule == null ? string.Empty : " against a proposed Synchronisation Rule");
+        return results;
+    }
+
+    /// <summary>
+    /// The Synchronisation Rules the export evaluation cache is built from, with a proposal substituted for the
+    /// stored rule it edits. Null when there is no proposal, so the cache loads the rules itself as it always has.
+    /// </summary>
+    private static async Task<List<SyncRule>?> LoadRulesForCacheAsync(
+        ISyncRepository guardedRepository,
+        SyncRule? proposedSyncRule)
+    {
+        if (proposedSyncRule == null)
+            return null;
+
+        var allSyncRules = await guardedRepository.GetAllSyncRulesAsync();
+        Substitute(allSyncRules, proposedSyncRule);
+        return allSyncRules;
+    }
+
+    /// <summary>
     /// Previews what a synchronisation of one Connected System Object would do now: the inbound chain
     /// (scope, join or projection, Attribute Flow) followed by the outbound decisions the prospective
     /// Metaverse Object state would produce, composed into the preview result with a speculative outcome
@@ -518,7 +595,8 @@ public class SyncPreviewServer
                     : $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.",
                 SyncRuleId = rule.Id,
                 SyncRuleName = rule.Name,
-                ConnectedSystemId = connectedSystemId
+                ConnectedSystemId = connectedSystemId,
+                AttributeName = flowError.TargetAttributeName
             });
         }
 

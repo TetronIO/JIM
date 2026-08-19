@@ -35,4 +35,11 @@ public class SyncPreviewMessage
     /// The Connected System the condition concerns, when one is attributable.
     /// </summary>
     public int? ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The attribute the condition concerns, when one is attributable: the target attribute of the mapping that
+    /// could not be evaluated. Carried as a field rather than left inside <see cref="Detail"/> so a consumer can
+    /// attribute the failure without parsing prose (#1437).
+    /// </summary>
+    public string? AttributeName { get; set; }
 }

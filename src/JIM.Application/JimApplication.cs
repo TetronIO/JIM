@@ -124,7 +124,8 @@ public class JimApplication : IDisposable
                 new MetaverseObjectTypeDeletionSettingsPreviewAdapter(this),
                 new ConnectedSystemScopeSelectionPreviewAdapter(this, new SyncEngine()),
                 new SyncRuleDestructiveTogglePreviewAdapter(this, new SyncEngine()),
-                new SyncRuleScopingPreviewAdapter(this, new SyncEngine())
+                new SyncRuleScopingPreviewAdapter(this, new SyncEngine()),
+                new SyncRuleAttributeFlowPreviewAdapter(this, new SyncEngine())
             ]));
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationDrift = new ConfigurationDriftService(this);
