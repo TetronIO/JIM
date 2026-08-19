@@ -112,6 +112,34 @@ Describe 'Get-JIMConnectedSystemObjectType' {
             }
         }
 
+        It 'Passes a Reference attribute''s declared target Object Type through untouched' {
+            InModuleScope JIM {
+                # The declared target decides which Object Type a reference resolves within (#1285);
+                # scripted callers need the same read-only view of it as the portal's Schema tab.
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    @(
+                        [PSCustomObject]@{
+                            name = 'Person'
+                            selected = $true
+                            attributes = @(
+                                [PSCustomObject]@{ name = 'DEPARTMENT_ID'; type = 'Reference'; referencedObjectTypeId = 9; referencedObjectTypeName = 'Department' },
+                                [PSCustomObject]@{ name = 'MANAGER'; type = 'Reference'; referencedObjectTypeId = $null; referencedObjectTypeName = $null }
+                            )
+                        }
+                    )
+                }
+
+                $result = @(Get-JIMConnectedSystemObjectType -ConnectedSystemId 7)
+
+                $declared = $result[0].attributes | Where-Object { $_.name -eq 'DEPARTMENT_ID' }
+                $declared.referencedObjectTypeId | Should -Be 9
+                $declared.referencedObjectTypeName | Should -Be 'Department'
+                $undeclared = $result[0].attributes | Where-Object { $_.name -eq 'MANAGER' }
+                $undeclared.referencedObjectTypeName | Should -BeNullOrEmpty
+            }
+        }
+
         It 'Returns every object type from a Connected System that classifies nothing' {
             InModuleScope JIM {
                 # The File and SCIM connectors report no classification at all, so nothing may be filtered out.

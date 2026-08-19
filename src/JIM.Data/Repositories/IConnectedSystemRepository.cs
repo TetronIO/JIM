@@ -648,6 +648,13 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
 
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a lightweight projection for resolving
+    /// a Reference attribute's declared target name (#1285) without loading the ReferencedObjectType
+    /// navigation into an entity graph a mutating path might attach.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId);
+
     public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
 
     /// <summary>

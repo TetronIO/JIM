@@ -583,6 +583,8 @@ Each Object Type also carries `Tags`, the classification key/value pairs the Con
 
 Each attribute carries `writability`, one of `Writable`, `ReadOnly` or `WritableOnCreate`. See [Attribute writability](../configuration/connected-systems.md#attribute-writability) for what each one means for Attribute Flow.
 
+A Reference attribute additionally carries `referencedObjectTypeId` and `referencedObjectTypeName` when the Connected System's schema declares which Object Type the reference points at (the SQL Connector's `referencesObjectType`); import reference resolution then resolves the reference within that Object Type alone. Both are `null` when the schema does not say. Read-only: discovered from the schema, never settable.
+
 ### Examples
 
 ```powershell title="Get object types for a Connected System"

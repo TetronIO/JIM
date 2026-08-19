@@ -611,9 +611,27 @@
                         <VirtualisedSortHeader Title="Type" Name="type" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
-                            @context.Item.Type.ToString().SplitOnCapitalLetters()
-                        </MudChip>
+                        @{
+                            // The Object Type a Reference attribute declares as its target (#1285): resolved from the
+                            // sibling list by id, so no navigation loading is relied upon.
+                            var referencedObjectTypeName = context.Item.Type == AttributeDataType.Reference && context.Item.ReferencedObjectTypeId.HasValue
+                                ? ConnectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == context.Item.ReferencedObjectTypeId.Value)?.Name
+                                : null;
+                        }
+                        @if (referencedObjectTypeName != null)
+                        {
+                            <MudTooltip Text="@($"This Reference attribute declares that it points at the '{referencedObjectTypeName}' Object Type, so references resolve within that Object Type alone. Declared by the Connected System's schema; read-only.")" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
+                                    @($"Reference ({referencedObjectTypeName})")
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
+                                @context.Item.Type.ToString().SplitOnCapitalLetters()
+                            </MudChip>
+                        }
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Title="Plurality" Sortable="false">
