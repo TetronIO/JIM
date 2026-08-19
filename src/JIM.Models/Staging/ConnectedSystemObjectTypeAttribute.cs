@@ -81,6 +81,18 @@ public class ConnectedSystemObjectTypeAttribute
     /// </summary>
     public AttributeWritability Writability { get; set; }
 
+    /// <summary>
+    /// For a <see cref="AttributeDataType.Reference"/> attribute, the Object Type this reference points at,
+    /// when the Connected System's schema declares one (the SQL Connector's <c>referencesObjectType</c>).
+    /// Null when the schema does not say; import reference resolution then searches every Object Type and
+    /// requires the value to be unambiguous (#1285). Connector-stated: a schema refresh restates or clears it,
+    /// like <see cref="Writability"/>; administrators cannot set it.
+    /// </summary>
+    public int? ReferencedObjectTypeId { get; set; }
+
+    /// <inheritdoc cref="ReferencedObjectTypeId"/>
+    public ConnectedSystemObjectType? ReferencedObjectType { get; set; }
+
     public override string ToString()
     {
         return Name;

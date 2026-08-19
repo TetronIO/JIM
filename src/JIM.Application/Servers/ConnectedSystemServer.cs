@@ -1641,6 +1641,10 @@ public class ConnectedSystemServer
 
         connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
 
+        // Declared reference targets are wired in a second pass after this loop, once every Object Type
+        // instance exists in the graph: a reference may point at an Object Type declared after it (#1285).
+        var declaredReferenceTargets = new List<(ConnectedSystemObjectTypeAttribute Attribute, string TargetName)>();
+
         // Track removed object types
         foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
         {
@@ -1746,6 +1750,21 @@ public class ConnectedSystemServer
                 result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
             }
 
+            // Restate the declared reference target (connector-stated, like Writability): cleared here so a
+            // withdrawn declaration cannot leave a stale target behind, and re-wired in the second pass below
+            // when the schema still declares one (#1285).
+            foreach (var schemaAttribute in schemaObjectType.Attributes)
+            {
+                var mergedAttribute = connectedSystemObjectType.Attributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
+                if (mergedAttribute == null)
+                    continue;
+
+                mergedAttribute.ReferencedObjectType = null;
+                mergedAttribute.ReferencedObjectTypeId = null;
+                if (!string.IsNullOrWhiteSpace(schemaAttribute.ReferencesObjectTypeName))
+                    declaredReferenceTargets.Add((mergedAttribute, schemaAttribute.ReferencesObjectTypeName.Trim()));
+            }
+
             MergeObjectTypeTags(connectedSystemObjectType, schemaObjectType);
 
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
@@ -1774,6 +1793,25 @@ public class ConnectedSystemServer
             }
 
             connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
+        }
+
+        // Second pass: wire each declared reference target to the merged Object Type instance it names. The
+        // navigation carries the link because a brand-new target has no id until it is saved; EF assigns the
+        // foreign key from the navigation for those, and the id is set directly where one already exists.
+        // Case-insensitive to match the SQL Connector's own name handling. A declared target the schema does
+        // not contain is a connector defect: reported as a discovery warning, never wired (#1285).
+        foreach (var (attribute, targetName) in declaredReferenceTargets)
+        {
+            var target = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Name.Equals(targetName, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            {
+                result.DiscoveryWarnings.Add(
+                    $"Attribute '{attribute.Name}' declares reference target Object Type '{targetName}', which the schema does not contain. The target was not recorded.");
+                continue;
+            }
+
+            attribute.ReferencedObjectType = target;
+            attribute.ReferencedObjectTypeId = target.Id > 0 ? target.Id : null;
         }
 
         // Any credential attribute that survived the merge is one that was already persisted; force it into a

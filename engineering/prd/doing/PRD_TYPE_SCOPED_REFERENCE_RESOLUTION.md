@@ -1,6 +1,6 @@
 # Type-Scoped Reference Resolution
 
-- **Status:** Planned
+- **Status:** Doing
 - **Created:** 2026-08-19
 - **Author:** Jay Van der Zant
 - **Issue:** #1285
