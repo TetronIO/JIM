@@ -36,6 +36,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectedSystemObjectTypeTag> ConnectedSystemObjectTypeTags { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
+    public virtual DbSet<ConnectedSystemPasswordSynchronisation> ConnectedSystemPasswordSynchronisations { get; set; } = null!;
     public virtual DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
     public virtual DbSet<ConnectedSystemSettingValue> ConnectedSystemSettingValues { get; set; } = null!;
     public virtual DbSet<ConnectorContainer> ConnectorContainers { get; set; } = null!;
@@ -334,6 +335,30 @@ public class JimDbContext : DbContext
             .WithOne(pp => pp.ConnectedSystem)
             .HasForeignKey<ConnectedSystemPasswordPolicy>(pp => pp.ConnectedSystemId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // A Connected System has at most one Password Synchronisation configuration, declared explicitly for the
+        // same reason as the policy above. Cascade: a system that no longer exists cannot receive passwords, and
+        // the queued changes aimed at it cascade away with it.
+        modelBuilder.Entity<ConnectedSystem>()
+            .HasOne(cs => cs.PasswordSynchronisation)
+            .WithOne(ps => ps.ConnectedSystem)
+            .HasForeignKey<ConnectedSystemPasswordSynchronisation>(ps => ps.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Restrict rather than cascade: deleting the Object Type that receives passwords must not silently delete
+        // the configuration naming it and leave the system quietly not synchronising. The delete fails, and the
+        // administrator repoints or removes the configuration deliberately.
+        modelBuilder.Entity<ConnectedSystemPasswordSynchronisation>()
+            .HasOne(ps => ps.TargetObjectType)
+            .WithMany()
+            .HasForeignKey(ps => ps.TargetObjectTypeId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Answers "which systems are enabled for Password Synchronisation?", which fan-out asks on every password
+        // change, without loading the Connected Systems themselves.
+        modelBuilder.Entity<ConnectedSystemPasswordSynchronisation>()
+            .HasIndex(ps => ps.Enabled)
+            .HasDatabaseName("IX_ConnectedSystemPasswordSynchronisations_Enabled");
 
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mo => mo.Roles)
