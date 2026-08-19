@@ -2,10 +2,12 @@
 
 ## Overview
 
-JIM employs a four-tier testing approach to ensure quality at different levels of the application:
+JIM employs a five-tier testing approach to ensure quality at different levels of the application:
 
 ```
 Integration Tests (Full System, Docker stack + external directories)
+         ^
+LDAPS Certificate Validation Tests (real directory servers over TLS, .NET test host)
          ^
 Database-Backed Component Tests (real PostgreSQL, .NET test host)
          ^
@@ -168,7 +170,49 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
 - ❌ UI and API-surface behaviour
 - ❌ Performance at scale
 
-## 4. Integration Tests
+## 4. LDAPS Certificate Validation Tests
+
+**Location**: `test/JIM.Worker.Tests/Connectors/LdapsCertificateValidationTests.cs`, `ServerCertificateProbeTests.cs`
+
+**Purpose**: Verify LDAPS certificate validation against real directory servers presenting real certificates over TLS, in the .NET test host. This tier exists because JIM deliberately does not make the trust decision itself (#1132): the platform LDAP client validates the chain, the validity period and the certificate's name, and JIM only supplies additional trust anchors. What that client does with those anchors can only be observed by actually connecting to a directory server over TLS, so none of it is unit-testable, and it is exactly the validation the integration stacks used to bypass by setting `LDAPTLS_REQCERT=never` (#1141).
+
+**Characteristics**:
+- Real directory servers over real TLS, but no Docker Compose stack and not driven by the PowerShell integration runner: the fixtures connect directly from the .NET test host
+- Covers three OpenLDAP variants (a system-trusted CA, a CA that is only trusted via the JIM certificate store, and an expired certificate) plus a Samba AD Domain Controller
+- Exercises both directions: connections must be refused for untrusted issuers, name mismatches and expired certificates (with the reason reported), and must succeed once the CA is added to the JIM certificate store
+
+**Gating**: Every fixture carries `[Category("RequiresLdaps")]` and, in `[OneTimeSetUp]`, calls `Assert.Ignore` unless `JIM_TEST_LDAPS_HOST` is set. So a normal `dotnet test` / `jim-test` run skips them, and they run only once pointed at real servers.
+
+**Configuration (environment variables)**:
+
+| Variable | Purpose |
+|----------|---------|
+| `JIM_TEST_LDAPS_HOST` | Host of the primary OpenLDAP test server; **also the opt-in switch** (unset = skip) |
+| `JIM_TEST_LDAPS_PORT` | LDAPS port (default `636`) |
+| `JIM_TEST_LDAPS_USERNAME` / `JIM_TEST_LDAPS_PASSWORD` | Bind credentials |
+| `JIM_TEST_LDAPS_CA_PATH` | Path to the CA certificate to trust via the JIM certificate store |
+| `JIM_TEST_LDAPS_MISMATCH_HOST` | Host presenting a certificate whose name does not match |
+| `JIM_TEST_LDAPS_EXPIRED_HOST` / `_EXPIRED_PORT` | Server presenting an expired certificate |
+| `JIM_TEST_LDAPS_SYSTEM_TRUSTED_HOST` / `_SYSTEM_TRUSTED_PORT` | Server whose CA is already trusted by the OS, proving JIM's additions are additive rather than a replacement |
+
+**Running locally**: stand up the fixture servers with the standalone script (see `test/scripts/Start-LdapsCertificateTestServers.ps1`; the `-IncludeSambaAd` switch also provisions the Samba AD Domain Controller), which prints the environment variables above, then:
+
+```bash
+dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"
+```
+
+**Running in CI**: the `ldaps-tests` job in `.github/workflows/ci.yml` runs `Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd` to stand the servers up, exports their connection details, then runs `dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"`. It runs on every PR, alongside `build-and-test` and `database-tests`, and asserts `LDAPTLS_REQCERT` is not set in its own environment first: that variable would silently disable the very validation this job exists to prove, turning every refusal case into a false pass.
+
+**What LDAPS Certificate Validation Tests Are Good At**:
+- ✅ Proving certificate validation genuinely refuses untrusted issuers, name mismatches and expired certificates
+- ✅ Proving a certificate trusted via the JIM certificate store is honoured, additively alongside OS trust anchors
+- ✅ Catching a regression that would otherwise only surface once a customer's directory certificate rotated
+
+**What LDAPS Certificate Validation Tests Miss**:
+- ❌ The rest of the LDAP Connector's behaviour (schema import, sync, password writes); that is covered by the Integration tier's Samba AD / OpenLDAP scenarios
+- ❌ Anything not reachable purely through the TLS handshake and certificate chain
+
+## 5. Integration Tests
 
 **Location**: `test/integration/`
 
@@ -227,6 +271,7 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
 | Unit Tests | 80%+ of business logic | On every commit (pre-commit hook) |
 | Workflow Tests | Critical workflows (sync, provisioning, deletion) | On every commit |
 | Database-Backed Component Tests | Provider-specific / raw-SQL repository behaviour | On every PR (CI `database-tests` job); locally via `jim-test-db` |
+| LDAPS Certificate Validation Tests | Certificate chain, name and expiry validation against real directories | On every PR (CI `ldaps-tests` job) |
 | Integration Tests | Key scenarios (Scenarios 1-5) | On PR, nightly, before release |
 
 ## Best Practices
@@ -377,7 +422,7 @@ var cso = await context.ConnectedSystemObjects.FirstAsync(c => c.Id == id);
 ### What This Means
 
 1. **Unit and workflow tests CANNOT validate that repository queries load required navigation properties**
-2. **Only real-PostgreSQL tests can verify `.Include()` chains are correct**; this means the Database-Backed Component tier (tier 3) or the Integration tier (tier 4). The Database-Backed tier is the cheaper of the two and runs on every PR, so reach for it first
+2. **Only real-PostgreSQL tests can verify `.Include()` chains are correct**; this means the Database-Backed Component tier (tier 3) or the Integration tier (tier 5). The Database-Backed tier is the cheaper of the two and runs on every PR, so reach for it first
 3. **Any bug involving missing navigation property loading will pass all unit/workflow tests**
 
 ### Defensive Measures
@@ -418,8 +463,9 @@ Because we cannot rely on unit/workflow tests to catch these bugs, we employ:
 - **Unit Tests**: Fast, isolated, test individual components (mocked)
 - **Workflow Tests**: Moderate speed, test multi-component workflows in-memory, catch integration bugs
 - **Database-Backed Component Tests**: Real PostgreSQL in the .NET test host, catch provider-specific and raw-SQL bugs the in-memory provider hides; fast enough to run on every PR
+- **LDAPS Certificate Validation Tests**: Real directory servers over TLS in the .NET test host, prove certificate validation genuinely refuses what it should and trusts what it should; fast enough to run on every PR
 - **Integration Tests**: Slow, test full system with Docker + external directories, validate production-like behaviour
 
-The four tiers complement each other. The watermark bug demonstrates why unit and workflow tests are not enough on their own; the Predefined Search silent-no-op bug (#849/#850) demonstrates why a real-PostgreSQL tier below the heavy Integration stack is worth having - it caught a persistence bug in ~30s that every in-memory test passed.
+The five tiers complement each other. The watermark bug demonstrates why unit and workflow tests are not enough on their own; the Predefined Search silent-no-op bug (#849/#850) demonstrates why a real-PostgreSQL tier below the heavy Integration stack is worth having - it caught a persistence bug in ~30s that every in-memory test passed; the LDAPS certificate tier exists for the same reason one layer up the stack: JIM's own trust decision is untestable without a real TLS handshake, and the integration stacks used to paper over that entirely by disabling validation.
 
 **⚠️ Critical Caveat**: Due to EF Core in-memory database limitations (see above), a real-PostgreSQL tier (Database-Backed Component or Integration) is the only reliable way to verify navigation property loading. Unit and workflow tests will PASS even when `.Include()` statements are missing.

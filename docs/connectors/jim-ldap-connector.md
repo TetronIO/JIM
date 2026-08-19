@@ -330,7 +330,7 @@ services:
 Set the Host setting to `dc01.corp.local`. The name now resolves inside the container, the certificate matches, and the connection is fully validated. This works when DNS is unavailable or unreliable, because the mapping is static and needs no name server. The alternative is to have the certificate reissued with the name (or IP address) you actually connect to.
 
 !!! warning "Disabling validation entirely"
-    OpenLDAP's own `LDAPTLS_REQCERT=never` environment variable is honoured by the LDAP client library JIM's containers use, and switches certificate validation off. It applies to the whole container, so it affects **every** LDAPS Connected System that container serves, and it cannot be scoped to one directory. JIM's development and integration test stacks set it for their throw-away directories. Never set it in production: it exposes the service account's credentials to anyone able to intercept the connection.
+    OpenLDAP's own `LDAPTLS_REQCERT=never` environment variable is honoured by the LDAP client library JIM's containers use, and switches certificate validation off. It applies to the whole container, so it affects **every** LDAPS Connected System that container serves, and it cannot be scoped to one directory. JIM's development and integration test stacks do not set it: they trust each throw-away directory's own CA through the JIM certificate store instead, so LDAPS validation is exercised for real rather than bypassed. Never set this variable in production: it exposes the service account's credentials to anyone able to intercept the connection.
 
 ### Setting Passwords
 
