@@ -136,6 +136,56 @@ public class ConnectedSystemPasswordSynchronisation
     }
 
     /// <summary>
+    /// What is wrong with this configuration for the given Connected System, or an empty list where it can be
+    /// saved. Shared by the portal, the REST API and PowerShell so that all three accept and refuse exactly the
+    /// same settings.
+    /// <para>
+    /// Every problem it catches would otherwise surface as queued password changes that can never be delivered:
+    /// a Connector with no password channel, or a target Object Type holding no accounts. Both look configured
+    /// and do nothing, which is the worst way for this to fail.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystem">
+    /// The Connected System being configured, loaded with its Connector Definition and Object Types.
+    /// </param>
+    public IReadOnlyList<string> Validate(ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        var problems = new List<string>();
+
+        // Requirement 4. Checked rather than assumed hidden: the portal does hide the option, but the API and
+        // PowerShell are reachable without it, and a configuration stored against a Connector that cannot set
+        // passwords would queue changes nothing could ever deliver.
+        if (connectedSystem.ConnectorDefinition?.SupportsPasswordSet != true)
+            problems.Add($"The {connectedSystem.ConnectorDefinition?.Name ?? "selected"} Connector cannot set " +
+                         "passwords, so Password Synchronisation cannot be configured on this Connected System.");
+
+        // The Object Type has to be one the administrator has actually selected into the schema: fan-out looks
+        // for an account of this type, and an unselected type has no Connected System Objects to find.
+        var targetObjectType = connectedSystem.ObjectTypes?
+            .SingleOrDefault(ot => ot.Id == TargetObjectTypeId);
+
+        if (targetObjectType == null)
+            problems.Add("Choose the Connected System Object Type that holds this system's user accounts.");
+        else if (!targetObjectType.Selected)
+            problems.Add($"The '{targetObjectType.Name}' Object Type is not selected for synchronisation, so it " +
+                         "holds no accounts to set passwords on. Select it on the Schema tab first.");
+
+        // Bounded rather than merely defaulted, because a value this far out is a typo rather than a choice, and
+        // the effective-value fallbacks silently correct only zero and negative.
+        if (MaxRetries is < 0 or > 100)
+            problems.Add("The maximum number of retries must be between 0 and 100. Leave it at 0 to use JIM's " +
+                         $"default of {DefaultMaxRetries}.");
+
+        if (RetryBackoffBase > TimeSpan.FromDays(1))
+            problems.Add("The retry backoff base must not exceed one day; each attempt already waits twice as " +
+                         "long as the one before it.");
+
+        return problems;
+    }
+
+    /// <summary>
     /// A detached copy of everything <see cref="WouldDeliverTheSameAs"/> compares, for holding what was saved
     /// while an editor mutates the live instance in place. The identity and navigation are deliberately left off:
     /// this is a value to compare against, never something to persist.

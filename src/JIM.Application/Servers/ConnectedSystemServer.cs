@@ -2016,6 +2016,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// A Connected System's Password Synchronisation configuration (#1119), or null where it has never been
+    /// configured, which is where every system starts.
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystemId);
+    }
+
+
+    /// <summary>
     /// The password expiry behaviours this Connected System's Connector is able to apply.
     /// <para>
     /// Read from the Connector rather than from anything persisted, because it is a property of the code and

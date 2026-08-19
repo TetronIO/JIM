@@ -551,6 +551,124 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Get a Connected System's Password Synchronisation configuration
+    /// </summary>
+    /// <remarks>
+    /// Reports the configuration, or JIM's defaults where none has been saved; `configured` says which of the
+    /// two you are looking at, and `connectorSupportsPasswordSet` says whether one can be saved at all.
+    ///
+    /// Nothing here carries a password. Queued password changes are held encrypted in the Password
+    /// Synchronisation queue and are never returned by any surface.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <response code="200">The configuration, or JIM's defaults where none has been saved.</response>
+    /// <response code="404">No such Connected System.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/password-synchronisation", Name = "GetConnectedSystemPasswordSynchronisation")]
+    [ProducesResponseType(typeof(ConnectedSystemPasswordSynchronisationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetConnectedSystemPasswordSynchronisationAsync(int connectedSystemId)
+    {
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var configuration = await _application.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystemId);
+
+        // An unconfigured system is reported as such rather than as a 404: the system exists, and "Password
+        // Synchronisation has not been set up here" is a different answer from "there is no such system".
+        return Ok(ConnectedSystemPasswordSynchronisationResponse.FromEntity(connectedSystem, configuration));
+    }
+
+    /// <summary>
+    /// Create or update a Connected System's Password Synchronisation configuration
+    /// </summary>
+    /// <remarks>
+    /// Every field is optional; an omitted one leaves the stored value unchanged. Sending this against a system
+    /// with no configuration creates one, in which case `targetObjectTypeId` is required.
+    ///
+    /// `enabled` is independent of whether a configuration exists, deliberately. A configured but disabled
+    /// system keeps accumulating queued password changes rather than discarding them, and enabling it delivers
+    /// what accumulated without further intervention. That is why there is no endpoint to remove a
+    /// configuration: removing it would throw the queue away, whereas disabling it is reversible.
+    ///
+    /// Password Synchronisation can only be configured on a Connected System whose Connector can set passwords.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The settings to change.</param>
+    /// <response code="200">The updated configuration.</response>
+    /// <response code="400">The Connector cannot set passwords, or the settings cannot be satisfied.</response>
+    /// <response code="404">No such Connected System.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/password-synchronisation", Name = "UpdateConnectedSystemPasswordSynchronisation")]
+    [ProducesResponseType(typeof(ConnectedSystemPasswordSynchronisationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateConnectedSystemPasswordSynchronisationAsync(
+        int connectedSystemId,
+        [FromBody] UpdateConnectedSystemPasswordSynchronisationRequest request)
+    {
+        _logger.LogInformation("Updating the Password Synchronisation configuration of Connected System: {Id}", connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for a Password Synchronisation configuration update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var configuration = connectedSystem.PasswordSynchronisation ??=
+            new ConnectedSystemPasswordSynchronisation { ConnectedSystemId = connectedSystem.Id };
+
+        if (request.Enabled.HasValue)
+            configuration.Enabled = request.Enabled.Value;
+
+        if (request.TargetObjectTypeId.HasValue)
+            configuration.TargetObjectTypeId = request.TargetObjectTypeId.Value;
+
+        if (request.MaxRetries.HasValue)
+            configuration.MaxRetries = request.MaxRetries.Value;
+
+        if (request.RetryBackoffBase.HasValue)
+            configuration.RetryBackoffBase = request.RetryBackoffBase.Value;
+
+        if (request.RequireSecureTransport.HasValue)
+            configuration.RequireSecureTransport = request.RequireSecureTransport.Value;
+
+        // Assessed before it is stored, and by the same code the portal's Save is gated on, so the two surfaces
+        // accept and refuse exactly the same settings. Every problem it catches would otherwise show up as
+        // queued password changes nothing could ever deliver.
+        var problems = configuration.Validate(connectedSystem);
+        if (problems.Count > 0)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"These Password Synchronisation settings cannot be used: {string.Join(" ", problems)}"));
+
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, apiKey, changeReason: request.ChangeReason);
+            else
+                await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, initiatedBy, changeReason: request.ChangeReason);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to update the Password Synchronisation configuration: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+
+        _logger.LogInformation("Updated the Password Synchronisation configuration of Connected System: {Id}", connectedSystemId);
+
+        var updated = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        var stored = await _application.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystemId);
+        return Ok(ConnectedSystemPasswordSynchronisationResponse.FromEntity(updated!, stored));
+    }
+
+    /// <summary>
     /// Generate a password that satisfies a Connected System's discovered policy
     /// </summary>
     /// <remarks>

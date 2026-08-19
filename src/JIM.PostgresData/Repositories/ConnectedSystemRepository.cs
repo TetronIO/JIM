@@ -223,6 +223,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IQueryable<ConnectedSystem> csQuery = Repository.Database.ConnectedSystems
             .Include(cs => cs.ConnectorDefinition)
             .Include(cs => cs.PasswordPolicy)
+            .Include(cs => cs.PasswordSynchronisation)
+                .ThenInclude(ps => ps.TargetObjectType)
             .Include(cs => cs.SettingValues)
                 .ThenInclude(sv => sv.Setting);
 
@@ -535,6 +537,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Repository.Database.ConnectedSystemPasswordPolicies.Add(connectedSystem.PasswordPolicy);
             else
                 Repository.UpdateDetachedSafe(connectedSystem.PasswordPolicy);
+        }
+
+        // And again for the Password Synchronisation configuration, for the same reasons: the graph is not
+        // traversed, and a new configuration's navigation leads back to the Connected System, which must already
+        // be tracked above so that Add does not try to insert it a second time.
+        if (connectedSystem.PasswordSynchronisation != null)
+        {
+            if (connectedSystem.PasswordSynchronisation.Id == 0)
+                Repository.Database.ConnectedSystemPasswordSynchronisations.Add(connectedSystem.PasswordSynchronisation);
+            else
+                Repository.UpdateDetachedSafe(connectedSystem.PasswordSynchronisation);
         }
     }
 
@@ -5460,6 +5473,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemPasswordPolicies
             .AsNoTracking()
             .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId)
+    {
+        // The Object Type is included because every caller that shows or validates this configuration needs to
+        // name it, and the alternative is a second query per Connected System on a list page.
+        return await Repository.Database.ConnectedSystemPasswordSynchronisations
+            .AsNoTracking()
+            .Include(ps => ps.TargetObjectType)
+            .SingleOrDefaultAsync(ps => ps.ConnectedSystemId == connectedSystemId);
     }
 
     public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)
