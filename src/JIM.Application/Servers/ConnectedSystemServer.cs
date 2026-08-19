@@ -7739,10 +7739,33 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Refuses an Object Matching Rule that could never match anything, before it is stored.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ObjectMatchingRule.IsValid"/> described what a workable rule looks like and nothing called it,
+    /// so the portal was able to store Simple mode rules with no Metaverse Object Type (#1458). The matching engine
+    /// skips such a rule and moves to the next one, so a Connected System whose only rules are malformed matches
+    /// nothing at all: every account that should have joined an existing identity projects a new one instead, and
+    /// nothing reports it. A hard refusal here is what the Synchronisation Integrity rules ask for; the alternative
+    /// is discovering the duplicate identities by hand, months later.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The rule cannot work, with the reason.</exception>
+    private static void EnsureObjectMatchingRuleIsWorkable(ObjectMatchingRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        var invalidity = rule.DescribeInvalidity();
+        if (invalidity != null)
+            throw new InvalidDataException(invalidity);
+    }
+
+    /// <summary>
     /// Creates a new Object Matching Rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7762,6 +7785,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7781,6 +7806,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7800,6 +7827,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",

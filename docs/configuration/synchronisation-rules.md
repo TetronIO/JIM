@@ -127,6 +127,13 @@ Object matching can be configured at two levels:
 - **Simple mode**<br /> Configured at the Connected System level; the matching rules are shared across all Synchronisation Rules for that system. Easier to manage when matching is uniform.
 - **Advanced mode**<br /> Configured per Synchronisation Rule, so each rule can match independently. Use this when different Synchronisation Rules need different matching strategies against the same Connected System.
 
+A Simple mode rule also names the **Metaverse Object Type** it searches. It has to: with no Synchronisation Rule
+behind it, nothing else says where to look, and a rule that does not say is skipped during synchronisation. An
+Advanced mode rule does not name one, because the Synchronisation Rule that owns it already does.
+
+JIM refuses to save a rule that could never match, naming what is missing. If any rule already stored has that
+shape, the Matching tab says so and names it, so it can be removed and recreated.
+
 ## Projection and provisioning
 
 These determine what happens when no match is found.
