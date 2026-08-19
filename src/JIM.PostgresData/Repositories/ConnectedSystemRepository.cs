@@ -2653,6 +2653,28 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsAsyncEnumerable();
 
     /// <inheritdoc />
+    public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId != null)
+            .OrderBy(cso => cso.Id)
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
+    public async Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId != null)
+            .CountAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId)
     {
         var query = Repository.Database.ConnectedSystemObjects
@@ -3996,6 +4018,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             "errors" => sortDescending
                 ? query.OrderByDescending(pe => pe.ErrorCount)
                 : query.OrderBy(pe => pe.ErrorCount),
+            "references" => sortDescending
+                ? query.OrderByDescending(pe => pe.AttributeValueChanges.Count(ac => ac.UnresolvedReferenceValue != null && ac.UnresolvedReferenceValue != ""))
+                : query.OrderBy(pe => pe.AttributeValueChanges.Count(ac => ac.UnresolvedReferenceValue != null && ac.UnresolvedReferenceValue != "")),
             "nextretry" => sortDescending
                 ? query.OrderByDescending(pe => pe.NextRetryAt ?? DateTime.MaxValue)
                 : query.OrderBy(pe => pe.NextRetryAt ?? DateTime.MaxValue),

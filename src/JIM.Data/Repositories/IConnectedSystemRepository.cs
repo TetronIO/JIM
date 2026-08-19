@@ -1043,6 +1043,29 @@ public interface IConnectedSystemRepository
     public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId);
 
     /// <summary>
+    /// Streams the joined Connected System Objects of one type in a Connected System, with the attribute values
+    /// and type loaded that Synchronisation Rule scope evaluation reads, for previewing what a destructive
+    /// Synchronisation Rule toggle would do to the objects the rule stands over (#1115).
+    /// </summary>
+    /// <remarks>
+    /// Streamed and untracked for the same reason as <see cref="StreamConnectedSystemObjectScopeCandidates"/>:
+    /// previews run over whole connector spaces. Only joined objects are streamed because both destructive
+    /// toggles decide the fate of a join; an unjoined object has nothing to disconnect, keep or delete. Ordered
+    /// so a preview re-run over unchanged data produces its groups in the same order.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose objects to stream.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type the rule targets.</param>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
+    /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type the rule targets.</param>
+    public Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>

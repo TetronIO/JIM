@@ -57,6 +57,11 @@ function Set-JIMSyncRule {
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Synchronisation Rule's change history.
 
+    .PARAMETER PreviewActivityId
+        The Configuration Change Preview this change was made after reading, as returned by
+        New-JIMConfigurationChangePreview -SyncRuleId. Recorded on the change's Activity so
+        "previewed, then applied" is auditable rather than a claim.
+
     .PARAMETER PassThru
         If specified, returns the updated Synchronisation Rule object.
 
@@ -138,6 +143,9 @@ function Set-JIMSyncRule {
         [ValidateNotNullOrEmpty()]
         [string]$ChangeReason,
 
+        [Parameter()]
+        [guid]$PreviewActivityId,
+
         [switch]$PassThru
     )
 
@@ -196,6 +204,10 @@ function Set-JIMSyncRule {
 
         if ($PSBoundParameters.ContainsKey('ChangeReason')) {
             $body.changeReason = $ChangeReason
+        }
+
+        if ($PSBoundParameters.ContainsKey('PreviewActivityId')) {
+            $body.previewActivityId = $PreviewActivityId
         }
 
         $displayName = $Name ?? $ruleId

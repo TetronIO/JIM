@@ -51,7 +51,10 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, "No longer eligible for deletion", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate, "Deletion date changes", "Would Change Deletion Eligible Date", CausalityTone.Warning, Icons.Material.Filled.EditCalendar),
         (ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued, "Deprovision queued", "CSO Pending Delete", CausalityTone.Error, Icons.Material.Filled.AutoDelete),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, "Disconnects from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Warning, Icons.Material.Filled.LinkOff)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, "Disconnects from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Warning, Icons.Material.Filled.LinkOff),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, "Removed from the target system", "Would Stage Delete Export", CausalityTone.Error, Icons.Material.Filled.AutoDelete),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined, "Keeps its Metaverse Object join", "Would Remain Joined", CausalityTone.Success, Icons.Material.Filled.Link),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction, "Scope-exit action changes", "Would Change Deprovision Action", CausalityTone.Warning, Icons.Material.Filled.SwapHoriz)
     ];
 
     /// <summary>
@@ -67,7 +70,10 @@ public class OutcomeDisplayMapTests
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate,
-        ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction
     ];
 
     [Test]

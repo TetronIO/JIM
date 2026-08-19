@@ -4459,6 +4459,25 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Streams the joined Connected System Objects of one type in a Connected System, with the attribute values
+    /// and type loaded that Synchronisation Rule scope evaluation reads, for previewing what a destructive
+    /// Synchronisation Rule toggle would do to the objects the rule stands over (#1115).
+    /// </summary>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return Application.Repository.ConnectedSystems.StreamJoinedConnectedSystemObjects(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
+    /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
+    /// </summary>
+    public async Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetJoinedConnectedSystemObjectCountAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
     /// The Connector's containment rule, for a Connected System whose Connector can express one; null otherwise.
     /// </summary>
     /// <remarks>
@@ -7097,7 +7116,11 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
     }
 
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null)
     {
         // validate the Synchronisation Rule
         if (syncRule == null)
@@ -7182,7 +7205,8 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            ParentActivityId = parentActivity?.Id
+            ParentActivityId = parentActivity?.Id,
+            PreviewActivityId = previewActivityId
         };
 
         if (syncRule.Id == 0)
@@ -7245,7 +7269,11 @@ public class ConnectedSystemServer
     /// <summary>
     /// Creates or updates a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null)
     {
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
@@ -7301,7 +7329,8 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            ParentActivityId = parentActivity?.Id
+            ParentActivityId = parentActivity?.Id,
+            PreviewActivityId = previewActivityId
         };
 
         if (syncRule.Id == 0)

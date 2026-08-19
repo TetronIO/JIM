@@ -34,6 +34,7 @@ Previews are available where a surface has an evaluator for it:
 
 - A Metaverse Object Type's [deletion settings](metaverse.md#previewing-a-deletion-settings-change), the change most worth asking about because it is the one that can make existing objects eligible for deletion the moment it is saved.
 - A Connected System's [partitions and containers](connected-systems.md#previewing-a-partition-or-container-change), where deselecting one container quietly takes everything beneath it out of import scope.
+- A Synchronisation Rule's [destructive toggles](synchronisation-rules.md#previewing-a-destructive-toggle-change): the Deprovisioning Action, which decides whether a scope exit disconnects an object or deletes it from the target system, and the Inbound Out-of-Scope Action, which decides whether objects leaving import scope keep their join.
 
 The panel opens with what saving would do, in one sentence, worst consequence first: a change that disconnects forty thousand objects and makes two eligible for deletion leads with the two deletions, because that is the part you cannot take back. The breakdown sits beneath it, and selecting a row lists the objects behind it.
 
@@ -84,5 +85,6 @@ Changes made through the REST API and PowerShell are not prompted. An automated 
 - [Preview cmdlets](../powershell/previews.md) -- starting, reading and cancelling a preview from PowerShell
 - [Metaverse](metaverse.md#previewing-a-deletion-settings-change) -- previewing a change to deletion settings
 - [Connected Systems](connected-systems.md#previewing-a-partition-or-container-change) -- previewing a change to what JIM imports
+- [Synchronisation Rules](synchronisation-rules.md#previewing-a-destructive-toggle-change) -- previewing a change to the destructive toggles
 - [Connected Systems](connected-systems.md#configuration-changes-pending-a-full-synchronisation) -- the changed-since indicator
 - [Service Settings](service-settings.md) -- switching configuration change tracking on or off

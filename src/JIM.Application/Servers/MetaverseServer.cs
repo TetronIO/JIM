@@ -1894,6 +1894,16 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Batch-loads Metaverse Objects by ID with their type and attribute values, untracked, for evaluating
+    /// Synchronisation Rule scope in memory (the destructive-toggle preview's outbound walk, #1115; the same
+    /// read the Temporal Scope Reconciler performs for its export re-evaluation).
+    /// </summary>
+    public async Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> metaverseObjectIds)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsByIdsNoTrackingAsync(metaverseObjectIds);
+    }
+
+    /// <summary>
     /// Gets MVO changes where the MVO has been deleted (ChangeType = Deleted and MetaverseObject is null).
     /// Used for the deleted objects browser.
     /// </summary>

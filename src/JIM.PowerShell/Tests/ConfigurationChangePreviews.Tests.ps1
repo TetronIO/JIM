@@ -150,6 +150,62 @@ Describe 'New-JIMConfigurationChangePreview' {
         }
     }
 
+    Context 'Synchronisation Rule destructive toggles (#1115)' {
+        It 'Targets the Synchronisation Rule endpoint and omits the toggles the caller did not supply' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 | Out-Null
+
+                # An empty body previews the stored toggles; sending defaults instead would ask about a
+                # change the caller did not propose.
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/42/destructive-toggles/preview'
+                $script:capturedBody.Keys.Count | Should -Be 0
+            }
+        }
+
+        It 'Sends the proposed toggles as their enum names (the API rejects numeric enum values)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 `
+                    -OutboundDeprovisionAction Delete -InboundOutOfScopeAction Disconnect | Out-Null
+
+                $script:capturedBody.outboundDeprovisionAction | Should -BeExactly 'Delete'
+                $script:capturedBody.inboundOutOfScopeAction | Should -BeExactly 'Disconnect'
+            }
+        }
+
+        It 'Restricts the toggles to the actions the model defines' {
+            $command = Get-Command New-JIMConfigurationChangePreview
+            $outbound = $command.Parameters['OutboundDeprovisionAction'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $outbound.ValidValues | Should -Be @('Disconnect', 'Delete')
+            $inbound = $command.Parameters['InboundOutOfScopeAction'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $inbound.ValidValues | Should -Be @('RemainJoined', 'Disconnect')
+        }
+
+        It 'Accepts SyncRuleId from the pipeline by property name' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['SyncRuleId']
+            ($parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName
+            }) | Should -Not -BeNullOrEmpty
+        }
+    }
+
     Context 'Waiting' {
         It 'Returns the start result without polling when the proposal is blocked' {
             InModuleScope JIM {
@@ -340,6 +396,40 @@ Describe 'Stop-JIMConfigurationChangePreview' {
 
     It 'Supports ShouldProcess so a preview is not stopped by a dry run' {
         (Get-Command Stop-JIMConfigurationChangePreview).Parameters.ContainsKey('WhatIf') | Should -BeTrue
+    }
+}
+
+Describe 'Set-JIMSyncRule preview linkage' {
+    It 'Sends previewActivityId so the change records the preview that informed it' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $previewActivityId = [guid]::NewGuid()
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ id = 42 }
+            }
+
+            Set-JIMSyncRule -Id 42 -OutboundDeprovisionAction Delete `
+                -PreviewActivityId $previewActivityId -Confirm:$false | Out-Null
+
+            $script:capturedBody.previewActivityId | Should -Be $previewActivityId
+        }
+    }
+
+    It 'Omits previewActivityId when no preview was run' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ id = 42 }
+            }
+
+            Set-JIMSyncRule -Id 42 -OutboundDeprovisionAction Delete -Confirm:$false | Out-Null
+
+            $script:capturedBody.ContainsKey('previewActivityId') | Should -BeFalse
+        }
     }
 }
 

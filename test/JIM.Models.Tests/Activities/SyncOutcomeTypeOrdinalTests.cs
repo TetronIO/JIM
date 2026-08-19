@@ -60,7 +60,12 @@ public class SyncOutcomeTypeOrdinalTests
         // ChangeType is Delete. Before this existed, a deprovisioning cascade was indistinguishable
         // from an attribute update in the causality views.
         [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = 25,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = 26
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = 26,
+
+        // Synchronisation Rule destructive-toggle preview (#1115): the fates the two Class A toggles decide.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] = 27,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] = 28,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = 29
     };
 
     [Test]
