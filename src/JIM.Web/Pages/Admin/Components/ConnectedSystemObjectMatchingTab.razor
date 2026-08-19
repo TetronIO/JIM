@@ -145,6 +145,14 @@ else
     [Parameter, EditorRequired]
     public IList<MetaverseAttribute> MetaverseAttributes { get; set; } = null!;
 
+    /// <summary>
+    /// The Metaverse Object Types a Simple mode rule can search. Required rather than optional: a rule that names
+    /// none has nowhere to look, so the matching engine skips it and the objects that should have joined project
+    /// duplicate identities instead (#1458).
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IList<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
+
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
@@ -152,6 +160,7 @@ else
     private int _selectedMatchingRuleTabIndex;
     private ConnectedSystemObjectTypeAttribute? _newMatchingRuleSourceAttribute;
     private MetaverseAttribute? _newMatchingRuleTargetAttribute;
+    private MetaverseObjectType? _newMatchingRuleMetaverseObjectType;
     private bool _newMatchingRuleCaseSensitive = false;
     // Track the currently active object type for the matching rules form state
     private ConnectedSystemObjectType? _currentMatchingRuleObjectType;
@@ -196,9 +205,18 @@ else
             await grid.RefreshAsync(invalidateTotals: true);
     }
 
+    /// <summary>
+    /// Whether the form describes a rule that could actually match. The Metaverse Object Type is as required as the
+    /// two attributes: a rule missing it is stored happily and never matches (#1458).
+    /// </summary>
+    private bool CanAddMatchingRule =>
+        _newMatchingRuleSourceAttribute != null
+        && _newMatchingRuleTargetAttribute != null
+        && _newMatchingRuleMetaverseObjectType != null;
+
     private async Task HandleAddMatchingRuleAsync(ConnectedSystemObjectType objectType)
     {
-        if (_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)
+        if (!CanAddMatchingRule)
             return;
 
         using var jim = JimFactory.Create();
@@ -214,7 +232,9 @@ else
             Order = nextOrder,
             ConnectedSystemObjectTypeId = objectType.Id,
             ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttributeId = _newMatchingRuleTargetAttribute.Id,
+            MetaverseObjectTypeId = _newMatchingRuleMetaverseObjectType!.Id,
+            MetaverseObjectType = _newMatchingRuleMetaverseObjectType,
+            TargetMetaverseAttributeId = _newMatchingRuleTargetAttribute!.Id,
             TargetMetaverseAttribute = _newMatchingRuleTargetAttribute,
             CaseSensitive = _newMatchingRuleCaseSensitive,
             Sources = new List<ObjectMatchingRuleSource>
@@ -222,7 +242,7 @@ else
                 new()
                 {
                     Order = 0,
-                    ConnectedSystemAttributeId = _newMatchingRuleSourceAttribute.Id,
+                    ConnectedSystemAttributeId = _newMatchingRuleSourceAttribute!.Id,
                     ConnectedSystemAttribute = _newMatchingRuleSourceAttribute
                 }
             }
@@ -238,6 +258,7 @@ else
             // Reset the form
             _newMatchingRuleSourceAttribute = null;
             _newMatchingRuleTargetAttribute = null;
+            _newMatchingRuleMetaverseObjectType = null;
             _newMatchingRuleCaseSensitive = false;
 
             Snackbar.Add("Matching rule has been created.", Severity.Success);
@@ -451,6 +472,24 @@ else
                         }
                     </MudSelect>
                 </MudItem>
+                <MudItem xs="12" md="4">
+                    @* Where the rule looks. A Simple mode rule has no Synchronisation Rule to take this from, so
+                       one that names no type searches nothing and silently matches nothing (#1458). *@
+                    <MudSelect T="MetaverseObjectType"
+                               @bind-Value="_newMatchingRuleMetaverseObjectType"
+                               Label="Metaverse Object Type"
+                               Variant="Variant.Outlined"
+                               ToStringFunc="@(t => t?.Name ?? string.Empty)"
+                               HelperText="The type of Metaverse Object this rule searches">
+                        @if (MetaverseObjectTypes != null)
+                        {
+                            @foreach (var objectTypeOption in MetaverseObjectTypes.OrderBy(t => t.Name))
+                            {
+                                <MudSelectItem Value="@objectTypeOption">@objectTypeOption.Name</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
             </MudGrid>
 
             <MudCheckBox T="bool" @bind-Value="_newMatchingRuleCaseSensitive"
@@ -465,7 +504,7 @@ else
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
                            DropShadow="false"
-                           Disabled="@(_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)"
+                           Disabled="@(!CanAddMatchingRule)"
                            OnClick="() => HandleAddMatchingRuleAsync(objectType)">
                     Add Matching Rule
                 </MudButton>
@@ -473,6 +512,30 @@ else
         </MudPaper>
 
         <MudText Typo="Typo.h6">Matching Rules for <span class="jim-title-accent">@objectType.Name</span></MudText>
+
+        @* Rules already stored in an unworkable shape are named rather than quietly ignored. They were storable
+           before the create path validated them (#1458), and the matching engine skips them without saying so, so
+           an administrator looking at a full grid has no way to tell the working rules from the dead ones. *@
+        var unworkableRules = objectType.ObjectMatchingRules
+            .Select(rule => new { Rule = rule, Reason = rule.DescribeInvalidity() })
+            .Where(candidate => candidate.Reason != null)
+            .ToList();
+
+        if (unworkableRules.Count > 0)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-2 mb-2"
+                      data-testid="jim-matching-rules-unworkable">
+                <strong>@unworkableRules.Count matching @(unworkableRules.Count == 1 ? "rule" : "rules") cannot match anything.</strong>
+                Objects that should join an existing Metaverse Object will project a new one instead. Remove and
+                recreate @(unworkableRules.Count == 1 ? "it" : "them"):
+                <ul class="mt-2 mb-0">
+                    @foreach (var unworkable in unworkableRules)
+                    {
+                        <li>Rule @(unworkable.Rule.Order + 1): @unworkable.Reason</li>
+                    }
+                </ul>
+            </MudAlert>
+        }
 
         @* Object Matching Rules are an ordered, short list held on the Object Type the page already loaded, so the
            grid's windows are sliced from it in memory. The columns carry no sort headers, deliberately: the order
