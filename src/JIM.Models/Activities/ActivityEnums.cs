@@ -165,7 +165,19 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// move from Disconnect to Delete" readable at a glance. The direction of the change is carried in the
     /// delta's old and new values.
     /// </summary>
-    WouldChangeDeprovisionAction
+    WouldChangeDeprovisionAction,
+
+    /// <summary>
+    /// Preview only (#1437): the proposed Attribute Flow would not evaluate for this object, so the attribute it
+    /// targets is not written at all. The Expression threw, a required input has no value under a Missing Input
+    /// Behaviour that fails, or a multi-valued source flows to a single-valued target.
+    ///
+    /// Its own transition rather than an absent delta, because an Expression that fails on one object in a thousand
+    /// is exactly what an Attribute Flow preview exists to find: reported as no change, the failing objects would
+    /// be indistinguishable from the ones the edit does not touch. Only failures the proposal introduces are
+    /// counted; one the stored configuration already has is not this change's doing.
+    /// </summary>
+    WouldFailAttributeFlow
 }
 
 /// <summary>
