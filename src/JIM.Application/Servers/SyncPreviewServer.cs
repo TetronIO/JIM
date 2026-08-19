@@ -3,6 +3,7 @@
 
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
+using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -323,20 +324,39 @@ public class SyncPreviewServer
         SyncRule? proposedSyncRule = null)
     {
         var syncRules = await guardedRepository.GetSyncRulesAsync(connectedSystemId, includeDisabled: false);
+        Substitute(syncRules, proposedSyncRule);
 
-        // Swap the proposal in for the rule it edits, so every evaluation below reads the proposed configuration.
-        // Positional, so the rule keeps its place in the order the engine applies rules in.
-        if (proposedSyncRule != null)
-        {
-            var storedIndex = syncRules.FindIndex(rule => rule.Id == proposedSyncRule.Id);
-            if (storedIndex >= 0)
-                syncRules[storedIndex] = proposedSyncRule;
-        }
+        // The Attribute Priority contributors, from EVERY rule across EVERY Connected System, exactly as the real
+        // synchronisation builds them (#1441). Attribute ownership is a property of the whole configuration, not of
+        // the system being previewed: the rule that owns an attribute is routinely one on another system, and a
+        // context built from this system's rules alone would report that rule as no contributor at all.
+        var allSyncRules = await guardedRepository.GetAllSyncRulesAsync();
+        Substitute(allSyncRules, proposedSyncRule);
+        var priorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true);
 
         var objectTypes = await guardedRepository.GetObjectTypesAsync(connectedSystemId);
         var cache = await previewServer.BuildExportEvaluationCacheAsync();
         return new CsoPreviewContext(connectedSystemId, previewServer, syncRules, objectTypes, cache,
-            BuildConnectedSystemNameLookup(cache), guardedRepository);
+            BuildConnectedSystemNameLookup(cache), guardedRepository, priorityContext);
+    }
+
+    /// <summary>
+    /// Swaps a proposed Synchronisation Rule in for the stored rule of the same id, in place.
+    /// </summary>
+    /// <remarks>
+    /// Positional, so the rule keeps its place in the order the engine applies rules in, and never added: a rule
+    /// that is disabled (and so absent) stays absent. Applied to the priority contributors as well as to the rules
+    /// that flow, because a proposal that changes a mapping's Priority has to be resolved against the proposal's
+    /// own priorities; resolving it against the stored ones would answer for a configuration that never existed.
+    /// </remarks>
+    private static void Substitute(List<SyncRule> syncRules, SyncRule? proposedSyncRule)
+    {
+        if (proposedSyncRule == null)
+            return;
+
+        var storedIndex = syncRules.FindIndex(rule => rule.Id == proposedSyncRule.Id);
+        if (storedIndex >= 0)
+            syncRules[storedIndex] = proposedSyncRule;
     }
 
     /// <summary>
@@ -462,7 +482,8 @@ public class SyncPreviewServer
             {
                 try
                 {
-                    foreach (var flowError in _syncEngine.FlowInboundAttributes(cso, rule, objectTypes, ExpressionEvaluator))
+                    foreach (var flowError in _syncEngine.FlowInboundAttributes(cso, rule, objectTypes, ExpressionEvaluator,
+                        priorityContext: context.PriorityContext))
                         flowErrors.Add((rule, flowError));
                 }
                 catch (SyncExpressionEvaluationException expressionEx)
@@ -577,7 +598,8 @@ public class SyncPreviewServer
         List<ConnectedSystemObjectType> ObjectTypes,
         ExportEvaluationCache Cache,
         Dictionary<int, string> SystemNames,
-        ISyncRepository GuardedRepository);
+        ISyncRepository GuardedRepository,
+        AttributePriorityContext PriorityContext);
 
     /// <summary>
     /// Classifies one per-object preview into its full-system category. Blocking errors take precedence:
