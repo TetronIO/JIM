@@ -208,11 +208,9 @@ public class ConnectedSystemPasswordSynchronisationTests
     {
         var notDeliverySettings = new HashSet<string>
         {
-            // Identity and navigation: not settings at all.
+            // Identity: not settings at all.
             nameof(ConnectedSystemPasswordSynchronisation.Id),
-            nameof(ConnectedSystemPasswordSynchronisation.ConnectedSystem),
             nameof(ConnectedSystemPasswordSynchronisation.ConnectedSystemId),
-            nameof(ConnectedSystemPasswordSynchronisation.TargetObjectType),
 
             // Derived from the settings the comparison already reads.
             nameof(ConnectedSystemPasswordSynchronisation.EffectiveMaxRetries),

@@ -812,13 +812,13 @@ public class ConfigurationSnapshotServiceTests
             Id = 3,
             Name = "Corporate AD",
             ConnectorDefinitionId = 4,
+            ObjectTypes = [new ConnectedSystemObjectType { Id = 7, Name = "user", Selected = true }],
             PasswordSynchronisation = new ConnectedSystemPasswordSynchronisation
             {
                 Id = 9,
                 ConnectedSystemId = 3,
                 Enabled = true,
                 TargetObjectTypeId = 7,
-                TargetObjectType = new ConnectedSystemObjectType { Id = 7, Name = "user" },
                 MaxRetries = 8,
                 RetryBackoffBase = TimeSpan.FromMinutes(15),
                 RequireSecureTransport = true

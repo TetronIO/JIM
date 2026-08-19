@@ -1,6 +1,6 @@
 # Password Synchronisation (Phase 1: JIM as Password Origin)
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete; queue, fan-out and delivery not started)
 - **Issue:** [#1119](https://github.com/TetronIO/JIM/issues/1119)
 - **PRD:** [`engineering/prd/doing/PRD_PASSWORD_SYNCHRONISATION.md`](../prd/doing/PRD_PASSWORD_SYNCHRONISATION.md)
 
@@ -131,7 +131,7 @@ The queue, fan-out, and delivery speak only `IConnectorPasswordManagement`, and 
 
 Each phase is TDD, red first, and lands with its tests, docs, and changelog entries; write parity ships with each surface in its own phase per the surface-parity rule.
 
-### Phase 1: Configuration and encryption foundation
+### Phase 1: Configuration and encryption foundation ✅
 
 - `ConnectedSystemPasswordSynchronisation` entity, EF configuration, migration; comparison/completeness guard tests
 - Dedicated protection purpose in `CredentialProtectionService` (`ProtectPassword`/`UnprotectPassword`, prefix, round-trip and isolation tests: a value protected under one purpose must not unprotect under the other)

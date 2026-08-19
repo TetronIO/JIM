@@ -45,8 +45,15 @@ public class ConnectedSystemPasswordSynchronisation
 
     public int Id { get; set; }
 
-    public ConnectedSystem ConnectedSystem { get; set; } = null!;
-
+    /// <summary>
+    /// The Connected System this configuration belongs to.
+    /// <para>
+    /// The foreign key with no navigation back to the Connected System, deliberately. Every caller reaches this
+    /// configuration through its Connected System and already holds it, and a back-navigation would close a cycle
+    /// that the OpenAPI schema generator expands rather than collapses, exceeding its nesting limit and failing
+    /// the document build outright.
+    /// </para>
+    /// </summary>
     public int ConnectedSystemId { get; set; }
 
     /// <summary>
@@ -68,9 +75,14 @@ public class ConnectedSystemPasswordSynchronisation
     /// Fan-out needs it to decide which of an identity's accounts in this system is the one to set a password on;
     /// an identity may well have a Connected System Object of another type in the same system.
     /// </para>
+    /// <para>
+    /// Deliberately the foreign key with no navigation beside it. The Object Type is already reachable through
+    /// <see cref="ConnectedSystem"/>'s own <c>ObjectTypes</c>, so a second route to it would be redundant, and it
+    /// would close a cycle (Connected System to configuration to Object Type and back to Connected System) that
+    /// the OpenAPI schema generator expands until it exceeds its nesting limit, failing the document build. Use
+    /// <see cref="ResolveTargetObjectType"/> to name it.
+    /// </para>
     /// </summary>
-    public ConnectedSystemObjectType TargetObjectType { get; set; } = null!;
-
     public int TargetObjectTypeId { get; set; }
 
     /// <summary>
@@ -133,6 +145,18 @@ public class ConnectedSystemPasswordSynchronisation
         var scaledSeconds = EffectiveRetryBackoffBase.TotalSeconds * Math.Pow(2, Math.Max(attemptCount, 1) - 1);
 
         return scaledSeconds >= cap.TotalSeconds ? cap : TimeSpan.FromSeconds(scaledSeconds);
+    }
+
+    /// <summary>
+    /// The Object Type <see cref="TargetObjectTypeId"/> names, found among the Connected System's own Object
+    /// Types, or null where it names none of them. Null is a real answer rather than a missing one: an Object
+    /// Type can be removed from the schema after a configuration named it.
+    /// </summary>
+    public ConnectedSystemObjectType? ResolveTargetObjectType(ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        return connectedSystem.ObjectTypes?.SingleOrDefault(ot => ot.Id == TargetObjectTypeId);
     }
 
     /// <summary>

@@ -102,7 +102,7 @@ public class ConnectedSystemPasswordSynchronisationResponse
             ConnectorSupportsPasswordSet = connectedSystem.ConnectorDefinition?.SupportsPasswordSet ?? false,
             Enabled = effective.Enabled,
             TargetObjectTypeId = effective.TargetObjectTypeId,
-            TargetObjectTypeName = configuration?.TargetObjectType?.Name,
+            TargetObjectTypeName = configuration?.ResolveTargetObjectType(connectedSystem)?.Name,
             MaxRetries = effective.MaxRetries,
             EffectiveMaxRetries = effective.EffectiveMaxRetries,
             RetryBackoffBase = effective.RetryBackoffBase,

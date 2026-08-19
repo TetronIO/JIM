@@ -568,7 +568,9 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetConnectedSystemPasswordSynchronisationAsync(int connectedSystemId)
     {
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        // The full graph rather than the Core one: naming the target Object Type means reading the system's
+        // own Object Types, which Core deliberately does not load.
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
@@ -663,7 +665,7 @@ public class SynchronisationController(
 
         _logger.LogInformation("Updated the Password Synchronisation configuration of Connected System: {Id}", connectedSystemId);
 
-        var updated = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        var updated = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         var stored = await _application.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystemId);
         return Ok(ConnectedSystemPasswordSynchronisationResponse.FromEntity(updated!, stored));
     }

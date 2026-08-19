@@ -198,6 +198,47 @@ public class SyncRule : IAuditable, IValidated
         if (AttributeFlowRules.Count == 0)
             response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No Attribute Flow Rules have been defined. Whilst valid, this means no data will flow between the two systems"));
 
+        AddCredentialLikeAttributeWarnings(response);
+
         return response;
+    }
+
+    /// <summary>
+    /// Warns where an Attribute Flow targets an attribute whose name suggests it holds a credential (#1119,
+    /// requirement 16).
+    /// <para>
+    /// The eight well-known credential attributes are blocked outright by <see cref="CredentialAttributes"/>, but
+    /// an administrator can rename an attribute and a target system can use a name JIM has never heard of, so
+    /// nothing otherwise stops an Attribute Flow carrying a password as an ordinary value. Doing so persists the
+    /// secret as a Connected System Object attribute value and a Metaverse Object attribute value, in both change
+    /// histories, in Pending Exports, in export previews, in search results and the API, and in every database
+    /// backup: the exact exposure the password channel exists to avoid, reintroduced by the back door.
+    /// </para>
+    /// <para>
+    /// A warning rather than a refusal, deliberately. The check is a substring match on a name, so it will
+    /// sometimes be wrong, and JIM does not own an administrator's schema; this is a guardrail that makes the
+    /// safe path the obvious one and the dangerous path deliberate, not a security boundary.
+    /// </para>
+    /// </summary>
+    private void AddCredentialLikeAttributeWarnings(List<ValidityStatusItem> response)
+    {
+        // Named one at a time rather than gathered into a single warning: an administrator acts on one attribute
+        // at a time, and a list of names in one line is easy to skim past.
+        foreach (var attributeName in AttributeFlowRules
+                     .SelectMany(mapping => new[]
+                     {
+                         mapping.TargetMetaverseAttribute?.Name,
+                         mapping.TargetConnectedSystemAttribute?.Name
+                     })
+                     .Where(CredentialAttributes.HasCredentialLikeName)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning,
+                $"The Attribute Flow targeting '{attributeName}' looks like it may carry a password. If it does, " +
+                "use Password Synchronisation on the Connected System instead: a password flowed as an attribute " +
+                "is stored in Metaverse Object and Connected System Object attribute values, change history, " +
+                "Pending Exports, export previews, search results and database backups. If this attribute is not " +
+                "a password, no action is needed."));
+        }
     }
 }

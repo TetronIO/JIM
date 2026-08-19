@@ -323,7 +323,7 @@ public class ConfigurationSnapshotService
         // the settings), not configuration, so it does not belong in a configuration change history.
         Add(children, "maxExportParallelism", Render(connectedSystem.MaxExportParallelism), "Max export parallelism");
         Add(children, "initialPasswordTimeToLive", Render(connectedSystem.InitialPasswordTimeToLive), "Initial password time to live");
-        AddPasswordSynchronisation(children, connectedSystem.PasswordSynchronisation);
+        AddPasswordSynchronisation(children, connectedSystem);
         children.Add(BuildSettingValues(connectedSystem.SettingValues, hashKey));
         children.Add(BuildRunProfiles(connectedSystem.RunProfiles));
         children.Add(BuildObjectTypes(connectedSystem.ObjectTypes));
@@ -482,15 +482,17 @@ public class ConfigurationSnapshotService
     /// </summary>
     private static void AddPasswordSynchronisation(
         List<ConfigurationSnapshotNode> nodes,
-        ConnectedSystemPasswordSynchronisation? passwordSynchronisation)
+        ConnectedSystem connectedSystem)
     {
+        var passwordSynchronisation = connectedSystem.PasswordSynchronisation;
         if (passwordSynchronisation == null)
             return;
 
         var children = new List<ConfigurationSnapshotNode>();
         Add(children, "enabled", Render(passwordSynchronisation.Enabled), "Enabled");
         AddReference(children, "targetObjectTypeId", passwordSynchronisation.TargetObjectTypeId,
-            passwordSynchronisation.TargetObjectType?.Name, "Target Connected System Object Type");
+            passwordSynchronisation.ResolveTargetObjectType(connectedSystem)?.Name,
+            "Target Connected System Object Type");
         Add(children, "maxRetries", Render(passwordSynchronisation.MaxRetries), "Maximum retries");
         Add(children, "retryBackoffBase", Render(passwordSynchronisation.RetryBackoffBase), "Retry backoff base");
         Add(children, "requireSecureTransport", Render(passwordSynchronisation.RequireSecureTransport),

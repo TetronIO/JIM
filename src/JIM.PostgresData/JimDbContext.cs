@@ -341,15 +341,18 @@ public class JimDbContext : DbContext
         // the queued changes aimed at it cascade away with it.
         modelBuilder.Entity<ConnectedSystem>()
             .HasOne(cs => cs.PasswordSynchronisation)
-            .WithOne(ps => ps.ConnectedSystem)
+            .WithOne()
             .HasForeignKey<ConnectedSystemPasswordSynchronisation>(ps => ps.ConnectedSystemId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Restrict rather than cascade: deleting the Object Type that receives passwords must not silently delete
         // the configuration naming it and leave the system quietly not synchronising. The delete fails, and the
         // administrator repoints or removes the configuration deliberately.
+        // Declared without a navigation on either end: the Object Type is already reachable through the
+        // Connected System, and a navigation here would close a cycle the OpenAPI schema generator cannot
+        // collapse (see ConnectedSystemPasswordSynchronisation.TargetObjectTypeId).
         modelBuilder.Entity<ConnectedSystemPasswordSynchronisation>()
-            .HasOne(ps => ps.TargetObjectType)
+            .HasOne<ConnectedSystemObjectType>()
             .WithMany()
             .HasForeignKey(ps => ps.TargetObjectTypeId)
             .OnDelete(DeleteBehavior.Restrict);

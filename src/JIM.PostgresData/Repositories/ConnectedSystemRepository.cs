@@ -224,7 +224,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cs => cs.ConnectorDefinition)
             .Include(cs => cs.PasswordPolicy)
             .Include(cs => cs.PasswordSynchronisation)
-                .ThenInclude(ps => ps.TargetObjectType)
             .Include(cs => cs.SettingValues)
                 .ThenInclude(sv => sv.Setting);
 
@@ -5477,11 +5476,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId)
     {
-        // The Object Type is included because every caller that shows or validates this configuration needs to
-        // name it, and the alternative is a second query per Connected System on a list page.
+        // The target Object Type is named from the Connected System's own Object Types by the caller
+        // (ResolveTargetObjectType), so there is nothing to include here.
         return await Repository.Database.ConnectedSystemPasswordSynchronisations
             .AsNoTracking()
-            .Include(ps => ps.TargetObjectType)
             .SingleOrDefaultAsync(ps => ps.ConnectedSystemId == connectedSystemId);
     }
 

@@ -156,8 +156,23 @@ The practical consequence is that **attributes holding credentials cannot be man
 
 It also means JIM writes passwords the way each directory expects rather than writing an attribute: for Active Directory it sets `unicodePwd` with the correct encoding, and elsewhere it uses the standard LDAP Password Modify operation. It never writes a password attribute directly, because directories store a directly written value exactly as supplied, which would leave the password readable in the directory.
 
-!!! note "Synchronising passwords between systems is a separate capability"
-    Everything on this page concerns JIM writing a password **to** a system. Capturing a password change in one system and replaying it into others is not yet available.
+## 🔁 Password Synchronisation
+
+Everything above concerns setting a password on one account, at the moment you ask. Password Synchronisation is the other half: one password change reaching **every** system that person has an account in, durably, without you standing over it.
+
+You configure it per Connected System, on the **Passwords** tab of the Connected System, and it appears only on systems whose connector can set passwords at all. Two settings, and one deliberate separation between them:
+
+- **The configuration** says which Object Type holds the accounts, how many delivery attempts to make before JIM stops and asks you to look, how long to wait before the first retry, and whether to refuse to transmit over a connection JIM cannot confirm is encrypted.
+- **The enable toggle** is separate from the configuration existing, so you can set a system up ahead of a change window and switch it on during one. A configured system that is switched **off** does not discard password changes: they accumulate, and switching it on delivers what accumulated.
+
+That is also why there is no way to remove a configuration, only to disable it. Removing one would throw away everything queued against it.
+
+How long a change waits before JIM gives up on it is the Connected System's **initial password time to live** setting, shared with initial password provisioning: the question both are asking is how long that system may be unavailable before JIM stops trying, and the answer is a property of the system.
+
+!!! warning "Delivery is not available yet"
+    The configuration above can be saved today and will be used the moment delivery ships, but no password change is queued or delivered yet. Setting a password directly on an account, and initial passwords on provisioning, are unaffected and work as described on this page.
+
+    Capturing a password change made **in** another system, such as a user changing their own password in Active Directory, and replaying it into the others is a later stage again; it needs a capture agent running on the domain controllers, because no directory will disclose a password when JIM reads from it.
 
 ## Where to go next
 
@@ -166,5 +181,6 @@ It also means JIM writes passwords the way each directory expects rather than wr
 | Switch on initial passwords for a rule | [Synchronisation Rules: Initial password](../configuration/synchronisation-rules.md#initial-password) |
 | See a discovered policy, or run the channel check | [Connected Systems: Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel) |
 | Set a password on one account, or on a person | [Connected Systems: Setting the password on one account](../configuration/connected-systems.md#setting-the-password-on-one-account) |
+| Configure Password Synchronisation on a system | [Connected Systems: Password Synchronisation](../configuration/connected-systems.md#password-synchronisation) |
 | Directory specifics: encryption, mechanisms, permissions | [LDAP Connector: Setting Passwords](../connectors/jim-ldap-connector.md#setting-passwords) |
 | Do any of it from a script | [PowerShell: Connected Systems](../powershell/connected-systems.md#set-jimconnectedsystemobjectpassword), [Metaverse](../powershell/metaverse.md#set-jimmetaverseobjectpassword), [Synchronisation Rules](../powershell/synchronisation-rules.md#initial-password) |

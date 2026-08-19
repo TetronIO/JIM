@@ -126,6 +126,16 @@ else if (_drift is { TrackingDisabled: true })
             <ConnectedSystemRunProfilesTab ConnectedSystem="_connectedSystem" />
         </MudTabPanel>
 
+        @* Hidden rather than disabled where the Connector has no password channel: there is nothing here to
+            configure at all, and a disabled tab reads as something that could be switched on. *@
+        @if (_connectedSystem.ConnectorDefinition.SupportsPasswordSet)
+        {
+            <MudTabPanel Text="Passwords" Disabled="@AreSettingDependentTabsDisabled()">
+                <ConnectedSystemPasswordSynchronisationTab ConnectedSystem="_connectedSystem"
+                                                           OnConnectedSystemChanged="ReloadConnectedSystemAsync" />
+            </MudTabPanel>
+        }
+
         <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
             <ConfigurationChangesTab TargetType="ActivityTargetType.ConnectedSystem" ObjectId="_connectedSystem.Id" ObjectTypeLabel="Connected System" />
         </MudTabPanel>
