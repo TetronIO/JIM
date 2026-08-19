@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using System.Runtime.CompilerServices;
 
 namespace JIM.Application.Servers.Preview;
@@ -340,20 +341,10 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         var previews = await _application.SyncPreview.PreviewSyncForCsosAsync(
             rule.ConnectedSystemId, [.. arrivals.Select(cso => cso.Id)], standIn, cancellationToken);
 
-        foreach (var cso in arrivals)
-        {
-            var transition = ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope;
-            if (previews.TryGetValue(cso.Id, out var preview) && preview.Inbound != null)
-            {
-                transition = preview.Inbound.WouldProject
-                    ? ActivityRunProfileExecutionItemSyncOutcomeType.Projected
-                    : preview.Inbound.WouldJoinMetaverseObjectId.HasValue
-                        ? ActivityRunProfileExecutionItemSyncOutcomeType.Joined
-                        : ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope;
-            }
-
-            deltas.Add(ScopeDelta(transition, rule, cso, OutOfScopeValue, InScopeValue));
-        }
+        // The engine's verdict where it reached one, and plain scope entry where it did not: an object it could not
+        // speak for has still entered scope, and reporting nothing for it would lose it from the count entirely.
+        deltas.AddRange(arrivals.Select(cso => ScopeDelta(
+            DescribeArrival(previews.GetValueOrDefault(cso.Id)), rule, cso, OutOfScopeValue, InScopeValue)));
 
         return deltas;
     }
@@ -424,6 +415,17 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
 
     #region helpers
 
+    /// <summary>
+    /// What the preview engine said an object entering scope would become.
+    /// </summary>
+    private static ActivityRunProfileExecutionItemSyncOutcomeType DescribeArrival(SyncPreviewResult? preview) =>
+        preview?.Inbound switch
+        {
+            { WouldProject: true } => ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+            { WouldJoinMetaverseObjectId: not null } => ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            _ => ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope
+        };
+
     private static PreviewDelta ScopeDelta(ActivityRunProfileExecutionItemSyncOutcomeType transition, SyncRule rule,
         ConnectedSystemObject cso, string oldValue, string newValue, Guid? metaverseObjectId = null) =>
         new(transition,
@@ -474,30 +476,38 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
     {
         var wantsConnectedSystemAttribute = rule.Direction == SyncRuleDirection.Import;
 
-        foreach (var criterion in EnumerateCriteria(proposal.CriteriaGroups))
+        return EnumerateCriteria(proposal.CriteriaGroups)
+            .Select(criterion => DescribeIfUnreadable(criterion, wantsConnectedSystemAttribute))
+            .Where(message => message != null)
+            .Select(message => message!);
+    }
+
+    /// <summary>
+    /// Why one criterion could not be evaluated, or null where it can be.
+    /// </summary>
+    private static string? DescribeIfUnreadable(SyncRuleScopingCriterionProposal criterion, bool wantsConnectedSystemAttribute)
+    {
+        if (criterion.MetaverseAttributeId == null && criterion.ConnectedSystemAttributeId == null)
         {
-            if (criterion.MetaverseAttributeId == null && criterion.ConnectedSystemAttributeId == null)
-            {
-                yield return "A proposed Scoping Criterion names no attribute, so there is nothing for it to " +
-                             "evaluate and it would narrow nothing.";
-                continue;
-            }
-
-            if (wantsConnectedSystemAttribute && criterion.MetaverseAttributeId != null)
-            {
-                yield return "A proposed Scoping Criterion reads a Metaverse Attribute, but an import " +
-                             "Synchronisation Rule evaluates its scope against Connected System attributes, so the " +
-                             "criterion would never match and the scope would be wider than it appears.";
-                continue;
-            }
-
-            if (!wantsConnectedSystemAttribute && criterion.ConnectedSystemAttributeId != null)
-            {
-                yield return "A proposed Scoping Criterion reads a Connected System attribute, but an export " +
-                             "Synchronisation Rule evaluates its scope against Metaverse Attributes, so the " +
-                             "criterion would never match and the scope would be wider than it appears.";
-            }
+            return "A proposed Scoping Criterion names no attribute, so there is nothing for it to evaluate and it " +
+                   "would narrow nothing.";
         }
+
+        if (wantsConnectedSystemAttribute && criterion.MetaverseAttributeId != null)
+        {
+            return "A proposed Scoping Criterion reads a Metaverse Attribute, but an import Synchronisation Rule " +
+                   "evaluates its scope against Connected System attributes, so the criterion would never match and " +
+                   "the scope would be wider than it appears.";
+        }
+
+        if (!wantsConnectedSystemAttribute && criterion.ConnectedSystemAttributeId != null)
+        {
+            return "A proposed Scoping Criterion reads a Connected System attribute, but an export Synchronisation " +
+                   "Rule evaluates its scope against Metaverse Attributes, so the criterion would never match and " +
+                   "the scope would be wider than it appears.";
+        }
+
+        return null;
     }
 
     private static IEnumerable<SyncRuleScopingCriterionProposal> EnumerateCriteria(

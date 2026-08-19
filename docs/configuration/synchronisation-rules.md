@@ -82,6 +82,19 @@ For example, to scope an export rule to leavers terminated between 30 and 364 da
 
 Configure this in the Scope tab of the Synchronisation Rule editor (choose Relative when the attribute is a date), or via the [PowerShell cmdlets](../powershell/synchronisation-rules.md) and the REST API.
 
+### Previewing a scope change
+
+Changing a Scoping Criterion decides which objects the rule manages at all, and what that costs is decided by a different setting sitting beside it: narrowing an import rule takes objects out of scope, and the **Out-of-Scope Action** then decides whether their Metaverse Object joins survive; narrowing an export rule can delete the objects that leave from the target system, per the **Deprovisioning Action**. Widening pulls objects in, projecting and provisioning identities nobody has counted.
+
+The **Preview Scope Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the criteria as they stand on the form, evaluated against the rule's saved criteria, changing nothing. It reports each object that would move, split by what the move actually costs it:
+
+- **Leaving scope**<br /> A joined object whose join would break, taking whatever it contributed out of the Metaverse with it; a joined object that would keep its join and simply stop receiving Attribute Flow; and an unjoined object that stops matching and loses nothing. Where a broken join would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
+- **Entering scope**<br /> What each object would become, answered by running the same evaluation a synchronisation would: a new Metaverse Object projected, a join to an existing one, or an object provisioned into the target Connected System.
+
+Two answers are deliberately negative rather than reassuring. Removing every criterion is called out as a warning, because it hands the rule every object of its type and is one click away from tidying up. And where another import Synchronisation Rule covers the same object type with **no** criteria of its own, that rule keeps every object in scope whatever this one says, so narrowing this rule disconnects nobody: the preview names that rule and counts no departures, rather than reporting a disconnection wave that would never happen.
+
+Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the criteria afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -ScopingCriteriaGroup`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/scoping-criteria/preview` endpoint.
+
 ## Object Matching Rules
 
 Object Matching Rules define how a Connected System Object is matched to an existing Metaverse Object. Rules specify one or more attribute pairs to compare:
