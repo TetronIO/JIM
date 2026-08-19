@@ -503,16 +503,22 @@ public class SyncRepository : ISyncRepository
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
-        var valueSet = new HashSet<string>(attributeValues);
-        var result = new Dictionary<string, ConnectedSystemObject>();
+        // Reference values arrive as strings whatever the anchor's data type, so stored values are rendered
+        // to their canonical strings for comparison, mirroring the Postgres implementation's typed matching
+        // (#1285). Case-insensitive so Guid renderings match however the caller cased them.
+        var valueSet = new HashSet<string>(attributeValues, StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
-            foreach (var av in cso.AttributeValues)
+            foreach (var av in cso.AttributeValues.Where(av => av.AttributeId == attributeId || av.Attribute?.Id == attributeId))
             {
-                if (av.AttributeId == attributeId && av.StringValue != null && valueSet.Contains(av.StringValue))
-                {
-                    result.TryAdd(av.StringValue, cso);
-                }
+                var renderedValue = av.StringValue
+                    ?? av.GuidValue?.ToString()
+                    ?? av.IntValue?.ToString()
+                    ?? av.LongValue?.ToString()
+                    ?? (av.DecimalValue.HasValue ? ExternalIdValue.ToCanonicalString(av.DecimalValue.Value) : null);
+                if (renderedValue != null && valueSet.Contains(renderedValue))
+                    result.TryAdd(renderedValue, cso);
             }
         }
         return Task.FromResult(result);

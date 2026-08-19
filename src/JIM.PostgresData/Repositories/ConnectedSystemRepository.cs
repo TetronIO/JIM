@@ -695,7 +695,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
-            .Include(ot => ot.Attributes)
+            .Include(ot => ot.Attributes).ThenInclude(a => a.ReferencedObjectType)
             .Include(ot => ot.Tags)
             .Include(ot => ot.ConnectedSystem)
             .SingleOrDefaultAsync(ot => ot.Id == id);
@@ -2529,43 +2529,180 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.StringValue.ToLower() == lowerValue));
     }
 
+    /// <summary>
+    /// Finds Connected System Objects holding any of the supplied values in the given attribute, for import
+    /// reference resolution's database fallback. Reference values arrive as strings whatever the anchor's
+    /// data type, so each value is read through the attribute's own type and matched against the
+    /// correspondingly typed column (#1285); before this, only StringValue was compared, so a reference to a
+    /// Guid- or int-anchored object could never resolve through the fallback. Results are keyed so the caller
+    /// can probe with the value string it asked for (case-insensitively).
+    /// </summary>
     public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
         var values = attributeValues.ToList();
-        if (values.Count == 0)
-            return new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
-
-        // Use case-insensitive matching consistent with the single-value method
-        var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
-        // Lightweight query: only include AttributeValues with Attribute for key extraction.
-        // No Type/Attributes or deep ReferenceValue chains needed — the CSO entity itself is
-        // sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
-        var csos = await Repository.Database.ConnectedSystemObjects
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Where(cso =>
-                cso.ConnectedSystem.Id == connectedSystemId &&
-                cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && lowerValues.Contains(av.StringValue.ToLower())))
-            .ToListAsync();
-
-        // Build dictionary keyed by lowercase attribute value for case-insensitive lookup.
-        // Use TryAdd for duplicates — first match wins (matching single-value method semantics).
         var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (var cso in csos)
+        if (values.Count == 0)
+            return result;
+
+        var attributeType = await Repository.Database.ConnectedSystemAttributes
+            .Where(a => a.Id == attributeId)
+            .Select(a => (AttributeDataType?)a.Type)
+            .FirstOrDefaultAsync();
+        if (attributeType == null)
+            return result;
+
+        // Lightweight query: only include AttributeValues with Attribute for key extraction.
+        // No Type/Attributes or deep ReferenceValue chains needed; the CSO entity itself is
+        // sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
+        switch (attributeType.Value)
         {
-            var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.StringValue != null);
-            if (matchingAttrValue?.StringValue != null)
+            case AttributeDataType.Text:
             {
-                if (!result.TryAdd(matchingAttrValue.StringValue, cso))
+                // Use case-insensitive matching consistent with the single-value method
+                var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && lowerValues.Contains(av.StringValue.ToLower())))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
                 {
-                    Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Found duplicate Connected System Objects for external ID '{ExternalId}' in Connected System {ConnectedSystemId}. Returning first match.",
-                        matchingAttrValue.StringValue, connectedSystemId);
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.StringValue != null);
+                    if (matchingAttrValue?.StringValue != null && !result.TryAdd(matchingAttrValue.StringValue, cso))
+                        LogDuplicateReferenceFallbackMatch(matchingAttrValue.StringValue, connectedSystemId);
                 }
+
+                break;
             }
+            case AttributeDataType.Guid:
+            {
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (Guid.TryParse(v, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.GuidValue != null && parsedValues.Contains(av.GuidValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.GuidValue.HasValue && requestedByParsedValue.ContainsKey(av.GuidValue.Value));
+                    if (matchingAttrValue?.GuidValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.GuidValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.GuidValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            case AttributeDataType.Number:
+            {
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (int.TryParse(v, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.IntValue != null && parsedValues.Contains(av.IntValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.IntValue.HasValue && requestedByParsedValue.ContainsKey(av.IntValue.Value));
+                    if (matchingAttrValue?.IntValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.IntValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.IntValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            case AttributeDataType.LongNumber:
+            {
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (long.TryParse(v, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.LongValue != null && parsedValues.Contains(av.LongValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.LongValue.HasValue && requestedByParsedValue.ContainsKey(av.LongValue.Value));
+                    if (matchingAttrValue?.LongValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.LongValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.LongValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            case AttributeDataType.Decimal:
+            {
+                // Invariant culture: reference values are written invariant by the import path (#1283).
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (decimal.TryParse(v, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.DecimalValue != null && parsedValues.Contains(av.DecimalValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.DecimalValue.HasValue && requestedByParsedValue.ContainsKey(av.DecimalValue.Value));
+                    if (matchingAttrValue?.DecimalValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.DecimalValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.DecimalValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            default:
+                Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Attribute {AttributeId} has type {AttributeType}, which cannot be used for external ids; no references can be resolved against it.",
+                    attributeId, attributeType.Value);
+                break;
         }
 
         return result;
     }
+
+    /// <summary>
+    /// Parses reference value strings into an anchor's data type, keyed by parsed value with the original
+    /// request string retained, so fallback results can be keyed by exactly what the caller asked for.
+    /// Values that cannot be read as the type are dropped: with several candidate Object Types a value
+    /// legitimately parses for some anchors and not others (#1285).
+    /// </summary>
+    private static Dictionary<TParsed, string> ParseRequestedReferenceValues<TParsed>(IEnumerable<string> values, Func<string, (bool Ok, TParsed Parsed)> parser) where TParsed : notnull =>
+        values
+            .Select(value => (Result: parser(value), Value: value))
+            .Where(pair => pair.Result.Ok)
+            .GroupBy(pair => pair.Result.Parsed)
+            .ToDictionary(group => group.Key, group => group.First().Value);
+
+    /// <summary>
+    /// Duplicates here mean two objects of one type carry the same anchor value in the database; first match
+    /// wins, matching the single-value method's semantics.
+    /// </summary>
+    private static void LogDuplicateReferenceFallbackMatch(string value, int connectedSystemId) =>
+        Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Found duplicate Connected System Objects for external ID '{ExternalId}' in Connected System {ConnectedSystemId}. Returning first match.",
+            value, connectedSystemId);
 
     public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
     {
@@ -3082,7 +3219,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
-            .Include(q => q.Attributes)
+            .Include(q => q.Attributes).ThenInclude(a => a.ReferencedObjectType)
             .Include(q => q.Tags)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)

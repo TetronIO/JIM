@@ -1053,15 +1053,14 @@ public class ImportUpdateObjectMvaTests
     }
 
     /// <summary>
-    /// Tests that when two objects of different types have the same external ID value,
-    /// and a reference tries to resolve to that value, the system throws an exception
-    /// because SingleOrDefault cannot determine which object is the target.
-    ///
-    /// This documents the current behaviour: external IDs must be system-unique, not just
-    /// object-type unique, for reference resolution to work correctly.
+    /// Two objects of different Object Types may share an external ID value (#1285): a view over a table has
+    /// the table's keys by construction, so the value space is only unique within a type. A reference to the
+    /// shared value with no declared target Object Type is genuinely ambiguous; it is reported per the
+    /// Connected System's unresolved-reference handling, naming the candidates, and the run completes.
+    /// (Before #1285 this test pinned the opposite: the whole import threw.)
     /// </summary>
     [Test]
-    public void FullImportOverlappingExternalIdThrowsExceptionTestAsync()
+    public async Task FullImportOverlappingExternalIdAcrossTypes_IsAmbiguousNotFatalAsync()
     {
         // clear any existing data and set up fresh
         ConnectedSystemObjectsData.Clear();
@@ -1165,16 +1164,27 @@ public class ImportUpdateObjectMvaTests
             }
         });
 
-        // The import should throw an InvalidOperationException because SingleOrDefault
-        // will find two CSOs with the same external ID value (user and group)
-        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        // The import completes; the ambiguous reference is a per-object condition, reported via the
+        // referencing object's Run Profile Execution Item under the default Error handling mode.
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformImportAsync();
+
+        var newGroup = SyncRepo.ConnectedSystemObjects.Values.Single(cso =>
+            cso.AttributeValues.Any(av => av.StringValue == "New Group With Ambiguous Reference"));
+        var memberAttribute = newGroup.AttributeValues.Single(av => av.Attribute.Name == MockSourceSystemAttributeNames.MEMBER.ToString());
+        var errorItem = activity.RunProfileExecutionItems.FirstOrDefault(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.UnresolvedReference);
+        using (Assert.EnterMultipleScope())
         {
-            var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
-            var activity = ActivitiesData.First();
-            var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
-            var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-            await synchronisationImportTaskProcessor.PerformImportAsync();
-        }, "Expected InvalidOperationException when resolving a reference that matches multiple CSOs with the same external ID value.");
+            Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(3),
+                "The user, the group sharing its value, and the newly imported group must all survive; the shared value space is not an error.");
+            Assert.That(memberAttribute.ReferenceValue, Is.Null, "An ambiguous reference must never be resolved by guessing.");
+            Assert.That(errorItem, Is.Not.Null, "The default Error handling mode marks the referencing object's Run Profile Execution Item.");
+            Assert.That(errorItem!.ErrorMessage, Does.Contain("SOURCE_USER").And.Contain("SOURCE_GROUP"),
+                "An administrator can only fix an ambiguity the message names.");
+        }
     }
 
     // todo: test activity/Run Profile execution item/change object creation

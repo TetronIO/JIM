@@ -2988,6 +2988,21 @@ public class SyncImportTaskProcessor
         // Build external ID lookup dictionaries for O(1) in-memory resolution instead of O(N) linear scans per reference
         var externalIdLookups = BuildExternalIdLookups(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
 
+        // The Object Types a reference could point at, each with its primary anchor attribute; built once
+        // per run (#1285). A Reference attribute that declares its target resolves against that type alone;
+        // an undeclared reference is tried against every type and must be unambiguous.
+        var primaryAnchorCandidates = (_connectedSystem.ObjectTypes ?? Enumerable.Empty<ConnectedSystemObjectType>())
+            .Select(objectType => (ObjectType: objectType, Anchor: objectType.Attributes.SingleOrDefault(a => a.IsExternalId)))
+            .Where(pair => pair.Anchor != null)
+            .Select(pair => new ReferenceTargetCandidate(pair.ObjectType, pair.Anchor!))
+            .ToList();
+        var candidatesByTypeId = primaryAnchorCandidates.ToDictionary(candidate => candidate.ObjectType.Id);
+
+        // Ambiguous references (a value matching objects of more than one Object Type, with no declared
+        // target to arbitrate) are collected for reporting after resolution; they are a per-object condition
+        // reported like unresolved references, never a run failure.
+        var ambiguousItems = new System.Collections.Concurrent.ConcurrentBag<(ConnectedSystemObject Cso, ConnectedSystemObjectAttributeValue AttrValue, List<string> CandidateTypeNames)>();
+
         // Phase 1: Resolve from in-memory dictionaries in parallel and collect still-unresolved references for batch DB query.
         // After Commits 1-4, the loop body is purely CPU-bound dictionary lookups with no DB calls,
         // so parallel execution is safe. All shared data structures are read-only after construction;
@@ -3027,9 +3042,11 @@ public class SyncImportTaskProcessor
 
                 foreach (var referenceAttributeValue in attributeValues)
                 {
-                    var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
-                    if (!resolved)
+                    var outcome = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups, candidatesByTypeId, primaryAnchorCandidates, out var candidateTypeNames);
+                    if (outcome == InMemoryReferenceOutcome.NotFound)
                         unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
+                    else if (outcome == InMemoryReferenceOutcome.Ambiguous)
+                        ambiguousItems.Add((csoToProcess, referenceAttributeValue, candidateTypeNames));
                 }
 
                 Interlocked.Increment(ref processedCount);
@@ -3042,36 +3059,49 @@ public class SyncImportTaskProcessor
         // Phase 2: Batch DB query for remaining unresolved references (eliminates N+1 individual queries)
         if (unresolvedItems.Count > 0)
         {
-            // Collect unresolved values grouped by lookup type
-            var unresolvedPrimaryValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Values grouped by the anchor attribute they must be looked up against (#1285): a declared
+            // target names exactly one; an undeclared primary reference could match any Object Type's
+            // anchor, so its value goes into every type's group and a value found under more than one is
+            // ambiguous. This replaces a single-attribute batch that collapsed mixed-type runs onto
+            // whichever attribute the first unresolved item happened to carry.
             var unresolvedSecondaryValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            int? primaryAttributeId = null;
+            var primaryValueGroups = new Dictionary<int, HashSet<string>>();
 
             foreach (var (_, attrValue, externalIdAttribute) in unresolvedItems)
             {
-                if (externalIdAttribute.IsSecondaryExternalId && externalIdAttribute.Type == AttributeDataType.Text)
-                    unresolvedSecondaryValues.Add(attrValue.UnresolvedReferenceValue!);
-                else
+                if (UsesSecondaryReferenceResolution(attrValue, externalIdAttribute))
                 {
-                    unresolvedPrimaryValues.Add(attrValue.UnresolvedReferenceValue!);
-                    primaryAttributeId ??= externalIdAttribute.Id;
+                    unresolvedSecondaryValues.Add(attrValue.UnresolvedReferenceValue!);
+                    continue;
+                }
+
+                foreach (var candidate in FallbackCandidatesFor(attrValue, candidatesByTypeId, primaryAnchorCandidates))
+                {
+                    if (!primaryValueGroups.TryGetValue(candidate.AnchorAttribute.Id, out var values))
+                    {
+                        values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        primaryValueGroups[candidate.AnchorAttribute.Id] = values;
+                    }
+                    values.Add(attrValue.UnresolvedReferenceValue!);
                 }
             }
 
             // Batch query the database in pages using the configurable sync page size
-            var dbPrimaryResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+            var dbPrimaryResultsByAttribute = new Dictionary<int, Dictionary<string, ConnectedSystemObject>>();
             var dbSecondaryResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
 
-            if (unresolvedPrimaryValues.Count > 0 && primaryAttributeId.HasValue)
+            foreach (var (anchorAttributeId, values) in primaryValueGroups)
             {
-                var primaryValuesList = unresolvedPrimaryValues.ToList();
-                for (var i = 0; i < primaryValuesList.Count; i += pageSize)
+                var groupResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+                dbPrimaryResultsByAttribute[anchorAttributeId] = groupResults;
+                var valuesList = values.ToList();
+                for (var i = 0; i < valuesList.Count; i += pageSize)
                 {
-                    var batch = primaryValuesList.Skip(i).Take(pageSize);
+                    var batch = valuesList.Skip(i).Take(pageSize);
                     var batchResults = await _syncRepo.GetConnectedSystemObjectsByAttributeValuesAsync(
-                        _connectedSystem.Id, primaryAttributeId.Value, batch);
+                        _connectedSystem.Id, anchorAttributeId, batch);
                     foreach (var kvp in batchResults)
-                        dbPrimaryResults.TryAdd(kvp.Key, kvp.Value);
+                        groupResults.TryAdd(kvp.Key, kvp.Value);
                 }
             }
 
@@ -3092,10 +3122,31 @@ public class SyncImportTaskProcessor
             foreach (var (cso, attrValue, externalIdAttribute) in unresolvedItems)
             {
                 ConnectedSystemObject? referencedCso = null;
-                if (externalIdAttribute.IsSecondaryExternalId && externalIdAttribute.Type == AttributeDataType.Text)
+                if (UsesSecondaryReferenceResolution(attrValue, externalIdAttribute))
+                {
                     dbSecondaryResults.TryGetValue(attrValue.UnresolvedReferenceValue!, out referencedCso);
+                }
                 else
-                    dbPrimaryResults.TryGetValue(attrValue.UnresolvedReferenceValue!, out referencedCso);
+                {
+                    // Probe each candidate Object Type's results; more than one hit is an ambiguity, handled
+                    // alongside the in-memory ambiguities below rather than resolved by guessing.
+                    var hits = new List<(ConnectedSystemObject Cso, string TypeName)>();
+                    foreach (var candidate in FallbackCandidatesFor(attrValue, candidatesByTypeId, primaryAnchorCandidates))
+                    {
+                        if (dbPrimaryResultsByAttribute.TryGetValue(candidate.AnchorAttribute.Id, out var groupResults) &&
+                            groupResults.TryGetValue(attrValue.UnresolvedReferenceValue!, out var hit))
+                            hits.Add((hit, candidate.ObjectType.Name));
+                    }
+
+                    if (hits.Count > 1)
+                    {
+                        ambiguousItems.Add((cso, attrValue, hits.Select(h => h.TypeName).ToList()));
+                        continue;
+                    }
+
+                    if (hits.Count == 1)
+                        referencedCso = hits[0].Cso;
+                }
 
                 if (referencedCso != null)
                 {
@@ -3144,6 +3195,58 @@ public class SyncImportTaskProcessor
                             break;
                     }
                 }
+            }
+        }
+
+        // Ambiguous references: a value matching objects of more than one Object Type, with no declared target
+        // to arbitrate (#1285). A per-object condition reported through the same per-system handling as
+        // unresolved references; resolving one by guessing is never an option.
+        var ambiguousReferenceCount = 0;
+        foreach (var (cso, attrValue, candidateTypeNames) in ambiguousItems)
+        {
+            ambiguousReferenceCount++;
+            var candidateNames = string.Join(", ", candidateTypeNames.Distinct().OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
+
+            switch (unresolvedReferenceHandling)
+            {
+                case UnresolvedReferenceHandling.Error:
+                    rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
+                    if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
+                    {
+                        activityRunProfileExecutionItem.ErrorMessage = $"A reference value ({attrValue.UnresolvedReferenceValue}) matches objects of more than one Object Type ({candidateNames}), and attribute '{attrValue.Attribute?.Name}' does not declare which Object Type it references, so the reference cannot be resolved. Declare the reference's target Object Type in the Connected System's schema configuration if the Connector supports doing so.";
+                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+                    }
+                    else
+                    {
+                        Log.Warning("ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {CsoId}, ambiguous reference: {AmbiguousRef}",
+                            cso.Id, LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue));
+                    }
+                    break;
+
+                case UnresolvedReferenceHandling.Warn:
+                    Log.Warning("ResolveReferencesAsync: A reference value ({AmbiguousRef}) on CSO {CsoId} matches objects of more than one Object Type ({CandidateNames}) and cannot be resolved.",
+                        LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, candidateNames);
+                    break;
+
+                case UnresolvedReferenceHandling.Ignore:
+                default:
+                    Log.Debug("ResolveReferencesAsync: A reference value ({AmbiguousRef}) on CSO {CsoId} matches objects of more than one Object Type ({CandidateNames}). Ignored per Connected System setting.",
+                        LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, candidateNames);
+                    break;
+            }
+        }
+
+        if (ambiguousReferenceCount > 0)
+        {
+            Log.Information("ResolveReferencesAsync: {Count} reference value(s) were ambiguous across Object Types (handling: {UnresolvedReferenceHandling}).",
+                ambiguousReferenceCount, unresolvedReferenceHandling);
+
+            if (unresolvedReferenceHandling == UnresolvedReferenceHandling.Warn)
+            {
+                var ambiguousSummary = $"{ambiguousReferenceCount} reference value(s) matched objects of more than one Object Type and could not be resolved. Declare each Reference attribute's target Object Type in the Connected System's schema configuration if the Connector supports doing so.";
+                _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+                    ? ambiguousSummary
+                    : $"{_activity.WarningMessage}\n{ambiguousSummary}";
             }
         }
 
@@ -3206,111 +3309,224 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// Attempts to resolve an attribute value's unresolved reference using the pre-built in-memory lookup dictionaries.
-    /// Returns true if the reference was resolved, false if it needs to be resolved via database fallback.
+    /// How an in-memory reference resolution attempt concluded (#1285).
     /// </summary>
-    private static bool ResolveAttributeValueFromLookups(ConnectedSystemObjectAttributeValue referenceAttributeValue, ConnectedSystemObjectTypeAttribute externalIdAttribute, ExternalIdLookups lookups)
+    internal enum InMemoryReferenceOutcome
     {
-        if (string.IsNullOrEmpty(referenceAttributeValue.UnresolvedReferenceValue))
-            return true; // nothing to resolve
+        /// <summary>The reference was resolved (or there was nothing to resolve).</summary>
+        Resolved,
 
-        ConnectedSystemObject? referencedConnectedSystemObject = null;
+        /// <summary>No object in this run holds the value; the database fallback should look for it.</summary>
+        NotFound,
 
-        if (externalIdAttribute.IsExternalId)
+        /// <summary>
+        /// Objects of more than one Object Type hold the value and no declared target arbitrates.
+        /// Reported per the Connected System's unresolved-reference handling; never resolved by guessing.
+        /// </summary>
+        Ambiguous
+    }
+
+    /// <summary>
+    /// An Object Type a reference could point at, paired with its primary anchor (External ID) attribute.
+    /// </summary>
+    private sealed record ReferenceTargetCandidate(ConnectedSystemObjectType ObjectType, ConnectedSystemObjectTypeAttribute AnchorAttribute);
+
+    /// <summary>
+    /// Whether a reference is resolved through Secondary External IDs (how LDAP resolves DN references),
+    /// which is deliberately type-agnostic: a DN is unique across the whole directory, and directory schemas
+    /// do not constrain which object class a DN attribute points at. A declared target always wins, because
+    /// only a connector whose schema states reference targets declares one (#1285).
+    /// </summary>
+    private static bool UsesSecondaryReferenceResolution(ConnectedSystemObjectAttributeValue attrValue, ConnectedSystemObjectTypeAttribute externalIdAttribute) =>
+        attrValue.Attribute?.ReferencedObjectTypeId == null &&
+        externalIdAttribute.IsSecondaryExternalId &&
+        externalIdAttribute.Type == AttributeDataType.Text;
+
+    /// <summary>
+    /// The Object Types whose anchors the database fallback must try for a reference: the declared target
+    /// alone when the attribute states one, otherwise every Object Type in the Connected System (#1285).
+    /// </summary>
+    private static IReadOnlyList<ReferenceTargetCandidate> FallbackCandidatesFor(
+        ConnectedSystemObjectAttributeValue attrValue,
+        IReadOnlyDictionary<int, ReferenceTargetCandidate> candidatesByTypeId,
+        IReadOnlyList<ReferenceTargetCandidate> allCandidates)
+    {
+        var declaredTargetTypeId = attrValue.Attribute?.ReferencedObjectTypeId;
+        if (declaredTargetTypeId.HasValue)
+            return candidatesByTypeId.TryGetValue(declaredTargetTypeId.Value, out var declaredCandidate) ? [declaredCandidate] : [];
+
+        return allCandidates;
+    }
+
+    /// <summary>
+    /// Attempts to resolve an attribute value's unresolved reference using the pre-built in-memory lookup
+    /// dictionaries, which are partitioned by Object Type (#1285). When the Reference attribute declares its
+    /// target Object Type (stated by the connector's schema, i.e. the SQL Connector's referencesObjectType),
+    /// only that type's partition is consulted, read through its own anchor attribute's data type. When it
+    /// does not, every partition is tried and the value must be unambiguous: one hit resolves, none falls
+    /// through to the database fallback, and several is reported as ambiguous.
+    /// </summary>
+    private static InMemoryReferenceOutcome ResolveAttributeValueFromLookups(
+        ConnectedSystemObjectAttributeValue referenceAttributeValue,
+        ConnectedSystemObjectTypeAttribute externalIdAttribute,
+        ExternalIdLookups lookups,
+        IReadOnlyDictionary<int, ReferenceTargetCandidate> candidatesByTypeId,
+        IReadOnlyList<ReferenceTargetCandidate> allCandidates,
+        out List<string> ambiguousObjectTypeNames)
+    {
+        ambiguousObjectTypeNames = [];
+        var unresolvedValue = referenceAttributeValue.UnresolvedReferenceValue;
+        if (string.IsNullOrEmpty(unresolvedValue))
+            return InMemoryReferenceOutcome.Resolved; // nothing to resolve
+
+        var declaredTargetTypeId = referenceAttributeValue.Attribute?.ReferencedObjectTypeId;
+        if (declaredTargetTypeId.HasValue)
         {
-            switch (externalIdAttribute.Type)
+            if (candidatesByTypeId.TryGetValue(declaredTargetTypeId.Value, out var declaredCandidate) &&
+                lookups.Partitions.TryGetValue(declaredTargetTypeId.Value, out var declaredPartition))
             {
-                case AttributeDataType.Text:
-                    lookups.PrimaryTextLookup?.TryGetValue(referenceAttributeValue.UnresolvedReferenceValue, out referencedConnectedSystemObject);
-                    break;
-                case AttributeDataType.Number:
-                    if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intValue))
-                        lookups.PrimaryIntLookup?.TryGetValue(intValue, out referencedConnectedSystemObject);
-                    else
-                        throw new InvalidCastException(
-                            $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
-                    break;
-                case AttributeDataType.LongNumber:
-                    if (long.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var longValue))
-                        lookups.PrimaryLongLookup?.TryGetValue(longValue, out referencedConnectedSystemObject);
-                    else
-                        throw new InvalidCastException(
-                            $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a long.");
-                    break;
-                case AttributeDataType.Decimal:
-                    // Invariant culture: the unresolved value was written by whichever thread built it,
-                    // and a comma decimal separator would otherwise fail to parse here (#1283).
-                    if (decimal.TryParse(referenceAttributeValue.UnresolvedReferenceValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var decimalValue))
-                        lookups.PrimaryDecimalLookup?.TryGetValue(decimalValue, out referencedConnectedSystemObject);
-                    else
-                        throw new InvalidCastException(
-                            $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a decimal.");
-                    break;
-                case AttributeDataType.Guid:
-                    if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidValue))
-                        lookups.PrimaryGuidLookup?.TryGetValue(guidValue, out referencedConnectedSystemObject);
-                    else
-                        throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a guid.");
-                    break;
-                case AttributeDataType.DateTime:
-                case AttributeDataType.Binary:
-                case AttributeDataType.Reference:
-                case AttributeDataType.Boolean:
-                case AttributeDataType.NotSet:
-                default:
-                    throw new ArgumentOutOfRangeException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} cannot be used for external ids.");
+                var declaredMatch = ProbePrimaryLookup(declaredPartition, declaredCandidate.AnchorAttribute, unresolvedValue);
+                if (declaredMatch != null)
+                {
+                    ApplyResolvedReference(referenceAttributeValue, declaredMatch);
+                    return InMemoryReferenceOutcome.Resolved;
+                }
             }
+
+            // The declared target's partition does not hold the value (or holds nothing this run); the
+            // database fallback will look it up against the declared target's anchor alone.
+            return InMemoryReferenceOutcome.NotFound;
         }
-        else if (externalIdAttribute.IsSecondaryExternalId)
+
+        var matches = new List<(ConnectedSystemObject Match, string TypeName)>();
+        if (externalIdAttribute.IsSecondaryExternalId)
         {
-            switch (externalIdAttribute.Type)
+            // Secondary External ID resolution (LDAP DN semantics) stays type-agnostic by design: a DN is
+            // unique across the directory, so every partition is probed and more than one hit means the
+            // system's own data contradicts that.
+            foreach (var (partitionTypeId, partition) in lookups.Partitions)
             {
-                case AttributeDataType.Text:
-                    lookups.SecondaryTextLookup?.TryGetValue(referenceAttributeValue.UnresolvedReferenceValue, out referencedConnectedSystemObject);
-                    break;
-                case AttributeDataType.Number:
-                    if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intValue))
-                        lookups.SecondaryIntLookup?.TryGetValue(intValue, out referencedConnectedSystemObject);
-                    else
-                        throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
-                    break;
-                case AttributeDataType.LongNumber:
-                    if (long.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var longValue))
-                        lookups.SecondaryLongLookup?.TryGetValue(longValue, out referencedConnectedSystemObject);
-                    else
-                        throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a long.");
-                    break;
-                case AttributeDataType.Decimal:
-                    // Invariant culture, for the same reason as the primary switch above (#1283).
-                    if (decimal.TryParse(referenceAttributeValue.UnresolvedReferenceValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var secondaryDecimalValue))
-                        lookups.SecondaryDecimalLookup?.TryGetValue(secondaryDecimalValue, out referencedConnectedSystemObject);
-                    else
-                        throw new InvalidCastException(
-                            $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a decimal.");
-                    break;
-                case AttributeDataType.Guid:
-                    if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidValue))
-                        lookups.SecondaryGuidLookup?.TryGetValue(guidValue, out referencedConnectedSystemObject);
-                    else
-                        throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a guid.");
-                    break;
-                case AttributeDataType.DateTime:
-                case AttributeDataType.Binary:
-                case AttributeDataType.Reference:
-                case AttributeDataType.Boolean:
-                case AttributeDataType.NotSet:
-                default:
-                    throw new ArgumentOutOfRangeException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} cannot be used for secondary external ids.");
+                var partitionMatch = ProbeSecondaryLookup(partition, externalIdAttribute, unresolvedValue);
+                if (partitionMatch != null)
+                    matches.Add((partitionMatch, candidatesByTypeId.TryGetValue(partitionTypeId, out var candidate) ? candidate.ObjectType.Name : partitionMatch.Type?.Name ?? partitionTypeId.ToString()));
             }
         }
         else
         {
-            throw new InvalidDataException("externalIdAttributeToUse wasn't external or secondary external id");
+            foreach (var candidate in allCandidates)
+            {
+                if (!lookups.Partitions.TryGetValue(candidate.ObjectType.Id, out var partition))
+                    continue;
+
+                var partitionMatch = ProbePrimaryLookup(partition, candidate.AnchorAttribute, unresolvedValue);
+                if (partitionMatch != null)
+                    matches.Add((partitionMatch, candidate.ObjectType.Name));
+            }
         }
 
-        if (referencedConnectedSystemObject == null)
-            return false;
+        switch (matches.Count)
+        {
+            case 0:
+                return InMemoryReferenceOutcome.NotFound;
+            case 1:
+                ApplyResolvedReference(referenceAttributeValue, matches[0].Match);
+                return InMemoryReferenceOutcome.Resolved;
+            default:
+                ambiguousObjectTypeNames = matches.Select(m => m.TypeName).ToList();
+                return InMemoryReferenceOutcome.Ambiguous;
+        }
+    }
 
+    /// <summary>
+    /// Probes one Object Type's primary external ID dictionaries for a reference value, reading the value
+    /// through that type's anchor data type. A value that cannot be read as the anchor's type (text where an
+    /// int is keyed, say) is simply not in that partition; with several candidate types a value legitimately
+    /// parses for some and not others, so an unreadable value is never an error here. What remains unresolved
+    /// is reported through the per-system unresolved-reference handling, never silently.
+    /// </summary>
+    private static ConnectedSystemObject? ProbePrimaryLookup(ExternalIdLookups.TypePartition partition, ConnectedSystemObjectTypeAttribute anchorAttribute, string value)
+    {
+        ConnectedSystemObject? match = null;
+        switch (anchorAttribute.Type)
+        {
+            case AttributeDataType.Text:
+                partition.PrimaryTextLookup?.TryGetValue(value, out match);
+                break;
+            case AttributeDataType.Number:
+                if (int.TryParse(value, out var intValue))
+                    partition.PrimaryIntLookup?.TryGetValue(intValue, out match);
+                break;
+            case AttributeDataType.LongNumber:
+                if (long.TryParse(value, out var longValue))
+                    partition.PrimaryLongLookup?.TryGetValue(longValue, out match);
+                break;
+            case AttributeDataType.Decimal:
+                // Invariant culture: the unresolved value was written by whichever thread built it, and a
+                // comma decimal separator would otherwise fail to parse here (#1283).
+                if (decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var decimalValue))
+                    partition.PrimaryDecimalLookup?.TryGetValue(decimalValue, out match);
+                break;
+            case AttributeDataType.Guid:
+                if (Guid.TryParse(value, out var guidValue))
+                    partition.PrimaryGuidLookup?.TryGetValue(guidValue, out match);
+                break;
+            case AttributeDataType.DateTime:
+            case AttributeDataType.Binary:
+            case AttributeDataType.Reference:
+            case AttributeDataType.Boolean:
+            case AttributeDataType.NotSet:
+            default:
+                throw new ArgumentOutOfRangeException(nameof(anchorAttribute), $"Attribute '{anchorAttribute.Name}' of type {anchorAttribute.Type} cannot be used for external ids.");
+        }
+
+        return match;
+    }
+
+    /// <summary>
+    /// As <see cref="ProbePrimaryLookup"/>, for the secondary external ID dictionaries.
+    /// </summary>
+    private static ConnectedSystemObject? ProbeSecondaryLookup(ExternalIdLookups.TypePartition partition, ConnectedSystemObjectTypeAttribute secondaryAnchorAttribute, string value)
+    {
+        ConnectedSystemObject? match = null;
+        switch (secondaryAnchorAttribute.Type)
+        {
+            case AttributeDataType.Text:
+                partition.SecondaryTextLookup?.TryGetValue(value, out match);
+                break;
+            case AttributeDataType.Number:
+                if (int.TryParse(value, out var intValue))
+                    partition.SecondaryIntLookup?.TryGetValue(intValue, out match);
+                break;
+            case AttributeDataType.LongNumber:
+                if (long.TryParse(value, out var longValue))
+                    partition.SecondaryLongLookup?.TryGetValue(longValue, out match);
+                break;
+            case AttributeDataType.Decimal:
+                // Invariant culture, for the same reason as the primary probe above (#1283).
+                if (decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var decimalValue))
+                    partition.SecondaryDecimalLookup?.TryGetValue(decimalValue, out match);
+                break;
+            case AttributeDataType.Guid:
+                if (Guid.TryParse(value, out var guidValue))
+                    partition.SecondaryGuidLookup?.TryGetValue(guidValue, out match);
+                break;
+            case AttributeDataType.DateTime:
+            case AttributeDataType.Binary:
+            case AttributeDataType.Reference:
+            case AttributeDataType.Boolean:
+            case AttributeDataType.NotSet:
+            default:
+                throw new ArgumentOutOfRangeException(nameof(secondaryAnchorAttribute), $"Attribute '{secondaryAnchorAttribute.Name}' of type {secondaryAnchorAttribute.Type} cannot be used for secondary external ids.");
+        }
+
+        return match;
+    }
+
+    /// <summary>
+    /// Records a resolved reference on the attribute value.
+    /// </summary>
+    private static void ApplyResolvedReference(ConnectedSystemObjectAttributeValue referenceAttributeValue, ConnectedSystemObject referencedConnectedSystemObject)
+    {
         var csoIdentifier = referencedConnectedSystemObject.Id != Guid.Empty
             ? referencedConnectedSystemObject.Id.ToString()
             : referencedConnectedSystemObject.ExternalIdAttributeValue?.ToString() ?? "(unknown)";
@@ -3322,25 +3538,28 @@ public class SyncImportTaskProcessor
         // CreateConnectedSystemObjectsAsync after ID pre-generation.
         if (referencedConnectedSystemObject.Id != Guid.Empty)
             referenceAttributeValue.ReferenceValueId = referencedConnectedSystemObject.Id;
-        return true;
     }
 
     /// <summary>
-    /// Builds lookup dictionaries from both CSO lists for O(1) in-memory reference resolution.
-    /// Extracts external ID attribute values once per CSO (avoiding repeated computed property access)
-    /// and indexes them by value for fast lookup during reference resolution.
+    /// Builds lookup dictionaries from both CSO lists for O(1) in-memory reference resolution, partitioned
+    /// by Object Type (#1285). Extracts external ID attribute values once per CSO (avoiding repeated
+    /// computed property access) and indexes them by value within their Object Type's partition. A duplicate
+    /// anchor value within one Object Type is a genuine data error and fails fast, naming what collided; the
+    /// same value on two Object Types is normal (a view over a table has the table's keys by construction).
     /// </summary>
-    private static ExternalIdLookups BuildExternalIdLookups(IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    internal static ExternalIdLookups BuildExternalIdLookups(IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         var lookups = new ExternalIdLookups();
 
-        // Process both lists into the same dictionaries
+        // Process both lists into the same partitions
         foreach (var csoList in new[] { connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated })
         {
             foreach (var cso in csoList)
             {
                 if (cso.AttributeValues.Count == 0)
                     continue;
+
+                var partition = lookups.GetOrAddPartition(cso.Type?.Id ?? cso.TypeId);
 
                 // Extract primary external ID value once (replicating ConnectedSystemObject.ExternalIdAttributeValue computed property logic)
                 var primaryIdAttrValue = cso.AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == cso.ExternalIdAttributeId);
@@ -3350,32 +3569,33 @@ public class SyncImportTaskProcessor
                     var attrType = primaryIdAttrValue.Attribute?.Type;
                     if (attrType != null)
                     {
+                        var attributeName = primaryIdAttrValue.Attribute?.Name ?? cso.ExternalIdAttributeId.ToString();
                         switch (attrType)
                         {
                             case AttributeDataType.Text when !string.IsNullOrEmpty(primaryIdAttrValue.StringValue):
-                                lookups.PrimaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
-                                if (!lookups.PrimaryTextLookup.TryAdd(primaryIdAttrValue.StringValue, cso))
-                                    throw new InvalidOperationException($"Duplicate primary external ID text value '{primaryIdAttrValue.StringValue}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
+                                partition.PrimaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
+                                if (!partition.PrimaryTextLookup.TryAdd(primaryIdAttrValue.StringValue, cso))
+                                    throw DuplicateAnchorValueError(cso, attributeName, primaryIdAttrValue.StringValue, secondary: false);
                                 break;
                             case AttributeDataType.Number when primaryIdAttrValue.IntValue.HasValue:
-                                lookups.PrimaryIntLookup ??= new Dictionary<int, ConnectedSystemObject>();
-                                if (!lookups.PrimaryIntLookup.TryAdd(primaryIdAttrValue.IntValue.Value, cso))
-                                    throw new InvalidOperationException($"Duplicate primary external ID int value '{primaryIdAttrValue.IntValue.Value}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
+                                partition.PrimaryIntLookup ??= new Dictionary<int, ConnectedSystemObject>();
+                                if (!partition.PrimaryIntLookup.TryAdd(primaryIdAttrValue.IntValue.Value, cso))
+                                    throw DuplicateAnchorValueError(cso, attributeName, primaryIdAttrValue.IntValue.Value.ToString(), secondary: false);
                                 break;
                             case AttributeDataType.LongNumber when primaryIdAttrValue.LongValue.HasValue:
-                                lookups.PrimaryLongLookup ??= new Dictionary<long, ConnectedSystemObject>();
-                                if (!lookups.PrimaryLongLookup.TryAdd(primaryIdAttrValue.LongValue.Value, cso))
-                                    throw new InvalidOperationException($"Duplicate primary external ID long value '{primaryIdAttrValue.LongValue.Value}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
+                                partition.PrimaryLongLookup ??= new Dictionary<long, ConnectedSystemObject>();
+                                if (!partition.PrimaryLongLookup.TryAdd(primaryIdAttrValue.LongValue.Value, cso))
+                                    throw DuplicateAnchorValueError(cso, attributeName, primaryIdAttrValue.LongValue.Value.ToString(), secondary: false);
                                 break;
                             case AttributeDataType.Decimal when primaryIdAttrValue.DecimalValue.HasValue:
-                                lookups.PrimaryDecimalLookup ??= new Dictionary<decimal, ConnectedSystemObject>();
-                                if (!lookups.PrimaryDecimalLookup.TryAdd(primaryIdAttrValue.DecimalValue.Value, cso))
-                                    throw new InvalidOperationException($"Duplicate primary external ID decimal value '{ExternalIdValue.ToCanonicalString(primaryIdAttrValue.DecimalValue.Value)}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
+                                partition.PrimaryDecimalLookup ??= new Dictionary<decimal, ConnectedSystemObject>();
+                                if (!partition.PrimaryDecimalLookup.TryAdd(primaryIdAttrValue.DecimalValue.Value, cso))
+                                    throw DuplicateAnchorValueError(cso, attributeName, ExternalIdValue.ToCanonicalString(primaryIdAttrValue.DecimalValue.Value), secondary: false);
                                 break;
                             case AttributeDataType.Guid when primaryIdAttrValue.GuidValue.HasValue:
-                                lookups.PrimaryGuidLookup ??= new Dictionary<Guid, ConnectedSystemObject>();
-                                if (!lookups.PrimaryGuidLookup.TryAdd(primaryIdAttrValue.GuidValue.Value, cso))
-                                    throw new InvalidOperationException($"Duplicate primary external ID guid value '{primaryIdAttrValue.GuidValue.Value}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
+                                partition.PrimaryGuidLookup ??= new Dictionary<Guid, ConnectedSystemObject>();
+                                if (!partition.PrimaryGuidLookup.TryAdd(primaryIdAttrValue.GuidValue.Value, cso))
+                                    throw DuplicateAnchorValueError(cso, attributeName, primaryIdAttrValue.GuidValue.Value.ToString(), secondary: false);
                                 break;
                         }
                     }
@@ -3390,6 +3610,7 @@ public class SyncImportTaskProcessor
                         var attrType2 = secondaryIdAttrValue.Attribute?.Type;
                         if (attrType2 != null)
                         {
+                            var attributeName = secondaryIdAttrValue.Attribute?.Name ?? cso.SecondaryExternalIdAttributeId.Value.ToString();
                             switch (attrType2)
                             {
                                 case AttributeDataType.Text when !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue):
@@ -3397,29 +3618,29 @@ public class SyncImportTaskProcessor
                                     // The SQL fixup (FixupCrossBatchReferenceIdsAsync) uses LOWER() for this reason.
                                     // Matching that behaviour here means in-memory resolution succeeds for LDAP references,
                                     // avoiding the expensive post-import SQL fixup entirely.
-                                    lookups.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
-                                    if (!lookups.SecondaryTextLookup.TryAdd(secondaryIdAttrValue.StringValue, cso))
-                                        throw new InvalidOperationException($"Duplicate secondary external ID text value '{secondaryIdAttrValue.StringValue}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
+                                    partition.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+                                    if (!partition.SecondaryTextLookup.TryAdd(secondaryIdAttrValue.StringValue, cso))
+                                        throw DuplicateAnchorValueError(cso, attributeName, secondaryIdAttrValue.StringValue, secondary: true);
                                     break;
                                 case AttributeDataType.Number when secondaryIdAttrValue.IntValue.HasValue:
-                                    lookups.SecondaryIntLookup ??= new Dictionary<int, ConnectedSystemObject>();
-                                    if (!lookups.SecondaryIntLookup.TryAdd(secondaryIdAttrValue.IntValue.Value, cso))
-                                        throw new InvalidOperationException($"Duplicate secondary external ID int value '{secondaryIdAttrValue.IntValue.Value}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
+                                    partition.SecondaryIntLookup ??= new Dictionary<int, ConnectedSystemObject>();
+                                    if (!partition.SecondaryIntLookup.TryAdd(secondaryIdAttrValue.IntValue.Value, cso))
+                                        throw DuplicateAnchorValueError(cso, attributeName, secondaryIdAttrValue.IntValue.Value.ToString(), secondary: true);
                                     break;
                                 case AttributeDataType.LongNumber when secondaryIdAttrValue.LongValue.HasValue:
-                                    lookups.SecondaryLongLookup ??= new Dictionary<long, ConnectedSystemObject>();
-                                    if (!lookups.SecondaryLongLookup.TryAdd(secondaryIdAttrValue.LongValue.Value, cso))
-                                        throw new InvalidOperationException($"Duplicate secondary external ID long value '{secondaryIdAttrValue.LongValue.Value}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
+                                    partition.SecondaryLongLookup ??= new Dictionary<long, ConnectedSystemObject>();
+                                    if (!partition.SecondaryLongLookup.TryAdd(secondaryIdAttrValue.LongValue.Value, cso))
+                                        throw DuplicateAnchorValueError(cso, attributeName, secondaryIdAttrValue.LongValue.Value.ToString(), secondary: true);
                                     break;
                                 case AttributeDataType.Decimal when secondaryIdAttrValue.DecimalValue.HasValue:
-                                    lookups.SecondaryDecimalLookup ??= new Dictionary<decimal, ConnectedSystemObject>();
-                                    if (!lookups.SecondaryDecimalLookup.TryAdd(secondaryIdAttrValue.DecimalValue.Value, cso))
-                                        throw new InvalidOperationException($"Duplicate secondary external ID decimal value '{ExternalIdValue.ToCanonicalString(secondaryIdAttrValue.DecimalValue.Value)}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
+                                    partition.SecondaryDecimalLookup ??= new Dictionary<decimal, ConnectedSystemObject>();
+                                    if (!partition.SecondaryDecimalLookup.TryAdd(secondaryIdAttrValue.DecimalValue.Value, cso))
+                                        throw DuplicateAnchorValueError(cso, attributeName, ExternalIdValue.ToCanonicalString(secondaryIdAttrValue.DecimalValue.Value), secondary: true);
                                     break;
                                 case AttributeDataType.Guid when secondaryIdAttrValue.GuidValue.HasValue:
-                                    lookups.SecondaryGuidLookup ??= new Dictionary<Guid, ConnectedSystemObject>();
-                                    if (!lookups.SecondaryGuidLookup.TryAdd(secondaryIdAttrValue.GuidValue.Value, cso))
-                                        throw new InvalidOperationException($"Duplicate secondary external ID guid value '{secondaryIdAttrValue.GuidValue.Value}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
+                                    partition.SecondaryGuidLookup ??= new Dictionary<Guid, ConnectedSystemObject>();
+                                    if (!partition.SecondaryGuidLookup.TryAdd(secondaryIdAttrValue.GuidValue.Value, cso))
+                                        throw DuplicateAnchorValueError(cso, attributeName, secondaryIdAttrValue.GuidValue.Value.ToString(), secondary: true);
                                     break;
                             }
                         }
@@ -3432,26 +3653,55 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// Holds pre-built lookup dictionaries for O(1) in-memory reference resolution.
-    /// Dictionaries are keyed by external ID values with case-sensitive Ordinal comparers
-    /// per the case sensitivity policy (external ID matching is always case-sensitive).
-    /// Only the dictionaries needed for the data types present in the import are initialised.
+    /// A duplicate anchor value within one Object Type is a genuine data error: synchronisation integrity
+    /// demands a fast, hard failure, and the message names the Object Type, the anchor attribute and the
+    /// value so an administrator can act on it (#1285).
     /// </summary>
-    private sealed class ExternalIdLookups
-    {
-        public Dictionary<string, ConnectedSystemObject>? PrimaryTextLookup { get; set; }
-        public Dictionary<int, ConnectedSystemObject>? PrimaryIntLookup { get; set; }
-        public Dictionary<long, ConnectedSystemObject>? PrimaryLongLookup { get; set; }
+    private static InvalidOperationException DuplicateAnchorValueError(ConnectedSystemObject cso, string attributeName, string value, bool secondary) =>
+        new($"Duplicate {(secondary ? "Secondary External ID" : "External ID")} value '{value}' within Object Type '{cso.Type?.Name ?? cso.TypeId.ToString()}' (attribute '{attributeName}'). External ID values must be unique within an Object Type; another object of this type already carries this value.");
 
-        // Keyed on the decimal itself, not on its canonical string: equal decimals hash equally
-        // regardless of scale, so 4200.00m and 4200m are the same key here without normalising (#1283).
-        public Dictionary<decimal, ConnectedSystemObject>? PrimaryDecimalLookup { get; set; }
-        public Dictionary<Guid, ConnectedSystemObject>? PrimaryGuidLookup { get; set; }
-        public Dictionary<string, ConnectedSystemObject>? SecondaryTextLookup { get; set; }
-        public Dictionary<int, ConnectedSystemObject>? SecondaryIntLookup { get; set; }
-        public Dictionary<long, ConnectedSystemObject>? SecondaryLongLookup { get; set; }
-        public Dictionary<decimal, ConnectedSystemObject>? SecondaryDecimalLookup { get; set; }
-        public Dictionary<Guid, ConnectedSystemObject>? SecondaryGuidLookup { get; set; }
+    /// <summary>
+    /// Holds pre-built lookup dictionaries for O(1) in-memory reference resolution, partitioned by Object
+    /// Type (#1285): two Object Types in one Connected System may legitimately share an anchor value space
+    /// (a view over a table has the table's keys by construction), so a value is only unique within its type.
+    /// </summary>
+    internal sealed class ExternalIdLookups
+    {
+        /// <summary>Per-Object-Type partitions, keyed by Object Type id.</summary>
+        public Dictionary<int, TypePartition> Partitions { get; } = [];
+
+        public TypePartition GetOrAddPartition(int objectTypeId)
+        {
+            if (!Partitions.TryGetValue(objectTypeId, out var partition))
+            {
+                partition = new TypePartition();
+                Partitions[objectTypeId] = partition;
+            }
+
+            return partition;
+        }
+
+        /// <summary>
+        /// One Object Type's external ID dictionaries. Primary dictionaries use case-sensitive comparers per
+        /// the case sensitivity policy (external ID matching is always case-sensitive); the secondary text
+        /// dictionary is case-insensitive because LDAP Distinguished Names are (RFC 4514). Decimal
+        /// dictionaries key on the decimal itself, not its canonical string: equal decimals hash equally
+        /// regardless of scale, so 4200.00m and 4200m are the same key without normalising (#1283).
+        /// Only the dictionaries needed for the data types present in the import are initialised.
+        /// </summary>
+        internal sealed class TypePartition
+        {
+            public Dictionary<string, ConnectedSystemObject>? PrimaryTextLookup { get; set; }
+            public Dictionary<int, ConnectedSystemObject>? PrimaryIntLookup { get; set; }
+            public Dictionary<long, ConnectedSystemObject>? PrimaryLongLookup { get; set; }
+            public Dictionary<decimal, ConnectedSystemObject>? PrimaryDecimalLookup { get; set; }
+            public Dictionary<Guid, ConnectedSystemObject>? PrimaryGuidLookup { get; set; }
+            public Dictionary<string, ConnectedSystemObject>? SecondaryTextLookup { get; set; }
+            public Dictionary<int, ConnectedSystemObject>? SecondaryIntLookup { get; set; }
+            public Dictionary<long, ConnectedSystemObject>? SecondaryLongLookup { get; set; }
+            public Dictionary<decimal, ConnectedSystemObject>? SecondaryDecimalLookup { get; set; }
+            public Dictionary<Guid, ConnectedSystemObject>? SecondaryGuidLookup { get; set; }
+        }
     }
 
     /// <summary>
