@@ -8,6 +8,7 @@ using JIM.Connectors;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -616,6 +617,10 @@ public class ConnectedSystemServer
         // before persistence. Credential attributes are forced back into a safe state here regardless of what the
         // caller sent, which closes any route that sets Selected outside the validated per-attribute endpoints.
         QuarantineCredentialAttributes(connectedSystem);
+
+        // the selection is what this save changes, and some Connectors can only serve their settings for some
+        // selections (#1424); refused here, before an Activity is opened for a save that will not happen.
+        ThrowIfObjectTypeSelectionInvalid(connectedSystem, connectedSystem.ObjectTypes ?? []);
 
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
@@ -1387,6 +1392,12 @@ public class ConnectedSystemServer
         {
             if (connector is IConnectorSettings settingsConnector)
                 results.AddRange(settingsConnector.ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
+
+            // some of what the settings say is about the Object Types selected for synchronisation (the SQL Connector's
+            // Delta Import Mode, for one), so a connector that can judge that is shown the schema as it stands. no schema
+            // yet is nothing selected, which is a valid answer, not a reason to skip the question.
+            if (connector is IConnectorObjectTypeSelectionValidation selectionValidation)
+                results.AddRange(selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, connectedSystem.ObjectTypes ?? [], Log.Logger));
         }
         finally
         {
@@ -1394,6 +1405,61 @@ public class ConnectedSystemServer
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Refuses a schema selection the Connector says the settings cannot serve (#1424): selecting an Object Type
+    /// that lacks what the configured Delta Import Mode needs, for example. Asked of the values and the schema
+    /// alone, never of the target system, so it is safe on every save path. Connected Systems whose Connector
+    /// cannot judge the selection, or that carry no settings to judge it against, are left alone.
+    /// </summary>
+    /// <param name="connectedSystem">Carries the Connector Definition and the setting values.</param>
+    /// <param name="objectTypes">The schema as it will stand once the change is persisted.</param>
+    /// <exception cref="InvalidSettingValuesException">The Connector refused the selection; the message is the Connector's own.</exception>
+    private void ThrowIfObjectTypeSelectionInvalid(ConnectedSystem connectedSystem, IReadOnlyCollection<ConnectedSystemObjectType> objectTypes)
+    {
+        if (connectedSystem.ConnectorDefinition == null || connectedSystem.SettingValues is not { Count: > 0 })
+            return;
+
+        // connectors that hold connections or temporary files are disposable; the rest are not, and a null here is fine.
+        var connector = CreateConnector(connectedSystem);
+        using var disposableConnector = connector as IDisposable;
+
+        if (connector is not IConnectorObjectTypeSelectionValidation selectionValidation)
+            return;
+
+        var problems = selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, objectTypes, Log.Logger)
+            .Where(result => !result.IsValid)
+            .Select(result => result.ErrorMessage)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .ToList();
+
+        if (problems.Count > 0)
+            throw new InvalidSettingValuesException(string.Join(" ", problems));
+    }
+
+    /// <summary>
+    /// As <see cref="ThrowIfObjectTypeSelectionInvalid"/>, for a single Object Type being updated on its own (the
+    /// REST API and PowerShell path). Only a selection can newly violate the settings, so a deselection is not
+    /// judged; for a selection the persisted schema is loaded and this Object Type's pending state stands in for
+    /// its persisted one, so the Connector judges the selection as it will be after the update.
+    /// </summary>
+    private async Task ThrowIfObjectTypeSelectionInvalidAsync(ConnectedSystemObjectType objectType)
+    {
+        if (!objectType.Selected)
+            return;
+
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(objectType.ConnectedSystemId);
+        if (connectedSystem?.ConnectorDefinition == null || connectedSystem.SettingValues is not { Count: > 0 })
+            return;
+
+        var persisted = await Application.Repository.ConnectedSystems.GetObjectTypesAsync(objectType.ConnectedSystemId) ?? [];
+        var objectTypes = persisted
+            .Where(candidate => candidate.Id != objectType.Id)
+            .Append(objectType)
+            .ToList();
+
+        ThrowIfObjectTypeSelectionInvalid(connectedSystem, objectTypes);
     }
 
     private static void ValidateConnectedSystemParameter(ConnectedSystem connectedSystem)
@@ -3533,6 +3599,8 @@ public class ConnectedSystemServer
 
         Log.Debug("UpdateObjectTypeAsync() called for {ObjectType}", objectType.Name);
 
+        await ThrowIfObjectTypeSelectionInvalidAsync(objectType);
+
         var activity = new Activity
         {
             TargetName = objectType.ConnectedSystem?.Name ?? "Unknown",
@@ -3597,6 +3665,8 @@ public class ConnectedSystemServer
             throw new ArgumentNullException(nameof(objectType));
 
         Log.Debug("UpdateObjectTypeAsync() called for {ObjectType} (API key initiated)", objectType.Name);
+
+        await ThrowIfObjectTypeSelectionInvalidAsync(objectType);
 
         var activity = new Activity
         {

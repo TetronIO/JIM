@@ -52,6 +52,58 @@ public class SqlConnectorDeltaImportTests
         """;
 
     /// <summary>
+    /// The watermark document with an export-only Object Type alongside: a table JIM writes to but never
+    /// reads, which carries no watermark column because nothing outside JIM changes it.
+    /// </summary>
+    private const string WatermarkDocumentWithAnExportOnlyType = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_ID" ],
+              "watermarkColumn": "LAST_MODIFIED"
+            },
+            {
+              "name": "AppUser",
+              "table": "APP_USERS",
+              "anchorColumns": [ "ID" ]
+            }
+          ]
+        }
+        """;
+
+    /// <summary>
+    /// The change-log document with the same export-only Object Type alongside, carrying no change log.
+    /// </summary>
+    private const string ChangeLogDocumentWithAnExportOnlyType = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "table": "EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_ID" ],
+              "changeLog": {
+                "table": "EMPLOYEE_CHANGES",
+                "anchorColumns": [ "EMPLOYEE_ID" ],
+                "sequenceColumn": "CHANGE_NUMBER",
+                "changeTypeColumn": "CHANGE_TYPE",
+                "createValues": [ "I" ],
+                "updateValues": [ "U" ],
+                "deleteValues": [ "D" ]
+              }
+            },
+            {
+              "name": "AppUser",
+              "table": "APP_USERS",
+              "anchorColumns": [ "ID" ]
+            }
+          ]
+        }
+        """;
+
+    /// <summary>
     /// The same object type detecting changes from a last-modified column on its own table.
     /// </summary>
     private const string WatermarkDocument = """
@@ -445,6 +497,28 @@ public class SqlConnectorDeltaImportTests
     }
 
     [Test]
+    public async Task ImportAsync_WatermarkColumnModeWithAnUnselectedObjectTypeThatHasNoWatermarkColumn_ImportsTheSelectedOne()
+    {
+        var provider = WatermarkProvider(
+            [1, "Ada", new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Unspecified)],
+            [2, "Grace", new DateTime(2026, 7, 16, 9, 0, 0, DateTimeKind.Unspecified)]);
+
+        var system = WatermarkSystem();
+        system.ObjectTypes!.Add(new ConnectedSystemObjectType
+        {
+            Name = "AppUser",
+            Selected = false,
+            Attributes = [Attribute("ID", AttributeDataType.Number, isExternalId: true)]
+        });
+        var watermark = PersonWatermark(SqlDeltaImportMode.WatermarkColumn, "2026-07-15T12:00:00.0000000Z", AttributeDataType.DateTime);
+
+        var run = await RunDeltaAsync(provider, WatermarkDocumentWithAnExportOnlyType, system, pageSize: 10, Store(watermark), SqlConnectorConstants.DeltaImportModeWatermarkColumn);
+
+        Assert.That(AnchorValues(run), Is.EqualTo(new[] { 2 }),
+            "The run-time backstop that refuses an Object Type without a watermark column applies to the Object Types the run reads, and an unselected one is not among them (#1424).");
+    }
+
+    [Test]
     public async Task ImportAsync_WatermarkColumnModeRowDeletedFromTheSource_DoesNotDetectTheDeletion()
     {
         // Ada was deleted from the source outright. A row that is gone has no last-modified column left
@@ -762,7 +836,7 @@ public class SqlConnectorDeltaImportTests
             }
             """;
 
-        Assert.That(ValidationMessageFor(document, SqlConnectorConstants.DeltaImportModeChangeLogTable), Does.Contain("deleteValues"),
+        Assert.That(SettingsValidationMessageFor(document, SqlConnectorConstants.DeltaImportModeChangeLogTable), Does.Contain("deleteValues"),
             "A change log that cannot say an object was deleted is the one thing this mode exists to provide.");
     }
 
@@ -788,7 +862,7 @@ public class SqlConnectorDeltaImportTests
             }
             """;
 
-        Assert.That(ValidationMessageFor(document, SqlConnectorConstants.DeltaImportModeChangeLogTable), Does.Contain("anchor"),
+        Assert.That(SettingsValidationMessageFor(document, SqlConnectorConstants.DeltaImportModeChangeLogTable), Does.Contain("anchor"),
             "A change-log row identified by part of an anchor names some other object, without any error.");
     }
 
@@ -815,7 +889,7 @@ public class SqlConnectorDeltaImportTests
             }
             """;
 
-        Assert.That(ValidationMessageFor(document, SqlConnectorConstants.DeltaImportModeChangeLogTable), Does.Contain("'D'"),
+        Assert.That(SettingsValidationMessageFor(document, SqlConnectorConstants.DeltaImportModeChangeLogTable), Does.Contain("'D'"),
             "One value cannot mean both an update and a deletion, and guessing which the administrator meant is not JIM's to do.");
     }
 
@@ -842,6 +916,88 @@ public class SqlConnectorDeltaImportTests
 
         Assert.That(connector.ValidateSettingValues(settingValues, _logger), Is.Empty,
             "A Connected System that only runs Full Imports is not obliged to answer the Delta Import question.");
+    }
+
+    [Test]
+    public void ValidateObjectTypeSelection_WatermarkColumnModeWithAnUnselectedObjectTypeThatHasNoWatermarkColumn_IsAccepted()
+    {
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+        var settingValues = DeltaSettingValues(connector, WatermarkDocumentWithAnExportOnlyType, SqlConnectorConstants.DeltaImportModeWatermarkColumn);
+
+        Assert.That(connector.ValidateObjectTypeSelection(settingValues, PersonAndUnselectedAppUserSystem().ObjectTypes!, _logger), Is.Empty,
+            "An Object Type that is not selected is skipped by every Run Profile, so a Delta Import cannot leave its objects to drift; demanding a watermark column on it is a schema change for nothing (#1424).");
+    }
+
+    [Test]
+    public void ValidateObjectTypeSelection_WatermarkColumnModeWithASelectedObjectTypeThatHasNoWatermarkColumn_IsRefusedNamingIt()
+    {
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+        var settingValues = DeltaSettingValues(connector, WatermarkDocumentWithAnExportOnlyType, SqlConnectorConstants.DeltaImportModeWatermarkColumn);
+        var objectTypes = PersonAndUnselectedAppUserSystem().ObjectTypes!;
+        objectTypes.Single(objectType => objectType.Name == "AppUser").Selected = true;
+
+        var results = connector.ValidateObjectTypeSelection(settingValues, objectTypes, _logger);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results, Has.Count.EqualTo(1));
+            Assert.That(results[0].IsValid, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("AppUser").And.Contain("watermarkColumn").And.Not.Contain("Person"),
+                "The refusal names the Object Type that is selected without what the mode needs, and only that one.");
+        }
+    }
+
+    [Test]
+    public void ValidateObjectTypeSelection_ChangeLogModeWithAnUnselectedObjectTypeThatHasNoChangeLog_IsAccepted()
+    {
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+        var settingValues = DeltaSettingValues(connector, ChangeLogDocumentWithAnExportOnlyType, SqlConnectorConstants.DeltaImportModeChangeLogTable);
+
+        Assert.That(connector.ValidateObjectTypeSelection(settingValues, PersonAndUnselectedAppUserSystem().ObjectTypes!, _logger), Is.Empty,
+            "The same reasoning as the watermark column: a change log is only owed by an Object Type a Delta Import will read.");
+    }
+
+    [Test]
+    public void ValidateObjectTypeSelection_ChangeLogModeWithASelectedObjectTypeThatHasNoChangeLog_IsRefusedNamingIt()
+    {
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+        var settingValues = DeltaSettingValues(connector, ChangeLogDocumentWithAnExportOnlyType, SqlConnectorConstants.DeltaImportModeChangeLogTable);
+        var objectTypes = PersonAndUnselectedAppUserSystem().ObjectTypes!;
+        objectTypes.Single(objectType => objectType.Name == "AppUser").Selected = true;
+
+        var results = connector.ValidateObjectTypeSelection(settingValues, objectTypes, _logger);
+
+        Assert.That(results.Select(result => result.ErrorMessage), Has.Exactly(1).Items.And.Some.Contains("AppUser").And.Some.Contains("changeLog"));
+    }
+
+    [Test]
+    public void ValidateObjectTypeSelection_NoObjectTypesSelectedYet_IsAccepted()
+    {
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+        var settingValues = DeltaSettingValues(connector, WatermarkDocumentWithAnExportOnlyType, SqlConnectorConstants.DeltaImportModeWatermarkColumn);
+
+        Assert.That(connector.ValidateObjectTypeSelection(settingValues, [], _logger), Is.Empty,
+            "Before the schema is imported nothing is selected, so there is nothing a Delta Import could skip; the question is asked again when the selection is made.");
+    }
+
+    [Test]
+    public void ValidateSettingValues_WatermarkColumnModeWithAnObjectTypeThatHasNoWatermarkColumn_IsNotJudgedWithoutTheSchema()
+    {
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+        var settingValues = DeltaSettingValues(connector, ChangeLogDocument, SqlConnectorConstants.DeltaImportModeWatermarkColumn);
+
+        Assert.That(connector.ValidateSettingValues(settingValues, _logger), Is.Empty,
+            "Whether a mode can be served is a question about the selected Object Types, which the settings alone cannot answer; ValidateObjectTypeSelection answers it wherever JIM has the schema (#1424).");
+    }
+
+    [Test]
+    public void ValidateObjectTypeSelection_AMalformedDocument_IsLeftToValidateSettingValues()
+    {
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+        var settingValues = DeltaSettingValues(connector, "{ not json", SqlConnectorConstants.DeltaImportModeWatermarkColumn);
+
+        Assert.That(connector.ValidateObjectTypeSelection(settingValues, PersonSystem().ObjectTypes!, _logger), Is.Empty,
+            "A document that does not parse is refused by ValidateSettingValues with the parser's own account; reporting it twice would show the administrator the same error under two headings.");
     }
 
     #endregion
@@ -944,10 +1100,30 @@ public class SqlConnectorDeltaImportTests
         return settingValues;
     }
 
-    private string ValidationMessageFor(string objectTypesDocument, string deltaMode)
+    /// <summary>
+    /// The refusal a document earns on its own account (its shape, not the mode): what ValidateSettingValues,
+    /// and so the Settings tab, reports before anything is selected.
+    /// </summary>
+    private string SettingsValidationMessageFor(string objectTypesDocument, string deltaMode)
     {
         var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
         var results = connector.ValidateSettingValues(DeltaSettingValues(connector, objectTypesDocument, deltaMode), _logger);
+
+        Assert.That(results, Has.Count.EqualTo(1), "Configuration that cannot work is refused before it can be saved.");
+        Assert.That(results[0].IsValid, Is.False);
+
+        return results[0].ErrorMessage ?? string.Empty;
+    }
+
+    /// <summary>
+    /// The refusal a document earns under a mode once Person is selected for synchronisation. The delta-mode
+    /// requirements are a question about the selected Object Types, so they are asked through
+    /// <see cref="IConnectorObjectTypeSelectionValidation"/> with the schema in hand (#1424).
+    /// </summary>
+    private string ValidationMessageFor(string objectTypesDocument, string deltaMode)
+    {
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+        var results = connector.ValidateObjectTypeSelection(DeltaSettingValues(connector, objectTypesDocument, deltaMode), PersonSystem().ObjectTypes!, _logger);
 
         Assert.That(results, Has.Count.EqualTo(1), "Configuration that cannot work is refused before it can be saved.");
         Assert.That(results[0].IsValid, Is.False);
@@ -1062,6 +1238,26 @@ public class SqlConnectorDeltaImportTests
             ObjectType("Person",
                 Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
                 Attribute("DISPLAY_NAME", AttributeDataType.Text))
+        ]
+    };
+
+    /// <summary>
+    /// Person selected for synchronisation and AppUser (an export-only target) present in the schema but not selected.
+    /// </summary>
+    private static ConnectedSystem PersonAndUnselectedAppUserSystem() => new()
+    {
+        Name = "HR Database",
+        ObjectTypes =
+        [
+            ObjectType("Person",
+                Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
+                Attribute("DISPLAY_NAME", AttributeDataType.Text)),
+            new ConnectedSystemObjectType
+            {
+                Name = "AppUser",
+                Selected = false,
+                Attributes = [Attribute("ID", AttributeDataType.Number, isExternalId: true)]
+            }
         ]
     };
 

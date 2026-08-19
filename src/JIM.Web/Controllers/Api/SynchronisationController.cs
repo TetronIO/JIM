@@ -7,6 +7,7 @@ using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Application.Services;
@@ -206,10 +207,20 @@ public class SynchronisationController(
 
         // Get the current API key for Activity attribution if authenticated via API key
         var apiKey = await GetCurrentApiKeyAsync();
-        if (apiKey != null)
-            await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, apiKey);
-        else
-            await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, initiatedBy);
+        try
+        {
+            if (apiKey != null)
+                await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, apiKey);
+            else
+                await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, initiatedBy);
+        }
+        catch (InvalidSettingValuesException ex)
+        {
+            // the Connector refused the selection against the Connected System's settings (a Delta Import Mode the
+            // Object Type is not equipped for, say); the message is the Connector's own and names what to change.
+            _logger.LogInformation("Object type {ObjectTypeId} ({Name}) selection refused: {Reason}", objectType.Id, objectType.Name, ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
 
         _logger.LogInformation("Updated object type {ObjectTypeId} ({Name})", objectType.Id, objectType.Name);
 

@@ -1162,7 +1162,17 @@
             return;
 
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        await jim.ConnectedSystems.UpdateConnectedSystemSchemaAsync(ConnectedSystem, user);
+        try
+        {
+            await jim.ConnectedSystems.UpdateConnectedSystemSchemaAsync(ConnectedSystem, user);
+        }
+        catch (InvalidSettingValuesException ex)
+        {
+            // the Connector refused the selection against this Connected System's settings (an Object Type selected
+            // without what the configured Delta Import Mode needs, say). Nothing was saved; the message names the fix.
+            Snackbar.Add(ex.Message, Severity.Error, options => options.RequireInteraction = true);
+            return;
+        }
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
 
         await OnConnectedSystemChanged.InvokeAsync();
