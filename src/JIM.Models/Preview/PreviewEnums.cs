@@ -12,15 +12,27 @@ namespace JIM.Models.Preview;
 /// an Activity for, including operational work no adapter could preview, and a registry keyed on it would accept
 /// keys that can never resolve.
 /// </summary>
+/// <remarks>
+/// A surface is a KIND OF CHANGE, not an entity: one entity's settings can be several surfaces, because each is
+/// evaluated by a different adapter and exactly one adapter may serve a surface. A Synchronisation Rule alone has
+/// three (its Scoping Criteria, its Attribute Flow, and its deprovisioning actions), and they answer different
+/// questions from different data. Several surfaces therefore map to one <see cref="ActivityTargetType"/>, which is
+/// correct: the target type says which object a preview was about, and the surface says what about it.
+/// </remarks>
 public enum ConfigurationChangePreviewSurface
 {
     /// <summary>Uninitialised. Never valid on a persisted preview.</summary>
     NotSet = 0,
 
     /// <summary>
-    /// A Synchronisation Rule: its scope, its Attribute Flow, and the Deprovisioning and Out-of-Scope Actions that
-    /// decide what happens to objects the rule stops covering (#827 gaps G1, G2 and G3).
+    /// A Synchronisation Rule's Deprovisioning and Out-of-Scope Actions: what happens to objects the rule stops
+    /// covering (#827 gap G3).
     /// </summary>
+    /// <remarks>
+    /// Named for the entity rather than the change because it was the first of the rule's surfaces to get an
+    /// adapter, and the name is on the REST wire (enums serialise by name, integers refused), so it is left alone
+    /// rather than renamed for tidiness. See the note on the enum itself about surfaces being change kinds.
+    /// </remarks>
     SynchronisationRule = 1,
 
     /// <summary>
@@ -37,7 +49,18 @@ public enum ConfigurationChangePreviewSurface
     /// <summary>
     /// A Metaverse Attribute: its data type, plurality, and which Metaverse Object Types it is bound to.
     /// </summary>
-    MetaverseAttribute = 4
+    MetaverseAttribute = 4,
+
+    /// <summary>
+    /// A Synchronisation Rule's Scoping Criteria: which objects the rule manages at all (#827 gap G1).
+    /// </summary>
+    SynchronisationRuleScope = 5,
+
+    /// <summary>
+    /// A Synchronisation Rule's Attribute Flow mappings: what the objects it manages would have written to them
+    /// (#827 gap G2).
+    /// </summary>
+    SynchronisationRuleAttributeFlow = 6
 }
 
 /// <summary>

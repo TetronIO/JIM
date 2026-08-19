@@ -4587,6 +4587,26 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Streams every Connected System Object of one type in a Connected System, joined or not, with the attribute
+    /// values and type loaded that Scoping Criteria evaluation reads, for previewing what a change to a
+    /// Synchronisation Rule's scope would do (#1436). The unjoined objects are what a widened scope would newly
+    /// project, so unlike the destructive-toggle walk this one cannot be reduced to the joined population.
+    /// </summary>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return Application.Repository.ConnectedSystems.StreamConnectedSystemObjectsOfType(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects of one type in a Connected System, joined or not: the
+    /// population a Scoping Criteria change preview walks, counted set-based for the dispatch decision (#1436).
+    /// </summary>
+    public async Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
     /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
     /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
     /// </summary>

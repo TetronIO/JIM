@@ -521,7 +521,11 @@ public class ConfigurationChangePreviewServer
         // is follows from the surface, exactly as it does for a configuration change Activity.
         switch (request.Surface)
         {
+            // Both Synchronisation Rule surfaces land in the same column: the surface says what KIND of change was
+            // previewed, and the column says which object it was about.
             case ConfigurationChangePreviewSurface.SynchronisationRule:
+            case ConfigurationChangePreviewSurface.SynchronisationRuleScope:
+            case ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow:
                 activity.SyncRuleId = request.TargetId;
                 break;
             case ConfigurationChangePreviewSurface.ConnectedSystem:

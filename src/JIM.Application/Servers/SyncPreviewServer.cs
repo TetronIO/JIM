@@ -3,6 +3,7 @@
 
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
+using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -97,6 +98,83 @@ public class SyncPreviewServer
     }
 
     /// <summary>
+    /// Previews a set of Metaverse Objects in one pass, optionally against a proposed export Synchronisation Rule,
+    /// building the shared export evaluation cache once for the whole set (#1437).
+    /// </summary>
+    /// <remarks>
+    /// The outbound sibling of <see cref="PreviewSyncForCsosAsync"/>, and it exists for the same reason: a
+    /// configuration change preview asks the same question of many objects, and the cache of export rules, target
+    /// systems and system names is identical for every one of them.
+    /// </remarks>
+    /// <param name="metaverseObjectIds">The Metaverse Objects to preview.</param>
+    /// <param name="proposedSyncRule">
+    /// An unsaved export rule to evaluate in place of the stored rule of the same id. Substituted into the rule set
+    /// the export evaluation cache is built from, so the whole outbound chain answers for the proposal; substituted
+    /// by id and never added, exactly as the inbound path does.
+    /// </param>
+    /// <param name="cancellationToken">Honoured between objects; a cancelled preview stops rather than completing.</param>
+    /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
+    /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    public async Task<Dictionary<Guid, SyncPreviewResult>> PreviewSyncForMvosAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        SyncRule? proposedSyncRule = null,
+        CancellationToken cancellationToken = default,
+        Func<ISyncRepositoryScope>? repositoryFactory = null)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObjectIds);
+
+        var results = new Dictionary<Guid, SyncPreviewResult>();
+        if (metaverseObjectIds.Count == 0)
+            return results;
+
+        using var scope = repositoryFactory?.Invoke();
+        var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
+        var previewServer = new ExportEvaluationServer(Application, guardedRepository);
+        await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
+
+        var cache = await previewServer.BuildExportEvaluationCacheAsync(
+            await LoadRulesForCacheAsync(guardedRepository, proposedSyncRule));
+        var systemNames = BuildConnectedSystemNameLookup(cache);
+
+        var mvos = await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync([.. metaverseObjectIds]);
+        if (mvos.Count == 0)
+            return results;
+
+        await previewServer.RefreshExportEvaluationCacheForPageAsync(cache, [.. mvos.Select(mvo => mvo.Id)]);
+
+        foreach (var mvo in mvos)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var result = new SyncPreviewResult();
+            var outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([mvo], cache);
+            ComposeOutbound(result, outbound);
+            BuildOutboundOutcomeNodes(result.OutcomeTree, outbound, systemNames);
+            results[mvo.Id] = result;
+        }
+
+        Log.Debug("PreviewSyncForMvosAsync: Previewed {Count} Metaverse Object(s){Proposed}.",
+            results.Count, proposedSyncRule == null ? string.Empty : " against a proposed Synchronisation Rule");
+        return results;
+    }
+
+    /// <summary>
+    /// The Synchronisation Rules the export evaluation cache is built from, with a proposal substituted for the
+    /// stored rule it edits. Null when there is no proposal, so the cache loads the rules itself as it always has.
+    /// </summary>
+    private static async Task<List<SyncRule>?> LoadRulesForCacheAsync(
+        ISyncRepository guardedRepository,
+        SyncRule? proposedSyncRule)
+    {
+        if (proposedSyncRule == null)
+            return null;
+
+        var allSyncRules = await guardedRepository.GetAllSyncRulesAsync();
+        Substitute(allSyncRules, proposedSyncRule);
+        return allSyncRules;
+    }
+
+    /// <summary>
     /// Previews what a synchronisation of one Connected System Object would do now: the inbound chain
     /// (scope, join or projection, Attribute Flow) followed by the outbound decisions the prospective
     /// Metaverse Object state would produce, composed into the preview result with a speculative outcome
@@ -107,10 +185,21 @@ public class SyncPreviewServer
     /// <param name="connectedSystemObjectId">The Connected System Object to preview.</param>
     /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
     /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    /// <param name="proposedSyncRule">
+    /// An unsaved Synchronisation Rule to evaluate in place of the stored rule of the same id, so a configuration
+    /// change preview can ask what a synchronisation would do AFTER a proposed edit rather than only what it would
+    /// do now (#1436). The substitute is used exactly where the stored rule would have been, scope gate included,
+    /// so the whole chain answers for the proposal rather than the adapter reimplementing any part of it.
+    ///
+    /// Substituted by id into the loaded set, never added to it: a rule that is disabled (and so absent) stays
+    /// absent, because previewing a disabled rule's proposed scope as though the rule also became enabled would
+    /// answer a question nobody asked.
+    /// </param>
     public async Task<SyncPreviewResult> PreviewSyncForCsoAsync(
         int connectedSystemId,
         Guid connectedSystemObjectId,
-        Func<ISyncRepositoryScope>? repositoryFactory = null)
+        Func<ISyncRepositoryScope>? repositoryFactory = null,
+        SyncRule? proposedSyncRule = null)
     {
         using var scope = repositoryFactory?.Invoke();
         var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
@@ -130,8 +219,61 @@ public class SyncPreviewServer
             return notFound;
         }
 
-        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer);
+        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer, proposedSyncRule);
         return await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true);
+    }
+
+    /// <summary>
+    /// Previews a set of Connected System Objects in one pass, optionally against a proposed Synchronisation Rule,
+    /// building the shared evaluation context once for the whole set (#1436).
+    /// </summary>
+    /// <remarks>
+    /// Exists because a configuration change preview asks the same question of many objects at once. Calling
+    /// <see cref="PreviewSyncForCsoAsync"/> per object would rebuild the rules, the object types and the whole
+    /// export evaluation cache each time, which is the expensive half of a single-object preview and is identical
+    /// for every object in the set.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System holding the objects.</param>
+    /// <param name="connectedSystemObjectIds">The objects to preview, in the order results are wanted.</param>
+    /// <param name="proposedSyncRule">
+    /// An unsaved rule to evaluate in place of the stored rule of the same id; see
+    /// <see cref="PreviewSyncForCsoAsync"/>.
+    /// </param>
+    /// <param name="cancellationToken">Honoured between objects; a cancelled preview stops rather than completing.</param>
+    /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
+    /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    public async Task<Dictionary<Guid, SyncPreviewResult>> PreviewSyncForCsosAsync(
+        int connectedSystemId,
+        IReadOnlyCollection<Guid> connectedSystemObjectIds,
+        SyncRule? proposedSyncRule = null,
+        CancellationToken cancellationToken = default,
+        Func<ISyncRepositoryScope>? repositoryFactory = null)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemObjectIds);
+
+        var results = new Dictionary<Guid, SyncPreviewResult>();
+        if (connectedSystemObjectIds.Count == 0)
+            return results;
+
+        using var scope = repositoryFactory?.Invoke();
+        var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
+        var previewServer = new ExportEvaluationServer(Application, guardedRepository);
+        await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
+
+        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer, proposedSyncRule);
+
+        foreach (var connectedSystemObjectId in connectedSystemObjectIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var cso = await guardedRepository.GetConnectedSystemObjectAsync(connectedSystemId, connectedSystemObjectId);
+            if (cso == null)
+                continue;
+
+            results[connectedSystemObjectId] = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true);
+        }
+
+        return results;
     }
 
     /// <summary>
@@ -255,13 +397,43 @@ public class SyncPreviewServer
     private static async Task<CsoPreviewContext> BuildCsoPreviewContextAsync(
         int connectedSystemId,
         ISyncRepository guardedRepository,
-        ExportEvaluationServer previewServer)
+        ExportEvaluationServer previewServer,
+        SyncRule? proposedSyncRule = null)
     {
         var syncRules = await guardedRepository.GetSyncRulesAsync(connectedSystemId, includeDisabled: false);
+        Substitute(syncRules, proposedSyncRule);
+
+        // The Attribute Priority contributors, from EVERY rule across EVERY Connected System, exactly as the real
+        // synchronisation builds them (#1441). Attribute ownership is a property of the whole configuration, not of
+        // the system being previewed: the rule that owns an attribute is routinely one on another system, and a
+        // context built from this system's rules alone would report that rule as no contributor at all.
+        var allSyncRules = await guardedRepository.GetAllSyncRulesAsync();
+        Substitute(allSyncRules, proposedSyncRule);
+        var priorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true);
+
         var objectTypes = await guardedRepository.GetObjectTypesAsync(connectedSystemId);
         var cache = await previewServer.BuildExportEvaluationCacheAsync();
         return new CsoPreviewContext(connectedSystemId, previewServer, syncRules, objectTypes, cache,
-            BuildConnectedSystemNameLookup(cache), guardedRepository);
+            BuildConnectedSystemNameLookup(cache), guardedRepository, priorityContext);
+    }
+
+    /// <summary>
+    /// Swaps a proposed Synchronisation Rule in for the stored rule of the same id, in place.
+    /// </summary>
+    /// <remarks>
+    /// Positional, so the rule keeps its place in the order the engine applies rules in, and never added: a rule
+    /// that is disabled (and so absent) stays absent. Applied to the priority contributors as well as to the rules
+    /// that flow, because a proposal that changes a mapping's Priority has to be resolved against the proposal's
+    /// own priorities; resolving it against the stored ones would answer for a configuration that never existed.
+    /// </remarks>
+    private static void Substitute(List<SyncRule> syncRules, SyncRule? proposedSyncRule)
+    {
+        if (proposedSyncRule == null)
+            return;
+
+        var storedIndex = syncRules.FindIndex(rule => rule.Id == proposedSyncRule.Id);
+        if (storedIndex >= 0)
+            syncRules[storedIndex] = proposedSyncRule;
     }
 
     /// <summary>
@@ -387,7 +559,8 @@ public class SyncPreviewServer
             {
                 try
                 {
-                    foreach (var flowError in _syncEngine.FlowInboundAttributes(cso, rule, objectTypes, ExpressionEvaluator))
+                    foreach (var flowError in _syncEngine.FlowInboundAttributes(cso, rule, objectTypes, ExpressionEvaluator,
+                        priorityContext: context.PriorityContext))
                         flowErrors.Add((rule, flowError));
                 }
                 catch (SyncExpressionEvaluationException expressionEx)
@@ -422,7 +595,8 @@ public class SyncPreviewServer
                     : $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.",
                 SyncRuleId = rule.Id,
                 SyncRuleName = rule.Name,
-                ConnectedSystemId = connectedSystemId
+                ConnectedSystemId = connectedSystemId,
+                AttributeName = flowError.TargetAttributeName
             });
         }
 
@@ -462,25 +636,25 @@ public class SyncPreviewServer
             };
             result.OutcomeTree.Add(root);
 
+            SyncOutcomeNode? attributeFlowChild = null;
             if (rootType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
             {
-                root.Children.Add(new SyncOutcomeNode
+                attributeFlowChild = new SyncOutcomeNode
                 {
                     OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
                     TargetEntityDescription = root.TargetEntityDescription,
                     DetailCount = flowCount,
                     Ordinal = root.Children.Count
-                });
+                };
+                root.Children.Add(attributeFlowChild);
             }
 
-            // The outbound outcomes attach to the ROOT, the Attribute Flow child their sibling. The real
-            // builder's stated intent is to nest them under the Attribute Flow child, but its child lookup
-            // keys on ParentSyncOutcomeId, which is only resolved at bulk-insert flattening, after the
-            // outcomes are built; so in the tree a real run actually records, export outcomes are the
-            // root's children. Fidelity (PRD requirement 9, the paired test) mirrors recorded behaviour,
-            // not intent; if the real builder is ever fixed to match its comment, this must move with it.
-            BuildOutboundOutcomeNodes(root.Children, outbound, context.SystemNames);
+            // The outbound outcomes nest under the Attribute Flow child where there is one, because what
+            // is exported is caused by what flowed in. Fidelity (PRD requirement 9, the paired test)
+            // mirrors what a real run RECORDS rather than what its comments intend, so this line follows
+            // the real builder in SyncTaskProcessorBase; keep the two moving together (#1428).
+            BuildOutboundOutcomeNodes(attributeFlowChild?.Children ?? root.Children, outbound, context.SystemNames);
         }
         else
         {
@@ -502,7 +676,8 @@ public class SyncPreviewServer
         List<ConnectedSystemObjectType> ObjectTypes,
         ExportEvaluationCache Cache,
         Dictionary<int, string> SystemNames,
-        ISyncRepository GuardedRepository);
+        ISyncRepository GuardedRepository,
+        AttributePriorityContext PriorityContext);
 
     /// <summary>
     /// Classifies one per-object preview into its full-system category. Blocking errors take precedence:

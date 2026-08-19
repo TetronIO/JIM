@@ -82,6 +82,19 @@ For example, to scope an export rule to leavers terminated between 30 and 364 da
 
 Configure this in the Scope tab of the Synchronisation Rule editor (choose Relative when the attribute is a date), or via the [PowerShell cmdlets](../powershell/synchronisation-rules.md) and the REST API.
 
+### Previewing a scope change
+
+Changing a Scoping Criterion decides which objects the rule manages at all, and what that costs is decided by a different setting sitting beside it: narrowing an import rule takes objects out of scope, and the **Out-of-Scope Action** then decides whether their Metaverse Object joins survive; narrowing an export rule can delete the objects that leave from the target system, per the **Deprovisioning Action**. Widening pulls objects in, projecting and provisioning identities nobody has counted.
+
+The **Preview Scope Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the criteria as they stand on the form, evaluated against the rule's saved criteria, changing nothing. It reports each object that would move, split by what the move actually costs it:
+
+- **Leaving scope**<br /> A joined object whose join would break, taking whatever it contributed out of the Metaverse with it; a joined object that would keep its join and simply stop receiving Attribute Flow; and an unjoined object that stops matching and loses nothing. Where a broken join would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
+- **Entering scope**<br /> What each object would become, answered by running the same evaluation a synchronisation would: a new Metaverse Object projected, a join to an existing one, or an object provisioned into the target Connected System.
+
+Two answers are deliberately negative rather than reassuring. Removing every criterion is called out as a warning, because it hands the rule every object of its type and is one click away from tidying up. And where another import Synchronisation Rule covers the same object type with **no** criteria of its own, that rule keeps every object in scope whatever this one says, so narrowing this rule disconnects nobody: the preview names that rule and counts no departures, rather than reporting a disconnection wave that would never happen.
+
+Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the criteria afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -ScopingCriteriaGroup`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/scoping-criteria/preview` endpoint.
+
 ## Object Matching Rules
 
 Object Matching Rules define how a Connected System Object is matched to an existing Metaverse Object. Rules specify one or more attribute pairs to compare:
@@ -335,6 +348,26 @@ Two behaviours to be aware of:
 - If several export mappings target the same attribute for an object type, the attribute only becomes unmanaged when **every** such mapping is Initial Export Only; a single normally-managed mapping keeps it managed.
 
 Initial Export Only is your choice about an attribute the Connected System would happily let JIM keep writing. Where the Connected System itself only accepts a value at creation, JIM applies the same create-once behaviour on its own, without the setting: see [Attribute writability](connected-systems.md#attribute-writability).
+
+### Previewing an Attribute Flow change
+
+Changing a mapping rewrites an attribute on every object the rule manages, on the next synchronisation, and nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
+
+The **Preview Attribute Flow Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the mappings as they stand on the form, evaluated against the rule's saved mappings, changing nothing. It reports, per object and per attribute:
+
+- **The value the object would end up with**<br /> Stated as an old-to-new pair, so a domain cutover reads as `ada@old.example` becoming `ada@new.example` rather than as a count. JIM groups identical pairs together and recognises the shape of the change (a changed domain, a changed container, a casing change, an added or removed prefix or suffix), so a thousand identical rewrites read as one line with a count beside it.
+- **Values that would be withdrawn**<br /> Where a mapping would stop producing a value for an object, the attribute is left blank rather than rewritten, and that is counted separately.
+- **Objects the mapping could not be evaluated for**<br /> An Expression that throws, or one whose [Missing Input Behaviour](#expression-mappings) fails the mapping because a required attribute has no value on that object. These are the handful of objects a cutover would otherwise leave without an address, and they are reported as their own outcome rather than as no change.
+
+The evaluation is the synchronisation engine's own, run twice per object (once against the saved configuration and once against the proposal) and compared, so [Attribute Priority](#attribute-priority), Missing Input Behaviour and Expression evaluation are answered by the engine rather than approximated.
+
+Three answers are deliberately negative rather than reassuring:
+
+- A proposed mapping that would **lose Attribute Priority** to another contributing rule is called out: a synchronisation would evaluate it and then write nothing, so reporting the values it produces would describe a write that never happens.
+- **Removing a mapping outright changes no value.** Inbound Attribute Flow contributes what its mappings produce, so a mapping that no longer exists leaves the values it last wrote in place; they stay as they are and stop being maintained. The preview says so rather than reporting a withdrawal.
+- The preview covers **this Connected System only**. Where another Connected System's rule also writes the attribute, that rule takes its turn on its own next synchronisation, so what it would write instead is named rather than guessed at.
+
+Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the mappings afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -AttributeFlowMapping`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/mappings/preview` endpoint.
 
 ## Attribute Priority
 

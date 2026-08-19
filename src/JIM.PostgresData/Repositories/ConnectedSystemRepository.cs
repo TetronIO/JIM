@@ -2802,6 +2802,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsAsyncEnumerable();
 
     /// <inheritdoc />
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId)
+            .OrderBy(cso => cso.Id)
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
+    public async Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId)
+            .CountAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         return await Repository.Database.ConnectedSystemObjects

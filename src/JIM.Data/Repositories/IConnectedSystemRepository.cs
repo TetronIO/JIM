@@ -1065,6 +1065,28 @@ public interface IConnectedSystemRepository
     public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId);
 
     /// <summary>
+    /// Streams every Connected System Object of one type in a Connected System, joined or not, with the attribute
+    /// values a Scoping Criteria evaluation reads.
+    /// </summary>
+    /// <remarks>
+    /// The unjoined objects are the point of this over
+    /// <see cref="StreamJoinedConnectedSystemObjects"/>: a scope change decides which objects a rule manages at
+    /// all, so the objects a widened scope would newly project are exactly the ones that have no Metaverse Object
+    /// yet. Streamed and untracked for the same reason as the other scope reads.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System to stream from.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type to stream.</param>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many Connected System Objects of one type a Connected System holds, joined or not. The cheap cost
+    /// estimate behind a scope-change preview.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to count in.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type to count.</param>
+    public Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
     /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
     /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
     /// </summary>

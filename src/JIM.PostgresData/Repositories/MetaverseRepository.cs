@@ -2818,6 +2818,17 @@ public class MetaverseRepository : IMetaverseRepository
             .AsAsyncEnumerable();
 
     /// <inheritdoc />
+    public IAsyncEnumerable<MetaverseObject> StreamMetaverseObjectsOfType(int metaverseObjectTypeId) =>
+        Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.AttributeValues)
+            .Include(mvo => mvo.ConnectedSystemObjects)
+            .Where(mvo => mvo.Type.Id == metaverseObjectTypeId)
+            .OrderBy(mvo => mvo.Id)
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
     public async Task<List<MetaverseObjectDisconnectionCandidate>> GetMetaverseObjectDisconnectionCandidatesAsync(
         IReadOnlyCollection<Guid> metaverseObjectIds)
     {

@@ -2788,6 +2788,150 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Preview what changing a Synchronisation Rule's Scoping Criteria would do
+    /// </summary>
+    /// <remarks>
+    /// Evaluates a proposed set of Scoping Criteria against the rule's persisted configuration, without saving
+    /// either: which objects would leave scope and what that costs each of them, which would enter scope and what
+    /// would be created for them, and which Metaverse Objects the departures would leave eligible for deletion.
+    ///
+    /// This matters because a scope change decides which objects a rule manages at all, while what happens to the
+    /// ones that leave is decided by a different setting: an import rule's Out-of-Scope Action can disconnect every
+    /// object that goes, and an export rule's Deprovisioning Action can delete them from the target system.
+    ///
+    /// Omitting <c>criteriaGroups</c> (or sending null) previews the rule's stored criteria, matching the update
+    /// endpoints' semantics. Sending an EMPTY array is a real and much larger proposal: it removes every criterion,
+    /// handing the rule every object of its type. Apply the previewed change through the Scoping Criteria
+    /// endpoints, passing the preview's Activity id so the change records what was read before it.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    ///
+    /// A criterion naming an attribute the rule's direction cannot read comes back as a blocking validation
+    /// finding rather than being evaluated around, because a criterion that can never match would silently make
+    /// the previewed scope wider than the one described.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed Scoping Criteria.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria/preview", Name = "StartSyncRuleScopingPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleScopingPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleScopingPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var proposal = request.ToProposal(syncRule);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleScope,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started Scoping Criteria preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// Preview what changing a Synchronisation Rule's Attribute Flow would write
+    /// </summary>
+    /// <remarks>
+    /// Evaluates a proposed set of Attribute Flow mappings against the rule's persisted configuration, without
+    /// saving either, and reports per object and per attribute what the values would become.
+    ///
+    /// This matters because a changed mapping rewrites an attribute on every object the rule manages, on the next
+    /// synchronisation, with no statement of what the values become; an Expression that malforms one case in a
+    /// thousand is invisible until it has flowed.
+    ///
+    /// The evaluation is the synchronisation engine's own, run twice per object (once against the stored
+    /// configuration, once against the proposal) and diffed, so Attribute Priority, Missing Input Behaviour and
+    /// Expression evaluation are the engine's answers rather than this endpoint's reading of the configuration. A
+    /// proposed mapping that would lose Attribute Priority comes back as a validation finding: it would be
+    /// evaluated and then write nothing, and reporting the values it produces without saying so would be a
+    /// confident statement about a write that never happens.
+    ///
+    /// Omitting <c>mappings</c> (or sending null) previews the rule's stored mappings, matching the update
+    /// endpoints' semantics. Sending an EMPTY array is a real proposal: it removes every mapping, so the rule flows
+    /// nothing. Note that removing a mapping changes no value on the next synchronisation; inbound flow contributes
+    /// what its mappings produce, so a mapping that no longer exists leaves the values it last wrote in place, and
+    /// the preview reports that as a finding rather than as a withdrawal.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>. Apply the previewed change through the Attribute Flow endpoints,
+    /// passing the preview's Activity id so the change records what was read before it.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed Attribute Flow mappings.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/mappings/preview", Name = "StartSyncRuleAttributeFlowPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleAttributeFlowPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleAttributeFlowPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var proposal = request.ToProposal(syncRule);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started Attribute Flow preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
     /// Get a Synchronisation Rule's initial password configuration
     /// </summary>
     /// <remarks>

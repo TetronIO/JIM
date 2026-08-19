@@ -24,6 +24,10 @@ function New-JIMConfigurationChangePreview {
           Outbound Deprovision Action (Disconnect or Delete on a scope exit) and the Inbound Out-of-Scope
           Action (RemainJoined or Disconnect). The field semantics match Set-JIMSyncRule exactly, so an
           omitted parameter previews the stored value. Apply the previewed change with Set-JIMSyncRule.
+        - -SyncRuleId with -ScopingCriteriaGroup previews a change to that rule's Scoping Criteria: which
+          objects it would manage at all, and what each movement in or out of scope would cost.
+        - -SyncRuleId with -AttributeFlowMapping previews a change to that rule's Attribute Flow: what
+          value every object it manages would end up with, per attribute.
 
         Evaluation is asynchronous. Without -Wait this returns as soon as the proposal itself has been
         validated, carrying the ActivityId to poll with Get-JIMConfigurationChangePreview. With -Wait it
@@ -100,6 +104,36 @@ function New-JIMConfigurationChangePreview {
         recalls what the object contributed and can trigger the Metaverse Object's deletion rules.
         Omitted previews the stored action. Read only by import Synchronisation Rules.
 
+    .PARAMETER ScopingCriteriaGroup
+        The proposed Scoping Criteria, as one hashtable per top-level criteria group. Groups are combined
+        with OR, exactly as a synchronisation combines them. Each group takes a Type of 'All' or 'Any', a
+        Criteria array, and an optional ChildGroups array of further groups nested inside it. Each
+        criterion names one attribute by id (ConnectedSystemAttributeId on an import rule,
+        MetaverseAttributeId on an export rule), a ComparisonType, and the value to compare against in the
+        field matching the attribute's data type (StringValue, IntValue, LongValue, DecimalValue,
+        DateTimeValue, BoolValue or GuidValue).
+
+        Mandatory, and an empty array is a valid and deliberate value: it proposes removing every criterion,
+        which hands the rule every object of its type. That is the widest change the Scope tab can make, so
+        it has to be asked for rather than arrived at by omission.
+
+    .PARAMETER AttributeFlowMapping
+        The proposed Attribute Flow, as one hashtable per mapping. Each mapping names the attribute it
+        writes (TargetMetaverseAttributeId on an import rule, TargetConnectedSystemAttributeId on an
+        export rule) and a Sources array; a source takes an Order, and either an attribute id
+        (ConnectedSystemAttributeId on an import rule, MetaverseAttributeId on an export rule) or an
+        Expression with an optional MissingInputBehaviour. A mapping may also carry Priority,
+        NullIsValue, InitialExportOnly, InboundValueProcessing and CaseNormalisation, which default to
+        the same values the editor uses.
+
+        Mandatory, and an empty array is a valid and deliberate value: it proposes removing every mapping,
+        so the rule flows nothing.
+
+        Priority is worth passing deliberately on an import mapping. It defaults to the lowest, so a
+        mapping proposed for an attribute another rule already contributes to would be evaluated and then
+        write nothing; the preview reports that as a validation finding rather than as values that would
+        never be written.
+
     .PARAMETER FullDataSet
         Keep every object-level detail row rather than the per-group cap's worth. Summary counts are
         exact either way; this decides only how much of the detail behind them can be read back with
@@ -172,6 +206,49 @@ function New-JIMConfigurationChangePreview {
         the next synchronisation, and how many managed objects' fate on a future scope exit changes.
 
     .EXAMPLE
+        $group = @{
+            Type = 'All'
+            Criteria = @(
+                @{ ConnectedSystemAttributeId = 101; ComparisonType = 'Equals'; StringValue = 'Sales' }
+            )
+        }
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup $group -Wait
+        $preview.ImpactCounts
+
+        Reports what narrowing an import Synchronisation Rule to the Sales department would do: how many
+        joined objects would leave scope and disconnect from their Metaverse Objects, how many unjoined
+        ones simply stop matching, and how many objects would newly enter scope and be projected.
+
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup @() -Wait
+        $preview.ImpactCounts | Where-Object transitionType -eq 'Projected'
+
+        Reports what removing every Scoping Criterion would do, which puts every object of the rule's type
+        in scope. The Projected count is how many Metaverse Objects that would create.
+
+    .EXAMPLE
+        $mapping = @{
+            TargetMetaverseAttributeId = 201
+            Priority = 1
+            Sources = @(
+                @{ Order = 1; Expression = 'cs["givenName"] + "." + cs["sn"] + "@corp.local"'; MissingInputBehaviour = 'FailMapping' }
+            )
+        }
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping -Wait
+        $preview.ImpactCounts
+
+        Reports what an email cutover would write: how many identities' addresses change, and how many
+        objects the Expression could not be evaluated for at all because a required input is missing.
+
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping -FullDataSet -Wait
+        Get-JIMConfigurationChangePreviewDelta -ActivityId $preview.ActivityId |
+            Where-Object transitionType -eq 'WouldFailAttributeFlow'
+
+        Keeps every detail row and lists the objects the proposed Expression would not evaluate for, which
+        is the handful the cutover would otherwise leave without an address.
+
+    .EXAMPLE
         $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -InboundOutOfScopeAction Disconnect -Wait
         if (($preview.ImpactCounts | Measure-Object objectCount -Sum).Sum -eq 0) {
             Set-JIMSyncRule -Id 42 -InboundOutOfScopeAction Disconnect -PreviewActivityId $preview.ActivityId
@@ -223,6 +300,8 @@ function New-JIMConfigurationChangePreview {
         [int[]]$ExcludedContainerIds,
 
         [Parameter(Mandatory, ParameterSetName = 'SyncRuleDestructiveToggles', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleScopingCriteria', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleAttributeFlow', ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,
 
         [Parameter(ParameterSetName = 'SyncRuleDestructiveToggles')]
@@ -232,6 +311,14 @@ function New-JIMConfigurationChangePreview {
         [Parameter(ParameterSetName = 'SyncRuleDestructiveToggles')]
         [ValidateSet('RemainJoined', 'Disconnect')]
         [string]$InboundOutOfScopeAction,
+
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleScopingCriteria')]
+        [AllowEmptyCollection()]
+        [hashtable[]]$ScopingCriteriaGroup,
+
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleAttributeFlow')]
+        [AllowEmptyCollection()]
+        [hashtable[]]$AttributeFlowMapping,
 
         [Parameter()]
         [switch]$FullDataSet,
@@ -298,6 +385,21 @@ function New-JIMConfigurationChangePreview {
             }
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'SyncRuleScopingCriteria') {
+            # Always sent, including as an empty array: omitting the field previews the rule's stored criteria,
+            # while an empty array proposes removing every one of them. The two are different questions, and the
+            # parameter is mandatory so the caller has to say which they are asking.
+            # Wrapped in @() so a single group serialises as a JSON array rather than a bare object.
+            $body.criteriaGroups = @($ScopingCriteriaGroup)
+        }
+
+        if ($PSCmdlet.ParameterSetName -eq 'SyncRuleAttributeFlow') {
+            # Always sent, including as an empty array, for the same reason as the criteria groups above: omitting
+            # the field previews the rule's stored mappings, while an empty array proposes removing every one of
+            # them. Wrapped in @() so a single mapping serialises as a JSON array rather than a bare object.
+            $body.mappings = @($AttributeFlowMapping)
+        }
+
         if ($FullDataSet) {
             $body.deltaPersistence = 'Full'
         }
@@ -308,6 +410,14 @@ function New-JIMConfigurationChangePreview {
         }
         elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleDestructiveToggles') {
             $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/destructive-toggles/preview"
+            $subject = "Synchronisation Rule $SyncRuleId"
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleScopingCriteria') {
+            $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/preview"
+            $subject = "Synchronisation Rule $SyncRuleId"
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleAttributeFlow') {
+            $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings/preview"
             $subject = "Synchronisation Rule $SyncRuleId"
         }
         else {
