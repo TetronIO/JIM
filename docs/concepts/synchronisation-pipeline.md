@@ -103,6 +103,12 @@ Export sends pending changes from the connector space to the target Connected Sy
 
 For performance, exports can be processed in batches. Connectors that support parallel export can process multiple batches concurrently. LDAP connectors additionally support configurable export concurrency for asynchronous LDAP operation pipelining.
 
+### References That Cannot Resolve Yet
+
+A Reference attribute (a person's manager, a group's members) is written as the referenced object's own identifier in the target Connected System, and that identifier only exists once the referenced object has itself been exported. Exports therefore naturally run in passes: a reference whose target is not addressable yet is left behind and filled in automatically once it is.
+
+An export does not wait whole for its references. Everything that can be written is written now; a new starter still gets their account on time even though their manager has not been provisioned yet, and the manager link follows when it can. The Pending Export remains, carrying only the references still owed, and its detail page explains each one: whether the target is simply awaiting its own export, or has no object in the target system at all (usually because it is out of scope for provisioning there). The latter cannot resolve as things stand, and is reported on the run according to the Connected System's [Unresolved Reference Handling](../configuration/connected-systems.md#unresolved-reference-handling), the same setting that governs the import side. The Pending Exports list shows how many references each export is still owed.
+
 ### Pre-Export Reconciliation
 
 JIM performs intelligent reconciliation before export. For example, if an object is created and then deleted before the export runs, the redundant Pending Exports are automatically cancelled -- avoiding unnecessary operations on the target system.

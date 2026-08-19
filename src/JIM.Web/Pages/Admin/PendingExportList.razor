@@ -148,6 +148,28 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
+                    <VirtualisedSortHeader Title="References Owed" Name="references" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @* How many reference changes this export could not write yet because their targets
+                       have no resolvable object in the Connected System (#1398); the detail page explains
+                       each owed reference and its reason. *@
+                    @if (context.Item.UnresolvedReferenceCount > 0)
+                    {
+                        <MudTooltip Text="This export was written without these references; they retry automatically once their targets exist. The detail page explains each one." Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">
+                                @context.Item.UnresolvedReferenceCount
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
                     <VirtualisedSortHeader Title="Next Retry" Name="nextretry" />
                 </HeaderTemplate>
                 <CellTemplate>

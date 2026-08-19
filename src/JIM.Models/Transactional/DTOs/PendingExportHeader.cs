@@ -52,6 +52,14 @@ public class PendingExportHeader
     public bool HasUnresolvedReferences { get; set; }
 
     /// <summary>
+    /// How many of this export's attribute changes are references still owed to the target system
+    /// (issue #1398): their targets have no resolvable object there yet, so they could not be
+    /// written when the rest of the export was. The detail view explains each owed reference
+    /// individually; this count lets a list view surface the wait at a glance.
+    /// </summary>
+    public int UnresolvedReferenceCount { get; set; }
+
+    /// <summary>
     /// The external identifier of the target CSO, if available.
     /// </summary>
     public string? TargetObjectIdentifier { get; set; }
@@ -94,6 +102,8 @@ public class PendingExportHeader
             MaxRetries = entity.MaxRetries,
             LastErrorMessage = entity.LastErrorMessage,
             HasUnresolvedReferences = entity.HasUnresolvedReferences,
+            UnresolvedReferenceCount = entity.AttributeValueChanges?
+                .Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue)) ?? 0,
             TargetObjectIdentifier = targetObjectIdentifier,
             SourceMetaverseObjectId = entity.SourceMetaverseObjectId,
             SourceMetaverseObjectDisplayName = sourceMvoDisplayName,

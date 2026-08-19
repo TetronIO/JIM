@@ -4018,6 +4018,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             "errors" => sortDescending
                 ? query.OrderByDescending(pe => pe.ErrorCount)
                 : query.OrderBy(pe => pe.ErrorCount),
+            "references" => sortDescending
+                ? query.OrderByDescending(pe => pe.AttributeValueChanges.Count(ac => ac.UnresolvedReferenceValue != null && ac.UnresolvedReferenceValue != ""))
+                : query.OrderBy(pe => pe.AttributeValueChanges.Count(ac => ac.UnresolvedReferenceValue != null && ac.UnresolvedReferenceValue != "")),
             "nextretry" => sortDescending
                 ? query.OrderByDescending(pe => pe.NextRetryAt ?? DateTime.MaxValue)
                 : query.OrderBy(pe => pe.NextRetryAt ?? DateTime.MaxValue),
