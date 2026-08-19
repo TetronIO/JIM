@@ -107,10 +107,21 @@ public class SyncPreviewServer
     /// <param name="connectedSystemObjectId">The Connected System Object to preview.</param>
     /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
     /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    /// <param name="proposedSyncRule">
+    /// An unsaved Synchronisation Rule to evaluate in place of the stored rule of the same id, so a configuration
+    /// change preview can ask what a synchronisation would do AFTER a proposed edit rather than only what it would
+    /// do now (#1436). The substitute is used exactly where the stored rule would have been, scope gate included,
+    /// so the whole chain answers for the proposal rather than the adapter reimplementing any part of it.
+    ///
+    /// Substituted by id into the loaded set, never added to it: a rule that is disabled (and so absent) stays
+    /// absent, because previewing a disabled rule's proposed scope as though the rule also became enabled would
+    /// answer a question nobody asked.
+    /// </param>
     public async Task<SyncPreviewResult> PreviewSyncForCsoAsync(
         int connectedSystemId,
         Guid connectedSystemObjectId,
-        Func<ISyncRepositoryScope>? repositoryFactory = null)
+        Func<ISyncRepositoryScope>? repositoryFactory = null,
+        SyncRule? proposedSyncRule = null)
     {
         using var scope = repositoryFactory?.Invoke();
         var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
@@ -130,8 +141,61 @@ public class SyncPreviewServer
             return notFound;
         }
 
-        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer);
+        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer, proposedSyncRule);
         return await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true);
+    }
+
+    /// <summary>
+    /// Previews a set of Connected System Objects in one pass, optionally against a proposed Synchronisation Rule,
+    /// building the shared evaluation context once for the whole set (#1436).
+    /// </summary>
+    /// <remarks>
+    /// Exists because a configuration change preview asks the same question of many objects at once. Calling
+    /// <see cref="PreviewSyncForCsoAsync"/> per object would rebuild the rules, the object types and the whole
+    /// export evaluation cache each time, which is the expensive half of a single-object preview and is identical
+    /// for every object in the set.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System holding the objects.</param>
+    /// <param name="connectedSystemObjectIds">The objects to preview, in the order results are wanted.</param>
+    /// <param name="proposedSyncRule">
+    /// An unsaved rule to evaluate in place of the stored rule of the same id; see
+    /// <see cref="PreviewSyncForCsoAsync"/>.
+    /// </param>
+    /// <param name="cancellationToken">Honoured between objects; a cancelled preview stops rather than completing.</param>
+    /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
+    /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    public async Task<Dictionary<Guid, SyncPreviewResult>> PreviewSyncForCsosAsync(
+        int connectedSystemId,
+        IReadOnlyCollection<Guid> connectedSystemObjectIds,
+        SyncRule? proposedSyncRule = null,
+        CancellationToken cancellationToken = default,
+        Func<ISyncRepositoryScope>? repositoryFactory = null)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemObjectIds);
+
+        var results = new Dictionary<Guid, SyncPreviewResult>();
+        if (connectedSystemObjectIds.Count == 0)
+            return results;
+
+        using var scope = repositoryFactory?.Invoke();
+        var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
+        var previewServer = new ExportEvaluationServer(Application, guardedRepository);
+        await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
+
+        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer, proposedSyncRule);
+
+        foreach (var connectedSystemObjectId in connectedSystemObjectIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var cso = await guardedRepository.GetConnectedSystemObjectAsync(connectedSystemId, connectedSystemObjectId);
+            if (cso == null)
+                continue;
+
+            results[connectedSystemObjectId] = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true);
+        }
+
+        return results;
     }
 
     /// <summary>
@@ -255,9 +319,20 @@ public class SyncPreviewServer
     private static async Task<CsoPreviewContext> BuildCsoPreviewContextAsync(
         int connectedSystemId,
         ISyncRepository guardedRepository,
-        ExportEvaluationServer previewServer)
+        ExportEvaluationServer previewServer,
+        SyncRule? proposedSyncRule = null)
     {
         var syncRules = await guardedRepository.GetSyncRulesAsync(connectedSystemId, includeDisabled: false);
+
+        // Swap the proposal in for the rule it edits, so every evaluation below reads the proposed configuration.
+        // Positional, so the rule keeps its place in the order the engine applies rules in.
+        if (proposedSyncRule != null)
+        {
+            var storedIndex = syncRules.FindIndex(rule => rule.Id == proposedSyncRule.Id);
+            if (storedIndex >= 0)
+                syncRules[storedIndex] = proposedSyncRule;
+        }
+
         var objectTypes = await guardedRepository.GetObjectTypesAsync(connectedSystemId);
         var cache = await previewServer.BuildExportEvaluationCacheAsync();
         return new CsoPreviewContext(connectedSystemId, previewServer, syncRules, objectTypes, cache,

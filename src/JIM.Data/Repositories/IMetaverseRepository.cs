@@ -412,6 +412,18 @@ public interface IMetaverseRepository
     public IAsyncEnumerable<MetaverseObjectDeletionCandidate> StreamMetaverseObjectDeletionCandidates(int metaverseObjectTypeId);
 
     /// <summary>
+    /// Streams every Metaverse Object of a type with the attribute values and Connected System Object joins that an
+    /// export rule's Scoping Criteria evaluation reads (#1436).
+    /// </summary>
+    /// <remarks>
+    /// The joins come with it because what a scope change means to an object depends on whether it already has an
+    /// object in the target system: leaving scope deprovisions the one it has, and entering scope provisions one it
+    /// does not. Streamed and untracked, like the other whole-population preview reads.
+    /// </remarks>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type to stream.</param>
+    public IAsyncEnumerable<MetaverseObject> StreamMetaverseObjectsOfType(int metaverseObjectTypeId);
+
+    /// <summary>
     /// The named Metaverse Objects, carrying everything their type's deletion rule is evaluated against and the
     /// Connected System of every object joined to them. For deciding whether a proposed disconnection would leave
     /// an object eligible for deletion (#1251).
