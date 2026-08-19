@@ -3569,7 +3569,8 @@ public class SyncImportTaskProcessor
                     var attrType = primaryIdAttrValue.Attribute?.Type;
                     if (attrType != null)
                     {
-                        var attributeName = primaryIdAttrValue.Attribute?.Name ?? cso.ExternalIdAttributeId.ToString();
+                        // The attrType guard above proves Attribute is not null; Name is required by the model.
+                        var attributeName = primaryIdAttrValue.Attribute!.Name;
                         switch (attrType)
                         {
                             case AttributeDataType.Text when !string.IsNullOrEmpty(primaryIdAttrValue.StringValue):
@@ -3610,7 +3611,8 @@ public class SyncImportTaskProcessor
                         var attrType2 = secondaryIdAttrValue.Attribute?.Type;
                         if (attrType2 != null)
                         {
-                            var attributeName = secondaryIdAttrValue.Attribute?.Name ?? cso.SecondaryExternalIdAttributeId.Value.ToString();
+                            // The attrType2 guard above proves Attribute is not null; Name is required by the model.
+                            var attributeName = secondaryIdAttrValue.Attribute!.Name;
                             switch (attrType2)
                             {
                                 case AttributeDataType.Text when !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue):

@@ -91,6 +91,14 @@ public class ConnectedSystemObjectTypeAttribute
     public int? ReferencedObjectTypeId { get; set; }
 
     /// <inheritdoc cref="ReferencedObjectTypeId"/>
+    /// <remarks>
+    /// Never serialised: this navigation exists for EF wiring (the schema merge assigns it so the foreign
+    /// key resolves for Object Types created in the same save), and the API surfaces the target as id and
+    /// name on the DTO instead. It also closes a type cycle (attribute to Object Type to attributes), and
+    /// OpenAPI schema generation inlines nullable navigations rather than referencing them, so without this
+    /// the document generation recurses to death on any endpoint whose response reaches this entity.
+    /// </remarks>
+    [System.Text.Json.Serialization.JsonIgnore]
     public ConnectedSystemObjectType? ReferencedObjectType { get; set; }
 
     public override string ToString()
