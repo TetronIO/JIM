@@ -90,7 +90,7 @@ public class ExampleDataControllerExampleDataSetCrudTests
     }
 
     [Test]
-    public async Task GetExampleDataSetAsync_Exists_ReturnsOkWithEntityAsync()
+    public async Task GetExampleDataSetAsync_Exists_ReturnsOkWithDtoAsync()
     {
         var dataSet = new ExampleDataSet { Id = 5, Name = "UK Cities", Culture = "en-GB" };
         _mockExampleDataRepo.Setup(r => r.GetExampleDataSetAsync(5)).ReturnsAsync(dataSet);
@@ -98,7 +98,7 @@ public class ExampleDataControllerExampleDataSetCrudTests
         var result = await _controller.GetExampleDataSetAsync(5);
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
-        var returned = (ExampleDataSet)((OkObjectResult)result).Value!;
+        var returned = (ExampleDataSetDto)((OkObjectResult)result).Value!;
         Assert.That(returned.Id, Is.EqualTo(5));
     }
 
@@ -131,7 +131,7 @@ public class ExampleDataControllerExampleDataSetCrudTests
         var result = await _controller.CreateExampleDataSetAsync(request);
 
         Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
-        var dto = (ExampleDataSet)((CreatedAtRouteResult)result).Value!;
+        var dto = (ExampleDataSetDto)((CreatedAtRouteResult)result).Value!;
         Assert.That(dto.Name, Is.EqualTo("UK Cities"));
         Assert.That(dto.Values, Has.Count.EqualTo(2));
         _mockExampleDataRepo.Verify(r => r.CreateExampleDataSetAsync(It.IsAny<ExampleDataSet>()), Times.Once);

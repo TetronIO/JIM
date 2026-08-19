@@ -62,7 +62,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     /// <param name="id">The unique identifier of the Example Data Set.</param>
     /// <returns>The full Example Data Set, including its values.</returns>
     [HttpGet("example-data-sets/{id:int}", Name = "GetExampleDataSet")]
-    [ProducesResponseType(typeof(ExampleDataSet), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ExampleDataSetDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetExampleDataSetAsync(int id)
@@ -72,7 +72,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         if (dataSet == null)
             return NotFound(ApiErrorResponse.NotFound($"Example Data Set with ID {id} not found."));
 
-        return Ok(dataSet);
+        return Ok(ExampleDataSetDto.FromEntity(dataSet));
     }
 
     /// <summary>
@@ -81,7 +81,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     /// <param name="request">The Example Data Set to create.</param>
     /// <returns>The created Example Data Set.</returns>
     [HttpPost("example-data-sets", Name = "CreateExampleDataSet")]
-    [ProducesResponseType(typeof(ExampleDataSet), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ExampleDataSetDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateExampleDataSetAsync([FromBody] CreateExampleDataSetRequest request)
@@ -105,7 +105,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         _logger.LogInformation("Created Example Data Set {Id} ({Name})", dataSet.Id, LogSanitiser.Sanitise(dataSet.Name));
 
         var created = await _application.ExampleData.GetExampleDataSetAsync(dataSet.Id);
-        return CreatedAtRoute("GetExampleDataSet", new { id = dataSet.Id }, created);
+        return CreatedAtRoute("GetExampleDataSet", new { id = dataSet.Id }, created == null ? null : ExampleDataSetDto.FromEntity(created));
     }
 
     /// <summary>
@@ -115,7 +115,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     /// <param name="request">The properties to update.</param>
     /// <returns>The updated Example Data Set.</returns>
     [HttpPut("example-data-sets/{id:int}", Name = "UpdateExampleDataSet")]
-    [ProducesResponseType(typeof(ExampleDataSet), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ExampleDataSetDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -149,7 +149,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
             await _application.ExampleData.UpdateExampleDataSetAsync(dataSet, await GetCurrentUserAsync(), request.ChangeReason);
         _logger.LogInformation("Updated Example Data Set {Id}", id);
 
-        return Ok(dataSet);
+        return Ok(ExampleDataSetDto.FromEntity(dataSet));
     }
 
     /// <summary>
@@ -211,7 +211,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     /// <param name="id">The unique identifier of the template.</param>
     /// <returns>The full template details including nested Object Type configurations.</returns>
     [HttpGet("templates/{id:int}", Name = "GetExampleDataTemplate")]
-    [ProducesResponseType(typeof(ExampleDataTemplate), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ExampleDataTemplateDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetTemplateAsync(int id)
@@ -221,8 +221,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         if (template == null)
             return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
 
-        // Return full entity for detail view - template includes nested ObjectTypes
-        return Ok(template);
+        return Ok(ExampleDataTemplateDto.FromEntity(template));
     }
 
     /// <summary>
