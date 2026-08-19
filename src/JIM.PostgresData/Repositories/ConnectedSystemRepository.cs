@@ -2806,7 +2806,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Repository.Database.ConnectedSystemObjects
             .AsNoTracking()
             .Include(cso => cso.Type)
+            // The attribute ENTITY behind each value, not just the value (#1450). ConnectedSystemObject.Name ranks
+            // candidate naming attributes by the attribute's own name, so without this every candidate is null and
+            // the object falls through to its External ID: for a directory that is a GUID, so a Configuration
+            // Change Preview's drill-down rendered a column of them for the objects an administrator opened it to
+            // recognise. The sibling delta query above already includes it; this one was written without.
             .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                           cso.TypeId == connectedSystemObjectTypeId)
             .OrderBy(cso => cso.Id)
