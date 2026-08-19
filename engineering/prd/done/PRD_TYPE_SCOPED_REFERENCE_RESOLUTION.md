@@ -1,6 +1,6 @@
 # Type-Scoped Reference Resolution
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-08-19
 - **Author:** Jay Van der Zant
 - **Issue:** #1285
@@ -149,14 +149,14 @@ None. All four decisions were confirmed by Jay on 2026-08-19:
 
 ## Acceptance Criteria
 
-- [ ] Full Import succeeds with two Object Types sharing an anchor value space (table + view), both providers, Scenario 16 matrix green with both workarounds removed
-- [ ] Declared-target references resolve to the declared Object Type even when the value exists in another type's partition (both directions tested)
-- [ ] Undeclared-target references: unique value resolves; ambiguous value reported per Unresolved Reference Handling naming candidate types; run continues
-- [ ] Intra-type duplicate anchor fails fast with Object Type, attribute and value in the message
-- [ ] Mixed-type DB fallback queries per referenced type's anchor attribute (red-first test reproducing the `primaryAttributeId` collapse)
-- [ ] Declared target visible read-only in portal Schema tab, REST schema DTO and PowerShell output
-- [ ] 500k scale import shows no measurable throughput regression against the #170 baseline
-- [ ] `dotnet build JIM.sln` and `dotnet test JIM.sln` clean; changelog 🐛 entry; docs updated per the table above
+- [x] Full Import succeeds with two Object Types sharing an anchor value space (table + view), both providers, Scenario 16 matrix green with both workarounds removed (38/38: SQL Server 18, Oracle 20, 2026-08-19)
+- [x] Declared-target references resolve to the declared Object Type even when the value exists in another type's partition (both directions tested)
+- [x] Undeclared-target references: unique value resolves; ambiguous value reported per Unresolved Reference Handling naming candidate types (all three modes tested); run continues
+- [x] Intra-type duplicate anchor fails fast with Object Type, attribute and value in the message
+- [x] Mixed-type DB fallback queries per referenced type's anchor attribute (red-first test reproducing the `primaryAttributeId` collapse), and matches through the anchor's own data type
+- [x] Declared target visible read-only in portal Schema tab, REST schema DTO and PowerShell output (REST verified live against a configured SQL Server system)
+- [x] 500k scale import shows no measurable throughput regression against the #170 baseline (SQL Server 13m39s / 1,220 obj/s, Oracle 16m16s / 1,024 obj/s)
+- [x] `dotnet build JIM.sln` and `dotnet test JIM.sln` clean (plus the full RequiresPostgres suite); changelog 🐛 entry; docs updated per the table above
 
 ## Additional Context
 

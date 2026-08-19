@@ -1,9 +1,9 @@
 # Type-Scoped Reference Resolution - Implementation Plan
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-08-19
 - **Issue:** [#1285](https://github.com/TetronIO/JIM/issues/1285)
-- **PRD:** [`engineering/prd/PRD_TYPE_SCOPED_REFERENCE_RESOLUTION.md`](../prd/PRD_TYPE_SCOPED_REFERENCE_RESOLUTION.md)
+- **PRD:** [`engineering/prd/done/PRD_TYPE_SCOPED_REFERENCE_RESOLUTION.md`](../../prd/done/PRD_TYPE_SCOPED_REFERENCE_RESOLUTION.md)
 
 ## Overview
 
