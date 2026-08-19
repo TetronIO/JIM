@@ -1802,11 +1802,12 @@ public abstract class SyncTaskProcessorBase
             {
                 // Prefer the AttributeFlow child as parent (MVO is fully formed after Attribute Flow),
                 // fall back to root outcome, fall back to creating outcomes at root level.
-                var rootOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
-                    !o.ParentSyncOutcomeId.HasValue);
+                // These outcomes were built in memory earlier in this page, so their parent link is the
+                // navigation property and not yet the FK; ask IsChildOutcome, which reads whichever is set.
+                var rootOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o => !o.IsChildOutcome);
                 var attributeFlowChild = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
                     o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                    && o.ParentSyncOutcomeId.HasValue);
+                    && o.IsChildOutcome);
                 var exportParent = attributeFlowChild ?? rootOutcome;
 
                 // Track Provisioned outcomes by CS ID so we can nest Pending Exports under them
@@ -2285,7 +2286,7 @@ public abstract class SyncTaskProcessorBase
                                 {
                                     var attrFlowChild = existingChangeEntry.Rpei.SyncOutcomes.FirstOrDefault(o =>
                                         o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                                        && o.ParentSyncOutcomeId.HasValue);
+                                        && o.IsChildOutcome);
                                     if (attrFlowChild != null)
                                         attrFlowChild.DetailCount = existingChangeEntry.Rpei.AttributeFlowCount;
                                 }
@@ -2529,20 +2530,20 @@ public abstract class SyncTaskProcessorBase
                         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                             && rpei.ObjectChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined)
                         {
-                            // Use the FK (ParentSyncOutcomeId) rather than the navigation property
-                            // so the check works whether or not EF populated ParentSyncOutcome —
-                            // AsNoTracking + Include(SyncOutcomes) loads the list but not the
-                            // per-node parent navigation.
+                            // This RPEI was read back from the database, so its outcomes carry the FK and
+                            // not the navigation property (AsNoTracking + Include(SyncOutcomes) loads the
+                            // list but not the per-node parent navigation). IsChildOutcome reads whichever
+                            // link is populated, so the same lookup is correct on either shape.
                             var attrFlowChild = rpei.SyncOutcomes.FirstOrDefault(o =>
                                 o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                                && o.ParentSyncOutcomeId.HasValue);
+                                && o.IsChildOutcome);
                             if (attrFlowChild != null)
                                 attrFlowChild.DetailCount = rpei.AttributeFlowCount;
                             else
                             {
                                 // No child yet (e.g., initial projection had no scalar attribute changes).
                                 // Add an AttributeFlow child under the root Projected/Joined outcome.
-                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => !o.ParentSyncOutcomeId.HasValue);
+                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => !o.IsChildOutcome);
                                 if (rootOutcome != null)
                                 {
                                     SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
