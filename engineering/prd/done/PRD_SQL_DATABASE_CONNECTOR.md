@@ -1,6 +1,7 @@
 # SQL Database Connector
 
-- **Status:** Doing
+- **Status:** Done
+- **Note:** All acceptance criteria are delivered for the Priority 1 providers (Microsoft SQL Server and Oracle Database); the full provider × capability matrix, the 500,000-row import included, is green on both (2026-08-18). Deferred, and tracked outside this PRD: the Priority 2 providers (PostgreSQL, MySQL; the roadmap's "PostgreSQL and MySQL" row), stored-procedure export (design decision 5's fast-follow), and two platform defects the matrix found that are not the connector's to fix, [#1285](https://github.com/TetronIO/JIM/issues/1285) (reference resolution keyed by anchor value alone, which is why Scenario 16 anchors `PersonView` on `EMAIL` and starts `APP_USERS` keys at 1,000,000) and [#1287](https://github.com/TetronIO/JIM/issues/1287) (`SeedAsync` is not idempotent).
 - **Created:** 2026-07-15
 - **Author:** Jay (with Claude)
 - **Issue:** [#170](https://github.com/TetronIO/JIM/issues/170)
@@ -223,15 +224,15 @@ Additionally:
 
 ## Acceptance Criteria
 
-- [ ] An administrator can configure, validate and save a SQL Server Connected System and an Oracle Connected System from each of the three admin surfaces (portal, REST API, PowerShell), with the password encrypted at rest via the existing credential protection mechanism.
-- [ ] Schema discovery lists tables/views and columns with correct JIM type mapping for both Priority 1 providers.
-- [ ] Full import stages objects from a table/view including multi-valued attributes from a related table and reference attributes carrying anchors, verified at 500,000 rows.
-- [ ] Delta import works in change-log-table mode including deletion propagation, and in watermark mode with documented create/update-only semantics; a missing watermark falls back with the standard warning.
-- [ ] Export creates, updates and deletes rows transactionally including related-table maintenance, returning database-generated keys as external IDs, with per-object error isolation and auto-confirmation.
-- [ ] All operations are recorded as Activities with per-object Run Profile Execution Items.
-- [ ] No native drivers: fully managed providers, air-gap deployable, dependency governance completed for each provider package.
-- [ ] The full provider × capability integration matrix (see Testing Requirements) runs green against real SQL Server and Oracle Database Free containers in the existing runner; unit tests cover the provider dialect layer, type mapping and query generation.
-- [ ] Public documentation ships in the same release: per-provider configuration guide, delta import setup guidance for both modes (dedicated pages if a single page cannot cover a mode's setup end to end), type mapping and licensing notes, and the wider-database-support feedback callout pointing at GitHub Discussions Ideas.
+- [x] An administrator can configure, validate and save a SQL Server Connected System and an Oracle Connected System from each of the three admin surfaces (portal, REST API, PowerShell), with the password encrypted at rest via the existing credential protection mechanism.
+- [x] Schema discovery lists tables/views and columns with correct JIM type mapping for both Priority 1 providers.
+- [x] Full import stages objects from a table/view including multi-valued attributes from a related table and reference attributes carrying anchors, verified at 500,000 rows. *(Scenario 16 `Scale.FullImport500k`: 500,000 rows read as 1,000,000 objects (table and view) in 17m 31s on SQL Server and 14m 45s on Oracle, worker peak 9.2 GiB; see `engineering/INTEGRATION_TESTING.md`.)*
+- [x] Delta import works in change-log-table mode including deletion propagation, and in watermark mode with documented create/update-only semantics; a missing watermark falls back with the standard warning.
+- [x] Export creates, updates and deletes rows transactionally including related-table maintenance, returning database-generated keys as external IDs, with per-object error isolation and auto-confirmation.
+- [x] All operations are recorded as Activities with per-object Run Profile Execution Items.
+- [x] No native drivers: fully managed providers, air-gap deployable, dependency governance completed for each provider package.
+- [x] The full provider × capability integration matrix (see Testing Requirements) runs green against real SQL Server and Oracle Database Free containers in the existing runner; unit tests cover the provider dialect layer, type mapping and query generation. *(18 of 18 cells on SQL Server and 20 of 20 on Oracle at `-FullMatrix`, none not exercised, 2026-08-18.)*
+- [x] Public documentation ships in the same release: per-provider configuration guide, delta import setup guidance for both modes (dedicated pages if a single page cannot cover a mode's setup end to end), type mapping and licensing notes, and the wider-database-support feedback callout pointing at GitHub Discussions Ideas.
 
 ## Additional Context
 
