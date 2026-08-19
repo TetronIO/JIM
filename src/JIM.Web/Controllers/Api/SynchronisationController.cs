@@ -122,7 +122,10 @@ public class SynchronisationController(
         if (objectTypes == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        var dtos = objectTypes.Select(ConnectedSystemObjectTypeDto.FromEntity);
+        // Sibling names resolve a Reference attribute's declared target (#1285) without the entity graph
+        // carrying a ReferencedObjectType navigation.
+        var objectTypeNamesById = objectTypes.ToDictionary(ot => ot.Id, ot => ot.Name);
+        var dtos = objectTypes.Select(objectType => ConnectedSystemObjectTypeDto.FromEntity(objectType, objectTypeNamesById));
         return Ok(dtos);
     }
 
@@ -153,7 +156,7 @@ public class SynchronisationController(
         if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
 
-        return Ok(ConnectedSystemObjectTypeDto.FromEntity(objectType));
+        return Ok(ConnectedSystemObjectTypeDto.FromEntity(objectType, await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId)));
     }
 
     /// <summary>
@@ -226,7 +229,7 @@ public class SynchronisationController(
 
         // Return the updated object type
         var updated = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
-        return Ok(ConnectedSystemObjectTypeDto.FromEntity(updated!));
+        return Ok(ConnectedSystemObjectTypeDto.FromEntity(updated!, await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId)));
     }
 
     /// <summary>
@@ -398,7 +401,7 @@ public class SynchronisationController(
 
         // Return the updated attribute
         var updated = await _application.ConnectedSystems.GetAttributeAsync(attributeId);
-        return Ok(ConnectedSystemAttributeDto.FromEntity(updated!));
+        return Ok(ConnectedSystemAttributeDto.FromEntity(updated!, await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId)));
     }
 
     /// <summary>
@@ -483,11 +486,12 @@ public class SynchronisationController(
             updated.Count, errors.Count);
 
         // Build the response
+        var objectTypeNamesById = await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId);
         var response = new BulkUpdateConnectedSystemAttributesResponse
         {
             ActivityId = activity.Id,
             UpdatedCount = updated.Count,
-            UpdatedAttributes = updated.Select(ConnectedSystemAttributeDto.FromEntity).ToList(),
+            UpdatedAttributes = updated.Select(attribute => ConnectedSystemAttributeDto.FromEntity(attribute, objectTypeNamesById)).ToList(),
             Errors = errors.Count > 0
                 ? errors.Select(e => new BulkUpdateAttributeError { AttributeId = e.AttributeId, ErrorMessage = e.Error }).ToList()
                 : null
@@ -2102,7 +2106,7 @@ public class SynchronisationController(
     /// <param name="id">The unique identifier of the Connector Definition.</param>
     /// <returns>The Connector Definition details including all settings and capabilities.</returns>
     [HttpGet("connector-definitions/{id:int}", Name = "GetConnectorDefinition")]
-    [ProducesResponseType(typeof(ConnectorDefinition), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectorDefinitionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectorDefinitionAsync(int id)
@@ -2112,7 +2116,7 @@ public class SynchronisationController(
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with ID {id} not found."));
 
-        return Ok(definition);
+        return Ok(ConnectorDefinitionDto.FromEntity(definition));
     }
 
     /// <summary>
@@ -2121,7 +2125,7 @@ public class SynchronisationController(
     /// <param name="name">The name of the Connector Definition (e.g., "CSV File", "LDAP").</param>
     /// <returns>The Connector Definition details including all settings and capabilities.</returns>
     [HttpGet("connector-definitions/by-name/{name}", Name = "GetConnectorDefinitionByName")]
-    [ProducesResponseType(typeof(ConnectorDefinition), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectorDefinitionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectorDefinitionByNameAsync(string name)
@@ -2131,7 +2135,7 @@ public class SynchronisationController(
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with name '{name}' not found."));
 
-        return Ok(definition);
+        return Ok(ConnectorDefinitionDto.FromEntity(definition));
     }
 
     #endregion

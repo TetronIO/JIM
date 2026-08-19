@@ -56,13 +56,15 @@ The list view and wildcard `-Uri` lookups return one or more header `PSCustomObj
 | `MetaverseAttributeCount` | `int` | Number of attributes surfaced in the search results |
 | `Created` | `datetime` | When the search was created |
 
-`-Id` and literal `-Uri` lookups return the full search rather than a header. It carries the header fields above except `MetaverseObjectTypeName` and `MetaverseAttributeCount`, which have no equivalent on the full object; use `$search.MetaverseObjectType.Name` and `$search.Attributes.Count` instead. It also adds:
+`-Id` and literal `-Uri` lookups return the full search rather than a header. It carries the header fields above except `MetaverseAttributeCount` (use `$search.Attributes.Count` instead). It also adds:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `MetaverseObjectType` | `object` | The Metaverse Object Type the search targets |
-| `Attributes` | `array` | Attributes surfaced in the search results, ordered by `Position` |
-| `CriteriaGroups` | `array` | Criteria groups that filter which objects match the search |
+| `MetaverseObjectTypeId` | `int` | Identifier of the Metaverse Object Type the search targets |
+| `LastUpdated` | `datetime` | When the search was last modified; null if never modified |
+| `CreatedByName` / `LastUpdatedByName` | `string` | Display names of the principals that created / last modified the search |
+| `Attributes` | `array` | Attributes surfaced in the search results, ordered by `Position`; each carries `Id`, `MetaverseAttributeId`, `MetaverseAttributeName` and `Position` |
+| `CriteriaGroups` | `array` | Criteria groups that filter which objects match the search, ordered by `Position` |
 
 ### Examples
 

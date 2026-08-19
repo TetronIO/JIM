@@ -306,6 +306,16 @@ public class JimDbContext : DbContext
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);
 
+        // The Object Type a Reference attribute declares as its target (#1285). Distinct from the owning
+        // relationship above, so it is configured explicitly. SetNull: removing an Object Type must not take
+        // attributes of other Object Types with it; the reference simply loses its declared target and
+        // resolution falls back to searching every Object Type.
+        modelBuilder.Entity<ConnectedSystemObjectTypeAttribute>()
+            .HasOne(csa => csa.ReferencedObjectType)
+            .WithMany()
+            .HasForeignKey(csa => csa.ReferencedObjectTypeId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // Classification tags have no meaning without the object type they classify, so they go with it. The unique
         // index enforces the same rule schema import applies in memory: a type is classified a given way once.
         modelBuilder.Entity<ConnectedSystemObjectType>()
