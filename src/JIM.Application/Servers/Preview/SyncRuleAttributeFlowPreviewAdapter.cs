@@ -41,6 +41,11 @@ namespace JIM.Application.Servers.Preview;
 /// - **Only this Connected System is evaluated.** A contributor on another system takes its turn on its own
 ///   synchronisation, which this preview does not run, so what it would re-elect is named in a finding rather
 ///   than guessed at per object.
+///
+/// The two directions reach their old-to-new pair by the same reconstruction from different material: inbound from
+/// the values each evaluation would REMOVE, outbound from the changes each evaluation declines to stage because the
+/// target already holds the value (#1443). Both are values the object holds now, which is why both directions can
+/// state what the administrator would see before and after.
 /// </summary>
 public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAdapter
 {
@@ -329,14 +334,22 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     }
 
     /// <summary>
-    /// The attribute changes one preview would stage for this rule, flattened across its decision records.
+    /// What one evaluation would leave the target system holding for this rule's attributes: the changes it would
+    /// stage, plus the ones it declined to stage because the target already holds the value (#1443).
     /// </summary>
+    /// <remarks>
+    /// The skipped changes are what make an export delta an old-to-new PAIR rather than a bare new value. A domain
+    /// cutover is precisely the case where the target already holds what the rule writes today, so the stored
+    /// configuration stages nothing and only the proposal stages anything; reading the staged changes alone would
+    /// report "would now write X" with nothing to compare X against. Including both also makes an unchanged
+    /// attribute cancel out, because a value skipped by both evaluations appears on both sides of the comparison.
+    /// </remarks>
     private static List<PendingExportAttributeValueChange> ExportChangesFor(SyncPreviewResult? preview, SyncRule rule) =>
         preview == null
             ? []
             : [.. preview.OutboundDecisions.Entries
                 .Where(entry => entry.SyncRuleId == rule.Id)
-                .SelectMany(entry => entry.AttributeChanges)];
+                .SelectMany(entry => entry.AttributeChanges.Concat(entry.NoNetChangeSkippedChanges))];
 
     private static Guid? ExportTargetObjectId(SyncPreviewResult? preview, SyncRule rule) =>
         preview?.OutboundDecisions.Entries
