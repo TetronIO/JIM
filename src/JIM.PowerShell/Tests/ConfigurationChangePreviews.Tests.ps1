@@ -382,6 +382,91 @@ Describe 'New-JIMConfigurationChangePreview' {
         }
     }
 
+    Context 'Object Matching previews' {
+        It 'Posts the proposed rules to the Object Matching preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $rule = @{
+                    Order = 2
+                    ConnectedSystemObjectTypeId = 9
+                    MetaverseObjectTypeId = 3
+                    TargetMetaverseAttributeId = 201
+                    CaseSensitive = $true
+                    Sources = @(
+                        @{ Order = 0; ConnectedSystemAttributeId = 101 }
+                    )
+                }
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule $rule | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/connected-systems/5/matching-rules/preview'
+                $script:capturedBody.rules.Count | Should -Be 1
+                # Order and case sensitivity each decide which identity an account joins to, so both have to
+                # reach the API rather than being dropped as decoration.
+                $script:capturedBody.rules[0].Order | Should -Be 2
+                $script:capturedBody.rules[0].CaseSensitive | Should -BeTrue
+                $script:capturedBody.rules[0].Sources[0].ConnectedSystemAttributeId | Should -Be 101
+            }
+        }
+
+        It 'Sends an empty array as an empty array, because that proposes a system that joins nothing' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule @() | Out-Null
+
+                # Omitting the field would preview the stored rules; an empty array is the opposite question.
+                $script:capturedBody.ContainsKey('rules') | Should -BeTrue
+                @($script:capturedBody.rules).Count | Should -Be 0
+            }
+        }
+
+        It 'Sends the mode only when the caller is changing it' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule @() | Out-Null
+                $script:capturedBody.ContainsKey('mode') | Should -BeFalse
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule @() -ObjectMatchingRuleMode SyncRule | Out-Null
+                $script:capturedBody.mode | Should -BeExactly 'SyncRule'
+            }
+        }
+
+        It 'Requires the rules to be stated rather than inferred from silence' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['MatchingRule']
+            $mandatory = $parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'ObjectMatching'
+            }
+            $mandatory.Mandatory | Should -BeTrue
+        }
+
+        It 'Allows the empty collection its mandatory parameter would otherwise reject' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['MatchingRule']
+            ($parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.AllowEmptyCollectionAttribute]
+            }) | Should -Not -BeNullOrEmpty
+        }
+    }
+
     Context 'Waiting' {
         It 'Returns the start result without polling when the proposal is blocked' {
             InModuleScope JIM {

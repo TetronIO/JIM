@@ -125,7 +125,23 @@ public static class OutcomeDisplayMap
                 "have their scope-exit action changed"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] =
             new OutcomeDisplay("Attribute Flow does not evaluate", "Would Fail Attribute Flow", CausalityTone.Error, Icons.Material.Filled.RuleFolder,
-                "have an Attribute Flow that would not evaluate")
+                "have an Attribute Flow that would not evaluate"),
+        // The Object Matching preview's fates (#1457). Error tone on joining a different Metaverse Object and on
+        // projecting instead of joining, because both are identity corruption that nothing reports at run time:
+        // one merges an account into the wrong identity, the other splits one identity into two. Ambiguity is a
+        // Warning because the next synchronisation refuses the object loudly rather than joining it wrongly.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] =
+            new OutcomeDisplay("Joins a different Metaverse Object", "Would Join Different Metaverse Object", CausalityTone.Error, Icons.Material.Filled.SwapHoriz,
+                "join a different Metaverse Object"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] =
+            new OutcomeDisplay("Joins instead of projecting", "Would Join Instead Of Project", CausalityTone.Success, Icons.Material.Filled.Link,
+                "join an existing Metaverse Object instead of projecting a new one"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] =
+            new OutcomeDisplay("Projects instead of joining", "Would Project Instead Of Join", CausalityTone.Error, Icons.Material.Filled.CallSplit,
+                "project a new Metaverse Object instead of joining an existing one"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] =
+            new OutcomeDisplay("Matches more than one Metaverse Object", "Would Match Ambiguously", CausalityTone.Warning, Icons.Material.Filled.QuestionMark,
+                "match more than one Metaverse Object")
     };
 
     /// <summary>

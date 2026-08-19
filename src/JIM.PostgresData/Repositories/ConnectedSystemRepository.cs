@@ -2828,6 +2828,33 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await UnjoinedOfType(connectedSystemId, connectedSystemObjectTypeId)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await UnjoinedOfType(connectedSystemId, connectedSystemObjectTypeId).CountAsync();
+    }
+
+    /// <summary>
+    /// The live, unjoined objects of one type: what a synchronisation would put to Object Matching. Obsolete
+    /// objects are excluded because a synchronisation never reaches the join step for them.
+    /// </summary>
+    private IQueryable<ConnectedSystemObject> UnjoinedOfType(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
+
+    /// <inheritdoc />
     public async Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         return await Repository.Database.ConnectedSystemObjects

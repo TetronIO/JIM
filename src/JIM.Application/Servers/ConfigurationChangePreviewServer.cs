@@ -531,6 +531,12 @@ public class ConfigurationChangePreviewServer
             case ConfigurationChangePreviewSurface.ConnectedSystem:
                 activity.ConnectedSystemId = request.TargetId;
                 break;
+            // Object Matching is previewed per Connected System, in both modes and across the switch between them,
+            // so the Activity attaches to the system rather than to whichever object type or Synchronisation Rule
+            // happens to own the rules today.
+            case ConfigurationChangePreviewSurface.ObjectMatching:
+                activity.ConnectedSystemId = request.TargetId;
+                break;
             case ConfigurationChangePreviewSurface.MetaverseObjectType:
                 activity.MetaverseObjectTypeId = request.TargetId;
                 break;

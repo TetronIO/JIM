@@ -69,7 +69,13 @@ public class SyncOutcomeTypeOrdinalTests
 
         // Synchronisation Rule Attribute Flow preview (#1437): the proposed mapping that would not evaluate at all,
         // so the attribute it targets is not written.
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = 30
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = 30,
+
+        // Object Matching preview (#1457): how a matching rule change moves an unjoined object's join.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] = 31,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] = 32,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] = 33,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = 34
     };
 
     [Test]

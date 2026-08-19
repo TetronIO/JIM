@@ -10,7 +10,7 @@ function New-JIMConfigurationChangePreview {
         Starts a Configuration Change Preview: JIM evaluates a proposed change against the objects
         already in the metaverse and reports what would happen to them, changing nothing.
 
-        Three surfaces can be previewed, selected by which identifier you pass:
+        Several surfaces can be previewed, selected by which identifier and proposal you pass:
 
         - -MetaverseObjectTypeId previews a change to that type's deletion settings. The field semantics
           match Set-JIMMetaverseObjectType exactly, so an omitted parameter previews the stored value.
@@ -28,6 +28,11 @@ function New-JIMConfigurationChangePreview {
           objects it would manage at all, and what each movement in or out of scope would cost.
         - -SyncRuleId with -AttributeFlowMapping previews a change to that rule's Attribute Flow: what
           value every object it manages would end up with, per attribute.
+        - -ConnectedSystemId with -MatchingRule previews a change to that system's Object Matching Rules:
+          which of its unjoined objects would join a different Metaverse Object, join instead of projecting
+          a new identity, project instead of joining, or match ambiguously and fail. Add
+          -ObjectMatchingRuleMode to preview the Simple/Advanced switch. Objects already joined are never
+          re-matched, so no matching change can move them, and the preview says so.
 
         Evaluation is asynchronous. Without -Wait this returns as soon as the proposal itself has been
         validated, carrying the ActivityId to poll with Get-JIMConfigurationChangePreview. With -Wait it
@@ -257,6 +262,29 @@ function New-JIMConfigurationChangePreview {
         Applies the tightened Out-of-Scope Action only when the preview found no object would be
         disconnected by it today, and records the preview against the change.
 
+    .EXAMPLE
+        $rules = @(
+            @{
+                order                      = 0
+                connectedSystemObjectTypeId = 9
+                metaverseObjectTypeId       = 3
+                targetMetaverseAttributeId  = 201
+                caseSensitive               = $false
+                sources                     = @(@{ order = 0; connectedSystemAttributeId = 102 })
+            }
+        )
+        $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule $rules -Wait
+        $preview.ImpactCounts | Where-Object transitionType -eq 'WouldJoinDifferentMetaverseObject'
+
+        Previews matching on a different attribute and reports how many accounts would end up on a
+        different identity, which is the count that decides whether the rule is safe to save.
+
+    .EXAMPLE
+        New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule @() -Wait
+
+        Previews removing every Object Matching Rule: nothing would join, and every unjoined object would
+        project a new identity instead.
+
     .LINK
         Get-JIMConfigurationChangePreview
         Get-JIMConfigurationChangePreviewDelta
@@ -265,6 +293,7 @@ function New-JIMConfigurationChangePreview {
         Set-JIMConnectedSystemPartition
         Set-JIMConnectedSystemContainer
         Set-JIMSyncRule
+        Set-JIMMatchingRule
     #>
     [CmdletBinding(DefaultParameterSetName = 'MetaverseObjectTypeDeletionSettings')]
     [OutputType([PSCustomObject])]
@@ -287,6 +316,7 @@ function New-JIMConfigurationChangePreview {
         [string]$DeletionTriggerMode,
 
         [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemScopeSelection', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ObjectMatching', ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
 
         [Parameter(ParameterSetName = 'ConnectedSystemScopeSelection')]
@@ -319,6 +349,14 @@ function New-JIMConfigurationChangePreview {
         [Parameter(Mandatory, ParameterSetName = 'SyncRuleAttributeFlow')]
         [AllowEmptyCollection()]
         [hashtable[]]$AttributeFlowMapping,
+
+        [Parameter(Mandatory, ParameterSetName = 'ObjectMatching')]
+        [AllowEmptyCollection()]
+        [hashtable[]]$MatchingRule,
+
+        [Parameter(ParameterSetName = 'ObjectMatching')]
+        [ValidateSet('ConnectedSystem', 'SyncRule')]
+        [string]$ObjectMatchingRuleMode,
 
         [Parameter()]
         [switch]$FullDataSet,
@@ -400,6 +438,20 @@ function New-JIMConfigurationChangePreview {
             $body.mappings = @($AttributeFlowMapping)
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'ObjectMatching') {
+            # Always sent, including as an empty array, for the same reason as the mappings above: omitting the
+            # field previews the Connected System's stored rules, while an empty array proposes removing every one
+            # of them, leaving nothing able to join. Wrapped in @() so a single rule serialises as a JSON array
+            # rather than a bare object.
+            $body.rules = @($MatchingRule)
+
+            # The mode is only sent when the caller is changing it; omitted, the preview keeps the stored mode, so
+            # a caller editing rules alone does not have to restate which mode they are in.
+            if ($ObjectMatchingRuleMode) {
+                $body.mode = $ObjectMatchingRuleMode
+            }
+        }
+
         if ($FullDataSet) {
             $body.deltaPersistence = 'Full'
         }
@@ -419,6 +471,10 @@ function New-JIMConfigurationChangePreview {
         elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleAttributeFlow') {
             $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings/preview"
             $subject = "Synchronisation Rule $SyncRuleId"
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'ObjectMatching') {
+            $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/matching-rules/preview"
+            $subject = "Connected System $ConnectedSystemId"
         }
         else {
             $endpoint = "/api/v1/metaverse/object-types/$MetaverseObjectTypeId/deletion-settings/preview"
