@@ -462,25 +462,25 @@ public class SyncPreviewServer
             };
             result.OutcomeTree.Add(root);
 
+            SyncOutcomeNode? attributeFlowChild = null;
             if (rootType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
             {
-                root.Children.Add(new SyncOutcomeNode
+                attributeFlowChild = new SyncOutcomeNode
                 {
                     OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
                     TargetEntityDescription = root.TargetEntityDescription,
                     DetailCount = flowCount,
                     Ordinal = root.Children.Count
-                });
+                };
+                root.Children.Add(attributeFlowChild);
             }
 
-            // The outbound outcomes attach to the ROOT, the Attribute Flow child their sibling. The real
-            // builder's stated intent is to nest them under the Attribute Flow child, but its child lookup
-            // keys on ParentSyncOutcomeId, which is only resolved at bulk-insert flattening, after the
-            // outcomes are built; so in the tree a real run actually records, export outcomes are the
-            // root's children. Fidelity (PRD requirement 9, the paired test) mirrors recorded behaviour,
-            // not intent; if the real builder is ever fixed to match its comment, this must move with it.
-            BuildOutboundOutcomeNodes(root.Children, outbound, context.SystemNames);
+            // The outbound outcomes nest under the Attribute Flow child where there is one, because what
+            // is exported is caused by what flowed in. Fidelity (PRD requirement 9, the paired test)
+            // mirrors what a real run RECORDS rather than what its comments intend, so this line follows
+            // the real builder in SyncTaskProcessorBase; keep the two moving together (#1428).
+            BuildOutboundOutcomeNodes(attributeFlowChild?.Children ?? root.Children, outbound, context.SystemNames);
         }
         else
         {
