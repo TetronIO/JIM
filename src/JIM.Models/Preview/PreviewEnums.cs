@@ -54,7 +54,13 @@ public enum ConfigurationChangePreviewSurface
     /// <summary>
     /// A Synchronisation Rule's Scoping Criteria: which objects the rule manages at all (#827 gap G1).
     /// </summary>
-    SynchronisationRuleScope = 5
+    SynchronisationRuleScope = 5,
+
+    /// <summary>
+    /// A Synchronisation Rule's Attribute Flow mappings: what the objects it manages would have written to them
+    /// (#827 gap G2).
+    /// </summary>
+    SynchronisationRuleAttributeFlow = 6
 }
 
 /// <summary>

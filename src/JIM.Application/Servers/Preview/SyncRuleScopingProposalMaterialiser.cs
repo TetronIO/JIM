@@ -53,22 +53,11 @@ internal static class SyncRuleScopingProposalMaterialiser
         var connectedSystemAttributesById = connectedSystemAttributes.ToDictionary(attribute => attribute.Id);
         var metaverseAttributesById = metaverseAttributes.ToDictionary(attribute => attribute.Id);
 
-        var standIn = new SyncRule
-        {
-            Id = storedRule.Id,
-            Name = storedRule.Name,
-            Direction = storedRule.Direction,
-            Enabled = storedRule.Enabled,
-            ConnectedSystemId = storedRule.ConnectedSystemId,
-            ConnectedSystemObjectTypeId = storedRule.ConnectedSystemObjectTypeId,
-            ConnectedSystemObjectType = storedRule.ConnectedSystemObjectType,
-            MetaverseObjectTypeId = storedRule.MetaverseObjectTypeId,
-            MetaverseObjectType = storedRule.MetaverseObjectType,
-            ProjectToMetaverse = storedRule.ProjectToMetaverse,
-            ProvisionToConnectedSystem = storedRule.ProvisionToConnectedSystem,
-            InboundOutOfScopeAction = storedRule.InboundOutOfScopeAction,
-            OutboundDeprovisionAction = storedRule.OutboundDeprovisionAction
-        };
+        // A faithful copy of the rule, with only its criteria replaced below. Its Attribute Flow in particular has
+        // to come across: the arrivals path hands this stand-in to the preview engine, and a rule that flows
+        // nothing would have the engine answer for a projection that writes no attributes.
+        var standIn = SyncRuleStandIn.CloneOf(storedRule);
+        standIn.ObjectScopingCriteriaGroups.Clear();
 
         foreach (var group in proposal.CriteriaGroups)
             standIn.ObjectScopingCriteriaGroups.Add(MaterialiseGroup(group, connectedSystemAttributesById, metaverseAttributesById));
