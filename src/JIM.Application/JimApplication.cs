@@ -173,34 +173,12 @@ public class JimApplication : IDisposable
     public async Task InitialiseDatabaseAsync()
     {
         await Repository.InitialiseDatabaseAsync();
-        try
-        {
-            await Seeding.SeedAsync();
-            // converge the built-in Metaverse schema towards the BuiltInMetaverseSchema catalogue. Runs after
-            // SeedAsync (which short-circuits on already-seeded databases) so newly-introduced built-in
-            // Metaverse Attributes and their advisory Standard Mappings reach existing deployments too.
-            await Seeding.SyncBuiltInMetaverseSchemaAsync();
-            await Seeding.SeedBuiltInSchedulesAsync();
-            await Seeding.SeedBuiltInRolesAsync();
-            // creates any built-in Connector Definition the database does not hold yet, and reconciles the ones it
-            // does with the connector code. SeedAsync does not seed them: it short-circuits on an already-seeded
-            // database, so a Connector added in a later release would never reach an upgraded deployment.
-            await Seeding.SyncBuiltInConnectorDefinitionsAsync();
-            await Seeding.SyncServiceSettingsAsync();
-            // Repair the built-in example data template if a previous factory reset stripped its attributes (its rows are
-            // collateral of the reset's TRUNCATE ... CASCADE). SeedAsync skips an already-present template, so this runs
-            // separately; it is a cheap no-op when the template is intact.
-            await Seeding.EnsureBuiltInExampleDataTemplateAsync();
-            await Seeding.CompleteSeedingActivityAsync();
-        }
-        catch (Exception ex)
-        {
-            // Catch-all is deliberate: this is an Activity execution boundary (the "System Initialisation" parent
-            // Activity, if one was created), and any failure here must be recorded on it via
-            // FailSeedingActivityAsync rather than escape silently, then rethrown so startup still fails loudly.
-            await Seeding.FailSeedingActivityAsync(ex);
-            throw;
-        }
+        // Converges the database towards the built-in configuration this release ships, creating whatever is
+        // absent and leaving everything else alone. Runs on every start, not just the first, so a built-in
+        // introduced in a later release reaches deployments that already exist. The pass ordering, and the
+        // Activity boundary that groups what it creates, belong to the pipeline rather than to this caller
+        // (SystemServer.ResetSystemAsync runs the same one).
+        await Seeding.ApplyBuiltInConfigurationAsync();
         await Repository.InitialisationCompleteAsync();
     }
 

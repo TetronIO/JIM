@@ -47,9 +47,9 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(id, includeChildObjects);
     }
 
-    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string objectTypeName, bool includeChildObjects)
+    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string objectTypeName, bool includeChildObjects, bool withChangeTracking = false)
     {
-        return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeName, includeChildObjects);
+        return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeName, includeChildObjects, withChangeTracking);
     }
 
     public async Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects)
@@ -256,9 +256,9 @@ public class MetaverseServer
     #endregion
 
     #region metaverse attributes
-    public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync()
+    public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync(bool withChangeTracking = false)
     {
-        return await Application.Repository.Metaverse.GetMetaverseAttributesAsync();
+        return await Application.Repository.Metaverse.GetMetaverseAttributesAsync(withChangeTracking);
     }
 
     public async Task<IList<MetaverseAttributeHeader>?> GetMetaverseAttributeHeadersAsync()

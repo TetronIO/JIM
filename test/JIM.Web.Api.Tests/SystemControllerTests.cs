@@ -37,17 +37,46 @@ public class SystemControllerTests
         var mockActivityRepo = new Mock<IActivityRepository>();
         var mockSystemRepo = new Mock<ISystemRepository>();
         var mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
-        // The reset restores the built-in example data template (EnsureBuiltInExampleDataTemplateAsync), which reads
-        // the example data and Metaverse repositories. Unset methods return null Tasks, so the restore finds no
-        // template / object types and returns early, which is all these reset-flow tests need.
+        // The reset re-runs the whole built-in configuration pipeline (issue #916), so every repository it touches
+        // needs a stand-in even though these tests are about the HTTP contract rather than the restore. Everything
+        // is wired to "nothing exists yet, creating it succeeds", which is the cheapest state the pipeline runs to
+        // completion from. Configuration change tracking is disabled below, so the audited creates take their lean
+        // path and the rebaseline pass returns immediately. Extend this helper, not the individual tests, when the
+        // pipeline gains a step.
         var mockExampleDataRepo = new Mock<IExampleDataRepository>();
         var mockMetaverseRepo = new Mock<IMetaverseRepository>();
-        // The reset also re-seeds the built-in Temporal Scope Reconciliation schedule (the wipe truncates
-        // the Schedules table). An empty schedule list makes the seeder recreate it; configuration change
-        // tracking is disabled so the audited create takes the lean, deterministic path.
         var mockSchedulingRepo = new Mock<ISchedulingRepository>();
+        var mockSearchRepo = new Mock<ISearchRepository>();
+        var mockSeedingRepo = new Mock<ISeedingRepository>();
+        var mockSecurityRepo = new Mock<ISecurityRepository>();
+        var mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
+
         mockSchedulingRepo.Setup(s => s.GetAllSchedulesAsync()).ReturnsAsync(new List<Schedule>());
         mockSchedulingRepo.Setup(s => s.CreateScheduleAsync(It.IsAny<Schedule>())).Returns(Task.CompletedTask);
+
+        mockSeedingRepo.Setup(s => s.SeedDataAsync(
+            It.IsAny<List<MetaverseAttribute>>(),
+            It.IsAny<List<MetaverseObjectType>>(),
+            It.IsAny<List<JIM.Models.Search.PredefinedSearch>>(),
+            It.IsAny<List<JIM.Models.ExampleData.ExampleDataSet>>(),
+            It.IsAny<List<JIM.Models.ExampleData.ExampleDataTemplate>>())).Returns(Task.CompletedTask);
+        mockSeedingRepo.Setup(s => s.SaveBuiltInSchemaChangesAsync(It.IsAny<List<MetaverseAttribute>>())).Returns(Task.CompletedTask);
+
+        // The built-in schema sync throws rather than creating a missing built-in Object Type, so these two must be
+        // present for it; SeedAsync only prepares them, and the SeedDataAsync stand-in above persists nothing.
+        mockMetaverseRepo.Setup(m => m.GetBuiltInMetaverseObjectTypesForSchemaSyncAsync())
+            .ReturnsAsync(new List<MetaverseObjectType>
+            {
+                new() { Id = 1, Name = Constants.BuiltInObjectTypes.User, BuiltIn = true },
+                new() { Id = 2, Name = Constants.BuiltInObjectTypes.Group, BuiltIn = true }
+            });
+        mockMetaverseRepo.Setup(m => m.GetMetaverseAttributesForSchemaSyncAsync()).ReturnsAsync(new List<MetaverseAttribute>());
+
+        mockSecurityRepo.Setup(s => s.CreateRoleAsync(It.IsAny<JIM.Models.Security.Role>()))
+            .ReturnsAsync((JIM.Models.Security.Role role) => role);
+
+        mockConnectedSystemRepo.Setup(c => c.CreateConnectorDefinitionAsync(It.IsAny<JIM.Models.Staging.ConnectorDefinition>()))
+            .Returns(Task.CompletedTask);
 
         mockActivityRepo.Setup(a => a.GetActivitiesAsync(
             It.IsAny<int>(),
@@ -73,6 +102,10 @@ public class SystemControllerTests
         mockSystemRepo.Setup(s => s.ResetSystemAsync(It.IsAny<bool>()))
             .ReturnsAsync(resetResult ?? new SystemResetResult());
 
+        mockServiceSettingsRepo.Setup(s => s.GetAllSettingsAsync()).ReturnsAsync(new List<ServiceSetting>());
+        mockServiceSettingsRepo.Setup(s => s.CreateSettingAsync(It.IsAny<ServiceSetting>())).Returns(Task.CompletedTask);
+        mockServiceSettingsRepo.Setup(s => s.UpdateSettingAsync(It.IsAny<ServiceSetting>())).Returns(Task.CompletedTask);
+        mockServiceSettingsRepo.Setup(s => s.SettingExistsAsync(It.IsAny<string>())).ReturnsAsync(false);
         mockServiceSettingsRepo.Setup(s => s.GetServiceSettingsAsync()).ReturnsAsync(serviceSettings);
         mockServiceSettingsRepo.Setup(s => s.UpdateServiceSettingsAsync(It.IsAny<ServiceSettings>())).Returns(Task.CompletedTask);
         mockServiceSettingsRepo.Setup(s => s.GetSettingAsync(Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled))
@@ -90,6 +123,10 @@ public class SystemControllerTests
         mockRepository.Setup(r => r.ExampleData).Returns(mockExampleDataRepo.Object);
         mockRepository.Setup(r => r.Metaverse).Returns(mockMetaverseRepo.Object);
         mockRepository.Setup(r => r.Scheduling).Returns(mockSchedulingRepo.Object);
+        mockRepository.Setup(r => r.Search).Returns(mockSearchRepo.Object);
+        mockRepository.Setup(r => r.Seeding).Returns(mockSeedingRepo.Object);
+        mockRepository.Setup(r => r.Security).Returns(mockSecurityRepo.Object);
+        mockRepository.Setup(r => r.ConnectedSystems).Returns(mockConnectedSystemRepo.Object);
 
         var application = new JimApplication(mockRepository.Object);
         var controller = new SystemController(NullLogger<SystemController>.Instance, application)
