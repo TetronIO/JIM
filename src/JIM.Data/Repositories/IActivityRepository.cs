@@ -233,6 +233,15 @@ public interface IActivityRepository
     public Task<DateTime?> GetLastHistoryCleanupTimeAsync();
 
     /// <summary>
+    /// Whether any Run Profile has ever been executed, in any state (in progress, complete, failed or cancelled).
+    /// Backs the home page's "Run your first synchronisation" setup step, which asks only whether an administrator
+    /// has run one, never how it turned out. Run Profile configuration changes (create, update, delete) carry the
+    /// same <see cref="ActivityTargetType.ConnectedSystemRunProfile"/> target type as executions, so implementations
+    /// must additionally require <see cref="ActivityTargetOperationType.Execute"/>.
+    /// </summary>
+    public Task<bool> HasAnyRunProfileExecutionAsync();
+
+    /// <summary>
     /// Gets the highest configuration-change version recorded for a configuration object, identified by its activity
     /// target type (<see cref="ActivityTargetType.ConnectedSystem"/> or <see cref="ActivityTargetType.SynchronisationRule"/>) and
     /// database id, or 0 if none exist yet. Used to assign the next per-object version when capturing a configuration
