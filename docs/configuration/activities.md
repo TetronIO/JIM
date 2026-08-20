@@ -87,14 +87,15 @@ A cause that was recorded on a different execution item links to it, so a long c
 
 #### Why an export happened
 
-An export run is the common case of a run whose reason lies elsewhere. It holds a queue of changes to make and nothing more; the synchronisation that decided on a given change ran in a different Activity, often days earlier. An export item therefore reads "A synchronisation of Project-AgileCore staged this change, and this run exported it", linking to the synchronisation that staged it, whose own causes continue above it. Follow that link and a deletion cascade, a scope change or an attribute flow is one more hop up the chain.
+An export run is the common case of a run whose reason lies elsewhere. It holds a queue of changes to make and nothing more; the synchronisation that decided on a given change ran in a different Activity, often days earlier. An export item therefore leads with what that synchronisation decided:
 
-This is the one link JIM cannot work out after the event, because a queued change is deleted the moment its export succeeds. It is therefore recorded as the change is staged, which has two consequences worth knowing:
+- A provisioning create reads "Mia Young was provisioned to Glitterband EMEA, so this run created the record", with the Synchronisation Rule that made the provisioning decision beside it.
+- An update reads "Mia Young's Identity changed, so this run applied the changes to the record".
+- A deprovision reads "The Identity Tina Adams was deleted, so this run deleted the record", and continues through the Deletion Rule decision that ordered it.
 
-- Changes queued **before** you upgraded to a version carrying this carry no cause, and their export items say so. Once they have exported, every later export is covered.
-- A few staging paths have no execution item to name, notably a deletion cascade and grace-period housekeeping. Those exports name the Identity behind the change instead, and the chain ends at that Identity rather than walking on to a run. The Identity's own page carries the rest of the story.
+Each hop links to the run that staged the change, whose own causes continue above it. Behind any synchronisation, the chain then follows the record's own history to the import that fed it: "Mia Young was imported into Yellowstone APAC as a new record" is the true root of most stories, and a deleted account's chain runs back to the moment the source record disappeared. An export staged by drift correction names the drift correction that staged it, so an export putting a value back reads as the enforcement it is rather than as an ordinary update.
 
-Deprovisioning exports read the same way, and an export staged by drift correction names the drift correction that staged it, so an export putting a value back reads as the enforcement it is rather than as an ordinary update.
+The queueing link is the one thing JIM cannot work out after the event, because a queued change is deleted the moment its export succeeds. It is recorded as the change is staged, so changes queued **before** you upgraded to a version carrying this show a shorter chain; once they have exported, every later export is covered. The import hop is the opposite: it is read from the record's own history at viewing time, so it appears only while that import remains within Activity retention, and a chain whose imports have aged out ends at the synchronisation instead.
 
 ## Scheduled Identity Deletion
 
