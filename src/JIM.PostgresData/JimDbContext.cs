@@ -68,6 +68,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<DeferredReference> DeferredReferences { get; set; } = null!;
     public virtual DbSet<PendingExport> PendingExports { get; set; } = null!;
     public virtual DbSet<PendingInitialPassword> PendingInitialPasswords { get; set; } = null!;
+    public virtual DbSet<PendingPasswordChange> PendingPasswordChanges { get; set; } = null!;
     public virtual DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; } = null!;
     public virtual DbSet<PredefinedSearch> PredefinedSearches { get; set; } = null!;
     public virtual DbSet<PredefinedSearchAttribute> PredefinedSearchAttributes {  get; set; } = null!;
@@ -635,6 +636,49 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<PendingInitialPassword>()
             .HasIndex(pip => new { pip.ConnectedSystemId, pip.Status })
             .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemId_Status");
+
+        // The Password Synchronisation queue (#1119). Foreign keys with no navigations on either end, following
+        // ConnectedSystemPasswordSynchronisation: nothing needs to walk from a queue row back to the identity or
+        // the system, and a navigation would close a schema cycle the OpenAPI document build cannot collapse.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasOne<MetaverseObject>()
+            .WithMany()
+            .HasForeignKey(ppc => ppc.MetaverseObjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasOne<ConnectedSystem>()
+            .WithMany()
+            .HasForeignKey(ppc => ppc.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Set null rather than cascade: an account being deleted and recreated must not take the password change
+        // with it. The change re-resolves its account on the next attempt, which is the same path a change queued
+        // before the account existed takes.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasOne<ConnectedSystemObject>()
+            .WithMany()
+            .HasForeignKey(ppc => ppc.ConnectedSystemObjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Requirement 8's coalescing, enforced by the database rather than by the code that writes it. The
+        // fan-out UPSERTs on this key, so two near-simultaneous password changes for one identity cannot both
+        // insert: the second updates the first in place, and last-write-wins is atomic. Application-side
+        // read-modify-write would leave that race open.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => new { ppc.MetaverseObjectId, ppc.ConnectedSystemId })
+            .IsUnique()
+            .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId_ConnectedSystemId_Unique");
+
+        // What the delivery pass asks for: the changes owed to this system, in this state, that have come due.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => new { ppc.ConnectedSystemId, ppc.Status, ppc.NextRetryAt })
+            .HasDatabaseName("IX_PendingPasswordChanges_ConnectedSystemId_Status_NextRetryAt");
+
+        // What the Metaverse Object's password panel asks for: everything outstanding for this identity.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => ppc.MetaverseObjectId)
+            .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId");
 
         // Only one Pending Export should exist per CSO at any time. The filter excludes rows where
         // ConnectedSystemObjectId is NULL (e.g., PEs for unresolved references not yet matched to a CSO).

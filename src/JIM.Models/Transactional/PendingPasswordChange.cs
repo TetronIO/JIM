@@ -1,0 +1,251 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Models.Staging;
+
+namespace JIM.Models.Transactional;
+
+/// <summary>
+/// One password change owed to one Connected System (#1119): the Password Synchronisation queue.
+/// <para>
+/// Three invariants shape everything here, and each has a failure mode worth naming:
+/// </para>
+/// <para>
+/// <b>The row holds the latest intended password for its target, never a replayable sequence.</b> A person who
+/// changes their password twice in an hour must not have the older one delivered to a system that was briefly
+/// unavailable; that would leave them with a password they have already replaced. A unique index on
+/// (Metaverse Object, Connected System) makes that a database guarantee rather than a convention, and
+/// <see cref="Supersede"/> is what a newer change does to an older one.
+/// </para>
+/// <para>
+/// <b>Success deletes the row.</b> The queue is work outstanding; the Activity is the history. A delivered row
+/// would hold an encrypted password long after anything needed it, for no gain.
+/// </para>
+/// <para>
+/// <b>This is the only place JIM holds a synchronised password</b>, and it holds it encrypted under a purpose of
+/// its own. Nothing reads it back to a surface: no DTO carries it, no log records it, and no preview shows it.
+/// </para>
+/// </summary>
+public class PendingPasswordChange
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>
+    /// The identity whose password changed. Half of the coalescing key, and what the Metaverse Object's password
+    /// panel reads to show an identity's outstanding work.
+    /// </summary>
+    public Guid MetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// The Connected System this change is owed to. The other half of the coalescing key.
+    /// <para>
+    /// Denormalised rather than reached through the Connected System Object, deliberately and for the same reason
+    /// <see cref="PendingInitialPassword.ConnectedSystemId"/> is: "what is outstanding on this system?" is asked
+    /// on every delivery pass and on every list page, and it must not need a join. It is also the only way to
+    /// hold a change for a system where the account does not exist yet.
+    /// </para>
+    /// </summary>
+    public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The account to set the password on, or null where the identity has no account in this system yet.
+    /// <para>
+    /// Null is an ordinary state rather than an error: a password change can reach JIM before the account it
+    /// belongs to has been provisioned. The change waits, bounded by <see cref="ExpiresAt"/>, and delivery
+    /// re-resolves the account on each attempt, so the provisioning race resolves itself.
+    /// </para>
+    /// </summary>
+    public Guid? ConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// The password, encrypted under the Password Synchronisation protection purpose.
+    /// <para>
+    /// Decrypted only in the delivery processor, only for the duration of one attempt. It is never returned by
+    /// any surface, and no DTO built from this row carries it.
+    /// </para>
+    /// </summary>
+    public string EncryptedPassword { get; set; } = null!;
+
+    /// <summary>
+    /// What should happen to the password once set, carried from the change rather than from the Connected
+    /// System's configuration.
+    /// <para>
+    /// Per-change because it belongs to the circumstance rather than to the system: an administrator setting a
+    /// password on somebody's behalf may reasonably require a change at next sign-in, whereas a password the
+    /// person chose themselves must not, and both go to the same targets.
+    /// </para>
+    /// </summary>
+    public PasswordExpiryBehaviour ExpiryBehaviour { get; set; } = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy;
+
+    public PendingPasswordChangeStatus Status { get; set; } = PendingPasswordChangeStatus.Pending;
+
+    /// <summary>
+    /// How the last attempt failed, or null before one has been made. Reused from the synchronous set-password
+    /// path rather than defined again, so one classification drives retry, parking and what an administrator is
+    /// told, whichever route the password took.
+    /// </summary>
+    public PasswordSetFailureReason? FailureReason { get; set; }
+
+    /// <summary>
+    /// The target's own words on the last failure, or null. The Connector has already stripped anything
+    /// password-like from it; why a directory refused is a fact about that directory and the most useful thing an
+    /// administrator can be shown.
+    /// </summary>
+    public string? TargetMessage { get; set; }
+
+    public int AttemptCount { get; set; }
+
+    /// <summary>
+    /// When the next delivery attempt falls due, or null for a change that is due now.
+    /// <para>
+    /// The genuine addition over <see cref="PendingInitialPassword"/>, which has no such field because its
+    /// retries ride the next export run. A synchronised password is not tied to a run, so it needs a clock, and
+    /// the backoff between attempts is what stops a refusing target being hammered.
+    /// </para>
+    /// </summary>
+    public DateTime? NextRetryAt { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public DateTime? LastAttemptedAt { get; set; }
+
+    /// <summary>
+    /// When this change stops being worth delivering, from the Connected System's time to live.
+    /// </summary>
+    public DateTime ExpiresAt { get; set; }
+
+    /// <summary>
+    /// The Activity recording the password change that produced this row (requirement 27).
+    /// <para>
+    /// The queue holds operational state; the Activity is the durable audit record and outlives the row, which is
+    /// deleted the moment delivery succeeds. Re-pointed by <see cref="Supersede"/>, so the row always names the
+    /// Activity for the password it is actually carrying.
+    /// </para>
+    /// </summary>
+    public Guid ActivityId { get; set; }
+
+    /// <summary>
+    /// Whether a delivery pass at <paramref name="asOf"/> should attempt this change: it is still pending, and
+    /// either has no retry scheduled or has reached it.
+    /// </summary>
+    public bool IsDue(DateTime asOf) =>
+        Status == PendingPasswordChangeStatus.Pending && (NextRetryAt == null || NextRetryAt <= asOf);
+
+    /// <summary>
+    /// Whether this change has outlived its time to live and should be expired rather than attempted.
+    /// <para>
+    /// Only a pending change expires. An expired one stays as it is rather than being re-expired on every pass,
+    /// and a parked one is waiting on a person: expiring it under them would remove the very thing they were
+    /// asked to look at.
+    /// </para>
+    /// </summary>
+    public bool HasExpired(DateTime asOf) =>
+        Status == PendingPasswordChangeStatus.Pending && ExpiresAt <= asOf;
+
+    /// <summary>
+    /// Records a failed delivery attempt, and decides from its classification whether to retry or to park.
+    /// </summary>
+    /// <param name="reason">How the target refused, or how the attempt failed.</param>
+    /// <param name="targetMessage">The target's own words, already stripped of anything password-like.</param>
+    /// <param name="configuration">The Connected System's Password Synchronisation settings.</param>
+    /// <param name="asOf">The instant of the attempt.</param>
+    public void RecordAttempt(
+        PasswordSetFailureReason reason,
+        string? targetMessage,
+        ConnectedSystemPasswordSynchronisation configuration,
+        DateTime asOf)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        AttemptCount++;
+        LastAttemptedAt = asOf;
+        FailureReason = reason;
+        TargetMessage = targetMessage;
+
+        // A policy rejection and an unsupported operation are answers rather than accidents: the same password
+        // presented again earns the same reply. Requirement 13 is why the policy case cannot be retried out of,
+        // as an initial password can: JIM did not generate this password and has no other to offer.
+        var park = reason is PasswordSetFailureReason.PolicyRejection or PasswordSetFailureReason.UnsupportedOperation
+                   || AttemptCount > configuration.EffectiveMaxRetries;
+
+        if (park)
+        {
+            Status = PendingPasswordChangeStatus.Parked;
+            NextRetryAt = null;
+            return;
+        }
+
+        Status = PendingPasswordChangeStatus.Pending;
+
+        var delay = configuration.CalculateRetryDelay(AttemptCount, ExpiresAt - CreatedAt);
+        var scheduled = asOf + delay;
+
+        // Never book an attempt for after the change stops being worth making; it would come round to find
+        // nothing to attempt, and the row would read as retrying when it was really waiting to expire.
+        NextRetryAt = scheduled > ExpiresAt ? ExpiresAt : scheduled;
+    }
+
+    /// <summary>
+    /// Replaces this change with a newer one for the same identity and Connected System: requirement 8's
+    /// coalescing.
+    /// <para>
+    /// The attempt history is cleared along with the password, because it described the password being replaced.
+    /// Carrying it forward would let a newer password inherit an exhausted retry budget, or a park earned by a
+    /// password nobody is trying to deliver any more.
+    /// </para>
+    /// </summary>
+    public void Supersede(
+        string encryptedPassword,
+        PasswordExpiryBehaviour expiryBehaviour,
+        Guid activityId,
+        TimeSpan timeToLive,
+        DateTime asOf)
+    {
+        EncryptedPassword = encryptedPassword;
+        ExpiryBehaviour = expiryBehaviour;
+        ActivityId = activityId;
+        CreatedAt = asOf;
+        ExpiresAt = asOf + timeToLive;
+
+        Status = PendingPasswordChangeStatus.Pending;
+        AttemptCount = 0;
+        FailureReason = null;
+        TargetMessage = null;
+        NextRetryAt = null;
+        LastAttemptedAt = null;
+    }
+
+    /// <summary>
+    /// Makes this change due immediately, clearing the failure that stopped it: the manual retry from the queue
+    /// page (requirement 22).
+    /// <para>
+    /// The attempt count resets because the retry budget counts attempts against one set of circumstances, and an
+    /// administrator retrying has changed them. Without the reset a parked change would exhaust its budget again
+    /// on the first attempt and park straight back.
+    /// </para>
+    /// </summary>
+    public void Retry()
+    {
+        Status = PendingPasswordChangeStatus.Pending;
+        AttemptCount = 0;
+        NextRetryAt = null;
+        FailureReason = null;
+        TargetMessage = null;
+    }
+
+    /// <summary>
+    /// Marks this change expired, keeping why it never landed. Requirement 9: an explicit recorded outcome, not a
+    /// silent drop.
+    /// </summary>
+    public void Expire()
+    {
+        Status = PendingPasswordChangeStatus.Expired;
+        NextRetryAt = null;
+    }
+
+    public override string ToString()
+    {
+        return $"{nameof(PendingPasswordChange)}: Metaverse Object {MetaverseObjectId} to Connected System " +
+               $"{ConnectedSystemId} ({Status})";
+    }
+}
