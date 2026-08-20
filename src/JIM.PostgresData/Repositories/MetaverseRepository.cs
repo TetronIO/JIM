@@ -82,20 +82,24 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects)
     {
-        var result = Repository.Database.MetaverseObjectTypes;
+        // Include returns a new query rather than mutating the one it is called on, so its result has to be assigned.
+        // Discarding it silently returned the object type with an empty Attributes collection to a caller that had
+        // asked for its attributes: seeding then re-added every binding it could not see, and a retry of a partial
+        // seed died on the join table's primary key (issue #1287).
+        IQueryable<MetaverseObjectType> query = Repository.Database.MetaverseObjectTypes;
         if (includeChildObjects)
-            result.Include(q => q.Attributes);
+            query = query.Include(q => q.Attributes);
 
-        return await result.SingleOrDefaultAsync(q => EF.Functions.ILike(q.Name, name));
+        return await query.SingleOrDefaultAsync(q => EF.Functions.ILike(q.Name, name));
     }
 
     public async Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects)
     {
-        var result = Repository.Database.MetaverseObjectTypes;
+        IQueryable<MetaverseObjectType> query = Repository.Database.MetaverseObjectTypes;
         if (includeChildObjects)
-            result.Include(q => q.Attributes);
+            query = query.Include(q => q.Attributes);
 
-        return await result.SingleOrDefaultAsync(q => EF.Functions.ILike(q.PluralName, pluralName));
+        return await query.SingleOrDefaultAsync(q => EF.Functions.ILike(q.PluralName, pluralName));
     }
 
     public async Task CreateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType)
