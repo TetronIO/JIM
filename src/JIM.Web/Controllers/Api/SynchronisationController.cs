@@ -4251,6 +4251,80 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Preview an Object Matching change
+    /// </summary>
+    /// <remarks>
+    /// Answers what changing a Connected System's Object Matching Rules would do before anything is saved: which
+    /// of its unjoined objects would join a different Metaverse Object, which would join instead of projecting a
+    /// new identity, which would project instead of joining, and which would match ambiguously and fail.
+    ///
+    /// This matters because none of those outcomes fails at synchronisation time. A rule matched too loosely
+    /// merges an account into the wrong identity and takes every value it contributes with it; a rule matched too
+    /// tightly projects a duplicate identity beside the right one. Both look like a successful run.
+    ///
+    /// The evaluation is the matching engine's own, run twice per object (once against the stored rules, once
+    /// against the proposal) and diffed, so a match is the engine's answer rather than this endpoint's reading of
+    /// the configuration.
+    ///
+    /// Only objects that are not already joined to a Metaverse Object are evaluated, because only they are ever
+    /// matched again. A Connected System Object already joined keeps the Metaverse Object it has, whatever this
+    /// change does.
+    ///
+    /// Omitting `mode` previews the Connected System's stored mode, and omitting `rules` previews its stored
+    /// rules, matching the update endpoints' semantics. Sending an EMPTY `rules` array is a real proposal: it
+    /// removes every rule, so nothing would ever join.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from `GET /previews/{activityId}`, drill-down rows from
+    /// `GET /previews/{activityId}/deltas`, and abandon a running preview with `DELETE /previews/{activityId}`.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The proposed Object Matching configuration.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/matching-rules/preview", Name = "StartObjectMatchingPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartObjectMatchingPreviewAsync(int connectedSystemId,
+        [FromBody] StartObjectMatchingPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var objectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
+        var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, false);
+        var proposal = request.ToProposal(connectedSystem, objectTypes, syncRules);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ObjectMatching,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started Object Matching preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
     /// Create an Object Matching Rule
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>

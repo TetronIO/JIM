@@ -100,7 +100,13 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = CausalityLane.Identity,
             // A mapping that would not evaluate leaves a Metaverse Object attribute unwritten, so it belongs beside
             // the other Metaverse-side transitions rather than in the export-side Downstream lane.
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = CausalityLane.Identity
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = CausalityLane.Identity,
+            // Every Object Matching transition decides which Metaverse Object an account belongs to, which is the
+            // Identity lane's whole subject.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = CausalityLane.Identity
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

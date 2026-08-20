@@ -1087,6 +1087,24 @@ public interface IConnectedSystemRepository
     public Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
 
     /// <summary>
+    /// The identifiers of a Connected System's live, unjoined objects of one type: the population a
+    /// synchronisation would put to Object Matching on its next run.
+    /// </summary>
+    /// <remarks>
+    /// Identifiers rather than objects, and a list rather than a stream, because the caller queries the database
+    /// per object it evaluates. Holding a result-set reader open across those queries is what Npgsql refuses (one
+    /// command per connection), so the population is read once and the objects are fetched in batches behind it.
+    /// </remarks>
+    public Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many live, unjoined objects of one type a Connected System holds. The count behind
+    /// <see cref="GetUnjoinedConnectedSystemObjectIdsOfTypeAsync"/>, for callers that need the size before
+    /// deciding whether to read the population at all.
+    /// </summary>
+    public Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
     /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
     /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
     /// </summary>

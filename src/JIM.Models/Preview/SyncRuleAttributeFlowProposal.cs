@@ -81,13 +81,20 @@ public record SyncRuleMappingProposal(
     /// <summary>
     /// This mapping as it currently stands on a Synchronisation Rule.
     /// </summary>
+    /// <remarks>
+    /// Each attribute id falls back to its navigation property's id, because the editors build an UNSAVED mapping
+    /// when an administrator adds one: the navigation is set and the foreign key stays unassigned until the rule is
+    /// saved. Reading the key alone made a mapping the editor plainly shows invisible to the proposal, so a preview
+    /// of a just-added mapping refused it as naming no target attribute and, in the same breath, reported its
+    /// attribute as no longer written (#1450). A saved mapping carries both and is unaffected.
+    /// </remarks>
     public static SyncRuleMappingProposal FromMapping(SyncRuleMapping mapping)
     {
         ArgumentNullException.ThrowIfNull(mapping);
 
         return new SyncRuleMappingProposal(
-            mapping.TargetMetaverseAttributeId,
-            mapping.TargetConnectedSystemAttributeId,
+            mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id,
+            mapping.TargetConnectedSystemAttributeId ?? mapping.TargetConnectedSystemAttribute?.Id,
             [.. mapping.Sources.OrderBy(source => source.Order).Select(SyncRuleMappingSourceProposal.FromSource)],
             mapping.InboundValueProcessing,
             mapping.CaseNormalisation,
@@ -132,8 +139,8 @@ public record SyncRuleMappingSourceProposal(
 
         return new SyncRuleMappingSourceProposal(
             source.Order,
-            source.MetaverseAttributeId,
-            source.ConnectedSystemAttributeId,
+            source.MetaverseAttributeId ?? source.MetaverseAttribute?.Id,
+            source.ConnectedSystemAttributeId ?? source.ConnectedSystemAttribute?.Id,
             source.Expression,
             source.MissingInputBehaviour);
     }
