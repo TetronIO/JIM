@@ -3,8 +3,10 @@
 
 using JIM.Application.Interfaces;
 using JIM.Data.Repositories;
+using System.Security.Cryptography;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
@@ -164,6 +166,259 @@ public class PasswordSynchronisationServer
             outcomes.Count == 0 ? "none" : LogSanitiser.Sanitise(string.Join(", ", outcomes.Select(o => o.ConnectedSystemName))));
 
         return new PasswordQueueResult { ActivityId = activity.Id, Targets = outcomes };
+    }
+
+    /// <summary>
+    /// How many queued password changes one pass will attempt against a Connected System.
+    /// <para>
+    /// A bound rather than a page size, matching the initial-password pass: a misconfigured target must not turn
+    /// one pass into an unbounded run of failing round trips. What is left over is taken by the next pass, oldest
+    /// first, so nothing starves.
+    /// </para>
+    /// </summary>
+    public const int MaximumChangesPerPass = 1000;
+
+    /// <summary>
+    /// Delivers the password changes due on a Connected System, expiring anything that has outlived its window
+    /// first.
+    /// <para>
+    /// Never throws for a delivery that did not work. Every outcome is classified and recorded against the change
+    /// it belongs to, because a pass that threw would abandon the changes it had not reached and lose the outcomes
+    /// of the ones it had.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System to deliver to, loaded with its configuration.</param>
+    /// <param name="connector">
+    /// Its Connector. One that cannot set passwords leaves the queued changes exactly as they are rather than
+    /// failing them: the capability may arrive with a Connector upgrade.
+    /// </param>
+    /// <param name="asOf">The instant the pass runs, for expiry and retry scheduling.</param>
+    /// <param name="cancellationToken">
+    /// Stops before the changes not yet reached. It cannot undo the deliveries already made, and their outcomes
+    /// are still recorded: a password that landed has landed whatever the run did next.
+    /// </param>
+    public async Task<PasswordDeliveryRunResult> DeliverDuePasswordChangesAsync(
+        ConnectedSystem connectedSystem,
+        IConnector connector,
+        DateTime asOf,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        var result = new PasswordDeliveryRunResult();
+
+        // An unconfigured or disabled system delivers nothing, and keeps everything. Requirement 2: a disabled
+        // system accumulates rather than discarding, so enabling it later has something to drain.
+        var configuration = connectedSystem.PasswordSynchronisation;
+        if (configuration is not { Enabled: true })
+            return result;
+
+        // Expiry first, so a change on its way out is not attempted, and its attempt count not inflated, on the
+        // very pass that retires it.
+        result.ExpiredCount = await _syncRepo.ExpirePasswordChangesAsync(connectedSystem.Id, asOf);
+
+        var due = await _syncRepo.GetDuePasswordChangesAsync(connectedSystem.Id, asOf, MaximumChangesPerPass);
+        if (due.Count == 0)
+            return result;
+
+        if (connector is not IConnectorPasswordManagement passwordConnector)
+        {
+            result.ConnectorCannotSetPasswords = true;
+            Log.Warning(
+                "DeliverDuePasswordChangesAsync: The Connector for Connected System {ConnectedSystemId} cannot set passwords. {Count} queued password change(s) are left outstanding.",
+                connectedSystem.Id, due.Count);
+            return result;
+        }
+
+        try
+        {
+            passwordConnector.OpenPasswordConnection(connectedSystem.SettingValues);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Reported once for the pass rather than as a failure per change: the problem belongs to the
+            // connection, and counting it against every change would inflate attempt counts that are supposed to
+            // mean "distinct attempts at this password".
+            result.CouldNotOpenPasswordConnection = true;
+            Log.Error(ex,
+                "DeliverDuePasswordChangesAsync: Could not open the password channel to Connected System {ConnectedSystemId}. {Count} queued password change(s) are left outstanding.",
+                connectedSystem.Id, due.Count);
+            return result;
+        }
+
+        var attempted = new List<PendingPasswordChange>();
+        var delivered = new List<Guid>();
+
+        try
+        {
+            foreach (var change in due)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    break;
+
+                var outcome = await DeliverOneAsync(passwordConnector, connectedSystem, change, configuration, asOf, cancellationToken);
+
+                if (outcome)
+                {
+                    delivered.Add(change.Id);
+                    result.DeliveredCount++;
+                }
+                else
+                {
+                    attempted.Add(change);
+                    if (change.Status == PendingPasswordChangeStatus.Parked)
+                        result.ParkedCount++;
+                    else
+                        result.RetryingCount++;
+                }
+            }
+        }
+        finally
+        {
+            passwordConnector.ClosePasswordConnection();
+
+            // Persisted in the finally so a cancelled pass keeps what it achieved. Re-delivering a password
+            // already set is harmless, but leaving a delivered change queued would send it again on every pass.
+            if (attempted.Count > 0)
+                await _syncRepo.RecordPasswordChangeAttemptsAsync(attempted);
+
+            if (delivered.Count > 0)
+                await _syncRepo.DeletePasswordChangesAsync(delivered);
+        }
+
+        // Synchronisation Integrity: summary statistics at the end of every batch operation.
+        Log.Information(
+            "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired.",
+            connectedSystem.Id, result.DeliveredCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Delivers one queued change, recording its outcome on the change. Returns true where the password was set
+    /// and the change should be removed from the queue.
+    /// </summary>
+    private async Task<bool> DeliverOneAsync(
+        IConnectorPasswordManagement passwordConnector,
+        ConnectedSystem connectedSystem,
+        PendingPasswordChange change,
+        ConnectedSystemPasswordSynchronisation configuration,
+        DateTime asOf,
+        CancellationToken cancellationToken)
+    {
+        // The account is resolved on every attempt rather than trusted from when the change was queued, which is
+        // what lets a change queued before provisioning deliver once the account appears, and what stops a
+        // change being sent to an account that has since been deleted and replaced.
+        var accounts = await _connectedSystemRepo().GetConnectedSystemObjectsByMetaverseObjectIdAsync(change.MetaverseObjectId);
+        var account = accounts.SingleOrDefault(a =>
+            a.ConnectedSystemId == connectedSystem.Id && a.TypeId == configuration.TargetObjectTypeId);
+
+        if (account == null)
+        {
+            // Retry rather than park: the account may simply not have been provisioned yet, and the change's own
+            // time to live is what bounds the wait (Resolved Decision 2).
+            change.RecordAttempt(PasswordSetFailureReason.TargetObjectNotFound,
+                "The identity has no account in this Connected System yet.", configuration, asOf);
+            await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
+            return false;
+        }
+
+        change.ConnectedSystemObjectId = account.Id;
+
+        PasswordSetResult setResult;
+        try
+        {
+            // The one point at which a synchronised password exists in cleartext, and only for this call.
+            var password = _passwordProtection().UnprotectPassword(change.EncryptedPassword)!;
+
+            setResult = await passwordConnector.SetPasswordAsync(account, password, new PasswordSetOptions
+            {
+                ExpiryBehaviour = change.ExpiryBehaviour,
+                // Deliberately never enabling: that belongs to provisioning. A synchronised password reaches
+                // accounts an administrator may have disabled on purpose, and re-enabling one would undo that
+                // silently, as a side effect of somebody changing their password elsewhere.
+                EnableAccount = null
+            }, cancellationToken);
+        }
+        catch (CryptographicException ex)
+        {
+            // The key ring has been rotated or lost, so this change can never be decrypted. Parked rather than
+            // retried: no number of attempts recovers a value nothing can read.
+            Log.Error(ex,
+                "DeliverDuePasswordChangesAsync: Could not decrypt a queued password for Connected System {ConnectedSystemId}. The encryption key may have been changed or lost.",
+                connectedSystem.Id);
+            change.RecordAttempt(PasswordSetFailureReason.ConfigurationFault,
+                "JIM could not decrypt this password. The encryption key may have been changed or lost.",
+                configuration, asOf);
+            change.Status = PendingPasswordChangeStatus.Parked;
+            change.NextRetryAt = null;
+            await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
+            return false;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A Connector that threw rather than classifying is treated as transient: the change is kept, and
+            // one target's fault never stops the pass reaching the others.
+            Log.Error(ex,
+                "DeliverDuePasswordChangesAsync: The Connector threw setting a password on Connected System {ConnectedSystemId}.",
+                connectedSystem.Id);
+            change.RecordAttempt(PasswordSetFailureReason.Transient, ex.Message, configuration, asOf);
+            await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
+            return false;
+        }
+
+        if (!setResult.Success)
+        {
+            change.RecordAttempt(setResult.FailureReason, setResult.ErrorMessage, configuration, asOf);
+            await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
+            return false;
+        }
+
+        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true);
+        return true;
+    }
+
+    /// <summary>
+    /// Records what one Connected System did with a queued password change, as a child of the Activity for the
+    /// change itself (requirement 23).
+    /// <para>
+    /// The child carries the outcome and the target's own words on a refusal, and never the password: the queue
+    /// row is deleted on success, so this Activity is all that survives to say the password reached this system.
+    /// </para>
+    /// </summary>
+    private async Task RecordDeliveryOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, bool success)
+    {
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.PasswordSynchronisation,
+            TargetOperationType = ActivityTargetOperationType.SetPassword,
+            // Set so the Activities list's existing per-Connected-System filter covers password events without
+            // any new filter control (requirement 24).
+            TargetContext = connectedSystem.Name,
+            ParentActivityId = change.ActivityId,
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystemObjectId = change.ConnectedSystemObjectId,
+            MetaverseObjectId = change.MetaverseObjectId,
+            Message = success
+                ? $"Password set on {connectedSystem.Name}."
+                : DescribeFailure(connectedSystem, change)
+        };
+
+        await _createActivity(activity, null);
+    }
+
+    private static string DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
+    {
+        var disposition = change.Status == PendingPasswordChangeStatus.Parked
+            ? "JIM has stopped trying; retry it once the cause is fixed"
+            : "JIM will try again";
+
+        var reason = string.IsNullOrWhiteSpace(change.TargetMessage)
+            ? change.FailureReason?.ToString() ?? "an unknown reason"
+            : change.TargetMessage;
+
+        return $"Password not set on {connectedSystem.Name}: {reason}. {disposition}.";
     }
 
     /// <summary>
