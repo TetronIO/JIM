@@ -38,6 +38,12 @@ function New-JIMConfigurationChangePreview {
           a new identity, project instead of joining, or match ambiguously and fail. Add
           -ObjectMatchingRuleMode to preview the Simple/Advanced switch. Objects already joined are never
           re-matched, so no matching change can move them, and the preview says so.
+        - -ConnectedSystemId with -SchemaObjectType previews a change to that system's schema selection:
+          how many Connected System Objects would stop being imported, which attributes would stop being
+          refreshed and on how many objects, and whose contributed Metaverse values would be withdrawn, or
+          kept, when their obsolete objects are next synchronised. Deselecting an Object Type does not
+          obsolete the objects already imported from it: they stay joined and keep contributing the values
+          they last imported, which the preview states rather than leaving to be discovered.
 
         Evaluation is asynchronous. Without -Wait this returns as soon as the proposal itself has been
         validated, carrying the ActivityId to poll with Get-JIMConfigurationChangePreview. With -Wait it
@@ -56,6 +62,17 @@ function New-JIMConfigurationChangePreview {
     .PARAMETER ConnectedSystemId
         The Connected System whose partition and container selection is being proposed. Selects the scope
         selection surface.
+
+    .PARAMETER SchemaObjectType
+        The proposed schema selection, as one hashtable per Connected System Object Type being changed.
+        Selects the schema selection surface.
+
+        Each hashtable needs objectTypeId, and then only the keys being changed: selected (bool),
+        removeContributedAttributesOnObsoletion (bool), and selectedAttributeIds (int array). Every
+        omission means "leave this as it stands", at both levels: an Object Type not named here is left
+        alone, and a key not set keeps that Type's stored value. Send the whole attribute set for a Type
+        rather than the attributes that changed; External IDs are selected implicitly and need not be
+        listed.
 
     .PARAMETER SelectedPartitionIds
         The partitions that would be managed. Omitted previews the partitions currently selected, so a
@@ -291,6 +308,21 @@ function New-JIMConfigurationChangePreview {
         project a new identity instead.
 
     .EXAMPLE
+        $types = @(@{ objectTypeId = 9; selected = $false })
+        $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 5 -SchemaObjectType $types -Wait
+        $preview.ImpactCounts | Where-Object transitionType -eq 'WouldStopBeingImported'
+
+        Previews deselecting an Object Type and reports how many of its objects would stop being imported
+        while staying joined to their Metaverse Objects, contributing values that never refresh again.
+
+    .EXAMPLE
+        $types = @(@{ objectTypeId = 9; removeContributedAttributesOnObsoletion = $false })
+        New-JIMConfigurationChangePreview -ConnectedSystemId 5 -SchemaObjectType $types -Wait
+
+        Previews turning obsoletion recall off, over the objects already obsolete and still joined, which
+        are the only ones whose fate the setting changes now.
+
+    .EXAMPLE
         $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -RuleState Disabled -Wait
         $preview.ImpactCounts
 
@@ -311,6 +343,7 @@ function New-JIMConfigurationChangePreview {
         Set-JIMConnectedSystemContainer
         Set-JIMSyncRule
         Set-JIMMatchingRule
+        Set-JIMConnectedSystemObjectType
     #>
     [CmdletBinding(DefaultParameterSetName = 'MetaverseObjectTypeDeletionSettings')]
     [OutputType([PSCustomObject])]
@@ -334,6 +367,7 @@ function New-JIMConfigurationChangePreview {
 
         [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemScopeSelection', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ObjectMatching', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemSchema', ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
 
         [Parameter(ParameterSetName = 'ConnectedSystemScopeSelection')]
@@ -388,6 +422,9 @@ function New-JIMConfigurationChangePreview {
 
         [Parameter(ParameterSetName = 'SyncRuleBehaviour')]
         [bool]$EnforceState,
+
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemSchema')]
+        [hashtable[]]$SchemaObjectType,
 
         [Parameter()]
         [switch]$FullDataSet,
@@ -483,6 +520,15 @@ function New-JIMConfigurationChangePreview {
             }
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'ConnectedSystemSchema') {
+            # Only the Object Types the caller names are sent, and within each only the keys they set. Every
+            # omission means "leave this as it stands", because every type default here is the destructive answer:
+            # an absent 'selected' read as false would propose taking a whole Object Type out of management on a
+            # request that meant to change one attribute. Wrapped in @() so a single Object Type serialises as a
+            # JSON array rather than a bare object.
+            $body.objectTypes = @($SchemaObjectType)
+        }
+
         if ($PSCmdlet.ParameterSetName -eq 'ObjectMatching') {
             # Always sent, including as an empty array, for the same reason as the mappings above: omitting the
             # field previews the Connected System's stored rules, while an empty array proposes removing every one
@@ -524,6 +570,10 @@ function New-JIMConfigurationChangePreview {
         elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleBehaviour') {
             $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/behaviour/preview"
             $subject = "Synchronisation Rule $SyncRuleId"
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'ConnectedSystemSchema') {
+            $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/schema-selection/preview"
+            $subject = "Connected System $ConnectedSystemId"
         }
         else {
             $endpoint = "/api/v1/metaverse/object-types/$MetaverseObjectTypeId/deletion-settings/preview"
