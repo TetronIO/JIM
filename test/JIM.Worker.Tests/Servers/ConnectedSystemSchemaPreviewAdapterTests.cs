@@ -169,6 +169,26 @@ public class ConnectedSystemSchemaPreviewAdapterTests
         Assert.That(await DeltasAsync(Stored()), Is.Empty);
     }
 
+    [Test]
+    public async Task EstimateCost_EachLeverOnItsOwn_CostsTheObjectTypesPopulationAsync()
+    {
+        // Every Object Type the change walk yields differs in at least one of the three levers, because that is
+        // what its comparison is over. Pinned per lever so the cost estimate cannot come to depend on a guard that
+        // re-asks the question the walk already answered, and then quietly stop counting a lever nobody listed.
+        var levers = new (string Name, Func<ConnectedSystemObjectTypeSelectionProposal, ConnectedSystemObjectTypeSelectionProposal> Edit)[]
+        {
+            ("the Object Type's own selection", type => type with { Selected = false }),
+            ("the obsoletion recall toggle", type => type with { RemoveContributedAttributesOnObsoletion = false }),
+            ("an attribute leaving the selection", type => type with { SelectedAttributeIds = [AnchorAttributeId] })
+        };
+
+        foreach (var (name, edit) in levers)
+        {
+            var estimate = await _adapter.EstimateCostAsync(Context(WithUserType(edit)));
+            Assert.That(estimate.AffectedObjects, Is.EqualTo(2), $"moving {name} must cost the Object Type's population");
+        }
+    }
+
     #endregion
 
     #region object type selection

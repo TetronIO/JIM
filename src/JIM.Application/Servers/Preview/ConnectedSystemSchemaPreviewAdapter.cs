@@ -104,13 +104,13 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
             return new PreviewCostEstimate(0);
 
         // Set-based, and deliberately generous: the cost of a schema change is bounded by the objects of the types
-        // it touches, whichever of the three levers moved on each.
+        // it touches, whichever of the three levers moved on each. Every yielded change has moved at least one of
+        // them by construction, because that is what the walk's comparison is over, so there is nothing to filter.
         var affected = 0;
         foreach (var change in Changes(stored, proposal))
         {
-            if (change.SelectionChanged || change.AttributesChanged || change.ObsoletionChanged)
-                affected += await _application.ConnectedSystems
-                    .GetConnectedSystemObjectCountOfTypeAsync(ConnectedSystemId(context), change.ObjectTypeId);
+            affected += await _application.ConnectedSystems
+                .GetConnectedSystemObjectCountOfTypeAsync(ConnectedSystemId(context), change.ObjectTypeId);
         }
 
         return new PreviewCostEstimate(affected);
