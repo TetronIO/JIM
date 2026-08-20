@@ -210,6 +210,34 @@
                                    data-testid="jim-mvo-set-password">Set Password</MudButton>
                     </MudStack>
                 </MudPaper>
+
+                @* A separate action rather than an option on the one above, because they answer different
+                   questions. Set Password fixes named accounts now; this one says the person's password has
+                   changed and every configured system should end up holding it. *@
+                <MudPaper Class="pa-4 mt-4" Outlined="true">
+                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-sync-password">
+                        <MudIcon Icon="@Icons.Material.Filled.SyncLock" Color="Color.Primary" Class="mt-1" />
+                        <MudStack Spacing="1" Class="flex-grow-1">
+                            <MudText Typo="Typo.h6">Synchronise Password</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Records that this person's password has changed and delivers it to every Connected
+                                System configured to receive synchronised passwords, retrying if one is
+                                unavailable. Use this when they have changed their own password somewhere; use Set
+                                Password above to reset accounts you choose, straight away.
+                            </MudText>
+                            @if (_passwordSynchronisationSystemCount == 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="jim-mvo-action-sync-password-unavailable">
+                                    Unavailable: no Connected System is enabled for Password Synchronisation.
+                                </MudText>
+                            }
+                        </MudStack>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                                   Disabled="@(_passwordSynchronisationSystemCount == 0)"
+                                   OnClick="OpenSynchronisePasswordDialogAsync"
+                                   data-testid="jim-mvo-sync-password">Synchronise Password</MudButton>
+                    </MudStack>
+                </MudPaper>
             </MudTabPanel>
         </AuthorizeView>
         </ChildContent>
@@ -226,6 +254,38 @@
     // the page so the action is either offered or not, rather than appearing and then turning out to be
     // unavailable once the dialog is open.
     private int _passwordCapableAccountCount;
+
+    // How many Connected Systems take synchronised passwords at all. Read with the page so the Synchronise
+    // Password action is offered or not, rather than appearing and then reaching nothing once somebody has
+    // typed a password into it.
+    private int _passwordSynchronisationSystemCount;
+
+    /// <summary>
+    /// Opens the synchronise-password dialog (#1119).
+    /// <para>
+    /// Deliberately has no account picker, unlike the set-password dialog beside it. Which Connected Systems
+    /// receive a synchronised password is their own configuration; offering a selection here would imply an
+    /// administrator can override it for one change, and they cannot.
+    /// </para>
+    /// </summary>
+    private async Task OpenSynchronisePasswordDialogAsync()
+    {
+        if (MetaverseObject == null)
+            return;
+
+        var parameters = new DialogParameters<SynchronisePasswordDialog>
+        {
+            { x => x.MetaverseObjectId, MetaverseObject.Id },
+            { x => x.DisplayName, _displayName },
+            { x => x.TargetSystemCount, _passwordSynchronisationSystemCount }
+        };
+
+        var title = string.IsNullOrWhiteSpace(_displayName)
+            ? "Synchronise Password"
+            : $"Synchronise Password: {_displayName}";
+        await DialogService.ShowAsync<SynchronisePasswordDialog>(title, parameters,
+            new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+    }
 
     /// <summary>
     /// Opens the set-password dialog over this person's accounts (issue #1172).
@@ -364,6 +424,8 @@
 
         _passwordCapableAccountCount = (await jim.ConnectedSystems.GetAccountsForPasswordSetAsync(MetaverseObject.Id))
             .Count(account => account.ConnectorCanSetPasswords);
+
+        _passwordSynchronisationSystemCount = await jim.PasswordSynchronisation.GetEnabledTargetCountAsync();
 
         if (detailResult.EarliestChangeInitiator != null)
         {

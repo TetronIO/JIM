@@ -3,6 +3,8 @@
 
 using Asp.Versioning;
 using JIM.Web.Extensions.Api;
+using JIM.Web.Middleware.Api;
+using JIM.Models.Staging;
 using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Application.Exceptions;
@@ -1384,6 +1386,81 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         };
 
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Synchronise a password for an identity
+    /// </summary>
+    /// <remarks>
+    /// Records that this person's password has changed, and queues it for delivery to every Connected System
+    /// that is enabled for Password Synchronisation and in which they have an account.
+    ///
+    /// This is not the same operation as setting a password on chosen accounts
+    /// (`POST /synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password`), which
+    /// resets one named account immediately and reports whether the target accepted it. This one returns as soon
+    /// as the change is recorded: delivery runs on its own clock and retries, so a directory being unavailable
+    /// delays the password rather than losing it, and the caller is not held while every target is written to.
+    ///
+    /// The password is encrypted before it is stored and is never logged, never returned, and never recorded on
+    /// an Activity. A newer change for the same person and system replaces an older undelivered one, so only the
+    /// most recent password is ever sent.
+    ///
+    /// A change that reaches no system is still recorded and says so, rather than appearing to have propagated.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object whose password changed.</param>
+    /// <param name="request">The password, and how it should behave once each target holds it.</param>
+    /// <response code="200">The change was recorded. The body names the Connected Systems it was queued for.</response>
+    /// <response code="400">No password was supplied.</response>
+    /// <response code="403">The transport is not one JIM will carry a password over.</response>
+    /// <response code="404">No such Metaverse Object.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("objects/{id:guid}/password", Name = "SynchroniseMetaverseObjectPassword")]
+    [RequireSecureTransport]
+    [ProducesResponseType(typeof(SynchroniseMetaverseObjectPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SynchroniseMetaverseObjectPasswordAsync(Guid id, [FromBody] SynchroniseMetaverseObjectPasswordRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // Deliberately logs the identity rather than anything about the password. There is nothing about a
+        // password value that belongs in a log line, including its length.
+        _logger.LogInformation("Synchronising a password change for Metaverse Object {MetaverseObjectId}", id);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for a Metaverse Object password synchronisation");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(ApiErrorResponse.BadRequest("A password is required."));
+
+        var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(id);
+        if (metaverseObject == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object {id} was not found."));
+
+        // Defaults to the target's own policy rather than to a forced change at next sign-in. This password came
+        // from the person whose account it is; demanding they choose another one immediately would defeat the
+        // point of synchronising the one they just set. The other operation, where an administrator sets a
+        // password on somebody's behalf, defaults the other way for the same reason read in reverse.
+        var expiryBehaviour = request.ExpiryBehaviour ?? PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy;
+
+        // Attribution follows whoever authenticated: an administrator at a screen, or the API key an automation
+        // presented. Automation is the expected caller here, since a synchronised password change usually starts
+        // in a self-service portal or a service desk tool rather than in JIM.
+        var displayName = metaverseObject.CachedDisplayName ?? id.ToString();
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.PasswordSynchronisation.QueuePasswordChangeAsync(
+                id, displayName, request.Password, expiryBehaviour, apiKey, HttpContext.RequestAborted)
+            : await _application.PasswordSynchronisation.QueuePasswordChangeAsync(
+                id, displayName, request.Password, expiryBehaviour, initiatedBy, HttpContext.RequestAborted);
+
+        return Ok(SynchroniseMetaverseObjectPasswordResponse.FromResult(result));
     }
 
     /// <summary>
