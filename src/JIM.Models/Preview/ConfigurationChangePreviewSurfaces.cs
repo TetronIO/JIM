@@ -25,6 +25,7 @@ public static class ConfigurationChangePreviewSurfaces
         ConfigurationChangePreviewSurface.SynchronisationRule => ActivityTargetType.SynchronisationRule,
         ConfigurationChangePreviewSurface.SynchronisationRuleScope => ActivityTargetType.SynchronisationRule,
         ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow => ActivityTargetType.SynchronisationRule,
+        ConfigurationChangePreviewSurface.SynchronisationRuleBehaviour => ActivityTargetType.SynchronisationRule,
         ConfigurationChangePreviewSurface.ConnectedSystem => ActivityTargetType.ConnectedSystem,
         ConfigurationChangePreviewSurface.MetaverseObjectType => ActivityTargetType.MetaverseObjectType,
         ConfigurationChangePreviewSurface.MetaverseAttribute => ActivityTargetType.MetaverseAttribute,

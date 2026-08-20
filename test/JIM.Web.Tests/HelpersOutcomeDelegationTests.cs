@@ -52,6 +52,9 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject, "Would Join Instead Of Project")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin, "Would Project Instead Of Join")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously, "Would Match Ambiguously")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting, "Would Stop Projecting")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, "Would Stop Provisioning")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift, "Would Stop Correcting Drift")]
     public void GetOutcomeTypeDisplayName_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
     {
@@ -116,6 +119,9 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject, Color.Success)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin, Color.Error)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift, Color.Warning)]
     public void GetOutcomeTypeMudBlazorColor_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, Color expected)
     {
@@ -161,7 +167,10 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] = Icons.Material.Filled.SwapHoriz,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] = Icons.Material.Filled.Link,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] = Icons.Material.Filled.CallSplit,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = Icons.Material.Filled.QuestionMark
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = Icons.Material.Filled.QuestionMark,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] = Icons.Material.Filled.PersonOff,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] = Icons.Material.Filled.NoAccounts,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = Icons.Material.Filled.SyncDisabled
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
