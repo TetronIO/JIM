@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.PostgresData;
@@ -228,16 +228,19 @@ public class MigrationDesignerChainTests
 
         bool IsExplained(string key, ShapeEntry entry) => explained.Contains(key) || wholeTables.Contains(entry.Table);
 
-        foreach (var key in before.Keys.Except(after.Keys).Order(StringComparer.Ordinal))
-            if (!IsExplained(key, before[key]))
-                yield return $"{key} was removed";
+        foreach (var key in before.Keys.Except(after.Keys)
+                     .Where(key => !IsExplained(key, before[key]))
+                     .Order(StringComparer.Ordinal))
+            yield return $"{key} was removed";
 
-        foreach (var key in after.Keys.Except(before.Keys).Order(StringComparer.Ordinal))
-            if (!IsExplained(key, after[key]))
-                yield return $"{key} was added";
+        foreach (var key in after.Keys.Except(before.Keys)
+                     .Where(key => !IsExplained(key, after[key]))
+                     .Order(StringComparer.Ordinal))
+            yield return $"{key} was added";
 
-        foreach (var key in before.Keys.Intersect(after.Keys).Order(StringComparer.Ordinal))
-            if (before[key].Value != after[key].Value && !IsExplained(key, after[key]))
-                yield return $"{key} changed from '{before[key].Value}' to '{after[key].Value}'";
+        foreach (var key in before.Keys.Intersect(after.Keys)
+                     .Where(key => before[key].Value != after[key].Value && !IsExplained(key, after[key]))
+                     .Order(StringComparer.Ordinal))
+            yield return $"{key} changed from '{before[key].Value}' to '{after[key].Value}'";
     }
 }
