@@ -759,6 +759,18 @@ public class ActivityRepository : IActivityRepository
             .FirstOrDefaultAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<bool> HasAnyRunProfileExecutionAsync()
+    {
+        // TargetOperationType must be Execute: creating, editing and deleting a Run Profile all record
+        // ConnectedSystemRunProfile-typed Activities too, and without this filter merely defining a Run Profile
+        // would read as having run one. Status is deliberately unfiltered; a run that is in progress or that
+        // failed was still run, which is all this question asks.
+        return await Repository.Database.Activities
+            .AnyAsync(a => a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                           && a.TargetOperationType == ActivityTargetOperationType.Execute);
+    }
+
     private IQueryable<Activity> ConfigurationChangeQuery(ActivityTargetType targetType, int targetObjectId)
     {
         // Membership of an object's configuration history is determined by "carries a captured snapshot version AND
