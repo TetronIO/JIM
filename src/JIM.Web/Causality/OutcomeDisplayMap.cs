@@ -125,7 +125,35 @@ public static class OutcomeDisplayMap
                 "have their scope-exit action changed"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] =
             new OutcomeDisplay("Attribute Flow does not evaluate", "Would Fail Attribute Flow", CausalityTone.Error, Icons.Material.Filled.RuleFolder,
-                "have an Attribute Flow that would not evaluate")
+                "have an Attribute Flow that would not evaluate"),
+        // The Object Matching preview's fates (#1457). Error tone on joining a different Metaverse Object and on
+        // projecting instead of joining, because both are identity corruption that nothing reports at run time:
+        // one merges an account into the wrong identity, the other splits one identity into two. Ambiguity is a
+        // Warning because the next synchronisation refuses the object loudly rather than joining it wrongly.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] =
+            new OutcomeDisplay("Joins a different Metaverse Object", "Would Join Different Metaverse Object", CausalityTone.Error, Icons.Material.Filled.SwapHoriz,
+                "join a different Metaverse Object"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] =
+            new OutcomeDisplay("Joins instead of projecting", "Would Join Instead Of Project", CausalityTone.Success, Icons.Material.Filled.Link,
+                "join an existing Metaverse Object instead of projecting a new one"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] =
+            new OutcomeDisplay("Projects instead of joining", "Would Project Instead Of Join", CausalityTone.Error, Icons.Material.Filled.CallSplit,
+                "project a new Metaverse Object instead of joining an existing one"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] =
+            new OutcomeDisplay("Matches more than one Metaverse Object", "Would Match Ambiguously", CausalityTone.Warning, Icons.Material.Filled.QuestionMark,
+                "match more than one Metaverse Object"),
+        // The behaviour-toggle preview's fates (#1462). Warning rather than Error on all three: nothing existing
+        // is destroyed by any of them, and what they cost is an identity, an account or a correction that never
+        // arrives, which is a different kind of harm from a deletion.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] =
+            new OutcomeDisplay("No longer creates an identity", "Would Stop Projecting", CausalityTone.Warning, Icons.Material.Filled.PersonOff,
+                "no longer have a Metaverse Object created for them"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] =
+            new OutcomeDisplay("No longer creates an account", "Would Stop Provisioning", CausalityTone.Warning, Icons.Material.Filled.NoAccounts,
+                "no longer have an account created for them"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] =
+            new OutcomeDisplay("Free to drift from JIM", "Would Stop Correcting Drift", CausalityTone.Warning, Icons.Material.Filled.SyncDisabled,
+                "be free to drift from what JIM holds")
     };
 
     /// <summary>

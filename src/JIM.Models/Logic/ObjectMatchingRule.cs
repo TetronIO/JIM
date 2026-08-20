@@ -112,32 +112,47 @@ public class ObjectMatchingRule : IAuditable
     /// <summary>
     /// Validates that the rule is correctly configured.
     /// </summary>
-    public bool IsValid()
+    public bool IsValid() => DescribeInvalidity() == null;
+
+    /// <summary>
+    /// Why this rule could never match anything, in the terms an administrator would use, or null when it is
+    /// workable.
+    /// </summary>
+    /// <remarks>
+    /// The reason rather than a bare bool because the failures here are silent at synchronisation time: the
+    /// matching engine skips a rule it cannot evaluate and moves to the next one, so a Connected System whose only
+    /// rule is malformed matches nothing and projects a duplicate identity for every account that should have
+    /// joined (#1458). Whatever refuses such a rule has to be able to say which field is at fault.
+    /// </remarks>
+    public string? DescribeInvalidity()
     {
         // Must belong to exactly one parent (SyncRule XOR ConnectedSystemObjectType)
         var hasSyncRule = SyncRuleId.HasValue || SyncRule != null;
         var hasObjectType = ConnectedSystemObjectTypeId.HasValue || ConnectedSystemObjectType != null;
 
-        if (hasSyncRule == hasObjectType)
-            return false; // Must have exactly one, not both or neither
+        if (hasSyncRule && hasObjectType)
+            return "An Object Matching Rule belongs either to a Connected System Object Type (Simple mode) or to a Synchronisation Rule (Advanced mode), never to both.";
+
+        if (!hasSyncRule && !hasObjectType)
+            return "An Object Matching Rule must belong to a Connected System Object Type (Simple mode) or to a Synchronisation Rule (Advanced mode).";
 
         // Simple mode rules must have MetaverseObjectTypeId set (no Synchronisation Rule to provide MVO type)
         if (hasObjectType && MetaverseObjectTypeId == null && MetaverseObjectType == null)
-            return false;
+            return "A Simple mode Object Matching Rule must name the Metaverse Object Type it searches; without one it has nowhere to look and matches nothing.";
 
         // Advanced mode rules must NOT have MetaverseObjectTypeId (Synchronisation Rule provides MVO type)
         if (hasSyncRule && (MetaverseObjectTypeId != null || MetaverseObjectType != null))
-            return false;
+            return "An Advanced mode Object Matching Rule takes the Metaverse Object Type from the Synchronisation Rule that owns it, so it must not name one of its own.";
 
         // Must have at least one source
         if (Sources.Count == 0)
-            return false;
+            return "An Object Matching Rule must have a source attribute, or it has nothing to match on.";
 
         // Must have a target attribute
         if (TargetMetaverseAttributeId == null && TargetMetaverseAttribute == null)
-            return false;
+            return "An Object Matching Rule must name the Metaverse Attribute its source values are compared against.";
 
-        return true;
+        return null;
     }
 
     /// <summary>

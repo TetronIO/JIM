@@ -2806,7 +2806,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Repository.Database.ConnectedSystemObjects
             .AsNoTracking()
             .Include(cso => cso.Type)
+            // The attribute ENTITY behind each value, not just the value (#1450). ConnectedSystemObject.Name ranks
+            // candidate naming attributes by the attribute's own name, so without this every candidate is null and
+            // the object falls through to its External ID: for a directory that is a GUID, so a Configuration
+            // Change Preview's drill-down rendered a column of them for the objects an administrator opened it to
+            // recognise. The sibling delta query above already includes it; this one was written without.
             .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                           cso.TypeId == connectedSystemObjectTypeId)
             .OrderBy(cso => cso.Id)
@@ -2820,6 +2826,33 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                           cso.TypeId == connectedSystemObjectTypeId)
             .CountAsync();
     }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await UnjoinedOfType(connectedSystemId, connectedSystemObjectTypeId)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await UnjoinedOfType(connectedSystemId, connectedSystemObjectTypeId).CountAsync();
+    }
+
+    /// <summary>
+    /// The live, unjoined objects of one type: what a synchronisation would put to Object Matching. Obsolete
+    /// objects are excluded because a synchronisation never reaches the join step for them.
+    /// </summary>
+    private IQueryable<ConnectedSystemObject> UnjoinedOfType(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
 
     /// <inheritdoc />
     public async Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId)

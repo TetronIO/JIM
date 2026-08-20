@@ -127,6 +127,72 @@ Object matching can be configured at two levels:
 - **Simple mode**<br /> Configured at the Connected System level; the matching rules are shared across all Synchronisation Rules for that system. Easier to manage when matching is uniform.
 - **Advanced mode**<br /> Configured per Synchronisation Rule, so each rule can match independently. Use this when different Synchronisation Rules need different matching strategies against the same Connected System.
 
+A Simple mode rule also names the **Metaverse Object Type** it searches. It has to: with no Synchronisation Rule
+behind it, nothing else says where to look, and a rule that does not say is skipped during synchronisation. An
+Advanced mode rule does not name one, because the Synchronisation Rule that owns it already does.
+
+JIM refuses to save a rule that could never match, naming what is missing. If any rule already stored has that
+shape, the Matching tab says so and names it, so it can be removed and recreated.
+
+### Previewing a behaviour change
+
+The five behaviour toggles are the settings whose consequences are hardest to picture, because none of them names a
+population. Disabling a rule reads like pausing it and is closer to withdrawing every value it owns. Turning
+**Provision To Connected System** on reads like granting a capability and is account creation at scale. Turning
+**Enforce State** off reads like relaxing a constraint and is a standing decision to let a target system diverge.
+
+**Preview Behaviour Impact**, beside the other previews on the rule's editor, answers what your edited toggles
+would do without saving them:
+
+| Transition | What it means |
+|---|---|
+| No longer creates an identity | Objects that would have had a Metaverse Object projected for them and now would not. They stay in the connector space, unmanaged. |
+| No longer creates an account | Metaverse Objects that would have had an account created in the target system and now would not. Nothing existing is destroyed, which is why it goes unnoticed. |
+| Free to drift from JIM | Objects whose divergence from what JIM holds would no longer be corrected. |
+| Identity created / Provisioned / Drift corrected | The inverses, for a toggle being turned on. |
+
+**Direction cannot be previewed, and cannot be changed.** A saved rule's Attribute Flow mappings and Object
+Matching Rules are written for the direction it has: an import rule's mappings write Metaverse Attributes and its
+matching rules search the Metaverse, so flipped to Export every one of them would address the wrong side. The
+preview refuses with a blocking finding rather than answering about a configuration that cannot work. Create a rule
+in the direction you need instead.
+
+Toggles that do nothing in the rule's direction are called out rather than counted as zero, because "nothing is
+affected" and "this setting does not apply here" are different statements and only one of them explains an empty
+result. **Enforce State** and **Provision To Connected System** apply to Export rules; **Project To Metaverse**
+applies to Import rules.
+
+Automation gets the same evaluation: `New-JIMConfigurationChangePreview -SyncRuleId <id> -RuleState Disabled`, or
+`POST` to the rule's `behaviour/preview` endpoint. See
+[Configuration Change Preview](configuration-changes.md).
+
+### Previewing an Object Matching change
+
+Matching mistakes do not fail. A rule matched too loosely joins an account to the wrong identity, and everything it
+contributes goes with it; a rule matched too tightly projects a second identity beside the right one. Both look like
+a successful synchronisation, and both are found later by a person.
+
+The Matching tab therefore offers **Preview Impact** beside **Add Matching Rule**, and again on the Simple/Advanced
+switch. It answers what the proposed matching would do, without saving it.
+
+The preview reports:
+
+| Transition | What it means |
+|---|---|
+| Joins a different Metaverse Object | The object joins one identity under the rules as they stand and would join a different one. The most dangerous outcome a matching change can produce. |
+| Joins instead of projecting | The object matches nothing today, so the next synchronisation would create a new identity for it, and under the proposal it would join an existing one. Usually what a widened rule is for. |
+| Projects instead of joining | The inverse, and a duplicate-identity risk: the object matches today and would match nothing, so a second identity would be created beside the one it should have joined. |
+| Matches more than one Metaverse Object | The proposal is ambiguous for this object, so its next synchronisation refuses it rather than joining it to anything. |
+
+One thing decides how to read every one of those counts: **Object Matching Rules are evaluated only for objects that
+are not already joined**. An account with a Metaverse Object keeps it, whatever you change here, so the impact covers
+the unjoined population alone. The preview says so before it says anything else.
+
+Automation gets the same evaluation, over the whole matching configuration rather than one rule at a time:
+`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -MatchingRule <rules>`, or `POST` to the Connected
+System's `matching-rules/preview` endpoint. Add `-ObjectMatchingRuleMode` to preview the Simple/Advanced switch. See
+[Configuration Change Preview](configuration-changes.md).
+
 ## Projection and provisioning
 
 These determine what happens when no match is found.

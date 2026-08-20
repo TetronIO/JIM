@@ -177,7 +177,63 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// be indistinguishable from the ones the edit does not touch. Only failures the proposal introduces are
     /// counted; one the stored configuration already has is not this change's doing.
     /// </summary>
-    WouldFailAttributeFlow
+    WouldFailAttributeFlow,
+
+    /// <summary>
+    /// Preview only (#1457): the Connected System Object joins to one Metaverse Object under the stored Object
+    /// Matching Rules and would join to a different one under the proposal. The most dangerous transition a
+    /// matching change can produce, because nothing about it fails: the account simply becomes part of the wrong
+    /// identity, and every attribute it contributes goes with it. The old and new values name the two Metaverse
+    /// Objects.
+    /// </summary>
+    WouldJoinDifferentMetaverseObject,
+
+    /// <summary>
+    /// Preview only (#1457): the Connected System Object matches nothing today, so its next synchronisation would
+    /// project a new Metaverse Object for it, and under the proposal it would join an existing one instead. The
+    /// benign direction of a matching change, and the one an administrator widening a rule is usually aiming for.
+    /// </summary>
+    WouldJoinInsteadOfProject,
+
+    /// <summary>
+    /// Preview only (#1457): the inverse, and a duplicate-identity risk. The Connected System Object matches a
+    /// Metaverse Object today and would match nothing under the proposal, so its next synchronisation would project
+    /// a second Metaverse Object beside the one it should have joined.
+    /// </summary>
+    WouldProjectInsteadOfJoin,
+
+    /// <summary>
+    /// Preview only (#1457): the proposed Object Matching Rules match more than one Metaverse Object for this
+    /// object, so its next synchronisation fails it with an ambiguous match rather than joining it to anything. Its
+    /// own transition rather than a validation finding, because ambiguity is a property of the data and not of the
+    /// rule: a rule that is unique across every object but two is invisible until those two are counted.
+    /// </summary>
+    WouldMatchAmbiguously,
+
+    /// <summary>
+    /// Preview only (#1462): the object would have had a new Metaverse Object projected for it on the next
+    /// synchronisation, and under the proposal it would not. It stays in the connector space unmanaged, which is
+    /// what turning Project To Metaverse off, or disabling the rule that does the projecting, actually means.
+    ///
+    /// Its own transition rather than an absent delta because the objects concerned are the ones an administrator
+    /// was expecting identities for; reported as no change they would be indistinguishable from the objects the
+    /// edit does not touch.
+    /// </summary>
+    WouldStopProjecting,
+
+    /// <summary>
+    /// Preview only (#1462): the target-system inverse. The Metaverse Object would have had an object provisioned
+    /// for it in the target Connected System and under the proposal would not, so the account an administrator was
+    /// expecting is never created. Nothing existing is destroyed, which is exactly why it goes unnoticed.
+    /// </summary>
+    WouldStopProvisioning,
+
+    /// <summary>
+    /// Preview only (#1462): the object's divergence from what JIM holds would no longer be corrected, because the
+    /// export rule that stands over it would stop enforcing state. The count of objects free to drift from the
+    /// moment the change is saved.
+    /// </summary>
+    WouldStopCorrectingDrift
 }
 
 /// <summary>

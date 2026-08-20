@@ -8,6 +8,7 @@ using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Security;
@@ -223,12 +224,15 @@ public class ExampleDataServer
         return await Application.Repository.ExampleData.GetTemplateHeaderAsync(id);
     }
 
-    // Example Data Templates have no user-facing CRUD surface yet (the REST controller mutates only Example Data Sets),
-    // so these mutators are attributed via the initiator triad and used by seeding today (System). The triad lets a
-    // future template-editing UI/API arrive without a signature change; each mutator records a versioned configuration
-    // snapshot like every other configuration object.
+    // Example Data Templates are administered through the REST API and PowerShell (#894) as well as created by seeding
+    // (System), so these mutators are attributed via the initiator triad and each records a versioned configuration
+    // snapshot like every other configuration object. Create and full update validate the template and enforce name
+    // uniqueness BEFORE creating the Activity or persisting anything, so an invalid request records nothing.
     public async Task CreateTemplateAsync(ExampleDataTemplate template, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
     {
+        template.Validate();
+        await EnsureTemplateNameIsUniqueAsync(template);
+
         var activity = new Activity
         {
             TargetName = template.Name,
@@ -243,8 +247,32 @@ public class ExampleDataServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateTemplateAsync(ExampleDataTemplate template, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
+    /// <summary>
+    /// Updates a Data Generation Template, recording an Update Activity and a versioned configuration snapshot.
+    /// </summary>
+    /// <param name="replaceObjectTypes">
+    /// When true (the default), the incoming graph replaces the persisted Object Types and everything below them, and
+    /// is fully validated first. When false, only the template's own fields are written (the rename case): the
+    /// persisted graph is left alone and full graph validation is skipped, though a name is still required.
+    /// </param>
+    /// <exception cref="ExampleDataTemplateException">The template is not valid.</exception>
+    /// <exception cref="InvalidOperationException">Another template already holds this template's name.</exception>
+    public async Task UpdateTemplateAsync(ExampleDataTemplate template, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, bool replaceObjectTypes = true)
     {
+        if (replaceObjectTypes)
+        {
+            // the incoming graph replaces the persisted one, so it must be valid in its own right.
+            template.Validate();
+        }
+        else if (string.IsNullOrEmpty(template.Name))
+        {
+            // a scalar-only rename leaves the persisted (already valid) graph untouched, so full graph
+            // validation is skipped; the name is still mandatory.
+            throw new ExampleDataTemplateException($"Null or empty {nameof(template.Name)}");
+        }
+
+        await EnsureTemplateNameIsUniqueAsync(template);
+
         var activity = new Activity
         {
             TargetName = template.Name,
@@ -253,7 +281,7 @@ public class ExampleDataServer
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         AuditHelper.SetUpdated(template, initiatorType, initiatorId, initiatorName);
-        await Application.Repository.ExampleData.UpdateTemplateAsync(template);
+        await Application.Repository.ExampleData.UpdateTemplateAsync(template, replaceObjectTypes);
         await CaptureExampleDataTemplateConfigurationChangeAsync(activity, template.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -274,6 +302,19 @@ public class ExampleDataServer
         await CaptureExampleDataTemplateDeletionAsync(activity, template, changeReason);
         await Application.Repository.ExampleData.DeleteTemplateAsync(templateId);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Throws when another Data Generation Template (a different id) already holds the incoming template's name.
+    /// Template names are the human-readable identifier across the portal, REST API and PowerShell, so they must be
+    /// unique; the REST layer maps this to a 409 Conflict.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">A different template already has this name.</exception>
+    private async Task EnsureTemplateNameIsUniqueAsync(ExampleDataTemplate template)
+    {
+        var existingTemplate = await Application.Repository.ExampleData.GetTemplateAsync(template.Name);
+        if (existingTemplate != null && existingTemplate.Id != template.Id)
+            throw new InvalidOperationException($"A Data Generation Template named '{template.Name}' already exists.");
     }
 
     private async Task CaptureExampleDataTemplateConfigurationChangeAsync(Activity activity, int templateId, string? changeReason)

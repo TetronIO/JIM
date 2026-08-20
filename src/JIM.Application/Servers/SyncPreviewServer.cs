@@ -10,6 +10,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
+using JIM.Models.Preview;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
@@ -115,12 +116,21 @@ public class SyncPreviewServer
     /// <param name="cancellationToken">Honoured between objects; a cancelled preview stops rather than completing.</param>
     /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
     /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    /// <param name="proposedRuleSet">
+    /// A proposal about the rule SET rather than about one rule's contents: a rule that would start being
+    /// evaluated, or stop. Takes precedence over <paramref name="proposedSyncRule"/>, which is the substitution
+    /// case of the same idea. Needed because substitution alone cannot express the Enabled toggle (#1462): a
+    /// disabled rule is not in the loaded set for a substitution to find, and a disabled stand-in substituted into
+    /// it stays in the list, since nothing downstream of the load re-checks Enabled.
+    /// </param>
     public async Task<Dictionary<Guid, SyncPreviewResult>> PreviewSyncForMvosAsync(
         IReadOnlyCollection<Guid> metaverseObjectIds,
         SyncRule? proposedSyncRule = null,
         CancellationToken cancellationToken = default,
-        Func<ISyncRepositoryScope>? repositoryFactory = null)
+        Func<ISyncRepositoryScope>? repositoryFactory = null,
+        ProposedSyncRuleSet? proposedRuleSet = null)
     {
+        var proposal = Proposal(proposedSyncRule, proposedRuleSet);
         ArgumentNullException.ThrowIfNull(metaverseObjectIds);
 
         var results = new Dictionary<Guid, SyncPreviewResult>();
@@ -133,7 +143,7 @@ public class SyncPreviewServer
         await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
 
         var cache = await previewServer.BuildExportEvaluationCacheAsync(
-            await LoadRulesForCacheAsync(guardedRepository, proposedSyncRule));
+            await LoadRulesForCacheAsync(guardedRepository, proposal));
         var systemNames = BuildConnectedSystemNameLookup(cache);
 
         var mvos = await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync([.. metaverseObjectIds]);
@@ -154,7 +164,7 @@ public class SyncPreviewServer
         }
 
         Log.Debug("PreviewSyncForMvosAsync: Previewed {Count} Metaverse Object(s){Proposed}.",
-            results.Count, proposedSyncRule == null ? string.Empty : " against a proposed Synchronisation Rule");
+            results.Count, proposal == null ? string.Empty : " against a proposed Synchronisation Rule");
         return results;
     }
 
@@ -164,13 +174,13 @@ public class SyncPreviewServer
     /// </summary>
     private static async Task<List<SyncRule>?> LoadRulesForCacheAsync(
         ISyncRepository guardedRepository,
-        SyncRule? proposedSyncRule)
+        ProposedSyncRuleSet? proposal)
     {
-        if (proposedSyncRule == null)
+        if (proposal == null)
             return null;
 
         var allSyncRules = await guardedRepository.GetAllSyncRulesAsync();
-        Substitute(allSyncRules, proposedSyncRule);
+        Substitute(allSyncRules, proposal);
         return allSyncRules;
     }
 
@@ -195,11 +205,19 @@ public class SyncPreviewServer
     /// absent, because previewing a disabled rule's proposed scope as though the rule also became enabled would
     /// answer a question nobody asked.
     /// </param>
+    /// <param name="proposedRuleSet">
+    /// A proposal about the rule SET rather than about one rule's contents: a rule that would start being
+    /// evaluated, or stop. Takes precedence over <paramref name="proposedSyncRule"/>, which is the substitution
+    /// case of the same idea. Needed because substitution alone cannot express the Enabled toggle (#1462): a
+    /// disabled rule is not in the loaded set for a substitution to find, and a disabled stand-in substituted into
+    /// it stays in the list, since nothing downstream of the load re-checks Enabled.
+    /// </param>
     public async Task<SyncPreviewResult> PreviewSyncForCsoAsync(
         int connectedSystemId,
         Guid connectedSystemObjectId,
         Func<ISyncRepositoryScope>? repositoryFactory = null,
-        SyncRule? proposedSyncRule = null)
+        SyncRule? proposedSyncRule = null,
+        ProposedSyncRuleSet? proposedRuleSet = null)
     {
         using var scope = repositoryFactory?.Invoke();
         var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
@@ -219,7 +237,8 @@ public class SyncPreviewServer
             return notFound;
         }
 
-        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer, proposedSyncRule);
+        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer,
+            Proposal(proposedSyncRule, proposedRuleSet));
         return await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true);
     }
 
@@ -242,12 +261,20 @@ public class SyncPreviewServer
     /// <param name="cancellationToken">Honoured between objects; a cancelled preview stops rather than completing.</param>
     /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
     /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    /// <param name="proposedRuleSet">
+    /// A proposal about the rule SET rather than about one rule's contents: a rule that would start being
+    /// evaluated, or stop. Takes precedence over <paramref name="proposedSyncRule"/>, which is the substitution
+    /// case of the same idea. Needed because substitution alone cannot express the Enabled toggle (#1462): a
+    /// disabled rule is not in the loaded set for a substitution to find, and a disabled stand-in substituted into
+    /// it stays in the list, since nothing downstream of the load re-checks Enabled.
+    /// </param>
     public async Task<Dictionary<Guid, SyncPreviewResult>> PreviewSyncForCsosAsync(
         int connectedSystemId,
         IReadOnlyCollection<Guid> connectedSystemObjectIds,
         SyncRule? proposedSyncRule = null,
         CancellationToken cancellationToken = default,
-        Func<ISyncRepositoryScope>? repositoryFactory = null)
+        Func<ISyncRepositoryScope>? repositoryFactory = null,
+        ProposedSyncRuleSet? proposedRuleSet = null)
     {
         ArgumentNullException.ThrowIfNull(connectedSystemObjectIds);
 
@@ -260,7 +287,8 @@ public class SyncPreviewServer
         var previewServer = new ExportEvaluationServer(Application, guardedRepository);
         await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
 
-        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer, proposedSyncRule);
+        var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer,
+            Proposal(proposedSyncRule, proposedRuleSet));
 
         foreach (var connectedSystemObjectId in connectedSystemObjectIds)
         {
@@ -398,17 +426,17 @@ public class SyncPreviewServer
         int connectedSystemId,
         ISyncRepository guardedRepository,
         ExportEvaluationServer previewServer,
-        SyncRule? proposedSyncRule = null)
+        ProposedSyncRuleSet? proposal = null)
     {
         var syncRules = await guardedRepository.GetSyncRulesAsync(connectedSystemId, includeDisabled: false);
-        Substitute(syncRules, proposedSyncRule);
+        Substitute(syncRules, proposal);
 
         // The Attribute Priority contributors, from EVERY rule across EVERY Connected System, exactly as the real
         // synchronisation builds them (#1441). Attribute ownership is a property of the whole configuration, not of
         // the system being previewed: the rule that owns an attribute is routinely one on another system, and a
         // context built from this system's rules alone would report that rule as no contributor at all.
         var allSyncRules = await guardedRepository.GetAllSyncRulesAsync();
-        Substitute(allSyncRules, proposedSyncRule);
+        Substitute(allSyncRules, proposal);
         var priorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true);
 
         var objectTypes = await guardedRepository.GetObjectTypesAsync(connectedSystemId);
@@ -426,15 +454,19 @@ public class SyncPreviewServer
     /// that flow, because a proposal that changes a mapping's Priority has to be resolved against the proposal's
     /// own priorities; resolving it against the stored ones would answer for a configuration that never existed.
     /// </remarks>
-    private static void Substitute(List<SyncRule> syncRules, SyncRule? proposedSyncRule)
-    {
-        if (proposedSyncRule == null)
-            return;
+    /// <summary>
+    /// The proposal to apply to a loaded rule set, from whichever of the two parameters the caller supplied.
+    /// </summary>
+    /// <remarks>
+    /// A caller passing <c>proposedSyncRule</c> is asking for the substitution case of
+    /// <see cref="ProposedSyncRuleSet"/>, so it is expressed as one rather than handled separately: the engine
+    /// keeps a single notion of what a proposal is, and the two entry shapes cannot drift apart.
+    /// </remarks>
+    private static ProposedSyncRuleSet? Proposal(SyncRule? proposedSyncRule, ProposedSyncRuleSet? proposedRuleSet) =>
+        proposedRuleSet ?? (proposedSyncRule == null ? null : ProposedSyncRuleSet.Substituting(proposedSyncRule));
 
-        var storedIndex = syncRules.FindIndex(rule => rule.Id == proposedSyncRule.Id);
-        if (storedIndex >= 0)
-            syncRules[storedIndex] = proposedSyncRule;
-    }
+    private static void Substitute(List<SyncRule> syncRules, ProposedSyncRuleSet? proposal) =>
+        proposal?.Apply(syncRules);
 
     /// <summary>
     /// The per-object CSO preview core shared by <see cref="PreviewSyncForCsoAsync"/> and

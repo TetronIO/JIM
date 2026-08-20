@@ -525,10 +525,17 @@ public class ConfigurationChangePreviewServer
             // previewed, and the column says which object it was about.
             case ConfigurationChangePreviewSurface.SynchronisationRule:
             case ConfigurationChangePreviewSurface.SynchronisationRuleScope:
+            case ConfigurationChangePreviewSurface.SynchronisationRuleBehaviour:
             case ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow:
                 activity.SyncRuleId = request.TargetId;
                 break;
             case ConfigurationChangePreviewSurface.ConnectedSystem:
+                activity.ConnectedSystemId = request.TargetId;
+                break;
+            // Object Matching is previewed per Connected System, in both modes and across the switch between them,
+            // so the Activity attaches to the system rather than to whichever object type or Synchronisation Rule
+            // happens to own the rules today.
+            case ConfigurationChangePreviewSurface.ObjectMatching:
                 activity.ConnectedSystemId = request.TargetId;
                 break;
             case ConfigurationChangePreviewSurface.MetaverseObjectType:

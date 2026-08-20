@@ -6,6 +6,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
+using JIM.Models.Preview;
 using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
@@ -445,6 +446,52 @@ public class SyncPreviewServerTests
         Assert.That(result.OutcomeTree, Has.Count.EqualTo(1));
         Assert.That(result.OutcomeTree[0].OutcomeType,
             Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.Joined));
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ProposedRuleSetRemovesTheOnlyImportRule_ReportsNothingWouldProcessTheObjectAsync()
+    {
+        // What disabling a Synchronisation Rule means, put to the engine (#1462). A disabled stand-in SUBSTITUTED
+        // in would not achieve it: nothing downstream of the load re-checks Enabled, so the rule would go on being
+        // evaluated and the preview would report that disabling it changes nothing.
+        var (cso, importRule, _) = ArrangeInboundFixture();
+        importRule.ProjectToMetaverse = true;
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id,
+            proposedRuleSet: ProposedSyncRuleSet.Removing(importRule.Id));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Warnings.Any(w => w.Code == SyncPreviewMessageCode.NoApplicableSyncRule), Is.True,
+                "with its only import rule out of the set, nothing would process the object inbound");
+            Assert.That(result.Inbound!.WouldProject, Is.False);
+            Assert.That(cso.MetaverseObjectId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ProposedRuleSetAddsARuleThatIsNotLoaded_EvaluatesItAsync()
+    {
+        // What enabling a disabled rule means. A substitution cannot express it: the rule is absent from the
+        // loaded set, so there is nothing of that id to replace, and the preview would report no change.
+        var (cso, importRule, mvEmployeeIdAttr) = ArrangeInboundFixture();
+        importRule.ProjectToMetaverse = true;
+
+        // Disable it, which is precisely how a rule leaves the loaded set: the repository reads with
+        // includeDisabled false, so there is no rule of that id for a substitution to find.
+        importRule.Enabled = false;
+
+        var withoutTheRule = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+        var withTheRule = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id,
+            proposedRuleSet: ProposedSyncRuleSet.Adding(importRule));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withoutTheRule.Inbound!.WouldProject, Is.False, "nothing evaluates the object while the rule is out of the set");
+            Assert.That(withTheRule.Inbound!.WouldProject, Is.True, "the added rule is evaluated, so the object would project");
+            Assert.That(withTheRule.Inbound!.AttributeFlowChanges.Any(c => c.AttributeId == mvEmployeeIdAttr.Id), Is.True);
+            Assert.That(cso.MetaverseObjectId, Is.Null, "and the preview still writes nothing");
+        }
     }
 
     [Test]

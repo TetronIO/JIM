@@ -1172,8 +1172,10 @@
         // attribute the update to the user
         using var jim = JimFactory.Create();
 
-        // deselecting an Object Type obsoletes every Connected System Object imported from it, and deprovisions
-        // whatever they are joined to. Until now that saved silently; ask the administrator to acknowledge it first.
+        // deselecting an Object Type stops its objects being imported and leaves the ones already imported joined
+        // and contributing values that will never refresh again; deselecting a Partition or Container takes objects
+        // out of an import that still runs, which obsoletes and deprovisions them. Both save silently otherwise, so
+        // the administrator acknowledges whichever consequence applies first.
         var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
                 "Connected System", ConnectedSystem.Name))
