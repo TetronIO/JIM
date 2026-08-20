@@ -40,9 +40,20 @@ New-JIMConfigurationChangePreview -SyncRuleId <int> -ScopingCriteriaGroup <hasht
 
 New-JIMConfigurationChangePreview -SyncRuleId <int> -AttributeFlowMapping <hashtable[]>
     [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -SyncRuleId <int> -RuleState <string>
+    [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-EnforceState <bool>]
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -ConnectedSystemId <int> -MatchingRule <hashtable[]>
+    [-ObjectMatchingRuleMode <string>]
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -ConnectedSystemId <int> -SchemaObjectType <hashtable[]>
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
 ```
 
-Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews that type's deletion settings, `-ConnectedSystemId` previews that system's partition and container selection, and `-SyncRuleId` previews a Synchronisation Rule. A rule has three previewable surfaces and the parameters you pass choose between them: the destructive toggles, or, with `-ScopingCriteriaGroup`, its Scoping Criteria, or, with `-AttributeFlowMapping`, its Attribute Flow.
+Which identifier you pass selects the entity, and the parameters beside it select the surface. `-MetaverseObjectTypeId` previews that type's deletion settings. `-ConnectedSystemId` previews that system's partition and container selection, or, with `-MatchingRule`, its Object Matching Rules, or, with `-SchemaObjectType`, its schema selection. `-SyncRuleId` previews a Synchronisation Rule's destructive toggles, or, with `-ScopingCriteriaGroup`, its Scoping Criteria, or, with `-AttributeFlowMapping`, its Attribute Flow, or, with `-RuleState`, its behaviour toggles.
 
 ### Parameters
 
@@ -62,6 +73,13 @@ Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews
 | `InboundOutOfScopeAction` | `string` | No | stored value | `RemainJoined` or `Disconnect`: what happens to a joined Connected System Object that leaves this import rule's scope or is obsoleted. |
 | `ScopingCriteriaGroup` | `hashtable[]` | Yes | | The proposed Scoping Criteria, one hashtable per top-level group. Groups are combined with OR. Each takes a `Type` of `All` or `Any`, a `Criteria` array, and an optional `ChildGroups` array of further groups. Each criterion names one attribute by id (`ConnectedSystemAttributeId` on an import rule, `MetaverseAttributeId` on an export rule), a `ComparisonType`, and the value in the field matching the attribute's data type. |
 | `AttributeFlowMapping` | `hashtable[]` | Yes | | The proposed Attribute Flow, one hashtable per mapping. Each names the attribute it writes (`TargetMetaverseAttributeId` on an import rule, `TargetConnectedSystemAttributeId` on an export rule) and a `Sources` array; a source takes an `Order` and either an attribute id (`ConnectedSystemAttributeId` on an import rule, `MetaverseAttributeId` on an export rule) or an `Expression` with an optional `MissingInputBehaviour`. A mapping may also carry `Priority`, `NullIsValue`, `InitialExportOnly`, `InboundValueProcessing` and `CaseNormalisation`. |
+| `RuleState` | `string` | Yes | | `Enabled` or `Disabled`: whether the rule would run at all. Mandatory because the toggle it sets is a boolean, so a caller who left it out could not be told apart from one proposing to switch the rule off. |
+| `ProjectToMetaverse` | `bool` | No | stored value | Whether the rule would create Metaverse Objects for the in-scope objects that match none. |
+| `ProvisionToConnectedSystem` | `bool` | No | stored value | Whether the rule would create objects in the target Connected System for the in-scope Metaverse Objects that have none. |
+| `EnforceState` | `bool` | No | stored value | Whether the rule would go on correcting drift in the target Connected System. |
+| `MatchingRule` | `hashtable[]` | Yes | | The proposed Object Matching Rules, one hashtable per rule. Each takes an `Order`, the parent it belongs to (`ConnectedSystemObjectTypeId` in Simple mode, `SyncRuleId` in Advanced), a `MetaverseObjectTypeId`, a `TargetMetaverseAttributeId`, `CaseSensitive`, and a `Sources` array of `Order` and `ConnectedSystemAttributeId`. |
+| `ObjectMatchingRuleMode` | `string` | No | stored mode | `ConnectedSystem` (Simple) or `SyncRule` (Advanced). Pass it to preview the switch between them. |
+| `SchemaObjectType` | `hashtable[]` | Yes | | The proposed schema selection, one hashtable per Connected System Object Type being changed. Each needs `objectTypeId`, and then only the keys being changed: `selected`, `removeContributedAttributesOnObsoletion`, and `selectedAttributeIds`. |
 | `FullDataSet` | `switch` | No | off | Keep every object-level detail row rather than the per-group cap's worth. Summary counts are exact either way. |
 | `Wait` | `switch` | No | off | Poll until the preview finishes and return the finished preview. |
 | `TimeoutSeconds` | `int` | No | `300` | How long `-Wait` polls before giving up. The preview keeps running; read it later with `Get-JIMConfigurationChangePreview`. |
@@ -73,6 +91,8 @@ An omitted deletion setting previews the stored value, exactly as [`Set-JIMMetav
 `ScopingCriteriaGroup` is mandatory, and `@()` is a valid and deliberate value: it proposes removing every criterion, which puts every object of the rule's type in scope. That is the widest change the Scope tab can make, so the cmdlet requires it to be asked for rather than arrived at by omitting a parameter.
 
 `AttributeFlowMapping` is mandatory for the same reason, and `@()` likewise proposes removing every mapping, so the rule flows nothing. Pass `Priority` deliberately on an import mapping: it defaults to the lowest, so a mapping proposed for an attribute another rule already contributes to would be evaluated and then write nothing, and the preview reports that as a validation finding rather than as values that would never be written.
+
+`SchemaObjectType` is mandatory, and every omission inside it means "leave this as it stands", at both levels: an Object Type not named is left alone, and a key not set keeps that Type's stored value. That matters more here than on the other surfaces, because every type default is the destructive answer: an absent `selected` read as `$false` would propose taking a whole Object Type out of management on a request that meant to change one attribute. Send the whole attribute set for a Type rather than the attributes that changed; External IDs are selected implicitly and need not be listed, and deselecting one is refused with a blocking finding.
 
 An omitted selection list likewise previews the stored selection. Pass the whole selection rather than one flag, because what a deselection costs depends on the rest of it: an object leaves import scope only when nothing else still covers it. An **empty** list is a real proposal and is sent as one, so `-SelectedContainerIds @()` previews deselecting every container, and `-ExcludedContainerIds @()` previews lifting every exclusion, which brings those branches back into scope.
 

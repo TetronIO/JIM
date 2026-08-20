@@ -200,6 +200,54 @@ JIM tells two situations apart at export time:
 
 An export that wrote in part is counted as succeeded on the Activity ("43 succeeded (4 written in part, awaiting references)"), because something was written; the Pending Export detail page lists each reference still owed with its reason, and the same detail is available from `Get-JIMPendingExport -Id` and the REST API as `unresolvedReferences`. A partial write that the target refuses (a reference column declared `NOT NULL`, say) fails that object with an ordinary export error, and is retried like any other failure.
 
+## What deselecting means
+
+The Schema tab's ticks decide what JIM **reads**. That is narrower than it looks, and worth being precise about, because deselecting has no visible effect at all: nothing fails, nothing is deleted, and nothing is disconnected.
+
+| What you deselect | What actually happens |
+|---|---|
+| An **Object Type** | JIM stops importing it. The Connected System Objects already imported from it are left exactly as they are: still joined to their Metaverse Objects, and still contributing the values they last imported, which stop being refreshed. Nothing is obsoleted and nothing is deprovisioned. |
+| An **attribute** | JIM stops fetching it. The values already held for it stay on the Connected System Objects, and any Attribute Flow reading it goes on flowing them, without them ever being refreshed again. |
+
+Neither is the same as deselecting a partition or a container. Those take objects out of an import that still runs, so the next Full Import does not find them, marks them obsolete, and the following synchronisation disconnects them. Deselecting an Object Type removes it from that comparison altogether, so its objects are never looked for.
+
+Selection is also an **import-side** idea only. Synchronisation and export do not consult it: an export Attribute Flow whose target attribute is deselected still writes it.
+
+So if your intent is to take a type genuinely out of management, deselecting it is not sufficient on its own. Disable or delete the Synchronisation Rules that manage it too, or its objects will go on contributing stale values indefinitely.
+
+### Obsoletion and contributed values
+
+Each Object Type carries **Remove Contributed Attributes On Obsoletion**, which decides what happens to the Metaverse values one of its objects contributed when that object is obsoleted:
+
+- **On** (the default) withdraws them. Where another Connected System still contributes the attribute it is handed over to that source; where none does, the value is cleared. A [deletion grace period](metaverse.md#deletion-behaviour) preserves a value with no surviving contributor until the grace window resolves.
+- **Off** leaves them on the Metaverse Object. They stop tracking anything from that point, and nothing reports them as stale.
+
+### Previewing a schema change
+
+The Schema tab offers a **Preview Changes** button beside **Save Changes**, which answers what your edited selection would do without saving it.
+
+The preview reports:
+
+| Transition | What it means |
+|---|---|
+| Stops being imported, stays joined | Connected System Objects that would stop being imported. Where the row names an attribute, only that attribute freezes; otherwise the whole object does. |
+| Imported again | Objects, or attribute values, that would start tracking the Connected System again. |
+| Contributed values withdrawn | Metaverse Objects that would have this system's contributed values withdrawn when their obsolete objects are next synchronised. |
+| Contributed values kept | The inverse: values that would be left in place instead. |
+
+Two things the preview is deliberately careful about:
+
+- **Only the objects that hold a value are counted for an attribute.** An object with nothing stored for a deselected attribute has nothing to freeze, so counting it would inflate the answer with objects the change does not touch.
+- **The obsoletion toggle is counted against the objects already obsolete and still joined**, which are the only ones whose fate it changes now. Objects obsoleted in future are governed by the setting too, but there is no population to count yet.
+
+Validation names what would go on running over the frozen data: Synchronisation Rules still bound to an Object Type you are deselecting, and Attribute Flow mappings still reading an attribute you are deselecting. Deselecting an External ID is refused outright.
+
+Save after previewing and the confirmation opens with the preview's own sentence, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
+
+The same evaluation is available to automation: [`New-JIMConfigurationChangePreview -ConnectedSystemId -SchemaObjectType`](../powershell/previews.md) in PowerShell, or `POST connected-systems/{id}/schema-selection/preview` in the [REST API](../../api/reference/). Every omission means "leave this as it stands", so a request changing one flag cannot accidentally propose deselecting a whole Object Type.
+
+See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
+
 ## Attribute writability
 
 When JIM retrieves a Connected System's schema, each discovered attribute is recorded with how the system will let JIM write to it. You can see this in the Schema tab's **Writability** column, filter the attribute list by it, and read it from the REST API and PowerShell as the attribute's `writability` value. It is discovered, never set by an administrator: it reflects what the Connected System told JIM.
