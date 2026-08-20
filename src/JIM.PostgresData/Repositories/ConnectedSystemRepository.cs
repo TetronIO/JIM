@@ -2842,6 +2842,52 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await UnjoinedOfType(connectedSystemId, connectedSystemObjectTypeId).CountAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await LiveOfType(connectedSystemId, connectedSystemObjectTypeId)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId)
+    {
+        return await LiveOfType(connectedSystemId, connectedSystemObjectTypeId)
+            .Where(cso => cso.AttributeValues.Any(av => av.AttributeId == attributeId))
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId != null &&
+                          cso.Status == ConnectedSystemObjectStatus.Obsolete)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// The live objects of one type, joined or not. What an import would refresh, and so what stops being
+    /// refreshed when the type or one of its attributes is deselected.
+    /// </summary>
+    private IQueryable<ConnectedSystemObject> LiveOfType(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
+
     /// <summary>
     /// The live, unjoined objects of one type: what a synchronisation would put to Object Matching. Obsolete
     /// objects are excluded because a synchronisation never reaches the join step for them.

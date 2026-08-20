@@ -55,6 +55,10 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting, "Would Stop Projecting")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, "Would Stop Provisioning")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift, "Would Stop Correcting Drift")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported, "Would Stop Being Imported")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported, "Would Resume Being Imported")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues, "Would Withdraw Contributed Values")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, "Would Retain Contributed Values")]
     public void GetOutcomeTypeDisplayName_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
     {
@@ -122,6 +126,10 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported, Color.Success)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, Color.Info)]
     public void GetOutcomeTypeMudBlazorColor_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, Color expected)
     {
@@ -170,7 +178,11 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = Icons.Material.Filled.QuestionMark,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] = Icons.Material.Filled.PersonOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] = Icons.Material.Filled.NoAccounts,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = Icons.Material.Filled.SyncDisabled
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = Icons.Material.Filled.SyncDisabled,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] = Icons.Material.Filled.CloudOff,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] = Icons.Material.Filled.CloudSync,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = Icons.Material.Filled.Undo,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = Icons.Material.Filled.Inventory2
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

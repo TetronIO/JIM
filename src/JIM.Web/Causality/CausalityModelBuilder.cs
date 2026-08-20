@@ -129,6 +129,10 @@ public static class CausalityModelBuilder
                 or ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated
                 or ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
                 or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected
+                // Preview-only (#1475): whether an object or an attribute is imported at all is a statement about
+                // what comes in, which is this lane, even though the harm it describes lands on the Metaverse.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported
                 => CausalityLane.Source,
 
             // Provisioning and export-side events: what it caused. WouldStageDeleteExport is preview-only but

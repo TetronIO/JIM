@@ -4626,6 +4626,37 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The identifiers of a Connected System's live objects of one type, joined or not: the population that stops
+    /// being imported when the type is deselected (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectIdsOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type that hold a value for one attribute: the
+    /// population whose values freeze when that attribute is deselected (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(
+            connectedSystemId, connectedSystemObjectTypeId, attributeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's obsolete objects of one type that are still joined: the population
+    /// whose fate changes when Remove Contributed Attributes On Obsoletion is toggled (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(
+            connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
     /// Connected System Objects by identifier, without change tracking: the batched read behind a population that
     /// was resolved to identifiers first.
     /// </summary>

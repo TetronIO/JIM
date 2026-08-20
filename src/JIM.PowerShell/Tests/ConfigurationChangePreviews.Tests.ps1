@@ -516,6 +516,59 @@ Describe 'New-JIMConfigurationChangePreview' {
         }
     }
 
+    Context 'Connected System schema selection previews' {
+        It 'Posts the proposed Object Types to the schema selection preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $types = @(@{ objectTypeId = 9; selected = $false })
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -SchemaObjectType $types | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/connected-systems/5/schema-selection/preview'
+                $script:capturedBody.objectTypes.Count | Should -Be 1
+                $script:capturedBody.objectTypes[0].objectTypeId | Should -Be 9
+                $script:capturedBody.objectTypes[0].selected | Should -BeFalse
+            }
+        }
+
+        It 'Sends only the keys the caller set, so silence never proposes deselecting a whole Object Type' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $types = @(@{ objectTypeId = 9; removeContributedAttributesOnObsoletion = $false })
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -SchemaObjectType $types | Out-Null
+
+                # Every type default on this surface is the destructive answer, so an unstated key has to be
+                # ABSENT from the body for the API to merge it with the stored Object Type. Present as $false,
+                # 'selected' proposes taking the whole Type out of management.
+                $script:capturedBody.objectTypes[0].removeContributedAttributesOnObsoletion | Should -BeFalse
+                $script:capturedBody.objectTypes[0].ContainsKey('selected') | Should -BeFalse
+                $script:capturedBody.objectTypes[0].ContainsKey('selectedAttributeIds') | Should -BeFalse
+            }
+        }
+
+        It 'Requires the Object Types to be stated rather than inferred from silence' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['SchemaObjectType']
+            $mandatory = $parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'ConnectedSystemSchema'
+            }
+            $mandatory.Mandatory | Should -BeTrue
+        }
+    }
+
     Context 'Waiting' {
         It 'Returns the start result without polling when the proposal is blocked' {
             InModuleScope JIM {

@@ -5,6 +5,9 @@
 @using JIM.Utilities
 @using Serilog
 @using JIM.Web.Models
+@using JIM.Models.Activities
+@using JIM.Models.Preview
+@inject IConfigurationChangePreviewStarter PreviewStarter
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -734,13 +737,45 @@
         </MudTabs>
     </div>
 
-    <MudButton
-        Color="Color.Primary"
-        Variant="Variant.Filled"
-        OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync"
-        Class="mt-6"
-        DropShadow="false"
-        Disabled="DisableSaveSchemaButton()">Save Changes</MudButton>
+    <MudStack Row="true" Spacing="2" Class="mt-6">
+        @* Preview (#1475): deselecting an Object Type or an attribute has no visible effect at all. Nothing fails
+           and nothing is deleted; JIM stops reading, and the objects already imported go on contributing values
+           that never refresh again. This is the count an administrator needs before saving, not afterwards. *@
+        <MudButton data-testid="jim-preview-schema-selection"
+                   Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Visibility"
+                   OnClick="PreviewSchemaSelectionAsync"
+                   Disabled="@_startingSchemaPreview"
+                   DropShadow="false">
+            Preview Changes
+        </MudButton>
+        <MudButton
+            Color="Color.Primary"
+            Variant="Variant.Filled"
+            OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync"
+            DropShadow="false"
+            Disabled="DisableSaveSchemaButton()">Save Changes</MudButton>
+    </MudStack>
+
+    @if (_schemaPreviewActivityId.HasValue)
+    {
+        var schemaPreviewActivityId = _schemaPreviewActivityId.Value;
+
+        @if (SchemaPreviewIsStale)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                      data-testid="jim-schema-preview-stale">
+                The schema selection has been edited since this preview ran, so it no longer describes what saving
+                would do. Preview again for an answer about the current selection.
+            </MudAlert>
+        }
+
+        <ConfigurationChangePreviewPanel ActivityId="@schemaPreviewActivityId"
+                                         Title="Preview: Schema Selection"
+                                         OnPreviewChanged="OnSchemaPreviewChanged"
+                                         Class="mt-6" />
+    }
 }
 
 @code {
@@ -752,6 +787,11 @@
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private Guid? _schemaPreviewActivityId;
+    private ConfigurationChangePreview? _schemaPreview;
+    private ConnectedSystemSchemaProposal? _previewedSchema;
+    private bool _startingSchemaPreview;
 
     private bool _schemaBeingRetrieved;
     private SchemaRefreshResult? _schemaRefreshResult;
@@ -1175,10 +1215,13 @@
         // deselecting an Object Type stops its objects being imported and leaves the ones already imported joined
         // and contributing values that will never refresh again; deselecting a Partition or Container takes objects
         // out of an import that still runs, which obsoletes and deprovisions them. Both save silently otherwise, so
-        // the administrator acknowledges whichever consequence applies first.
+        // the administrator acknowledges whichever consequence applies first, and where a preview was run the
+        // acknowledgement says how many objects that is (#1475).
         var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                "Connected System", ConnectedSystem.Name))
+                "Connected System", ConnectedSystem.Name,
+                ConfigurationChangePreviewCounts.ForConfirmation(_schemaPreview, SchemaPreviewIsStale),
+                ConfigurationChangePreviewCounts.ForConfirmationVerdict(_schemaPreview, SchemaPreviewIsStale)))
             return;
 
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
@@ -1193,9 +1236,93 @@
             Snackbar.Add(ex.Message, Severity.Error, options => options.RequireInteraction = true);
             return;
         }
+        DiscardSchemaPreview();
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
 
         await OnConnectedSystemChanged.InvokeAsync();
+    }
+
+    // ─── Configuration Change Preview (#1475) ───
+
+    /// <summary>
+    /// The schema selection currently ticked, as the preview framework's proposal type.
+    /// </summary>
+    /// <remarks>
+    /// Read from the loaded Connected System because the grids edit their <c>Selected</c> flags in place, so the
+    /// entity graph already carries what the administrator has chosen but not yet saved.
+    /// </remarks>
+    private ConnectedSystemSchemaProposal BuildSchemaProposal() =>
+        ConnectedSystemSchemaProposal.FromCurrentConfiguration(ConnectedSystem.ObjectTypes ?? []);
+
+    /// <summary>
+    /// Whether the selection has moved since the preview ran, which makes its answer about a selection nobody is
+    /// about to save. Said plainly rather than silently discarded: an administrator who previewed and then made
+    /// one more change is exactly the person most likely to trust the panel still on screen.
+    /// </summary>
+    private bool SchemaPreviewIsStale =>
+        _previewedSchema is not null && !BuildSchemaProposal().DescribesSameSchemaAs(_previewedSchema);
+
+    private async Task PreviewSchemaSelectionAsync()
+    {
+        if (_startingSchemaPreview)
+            return;
+
+        _startingSchemaPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var proposal = BuildSchemaProposal();
+
+            // The starter, not StartAndDispatchPreviewAsync: it owns the question of whether a large preview keeps
+            // every drill-down row, and that decision belongs in one place rather than at each surface.
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.ConnectedSystemSchema,
+                TargetId = ConnectedSystem.Id,
+                TargetName = ConnectedSystem.Name,
+                ProposedConfiguration = proposal,
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user?.Id,
+                InitiatedByName = user?.Name
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _schemaPreviewActivityId = activityId;
+            _previewedSchema = proposal;
+            _schemaPreview = null;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            DiscardSchemaPreview();
+            Log.Error(ex, "Failed to start a schema selection preview for Connected System {ConnectedSystemId}", ConnectedSystem.Id);
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingSchemaPreview = false;
+        }
+    }
+
+    /// <summary>
+    /// Records the panel's latest read of the preview, for the save confirmation to state.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately does not call <c>StateHasChanged</c>, for the reason recorded on the pilot surface: the panel
+    /// re-reads on every parameter set, so re-rendering here would set its parameters again, refresh again, and
+    /// raise this again, cancelling and restarting its reconciliation poll on every pass so the panel never leaves
+    /// stage 1. Nothing rendered here depends on this value, so storing it is enough.
+    /// </remarks>
+    private void OnSchemaPreviewChanged(ConfigurationChangePreview? preview) => _schemaPreview = preview;
+
+    private void DiscardSchemaPreview()
+    {
+        _schemaPreviewActivityId = null;
+        _previewedSchema = null;
+        _schemaPreview = null;
     }
 
     private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) =>

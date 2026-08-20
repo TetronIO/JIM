@@ -1383,6 +1383,144 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Preview a change to a Connected System's schema selection
+    /// </summary>
+    /// <remarks>
+    /// Answers what a proposed schema selection would do, without making it (#827 gap G6, #1475): which Connected
+    /// System Objects would stop being imported, which attributes would stop being refreshed and on how many
+    /// objects, and which Metaverse Objects would have this system's contributed values withdrawn, or kept, when
+    /// their obsolete objects are next synchronised.
+    ///
+    /// This matters because the change has no visible effect. Nothing fails, nothing is deleted and nothing is
+    /// disconnected; JIM simply stops reading, and everything downstream carries on over data that has stopped
+    /// moving. In particular, deselecting an Object Type does **not** obsolete the objects already imported from
+    /// it: they stay joined to their Metaverse Objects and go on contributing the values they last imported.
+    ///
+    /// Every omission means "leave this as it stands". An Object Type the request does not name is left alone, and
+    /// a field it does not set keeps that Type's stored value, so a request changing one attribute cannot
+    /// accidentally propose deselecting a whole Type.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The proposed schema selection.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="400">A named Object Type or attribute does not belong to this Connected System.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/schema-selection/preview", Name = "StartConnectedSystemSchemaPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartConnectedSystemSchemaPreviewAsync(int connectedSystemId,
+        [FromBody] StartConnectedSystemSchemaPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var objectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId) ?? [];
+        var stored = ConnectedSystemSchemaProposal.FromCurrentConfiguration(objectTypes);
+
+        // An id naming nothing in this schema is different in kind from a selection the preview disagrees with:
+        // there is no coherent proposal to evaluate, and silently ignoring it would produce a confident answer to
+        // a question the caller did not ask.
+        var unknown = UnknownSchemaSelectionIds(objectTypes, request);
+        if (unknown != null)
+            return BadRequest(unknown);
+
+        var proposal = MergeSchemaProposal(stored, request);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ConnectedSystemSchema,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started schema selection preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// The whole proposed schema, built by laying the request's overrides over the stored selection. Every
+    /// omission keeps the stored value, at both levels: an Object Type the request does not name is carried
+    /// through untouched, and a field it does not set on a Type it does name keeps that Type's setting.
+    /// </summary>
+    /// <remarks>
+    /// Merging here rather than in the adapter is what lets a caller change one flag. The type defaults are the
+    /// destructive answers (an omitted <c>selected</c> read as false deselects an Object Type; an omitted
+    /// attribute list read as empty deselects every attribute), so silence has to reach the stored value before
+    /// anything compares the two.
+    /// </remarks>
+    private static ConnectedSystemSchemaProposal MergeSchemaProposal(ConnectedSystemSchemaProposal stored,
+        StartConnectedSystemSchemaPreviewRequest request)
+    {
+        var requested = (request.ObjectTypes ?? [])
+            .GroupBy(objectType => objectType.ObjectTypeId)
+            .ToDictionary(group => group.Key, group => group.Last());
+
+        return new ConnectedSystemSchemaProposal(stored.ObjectTypes
+            .Select(storedType => requested.TryGetValue(storedType.ObjectTypeId, out var proposed)
+                ? storedType with
+                {
+                    Selected = proposed.Selected ?? storedType.Selected,
+                    RemoveContributedAttributesOnObsoletion = proposed.RemoveContributedAttributesOnObsoletion
+                                                              ?? storedType.RemoveContributedAttributesOnObsoletion,
+                    SelectedAttributeIds = proposed.SelectedAttributeIds ?? storedType.SelectedAttributeIds
+                }
+                : storedType)
+            .ToList());
+    }
+
+    /// <summary>
+    /// The error response for a proposal naming an Object Type or attribute this Connected System does not have,
+    /// or null when every id in the proposal resolves.
+    /// </summary>
+    private static ApiErrorResponse? UnknownSchemaSelectionIds(
+        IReadOnlyCollection<ConnectedSystemObjectType> objectTypes, StartConnectedSystemSchemaPreviewRequest request)
+    {
+        foreach (var proposed in request.ObjectTypes ?? [])
+        {
+            var storedType = objectTypes.FirstOrDefault(objectType => objectType.Id == proposed.ObjectTypeId);
+            if (storedType == null)
+                return ApiErrorResponse.BadRequest(
+                    $"Object Type {proposed.ObjectTypeId} does not belong to this Connected System.");
+
+            if (proposed.SelectedAttributeIds == null)
+                continue;
+
+            var knownAttributeIds = storedType.Attributes.Select(attribute => attribute.Id).ToHashSet();
+            var unknown = proposed.SelectedAttributeIds.Where(id => !knownAttributeIds.Contains(id)).ToList();
+            if (unknown.Count > 0)
+                return ApiErrorResponse.BadRequest(
+                    $"Attribute(s) {string.Join(", ", unknown.Order())} do not belong to Object Type " +
+                    $"{storedType.Name} on this Connected System.");
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// The error response for a proposal naming a partition or container this Connected System does not have, or
     /// stating that one Container is both managed and carved out, or null when the proposal is coherent.
     /// </summary>

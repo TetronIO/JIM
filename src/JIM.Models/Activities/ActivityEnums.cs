@@ -233,7 +233,43 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// export rule that stands over it would stop enforcing state. The count of objects free to drift from the
     /// moment the change is saved.
     /// </summary>
-    WouldStopCorrectingDrift
+    WouldStopCorrectingDrift,
+
+    /// <summary>
+    /// Preview only (#1475): the object would stop being imported, and nothing else would happen to it. Deselecting
+    /// its Object Type removes the type from deletion detection, so the object is never compared against an import
+    /// again: it stays joined to its Metaverse Object and keeps contributing the values it last imported, which stop
+    /// being refreshed.
+    ///
+    /// Where the delta names an attribute, the same freeze at attribute granularity: the Connector stops fetching
+    /// that attribute and the values already held for it stay exactly as they are.
+    ///
+    /// Its own transition rather than a disconnection or an obsoletion, because it is neither. An object that keeps
+    /// contributing stale values while nothing reports it is the failure this preview exists to make visible, and
+    /// borrowing either of those words would describe a cascade that does not happen. See #1474.
+    /// </summary>
+    WouldStopBeingImported,
+
+    /// <summary>
+    /// Preview only (#1475): the inverse. The object, or the attribute the delta names, would start being imported
+    /// again, so values that had frozen resume tracking the Connected System from the next Import Run Profile.
+    /// </summary>
+    WouldResumeBeingImported,
+
+    /// <summary>
+    /// Preview only (#1475): the Metaverse Object would have the values this Connected System contributed withdrawn
+    /// when its obsolete object is next synchronised, where today they would be left in place. What turning Remove
+    /// Contributed Attributes On Obsoletion on means for the objects already waiting: a surviving contributor is
+    /// re-elected where there is one, and the value is cleared where there is not.
+    /// </summary>
+    WouldWithdrawContributedValues,
+
+    /// <summary>
+    /// Preview only (#1475): the inverse. The values this Connected System contributed would be left on the
+    /// Metaverse Object when its obsolete object is next synchronised, rather than withdrawn. They stop tracking
+    /// anything at that point, which is the part a proposal that reads as "keep the data" does not say.
+    /// </summary>
+    WouldRetainContributedValues
 }
 
 /// <summary>

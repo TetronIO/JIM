@@ -111,7 +111,11 @@ public class CausalityModelBuilderTests
             // about what reaches, or stops reaching, the target system.
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] = CausalityLane.Downstream,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = CausalityLane.Downstream
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] = CausalityLane.Source,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] = CausalityLane.Source,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = CausalityLane.Identity
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

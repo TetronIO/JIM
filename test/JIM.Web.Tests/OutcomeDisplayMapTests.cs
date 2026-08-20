@@ -62,7 +62,11 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously, "Matches more than one Metaverse Object", "Would Match Ambiguously", CausalityTone.Warning, Icons.Material.Filled.QuestionMark),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting, "No longer creates an identity", "Would Stop Projecting", CausalityTone.Warning, Icons.Material.Filled.PersonOff),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, "No longer creates an account", "Would Stop Provisioning", CausalityTone.Warning, Icons.Material.Filled.NoAccounts),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift, "Free to drift from JIM", "Would Stop Correcting Drift", CausalityTone.Warning, Icons.Material.Filled.SyncDisabled)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift, "Free to drift from JIM", "Would Stop Correcting Drift", CausalityTone.Warning, Icons.Material.Filled.SyncDisabled),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported, "Stops being imported, stays joined", "Would Stop Being Imported", CausalityTone.Warning, Icons.Material.Filled.CloudOff),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported, "Imported again", "Would Resume Being Imported", CausalityTone.Success, Icons.Material.Filled.CloudSync),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues, "Contributed values withdrawn", "Would Withdraw Contributed Values", CausalityTone.Warning, Icons.Material.Filled.Undo),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, "Contributed values kept", "Would Retain Contributed Values", CausalityTone.Info, Icons.Material.Filled.Inventory2)
     ];
 
     /// <summary>
@@ -89,7 +93,11 @@ public class OutcomeDisplayMapTests
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning,
-        ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues
     ];
 
     [Test]
