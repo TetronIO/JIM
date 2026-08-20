@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
@@ -34,6 +34,10 @@ var host = Host.CreateDefaultBuilder(args)
                 // maintain single instances per entity. NoTracking produces duplicate instances
                 // that conflict when write operations later track them.
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.TrackAll)
+                // Both suppressions are explained in JimDbContext.OnConfiguring. The
+                // PendingModelChangesWarning one is load-bearing: the Npgsql legacy timestamp
+                // switch makes the runtime model differ from the migrations by 99 DateTime
+                // columns, so removing it stops this service booting.
                 .ConfigureWarnings(warnings => warnings.Ignore(
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning)));
