@@ -749,6 +749,11 @@ public class Worker : BackgroundService
             var outcomeTrackingLevel = await jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
             var csoChangeTrackingEnabled = await jim.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
             var executionItems = new List<ActivityRunProfileExecutionItem>();
+            // Queueing provenance (#1223): the item reporting each staged Pending Export is the item that
+            // queued it, and the export must record that or the export run that carries it out has nothing to
+            // walk back along. The rows are persisted by the staging calls below before their reporting items
+            // exist, so the stamps are applied as a set-once fix-up at the end of the batch.
+            var queueingStamps = new List<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)>();
 
             // Reference recall (#908): capture referencing objects and resolved reference values
             // BEFORE deletion nulls the reference FKs and disconnects the candidates' CSOs.
@@ -831,6 +836,8 @@ public class Worker : BackgroundService
                             AddPendingExportOutcome(deletionItem, mvoDeletedOutcome, deletePendingExport,
                                 csNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
                                 activity, csoChangeTrackingEnabled);
+                            deletePendingExport.QueuedByRunProfileExecutionItemId = deletionItem.Id;
+                            queueingStamps.Add((deletePendingExport.Id, deletionItem.Id));
                         }
                     }
                     else
@@ -849,6 +856,8 @@ public class Worker : BackgroundService
                             deprovisionItem.CausalEdges.Add(deprovisionCause.ToEdge(
                                 CausalEdgeType.MetaverseObjectDeletionCausedDeprovision,
                                 deprovisionItem.SyncOutcomes.FirstOrDefault()));
+                            pendingExport.QueuedByRunProfileExecutionItemId = deprovisionItem.Id;
+                            queueingStamps.Add((pendingExport.Id, deprovisionItem.Id));
                             executionItems.Add(deprovisionItem);
                         }
                     }
@@ -921,9 +930,13 @@ public class Worker : BackgroundService
                             recallItem.CausalEdges.Add(cause.ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval, effectOutcome));
                     }
 
+                    pendingExport.QueuedByRunProfileExecutionItemId = recallItem.Id;
+                    queueingStamps.Add((pendingExport.Id, recallItem.Id));
                     executionItems.Add(recallItem);
                 }
             }
+
+            await jim.SyncRepo.SetPendingExportQueueingItemsAsync(queueingStamps);
 
             if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {

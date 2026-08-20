@@ -359,6 +359,28 @@ public class ReferenceRecallCausalEdgeTests
     /// Exposes the protected deferred-recall seam so the causal capture can be driven directly without standing
     /// up a full paged sync run.
     /// </summary>
+    /// <summary>
+    /// The queueing-provenance stamp (#1223): the recall RPEI emitted for a group's removal export is the item
+    /// that queued it, and the Pending Export must record that. The export run that later carries the removal
+    /// out then chains to this item, whose own edges name the deleted members: the complete story.
+    /// </summary>
+    [Test]
+    public async Task FlushDeferredRecallRpeis_StagedRecallExport_StampsTheRecallItemAsItsQueueingItemAsync()
+    {
+        var processor = CreateProcessor(out var activity);
+        processor.SetRecallExportEvaluationCache(BuildRecallExportEvaluationCache(TargetSystemId, "Target LDAP"));
+        var groupCso = SeedGroupCso("cn=Engineering,ou=Groups,dc=corp", "group");
+        var pendingExport = BuildRecallPendingExport(groupCso.Id, changeCount: 1);
+        await SyncRepo.CreatePendingExportAsync(pendingExport);
+
+        processor.CallStageDeferredRecallRpei(pendingExport, "Engineering", [NewCause("Tina Adams (S8-99)")]);
+        await processor.CallFlushDeferredRecallRpeisAsync();
+
+        var recallItem = activity.RunProfileExecutionItems
+            .Single(r => r.ObjectChangeType == ObjectChangeType.PendingExport);
+        Assert.That(pendingExport.QueuedByRunProfileExecutionItemId, Is.EqualTo(recallItem.Id));
+    }
+
     private sealed class DeferredRecallCausalTestProcessor : SyncFullSyncTaskProcessor
     {
         public DeferredRecallCausalTestProcessor(

@@ -3467,6 +3467,13 @@ public abstract class SyncTaskProcessorBase
         var nestedCount = 0;
         var standaloneCount = 0;
 
+        // Queueing provenance (#1223): the item reporting a staged delete Pending Export is the item that
+        // queued it, and the export must record that. Both cause identifiers a delete Pending Export could
+        // otherwise offer are gone by export time (SourceMetaverseObjectId is nulled by the deletion's SET
+        // NULL cascade), so without this stamp a deprovisioned account shows no cause whatsoever. The rows
+        // are already persisted by the staging above, hence the set-once fix-up at the end.
+        var queueingStamps = new List<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)>();
+
         foreach (var (pendingExport, csoId) in reportableExports)
         {
             // The Pending Export's own SourceMetaverseObjectId is not a reliable attribution here: a reused
@@ -3489,6 +3496,12 @@ public abstract class SyncTaskProcessorBase
                     detailCount: pendingExport.AttributeValueChanges.Count,
                     detailMessage: pendingExport.ConnectedSystemId.ToString());
                 await SnapshotPendingExportChangesAsync(nestedOutcome, pendingExport);
+                // The deletion item's id is assigned here where missing, because the RPEI flush that would
+                // otherwise assign it runs after this method; the flush only fills ids in where absent.
+                if (mvoDeletedNode.Rpei.Id == Guid.Empty)
+                    mvoDeletedNode.Rpei.Id = Guid.NewGuid();
+                pendingExport.QueuedByRunProfileExecutionItemId = mvoDeletedNode.Rpei.Id;
+                queueingStamps.Add((pendingExport.Id, mvoDeletedNode.Rpei.Id));
                 nestedCount++;
                 continue;
             }
@@ -3533,9 +3546,13 @@ public abstract class SyncTaskProcessorBase
                         .ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedDeprovision, cascadeEffectOutcome));
             }
 
+            pendingExport.QueuedByRunProfileExecutionItemId = cascadeRpei.Id;
+            queueingStamps.Add((pendingExport.Id, cascadeRpei.Id));
             _activity.RunProfileExecutionItems.Add(cascadeRpei);
             standaloneCount++;
         }
+
+        await _syncRepo.SetPendingExportQueueingItemsAsync(queueingStamps);
 
         Log.Information(
             "FlushPendingMvoDeletionsAsync: Reported {Count} deletion-cascade delete Pending Export(s) on the Activity " +
@@ -3685,6 +3702,8 @@ public abstract class SyncTaskProcessorBase
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name)
             ?? new Dictionary<int, string>();
 
+        var recallQueueingStamps = new List<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)>();
+
         foreach (var (csoId, (stagedPendingExport, displayName)) in _deferredRecallRpeisByCsoId)
         {
             csoSnapshots.TryGetValue(csoId, out var snapshot);
@@ -3726,8 +3745,17 @@ public abstract class SyncTaskProcessorBase
                     recallRpei.CausalEdges.Add(cause.ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval, effectOutcome));
             }
 
+            // Queueing provenance (#1223): this item is what queued the removal export, and the export must
+            // record that so the run carrying it out later can chain back here, where the edges above name
+            // the deleted members. The Pending Export rows were persisted pages ago, hence the set-once
+            // fix-up below rather than a pre-persist stamp.
+            recallQueueingStamps.Add((stagedPendingExport.Id, recallRpei.Id));
+            stagedPendingExport.QueuedByRunProfileExecutionItemId = recallRpei.Id;
+
             _activity.RunProfileExecutionItems.Add(recallRpei);
         }
+
+        await _syncRepo.SetPendingExportQueueingItemsAsync(recallQueueingStamps);
 
         _deferredRecallRpeisByCsoId.Clear();
         _deferredRecallCausesByCsoId.Clear();

@@ -246,6 +246,33 @@ public class HousekeepingActivityWorkflowTests
     }
 
     /// <summary>
+    /// The queueing-provenance stamp (#1223): housekeeping's recall item is what queued the group's removal
+    /// export, and the Pending Export must record it, or the export run that carries the removal out has
+    /// nothing to walk back along and the removal reads as having no cause at all.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoReferencedByGroup_StampsTheRecallItemOnItsPendingExportAsync()
+    {
+        var (memberMvo, memberDn) = SeedEligibleMemberWithTargetCso("Lena Leaver");
+        var groupMvo = SeedGroupMvoReferencing("Team Alpha", memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberMvo.Id, memberDn);
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([memberMvo]);
+
+        await WorkerInstance.PerformHousekeepingAsync(Jim);
+
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var recallRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id
+            && r.ObjectChangeType == ObjectChangeType.PendingExport
+            && r.ConnectedSystemObjectId == groupTargetCso.Id);
+        var recallPendingExport = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+
+        Assert.That(recallPendingExport.QueuedByRunProfileExecutionItemId, Is.EqualTo(recallRpei.Id));
+    }
+
+    /// <summary>
     /// Deletion cascade (#1044): a grace-period-expired Metaverse Object whose target Connected System Object is
     /// matched by an export Synchronisation Rule with a Delete deprovisioning action stages a delete Pending Export.
     /// That export deprovisions a real account, so it must be recorded on the housekeeping Activity as a consequence

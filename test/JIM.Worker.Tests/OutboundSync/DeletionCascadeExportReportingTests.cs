@@ -120,6 +120,58 @@ public class DeletionCascadeExportReportingTests
     }
 
     /// <summary>
+    /// The queueing-provenance stamp (#1223): the deletion RPEI that reports a staged delete Pending Export is
+    /// the item that queued it, and the Pending Export must record that, or the export run that carries it out
+    /// days later has nothing to walk back along. Both cause identifiers a delete Pending Export used to rely
+    /// on are gone by export time: SourceMetaverseObjectId is nulled by the deletion's SET NULL cascade, and no
+    /// queueing item was ever stamped, which is why deprovisioned items rendered no "Caused by" whatsoever.
+    /// </summary>
+    [Test]
+    public async Task FlushPendingMvoDeletions_NestedCascadeExport_StampsTheDeletionItemAsItsQueueingItemAsync()
+    {
+        SeedExportSyncRule(OutboundDeprovisionAction.Delete);
+        var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        var processor = await CreateProcessorAsync();
+        var (deletionRpei, _) = processor.RecordSourceDisconnection(mvo);
+        processor.QueueMvoDeletion(mvo);
+
+        await processor.CallFlushPendingMvoDeletionsAsync();
+
+        var deletePendingExport = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
+        Assert.Multiple(() =>
+        {
+            Assert.That(deletionRpei.Id, Is.Not.EqualTo(Guid.Empty),
+                "the deletion item must be given its id at stamp time; the RPEI flush runs too late for this");
+            Assert.That(deletePendingExport.QueuedByRunProfileExecutionItemId, Is.EqualTo(deletionRpei.Id));
+        });
+    }
+
+    /// <summary>
+    /// The standalone fallback item is the queueing item for its Pending Export, exactly as the nested case's
+    /// deletion item is for its own.
+    /// </summary>
+    [Test]
+    public async Task FlushPendingMvoDeletions_StandaloneCascadeExport_StampsTheStandaloneItemAsItsQueueingItemAsync()
+    {
+        SeedExportSyncRule(OutboundDeprovisionAction.Delete);
+        var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        Activity activity = null!;
+        var processor = await CreateProcessorAsync(a => activity = a);
+        // No RecordSourceDisconnection: with no MvoDeleted outcome to nest under, the flush falls back to a
+        // standalone Pending Export item.
+        processor.QueueMvoDeletion(mvo);
+
+        await processor.CallFlushPendingMvoDeletionsAsync();
+
+        var deletePendingExport = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
+        var standaloneItem = activity.RunProfileExecutionItems
+            .Single(r => r.ObjectChangeType == ObjectChangeType.PendingExport);
+        Assert.That(deletePendingExport.QueuedByRunProfileExecutionItemId, Is.EqualTo(standaloneItem.Id));
+    }
+
+    /// <summary>
     /// Each deleted Metaverse Object's cascade lands on its own deletion, not pooled onto the first:
     /// the graph must attribute every downstream deprovisioning to the identity that caused it.
     /// </summary>

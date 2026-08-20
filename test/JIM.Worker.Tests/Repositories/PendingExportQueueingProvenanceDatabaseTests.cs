@@ -198,6 +198,54 @@ public class PendingExportQueueingProvenanceDatabaseTests
         });
     }
 
+    /// <summary>
+    /// The set-once fix-up used by the deletion-cascade and recall paths, whose Pending Exports are persisted
+    /// before the item reporting them exists. Raw SQL, so only a real database can prove the array-parameter
+    /// UPDATE actually lands the right id on the right row.
+    /// </summary>
+    [Test]
+    public async Task SetPendingExportQueueingItemsAsync_PersistedExports_StampsEachWithItsOwnItemAsync()
+    {
+        var systemId = await SeedSystemAsync();
+        var firstExportId = Guid.NewGuid();
+        var secondExportId = Guid.NewGuid();
+        var firstItemId = Guid.NewGuid();
+        var secondItemId = Guid.NewGuid();
+
+        await using var write = NewContext();
+        var repository = new PostgresDataRepository(write);
+        await repository.Sync.CreatePendingExportsAsync([
+            new PendingExport
+            {
+                Id = firstExportId,
+                ConnectedSystemId = systemId,
+                ChangeType = PendingExportChangeType.Delete,
+                Status = PendingExportStatus.Pending,
+                CreatedAt = DateTime.UtcNow
+            },
+            new PendingExport
+            {
+                Id = secondExportId,
+                ConnectedSystemId = systemId,
+                ChangeType = PendingExportChangeType.Update,
+                Status = PendingExportStatus.Pending,
+                CreatedAt = DateTime.UtcNow
+            }
+        ]);
+
+        await repository.Sync.SetPendingExportQueueingItemsAsync(
+            [(firstExportId, firstItemId), (secondExportId, secondItemId)]);
+
+        await using var verify = NewContext();
+        var stamped = await verify.PendingExports.AsNoTracking()
+            .ToDictionaryAsync(pe => pe.Id, pe => pe.QueuedByRunProfileExecutionItemId);
+        Assert.Multiple(() =>
+        {
+            Assert.That(stamped[firstExportId], Is.EqualTo(firstItemId));
+            Assert.That(stamped[secondExportId], Is.EqualTo(secondItemId));
+        });
+    }
+
     private async Task<int> SeedSystemAsync()
     {
         await using var ctx = NewContext();

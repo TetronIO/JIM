@@ -482,6 +482,21 @@ public interface ISyncRepository
     Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Names the Run Profile Execution Item that queued each Pending Export, after both exist (#1223).
+    /// </summary>
+    /// <remarks>
+    /// The ordinary outbound path stamps <see cref="PendingExport.QueuedByRunProfileExecutionItemId"/> before
+    /// the exports are persisted, but the deletion-cascade and reference-recall paths run the other way round:
+    /// their Pending Exports are staged and persisted first, and the execution item that reports each one (the
+    /// deletion item, the standalone cascade item, the recall item) is only built afterwards. This is the
+    /// set-once fix-up for those paths; the caller must also set the property on its in-memory Pending Export
+    /// instances so any tracked instance matches the row.
+    /// </remarks>
+    /// <param name="stamps">The Pending Export ids and the execution item id that queued each.</param>
+    Task SetPendingExportQueueingItemsAsync(
+        IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps);
+
+    /// <summary>
     /// Records that newly provisioned accounts are owed an initial password.
     /// <para>
     /// Staged rather than delivered inline, for the same reason a Pending Export is staged rather than written
