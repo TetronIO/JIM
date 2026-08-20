@@ -72,14 +72,15 @@ public class ExampleDataRepository : IExampleDataRepository
 
     public async Task DeleteExampleDataSetAsync(int exampleDataSetId)
     {
-        var exampleDataSet = await Repository.Database.ExampleDataSets.Include(q => q.Values).AsTracking().SingleOrDefaultAsync(q => q.Id == exampleDataSetId);
+        var exampleDataSet = await Repository.Database.ExampleDataSets.AsTracking().SingleOrDefaultAsync(q => q.Id == exampleDataSetId);
         if (exampleDataSet == null)
         {
             Log.Warning("DeleteExampleDataSetAsync: No such ExampleDetaSet found to delete.");
             return;
         }
 
-        Repository.Database.ExampleDataSetValues.RemoveRange(exampleDataSet.Values);
+        // The values go with the set: the foreign key cascades (#1477), so they need neither loading nor
+        // removing by hand.
         Repository.Database.ExampleDataSets.Remove(exampleDataSet);
         await Repository.Database.SaveChangesAsync();
     }
