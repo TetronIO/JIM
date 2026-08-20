@@ -155,7 +155,10 @@ public class JimApplication : IDisposable
         // constructed with test doubles for what it actually uses.
         PasswordSynchronisation = new PasswordSynchronisationServer(
             SyncRepo,
-            () => Repository.ConnectedSystems,
+            // Null-forgiving because the compiler analyses this lambda as though it ran here, inside the
+            // constructor, where Repository is not yet definitely assigned. It never does: the delegate exists
+            // precisely so the repository is resolved when a password change is queued.
+            () => Repository!.ConnectedSystems,
             () => (CredentialProtection as IPasswordProtectionService)
                   ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider()),
             (activity, initiatedBy) => Activities.CreateActivityAsync(activity, initiatedBy),
