@@ -32,47 +32,53 @@
        SignalR round trip, and the virtualiser renders empty space for rows it has asked for but not yet received.
        Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,
        rather than repeatedly out-running the fetch. *@
+    @* Built as a template rather than inline, so a grid whose toolbar would hold nothing but the count can
+       leave the parameter null and have MudDataGrid draw no toolbar at all. See ShowToolBar. *@
+    @{
+        RenderFragment toolBar =
+            @<text>
+        @* The toolbar has two anchored ends and nothing loose in between. Left: how the table is displayed,
+           then the page's own actions. Right: how big the list is, then the box that narrows it. A count in
+           the left slot pushed the primary action into the middle, where the loudest thing on the page was
+           also the only one floating in open space. *@
+        @* An embedded grid is one of many on its page (a value table per multi-valued attribute, a table per
+           event in a timeline), so it drops the density toggle: row density is one saved preference for the
+           whole portal, and a control for it once per attribute is the same switch drawn a dozen times. It
+           keeps its search box, which is per table by nature and is how a member is found among half a
+           million, and its count, which is the one thing each embedded table must say for itself. *@
+        @if (!Embedded)
+        {
+            <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
+        }
+        @if (ToolBarExtras != null)
+        {
+            @if (!Embedded)
+            {
+                <MudText Class="mx-2 mud-text-disabled">|</MudText>
+            }
+            @ToolBarExtras
+        }
+        <MudSpacer />
+        @* The total match count. With no pager this is the only place the list says how big it is, and while a
+           search narrows it the text becomes "x of y" against the unfiltered baseline; it sits against the
+           search box because that is the control the reader just changed it with. *@
+        <TableObjectCount Count="@TotalItems" Total="@UnfilteredTotalItems"
+                          SingularName="@SingularName" PluralName="@PluralName"
+                          Class="mr-3" />
+        @if (ShowSearch)
+        {
+            @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
+               filtered by a term the reader cannot see. *@
+            <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
+        }
+            </text>;
+    }
     <MudDataGrid @ref="_dataGrid" T="T" VirtualizeServerData="ServerReload" Virtualize="true" OverscanCount="30"
                  FixedHeader="true" ItemSize="@RowHeight"
                  Hover="true" Dense="@_dense" Outlined="true" Elevation="0" SortMode="SortMode.Single"
                  RowClass="@(RowClicked.HasDelegate ? "cursor-pointer" : null)" RowClassFunc="@RowClassFunc"
-                 RowClick="HandleRowClick" Class="@GridClass">
-        <ToolBarContent>
-            @* The toolbar has two anchored ends and nothing loose in between. Left: how the table is displayed,
-               then the page's own actions. Right: how big the list is, then the box that narrows it. A count in
-               the left slot pushed the primary action into the middle, where the loudest thing on the page was
-               also the only one floating in open space. *@
-            @* An embedded grid is one of many on its page (a value table per multi-valued attribute, a table per
-               event in a timeline), so it drops the density toggle: row density is one saved preference for the
-               whole portal, and a control for it once per attribute is the same switch drawn a dozen times. It
-               keeps its search box, which is per table by nature and is how a member is found among half a
-               million, and its count, which is the one thing each embedded table must say for itself. *@
-            @if (!Embedded)
-            {
-                <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
-            }
-            @if (ToolBarExtras != null)
-            {
-                @if (!Embedded)
-                {
-                    <MudText Class="mx-2 mud-text-disabled">|</MudText>
-                }
-                @ToolBarExtras
-            }
-            <MudSpacer />
-            @* The total match count. With no pager this is the only place the list says how big it is, and while a
-               search narrows it the text becomes "x of y" against the unfiltered baseline; it sits against the
-               search box because that is the control the reader just changed it with. *@
-            <TableObjectCount Count="@TotalItems" Total="@UnfilteredTotalItems"
-                              SingularName="@SingularName" PluralName="@PluralName"
-                              Class="mr-3" />
-            @if (ShowSearch)
-            {
-                @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
-                   filtered by a term the reader cannot see. *@
-                <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
-            }
-        </ToolBarContent>
+                 RowClick="HandleRowClick" Class="@GridClass"
+                 ToolBarContent="@(ShowToolBar ? toolBar : null)">
         <Columns>
             @Columns
         </Columns>
@@ -180,6 +186,15 @@
     /// </summary>
     [Parameter]
     public bool ShowSearch { get; set; } = true;
+
+    /// <summary>
+    /// Whether the grid draws a toolbar at all. It does unless the toolbar would hold nothing but the count: an
+    /// <see cref="Embedded"/> grid drops the density toggle, and one with <see cref="ShowSearch"/> off has no
+    /// search box either, leaving a full-height bar across the top of the table saying what the rows beneath it
+    /// already say. The count earns its place beside the control that changes it, so it goes when that control
+    /// does. Public so a test can assert the decision rather than infer it from rendered markup.
+    /// </summary>
+    public bool ShowToolBar => !Embedded || ShowSearch || ToolBarExtras != null;
 
     /// <summary>
     /// Whether this grid keeps its search, sort and scroll position in the address bar. A grid in a dialog sets
