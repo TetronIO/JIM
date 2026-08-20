@@ -141,7 +141,19 @@ public static class OutcomeDisplayMap
                 "project a new Metaverse Object instead of joining an existing one"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] =
             new OutcomeDisplay("Matches more than one Metaverse Object", "Would Match Ambiguously", CausalityTone.Warning, Icons.Material.Filled.QuestionMark,
-                "match more than one Metaverse Object")
+                "match more than one Metaverse Object"),
+        // The behaviour-toggle preview's fates (#1462). Warning rather than Error on all three: nothing existing
+        // is destroyed by any of them, and what they cost is an identity, an account or a correction that never
+        // arrives, which is a different kind of harm from a deletion.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] =
+            new OutcomeDisplay("No longer creates an identity", "Would Stop Projecting", CausalityTone.Warning, Icons.Material.Filled.PersonOff,
+                "no longer have a Metaverse Object created for them"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] =
+            new OutcomeDisplay("No longer creates an account", "Would Stop Provisioning", CausalityTone.Warning, Icons.Material.Filled.NoAccounts,
+                "no longer have an account created for them"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] =
+            new OutcomeDisplay("Free to drift from JIM", "Would Stop Correcting Drift", CausalityTone.Warning, Icons.Material.Filled.SyncDisabled,
+                "be free to drift from what JIM holds")
     };
 
     /// <summary>

@@ -71,7 +71,13 @@ public enum ConfigurationChangePreviewSurface
     /// switching between them is making a matching change like any other. Splitting them by owning entity would
     /// have made the mode switch previewable by neither adapter.
     /// </remarks>
-    ObjectMatching = 7
+    ObjectMatching = 7,
+
+    /// <summary>
+    /// A Synchronisation Rule's behaviour toggles: whether it runs at all, which way it runs, and whether it may
+    /// project, provision or correct drift (#827 gap G3, the half #1115 did not cover).
+    /// </summary>
+    SynchronisationRuleBehaviour = 8
 }
 
 /// <summary>
