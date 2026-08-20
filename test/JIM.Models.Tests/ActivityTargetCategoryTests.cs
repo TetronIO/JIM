@@ -27,6 +27,17 @@ public class ActivityTargetCategoryTests
     }
 
     [Test]
+    public void GetCategory_PasswordSynchronisation_MapsToItsOwnCategory()
+    {
+        // Its own category rather than Identity Data, which is the near miss: a password change is about an
+        // identity, but Identity Data means an identity's attribute change history, and a password never reaches
+        // an attribute. Filing it there would bury password events among attribute changes and would be the one
+        // place in JIM where "identity data" included a credential.
+        Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.PasswordSynchronisation),
+            Is.EqualTo(ActivityTargetCategory.PasswordSynchronisation));
+    }
+
+    [Test]
     public void GetCategory_ConfigurationObjects_MapToConfiguration()
     {
         using (Assert.EnterMultipleScope())
