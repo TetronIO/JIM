@@ -115,7 +115,7 @@ Providers commonly rate-limit. The connector:
 - honours `Retry-After` on a `429` or `503`;
 - pauses proactively when a provider's `RateLimit-*` headers say its allowance is nearly spent.
 
-Throttling is reported as a warning; it does not fail a run.
+Throttling is recorded in the logs and never fails a run; it is not reported on the Activity.
 
 ## Connection Settings
 
