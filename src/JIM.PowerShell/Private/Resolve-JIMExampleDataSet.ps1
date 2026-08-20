@@ -1,20 +1,20 @@
 # Copyright (c) Tetron Limited. All rights reserved.
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-function Resolve-JIMMetaverseAttribute {
+function Resolve-JIMExampleDataSet {
     <#
     .SYNOPSIS
-        Resolves a Metaverse Attribute name to its object.
+        Resolves an Example Data Set name to its object.
 
     .DESCRIPTION
-        Internal helper function that looks up a Metaverse Attribute by name and returns the object.
+        Internal helper function that looks up an Example Data Set by name and returns the object.
         Throws an error if not found or if multiple matches exist.
 
     .PARAMETER Name
-        The name of the Metaverse Attribute to resolve.
+        The name of the Example Data Set to resolve.
 
     .OUTPUTS
-        PSCustomObject representing the Metaverse Attribute.
+        PSCustomObject representing the Example Data Set.
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
@@ -23,21 +23,21 @@ function Resolve-JIMMetaverseAttribute {
         [string]$Name
     )
 
-    Write-Verbose "Resolving Metaverse Attribute name: $Name"
+    Write-Verbose "Resolving Example Data Set name: $Name"
 
     # The list endpoint is paginated with a server-side default page size, so read every page;
     # a name beyond the first page could otherwise never resolve (#894).
-    $attributes = Get-JIMPagedItems -Endpoint "/api/v1/metaverse/attributes"
+    $dataSets = Get-JIMPagedItems -Endpoint "/api/v1/example-data/example-data-sets"
 
     # Find by name (exact match)
-    $matches = @($attributes | Where-Object { $_.name -eq $Name })
+    $matches = @($dataSets | Where-Object { $_.name -eq $Name })
 
     if ($matches.Count -eq 0) {
-        throw "Metaverse Attribute not found: '$Name'"
+        throw "Example Data Set not found: '$Name'"
     }
 
     if ($matches.Count -gt 1) {
-        throw "Multiple Metaverse Attributes found with name '$Name'. Use -Id to specify the exact attribute."
+        throw "Multiple Example Data Sets found with name '$Name'. Use the data set's id to specify the exact set."
     }
 
     $matches[0]
