@@ -80,7 +80,14 @@ public class SyncOutcomeTypeOrdinalTests
         // Synchronisation Rule behaviour toggle preview (#1462): what a rule stops doing.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] = 35,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] = 36,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = 37
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = 37,
+
+        // Connected System schema selection preview (#1475): what deselecting stops, and what the obsoletion recall
+        // toggle does to the values already contributed.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] = 38,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] = 39,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = 40,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = 41
     };
 
     [Test]

@@ -1105,6 +1105,34 @@ public interface IConnectedSystemRepository
     public Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
 
     /// <summary>
+    /// The identifiers of a Connected System's live objects of one type, joined or not: the population that stops
+    /// being imported when the type is deselected (#1475).
+    /// </summary>
+    /// <remarks>
+    /// Identifiers rather than objects, for the reason
+    /// <see cref="GetUnjoinedConnectedSystemObjectIdsOfTypeAsync"/> gives: the caller fetches in batches behind the
+    /// population read, because Npgsql allows one command per connection.
+    /// </remarks>
+    public Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type that hold at least one value for a given
+    /// attribute: the population whose values freeze when that attribute is deselected (#1475). Objects holding no
+    /// value for it have nothing to freeze, so reporting them would inflate the count with objects the change does
+    /// not touch.
+    /// </summary>
+    public Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's obsolete objects of one type that are still joined to a Metaverse
+    /// Object: the objects awaiting the synchronisation that will disconnect them, and therefore the population
+    /// whose fate changes when Remove Contributed Attributes On Obsoletion is toggled (#1475).
+    /// </summary>
+    public Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId);
+
+    /// <summary>
     /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
     /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
     /// </summary>

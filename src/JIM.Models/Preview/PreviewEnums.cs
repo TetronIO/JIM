@@ -36,7 +36,9 @@ public enum ConfigurationChangePreviewSurface
     SynchronisationRule = 1,
 
     /// <summary>
-    /// A Connected System: schema selection, and the partitions and containers it imports from (#827 gap G4).
+    /// A Connected System's import scope: the partitions and containers it reads from (#827 gap G4). Its schema
+    /// selection is a different question answered from different data, and is
+    /// <see cref="ConnectedSystemSchema"/>.
     /// </summary>
     ConnectedSystem = 2,
 
@@ -77,7 +79,19 @@ public enum ConfigurationChangePreviewSurface
     /// A Synchronisation Rule's behaviour toggles: whether it runs at all, which way it runs, and whether it may
     /// project, provision or correct drift (#827 gap G3, the half #1115 did not cover).
     /// </summary>
-    SynchronisationRuleBehaviour = 8
+    SynchronisationRuleBehaviour = 8,
+
+    /// <summary>
+    /// A Connected System's schema selection and obsoletion settings: which Object Types JIM manages, which of
+    /// their attributes it imports, and whether obsoleting an object withdraws the Metaverse values it contributed
+    /// (#827 gap G6).
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="ConnectedSystem"/>, which is the same entity's import scope, because the two are
+    /// different questions answered from different data: scope asks which objects are read, schema asks which kinds
+    /// of object and which of their attributes. One adapter may serve one surface, so they could not share.
+    /// </remarks>
+    ConnectedSystemSchema = 9
 }
 
 /// <summary>

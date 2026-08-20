@@ -529,7 +529,10 @@ public class ConfigurationChangePreviewServer
             case ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow:
                 activity.SyncRuleId = request.TargetId;
                 break;
+            // Both Connected System surfaces land in the same column, for the same reason as the Synchronisation
+            // Rule's: import scope and schema selection are different kinds of change to one system.
             case ConfigurationChangePreviewSurface.ConnectedSystem:
+            case ConfigurationChangePreviewSurface.ConnectedSystemSchema:
                 activity.ConnectedSystemId = request.TargetId;
                 break;
             // Object Matching is previewed per Connected System, in both modes and across the switch between them,

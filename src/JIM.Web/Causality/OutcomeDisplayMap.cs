@@ -153,7 +153,22 @@ public static class OutcomeDisplayMap
                 "no longer have an account created for them"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] =
             new OutcomeDisplay("Free to drift from JIM", "Would Stop Correcting Drift", CausalityTone.Warning, Icons.Material.Filled.SyncDisabled,
-                "be free to drift from what JIM holds")
+                "be free to drift from what JIM holds"),
+        // The schema selection preview's fates (#1475). Warning on the freeze rather than Error, because nothing is
+        // destroyed and nothing is disconnected; what happens is that values stop tracking their source while still
+        // being contributed, which is a slower harm and an easier one to miss.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] =
+            new OutcomeDisplay("Stops being imported, stays joined", "Would Stop Being Imported", CausalityTone.Warning, Icons.Material.Filled.CloudOff,
+                "stop being imported while staying joined, keeping the values they last imported"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] =
+            new OutcomeDisplay("Imported again", "Would Resume Being Imported", CausalityTone.Success, Icons.Material.Filled.CloudSync,
+                "be imported again, so their values track the Connected System once more"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] =
+            new OutcomeDisplay("Contributed values withdrawn", "Would Withdraw Contributed Values", CausalityTone.Warning, Icons.Material.Filled.Undo,
+                "have the values this Connected System contributed withdrawn"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] =
+            new OutcomeDisplay("Contributed values kept", "Would Retain Contributed Values", CausalityTone.Info, Icons.Material.Filled.Inventory2,
+                "keep the values this Connected System contributed")
     };
 
     /// <summary>
