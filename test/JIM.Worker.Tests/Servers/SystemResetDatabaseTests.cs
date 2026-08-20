@@ -8,6 +8,7 @@ using JIM.Models.Enums;
 using JIM.Models.ExampleData;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
+using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.PostgresData;
@@ -436,13 +437,9 @@ public class SystemResetDatabaseTests
         // Schedules and Activities tables by itself, so those categories are covered without help.
         await using (var ctx = NewContext())
         {
-            // Criteria and criteria groups do not cascade from PredefinedSearches (both foreign keys are NO
-            // ACTION), so unwind the chain by hand. This simulates the search never having been seeded; it is not
-            // a supported delete path (see the reset's own inability to delete such a search, issue filed).
-            await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""PredefinedSearchCriteria"" WHERE ""PredefinedSearchCriteriaGroupId"" IN (SELECT g.""Id"" FROM ""PredefinedSearchCriteriaGroups"" g INNER JOIN ""PredefinedSearches"" s ON s.""Id"" = g.""PredefinedSearchId"" WHERE s.""Uri"" = 'distribution-groups');");
-            await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""PredefinedSearchCriteriaGroups"" WHERE ""PredefinedSearchId"" IN (SELECT ""Id"" FROM ""PredefinedSearches"" WHERE ""Uri"" = 'distribution-groups');");
+            // Criteria groups, criteria and Connector Definition settings all cascade from their owner now
+            // (#1477), so deleting the owner is enough.
             await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""PredefinedSearches"" WHERE ""Uri"" = 'distribution-groups';");
-            await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""ConnectorDefinitionSettings"" WHERE ""ConnectorDefinitionId"" IN (SELECT ""Id"" FROM ""ConnectorDefinitions"" WHERE ""BuiltIn"");");
             await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""ConnectorDefinitions"" WHERE ""BuiltIn"";");
         }
 
@@ -491,6 +488,170 @@ public class SystemResetDatabaseTests
                     a.TargetType == ActivityTargetType.SystemInitialisation && a.Status != ActivityStatus.Complete), Is.False,
                 "leaving the parent InProgress would block any subsequent reset via the in-progress guard");
         }
+    }
+
+    /// <summary>
+    /// A factory reset must remove custom configuration that has child rows, which is the ordinary shape of it
+    /// rather than an edge case: a Predefined Search filters via criteria groups, a Connector Definition declares
+    /// settings, an Example Data Set holds values, and an Example Data Template covers Object Types (issue #1477).
+    /// None of those child foreign keys used to cascade, so the wipe's <c>WHERE "BuiltIn" = false</c> deletes failed
+    /// with a foreign-key violation; because the whole wipe runs in one transaction, the entire reset rolled back
+    /// and nothing at all was removed.
+    /// <para>
+    /// The in-memory provider enforces no foreign keys, so only a real database can see this.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task ResetSystemAsync_CustomConfigurationWithChildRows_IsRemovedRatherThanBlockedAsync()
+    {
+        await SeedCustomConfigurationWithChildRowsAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var result = await repository.System.ResetSystemAsync(includeAdministrators: false);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.CustomPredefinedSearchesRemoved, Is.EqualTo(1));
+                Assert.That(result.CustomConnectorDefinitionsRemoved, Is.EqualTo(1));
+                Assert.That(result.CustomExampleDataSetsRemoved, Is.EqualTo(1));
+                Assert.That(result.CustomExampleDataTemplatesRemoved, Is.EqualTo(1));
+            }
+        }
+
+        await using var verify = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.PredefinedSearches.AnyAsync(s => !s.BuiltIn), Is.False, "the custom Predefined Search must be removed");
+            Assert.That(await verify.PredefinedSearchCriteriaGroups.AnyAsync(), Is.False, "its criteria groups, nested ones included, must go with it");
+            Assert.That(await verify.PredefinedSearchCriteria.AnyAsync(), Is.False, "its criteria must go with it");
+            Assert.That(await verify.ConnectorDefinitions.AnyAsync(d => !d.BuiltIn), Is.False, "the custom Connector Definition must be removed");
+            Assert.That(await verify.ConnectorDefinitionSettings.AnyAsync(), Is.False, "its settings must go with it");
+            Assert.That(await verify.ExampleDataSets.AnyAsync(s => !s.BuiltIn), Is.False, "the custom Example Data Set must be removed");
+            Assert.That(await verify.ExampleDataSetValues.AnyAsync(), Is.False, "its values must go with it");
+            Assert.That(await verify.ExampleDataTemplates.AnyAsync(t => !t.BuiltIn), Is.False, "the custom Example Data Template must be removed");
+            Assert.That(await verify.ExampleDataObjectTypes.AnyAsync(), Is.False, "its Object Types must go with it");
+        }
+    }
+
+    /// <summary>
+    /// A custom Metaverse Attribute chosen as the SSO unique identifier is referenced by the preserved Service
+    /// Settings singleton, so deleting the attribute would violate that foreign key and roll the reset back
+    /// (issue #1477). The reference is customer configuration and the attribute it names is about to be removed,
+    /// so the reset clears it rather than being blocked by it.
+    /// </summary>
+    [Test]
+    public async Task ResetSystemAsync_CustomAttributeIsTheSsoUniqueIdentifier_ReferenceIsClearedAsync()
+    {
+        await using (var seed = NewContext())
+        {
+            var customAttr = new MetaverseAttribute
+            {
+                Name = "Payroll Number",
+                Type = AttributeDataType.Text,
+                AttributePlurality = AttributePlurality.SingleValued,
+                BuiltIn = false
+            };
+            seed.MetaverseAttributes.Add(customAttr);
+            seed.Add(new ServiceSettings
+            {
+                IsServiceInMaintenanceMode = false,
+                SSOUniqueIdentifierClaimType = "employeeNumber",
+                SSOUniqueIdentifierMetaverseAttribute = customAttr
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.System.ResetSystemAsync(includeAdministrators: false);
+        }
+
+        await using var verify = NewContext();
+        var settings = await verify.ServiceSettings
+            .Include(ss => ss.SSOUniqueIdentifierMetaverseAttribute)
+            .SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.MetaverseAttributes.AnyAsync(a => !a.BuiltIn), Is.False, "the custom attribute must be removed");
+            Assert.That(settings.SSOUniqueIdentifierMetaverseAttribute, Is.Null,
+                "the Service Settings reference to the removed attribute must be cleared, not left dangling");
+        }
+    }
+
+    /// <summary>
+    /// Seeds one custom row in each configuration category the wipe removes with a <c>WHERE "BuiltIn" = false</c>
+    /// delete, each carrying the child rows an administrator-created one really has.
+    /// </summary>
+    private async Task SeedCustomConfigurationWithChildRowsAsync()
+    {
+        await using var ctx = NewContext();
+
+        var userType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, PluralName = "Users", BuiltIn = true };
+        var builtInAttr = new MetaverseAttribute
+        {
+            Name = Constants.BuiltInAttributes.DisplayName,
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            BuiltIn = true
+        };
+        ctx.MetaverseObjectTypes.Add(userType);
+        ctx.MetaverseAttributes.Add(builtInAttr);
+
+        // A Predefined Search with a nested criteria group, so both the search -> group and group -> group
+        // foreign keys are exercised, plus a criterion under each.
+        var search = new PredefinedSearch
+        {
+            Name = "Contractors",
+            Uri = "contractors",
+            BuiltIn = false,
+            MetaverseObjectType = userType
+        };
+        search.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = builtInAttr, Position = 0 });
+        var topLevelGroup = new PredefinedSearchCriteriaGroup { Type = SearchGroupType.All, Position = 0 };
+        topLevelGroup.Criteria.Add(new PredefinedSearchCriteria
+        {
+            ComparisonType = SearchComparisonType.Equals,
+            MetaverseAttribute = builtInAttr,
+            StringValue = "Contractor"
+        });
+        var nestedGroup = new PredefinedSearchCriteriaGroup { Type = SearchGroupType.Any, Position = 0 };
+        nestedGroup.Criteria.Add(new PredefinedSearchCriteria
+        {
+            ComparisonType = SearchComparisonType.StartsWith,
+            MetaverseAttribute = builtInAttr,
+            StringValue = "C"
+        });
+        topLevelGroup.ChildGroups.Add(nestedGroup);
+        search.CriteriaGroups.Add(topLevelGroup);
+        ctx.PredefinedSearches.Add(search);
+
+        // A Connector Definition with settings.
+        var connectorDefinition = new ConnectorDefinition { Name = "Contoso Connector", BuiltIn = false };
+        connectorDefinition.Settings.Add(new ConnectorDefinitionSetting
+        {
+            Name = "Hostname",
+            Category = ConnectedSystemSettingCategory.Connectivity,
+            Type = ConnectedSystemSettingType.String,
+            Required = true
+        });
+        ctx.ConnectorDefinitions.Add(connectorDefinition);
+
+        // An Example Data Set with values.
+        var dataSet = new ExampleDataSet { Name = "Custom Surnames", Culture = "en-GB", BuiltIn = false };
+        dataSet.Values.Add(new ExampleDataSetValue { StringValue = "Ashworth" });
+        ctx.ExampleDataSets.Add(dataSet);
+
+        // An Example Data Template covering an Object Type.
+        var template = new ExampleDataTemplate { Name = "Custom Template", BuiltIn = false };
+        template.ObjectTypes.Add(new ExampleDataObjectType { MetaverseObjectType = userType, ObjectsToCreate = 10 });
+        ctx.ExampleDataTemplates.Add(template);
+
+        ctx.Add(new ServiceSettings { IsServiceInMaintenanceMode = false });
+
+        await ctx.SaveChangesAsync();
     }
 
     /// <summary>

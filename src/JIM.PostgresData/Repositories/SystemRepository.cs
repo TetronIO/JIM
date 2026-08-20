@@ -91,6 +91,17 @@ internal sealed class SystemRepository : ISystemRepository
             await db.ExecuteSqlRawAsync(@"DELETE FROM ""ExampleDataSets"" WHERE ""BuiltIn"" = false;");
             await db.ExecuteSqlRawAsync(@"DELETE FROM ""Roles"" WHERE ""BuiltIn"" = false;");
             await db.ExecuteSqlRawAsync(@"DELETE FROM ""MetaverseObjectTypes"" WHERE ""BuiltIn"" = false;");
+
+            // An administrator can point the SSO unique identifier at a custom Metaverse Attribute, and the
+            // Service Settings singleton is preserved by the reset, so that reference outlives the attribute
+            // delete below and fails it with 23503 (#1477). Cascading is not an option here: it would delete the
+            // singleton itself. The mapping is customer configuration naming an attribute that is about to be
+            // removed, so the reset clears it. SystemResetForeignKeyCoverageTests holds the matching allow-list
+            // entry for this foreign key; keep the two in step.
+            await db.ExecuteSqlRawAsync(
+                @"UPDATE ""ServiceSettings"" SET ""SSOUniqueIdentifierMetaverseAttributeId"" = NULL
+                  WHERE ""SSOUniqueIdentifierMetaverseAttributeId"" IN (
+                      SELECT ""Id"" FROM ""MetaverseAttributes"" WHERE ""BuiltIn"" = false);");
             await db.ExecuteSqlRawAsync(@"DELETE FROM ""MetaverseAttributes"" WHERE ""BuiltIn"" = false;");
             await db.ExecuteSqlRawAsync(@"DELETE FROM ""ConnectorDefinitions"" WHERE ""BuiltIn"" = false;");
             await db.ExecuteSqlRawAsync(@"DELETE FROM ""ApiKeys"" WHERE ""IsInfrastructureKey"" = false;");

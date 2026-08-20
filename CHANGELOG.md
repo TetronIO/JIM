@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Those filters combine, so "which of last week's scheduled Full Imports against Contoso AD recorded errors?" is now one call rather than a sift through pages of Activities. The portal, REST API and PowerShell run the same query, so all three answer identically.
 
 - 🐛 Parked and expired initial password records are now cleared once they have had their retention period, 90 days by default. Nothing removed them before, so a Synchronisation Rule provisioning into a system that refuses its passwords grew one record per account for ever. (#1316)
+- 🐛 A factory reset no longer fails outright when custom configuration holds the records it ordinarily holds, such as a Predefined Search's criteria or a Connector Definition's settings. It stopped with a foreign-key error and, being one transaction, removed nothing. (#1477)
 
 ### Added
 
