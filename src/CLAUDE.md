@@ -339,6 +339,8 @@ Optional, clearable fields (e.g. `Description`) follow one convention across bot
 5. Run the unit tests: `BulkInsertColumnCompletenessTests` will fail for any table whose raw SQL writers the new column must be added to (see "Raw SQL Column Lists" above). Extend the named `*BulkColumns` constant AND the corresponding writers (values in list order), place the column consciously in the update or exclusion list, and extend the table's `RequiresPostgres` round-trip test to assert the new column persists. A schema change is not complete until these pass.
 6. Commit migration files
 
+**If `main` gains migrations while yours is unmerged, regenerate yours.** A migration's `.Designer.cs` is a snapshot of the *whole* model at that point, and `dotnet ef migrations remove` restores `JimDbContextModelSnapshot.cs` from the **previous** migration's Designer. A Designer scaffolded before someone else's migration landed is missing their columns, so a later routine add-then-remove silently deletes those columns from the snapshot, and the next migration generated from it tries to re-add a column the database already has. Nothing fails while this happens. After merging `main` into your branch, `dotnet ef migrations remove` and re-add your migration so its Designer snapshots the merged model. `MigrationDesignerChainTests` (JIM.Worker.Tests) fails the build if you forget, naming the columns; see issue #1379.
+
 **CRITICAL: NEVER flatten, squash, delete, or reset EF Core migrations.** Migrations are append-only. Deployed instances track applied migrations by name in `__EFMigrationsHistory`; removing old migrations and replacing them with a combined migration will break every existing deployment.
 
 **Updating Architecture Diagrams:**
