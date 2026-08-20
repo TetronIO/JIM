@@ -196,6 +196,12 @@ public class ProcessedExportItem
     public Guid? QueuedByRunProfileExecutionItemId { get; set; }
 
     /// <summary>
+    /// The Synchronisation Rule whose provisioning decision produced this export, copied from
+    /// <see cref="PendingExport.ProvisioningSyncRuleId"/>. Only ever set for a create.
+    /// </summary>
+    public int? ProvisioningSyncRuleId { get; set; }
+
+    /// <summary>
     /// Copies the identifiers that say why this export happened off the Pending Export being carried out, and
     /// returns this item so it can be captured in a single expression at each call site.
     /// </summary>
@@ -212,6 +218,7 @@ public class ProcessedExportItem
         PendingExportId = export.Id;
         SourceMetaverseObjectId = export.SourceMetaverseObjectId;
         QueuedByRunProfileExecutionItemId = export.QueuedByRunProfileExecutionItemId;
+        ProvisioningSyncRuleId = export.ProvisioningSyncRuleId;
         return this;
     }
 }

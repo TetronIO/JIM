@@ -42,7 +42,10 @@ public class CausalEdgeOrdinalTests
         [CausalReasonCode.LastConnectorDisconnected] = 1,
         [CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured] = 2,
         [CausalReasonCode.AllAuthoritativeSourcesDisconnected] = 3,
-        [CausalReasonCode.AuthoritativeSourceDisconnected] = 4
+        [CausalReasonCode.AuthoritativeSourceDisconnected] = 4,
+        [CausalReasonCode.ExportCreateStaged] = 5,
+        [CausalReasonCode.ExportUpdateStaged] = 6,
+        [CausalReasonCode.ExportDeleteStaged] = 7
     };
 
     [Test]

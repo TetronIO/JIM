@@ -257,11 +257,16 @@ public class CausalityCauseWordingTests
 
     #region the synchronisation that queued an export (#1223)
 
-    private static CausalChainCohort QueueingCohort(string? displayName = "Project-AgileCore")
+    private static CausalChainCohort QueueingCohort(
+        string? displayName = "Project-AgileCore",
+        CausalReasonCode reasonCode = CausalReasonCode.NotSet)
     {
         return new CausalChainCohort
         {
             EdgeType = CausalEdgeType.PendingExportQueueingCausedExportExecution,
+            ReasonCode = reasonCode,
+            ConnectedSystemId = 4,
+            ConnectedSystemName = "Glitterband EMEA",
             Members = [new CausalChainMember { DisplayName = displayName }]
         };
     }
@@ -290,6 +295,95 @@ public class CausalityCauseWordingTests
 
         Assert.That(Read(sentence), Is.EqualTo(
             "A synchronisation of 1 object staged this change, and this run exported it"));
+    }
+
+    /// <summary>
+    /// A provisioning create leads with the decision and answers create-versus-update in the verb. The system
+    /// is named in the sentence, so the hop must not also render its chip; see ShowConnectedSystemChip below.
+    /// </summary>
+    [Test]
+    public void Sentence_QueueingCohortForACreate_LeadsWithTheProvisioningDecision()
+    {
+        var cohort = QueueingCohort("Mia Young (S8-352)", CausalReasonCode.ExportCreateStaged);
+
+        var sentence = CausalityCauseWording.Sentence(cohort, effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "Mia Young (S8-352) was provisioned to Glitterband EMEA, so this run created the record"));
+    }
+
+    [Test]
+    public void Sentence_QueueingCohortForAnUpdate_LeadsWithTheIdentityChange()
+    {
+        var cohort = QueueingCohort("Sam Scott (S8-198)", CausalReasonCode.ExportUpdateStaged);
+
+        var sentence = CausalityCauseWording.Sentence(cohort, effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "Sam Scott (S8-198)'s Identity changed, so this run applied the changes to the record"));
+    }
+
+    /// <summary>
+    /// The flagship case: an account being removed leads with the Identity's deletion, whose own causes
+    /// continue above it.
+    /// </summary>
+    [Test]
+    public void Sentence_QueueingCohortForADelete_LeadsWithTheIdentityDeletion()
+    {
+        var cohort = QueueingCohort("Tina Adams (S8-999)", CausalReasonCode.ExportDeleteStaged);
+
+        var sentence = CausalityCauseWording.Sentence(cohort, effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "The Identity Tina Adams (S8-999) was deleted, so this run deleted the record"));
+    }
+
+    /// <summary>
+    /// The provisioning rule reads on from its own chip as the subject, matching the deletion reasons'
+    /// chip-as-subject grammar.
+    /// </summary>
+    [Test]
+    public void Reason_QueueingCohortForACreateNamingARule_ReadsOnFromTheRuleChip()
+    {
+        var cohort = new CausalChainCohort
+        {
+            EdgeType = CausalEdgeType.PendingExportQueueingCausedExportExecution,
+            ReasonCode = CausalReasonCode.ExportCreateStaged,
+            ConnectedSystemId = 4,
+            ConnectedSystemName = "Glitterband EMEA",
+            SyncRuleId = 12,
+            SyncRuleName = "EMEA LDAP Export Users",
+            Members = [new CausalChainMember { DisplayName = "Mia Young (S8-352)" }]
+        };
+
+        Assert.That(CausalityCauseWording.Reason(cohort), Is.EqualTo("made the provisioning decision"));
+    }
+
+    [Test]
+    public void Reason_QueueingCohortForAnUpdate_HasNothingToAdd()
+    {
+        Assert.That(CausalityCauseWording.Reason(
+            QueueingCohort("Sam Scott (S8-198)", CausalReasonCode.ExportUpdateStaged)), Is.Null);
+    }
+
+    /// <summary>
+    /// The queueing hop's sentence names the system exported to, so rendering its chip as well would restate
+    /// the page's own system with no role beside it: the unattributed-token shape the attribution row was
+    /// redesigned to remove. Every other seam keeps the chip, whose reason phrase it is the subject of.
+    /// </summary>
+    [Test]
+    public void ShowConnectedSystemChip_QueueingCohort_SuppressesTheChip()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(CausalityCauseWording.ShowConnectedSystemChip(QueueingCohort()), Is.False);
+            Assert.That(CausalityCauseWording.ShowConnectedSystemChip(new CausalChainCohort
+            {
+                EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
+                ConnectedSystemId = 1,
+                ConnectedSystemName = "Yellowstone APAC"
+            }), Is.True);
+        });
     }
 
     #endregion

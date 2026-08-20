@@ -10,11 +10,11 @@ namespace JIM.Models.Activities;
 /// <para>
 /// Only hops that cross a Run Profile Execution Item or Activity boundary appear here. A sync outcome
 /// tree is itself a causal structure, parenting each consequence under the event that caused it, so a
-/// hop within one item needs no edge and must not get one: duplicating a link that is already
-/// persisted is exactly what the PRD forbids where it rejects the queueing-to-executing hop
-/// (<see cref="ActivityRunProfileExecutionItem.PendingExportId"/> already expresses it). Scope loss to
-/// disconnect, disconnect to Deletion Rule firing, and the nested case of deletion to deprovisioning
-/// all fail that test and are deliberately absent.
+/// hop within one item needs no edge and must not get one: an edge must never duplicate a link that is
+/// already persisted. Scope loss to disconnect, disconnect to Deletion Rule firing, and the nested case
+/// of deletion to deprovisioning all fail that test and are deliberately absent. (The queueing-to-executing
+/// hop was originally rejected on the same grounds, wrongly; see
+/// <see cref="PendingExportQueueingCausedExportExecution"/>.)
 /// </para>
 /// </summary>
 public enum CausalEdgeType
@@ -109,5 +109,23 @@ public enum CausalReasonCode
     /// Deletion Rule "when authoritative source disconnects" in Specific Sources mode: a listed
     /// authoritative source disconnected.
     /// </summary>
-    AuthoritativeSourceDisconnected = 4
+    AuthoritativeSourceDisconnected = 4,
+
+    /// <summary>
+    /// On a <see cref="CausalEdgeType.PendingExportQueueingCausedExportExecution"/> edge: the staged change
+    /// was a provisioning create. The edge carries the Synchronisation Rule whose provisioning decision it
+    /// was, which the Pending Export records at staging time (#1121).
+    /// </summary>
+    ExportCreateStaged = 5,
+
+    /// <summary>
+    /// On a queueing edge: the staged change was an attribute update to an existing record.
+    /// </summary>
+    ExportUpdateStaged = 6,
+
+    /// <summary>
+    /// On a queueing edge: the staged change was a delete. Distinguished so the export item's chain can lead
+    /// with the Identity's deletion rather than a generic "a change was staged".
+    /// </summary>
+    ExportDeleteStaged = 7
 }

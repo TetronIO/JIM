@@ -43,10 +43,22 @@ public static class CausalityCauseWording
                 break;
 
             case CausalEdgeType.PendingExportQueueingCausedExportExecution:
-                // Neutral about what the synchronisation did, deliberately: this one seam covers an update and a
-                // deprovision alike, and the effect outcome beside it already says which.
-                parts.Add(new CausalityCauseSentencePart(
-                    $"A synchronisation of {Subject(cohort)} staged this change, and this run exported it"));
+                // Keyed on what the synchronisation decided, so the verb answers create-versus-update at a
+                // glance. The system exported to is named here rather than as a chip: the chip would restate
+                // the page's own system with no role beside it (see ShowConnectedSystemChip). NotSet covers
+                // edges written before the reason codes existed and keeps their original sentence.
+                parts.Add(new CausalityCauseSentencePart(cohort.ReasonCode switch
+                {
+                    CausalReasonCode.ExportCreateStaged when !string.IsNullOrWhiteSpace(cohort.ConnectedSystemName) =>
+                        $"{Subject(cohort)} was provisioned to {cohort.ConnectedSystemName}, so this run created the record",
+                    CausalReasonCode.ExportCreateStaged =>
+                        $"{Subject(cohort)} was provisioned, so this run created the record",
+                    CausalReasonCode.ExportUpdateStaged =>
+                        $"{Subject(cohort)}'s Identity changed, so this run applied the changes to the record",
+                    CausalReasonCode.ExportDeleteStaged =>
+                        $"The Identity {Subject(cohort)} was deleted, so this run deleted the record",
+                    _ => $"A synchronisation of {Subject(cohort)} staged this change, and this run exported it"
+                }));
                 break;
 
             case CausalEdgeType.MetaverseObjectDeletionCausedDeprovision:
@@ -84,6 +96,13 @@ public static class CausalityCauseWording
     public static string? Reason(CausalChainCohort cohort)
     {
         ArgumentNullException.ThrowIfNull(cohort);
+
+        // The queueing seam's reasons are already told by its sentence; the one thing left to attribute is a
+        // create's provisioning decision, which reads on from the Synchronisation Rule chip as its subject.
+        if (cohort.ReasonCode is CausalReasonCode.ExportCreateStaged)
+            return cohort.SyncRuleId.HasValue ? "made the provisioning decision" : null;
+        if (cohort.ReasonCode is CausalReasonCode.ExportUpdateStaged or CausalReasonCode.ExportDeleteStaged)
+            return null;
 
         // Kept as one expression per code rather than a shared suffix: an administrator reads these, and a
         // phrase assembled from fragments is a phrase nobody proof-reads as a whole sentence.
@@ -149,6 +168,19 @@ public static class CausalityCauseWording
     {
         ArgumentNullException.ThrowIfNull(cohort);
         return $"Hide the {cohort.MemberCount} {Noun(cohort)}";
+    }
+
+    /// <summary>
+    /// Whether the hop should render the cohort's Connected System as a chip. False where the sentence
+    /// already names the system (the queueing seam): a chip there would restate the very system the page is
+    /// about with no role stated beside it, which is the unattributed-token shape the attribution row was
+    /// redesigned to remove. The rule is that the system appears exactly once per hop, either as the subject
+    /// of the reason phrase (via its chip) or inside the sentence, never both.
+    /// </summary>
+    public static bool ShowConnectedSystemChip(CausalChainCohort cohort)
+    {
+        ArgumentNullException.ThrowIfNull(cohort);
+        return cohort.EdgeType != CausalEdgeType.PendingExportQueueingCausedExportExecution;
     }
 
     /// <summary>

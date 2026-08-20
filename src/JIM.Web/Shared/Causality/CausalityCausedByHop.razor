@@ -32,7 +32,8 @@
            rather than leading them: the chips stay fixed-shape tokens an eye can skip down a chain, and the
            reason reads on from the one naming the system it is about (see CausalityCauseWording.Reason). *@
         <div class="cb-meta">
-            @if (Cohort.ConnectedSystemId is { } connectedSystemId && Cohort.HasConnectedSystem)
+            @if (Cohort.ConnectedSystemId is { } connectedSystemId && Cohort.HasConnectedSystem
+                  && CausalityCauseWording.ShowConnectedSystemChip(Cohort))
             {
                 <CausalityEntityChip Label="@Cohort.ConnectedSystemName"
                                      Href="@($"/admin/connected-systems/{connectedSystemId}")"
@@ -127,7 +128,7 @@
 
     private bool HasMeta =>
         Reason != null
-        || Cohort.HasConnectedSystem
+        || (Cohort.HasConnectedSystem && CausalityCauseWording.ShowConnectedSystemChip(Cohort))
         || (Cohort.SyncRuleId.HasValue && !string.IsNullOrWhiteSpace(Cohort.SyncRuleName));
 
     private void ToggleMembers()

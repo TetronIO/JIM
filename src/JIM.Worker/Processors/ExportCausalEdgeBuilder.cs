@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Staging;
 using JIM.Models.Transactional;
 
 namespace JIM.Worker.Processors;
@@ -31,13 +32,22 @@ public static class ExportCausalEdgeBuilder
     /// Export before it was deleted.</param>
     /// <param name="effectOutcome">The Exported / Deprovisioned outcome the cause explains, where outcome
     /// tracking recorded one. Null leaves the edge attached to the item as a whole.</param>
+    /// <param name="connectedSystem">The system exported to, snapshotted onto the edge because the create
+    /// sentence names it ("provisioned to Glitterband EMEA") and the chain must still read after the system
+    /// is renamed or deleted. Never rendered as a chip on this seam; see CausalityCauseWording.</param>
+    /// <param name="provisioningSyncRuleName">The name of the Synchronisation Rule whose provisioning decision
+    /// produced a create, resolved by the caller from <see cref="ProcessedExportItem.ProvisioningSyncRuleId"/>.
+    /// Ignored where the item names no rule.</param>
     public static void RecordQueueingCause(
         ActivityRunProfileExecutionItem executionItem,
         ProcessedExportItem exportItem,
-        ActivityRunProfileExecutionItemSyncOutcome? effectOutcome)
+        ActivityRunProfileExecutionItemSyncOutcome? effectOutcome,
+        ConnectedSystem connectedSystem,
+        string? provisioningSyncRuleName = null)
     {
         ArgumentNullException.ThrowIfNull(executionItem);
         ArgumentNullException.ThrowIfNull(exportItem);
+        ArgumentNullException.ThrowIfNull(connectedSystem);
 
         // A failed export changed nothing on the Connected System, so there is no effect for a cause to
         // explain; the item's story is its error message.
@@ -59,13 +69,22 @@ public static class ExportCausalEdgeBuilder
             PendingExportId = exportItem.PendingExportId,
             // Named from the exported object, because the Pending Export is deleted moments from now and the
             // Metaverse Object may be too (this seam carries deprovisions as well as updates).
-            DisplayName = executionItem.DisplayNameSnapshot
-            // No Connected System, and no reason code. Both are attribution, and neither has anything to
-            // attribute here: an execution item covers one object on one system, so this seam's cohorts are
-            // always of one and there is nothing to group. The system would render as a chip naming the very
-            // system the page is already about, with no stated role beside it, which is the unattributed-token
-            // shape the attribution row was rewritten to remove. The effect outcome already distinguishes an
-            // export from a deprovision.
+            DisplayName = executionItem.DisplayNameSnapshot,
+            // What kind of change was staged, so the chain leads with "created the record" / "applied the
+            // changes" / "deleted the record" rather than a generic "a change was staged" (#1223 read design).
+            ReasonCode = exportItem.ChangeType switch
+            {
+                PendingExportChangeType.Create => CausalReasonCode.ExportCreateStaged,
+                PendingExportChangeType.Delete => CausalReasonCode.ExportDeleteStaged,
+                _ => CausalReasonCode.ExportUpdateStaged
+            },
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystemName = connectedSystem.Name,
+            // A create names the rule whose provisioning decision it was, recorded on the Pending Export at
+            // staging time (#1121). Updates and deletes name none: an update flows from whichever rules map
+            // the changed attributes, and a delete is the Deletion Rule's decision, both told elsewhere.
+            SyncRuleId = exportItem.ProvisioningSyncRuleId,
+            SyncRuleName = exportItem.ProvisioningSyncRuleId.HasValue ? provisioningSyncRuleName : null
         }.ToEdge(CausalEdgeType.PendingExportQueueingCausedExportExecution, effectOutcome));
     }
 }

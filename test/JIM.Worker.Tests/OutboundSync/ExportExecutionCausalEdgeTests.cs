@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Enums;
+using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Worker.Processors;
 
@@ -22,6 +23,7 @@ namespace JIM.Worker.Tests.OutboundSync;
 [TestFixture]
 public class ExportExecutionCausalEdgeTests
 {
+    private const int TargetSystemId = 4;
     private static readonly Guid QueueingItemId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid PendingExportId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid SourceMvoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -39,7 +41,7 @@ public class ExportExecutionCausalEdgeTests
             OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Exported
         };
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, ExportItem(), outcome);
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, ExportItem(), outcome, TargetSystem());
 
         Assert.That(executionItem.CausalEdges, Has.Count.EqualTo(1));
         var edge = executionItem.CausalEdges[0];
@@ -49,8 +51,10 @@ public class ExportExecutionCausalEdgeTests
             Assert.That(edge.CauseRunProfileExecutionItemId, Is.EqualTo(QueueingItemId));
             Assert.That(edge.CausePendingExportId, Is.EqualTo(PendingExportId));
             Assert.That(edge.CauseMetaverseObjectId, Is.EqualTo(SourceMvoId));
-            Assert.That(edge.ConnectedSystemId, Is.Null,
-                "an item covers one object on one system, so naming it here only renders a chip for the system the page is already about");
+            Assert.That(edge.ReasonCode, Is.EqualTo(CausalReasonCode.ExportUpdateStaged));
+            Assert.That(edge.ConnectedSystemId, Is.EqualTo(TargetSystemId),
+                "the sentence names the system exported to, so the edge must snapshot it");
+            Assert.That(edge.ConnectedSystemName, Is.EqualTo("Glitterband EMEA"));
             Assert.That(edge.EffectSyncOutcome, Is.SameAs(outcome),
                 "the edge must name the outcome it explains, or an item carrying several outcomes groups its causes under the wrong one");
         });
@@ -69,7 +73,7 @@ public class ExportExecutionCausalEdgeTests
             DisplayNameSnapshot = "Project-AgileCore"
         };
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, ExportItem(), null);
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, ExportItem(), null, TargetSystem());
 
         Assert.That(executionItem.CausalEdges[0].CauseDisplayName, Is.EqualTo("Project-AgileCore"));
     }
@@ -86,7 +90,7 @@ public class ExportExecutionCausalEdgeTests
         var exportItem = ExportItem();
         exportItem.QueuedByRunProfileExecutionItemId = null;
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null);
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
 
         Assert.That(executionItem.CausalEdges, Has.Count.EqualTo(1));
         Assert.Multiple(() =>
@@ -109,7 +113,7 @@ public class ExportExecutionCausalEdgeTests
         exportItem.QueuedByRunProfileExecutionItemId = null;
         exportItem.SourceMetaverseObjectId = null;
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null);
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
 
         Assert.That(executionItem.CausalEdges, Is.Empty);
     }
@@ -125,7 +129,7 @@ public class ExportExecutionCausalEdgeTests
         var exportItem = ExportItem();
         exportItem.Succeeded = false;
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null);
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
 
         Assert.That(executionItem.CausalEdges, Is.Empty);
     }
@@ -141,7 +145,7 @@ public class ExportExecutionCausalEdgeTests
         var exportItem = ExportItem();
         exportItem.ChangeType = PendingExportChangeType.Delete;
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null);
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
 
         Assert.That(executionItem.CausalEdges, Has.Count.EqualTo(1));
         Assert.That(executionItem.CausalEdges[0].EdgeType,
@@ -156,4 +160,56 @@ public class ExportExecutionCausalEdgeTests
         SourceMetaverseObjectId = SourceMvoId,
         QueuedByRunProfileExecutionItemId = QueueingItemId
     };
+
+    private static ConnectedSystem TargetSystem() => new() { Id = TargetSystemId, Name = "Glitterband EMEA" };
+
+    #region what the queueing synchronisation decided (#1223)
+
+    /// <summary>
+    /// A provisioning create records which Synchronisation Rule decided it, snapshotted so the chain reads
+    /// after the rule is renamed or deleted. The Pending Export already carries the rule id (#1121); the name
+    /// is resolved by the caller and handed in.
+    /// </summary>
+    [Test]
+    public void RecordQueueingCause_ProvisioningCreate_RecordsTheRuleAndTheCreateReason()
+    {
+        var executionItem = new ActivityRunProfileExecutionItem { ObjectChangeType = ObjectChangeType.Exported };
+        var exportItem = ExportItem();
+        exportItem.ChangeType = PendingExportChangeType.Create;
+        exportItem.ProvisioningSyncRuleId = 12;
+
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem(),
+            provisioningSyncRuleName: "EMEA LDAP Export Users");
+
+        var edge = executionItem.CausalEdges[0];
+        Assert.Multiple(() =>
+        {
+            Assert.That(edge.ReasonCode, Is.EqualTo(CausalReasonCode.ExportCreateStaged));
+            Assert.That(edge.SyncRuleId, Is.EqualTo(12));
+            Assert.That(edge.SyncRuleName, Is.EqualTo("EMEA LDAP Export Users"));
+        });
+    }
+
+    /// <summary>
+    /// A deprovision carries the delete reason, and no rule: deletion is decided by the Deletion Rule and the
+    /// deprovisioning action, not by a provisioning decision.
+    /// </summary>
+    [Test]
+    public void RecordQueueingCause_Deprovision_RecordsTheDeleteReasonAndNoRule()
+    {
+        var executionItem = new ActivityRunProfileExecutionItem { ObjectChangeType = ObjectChangeType.Deprovisioned };
+        var exportItem = ExportItem();
+        exportItem.ChangeType = PendingExportChangeType.Delete;
+
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
+
+        var edge = executionItem.CausalEdges[0];
+        Assert.Multiple(() =>
+        {
+            Assert.That(edge.ReasonCode, Is.EqualTo(CausalReasonCode.ExportDeleteStaged));
+            Assert.That(edge.SyncRuleId, Is.Null);
+        });
+    }
+
+    #endregion
 }
