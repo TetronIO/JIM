@@ -25,10 +25,9 @@ function Resolve-JIMExampleDataSet {
 
     Write-Verbose "Resolving Example Data Set name: $Name"
 
-    $response = Invoke-JIMApi -Endpoint "/api/v1/example-data/example-data-sets"
-
-    # Handle paginated response
-    $dataSets = if ($response.items) { $response.items } else { $response }
+    # The list endpoint is paginated with a server-side default page size, so read every page;
+    # a name beyond the first page could otherwise never resolve (#894).
+    $dataSets = Get-JIMPagedItems -Endpoint "/api/v1/example-data/example-data-sets"
 
     # Find by name (exact match)
     $matches = @($dataSets | Where-Object { $_.name -eq $Name })

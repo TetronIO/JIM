@@ -25,10 +25,9 @@ function Resolve-JIMMetaverseAttribute {
 
     Write-Verbose "Resolving Metaverse Attribute name: $Name"
 
-    $response = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes"
-
-    # Handle paginated response
-    $attributes = if ($response.items) { $response.items } else { $response }
+    # The list endpoint is paginated with a server-side default page size, so read every page;
+    # a name beyond the first page could otherwise never resolve (#894).
+    $attributes = Get-JIMPagedItems -Endpoint "/api/v1/metaverse/attributes"
 
     # Find by name (exact match)
     $matches = @($attributes | Where-Object { $_.name -eq $Name })
