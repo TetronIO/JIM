@@ -1,0 +1,148 @@
+@using JIM.Models.Staging.DTOs
+@inject IDialogService DialogService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<MudAlert Severity="@PanelSeverity"
+          Variant="Variant.Outlined"
+          Icon="@Icons.Material.Filled.Preview"
+          Class="mt-5 jim-alert-schema-refresh-preview">
+    <MudText Typo="Typo.subtitle1" Class="mb-2">
+        <strong>Schema Refresh Preview</strong>
+    </MudText>
+
+    @if (!Result.HasChanges)
+    {
+        <MudText Class="mb-2">
+            Found <strong>@Result.TotalObjectTypes.ToString("N0")</strong> object type(s) with <strong>@Result.TotalAttributes.ToString("N0")</strong> attribute(s).
+        </MudText>
+        <MudText Color="Color.Success">No changes detected. The schema is up to date.</MudText>
+        <MudButton data-testid="jim-close-schema-refresh"
+                   Variant="Variant.Text"
+                   Color="Color.Inherit"
+                   DropShadow="false"
+                   Class="mt-3"
+                   OnClick="@(() => OnDiscard.InvokeAsync())">Close</MudButton>
+    }
+    else
+    {
+        <MudText Class="mb-2">
+            The Connected System reported the changes below. <strong>Nothing has been applied yet</strong>; review them, then apply or discard the refresh.
+        </MudText>
+
+        @if (Result.DiscoveryWarnings.Count > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                <strong>Discovery warnings:</strong> the Connector could not discover everything and worked around the gaps below. A partial read can make Object Types or Attributes appear removed when they are not; check these before applying.
+                <ul class="mt-1 mb-0">
+                    @foreach (var warning in Result.DiscoveryWarnings)
+                    {
+                        <li>@warning</li>
+                    }
+                </ul>
+            </MudAlert>
+        }
+
+        @if (Result.BlockedCredentialAttributeCount > 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                <strong>@Result.BlockedCredentialAttributeCount credential attribute(s) blocked:</strong>
+                @(string.Join(", ", Result.BlockedCredentialAttributes.SelectMany(kvp => kvp.Value).Distinct())).
+                These hold credential material and are never managed by JIM.
+            </MudAlert>
+        }
+
+        <SchemaChangeTable Result="Result" />
+
+        @if (Result.HasRemovalsOrDefinitionChanges)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                <strong>Some of these changes can affect existing configuration.</strong>
+                Object Types and Attributes the Connected System no longer reports are <strong>retained</strong> in JIM when you apply; nothing is deleted, but their values stop refreshing and any Synchronisation Rule or Attribute Flow that reads them works from stale data. Attribute definition changes are applied, and a mapping validated against the old definition may no longer behave as intended. Review your Synchronisation Rules after applying.
+            </MudAlert>
+        }
+
+        @if (Result.ActionRequired)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                <strong>Action Required:</strong> Some attributes that are no longer reported are still referenced by Synchronisation Rules.
+                Please update your Synchronisation Rules to remove references to these attributes.
+            </MudAlert>
+        }
+
+        <div class="d-flex mt-4">
+            <MudButton data-testid="jim-apply-schema-refresh"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       DropShadow="false"
+                       Disabled="@Busy"
+                       OnClick="@(() => OnApply.InvokeAsync())">Apply Schema Changes</MudButton>
+            <MudButton data-testid="jim-discard-schema-refresh"
+                       Variant="Variant.Text"
+                       Color="Color.Inherit"
+                       DropShadow="false"
+                       Disabled="@Busy"
+                       Class="ms-2"
+                       OnClick="HandleDiscardAsync">Discard</MudButton>
+        </div>
+    }
+</MudAlert>
+
+@code {
+    /// <summary>
+    /// The refresh being previewed. Nothing it describes has been persisted.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public SchemaRefreshResult Result { get; set; } = null!;
+
+    /// <summary>
+    /// Raised when the administrator chooses to persist the previewed refresh.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnApply { get; set; }
+
+    /// <summary>
+    /// Raised when the administrator discards the previewed refresh (after confirmation, where discarding leaves
+    /// JIM's schema adrift of the Connected System's).
+    /// </summary>
+    [Parameter]
+    public EventCallback OnDiscard { get; set; }
+
+    /// <summary>
+    /// True while the apply is running, so the buttons cannot be pressed twice.
+    /// </summary>
+    [Parameter]
+    public bool Busy { get; set; }
+
+    private Severity PanelSeverity => Result.HasRemovalsOrDefinitionChanges ? Severity.Warning : Severity.Info;
+
+    /// <summary>
+    /// Additions discard for free (the next refresh finds them again). Removals and definition changes do not:
+    /// discarding them means JIM's configuration no longer matches the Connected System, and the next
+    /// synchronisation runs against that mismatch, so the administrator confirms they understand what staying
+    /// on the old schema costs.
+    /// </summary>
+    private async Task HandleDiscardAsync()
+    {
+        if (Result.HasRemovalsOrDefinitionChanges)
+        {
+            var options = new MessageBoxOptions
+            {
+                Title = "Discard schema changes?",
+                MarkupMessage = (MarkupString)(
+                    "The Connected System no longer matches the schema JIM holds. Discarding keeps JIM on the old schema: " +
+                    "imports and exports that reference removed or redefined attributes can fail or silently work from stale values on the next synchronisation. " +
+                    "You can refresh again at any time to review these changes."),
+                YesText = "Discard",
+                CancelText = "Keep Reviewing"
+            };
+
+            var confirmed = await DialogService.ShowMessageBoxAsync(options);
+            if (confirmed != true)
+                return;
+        }
+
+        await OnDiscard.InvokeAsync();
+    }
+}

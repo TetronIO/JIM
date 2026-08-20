@@ -55,6 +55,14 @@ public class SchemaRefreshResult
     public Dictionary<string, List<string>> RemovedAttributes { get; set; } = new();
 
     /// <summary>
+    /// Attributes whose definition (data type or plurality) the Connector restated, grouped by object type name.
+    /// These changes are applied by the merge; they are reported because a definition change can invalidate an
+    /// Attribute Flow mapping validated against the old definition. A data type an administrator overrode is
+    /// never overwritten and therefore never appears here.
+    /// </summary>
+    public Dictionary<string, List<SchemaAttributeDefinitionChange>> ChangedAttributes { get; set; } = new();
+
+    /// <summary>
     /// Attributes that could not be removed because they are referenced by Synchronisation Rules.
     /// Key is the attribute name, value is the list of Synchronisation Rule names that reference it.
     /// </summary>
@@ -99,7 +107,31 @@ public class SchemaRefreshResult
     public bool HasChanges => AddedObjectTypes.Count > 0 ||
                               RemovedObjectTypes.Count > 0 ||
                               AddedAttributes.Values.Sum(v => v.Count) > 0 ||
-                              RemovedAttributes.Values.Sum(v => v.Count) > 0;
+                              RemovedAttributes.Values.Sum(v => v.Count) > 0 ||
+                              ChangedAttributes.Values.Sum(v => v.Count) > 0;
+
+    /// <summary>
+    /// Whether the refresh found changes that can invalidate existing configuration or leave stale data behind:
+    /// removals (which JIM reports but deliberately retains; see issue #782) and attribute definition changes.
+    /// Additions never set this; they cannot break anything that already works. Surfaces use this to decide
+    /// whether discarding or applying the refresh warrants a warning.
+    /// </summary>
+    public bool HasRemovalsOrDefinitionChanges => RemovedObjectTypes.Count > 0 ||
+                                                  RemovedAttributes.Values.Sum(v => v.Count) > 0 ||
+                                                  ChangedAttributes.Values.Sum(v => v.Count) > 0;
+
+    /// <summary>
+    /// Records a definition change the merge applied to an existing attribute, grouped under its object type.
+    /// </summary>
+    public void AddChangedAttribute(string objectTypeName, SchemaAttributeDefinitionChange change)
+    {
+        if (!ChangedAttributes.TryGetValue(objectTypeName, out var changes))
+        {
+            changes = new List<SchemaAttributeDefinitionChange>();
+            ChangedAttributes[objectTypeName] = changes;
+        }
+        changes.Add(change);
+    }
 
     /// <summary>
     /// Creates a successful result with no changes.
