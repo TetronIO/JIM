@@ -10,6 +10,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Enums;
 using Moq;
 using NUnit.Framework;
 
@@ -35,12 +36,16 @@ public class CausalChainWalkTests
 
     private readonly Dictionary<Guid, List<CausalEdge>> _edgesByEffectItemId = new();
     private readonly HashSet<Guid> _retainedItemIds = [];
+    private readonly Dictionary<Guid, CausalChainItemSummary> _summariesById = new();
+    private readonly Dictionary<Guid, CausalSourceImportEvent> _importEventsByCsoId = new();
 
     [SetUp]
     public void SetUp()
     {
         _edgesByEffectItemId.Clear();
         _retainedItemIds.Clear();
+        _summariesById.Clear();
+        _importEventsByCsoId.Clear();
 
         _mockRepository = new Mock<IRepository>();
         _mockActivityRepository = new Mock<IActivityRepository>();
@@ -52,8 +57,17 @@ public class CausalChainWalkTests
                 ids.SelectMany(id => _edgesByEffectItemId.TryGetValue(id, out var edges) ? edges : []).ToList());
 
         _mockActivityRepository
-            .Setup(r => r.GetRetainedRunProfileExecutionItemIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids.Where(_retainedItemIds.Contains).ToHashSet());
+            .Setup(r => r.GetRunProfileExecutionItemCausalSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids
+                .Where(_retainedItemIds.Contains)
+                // A neutral change type by default: only tests that opt an item into a synchronisation-side
+                // summary via _summariesById exercise the source-import hop.
+                .ToDictionary(id => id, id => _summariesById.GetValueOrDefault(id)
+                    ?? new CausalChainItemSummary { Id = id, ObjectChangeType = ObjectChangeType.PendingExport }));
+
+        _mockActivityRepository
+            .Setup(r => r.GetLatestImportItemForCsoAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<Guid>()))
+            .ReturnsAsync((Guid csoId, DateTime _, Guid _) => _importEventsByCsoId.GetValueOrDefault(csoId));
 
         _application = new JimApplication(_mockRepository.Object);
     }
@@ -382,6 +396,127 @@ public class CausalChainWalkTests
             Times.AtMost(3),
             "the walk must batch each level into one query; per-member queries would not survive a real cascade");
     }
+
+    #region the source-import hop (#1223, complete export chain)
+
+    private Guid SeedSyncCauseSummary(Guid itemId, ObjectChangeType changeType = ObjectChangeType.Projected)
+    {
+        var csoId = Guid.NewGuid();
+        _retainedItemIds.Add(itemId);
+        _summariesById[itemId] = new CausalChainItemSummary
+        {
+            Id = itemId,
+            ObjectChangeType = changeType,
+            ConnectedSystemObjectId = csoId,
+            ActivityExecuted = new DateTime(2026, 8, 15, 11, 0, 0, DateTimeKind.Utc)
+        };
+        return csoId;
+    }
+
+    private Guid SeedImportEvent(Guid csoId, ObjectChangeType changeType = ObjectChangeType.Added)
+    {
+        var importItemId = Guid.NewGuid();
+        _retainedItemIds.Add(importItemId);
+        _importEventsByCsoId[csoId] = new CausalSourceImportEvent
+        {
+            RunProfileExecutionItemId = importItemId,
+            ChangeType = changeType,
+            DisplayName = "Mia Young (S8-352)",
+            ConnectedSystemId = 1,
+            ConnectedSystemName = "Yellowstone APAC"
+        };
+        return importItemId;
+    }
+
+    /// <summary>
+    /// The hop that completes an export's chain: the synchronisation that staged the change resolves, and the
+    /// record's own timeline continues behind it to the import that fed it, which then ends as the true root.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ResolvedSynchronisationCause_ContinuesToTheImportThatFedItAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        var csoId = SeedSyncCauseSummary(syncItemId);
+        var importItemId = SeedImportEvent(csoId);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var syncMember = chain.Cohorts.Single().Members.Single();
+        Assert.That(syncMember.Resolution, Is.EqualTo(CausalChainResolution.Resolved),
+            "a synchronisation whose record has a retained import must resolve rather than end the chain");
+        var sourceHop = syncMember.Causes.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(sourceHop.SourceImportChangeType, Is.EqualTo(ObjectChangeType.Added));
+            Assert.That(sourceHop.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
+            Assert.That(sourceHop.Members.Single().RunProfileExecutionItemId, Is.EqualTo(importItemId),
+                "the hop must link to the import item so the walk and the reader can continue there");
+            Assert.That(sourceHop.Members.Single().DisplayName, Is.EqualTo("Mia Young (S8-352)"));
+            Assert.That(sourceHop.Members.Single().Resolution, Is.EqualTo(CausalChainResolution.NoFurtherCauses),
+                "an import with no edges of its own is the true root: data arrived from the source system");
+        });
+    }
+
+    /// <summary>
+    /// A synchronisation item viewed directly gets the same hop at the root, so the chain reads identically
+    /// wherever the reader enters it.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_SynchronisationItemViewedDirectly_GetsTheSourceImportHopAtRootAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var csoId = SeedSyncCauseSummary(itemId);
+        SeedImportEvent(csoId, ObjectChangeType.Updated);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        Assert.That(chain.Cohorts, Has.Count.EqualTo(1),
+            "an item with no edges but a retained import behind its record has a chain, not an empty panel");
+        Assert.That(chain.Cohorts[0].SourceImportChangeType, Is.EqualTo(ObjectChangeType.Updated));
+    }
+
+    /// <summary>
+    /// The hop applies to synchronisation-side items only. An import item is itself the far end of the
+    /// timeline, and a staging item's Connected System Object belongs to the effect, not the cause; giving
+    /// either a timeline hop would invent a cause the walk has no grounds for.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ImportSideCause_GetsNoSourceImportHopAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var importCauseItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: importCauseItemId, causeName: "Mia Young (S8-352)"));
+        var csoId = SeedSyncCauseSummary(importCauseItemId, ObjectChangeType.Added);
+        SeedImportEvent(csoId);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var member = chain.Cohorts.Single().Members.Single();
+        Assert.That(member.Resolution, Is.EqualTo(CausalChainResolution.NoFurtherCauses));
+        Assert.That(member.Causes, Is.Empty);
+    }
+
+    /// <summary>
+    /// A record whose imports have aged out yields no hop, and the chain ends at the synchronisation as a
+    /// complete story rather than pretending the timeline never existed or faking a truncation.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_SynchronisationCauseWithNoRetainedImport_EndsThereAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSyncCauseSummary(syncItemId);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var member = chain.Cohorts.Single().Members.Single();
+        Assert.That(member.Resolution, Is.EqualTo(CausalChainResolution.NoFurtherCauses));
+    }
+
+    #endregion
 
     private void SeedEdges(Guid effectItemId, params CausalEdge[] edges)
     {

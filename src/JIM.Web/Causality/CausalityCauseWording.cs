@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Enums;
 
 namespace JIM.Web.Causality;
 
@@ -34,6 +35,25 @@ public static class CausalityCauseWording
 
         var parts = new List<CausalityCauseSentencePart>();
         var plural = cohort.MemberCount != 1;
+
+        // A derived source-import hop carries no edge type, so it is worded before the switch: the true root
+        // of a chain, where data arrived at (or disappeared from) the source system. The system is named in
+        // the sentence and never chipped on this hop; see ShowConnectedSystemChip.
+        if (cohort.SourceImportChangeType is { } importChangeType)
+        {
+            var systemName = string.IsNullOrWhiteSpace(cohort.ConnectedSystemName)
+                ? "the source system"
+                : cohort.ConnectedSystemName;
+            parts.Add(new CausalityCauseSentencePart(importChangeType switch
+            {
+                ObjectChangeType.Updated =>
+                    $"{Subject(cohort)} was imported from {systemName} with changed attributes",
+                ObjectChangeType.Deleted =>
+                    $"{Subject(cohort)}'s record was deleted from {systemName}",
+                _ => $"{Subject(cohort)} was imported into {systemName} as a new record"
+            }));
+            return parts;
+        }
 
         switch (cohort.EdgeType)
         {
@@ -180,7 +200,8 @@ public static class CausalityCauseWording
     public static bool ShowConnectedSystemChip(CausalChainCohort cohort)
     {
         ArgumentNullException.ThrowIfNull(cohort);
-        return cohort.EdgeType != CausalEdgeType.PendingExportQueueingCausedExportExecution;
+        return cohort.SourceImportChangeType is null
+            && cohort.EdgeType != CausalEdgeType.PendingExportQueueingCausedExportExecution;
     }
 
     /// <summary>

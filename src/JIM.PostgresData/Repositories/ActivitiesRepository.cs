@@ -1555,23 +1555,64 @@ public class ActivityRepository : IActivityRepository
     }
 
     /// <summary>
-    /// Returns which of the given Run Profile Execution Item ids still exist (#1223).
+    /// Summarises the given Run Profile Execution Items for the causal walk (#1223); presence in the result is
+    /// the retention check.
     /// </summary>
-    public async Task<HashSet<Guid>> GetRetainedRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> runProfileExecutionItemIds)
+    public async Task<Dictionary<Guid, CausalChainItemSummary>> GetRunProfileExecutionItemCausalSummariesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds)
     {
         if (runProfileExecutionItemIds.Count == 0)
             return [];
 
         var ids = runProfileExecutionItemIds as List<Guid> ?? runProfileExecutionItemIds.ToList();
-        // Ids only: the walk needs existence, not the items themselves, and materialising execution items to
-        // answer an existence question would load attribute graphs for every cause in a cascade.
-        var found = await Repository.Database.ActivityRunProfileExecutionItems
+        // A scalar projection: the walk needs a handful of fields per cause, and materialising execution items
+        // to answer it would load attribute graphs for every cause in a cascade.
+        var summaries = await Repository.Database.ActivityRunProfileExecutionItems
             .AsNoTracking()
             .Where(r => ids.Contains(r.Id))
-            .Select(r => r.Id)
+            .Select(r => new CausalChainItemSummary
+            {
+                Id = r.Id,
+                ObjectChangeType = r.ObjectChangeType,
+                ConnectedSystemObjectId = r.ConnectedSystemObjectId,
+                ActivityExecuted = r.Activity.Executed
+            })
             .ToListAsync();
 
-        return found.ToHashSet();
+        return summaries.ToDictionary(s => s.Id);
+    }
+
+    /// <summary>
+    /// The import event that last changed a Connected System Object at or before the given Activity time,
+    /// excluding the asking item itself (#1223).
+    /// </summary>
+    public async Task<CausalSourceImportEvent?> GetLatestImportItemForCsoAsync(
+        Guid connectedSystemObjectId, DateTime atOrBeforeActivityExecuted, Guid excludeRunProfileExecutionItemId)
+    {
+        return await Repository.Database.ActivityRunProfileExecutionItems
+            .AsNoTracking()
+            .Where(r => r.ConnectedSystemObjectId == connectedSystemObjectId
+                && r.Id != excludeRunProfileExecutionItemId
+                && (r.ObjectChangeType == ObjectChangeType.Added
+                    || r.ObjectChangeType == ObjectChangeType.Updated
+                    || r.ObjectChangeType == ObjectChangeType.Deleted)
+                && r.Activity.Executed <= atOrBeforeActivityExecuted)
+            .OrderByDescending(r => r.Activity.Executed)
+            .Select(r => new CausalSourceImportEvent
+            {
+                RunProfileExecutionItemId = r.Id,
+                ChangeType = r.ObjectChangeType,
+                DisplayName = r.DisplayNameSnapshot,
+                ConnectedSystemId = r.Activity.ConnectedSystemId,
+                // The Activity model carries the system by id alone; resolve the name live. Unlike the edge
+                // snapshots this is a derived hop, so a deleted system degrades the sentence rather than
+                // falsifying history.
+                ConnectedSystemName = Repository.Database.ConnectedSystems
+                    .Where(cs => cs.Id == r.Activity.ConnectedSystemId)
+                    .Select(cs => cs.Name)
+                    .FirstOrDefault()
+            })
+            .FirstOrDefaultAsync();
     }
 
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)

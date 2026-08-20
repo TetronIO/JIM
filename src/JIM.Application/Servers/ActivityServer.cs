@@ -578,10 +578,22 @@ public class ActivityServer
         var rootEdges = await Application.Repository.Activity
             .GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync([runProfileExecutionItemId]);
 
-        if (rootEdges.Count == 0)
+        var cohorts = GroupIntoCohorts(rootEdges);
+
+        // The viewed item's own timeline continues behind it too: a synchronisation item opened directly gets
+        // its source-import hop at the root, exactly as it would nested under an export's chain.
+        var rootSummaries = await Application.Repository.Activity
+            .GetRunProfileExecutionItemCausalSummariesAsync([runProfileExecutionItemId]);
+        if (rootSummaries.TryGetValue(runProfileExecutionItemId, out var rootSummary))
+        {
+            var rootSourceHop = await TryBuildSourceImportCohortAsync(rootSummary);
+            if (rootSourceHop != null)
+                cohorts.Add(rootSourceHop);
+        }
+
+        if (cohorts.Count == 0)
             return new CausalChain { RunProfileExecutionItemId = runProfileExecutionItemId };
 
-        var cohorts = GroupIntoCohorts(rootEdges);
         var truncatedByDepth = await ExpandLevelsAsync(cohorts, maxDepth);
 
         return new CausalChain
@@ -617,8 +629,8 @@ public class ActivityServer
             // Distinct, because a cohort of many members routinely points at one causing item, and a level of
             // a large cascade would otherwise ask about the same item thousands of times.
             var causeItemIds = frontier.Select(m => m.RunProfileExecutionItemId!.Value).Distinct().ToList();
-            var retained = await Application.Repository.Activity.GetRetainedRunProfileExecutionItemIdsAsync(causeItemIds);
-            var retainedIds = causeItemIds.Where(retained.Contains).ToList();
+            var summaries = await Application.Repository.Activity.GetRunProfileExecutionItemCausalSummariesAsync(causeItemIds);
+            var retainedIds = causeItemIds.Where(summaries.ContainsKey).ToList();
 
             var edgesByEffect = retainedIds.Count > 0
                 ? (await Application.Repository.Activity.GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(retainedIds))
@@ -631,7 +643,7 @@ public class ActivityServer
             {
                 var causeItemId = member.RunProfileExecutionItemId!.Value;
 
-                if (!retained.Contains(causeItemId))
+                if (!summaries.TryGetValue(causeItemId, out var summary))
                 {
                     // Expected rather than exceptional: causes are always older than their effects, so past
                     // one retention window this is the normal end of a long chain.
@@ -639,14 +651,25 @@ public class ActivityServer
                     continue;
                 }
 
-                if (!edgesByEffect.TryGetValue(causeItemId, out var edges))
+                var memberCohorts = edgesByEffect.TryGetValue(causeItemId, out var edges)
+                    ? GroupIntoCohorts(edges)
+                    : [];
+
+                // The record's own timeline continues behind a synchronisation item to the import that fed
+                // it, whether or not the item also carries edges: the source data's arrival is a cause in its
+                // own right, and it is the hop that reaches the chain's true root.
+                var sourceHop = await TryBuildSourceImportCohortAsync(summary);
+                if (sourceHop != null)
+                    memberCohorts.Add(sourceHop);
+
+                if (memberCohorts.Count == 0)
                 {
                     member.Resolution = CausalChainResolution.NoFurtherCauses;
                     continue;
                 }
 
                 member.Resolution = CausalChainResolution.Resolved;
-                member.Causes.AddRange(GroupIntoCohorts(edges));
+                member.Causes.AddRange(memberCohorts);
                 nextFrontier.AddRange(member.Causes.SelectMany(c => c.Members)
                     .Where(m => m.RunProfileExecutionItemId.HasValue));
             }
@@ -669,6 +692,67 @@ public class ActivityServer
     /// the Connected System name the tuple already carries, and would change behaviour silently whenever the
     /// wording changed.
     /// </remarks>
+    /// <summary>
+    /// The Run Profile Execution Item types behind which a record's own timeline continues to the import that
+    /// fed it: a synchronisation processed the Connected System Object, so whatever import last changed that
+    /// object is where its data (or its disappearance) came from. Import-side items are themselves the far
+    /// end, and a <see cref="ObjectChangeType.PendingExport"/> staging item's causes are its recorded edges,
+    /// not its object's timeline: its Connected System Object is the effect's, never the cause's.
+    /// </summary>
+    private static readonly HashSet<ObjectChangeType> SourceImportHopItemTypes =
+    [
+        ObjectChangeType.Projected,
+        ObjectChangeType.Joined,
+        ObjectChangeType.AttributeFlow,
+        ObjectChangeType.Disconnected,
+        ObjectChangeType.DisconnectedOutOfScope,
+        ObjectChangeType.OutOfScopeRetainJoin,
+        ObjectChangeType.DriftCorrection
+    ];
+
+    /// <summary>
+    /// Builds the source-import hop behind a synchronisation item, or null where none applies: the item is not
+    /// synchronisation-side, processed no Connected System Object, or no import on the record is retained.
+    /// </summary>
+    /// <remarks>
+    /// Derived from the record's timeline rather than a stored edge, which is the PRD's requirement 4 applied:
+    /// per-object timelines are the free join, used wherever "what else happened to this object" is the answer.
+    /// The alternative, capturing an edge at synchronisation time, was rejected because it would put a
+    /// change-history lookup per object on the full-synchronisation hot path to record what this join already
+    /// yields at read time.
+    ///
+    /// The hop's member carries the import item's id, so the walk continues through it: an import that was
+    /// itself an export confirmation resolves its own edges at the next level, and times move strictly
+    /// backwards along the timeline, so the recursion terminates at the depth bound or the true root.
+    /// </remarks>
+    private async Task<CausalChainCohort?> TryBuildSourceImportCohortAsync(CausalChainItemSummary summary)
+    {
+        if (!SourceImportHopItemTypes.Contains(summary.ObjectChangeType) || !summary.ConnectedSystemObjectId.HasValue)
+            return null;
+
+        var importEvent = await Application.Repository.Activity.GetLatestImportItemForCsoAsync(
+            summary.ConnectedSystemObjectId.Value, summary.ActivityExecuted, summary.Id);
+        if (importEvent == null)
+            return null;
+
+        return new CausalChainCohort
+        {
+            SourceImportChangeType = importEvent.ChangeType,
+            ConnectedSystemId = importEvent.ConnectedSystemId,
+            ConnectedSystemName = importEvent.ConnectedSystemName,
+            Members =
+            [
+                new CausalChainMember
+                {
+                    RunProfileExecutionItemId = importEvent.RunProfileExecutionItemId,
+                    ConnectedSystemObjectId = summary.ConnectedSystemObjectId,
+                    DisplayName = importEvent.DisplayName,
+                    Resolution = CausalChainResolution.Resolved
+                }
+            ]
+        };
+    }
+
     private static List<CausalChainCohort> GroupIntoCohorts(List<CausalEdge> edges)
     {
         return edges

@@ -279,13 +279,13 @@ public class CausalEdgeFlushDatabaseTests
         Assert.That(edges.Count(e => e.EffectRunProfileExecutionItemId == firstEffect.Id), Is.EqualTo(2));
         Assert.That(edges.Count(e => e.EffectRunProfileExecutionItemId == uncausedItem.Id), Is.Zero);
 
-        var retained = await verifyRepository.Activity.GetRetainedRunProfileExecutionItemIdsAsync(
+        var summaries = await verifyRepository.Activity.GetRunProfileExecutionItemCausalSummariesAsync(
             [firstEffect.Id, uncausedItem.Id, purgedItemId]);
 
-        Assert.That(retained, Does.Contain(firstEffect.Id));
-        Assert.That(retained, Does.Contain(uncausedItem.Id),
+        Assert.That(summaries, Does.ContainKey(firstEffect.Id));
+        Assert.That(summaries, Does.ContainKey(uncausedItem.Id),
             "an item with no edges is still retained; reporting it as purged would claim information was lost when none was");
-        Assert.That(retained, Does.Not.Contain(purgedItemId),
+        Assert.That(summaries, Does.Not.ContainKey(purgedItemId),
             "an id that no longer exists is what a truncated chain looks like, and must be reported as absent");
     }
 
@@ -300,7 +300,7 @@ public class CausalEdgeFlushDatabaseTests
         var repository = new PostgresDataRepository(ctx);
 
         Assert.That(await repository.Activity.GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync([]), Is.Empty);
-        Assert.That(await repository.Activity.GetRetainedRunProfileExecutionItemIdsAsync([]), Is.Empty);
+        Assert.That(await repository.Activity.GetRunProfileExecutionItemCausalSummariesAsync([]), Is.Empty);
     }
 
     private static CausalEdge NewEdge()

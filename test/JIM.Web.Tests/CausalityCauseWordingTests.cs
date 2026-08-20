@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Enums;
 using JIM.Web.Causality;
 using NUnit.Framework;
 
@@ -385,6 +386,69 @@ public class CausalityCauseWordingTests
             }), Is.True);
         });
     }
+
+    #region the source-import hop (#1223, complete export chain)
+
+    private static CausalChainCohort SourceImportCohort(ObjectChangeType changeType)
+    {
+        return new CausalChainCohort
+        {
+            SourceImportChangeType = changeType,
+            ConnectedSystemId = 1,
+            ConnectedSystemName = "Yellowstone APAC",
+            Members = [new CausalChainMember { DisplayName = "Mia Young (S8-352)" }]
+        };
+    }
+
+    /// <summary>
+    /// The chain's true root: data arrived from the source system. Named in the sentence, so the hop renders
+    /// no chip; the rule is one appearance of the system per hop.
+    /// </summary>
+    [Test]
+    public void Sentence_SourceImportHopForAnAdd_ReadsAsTheRecordArriving()
+    {
+        var sentence = CausalityCauseWording.Sentence(SourceImportCohort(ObjectChangeType.Added), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "Mia Young (S8-352) was imported into Yellowstone APAC as a new record"));
+    }
+
+    [Test]
+    public void Sentence_SourceImportHopForAnUpdate_ReadsAsChangedSourceData()
+    {
+        var sentence = CausalityCauseWording.Sentence(SourceImportCohort(ObjectChangeType.Updated), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "Mia Young (S8-352) was imported from Yellowstone APAC with changed attributes"));
+    }
+
+    /// <summary>
+    /// The deletion chains' root: the source system's record disappeared, which is what set the whole cascade
+    /// off.
+    /// </summary>
+    [Test]
+    public void Sentence_SourceImportHopForADelete_ReadsAsTheSourceRecordDisappearing()
+    {
+        var sentence = CausalityCauseWording.Sentence(SourceImportCohort(ObjectChangeType.Deleted), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "Mia Young (S8-352)'s record was deleted from Yellowstone APAC"));
+    }
+
+    [Test]
+    public void ShowConnectedSystemChip_SourceImportHop_SuppressesTheChip()
+    {
+        Assert.That(CausalityCauseWording.ShowConnectedSystemChip(SourceImportCohort(ObjectChangeType.Added)),
+            Is.False);
+    }
+
+    [Test]
+    public void Reason_SourceImportHop_HasNothingToAdd()
+    {
+        Assert.That(CausalityCauseWording.Reason(SourceImportCohort(ObjectChangeType.Added)), Is.Null);
+    }
+
+    #endregion
 
     #endregion
 }

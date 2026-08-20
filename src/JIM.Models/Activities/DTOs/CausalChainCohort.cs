@@ -57,6 +57,14 @@ public class CausalChainCohort
     public bool HasConnectedSystem => ConnectedSystemId.HasValue && !string.IsNullOrWhiteSpace(ConnectedSystemName);
 
     /// <summary>
+    /// Set where this cohort is a derived source-import hop rather than a recorded edge: what the import did
+    /// to the record (added, changed or deleted it). The walk synthesises these from the record's own timeline
+    /// (the PRD's free per-object join), so they carry no <see cref="EdgeType"/> of their own; wording and
+    /// rendering key on this before consulting the edge type.
+    /// </summary>
+    public Enums.ObjectChangeType? SourceImportChangeType { get; init; }
+
+    /// <summary>
     /// The Synchronisation Rule responsible, where one applies.
     /// </summary>
     public int? SyncRuleId { get; init; }

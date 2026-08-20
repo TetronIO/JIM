@@ -122,16 +122,30 @@ public interface IActivityRepository
     public Task<List<CausalEdge>> GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> effectRunProfileExecutionItemIds);
 
     /// <summary>
-    /// Returns which of the given Run Profile Execution Item ids still exist (#1223).
+    /// Summarises the given Run Profile Execution Items for the causal walk (#1223): which still exist, and
+    /// what each did to which Connected System Object.
     /// </summary>
     /// <remarks>
-    /// The upward walk needs this to tell two situations apart that are otherwise identical: a cause with no
-    /// edges above it is a genuine root and the chain is complete, whereas a cause whose item has aged out of
-    /// history is a chain that was cut short. Both produce no further edges; only one of them lost
-    /// information, and reporting the second as the first would tell an administrator they had the whole story
-    /// when they did not.
+    /// Presence in the result is the retention check. The walk needs it to tell two situations apart that are
+    /// otherwise identical: a cause with no edges above it is a genuine root and the chain is complete, whereas
+    /// a cause whose item has aged out of history is a chain that was cut short. Both produce no further edges;
+    /// only one of them lost information, and reporting the second as the first would tell an administrator
+    /// they had the whole story when they did not.
+    ///
+    /// The change type, Connected System Object and Activity time carried per item are what let the walk
+    /// continue past a synchronisation to the import that fed it, via
+    /// <see cref="GetLatestImportItemForCsoAsync"/>.
     /// </remarks>
-    public Task<HashSet<Guid>> GetRetainedRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+    public Task<Dictionary<Guid, CausalChainItemSummary>> GetRunProfileExecutionItemCausalSummariesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
+    /// <summary>
+    /// The import event that last changed a Connected System Object at or before the given Activity time,
+    /// excluding the asking item itself: the causal walk's source-import hop (#1223). Null where no import on
+    /// the record is retained, in which case the chain ends at the synchronisation instead.
+    /// </summary>
+    public Task<CausalSourceImportEvent?> GetLatestImportItemForCsoAsync(
+        Guid connectedSystemObjectId, DateTime atOrBeforeActivityExecuted, Guid excludeRunProfileExecutionItemId);
 
 
     /// <summary>
