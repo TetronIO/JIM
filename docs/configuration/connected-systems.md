@@ -248,6 +248,27 @@ The same evaluation is available to automation: [`New-JIMConfigurationChangePrev
 
 See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
 
+## Refreshing the schema
+
+The Schema tab's **Refresh Schema** button retrieves the latest object types and attributes from the Connected System. The first retrieval simply records what it finds; a refresh with a schema already in place shows you a **preview** of what changed before anything is applied, so a source system that has drifted never rewrites JIM's configuration behind your back.
+
+The preview reports, per object type:
+
+| Change | What applying it does |
+|---|---|
+| Object types or attributes **added** | Recorded and available for selection. Additions cannot affect anything that already works. |
+| Object types or attributes **no longer reported** | **Retained** in JIM; nothing is deleted by a refresh. Their values stop refreshing from that point, and any Synchronisation Rule or Attribute Flow reading them works from stale data, so the preview flags them for your attention. |
+| Attribute **definitions changed** (data type or plurality) | The new definition is recorded. A mapping validated against the old definition may no longer behave as intended, so these are flagged too. A data type you [overrode yourself](#overriding-an-inferred-type) is never overwritten, and never appears here. |
+
+You then choose:
+
+- **Apply Schema Changes** records the refresh, exactly as previewed, under an ImportSchema [Activity](activities.md).
+- **Discard** drops it; JIM's schema stays exactly as it was. Where the preview found removals or definition changes, discarding means JIM's configuration no longer matches the Connected System, and the next synchronisation runs against that mismatch; you are asked to confirm that you understand. Discarding additions alone needs no confirmation, because the next refresh simply finds them again.
+
+Watch the preview's **discovery warnings** before applying: a Connected System identity without permission to read the full schema produces a partial read, which can make object types or attributes appear removed when they are not.
+
+The same flow is available to automation: `Import-JIMConnectedSystemSchema -Preview` in [PowerShell](../powershell/connected-systems.md#import-jimconnectedsystemschema) returns the preview result (its `HasRemovalsOrDefinitionChanges` property flags the changes that matter), and the REST API offers `POST connected-systems/{id}/import-schema/preview` beside the committing `import-schema` endpoint; see the [REST API reference](../../api/reference/).
+
 ## Attribute writability
 
 When JIM retrieves a Connected System's schema, each discovered attribute is recorded with how the system will let JIM write to it. You can see this in the Schema tab's **Writability** column, filter the attribute list by it, and read it from the REST API and PowerShell as the attribute's `writability` value. It is discovered, never set by an administrator: it reflects what the Connected System told JIM.

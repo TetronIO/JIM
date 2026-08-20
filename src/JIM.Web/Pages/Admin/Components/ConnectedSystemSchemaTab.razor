@@ -24,15 +24,14 @@
     else
     {
         <MudText>
-            <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the Connected System, then this
-            will result in all references to them being removed from within JIM, i.e. Synchronisation Rules, Attribute Flow, attributes values and even entire objects will be
-            deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right permissions needed to retrieve the schema, and consider
-            a database backup before proceeding.
+            Refreshing the schema retrieves the latest Object Types and Attributes from the Connected System and shows you what changed <strong>before anything is applied</strong>.
+            Nothing is deleted by a refresh: entries the Connected System no longer reports are retained in JIM and flagged for your attention. Ensure the Connected System
+            identity has the permissions needed to read the full schema; a partial read can make entries appear removed when they are not.
         </MudText>
     }
     <MudButton
         Color="ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning"
-        Disabled="@(_schemaBeingRetrieved)"
+        Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
         Variant="Variant.Filled"
 
         OnClick="HandleImportSchemaAsync"
@@ -112,51 +111,7 @@
             }
             else
             {
-                <MudSimpleTable Dense="true" Hover="true" Bordered="true" Elevation="0" Class="mt-2 jim-schema-change-table">
-                    <thead>
-                        <tr>
-                            <th>Change Type</th>
-                            <th>Details</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (result.AddedObjectTypes.Count > 0)
-                        {
-                            <tr>
-                                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /><span>Object Types Added</span></div></td>
-                                <td class="jim-text-code">@string.Join(", ", result.AddedObjectTypes)</td>
-                            </tr>
-                        }
-                        @if (result.RemovedObjectTypes.Count > 0)
-                        {
-                            <tr>
-                                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" Class="me-1" /><span>Object Types Removed</span></div></td>
-                                <td class="jim-text-code">@string.Join(", ", result.RemovedObjectTypes)</td>
-                            </tr>
-                        }
-                        @if (result.UpdatedObjectTypes.Count > 0)
-                        {
-                            <tr>
-                                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Update" Color="Color.Info" Class="me-1" /><span>Object Types Updated</span></div></td>
-                                <td class="jim-text-code">@string.Join(", ", result.UpdatedObjectTypes)</td>
-                            </tr>
-                        }
-                        @foreach (var kvp in result.AddedAttributes)
-                        {
-                            <tr>
-                                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /><span>Attributes Added (@kvp.Key)</span></div></td>
-                                <td class="jim-text-code">@string.Join(", ", kvp.Value)</td>
-                            </tr>
-                        }
-                        @foreach (var kvp in result.RemovedAttributes)
-                        {
-                            <tr>
-                                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Warning" Class="me-1" /><span>Attributes Removed (@kvp.Key)</span></div></td>
-                                <td class="jim-text-code">@string.Join(", ", kvp.Value)</td>
-                            </tr>
-                        }
-                    </tbody>
-                </MudSimpleTable>
+                <SchemaChangeTable Result="result" />
 
                 @if (result.ActionRequired)
                 {
@@ -172,6 +127,14 @@
             <MudText Color="Color.Error">@result.ErrorMessage</MudText>
         }
     </MudAlert>
+}
+
+@if (_schemaRefreshPreview != null)
+{
+    <SchemaRefreshPreviewPanel Result="_schemaRefreshPreview"
+                               Busy="_schemaRefreshApplying"
+                               OnApply="HandleApplySchemaRefreshAsync"
+                               OnDiscard="HandleDiscardSchemaRefresh" />
 }
 
 @* Only meaningful where the Connector can set passwords at all; on one that cannot, there is no policy to read and
@@ -795,6 +758,13 @@
 
     private bool _schemaBeingRetrieved;
     private SchemaRefreshResult? _schemaRefreshResult;
+
+    // A refresh with an existing schema previews first (#421): the merge runs against this freshly loaded
+    // instance so the live graph the tabs render stays untouched until the administrator applies. Discarding
+    // is just dropping the pair.
+    private SchemaRefreshResult? _schemaRefreshPreview;
+    private ConnectedSystem? _pendingSchemaRefreshSystem;
+    private bool _schemaRefreshApplying;
     private ConnectedSystemObjectType? _selectedObjectType;
     private int _activeSchemaTabIndex;
     private string _objectTypeSearchString = "";
@@ -996,17 +966,35 @@
 
         _schemaBeingRetrieved = true;
         _schemaRefreshResult = null; // Clear any previous result
+        _schemaRefreshPreview = null;
+        _pendingSchemaRefreshSystem = null;
         StateHasChanged();
         await Task.Delay(1);
 
         try
         {
-            _schemaRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(ConnectedSystem, user);
+            if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
+            {
+                // First retrieval: there is nothing to diff against and nothing a refresh could disturb, so
+                // retrieve and persist in one step.
+                _schemaRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(ConnectedSystem, user);
 
-            // A single, newly-discovered object type is auto-selected and persisted server-side (see
-            // ImportConnectedSystemSchemaAsync); the reload below surfaces it, and OnParametersSet binds it as
-            // the active object type so the admin lands straight on attribute selection.
-            await OnConnectedSystemChanged.InvokeAsync();
+                // A single, newly-discovered object type is auto-selected and persisted server-side (see
+                // ImportConnectedSystemSchemaAsync); the reload below surfaces it, and OnParametersSet binds it as
+                // the active object type so the admin lands straight on attribute selection.
+                await OnConnectedSystemChanged.InvokeAsync();
+            }
+            else
+            {
+                // A refresh with an existing schema previews first (#421). The merge mutates the instance it is
+                // given, so it runs against a freshly loaded one: the schema the tabs below render stays exactly
+                // as persisted until the administrator applies, and discarding costs nothing.
+                var pending = await jim.ConnectedSystems.GetConnectedSystemAsync(ConnectedSystem.Id)
+                    ?? throw new InvalidOperationException($"Connected System {ConnectedSystem.Id} could not be reloaded for a schema refresh preview.");
+
+                _schemaRefreshPreview = await jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(pending);
+                _pendingSchemaRefreshSystem = pending;
+            }
         }
         catch (CsvParsingException ex)
         {
@@ -1024,6 +1012,52 @@
             StateHasChanged();
             await Task.Delay(1);
         }
+    }
+
+    /// <summary>
+    /// Persists the previewed refresh: the same retrieve-merge-persist outcome the one-call import produces,
+    /// with the administrator's decision in the middle. The preview's result becomes the applied summary.
+    /// </summary>
+    private async Task HandleApplySchemaRefreshAsync()
+    {
+        if (_schemaRefreshPreview == null || _pendingSchemaRefreshSystem == null)
+            return;
+
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+
+        _schemaRefreshApplying = true;
+        StateHasChanged();
+        await Task.Delay(1);
+
+        try
+        {
+            await jim.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(_pendingSchemaRefreshSystem, _schemaRefreshPreview, user);
+            _schemaRefreshResult = _schemaRefreshPreview;
+            _schemaRefreshPreview = null;
+            _pendingSchemaRefreshSystem = null;
+            await OnConnectedSystemChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to apply schema refresh for Connected System {SystemId}", ConnectedSystem.Id);
+            Snackbar.Add($"Failed to apply the schema changes: {ex.Message}", Severity.Error, options => options.RequireInteraction = true);
+        }
+        finally
+        {
+            _schemaRefreshApplying = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Drops the previewed refresh. The preview merged into its own instance, so the schema JIM holds was never
+    /// touched; the panel has already confirmed the decision where the discard leaves JIM adrift of the source.
+    /// </summary>
+    private void HandleDiscardSchemaRefresh()
+    {
+        _schemaRefreshPreview = null;
+        _pendingSchemaRefreshSystem = null;
     }
 
     private void HandleCloseSchemaRefreshResult()

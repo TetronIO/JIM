@@ -315,10 +315,10 @@ Imports (or re-imports) the schema from the connected data source. This discover
 
 ```powershell
 # ById (default)
-Import-JIMConnectedSystemSchema -Id <int> [-PassThru]
+Import-JIMConnectedSystemSchema -Id <int> [-Preview] [-PassThru]
 
 # ByInputObject
-Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-PassThru]
+Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-PassThru]
 ```
 
 ### Parameters
@@ -327,16 +327,24 @@ Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-PassThru]
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById) | | Connected System identifier |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
-| `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after schema import |
+| `Preview` | `switch` | No | `$false` | Retrieves the schema and returns what a refresh would change, without persisting anything |
+| `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after schema import (not needed with `-Preview`, which always returns its result) |
 
 ### Output
 
-When `-PassThru` is specified, returns the Connected System Object. Otherwise, no output.
+With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output.
 
 ### Examples
 
 ```powershell title="Import schema for a Connected System"
 Import-JIMConnectedSystemSchema -Id 3
+```
+
+```powershell title="Preview a refresh, then apply only when nothing was removed or redefined"
+$preview = Import-JIMConnectedSystemSchema -Id 3 -Preview
+if (-not $preview.HasRemovalsOrDefinitionChanges) {
+    Import-JIMConnectedSystemSchema -Id 3 -Confirm:$false
+}
 ```
 
 ```powershell title="Pipeline: create a system, then import its schema"
@@ -346,9 +354,10 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 
 ### Notes
 
-- This operation is **destructive**: it replaces the existing schema. Any object type or attribute selections that no longer match the new schema are removed.
+- A refresh never deletes: additions and attribute definition updates are applied, while object types and attributes the Connected System no longer reports are retained in JIM and flagged in the result. See [Refreshing the schema](../configuration/connected-systems.md#refreshing-the-schema).
+- Check the preview's `DiscoveryWarnings` before applying: a partial schema read (for example, missing permissions) can make entries appear removed when they are not.
 - Schema import is required before creating Synchronisation Rules for a Connected System.
-- Supports `ShouldProcess` (Medium impact).
+- Supports `ShouldProcess` (Medium impact). `-Preview` bypasses it; a preview changes nothing, so there is nothing to confirm.
 
 ---
 

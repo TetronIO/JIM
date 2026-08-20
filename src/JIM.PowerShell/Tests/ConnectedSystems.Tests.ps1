@@ -471,3 +471,67 @@ Describe 'Set-JIMConnectedSystemContainer' {
         }
     }
 }
+
+Describe 'Import-JIMConnectedSystemSchema' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Import-JIMConnectedSystemSchema
+        }
+
+        It 'Should have a Preview switch parameter' {
+            $command.Parameters['Preview'].SwitchParameter | Should -BeTrue
+        }
+    }
+
+    Context 'Preview behaviour' {
+
+        It 'Calls the preview endpoint and returns the result when -Preview is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        success                        = $true
+                        hasChanges                     = $true
+                        hasRemovalsOrDefinitionChanges = $true
+                        removedObjectTypes             = @('computer')
+                    }
+                }
+
+                $result = Import-JIMConnectedSystemSchema -Id 5 -Preview
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/5/import-schema/preview' -and $Method -eq 'POST'
+                }
+                $result.HasRemovalsOrDefinitionChanges | Should -BeTrue
+                $result.RemovedObjectTypes | Should -Contain 'computer'
+            }
+        }
+
+        It 'Previews without persisting even though PassThru is not specified' {
+            # The result IS the point of a preview; gating it behind -PassThru would return nothing at all.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ success = $true; hasChanges = $false } }
+
+                $result = Import-JIMConnectedSystemSchema -Id 5 -Preview
+
+                $result | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It 'Calls the import endpoint, not the preview endpoint, when -Preview is absent' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ objectTypes = @() } }
+
+                Import-JIMConnectedSystemSchema -Id 5 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/5/import-schema'
+                }
+            }
+        }
+    }
+}
