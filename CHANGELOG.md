@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Those filters combine, so "which of last week's scheduled Full Imports against Contoso AD recorded errors?" is now one call rather than a sift through pages of Activities. The portal, REST API and PowerShell run the same query, so all three answer identically.
 
 - 🐛 Parked and expired initial password records are now cleared once they have had their retention period, 90 days by default. Nothing removed them before, so a Synchronisation Rule provisioning into a system that refuses its passwords grew one record per account for ever. (#1316)
+- 🐛 A factory reset no longer fails outright when custom configuration holds the records it ordinarily holds, such as a Predefined Search's criteria or a Connector Definition's settings. It stopped with a foreign-key error and, being one transaction, removed nothing. (#1477)
 
 ### Added
 
@@ -139,6 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The home page's **Run your first synchronisation** step now ticks when you run a synchronisation. It was satisfied only by a Schedule having fired, so an administrator who ran a Run Profile by hand from Operations, which is how a first synchronisation is normally run, was never credited with it; on a deployment whose only Schedule is disabled the step could never be completed at all, leaving the Getting Started checklist on screen permanently. Running a Run Profile now completes the step, whether you started it yourself or a Schedule did, and whether the run succeeded, failed or is still going. Defining a Run Profile is still not the same as running one. (#1482)
 - 🐛 The confirmation shown when you deselect a Connected System Object Type now states what deselecting actually does. It said the objects already imported from the type become obsolete and whatever they are joined to is deprovisioned, which is what happens when you deselect a Partition or a Container, and is not what happens here: deletion detection only looks at selected Object Types, so a deselected type's Connected System Objects are never revisited. They stay joined to their Metaverse Objects and keep contributing the values they last imported, which stop being refreshed. The confirmation now says so, and says plainly that nothing is obsoleted and nothing is deprovisioned, so the setting is not read as a way to take objects out of management. Whether it should behave that way is being decided separately. (#1474)
 - 🐛 The built-in Words Example Data Set no longer ships `Jalapeã±O`, an encoding-damaged spelling of `Jalapeño` that generated example objects could pick up as a value. (#1287)
 - 🐛 An instance that stops part way through creating its built-in configuration now recovers on the next start, instead of failing to start ever again. Seeding is safe to repeat: every step checks what the database already holds rather than assuming it holds nothing, so recovery no longer means resetting the schema and starting over. (#1287)
