@@ -1973,8 +1973,12 @@ public class SynchronisationController(
             var result = await _application.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
             return Ok(SchemaRefreshResultDto.FromModel(result));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Deliberately broad, with the cancellation exclusion the fallback-dispatcher rule requires: schema
+            // retrieval fails in as many concrete types as there are connectors (file IO, LDAP, SQL, HTTP), and
+            // every one of them is a fact about the Connected System's configuration or reachability that the
+            // caller must see as a 400 with the reason, not a 500. A cancelled request still propagates.
             _logger.LogError(ex, "Failed to preview schema refresh for Connected System: {Id}", connectedSystemId);
             return BadRequest(ApiErrorResponse.BadRequest($"Schema refresh preview failed: {ex.Message}"));
         }

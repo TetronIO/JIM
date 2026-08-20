@@ -1038,8 +1038,11 @@
             _pendingSchemaRefreshSystem = null;
             await OnConnectedSystemChanged.InvokeAsync();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Deliberately broad, with the cancellation exclusion the fallback-dispatcher rule requires: whatever
+            // the persist throws (database faults included, which are not domain exceptions), the administrator
+            // must see the failure in the panel rather than have it escape and tear the circuit down.
             Log.Error(ex, "Failed to apply schema refresh for Connected System {SystemId}", ConnectedSystem.Id);
             Snackbar.Add($"Failed to apply the schema changes: {ex.Message}", Severity.Error, options => options.RequireInteraction = true);
         }
