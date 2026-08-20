@@ -1397,7 +1397,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     ///
     /// This is not the same operation as setting a password on chosen accounts
     /// (`POST /synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password`), which
-    /// resets one named account immediately and reports whether the target accepted it. This one returns as soon
+    /// sets a chosen password on one named account immediately and reports whether the target accepted it. This
+    /// one returns as soon
     /// as the change is recorded: delivery runs on its own clock and retries, so a directory being unavailable
     /// delays the password rather than losing it, and the caller is not held while every target is written to.
     ///

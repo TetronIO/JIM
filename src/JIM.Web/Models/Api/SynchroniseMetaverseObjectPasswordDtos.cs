@@ -11,8 +11,8 @@ namespace JIM.Web.Models.Api;
 /// A password change for an identity, to be synchronised to every Connected System that takes synchronised
 /// passwords and in which the identity has an account (#1119).
 /// <para>
-/// Distinct from setting a password on chosen accounts. That operation resets whichever accounts the caller
-/// names, immediately, and reports per-account success or failure. This one records that the person's password
+/// Distinct from setting a password on chosen accounts. That operation applies a password the caller chose to
+/// whichever accounts they name, immediately, and reports per-account success or failure. This one records that the person's password
 /// has changed and returns; delivery happens on its own clock, with retries, so a directory being unavailable
 /// delays the password rather than losing it.
 /// </para>

@@ -30,7 +30,8 @@ namespace JIM.Web.Api.Tests;
 /// password changed" into one queued change per Connected System they have an account in.
 /// <para>
 /// Deliberately not the same operation as setting a password on chosen accounts, which stays exactly as it is.
-/// That one resets whichever accounts an administrator picks, immediately, and preselects nothing because
+/// That one applies a password the administrator chose to whichever accounts they pick, immediately, and
+/// preselects nothing because
 /// resetting a forgotten password in one system must not silently reset the others (#1172). This one says the
 /// person's password has changed and every enabled system should end up holding it, which is a standing
 /// arrangement rather than a choice made per account.

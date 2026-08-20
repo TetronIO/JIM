@@ -795,8 +795,8 @@ public class SynchronisationController(
     /// The password is supplied by the caller. To have JIM produce one that satisfies what the Connected System
     /// itself demands, call the generate endpoint first and pass the result here.
     ///
-    /// This resets the password on whichever account it is pointed at: an administrator who can call it can
-    /// reset any account in this connector space, subject only to what the Connected System's own service
+    /// This sets the password on whichever account it is pointed at: an administrator who can call it can take
+    /// over any account in this connector space, subject only to what the Connected System's own service
     /// account is permitted to do.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>

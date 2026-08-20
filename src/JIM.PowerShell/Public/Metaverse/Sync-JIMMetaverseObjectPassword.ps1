@@ -20,10 +20,10 @@ function Sync-JIMMetaverseObjectPassword {
         Password Synchronisation switched off still accumulates the change and receives it when it is switched
         back on; a system that is not configured for it at all is not a target.
 
-        This is not Set-JIMMetaverseObjectPassword. That command resets whichever accounts you name, straight
-        away, and tells you whether each target accepted the password: the right tool when somebody has
-        forgotten their password and you are fixing it for them, in the systems you choose. Use this one when
-        the person has changed their own password somewhere and every system should end up holding it.
+        This is not Set-JIMMetaverseObjectPassword. That command sets a password you choose on whichever
+        accounts you name, straight away, and tells you whether each target accepted it: the right tool when you
+        are choosing the password, in the systems you choose. Use this one when the person has changed their own
+        password somewhere and every system should end up holding it.
 
         The password is encrypted before JIM stores it and is never logged, never returned, and never recorded
         on an Activity.

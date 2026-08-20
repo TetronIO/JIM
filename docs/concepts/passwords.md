@@ -175,18 +175,18 @@ JIM has two ways to give somebody a password, and they answer different question
 
 | | **Set Password** | **Synchronise Password** |
 |---|---|---|
-| Answers | "Reset this person's password in the systems I choose" | "This person's password changed; every system should hold it" |
+| Answers | "Change this person's password in the systems I choose" | "This person's password changed; every system should hold it" |
 | Reaches | The accounts you tick | Every Connected System enabled for Password Synchronisation |
 | When | Immediately, while you wait | Recorded now, delivered on its own clock |
 | If a system is down | That account fails, and you are told | Queued and retried until it works or the window closes |
 | Told to you | Success or failure per account | Which systems it was queued for |
 
-Use **Set Password** when somebody has forgotten theirs and you are fixing it for them in the one system that matters. Use **Synchronise Password** when they have already changed their own password somewhere and the rest should catch up.
+Use **Set Password** when you are choosing the password yourself and applying it to systems you name: onboarding somebody, or putting right an account whose password was refused or forgotten. Use **Synchronise Password** when they have already changed their own password somewhere and the rest should catch up.
 
 Both are on the Metaverse Object's Actions tab, and both are available to automation:
 
 ```powershell
-# Reset chosen accounts, now
+# Change the password on chosen accounts, now
 Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId 3 -Password $password
 
 # Propagate a password change everywhere it belongs

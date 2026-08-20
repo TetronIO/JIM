@@ -12,9 +12,9 @@
     self-service portal or a service desk tool telling JIM that somebody's password has changed, and neither
     of those clicks a dialog.
 
-    Deliberately a separate cmdlet from Set-JIMMetaverseObjectPassword, which resets whichever accounts you
-    name, immediately, and reports whether each target accepted the password. This one records that the
-    person's password changed and lets delivery happen on its own clock. Collapsing the two would mean one
+    Deliberately a separate cmdlet from Set-JIMMetaverseObjectPassword, which sets a password you choose on
+    whichever accounts you name, immediately, and reports whether each target accepted it. This one records
+    that the person's password changed and lets delivery happen on its own clock. Collapsing the two would mean one
     cmdlet whose -AllAccounts and "synchronise" behaviours differ in retry semantics, target selection and
     what the return value means.
 #>
