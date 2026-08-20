@@ -60,7 +60,18 @@ public enum ConfigurationChangePreviewSurface
     /// A Synchronisation Rule's Attribute Flow mappings: what the objects it manages would have written to them
     /// (#827 gap G2).
     /// </summary>
-    SynchronisationRuleAttributeFlow = 6
+    SynchronisationRuleAttributeFlow = 6,
+
+    /// <summary>
+    /// A Connected System's Object Matching configuration: the rules that decide which Metaverse Object each of its
+    /// unjoined objects joins to, in both Simple and Advanced modes, and the switch between them (#827 gap G1).
+    /// </summary>
+    /// <remarks>
+    /// One surface across both modes, because they answer the same question from the same data and an administrator
+    /// switching between them is making a matching change like any other. Splitting them by owning entity would
+    /// have made the mode switch previewable by neither adapter.
+    /// </remarks>
+    ObjectMatching = 7
 }
 
 /// <summary>

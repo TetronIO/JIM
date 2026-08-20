@@ -4607,6 +4607,34 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The identifiers of a Connected System's live, unjoined objects of one type: the population a
+    /// synchronisation would put to Object Matching on its next run, and therefore the only population an Object
+    /// Matching change can move (#1457).
+    /// </summary>
+    public async Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// How many live, unjoined objects of one type a Connected System holds; the set-based count behind an Object
+    /// Matching preview's cost estimate.
+    /// </summary>
+    public async Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnjoinedConnectedSystemObjectCountOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Connected System Objects by identifier, without change tracking: the batched read behind a population that
+    /// was resolved to identifiers first.
+    /// </summary>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, connectedSystemObjectIds);
+    }
+
+    /// <summary>
     /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
     /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
     /// </summary>
@@ -7711,10 +7739,33 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Refuses an Object Matching Rule that could never match anything, before it is stored.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ObjectMatchingRule.IsValid"/> described what a workable rule looks like and nothing called it,
+    /// so the portal was able to store Simple mode rules with no Metaverse Object Type (#1458). The matching engine
+    /// skips such a rule and moves to the next one, so a Connected System whose only rules are malformed matches
+    /// nothing at all: every account that should have joined an existing identity projects a new one instead, and
+    /// nothing reports it. A hard refusal here is what the Synchronisation Integrity rules ask for; the alternative
+    /// is discovering the duplicate identities by hand, months later.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The rule cannot work, with the reason.</exception>
+    private static void EnsureObjectMatchingRuleIsWorkable(ObjectMatchingRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        var invalidity = rule.DescribeInvalidity();
+        if (invalidity != null)
+            throw new InvalidDataException(invalidity);
+    }
+
+    /// <summary>
     /// Creates a new Object Matching Rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7734,6 +7785,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7753,6 +7806,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7772,6 +7827,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",

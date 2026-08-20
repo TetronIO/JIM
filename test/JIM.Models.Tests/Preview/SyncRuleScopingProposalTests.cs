@@ -129,6 +129,49 @@ public class SyncRuleScopingProposalTests
         Assert.That(original.DescribesSameScopeAs(restored), Is.True);
     }
 
+    // ── The unsaved shape the portal editor builds ───────────────────────────────────────────────────────────
+
+    [Test]
+    public void FromCurrentScope_CriterionCarriesOnlyItsAttributeNavigation_StillReadsTheAttributeId()
+    {
+        // The shape the Scope editor builds when an administrator ADDS a criterion: the navigation is set and the
+        // foreign key stays unassigned until the rule is saved. Reading the key alone made a criterion the editor
+        // plainly shows read as naming no attribute, which the preview reports as a blocking finding.
+        var department = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "department", Type = AttributeDataType.Text };
+        var rule = new SyncRule { Id = 1, Name = "HR Import", Direction = SyncRuleDirection.Import };
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            ConnectedSystemAttribute = department,
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "Sales"
+        });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+
+        var proposal = SyncRuleScopingProposal.FromCurrentScope(rule);
+
+        Assert.That(proposal.CriteriaGroups[0].Criteria[0].ConnectedSystemAttributeId, Is.EqualTo(department.Id));
+    }
+
+    [Test]
+    public void FromCurrentScope_ExportCriterionCarriesOnlyItsAttributeNavigation_StillReadsTheAttributeId()
+    {
+        var department = new MetaverseAttribute { Id = 201, Name = "Department", Type = AttributeDataType.Text };
+        var rule = new SyncRule { Id = 2, Name = "Directory Export", Direction = SyncRuleDirection.Export };
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = department,
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "Sales"
+        });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+
+        var proposal = SyncRuleScopingProposal.FromCurrentScope(rule);
+
+        Assert.That(proposal.CriteriaGroups[0].Criteria[0].MetaverseAttributeId, Is.EqualTo(department.Id));
+    }
+
     #region helpers
 
     private static SyncRuleScopingCriterionProposal Criterion(int connectedSystemAttributeId, string value) =>
