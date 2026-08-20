@@ -126,7 +126,8 @@ public class JimApplication : IDisposable
                 new SyncRuleDestructiveTogglePreviewAdapter(this, new SyncEngine()),
                 new SyncRuleScopingPreviewAdapter(this, new SyncEngine()),
                 new SyncRuleAttributeFlowPreviewAdapter(this, new SyncEngine()),
-                new ObjectMatchingPreviewAdapter(this)
+                new ObjectMatchingPreviewAdapter(this),
+                new SyncRuleBehaviourTogglePreviewAdapter(this, new SyncEngine())
             ]));
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationDrift = new ConfigurationDriftService(this);
