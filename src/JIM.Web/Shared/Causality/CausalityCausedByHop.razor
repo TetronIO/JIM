@@ -56,7 +56,7 @@
     @if (SoleCause != null && LinkFor(SoleCause) is { } soleHref)
     {
         <div class="cb-actions">
-            <a class="cb-link" href="@soleHref">View what recorded it</a>
+            <a class="cb-link" href="@soleHref">View activity item</a>
         </div>
     }
 
@@ -81,7 +81,7 @@
                             <span class="cb-member-name">@(member.DisplayName ?? "Unnamed object")</span>
                             @if (LinkFor(member) is { } memberHref)
                             {
-                                <a class="cb-link" href="@memberHref">View what recorded it</a>
+                                <a class="cb-link" href="@memberHref">View activity item</a>
                             }
                         </div>
                         @RenderCauseTail(member)
