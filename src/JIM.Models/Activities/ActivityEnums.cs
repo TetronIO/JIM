@@ -208,7 +208,32 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// own transition rather than a validation finding, because ambiguity is a property of the data and not of the
     /// rule: a rule that is unique across every object but two is invisible until those two are counted.
     /// </summary>
-    WouldMatchAmbiguously
+    WouldMatchAmbiguously,
+
+    /// <summary>
+    /// Preview only (#1462): the object would have had a new Metaverse Object projected for it on the next
+    /// synchronisation, and under the proposal it would not. It stays in the connector space unmanaged, which is
+    /// what turning Project To Metaverse off, or disabling the rule that does the projecting, actually means.
+    ///
+    /// Its own transition rather than an absent delta because the objects concerned are the ones an administrator
+    /// was expecting identities for; reported as no change they would be indistinguishable from the objects the
+    /// edit does not touch.
+    /// </summary>
+    WouldStopProjecting,
+
+    /// <summary>
+    /// Preview only (#1462): the target-system inverse. The Metaverse Object would have had an object provisioned
+    /// for it in the target Connected System and under the proposal would not, so the account an administrator was
+    /// expecting is never created. Nothing existing is destroyed, which is exactly why it goes unnoticed.
+    /// </summary>
+    WouldStopProvisioning,
+
+    /// <summary>
+    /// Preview only (#1462): the object's divergence from what JIM holds would no longer be corrected, because the
+    /// export rule that stands over it would stop enforcing state. The count of objects free to drift from the
+    /// moment the change is saved.
+    /// </summary>
+    WouldStopCorrectingDrift
 }
 
 /// <summary>
