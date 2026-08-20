@@ -1658,18 +1658,20 @@ internal class SeedingServer
 
     /// <summary>
     /// Normalises an embedded example-data resource into the values to seed: split on either line-ending style,
-    /// trimmed, with blank lines and repeats dropped. Line endings cannot be assumed here: the resource files are
-    /// stored LF but a Windows checkout converts them to CRLF, so what is compiled into the assembly depends on the
-    /// build host, while <see cref="Environment.NewLine"/> depends on the host the container runs on. Splitting on
-    /// <see cref="Environment.NewLine"/> left a trailing carriage return on every value, which never matched the
-    /// trimmed value already stored, so every already-persisted Example Data Set looked incomplete on a retry
-    /// (issue #1287).
+    /// trimmed, with any leading byte-order mark, blank lines and repeats dropped. Neither line endings nor a leading
+    /// mark can be assumed away here: the resource files are stored LF but a Windows checkout converts them to CRLF,
+    /// so what is compiled into the assembly depends on the build host, while <see cref="Environment.NewLine"/>
+    /// depends on the host the container runs on. Splitting on <see cref="Environment.NewLine"/> left a trailing
+    /// carriage return on every value, which never matched the trimmed value already stored, so every
+    /// already-persisted Example Data Set looked incomplete on a retry (issue #1287). A byte-order mark is stripped
+    /// for the same reason: several of the resource files carry one, and although the resource reader consumes it
+    /// today, a mark that reached a value would sit invisibly at the front of it for the life of the deployment.
     /// </summary>
     internal static List<string> NormaliseExampleDataSetValues(string resourceValues)
     {
         var values = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var line in resourceValues.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        foreach (var line in resourceValues.TrimStart('\uFEFF').Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
             var value = line.Trim();
             if (value.Length > 0 && seen.Add(value))

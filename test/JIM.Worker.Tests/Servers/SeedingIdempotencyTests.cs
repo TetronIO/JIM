@@ -179,6 +179,17 @@ public class SeedingIdempotencyTests
     }
 
     [Test]
+    public void NormaliseExampleDataSetValues_LeadingByteOrderMark_IsStripped()
+    {
+        // The resource files are read with byte-order-mark detection on, so a mark never reaches here today. It is
+        // stripped anyway because the alternative is silent: a mark that did survive would prefix the set's first
+        // value with an invisible character, and every later comparison against the stored value would match it.
+        var values = SeedingServer.NormaliseExampleDataSetValues("\uFEFFActive\nLeaver");
+
+        Assert.That(values, Is.EqualTo(new[] { "Active", "Leaver" }));
+    }
+
+    [Test]
     public void NormaliseExampleDataSetValues_DuplicateLines_AreCollapsed()
     {
         var values = SeedingServer.NormaliseExampleDataSetValues("Alpha\nBravo\nAlpha");
