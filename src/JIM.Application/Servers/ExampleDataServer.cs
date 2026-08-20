@@ -40,9 +40,9 @@ public class ExampleDataServer
     }
 
     #region ExampleDataSets
-    public async Task<List<ExampleDataSet>> GetExampleDataSetsAsync()
+    public async Task<List<ExampleDataSet>> GetExampleDataSetsAsync(bool withChangeTracking = false)
     {
-        return await Application.Repository.ExampleData.GetExampleDataSetsAsync();
+        return await Application.Repository.ExampleData.GetExampleDataSetsAsync(withChangeTracking);
     }
 
     public async Task<List<ExampleDataSetHeader>> GetExampleDataSetHeadersAsync()

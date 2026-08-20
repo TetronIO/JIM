@@ -44,30 +44,30 @@ internal class SeedingServer
     #endregion
 
     /// <summary>
-    /// Seeds the built-in configuration a JIM instance needs to run: the Metaverse schema, the Predefined Searches,
-    /// and the Example Data Sets and Template. Runs only until ServiceSettings exists, which is created last and in
-    /// the same transaction, so a crash part way through leaves the database unseeded and the next start retries.
+    /// Converges the built-in configuration a JIM instance needs to run towards what this release ships: the
+    /// Metaverse schema, the Predefined Searches, and the Example Data Sets and Template. Runs on every startup and
+    /// again after a factory reset, creating whatever is absent and leaving everything else alone.
     /// <para>
-    /// Every step must therefore be idempotent: check-then-create against the persisted state, never assuming the
+    /// Every step is therefore idempotent: check-then-create against the persisted state, never assuming the
     /// database is empty. Several steps once assumed it was, and a retry against a partially-seeded database
     /// crash-looped on every subsequent start (issue #1287). Anything already persisted is left alone, so no step
     /// records a second Create Activity for an object it did not create.
+    /// </para>
+    /// <para>
+    /// This pass used to stop the moment ServiceSettings existed, on the reasoning that seeding had already
+    /// happened. Once every step became check-then-create that guard protected nothing and only prevented
+    /// convergence: a built-in Metaverse Object Type, Predefined Search or Example Data Set introduced in a later
+    /// release reached brand-new deployments only, and a new built-in Object Type additionally crashed worker
+    /// startup on existing ones, because <see cref="SyncBuiltInMetaverseSchemaAsync"/> throws when the catalogue
+    /// names an Object Type it cannot find (issue #916). ServiceSettings is still created last and in the same
+    /// transaction as the rest of the batch, so a crash part way through a first seed still leaves the database
+    /// unseeded.
     /// </para>
     /// </summary>
     internal async Task SeedAsync()
     {
         var stopwatch = new Stopwatch();
         stopwatch.Start();
-
-        // has seeding already happened? don't run it twice!
-        // IMPORTANT: ServiceSettings is created at the END of seeding (in SeedDataAsync) to ensure
-        // that if the process crashes during seeding, the next restart will retry seeding from scratch.
-        // This prevents a race condition where ServiceSettings exists but MetaverseAttributes don't.
-        if (await Application.ServiceSettings.ServiceSettingsExistAsync())
-        {
-            Log.Information("SeedAsync: ServiceSettings already exists so believe seeding has already been performed. Stopping.");
-            return;
-        }
 
         // get attributes, if they don't exist, prepare object in list for bulk submission via seeding method
         // create object types as needed
@@ -179,7 +179,7 @@ internal class SeedingServer
 
         #region MetaverseObjectTypes
         // prepare the user object type and attribute mappings
-        var userObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, true);
+        var userObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, true, withChangeTracking: true);
         if (userObjectType == null)
         {
             userObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, PluralName = "Users", BuiltIn = true, Icon = "Person" };
@@ -270,7 +270,7 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, webPageAttribute);
 
         // create the group object type and attribute mappings
-        var groupObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, true);
+        var groupObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, true, withChangeTracking: true);
         if (groupObjectType == null)
         {
             groupObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Group, PluralName = "Groups", BuiltIn = true, Icon = "Groups" };
@@ -593,25 +593,23 @@ internal class SeedingServer
     }
 
     /// <summary>
-    /// Seeds the built-in schedules that JIM provides and maintains itself. Currently this is the Temporal Scope
-    /// Reconciliation schedule (issue #892), which periodically re-evaluates relative-date scoping for objects
-    /// whose scope membership drifts with the clock but whose source data has not changed. Idempotent: it does
-    /// nothing if the built-in schedule already exists. Administrators may enable/disable it and change its
-    /// interval, but may not rename or delete it (enforced at the API/UI layer). Runs at service startup and
-    /// again after a factory reset (the wipe truncates the Schedules table).
+    /// The declarative catalogue of built-in Schedules JIM ships and maintains itself. Each entry is matched
+    /// against the database by <see cref="Schedule.Name"/>, which is a safe identity because built-in Schedules
+    /// cannot be renamed or deleted (enforced at the API/UI layer, and by SchedulerServer.DeleteScheduleAsync);
+    /// administrators may only enable, disable and re-time them.
+    /// <para>
+    /// A catalogue rather than a hardcoded check because the pass that seeds these once asked "does any built-in
+    /// Schedule carry a Temporal Scope Reconciliation step?" and returned if one did, so a second built-in Schedule
+    /// could never have reached an existing deployment (issue #916). Adding an entry here is all a future release
+    /// needs to do; convergence brings it to deployments that already exist.
+    /// </para>
     /// </summary>
-    internal async Task SeedBuiltInSchedulesAsync()
+    internal static IEnumerable<Schedule> BuiltInSchedules()
     {
-        var schedules = await Application.Repository.Scheduling.GetAllSchedulesAsync();
-        var reconciliationScheduleExists = schedules.Any(s => s.BuiltIn &&
-            s.Steps.Any(st => st.StepType == ScheduleStepType.TemporalScopeReconciliation));
-        if (reconciliationScheduleExists)
-        {
-            Log.Verbose("SeedBuiltInSchedulesAsync: Temporal Scope Reconciliation schedule already present; skipping.");
-            return;
-        }
-
-        var schedule = new Schedule
+        // Temporal Scope Reconciliation (issue #892): periodically re-evaluates relative-date scoping for objects
+        // whose scope membership drifts with the clock but whose source data has not changed, so the
+        // synchronisation and export hot paths do not skip them.
+        yield return new Schedule
         {
             Name = "Temporal Scope Reconciliation",
             Description = "Built-in schedule that re-evaluates relative-date scoping for objects whose scope membership " +
@@ -641,46 +639,78 @@ internal class SeedingServer
                 }
             }
         };
-
-        // Create through the audited path, not the repository, so the schedule's origin is visible in the
-        // portal: a Create Activity attributed to System and a version-1 configuration change snapshot.
-        // A repository-direct seed leaves no audit trace, so the change history would start at whichever
-        // principal touched the schedule next, misattributing its origin.
-        var parentActivityId = await GetOrCreateSeedingActivityAsync();
-        await Application.Scheduler.CreateScheduleAsync(schedule, ActivityInitiatorType.System, null, "System",
-            changeReason: "Built-in schedule created automatically by JIM.", parentActivityId: parentActivityId);
-        Log.Information("SeedBuiltInSchedulesAsync: Created built-in Temporal Scope Reconciliation schedule {ScheduleId} (hourly).", schedule.Id);
     }
 
     /// <summary>
-    /// Seeds the built-in Administrator Role that JIM provides, through the audited create path
-    /// (<see cref="SecurityServer.CreateRoleAsync(Role, MetaverseObject?, string?)"/>) so its change history begins
-    /// with a System-attributed Create Activity and a version-1 configuration change snapshot, rather than starting
-    /// blank the first time an administrator touches its membership. Idempotent: does nothing if the built-in Role
-    /// already exists. Runs at every application startup, mirroring <see cref="SeedBuiltInSchedulesAsync"/>.
+    /// Converges the database towards the built-in Schedule catalogue, creating any entry it does not hold.
+    /// Runs at service startup and again after a factory reset (the wipe truncates the Schedules table).
+    /// </summary>
+    internal async Task SeedBuiltInSchedulesAsync()
+    {
+        var existingNames = (await Application.Repository.Scheduling.GetAllSchedulesAsync())
+            .Where(s => s.BuiltIn)
+            .Select(s => s.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var schedule in BuiltInSchedules().Where(s => !existingNames.Contains(s.Name)))
+        {
+            // Create through the audited path, not the repository, so the schedule's origin is visible in the
+            // portal: a Create Activity attributed to System and a version-1 configuration change snapshot.
+            // A repository-direct seed leaves no audit trace, so the change history would start at whichever
+            // principal touched the schedule next, misattributing its origin.
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            await Application.Scheduler.CreateScheduleAsync(schedule, ActivityInitiatorType.System, null, "System",
+                changeReason: "Built-in schedule created automatically by JIM.", parentActivityId: parentActivityId);
+            Log.Information("SeedBuiltInSchedulesAsync: Created built-in schedule '{ScheduleName}' {ScheduleId}.", schedule.Name, schedule.Id);
+        }
+    }
+
+    /// <summary>
+    /// The declarative catalogue of built-in Roles JIM ships, matched against the database by name. Only the
+    /// Administrator Role is a stored Role; <see cref="Constants.BuiltInRoles.User"/> is a claim added to every
+    /// authenticated identity rather than a row, so it deliberately does not appear here.
+    /// <para>
+    /// A catalogue rather than a hardcoded check for the same reason as <see cref="BuiltInSchedules"/>: the pass
+    /// that seeds these looked for the Administrator Role alone and returned, so a second built-in Role could never
+    /// have reached an existing deployment (issue #916).
+    /// </para>
+    /// </summary>
+    internal static IEnumerable<string> BuiltInRoleNames()
+    {
+        yield return Constants.BuiltInRoles.Administrator;
+    }
+
+    /// <summary>
+    /// Converges the database towards the built-in Role catalogue, creating any entry it does not hold through the
+    /// audited create path (<see cref="SecurityServer.CreateRoleAsync(Role, MetaverseObject?, string?, Guid?)"/>) so
+    /// each Role's change history begins with a System-attributed Create Activity and a version-1 configuration
+    /// change snapshot, rather than starting blank the first time an administrator touches its membership. Runs at
+    /// every application startup, mirroring <see cref="SeedBuiltInSchedulesAsync"/>.
     /// </summary>
     internal async Task SeedBuiltInRolesAsync()
     {
-        var administratorRole = await Application.Security.GetRoleAsync(Constants.BuiltInRoles.Administrator);
-        if (administratorRole != null)
+        foreach (var roleName in BuiltInRoleNames())
         {
-            Log.Verbose("SeedBuiltInRolesAsync: Administrator Role already present; skipping.");
-            return;
+            if (await Application.Security.GetRoleAsync(roleName) != null)
+            {
+                Log.Verbose("SeedBuiltInRolesAsync: Role '{RoleName}' already present; skipping.", roleName);
+                continue;
+            }
+
+            var role = new Role
+            {
+                BuiltIn = true,
+                Name = roleName
+            };
+
+            // Create through the audited path, not the repository, so the Role's origin is visible in the portal: a
+            // Create Activity attributed to System and a version-1 configuration change snapshot. A repository-direct
+            // seed leaves no audit trace, so the change history would start at whichever principal touched the Role
+            // next, misattributing its origin.
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            await Application.Security.CreateRoleAsync(role, changeReason: "Built-in Role created automatically by JIM.", parentActivityId: parentActivityId);
+            Log.Information("SeedBuiltInRolesAsync: Created built-in Role {RoleName} (ID: {RoleId}).", role.Name, role.Id);
         }
-
-        var role = new Role
-        {
-            BuiltIn = true,
-            Name = Constants.BuiltInRoles.Administrator
-        };
-
-        // Create through the audited path, not the repository, so the Role's origin is visible in the portal: a
-        // Create Activity attributed to System and a version-1 configuration change snapshot. A repository-direct
-        // seed leaves no audit trace, so the change history would start at whichever principal touched the Role
-        // next, misattributing its origin.
-        var parentActivityId = await GetOrCreateSeedingActivityAsync();
-        await Application.Security.CreateRoleAsync(role, changeReason: "Built-in Role created automatically by JIM.", parentActivityId: parentActivityId);
-        Log.Information("SeedBuiltInRolesAsync: Created built-in Role {RoleName} (ID: {RoleId}).", role.Name, role.Id);
     }
 
     /// <summary>
@@ -705,6 +735,77 @@ internal class SeedingServer
         await Application.Activities.CreateSystemActivityAsync(activity);
         _seedingActivity = activity;
         return activity.Id;
+    }
+
+    /// <summary>
+    /// Declares which pass keeps each kind of built-in configuration converged. Every entity type carrying a
+    /// <c>BuiltIn</c> flag is configuration JIM ships, so something has to create it on a deployment that predates
+    /// it and restore it after a factory reset truncates or cascades it away.
+    /// <para>
+    /// This exists to be asserted against the EF model, so a new table carrying BuiltIn rows cannot be added
+    /// without that decision being made. Three built-ins reached production without one: the Example Data Template
+    /// (#866), the Temporal Scope Reconciliation Schedule (#911), and everything SeedAsync owned (#916). Each was
+    /// found in production rather than in review.
+    /// </para>
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<Type, string> BuiltInConvergencePaths = new Dictionary<Type, string>
+    {
+        [typeof(MetaverseObjectType)] = nameof(SeedAsync),
+        [typeof(MetaverseAttribute)] = $"{nameof(SeedAsync)} then {nameof(SyncBuiltInMetaverseSchemaAsync)}",
+        [typeof(PredefinedSearch)] = nameof(SeedAsync),
+        [typeof(ExampleDataSet)] = nameof(SeedAsync),
+        [typeof(ExampleDataTemplate)] = $"{nameof(SeedAsync)} then {nameof(EnsureBuiltInExampleDataTemplateAsync)}",
+        [typeof(ConnectorDefinition)] = nameof(SyncBuiltInConnectorDefinitionsAsync),
+        [typeof(Schedule)] = nameof(SeedBuiltInSchedulesAsync),
+        [typeof(Role)] = nameof(SeedBuiltInRolesAsync)
+    };
+
+    /// <summary>
+    /// Runs every built-in configuration pass in dependency order, inside the parent Activity boundary that groups
+    /// what they create. The single definition of "apply JIM's built-in configuration": called at worker startup
+    /// (<see cref="JimApplication.InitialiseDatabaseAsync"/>) and after a factory reset
+    /// (<see cref="SystemServer.ResetSystemAsync"/>), so a built-in added in a later release reaches an existing
+    /// deployment and survives a reset without either caller needing to know the list.
+    /// </summary>
+    internal Task ApplyBuiltInConfigurationAsync() => RunBuiltInConfigurationPipelineAsync(rebaselinePreservedConfiguration: false);
+
+    /// <summary>
+    /// The factory reset's entry point into the pipeline. Identical to <see cref="ApplyBuiltInConfigurationAsync"/>
+    /// except that it also re-records the version-1 baselines of built-ins the wipe *preserved*: the reset truncates
+    /// the Activities table but keeps BuiltIn rows, so the ordinary passes no-op for them and their factory-state
+    /// provenance would be permanently lost. No seeding pass can do that job, which is why the rebaseline is not
+    /// one of the bespoke repairs this pipeline replaced.
+    /// </summary>
+    internal Task RestoreBuiltInConfigurationAfterResetAsync() => RunBuiltInConfigurationPipelineAsync(rebaselinePreservedConfiguration: true);
+
+    private async Task RunBuiltInConfigurationPipelineAsync(bool rebaselinePreservedConfiguration)
+    {
+        try
+        {
+            // Order matters: SeedAsync creates the built-in Metaverse Object Types the schema sync binds attributes
+            // to (that sync throws rather than creating a missing one), and the Example Data Sets the template
+            // repair resolves against.
+            await SeedAsync();
+            await SyncBuiltInMetaverseSchemaAsync();
+            await SeedBuiltInSchedulesAsync();
+            await SeedBuiltInRolesAsync();
+            await SyncBuiltInConnectorDefinitionsAsync();
+            await SyncServiceSettingsAsync();
+            await EnsureBuiltInExampleDataTemplateAsync();
+
+            if (rebaselinePreservedConfiguration)
+                await RebaselineBuiltInConfigurationAsync();
+
+            await CompleteSeedingActivityAsync();
+        }
+        catch (Exception ex)
+        {
+            // Catch-all is deliberate: this is an Activity execution boundary (the "System Initialisation" parent
+            // Activity, if one was created), and any failure here must be recorded on it via
+            // FailSeedingActivityAsync rather than escape silently, then rethrown so the caller still fails loudly.
+            await FailSeedingActivityAsync(ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -1628,7 +1729,11 @@ internal class SeedingServer
     /// </summary>
     private async Task<MetaverseAttribute> GetOrPrepareMetaverseAttributeAsync(string name, AttributePlurality attributePlurality, AttributeDataType attributeDataType, List<MetaverseAttribute> allAttributes, AttributeRenderingHint renderingHint = AttributeRenderingHint.Default)
     {
-        var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name);
+        // Loaded change-tracked because this pass mutates and saves what it loads: an already-persisted attribute is
+        // bound to Object Types, referenced by newly-created Predefined Searches, and handed to the create batch as
+        // part of their object graph. An untracked instance would be walked into by AddRange and re-inserted (see
+        // MetaverseRepository.GetMetaverseObjectTypeAsync's tracking flag for the other half of the same rule).
+        var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name, withChangeTracking: true);
         if (attribute == null)
         {
             attribute = new MetaverseAttribute
@@ -1761,8 +1866,11 @@ internal class SeedingServer
         if (existing != null && existing.ObjectTypes.Any(ot => ot.TemplateAttributes.Count > 0))
             return; // present and complete: the common case, kept cheap.
 
-        var userType = await Application.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, includeChildObjects: false);
-        var groupType = await Application.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false);
+        // Change-tracked for the same reason SeedAsync tracks its loads: the template graph created below references
+        // these objects, and an untracked instance of a row the pipeline already tracked would collide with it on
+        // TrackGraph ("another instance with the same key value is already being tracked").
+        var userType = await Application.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, includeChildObjects: false, withChangeTracking: true);
+        var groupType = await Application.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false, withChangeTracking: true);
         if (userType == null || groupType == null)
         {
             Log.Warning("EnsureBuiltInExampleDataTemplateAsync: built-in User/Group Metaverse Object Types not found; cannot restore the example data template.");
@@ -1773,8 +1881,8 @@ internal class SeedingServer
         if (existing != null)
             await Application.Repository.ExampleData.DeleteTemplateAsync(existing.Id);
 
-        var metaverseAttributes = (await Application.Metaverse.GetMetaverseAttributesAsync())?.ToList() ?? new List<MetaverseAttribute>();
-        var dataSets = await Application.ExampleData.GetExampleDataSetsAsync();
+        var metaverseAttributes = (await Application.Metaverse.GetMetaverseAttributesAsync(withChangeTracking: true))?.ToList() ?? new List<MetaverseAttribute>();
+        var dataSets = await Application.ExampleData.GetExampleDataSetsAsync(withChangeTracking: true);
 
         var template = new ExampleDataTemplate { Name = templateName, BuiltIn = true };
         AddUsersToExampleDataTemplate(template, userType, dataSets, metaverseAttributes);

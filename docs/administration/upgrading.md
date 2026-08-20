@@ -113,6 +113,7 @@ The procedure mirrors a first-time air-gapped deployment, minus the initial conf
 Understanding the startup sequence explains why the web interface is briefly unavailable after an upgrade:
 
 - **The worker leads.** `jim.worker` is the first service to initialise. It applies any database upgrades automatically.
+- **Built-in configuration catches up.** Immediately after the database upgrade, the worker brings your instance's built-in configuration into line with what the release ships, creating anything it does not already hold: Metaverse Object Types and Attributes, Predefined Searches, Connectors, Example Data Sets, built-in Schedules and Roles, and Service Settings. Anything already present is left exactly as it is, including settings you have changed, so the pass records nothing on an instance that is already up to date. Where it does create something, it appears in the change history as a **System Initialisation** Activity with each new object beneath it. This takes well under a second on a converged instance.
 - **The web and scheduler wait.** `jim.web` and `jim.scheduler` poll the application's readiness state and do not begin serving until the database upgrade has completed and JIM has left maintenance mode. `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second while it waits.
 - **Readiness is externally observable.** `GET /api/v1/health/ready` returns `503 Service Unavailable` with `"status": "not_ready"` throughout, then `200 OK` with `"status": "ready"` once JIM is serving.
 
