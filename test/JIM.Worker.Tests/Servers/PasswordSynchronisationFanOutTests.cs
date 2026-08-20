@@ -38,6 +38,7 @@ public class PasswordSynchronisationFanOutTests
     private Mock<IConnectedSystemRepository> _connectedSystemRepository = null!;
     private TestCredentialProtection _protection = null!;
     private List<Activity> _createdActivities = null!;
+    private List<int?> _deliveryRequests = null!;
     private PasswordSynchronisationServer _server = null!;
 
     [SetUp]
@@ -47,6 +48,7 @@ public class PasswordSynchronisationFanOutTests
         _connectedSystemRepository = new Mock<IConnectedSystemRepository>();
         _protection = new TestCredentialProtection();
         _createdActivities = [];
+        _deliveryRequests = [];
 
         _connectedSystemRepository
             .Setup(r => r.GetEnabledPasswordSynchronisationTargetsAsync())
@@ -59,12 +61,20 @@ public class PasswordSynchronisationFanOutTests
             _syncRepository,
             () => _connectedSystemRepository.Object,
             () => _protection,
+            // These fixtures never reach a Connector: they exercise queueing and one-change delivery with a
+            // Connector handed in directly. Resolving one here would be answering a question they do not ask.
+            _ => throw new NotSupportedException("This fixture does not resolve Connectors."),
             (activity, _) =>
             {
                 _createdActivities.Add(activity);
                 return Task.CompletedTask;
             },
-            _ => Task.CompletedTask);
+            _ => Task.CompletedTask,
+            connectedSystemId =>
+            {
+                _deliveryRequests.Add(connectedSystemId);
+                return Task.CompletedTask;
+            });
     }
 
     private void ArrangeTargets(params PasswordSynchronisationTarget[] targets) =>
@@ -91,6 +101,73 @@ public class PasswordSynchronisationFanOutTests
         ConnectedSystemId = connectedSystemId,
         TypeId = typeId
     };
+
+    [Test]
+    public async Task QueuePasswordChange_AsksForDeliveryAsync()
+    {
+        // Queueing without asking for delivery would leave a password change sitting until the worker's idle
+        // housekeeping happened to notice it, which is up to a minute of somebody's old password still working.
+        var metaverseObjectId = Guid.NewGuid();
+        ArrangeTargets(Target(3, "Corporate AD"), Target(4, "HR Portal"));
+        ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId), Account(4, UserObjectTypeId));
+
+        await _server.QueuePasswordChangeAsync(
+            metaverseObjectId, "Ada Lovelace", "a-password",
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, null, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_deliveryRequests, Has.Exactly(1).Items, "One request covers every system fanned out to.");
+            Assert.That(_deliveryRequests[0], Is.Null, "Fan-out reaches several systems, so the request names none of them.");
+        }
+    }
+
+    [Test]
+    public async Task QueuePasswordChange_NothingQueued_AsksForNothingAsync()
+    {
+        // No system is configured for Password Synchronisation, so there is nothing to deliver and no reason to
+        // put a pass in the Operations queue.
+        var metaverseObjectId = Guid.NewGuid();
+
+        await _server.QueuePasswordChangeAsync(
+            metaverseObjectId, "Ada Lovelace", "a-password",
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, null, CancellationToken.None);
+
+        Assert.That(_deliveryRequests, Is.Empty);
+    }
+
+    [Test]
+    public async Task ReleaseForDelivery_SomethingReleased_AsksForDeliveryOfThatSystemAsync()
+    {
+        // Requirement 3's drain: enabling a system must actually deliver what accumulated while it was disabled,
+        // not merely mark it deliverable.
+        var metaverseObjectId = Guid.NewGuid();
+        ArrangeTargets(Target(3, "Corporate AD"));
+        ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
+        await _server.QueuePasswordChangeAsync(
+            metaverseObjectId, "Ada Lovelace", "a-password",
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, null, CancellationToken.None);
+        _deliveryRequests.Clear();
+
+        var change = _syncRepository.PendingPasswordChanges.Values.Single();
+        change.Status = PendingPasswordChangeStatus.Parked;
+
+        await _server.ReleaseForDeliveryAsync(3);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_deliveryRequests, Has.Exactly(1).Items);
+            Assert.That(_deliveryRequests[0], Is.EqualTo(3), "The trigger knows which system it released work on.");
+        }
+    }
+
+    [Test]
+    public async Task ReleaseForDelivery_NothingReleased_AsksForNothingAsync()
+    {
+        await _server.ReleaseForDeliveryAsync(3);
+
+        Assert.That(_deliveryRequests, Is.Empty);
+    }
 
     [Test]
     public async Task QueuePasswordChange_QueuesOneChangePerEnabledSystemAsync()

@@ -34,8 +34,10 @@ public class PasswordSynchronisationServer
     private readonly ISyncRepository _syncRepo;
     private readonly Func<IConnectedSystemRepository> _connectedSystemRepo;
     private readonly Func<IPasswordProtectionService> _passwordProtection;
+    private readonly Func<ConnectedSystem, IConnector> _createConnector;
     private readonly Func<Activity, MetaverseObject?, Task> _createActivity;
     private readonly Func<Activity, Task> _completeActivity;
+    private readonly Func<int?, Task> _requestDelivery;
 
     /// <param name="passwordProtection">
     /// How to reach password protection, resolved when a change is queued rather than now. The hosts set
@@ -47,20 +49,34 @@ public class PasswordSynchronisationServer
     /// same reason as password protection: the facade's own repository properties are not populated until after
     /// this constructor has run, so anything read here would be the null that precedes them.
     /// </param>
+    /// <param name="createConnector">
+    /// Resolves a Connected System's Connector, already configured with credential protection and certificate
+    /// validation. A delegate rather than the factory itself, so this server never needs to know how a Connector
+    /// is built or what has to be injected into it before it can decrypt a bind credential.
+    /// </param>
     /// <param name="createActivity">Creates an Activity, attributed to the initiator passed with it.</param>
+    /// <param name="requestDelivery">
+    /// Asks for a delivery pass over the given Connected System, or over every system with work due where null.
+    /// Queueing and delivering stay separate (a password change must not wait on a directory), so this is how the
+    /// queue tells the worker there is something to do rather than leaving it to the next housekeeping tick.
+    /// </param>
     /// <param name="completeActivity">Completes an Activity.</param>
     internal PasswordSynchronisationServer(
         ISyncRepository syncRepository,
         Func<IConnectedSystemRepository> connectedSystemRepository,
         Func<IPasswordProtectionService> passwordProtection,
+        Func<ConnectedSystem, IConnector> createConnector,
         Func<Activity, MetaverseObject?, Task> createActivity,
-        Func<Activity, Task> completeActivity)
+        Func<Activity, Task> completeActivity,
+        Func<int?, Task> requestDelivery)
     {
         _syncRepo = syncRepository;
         _connectedSystemRepo = connectedSystemRepository;
         _passwordProtection = passwordProtection;
+        _createConnector = createConnector;
         _createActivity = createActivity;
         _completeActivity = completeActivity;
+        _requestDelivery = requestDelivery;
     }
 
     /// <summary>
@@ -165,6 +181,11 @@ public class PasswordSynchronisationServer
             metaverseObjectId, outcomes.Count,
             outcomes.Count == 0 ? "none" : LogSanitiser.Sanitise(string.Join(", ", outcomes.Select(o => o.ConnectedSystemName))));
 
+        // Unscoped, because fan-out reaches every enabled system at once and the pass resolves which of them
+        // actually have work due. Nothing queued means nothing to ask for.
+        if (changes.Count > 0)
+            await _requestDelivery(null);
+
         return new PasswordQueueResult { ActivityId = activity.Id, Targets = outcomes };
     }
 
@@ -242,6 +263,21 @@ public class PasswordSynchronisationServer
             result.CouldNotOpenPasswordConnection = true;
             Log.Error(ex,
                 "DeliverDuePasswordChangesAsync: Could not open the password channel to Connected System {ConnectedSystemId}. {Count} queued password change(s) are left outstanding.",
+                connectedSystem.Id, due.Count);
+            return result;
+        }
+
+        // The administrator's declaration that passwords must not leave JIM in the clear for this system,
+        // applied to the channel the Connector actually opened. Checked here rather than inside the Connector
+        // because it is a policy JIM holds per Connected System, not something a Connector can decide: some
+        // deployments genuinely cannot offer TLS on their directory, which is why the setting exists at all.
+        // Nothing is attempted and no attempt is counted: the changes wait for a secure channel.
+        if (configuration.RequireSecureTransport && !passwordConnector.IsPasswordChannelSecure)
+        {
+            passwordConnector.ClosePasswordConnection();
+            result.PasswordChannelNotSecure = true;
+            Log.Error(
+                "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId} requires a secure transport for passwords, and the Connector's password channel is not encrypted. {Count} queued password change(s) are left outstanding.",
                 connectedSystem.Id, due.Count);
             return result;
         }
@@ -422,6 +458,100 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
+    /// Whether any Connected System has queued password work due as of the given moment (#1119).
+    /// <para>
+    /// Asked by the worker's idle housekeeping, which is the only trigger that catches a retry: a change that
+    /// failed once comes due minutes later without anything else happening in the system.
+    /// </para>
+    /// </summary>
+    public async Task<bool> HasWorkDueAsync(DateTime asOf)
+    {
+        var connectedSystemIds = await _syncRepo.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf);
+        return connectedSystemIds.Count > 0;
+    }
+
+    /// <summary>
+    /// Runs a delivery pass over the Connected Systems with password work due, resolving each system's Connector
+    /// as it goes. This is what the worker's Password Delivery task calls.
+    /// <para>
+    /// A system that cannot be delivered to is recorded and stepped over rather than thrown from. A pass that
+    /// threw on the first unreachable directory would leave every system behind it in the list undelivered, which
+    /// is exactly the failure mode Password Synchronisation exists to avoid: somebody's password differing
+    /// between systems because one of them happened to be down.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemId">
+    /// The Connected System to deliver to, or null to visit every system with work due. Named where the trigger
+    /// knows which system it is, so a targeted delivery does not sweep systems with nothing to do.
+    /// </param>
+    /// <param name="asOf">The moment the pass is running as of; what is due and what has expired are read from it.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the pass.</param>
+    public async Task<PasswordDeliveryPassResult> DeliverDueAsync(int? connectedSystemId, DateTime asOf, CancellationToken cancellationToken)
+    {
+        var result = new PasswordDeliveryPassResult();
+
+        var connectedSystemIds = connectedSystemId.HasValue
+            ? [connectedSystemId.Value]
+            : await _syncRepo.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf);
+
+        foreach (var id in connectedSystemIds)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                break;
+
+            var connectedSystem = await _connectedSystemRepo().GetConnectedSystemForPasswordDeliveryAsync(id);
+            if (connectedSystem == null)
+            {
+                // Deleted between a change being queued and this pass reaching it. The queue rows go with the
+                // system on delete, so there is nothing left to act on and nothing to tell anybody.
+                Log.Debug("DeliverDueAsync: Connected System {ConnectedSystemId} no longer exists; skipping it.", id);
+                continue;
+            }
+
+            // Read again here rather than trusted from whatever queued the work: Password Synchronisation may
+            // have been disabled since, and a disabled system accumulates rather than delivers (requirement 2).
+            if (connectedSystem.PasswordSynchronisation is not { Enabled: true })
+                continue;
+
+            IConnector connector;
+            try
+            {
+                connector = _createConnector(connectedSystem);
+            }
+            catch (NotSupportedException ex)
+            {
+                // The Connected System names a Connector this build does not have. Reported rather than thrown,
+                // and the queued changes are left exactly as they are: nothing was attempted against them.
+                result.AddProblem($"{connectedSystem.Name}: its Connector could not be resolved, so queued password changes are waiting.");
+                Log.Error(ex,
+                    "DeliverDueAsync: Could not resolve the Connector for Connected System {ConnectedSystemId}. Its queued password change(s) are left outstanding.",
+                    connectedSystem.Id);
+                continue;
+            }
+
+            try
+            {
+                var systemResult = await DeliverDuePasswordChangesAsync(connectedSystem, connector, asOf, cancellationToken);
+                result.Add(connectedSystem.Name, systemResult);
+            }
+            finally
+            {
+                // IConnector carries no disposal contract, but concrete Connectors hold connections; disposing
+                // what can be disposed keeps a pass over many systems from accumulating them.
+                if (connector is IDisposable disposableConnector)
+                    disposableConnector.Dispose();
+            }
+        }
+
+        Log.Information(
+            "DeliverDueAsync: {Visited} Connected System(s) visited: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Problems} problem(s).",
+            result.ConnectedSystemsVisited, result.DeliveredCount, result.RetryingCount, result.ParkedCount,
+            result.ExpiredCount, result.Problems.Count);
+
+        return result;
+    }
+
+    /// <summary>
     /// Makes every parked password change on a Connected System due again, returning how many were released:
     /// requirement 3's drain when a system is enabled, and the same mechanic when its delivery settings change.
     /// </summary>
@@ -430,9 +560,15 @@ public class PasswordSynchronisationServer
         var released = await _syncRepo.ReleasePasswordChangesForDeliveryAsync(connectedSystemId);
 
         if (released > 0)
+        {
             Log.Information(
                 "ReleaseForDeliveryAsync: {Released} parked password change(s) on Connected System {ConnectedSystemId} are due again.",
                 released, connectedSystemId);
+
+            // Scoped to this system: the trigger knows exactly which one it released work on, so a pass over
+            // every system would visit others with nothing to do.
+            await _requestDelivery(connectedSystemId);
+        }
 
         return released;
     }

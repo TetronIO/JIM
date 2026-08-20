@@ -1,6 +1,6 @@
 # Password Synchronisation (Phase 1: JIM as Password Origin)
 
-- **Status:** Doing (Phase 1 complete; queue, fan-out and delivery not started)
+- **Status:** Doing (Phases 1 to 3 complete; surfaces, retention and the integration scenario not started)
 - **Issue:** [#1119](https://github.com/TetronIO/JIM/issues/1119)
 - **PRD:** [`engineering/prd/doing/PRD_PASSWORD_SYNCHRONISATION.md`](../prd/doing/PRD_PASSWORD_SYNCHRONISATION.md)
 
@@ -138,19 +138,20 @@ Each phase is TDD, red first, and lands with its tests, docs, and changelog entr
 - Configuration parity: portal tab on `ConnectedSystemDetail` (visible only when the connector has the capability), REST create/read/update/enable/disable on `SynchronisationController`, `Get-/Set-JIMConnectedSystemPasswordSynchronisation` cmdlets with Pester tests (requirements 1, 2, 4, 5, 32)
 - Wire `CredentialAttributes.HasCredentialLikeName` into Attribute Flow configuration validation as a warning (closes requirement 16's missing call site)
 
-### Phase 2: Queue, fan-out, and Activities
+### Phase 2: Queue, fan-out, and Activities ✅
 
 - `PendingPasswordChange` + status enum, EF configuration, unique coalescing index, migration, bulk-columns constants, repository methods on `ISyncRepository` (UPSERT, get-due, record-attempts, delete, expire, release, counts), guard and in-memory implementations
 - `PasswordSynchronisationServer`: `QueuePasswordChangeAsync` with coalescing, zero-target no-op Activity, batched writes
 - New Activity target type and category, label, map, and exhaustiveness tests (requirements 6, 7, 8, 14, 23, 24)
 - Unit tests: coalescing supersedes, fan-out scoping (enabled + configured + object type), unprovisioned target queues, no-op recorded, payload encrypted at rest, never-log invariant
 
-### Phase 3: Delivery, retry, and drain
+### Phase 3: Delivery, retry, and drain ✅
 
 - `PasswordDeliveryWorkerTask` + static processor; the four task-type registration points; housekeeping due-retry enqueue
 - Expiry-first pass, backoff schedule, park rules (policy rejection never regenerates, requirement 13), max-retries exhaustion, child Activity per outcome, delete-on-success
 - Drain-on-enable and configuration-change release semantics (requirement 3); manual retry resets `NextRetryAt` and re-enqueues
 - Unit tests against `MockCallConnector` (which already implements `IConnectorPasswordManagement`); `RequiresPostgres` round-trip tests for the UPSERT and the due-work query
+- `RequireSecureTransport` honoured as a refusal (divergence 1 closed). Implemented as `IConnectorPasswordManagement.IsPasswordChannelSecure`, a statement of fact by the Connector, with the refusal applied by the delivery pass: the policy is JIM's, held per Connected System, and a Connector cannot know whether a given deployment is an isolated network that cannot serve TLS. Delivered ahead of Phase 4, where it was originally listed, because the delivery pass is what enforces it
 
 ### Phase 4: Surfaces and reporting
 
@@ -158,7 +159,6 @@ Each phase is TDD, red first, and lands with its tests, docs, and changelog entr
 - REST queue read/retry/cancel endpoints and PowerShell cmdlets (requirement 33); new `POST /api/v1/metaverse/objects/{id}/password` closing the existing MVO-endpoint gap, with the secure-transport check (`Request.IsHttps` reject, requirement 34) applied to every password-accepting endpoint
 - Connected System list: state on `ConnectedSystemHeader` (all three projection sites), indicator chip, `passwordsync` sort arm, filter control (requirement 26)
 - Metaverse Object detail: admin-only Password Synchronisation panel via the `AuthorizeView` tab precedent, listing that identity's password Activities with per-system outcomes (requirement 25)
-- `LdapConnectorPassword` honours `RequireSecureTransport` as a refusal (divergence 1 closed as designed)
 
 ### Phase 5: Schedule-driven retention
 

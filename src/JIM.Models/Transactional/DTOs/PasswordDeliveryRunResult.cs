@@ -44,9 +44,16 @@ public class PasswordDeliveryRunResult
     public bool ConnectorCannotSetPasswords { get; set; }
 
     /// <summary>
+    /// True where this Connected System requires a secure transport for passwords and the Connector's password
+    /// channel is not encrypted. Nothing was sent and no attempt was counted; the queued changes wait for a
+    /// secure channel rather than being delivered against the administrator's explicit instruction.
+    /// </summary>
+    public bool PasswordChannelNotSecure { get; set; }
+
+    /// <summary>
     /// Whether this pass has anything worth telling an administrator about.
     /// </summary>
     public bool HasSomethingToReport =>
         DeliveredCount > 0 || RetryingCount > 0 || ParkedCount > 0 || ExpiredCount > 0
-        || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords;
+        || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure;
 }

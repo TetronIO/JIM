@@ -169,6 +169,24 @@ That is also why there is no way to remove a configuration, only to disable it. 
 
 How long a change waits before JIM gives up on it is the Connected System's **initial password time to live** setting, shared with initial password provisioning: the question both are asking is how long that system may be unavailable before JIM stops trying, and the answer is a property of the system.
 
+### 📬 How a password change reaches a system
+
+A password change is recorded first and delivered afterwards, never in the same breath. The person changing their password must not be held waiting on a directory, and their new password must not fail to take because one of the systems they have an account in happens to be down. So JIM writes one queued change per target system, encrypted, and returns; delivery runs on its own.
+
+What happens to a queued change:
+
+- **It is delivered, and disappears.** Nothing is kept once the target has the password: there is no value worth retaining and every reason not to.
+- **It is retried.** A target that was unreachable, or that failed in a way another attempt may resolve, gets one. Each wait is twice as long as the one before it, starting from the backoff you configured, and never longer than the time the change has left.
+- **It is parked, and waits for you.** A target that *refused* the password, or that cannot do what was asked at all, will refuse it identically next time; JIM stops rather than burning the attempts. So does a change that has used all of them. Parked work is released, and tried again, the moment you change what would be delivered to that system: switching Password Synchronisation on, or correcting a setting.
+- **It expires.** A change that outlives its time to live is retired with its last failure recorded, rather than delivering a password the person may have changed twice since.
+
+A change for someone who changes their password again before the first one is delivered replaces the first, rather than queueing behind it. Only the newest password is ever sent.
+
+Delivery is a Password Delivery task in the Operations queue, so a pass is visible while it runs and its outcome is recorded as an Activity like any other work. A pass is raised when a password change is queued, when you enable Password Synchronisation on a system (to deliver what accumulated), and by JIM itself when a retry falls due.
+
+!!! warning "Requiring a secure transport means refusing to send"
+    A Connected System with **Require Secure Transport** on will not have passwords sent to it over a connection JIM cannot confirm is encrypted. The queued changes wait, and the pass says so; nothing is attempted and no attempt is counted against them. Leave it off only where the target genuinely cannot offer an encrypted connection, and understand that a password sent over an unencrypted one is readable by anyone on the network path.
+
 !!! note "Capturing a password changed in another system is a separate capability"
     Everything here concerns a password change JIM knows about: one an administrator makes, or one sent to JIM's API. Capturing a change made **in** another system, such as a user changing their own password in Active Directory, and replaying it into the others needs a capture agent running on the domain controllers, because no directory will disclose a password when JIM reads from it.
 
