@@ -1,91 +1,100 @@
-# Schema Drift Reconciliation
+# Schema Refresh Decision
 
 - **Status:** Planned
-- **Created:** 2026-08-20
-- **Author:** Claude (from requirements stated by the project owner on #421)
+- **Created:** 2026-08-20 (reworked 2026-08-20 after review; the original draft centred on a rare misread scenario and scattered controls across the application, both rejected)
+- **Author:** Claude (from requirements stated by the project owner on #421 and in review)
 - **Issue:** [#1485](https://github.com/TetronIO/JIM/issues/1485)
 
 ## Problem Statement
 
-A schema refresh never deletes: Object Types and Attributes the Connected System no longer reports are retained in JIM (deliberately; see #782), and #421 Phase 1 made that honest by previewing every refresh and flagging removals and definition changes before anything is applied. What Phase 1 does not do is give the administrator a way to **act** on the drift it reports. After applying a refresh that carries removals, JIM still holds schema entries the source no longer has:
+A schema refresh can be destructive. Additions are harmless, but the Connected System can also have removed Object Types, removed attributes, or (rarely, but legitimately, e.g. a custom application refining its schema) changed an attribute's data type. #421 delivered the pause: a refresh now retrieves the schema and shows the administrator what changed, green (additions) and red (removals and definition changes), before anything is applied, with the choice to apply or cancel.
 
-- Their Connected System Object attribute values freeze and go on being contributed to the Metaverse indefinitely, which violates JIM's data-integrity principle: JIM no longer reflects the state of the Connected System.
-- Synchronisation Rules bound to a removed Object Type, and Attribute Flow mappings reading a removed attribute, keep running over data that has stopped moving. Nothing marks them; nothing reports them as stale.
-- A data type or plurality change can invalidate a mapping validated against the old definition. Phase 1 reports it; nothing helps the administrator resolve it.
+What the pause cannot yet do is protect anything. Whichever of the two choices the administrator takes, the destructive facts still land:
 
-The traditional ILM alternative, committing every schema change automatically, is worse: a permissions blip at the source is indistinguishable from a real removal, and an auto-commit response to it would destroy configuration and mass-delete objects irreversibly. SQL Server-based ILM systems did exactly this and it regularly broke deployments. JIM must give the administrator a safe, explicit, previewable path to reconcile instead.
+- **Apply** records the new schema, but every Synchronisation Rule bound to a removed Object Type, and every Attribute Flow mapping reading a removed attribute (directly or as an input to an expression), keeps running over entries that no longer exist at the source. A mapping validated against a changed data type may now misbehave.
+- **Cancel** keeps the old schema, and that is not safe either: the next Full Import finds no objects of a removed Object Type and obsoletes them all, and a changed data type means the source is now sending values the mapping was never validated for.
+
+The administrator can see the problem and has no tool to respond to it. This PRD gives the refresh review the missing choices, all at the one place the destructive facts arrive: the Schema tab's refresh decision.
 
 ## Goals
 
-- An administrator can see, at any time, which Synchronisation Rules and Attribute Flow mappings reference schema entries the Connected System no longer reports, without hunting for them.
-- Configuration invalidated by drift stops silently producing stale or wrong results: it is marked inoperable (auto-disabled with a stated reason) rather than left running or deleted.
-- Inoperable marking is **reversible by the source**: if a subsequent refresh finds the entry again (a permissions blip corrected), the marking clears itself.
-- An administrator can explicitly remove a retained schema entry from JIM, with the cascade (Connected System Object deletion, attribute value withdrawal, Metaverse consequences) routed through the existing obsoletion and recall pipeline, previewed via the Configuration Change Preview framework (#827) before it runs, and blocked while configuration still references the entry.
-- Every destructive step is auditable: Activities and RPEIs record what was removed and why, per the synchronisation integrity rules.
+- The refresh review presents destructive changes distinctly (red) from additions (green), and pauses; nothing is applied until the administrator chooses.
+- Where the diff carries destructive changes, the administrator chooses one of three ways forward:
+    1. **Cancel**, with a warning stating the specific risks of staying on the old schema (removed Object Types' objects are obsoleted by the next Full Import regardless; changed data types can break mappings).
+    2. **Apply and disable dependents** (working name; a better one is wanted): the new schema is recorded, and every dependent configuration object is disabled rather than left running: Synchronisation Rules bound to a removed Object Type, and Attribute Flow mappings reading a removed or retyped attribute, including mappings where the attribute is an input to an expression.
+    3. **Apply and remove**: the new schema is recorded, the dependent configuration objects are removed, and the dependent data goes with them: Connected System Objects of a removed Object Type, and stored attribute values of a removed attribute, cascading through the existing obsoletion, recall, grace-period and Deletion Rule machinery.
+- Options 2 and 3 are previewed before they run (what would be disabled or removed, with counts); option 1 needs only its warning.
+- Attribute Flow mappings gain an enabled/disabled state (none exists today; Synchronisation Rules have one, mappings do not), surfaced across portal, REST and PowerShell per the surface-parity rule, so option 2 has something to actuate and the administrator can re-enable per mapping afterwards.
+- Everything above is audited: the chosen option is recorded on the refresh's Activity, and option 3 executes in the worker with per-object results and summary statistics.
 
 ## Non-Goals
 
-- **Automatic enforcement of removals on refresh.** Applying a refresh never deletes objects, values, rules or mappings. An optional per-system policy for trusted dev environments may be considered later; it is out of scope here.
-- **Per-item cherry-picking of a refresh.** A refresh applies or discards as a whole (additions are inherently safe; removals are retained either way). Item-level partial application multiplies the schema states the engine must honour, and audits have repeatedly found states it does not.
-- **Deleting Synchronisation Rules or mappings automatically, under any circumstances.** Disable and surface, never delete; deletion of configuration is always an explicit administrator action.
+- **No automatic application or enforcement.** A refresh never applies itself and never deletes anything without the administrator explicitly choosing option 3 on that refresh.
+- **No drift-management surfaces elsewhere in the application.** The refresh review is the decision point. No standalone "remove this stale entry" affordances on schema rows, no separate reconciliation pages; a cancelled refresh is simply re-run when the administrator is ready to decide.
+- **No per-item cherry-picking.** A refresh applies or cancels whole, with one of the three postures. Partial schema states multiply what the engine must honour.
+- **No deletion of configuration outside option 3.** Option 2 disables; only option 3 removes, and only after its preview.
 
 ## User Stories
 
-1. As an administrator, I want JIM to disable and clearly flag Synchronisation Rules and mappings invalidated by schema drift, so that my synchronisations fail fast and visibly instead of flowing stale values silently.
-2. As an administrator, I want an invalidated rule to recover automatically when the schema entry reappears, so that a permissions blip at the source costs me nothing.
-3. As an administrator, I want to retire a removed Object Type from JIM deliberately, previewing how many objects and values that touches, so that JIM's state converges with the Connected System without surprises.
-4. As an administrator, I want to be told when a data type change has invalidated a mapping, and what my options are, so that I am not debugging wrong flows after the fact.
+1. As an administrator, I want the refresh review to separate what is safe (additions) from what is destructive (removals, type changes), so I can decide with the facts in front of me rather than discovering them at the next synchronisation.
+2. As an administrator facing a destructive diff, I want a middle option between "hope for the best" and "delete everything": apply the schema and have JIM disable the configuration the changes invalidated, so nothing runs wrong while I rework it.
+3. As an administrator retiring a genuinely decommissioned Object Type, I want one decision that applies the schema, removes the invalidated configuration and cleans up its objects and values through the normal deprovisioning machinery, with a preview and a full audit trail.
+4. As an administrator who cancelled, I want the warning to have told me exactly what staying on the old schema costs, so cancelling is an informed hold, not a trap.
 
 ## Requirements
 
 ### Functional Requirements
 
-**Phase 2a: inoperable marking (safety and visibility, zero destruction)**
+**The decision surface (Schema tab refresh review, extending #421's panel)**
 
-1. A schema refresh apply that leaves removals behind marks affected configuration **inoperable**: Synchronisation Rules whose Object Type is no longer reported, and Attribute Flow mappings whose source or target attribute is no longer reported. Inoperable is distinct from administrator-disabled: it carries a stated reason ("Object Type 'computer' is no longer reported by the Connected System; marked inoperable by the schema refresh of 20 Aug 2026") and clears automatically when a later refresh finds the entry again. Precedent: #1248's inoperable Run Profiles over deselected partitions.
-2. Attribute Flow mappings need a per-mapping disabled state to support this; none exists today (`SyncRuleMapping` has no enabled flag). Add one, surfaced across portal, REST and PowerShell per the surface-parity rule, with the inoperable reason distinct from an administrator's own disable.
-3. An inoperable rule or mapping is skipped by synchronisation and reported as skipped (not silently absent) on the run's Activity, satisfying "fast/hard failures over corrupted state".
-4. A data type or plurality change that invalidates a mapping (source and target types no longer compatible) marks that mapping inoperable with the definition change as the reason, at refresh apply time.
-5. The Schema tab, the Synchronisation Rule editor and the relevant list pages surface inoperable state visibly; counts appear on the refresh preview so the administrator sees what applying will mark.
+1. The refresh preview renders additions and destructive changes as visually distinct groups (green/red), with attribute definition changes (data type, plurality) in the destructive group.
+2. When the diff contains destructive changes, the panel's actions become the three options above; when it contains only additions, the existing Apply/Discard pair stands unchanged.
+3. Dependent-configuration detection covers: Synchronisation Rules whose Object Type is removed; Attribute Flow mappings whose source or target attribute is removed or retyped, including mappings consuming the attribute as an expression input; and Object Matching Rules referencing a removed attribute.
+4. Options 2 and 3 open a preview before committing: option 2 lists every configuration object that would be disabled; option 3 lists that plus the data impact (Connected System Objects obsoleted per removed Object Type, stored values removed per removed attribute), using the counting machinery the preview framework already has.
+5. Cancel, when the diff carries destructive changes, warns concretely: objects of removed Object Types will be obsoleted by the next Full Import regardless of cancelling, and mappings over retyped attributes may misbehave. Additions-only cancels remain warning-free (#421 behaviour).
 
-**Phase 2b: administrator-initiated enforcement (explicit removal)**
+**Option 2 mechanics: apply and disable dependents**
 
-6. A retained (no-longer-reported) Object Type or attribute offers an explicit **Remove from JIM** action. For an Object Type: its Connected System Objects are obsoleted and flow through the existing deletion pipeline (recall of contributed attributes per the type's obsoletion setting, grace periods, Metaverse deletion rules); the schema entry is deleted once its objects are gone. For an attribute: its stored values are removed via the existing pending-removal machinery; the schema entry is deleted once values are gone.
-7. Removal is **blocked** while any Synchronisation Rule or mapping still references the entry (the #465 pattern): the blocking finding names each referencing rule so the administrator can retarget or delete it first. Inoperable marking does not lift the block; the reference must actually be removed.
-8. Removal is previewable end-to-end on the Configuration Change Preview framework before it runs: how many Connected System Objects are obsoleted, how many Metaverse values are withdrawn or kept, which deletion rules would fire.
-9. Removal executes in the worker as an audited Activity with per-object RPEIs and summary statistics, never synchronously in the portal request.
+6. Attribute Flow mappings gain a persisted enabled/disabled state with portal, REST and PowerShell write parity. A disabled mapping is skipped by synchronisation and reported as skipped on the run's Activity, never silently absent.
+7. Disabling performed by option 2 records why (which refresh, which schema change) so the administrator later sees the cause on the rule or mapping, distinct from a disable they performed themselves. Re-enabling is a manual administrator action.
+8. Synchronisation Rules disabled by option 2 use the existing rule-level Enabled state, with the same recorded reason.
+
+**Option 3 mechanics: apply and remove**
+
+9. Removal of dependent configuration deletes the affected Synchronisation Rules and mappings (as previewed and confirmed; this is the one sanctioned configuration-deleting path, and it is always explicit).
+10. Removal of dependent data routes through existing machinery, never a new bulk-delete path: Connected System Objects of a removed Object Type are obsoleted and flow through disconnection, attribute recall (per the type's obsoletion setting), grace periods and Metaverse Deletion Rules; stored values of a removed attribute are removed via the pending-removal machinery.
+11. Option 3 executes as a worker task under an audited Activity with per-object results; the portal request only queues it.
 
 ### Non-Functional Requirements
 
-- Enforcement must scale to customer populations (100K+ objects of a removed type) by reusing the bulk obsoletion paths, not per-object EF operations.
+- Option 3 must scale to customer populations (100K+ objects of a removed type) by reusing the bulk obsoletion paths.
 - No new environment variables; everything is admin-UI/API-driven.
-
-### Constraints
-
-- Never auto-delete configuration. Never bypass the metaverse (no direct system-to-system state changes). All errors via Activities/RPEIs.
 
 ## Examples and Scenarios
 
-- **Permissions blip:** a service account loses read access to half the directory schema; a refresh preview shows 40 "removals" plus discovery warnings. The administrator applies anyway (or a colleague does). Affected rules go inoperable with reasons; the next week's refresh, after permissions are fixed, finds the entries and the rules self-heal. Nothing was deleted at any point.
-- **Real decommission:** the HR system drops its `faxNumber` column. Refresh applies; the one mapping reading it goes inoperable. The administrator deletes the mapping, then uses Remove from JIM on the attribute; the preview says 12,400 objects hold a value; values are withdrawn through the standard pipeline and the schema entry disappears.
-- **Type refinement:** a custom application changes `employeeNumber` from Text to Number. The refresh preview flags the definition change; on apply, the mapping to the Text-typed Metaverse attribute is marked inoperable with the change as the reason; the administrator remaps or overrides the type.
+- **Attribute decommissioned:** HR drops `faxNumber`. Refresh shows it red. The administrator picks option 2: schema applied, the one mapping reading it (plus a mapping using it inside an expression) disabled with the refresh named as the reason. They delete the mappings at leisure, re-run the refresh choosing option 3 later, or leave it.
+- **Object Type decommissioned:** the source retires `computer`. Refresh shows the type red with its dependent rule. Option 3's preview: 1 Synchronisation Rule and 4 mappings removed; 1,204 Connected System Objects obsoleted through the standard pipeline; grace periods and Deletion Rules apply. The administrator confirms; the worker executes and the Activity records every object.
+- **Type refinement:** a custom application changes `employeeNumber` from Text to Number. Refresh shows the definition change red. Option 2 disables the mapping validated against Text; the administrator remaps to a Number-typed Metaverse Attribute and re-enables.
+- **Not ready to decide:** the administrator cancels. The warning has told them objects of the removed type will be obsoleted at the next Full Import anyway; they pause the relevant Run Profiles and come back. Re-running the refresh reproduces the same decision.
 
 ## Acceptance Criteria
 
-- [ ] Rules/mappings referencing entries a refresh no longer reports are marked inoperable at apply, with reasons, and are skipped-and-reported by synchronisation runs.
-- [ ] Inoperable marking clears automatically when a refresh finds the entry again.
+- [ ] A refresh with destructive changes pauses on a review separating green from red and offering the three options; additions-only refreshes keep #421's behaviour.
+- [ ] Cancel over a destructive diff warns with the concrete next-sync consequences.
+- [ ] Option 2 applies the schema and disables every detected dependent (rules, mappings, expression-input mappings), each recording the refresh as the reason; disabled mappings are skipped-and-reported by synchronisation.
 - [ ] Per-mapping enabled/disabled state exists with portal, REST and PowerShell parity.
-- [ ] Remove from JIM cascades through the existing obsoletion/recall pipeline, is previewable, is blocked by referencing configuration, and is fully audited.
-- [ ] Nothing in either phase deletes configuration or objects without an explicit administrator action.
+- [ ] Option 3 applies the schema, removes the previewed configuration and cascades data removal through the existing obsoletion/recall/deletion-rule pipeline as an audited worker task.
+- [ ] Both option 2 and option 3 show an accurate preview before anything is committed.
+- [ ] Nothing is ever applied, disabled or removed without the administrator choosing it on that refresh.
 
 ## Dependencies
 
-- #421 Phase 1 (refresh preview) delivered; the preview panel is where Phase 2a's counts and Phase 2b's actions surface.
-- Configuration Change Preview framework (#827) for the enforcement preview.
-- Existing obsoletion, recall, grace-period and deletion-rule machinery.
+- #421 (delivered): the refresh pause, diff and preview panel this decision extends.
+- Configuration Change Preview framework (#827) for the option 2/3 previews and counts.
+- Existing obsoletion, recall, grace-period and Deletion Rule machinery for option 3's data cascade.
 
 ## Open Questions
 
-- Should Phase 2a's inoperable marking happen at refresh apply only, or also retrospectively for drift already present on upgrade? (A one-off reconciliation pass on first refresh after upgrade is the likely answer.)
-- Does an inoperable *inbound* rule stop deletion detection for its Object Type, and is that acceptable? Needs the same audit rigour G6 applied to selection semantics.
-- Whether a per-Connected-System "auto-enforce on refresh" policy (Phase 3) is ever wanted, even for dev environments.
+- Naming for option 2 ("apply and disable dependents" / "safe mode" both feel wrong; wanted: a label an administrator reads correctly first time).
+- Whether option 3 should also be offered per-kind (e.g. full removal for a decommissioned type, disable-only for a retyped attribute, within one refresh) or stay one posture per refresh.
+- Delivery split: option 2 (with the per-mapping state) is buildable ahead of option 3; confirm the two land as separate PRs/phases.
