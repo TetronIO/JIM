@@ -11,6 +11,8 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 ## What a Connected System contains
 
 - **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
+
+    The Schema, Partitions &amp; Containers and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings themselves, not about the external system being reachable: saving the Settings tab also tests the connection and tells you what it found, but a system that is down for maintenance does not take those tabs away, and you can keep working on the configuration while it is.
 - **Discovered schema**<br /> The object types and attributes available in the external system, populated on first contact.
 - **Connector space**<br /> A staging area that holds JIM's local copy of the external system's data.
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.
@@ -22,7 +24,7 @@ The connector space is a critical concept. It is a staging area between the exte
 
 --8<-- "assets/diagrams/sync-pipeline.svg"
 
-<p class="jim-diagram-caption">Imported data is staged in the connector space as Connected System Objects; the Metaverse is only touched during the synchronisation phase, and exports stage the same way in reverse.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
+<p class="jim-diagram-caption">Every Connected System has its own connector space, named for it here; imported data is staged there as Connected System Objects, the Metaverse is only touched during the synchronisation phase, and exports stage the same way in reverse. The systems shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
 
 This two-stage approach gives you:
 
@@ -69,6 +71,100 @@ Inside a partition, or directly inside the connector space of a connector that d
 
 In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the connector space for connectors that have no partitions).
 
+### How many objects each container holds
+
+Each container row shows how many objects it holds, so you can tell a container worth managing from an empty one before you tick anything.
+
+The figure is read from the Connected System itself, not from what JIM has already imported, so it is there the first time you open the tab on a brand new Connected System. That is the moment it matters most: you are deciding what to manage, and JIM holds nothing yet.
+
+- **The figure follows the container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope).** A container set to This and below reports what its whole branch holds; one narrowed to This level reports only what sits directly in it. Hover the number to see both, and which of them is on screen.
+- **Only the Object Types you have selected are counted**, so the number matches what a Full Import would actually bring back. Select them on the Schema tab first; nothing is counted until you have.
+- **Zero and blank mean different things.** Zero is a container that was searched and found empty. A blank means nobody has counted it: either the Connector cannot report counts, the hierarchy has not been retrieved since this feature shipped, or counting was cut short, in which case the hierarchy refresh's Activity says so and why.
+- **Selections and exclusions are ignored.** The figure says what is in the container, not what JIM would import from it once your exclusions apply. [Preview Changes](#previewing-a-partition-or-container-change) answers that second question.
+
+Counts are gathered as part of **Retrieve Hierarchy**, so refreshing the hierarchy refreshes the numbers, and the tab tells you when it last ran. Counting is bounded: if it takes longer than a minute, or the directory stops the search at its own size or time limit, JIM discards that partition's figures rather than showing numbers that are quietly short of the truth, and the refresh's Activity completes with a warning naming the partition and what stopped the count. Raising the directory's limit, or narrowing the selected Object Types, is the usual fix. The hierarchy itself still arrives either way.
+
+!!! note "This reads your directory"
+    Counting means retrieving the matching entries, because LDAP has no count operation. JIM asks for names only, which is far lighter than an import, and runs one search per partition rather than one per container. It is still a read against your production directory, so it happens when you retrieve the hierarchy and at no other time.
+
+### What your selections mean
+
+Selection is how you tell JIM which parts of a system it manages, and it binds everywhere:
+
+- A [Run Profile](run-profiles.md) that targets a deselected partition is refused rather than run. The Run Profiles tab marks it, and the property is available over REST and PowerShell so you can find every affected Run Profile at once.
+- Exports are refused outside the selected containers, honouring each container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope). Selection means the scope JIM manages, not merely the scope it reads: writing an object where JIM cannot import it back leaves the change unconfirmed and the object treated as deleted on the next Full Import, so JIM would end up churning an object it had just exported. A container set to One Level is not a licence to write anywhere beneath it, only directly within it, because that is exactly what the next import will return. The export fails for that object, naming the Distinguished Name, and the rest of the run continues. A container created by the Connector during the run is in scope, because JIM selects it as soon as the run ends.
+- Objects in a deselected partition or container fall out of import scope. A Full Import treats anything it does not find as deleted from the system, so narrowing scope makes the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls the attribute values they contributed. Widen scope again before running a Full Import if that is not what you intended.
+
+### Stating Container Scope as text (Advanced Mode)
+
+The Partitions & Containers tab offers two ways to edit the same Container Scope, switched with **Simple** and **Advanced**:
+
+- **Simple** is the tree: tick the Containers you manage, and set each one's [Container Scope](../connectors/jim-ldap-connector.md#container-scope).
+- **Advanced** is the same scope written out, one statement per line. It is for the hierarchy that is impractical to click through, and for keeping a scope under version control, reviewing it as a diff, or copying it between Connected Systems.
+
+```text
+include OU=Corp,DC=example,DC=com
+exclude OU=Service Accounts,OU=Corp,DC=example,DC=com
+include OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com
+```
+
+Each line is a directive, an optional `one-level`, then the Container's path:
+
+| Statement | Means |
+|---|---|
+| `include <path>` | Manage this Container and everything beneath it. `+` is accepted as shorthand. |
+| `include one-level <path>` | Manage the objects held directly in this Container, and no Container beneath it. |
+| `exclude <path>` | Carve this Container out of the selection an ancestor made. `-` is accepted as shorthand. |
+| `exclude one-level <path>` | Carve out the objects held directly in this Container, leaving the Containers beneath it as their ancestors had them. |
+
+Blank lines are ignored, and so is any line beginning with `#`. Comments are whole-line only, because a Distinguished Name may itself contain a `#`.
+
+The text states **the whole** of Container Scope, not a change to it. A Container the text does not name states nothing, so removing a line is how a Container is deselected, and empty text clears the scope entirely. Partition selection is left alone, except that naming a Container selects the partition holding it.
+
+Nothing is applied by halves. Each of these is refused, naming the line at fault, with the scope left exactly as it was:
+
+- a path that names no Container JIM has discovered (retrieve the hierarchy if the Container is new);
+- the same Container stated twice, because a Container states one thing about itself;
+- a statement an ancestor already makes, which would change nothing.
+
+**Apply** edits the selection, exactly as ticking a box does; nothing reaches the Connected System until you **Save Changes**, so Advanced Mode gets the same preview and the same confirmation as the tree. Switching back to **Simple** applies the text first rather than discarding it, and every scope expressible one way is expressible the other, so nothing is lost in either direction.
+
+Automation has the same surface: [`Get-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md) and [`Set-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md) in PowerShell, or `GET`/`PUT connected-systems/{id}/container-scope-text` in the [REST API](../../api/reference/).
+
+### Previewing a partition or container change
+
+Because narrowing scope is silently destructive, the Partitions & Containers tab offers a **Preview Changes** button beside **Save Changes**. It answers what your edited selection would do, without saving it.
+
+The preview reports:
+
+| Transition | What it means |
+|---|---|
+| Leaves import scope | Connected System Objects that leave import scope and are not joined to anything. Nothing in the Metaverse changes as a result. |
+| Disconnects from its Metaverse Object | Objects that leave import scope and *are* joined. Each takes the attribute values it contributed out of the Metaverse Object with it. |
+| Becomes eligible for deletion | Metaverse Objects that those disconnections would leave satisfying their [deletion rule](metaverse.md#deletion-behaviour). These are deletions your selection would set in motion. |
+| Enters import scope | Objects JIM still holds from scope you are re-selecting. |
+
+The counts honour each container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope): beneath a One Level container an import returns nothing, so objects a level deeper are already out of scope and deselecting it takes nothing further away.
+
+Two limits are worth knowing, and the preview states both where they apply:
+
+- **Objects JIM has never imported cannot be counted.** Selecting new scope makes the next Full Import discover objects that are not in the connector space yet, and there is nothing to count until it runs.
+- **Some objects cannot be placed.** An object imported before JIM recorded partitions, or one whose Connector cannot say what container an object is in, is left out of the counts entirely rather than guessed at in either direction.
+
+Save after previewing and the confirmation opens with the preview's own sentence, alongside the properties changing, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
+
+The same evaluation is available to automation: [`New-JIMConfigurationChangePreview -ConnectedSystemId`](../powershell/previews.md) in PowerShell, or `POST connected-systems/{id}/scope-selection/preview` in the [REST API](../../api/reference/). Send the whole proposed selection rather than one flag: what a deselection costs depends on the rest of the selection, because an object leaves scope only when nothing else still covers it.
+
+See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
+
+### Renames and moves in the source system
+
+JIM identifies partitions and containers by the system's own immutable identifier where one exists (`objectGUID` on Active Directory, `entryUUID` on OpenLDAP), not by their Distinguished Name. Renaming an organisational unit, or moving one to a different parent, therefore keeps your selection intact: the next hierarchy refresh reports it as a rename or a move rather than as one container disappearing and another appearing.
+
+Containers selected before this behaviour shipped record their identifier at their next hierarchy refresh, and continue to be matched on Distinguished Name until then. Refresh the hierarchy once after upgrading to pick it up.
+
+A container that genuinely disappears from the source system is still reported as removed, and the Partitions & Containers tab warns when a removed container was one you had selected.
+
 ## Unresolved reference handling
 
 When an import stages a reference attribute value (for example a group member's Distinguished Name) that does not correspond to any object in the connector space, JIM cannot resolve the reference. The most common cause is the referenced object sitting outside the configured [Container Scope](#partitions-and-containers), which can be entirely deliberate: excluding foreign or out-of-remit objects from import is a normal scoping decision.
@@ -81,6 +177,8 @@ Each Connected System has an **Unresolved Reference Handling** setting that cont
 | **Warn** | No per-object errors are raised. The Activity completes with a warning carrying a summary of how many references could not be resolved. Choose this when unresolved references are worth a glance but should not read as failures. |
 | **Ignore** | No per-object errors and no Activity warning; the import completes successfully. Choose this when unresolved references are expected and benign. |
 
+The same setting also governs **ambiguous references**: a reference value that matches objects of more than one Object Type, where the attribute does not declare which Object Type it points at. Two Object Types may legitimately share an anchor value space (a view over a table has the table's keys by construction), so JIM never resolves such a reference by guessing; it is reported per the mode above, with a message naming the candidate Object Types. Where the Connector's schema can declare the reference's target Object Type (the [SQL Connector](../connectors/jim-sql-connector.md)'s `referencesObjectType`), declaring it removes the ambiguity entirely: the reference resolves within the declared Object Type alone.
+
 Whichever mode is selected, genuine data-quality issues remain discoverable:
 
 - **Connected System Objects**<br /> Unresolved reference values stay stored on the affected objects, so they can be inspected on the object's detail page at any time.
@@ -88,6 +186,166 @@ Whichever mode is selected, genuine data-quality issues remain discoverable:
 - **Service log**<br /> Every unresolved reference is logged (at Warning level in Warn mode, Debug level in Ignore mode), along with a summary count at the end of reference resolution.
 
 Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
+
+### On export
+
+The same setting governs the export side. When JIM writes a reference attribute (a manager, a group's members) it needs the referenced object's own identifier in the target Connected System, which it can only have once that object exists there. A Pending Export whose references cannot all be resolved yet is not held back whole: everything that can be written is written now (a Create inserts the row without the reference columns; a group gains the members that can be resolved), and the Pending Export stays pending, carrying only the reference values still owed, until they resolve. It is retried on the deferred cadence and finished when the referenced objects can be addressed.
+
+JIM tells two situations apart at export time:
+
+| Situation | What it means | What happens |
+|-----------|---------------|--------------|
+| **Awaiting anchor** | The referenced object has a Connected System Object in this Connected System, but its own export has not been executed or confirmed yet, so it has no anchor to point at. | Ordinary ordering. Nothing is reported; the reference is written on a later run. |
+| **Not in this Connected System** | The referenced object has no Connected System Object in this Connected System at all: it is out of scope for every Synchronisation Rule into the system, or has not been provisioned. | The reference cannot be written as things stand, and is reported per the mode above: **Error** marks the referring object's Run Profile execution item with an Unresolved Reference error naming the attribute and the referenced object, and the Activity completes with a warning; **Warn** completes the Activity with a warning carrying a summary count; **Ignore** logs only. |
+
+An export that wrote in part is counted as succeeded on the Activity ("43 succeeded (4 written in part, awaiting references)"), because something was written; the Pending Export detail page lists each reference still owed with its reason, and the same detail is available from `Get-JIMPendingExport -Id` and the REST API as `unresolvedReferences`. A partial write that the target refuses (a reference column declared `NOT NULL`, say) fails that object with an ordinary export error, and is retried like any other failure.
+
+## What deselecting means
+
+The Schema tab's ticks decide what JIM **reads**. That is narrower than it looks, and worth being precise about, because deselecting has no visible effect at all: nothing fails, nothing is deleted, and nothing is disconnected.
+
+| What you deselect | What actually happens |
+|---|---|
+| An **Object Type** | JIM stops importing it. The Connected System Objects already imported from it are left exactly as they are: still joined to their Metaverse Objects, and still contributing the values they last imported, which stop being refreshed. Nothing is obsoleted and nothing is deprovisioned. |
+| An **attribute** | JIM stops fetching it. The values already held for it stay on the Connected System Objects, and any Attribute Flow reading it goes on flowing them, without them ever being refreshed again. |
+
+Neither is the same as deselecting a partition or a container. Those take objects out of an import that still runs, so the next Full Import does not find them, marks them obsolete, and the following synchronisation disconnects them. Deselecting an Object Type removes it from that comparison altogether, so its objects are never looked for.
+
+Selection is also an **import-side** idea only. Synchronisation and export do not consult it: an export Attribute Flow whose target attribute is deselected still writes it.
+
+So if your intent is to take a type genuinely out of management, deselecting it is not sufficient on its own. Disable or delete the Synchronisation Rules that manage it too, or its objects will go on contributing stale values indefinitely.
+
+### Obsoletion and contributed values
+
+Each Object Type carries **Remove Contributed Attributes On Obsoletion**, which decides what happens to the Metaverse values one of its objects contributed when that object is obsoleted:
+
+- **On** (the default) withdraws them. Where another Connected System still contributes the attribute it is handed over to that source; where none does, the value is cleared. A [deletion grace period](metaverse.md#deletion-behaviour) preserves a value with no surviving contributor until the grace window resolves.
+- **Off** leaves them on the Metaverse Object. They stop tracking anything from that point, and nothing reports them as stale.
+
+### Previewing a schema change
+
+The Schema tab offers a **Preview Changes** button beside **Save Changes**, which answers what your edited selection would do without saving it.
+
+The preview reports:
+
+| Transition | What it means |
+|---|---|
+| Stops being imported, stays joined | Connected System Objects that would stop being imported. Where the row names an attribute, only that attribute freezes; otherwise the whole object does. |
+| Imported again | Objects, or attribute values, that would start tracking the Connected System again. |
+| Contributed values withdrawn | Metaverse Objects that would have this system's contributed values withdrawn when their obsolete objects are next synchronised. |
+| Contributed values kept | The inverse: values that would be left in place instead. |
+
+Two things the preview is deliberately careful about:
+
+- **Only the objects that hold a value are counted for an attribute.** An object with nothing stored for a deselected attribute has nothing to freeze, so counting it would inflate the answer with objects the change does not touch.
+- **The obsoletion toggle is counted against the objects already obsolete and still joined**, which are the only ones whose fate it changes now. Objects obsoleted in future are governed by the setting too, but there is no population to count yet.
+
+Validation names what would go on running over the frozen data: Synchronisation Rules still bound to an Object Type you are deselecting, and Attribute Flow mappings still reading an attribute you are deselecting. Deselecting an External ID is refused outright.
+
+Save after previewing and the confirmation opens with the preview's own sentence, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
+
+The same evaluation is available to automation: [`New-JIMConfigurationChangePreview -ConnectedSystemId -SchemaObjectType`](../powershell/previews.md) in PowerShell, or `POST connected-systems/{id}/schema-selection/preview` in the [REST API](../../api/reference/). Every omission means "leave this as it stands", so a request changing one flag cannot accidentally propose deselecting a whole Object Type.
+
+See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
+
+## Refreshing the schema
+
+The Schema tab's **Refresh Schema** button retrieves the latest object types and attributes from the Connected System. The first retrieval simply records what it finds; a refresh with a schema already in place shows you a **preview** of what changed before anything is applied, so a source system that has drifted never rewrites JIM's configuration behind your back.
+
+The preview reports, per object type:
+
+| Change | What applying it does |
+|---|---|
+| Object types or attributes **added** | Recorded and available for selection. Additions cannot affect anything that already works. |
+| Object types or attributes **no longer reported** | **Retained** in JIM; nothing is deleted by a refresh. Their values stop refreshing from that point, and any Synchronisation Rule or Attribute Flow reading them works from stale data, so the preview flags them for your attention. |
+| Attribute **definitions changed** (data type or plurality) | The new definition is recorded. A mapping validated against the old definition may no longer behave as intended, so these are flagged too. A data type you [overrode yourself](#overriding-an-inferred-type) is never overwritten, and never appears here. |
+
+You then choose:
+
+- **Apply Schema Changes** records the refresh, exactly as previewed, under an ImportSchema [Activity](activities.md).
+- **Discard** drops it; JIM's schema stays exactly as it was. Where the preview found removals or definition changes, discarding means JIM's configuration no longer matches the Connected System, and the next synchronisation runs against that mismatch; you are asked to confirm that you understand. Discarding additions alone needs no confirmation, because the next refresh simply finds them again.
+
+Watch the preview's **discovery warnings** before applying: a Connected System identity without permission to read the full schema produces a partial read, which can make object types or attributes appear removed when they are not.
+
+The same flow is available to automation: `Import-JIMConnectedSystemSchema -Preview` in [PowerShell](../powershell/connected-systems.md#import-jimconnectedsystemschema) returns the preview result (its `HasRemovalsOrDefinitionChanges` property flags the changes that matter), and the REST API offers `POST connected-systems/{id}/import-schema/preview` beside the committing `import-schema` endpoint; see the [REST API reference](../../api/reference/).
+
+## Attribute writability
+
+When JIM retrieves a Connected System's schema, each discovered attribute is recorded with how the system will let JIM write to it. You can see this in the Schema tab's **Writability** column, filter the attribute list by it, and read it from the REST API and PowerShell as the attribute's `writability` value. It is discovered, never set by an administrator: it reflects what the Connected System told JIM.
+
+There are three states.
+
+| Shown as | `writability` | What it means |
+|----------|---------------|---------------|
+| Writable | `Writable` | The Connected System accepts writes to this attribute. An export Attribute Flow can target it and keep it up to date. |
+| Read-Only | `ReadOnly` | The Connected System will not accept writes at all. The attribute can still be imported (`whenCreated` and `objectSid` are useful to hold in the Metaverse), but no export Attribute Flow may target it; JIM refuses the mapping when you try to create it. |
+| Set on creation only | `WritableOnCreate` | The Connected System accepts a value only as part of creating the object. An export Attribute Flow may target it, and usually should: without one the object cannot be provisioned. JIM sends the value with the Create Pending Export and never sends it again. |
+
+### Why "Set on creation only" exists
+
+Some attributes are what the Connected System uses to identify the object. A relational table's primary key is the clearest case: JIM has to supply it when it inserts the row, and from then on it is what ties the Connected System Object to that row. Rewriting it later would not update the row, it would point JIM at a different one, and the object JIM thought it was managing would be orphaned. A directory's relative distinguished name has the same shape, being changed by a rename operation rather than by an ordinary attribute write.
+
+JIM therefore treats these attributes as write-once, and enforces it on the export path rather than trusting the configuration to be right:
+
+- **Provisioning**<br /> The value flows normally. It is part of the Create Pending Export, exactly like any other mapped attribute.
+- **Updates**<br /> The attribute is excluded from every Update Pending Export, **even when the Metaverse value has changed**. Nothing is sent, and no error is raised: this is the intended behaviour, not a failure.
+- **Drift Correction**<br /> A value that has diverged in the Connected System is not treated as drift and is not corrected, because correcting it would mean rewriting the identifier.
+
+If a source value feeding one of these attributes genuinely does change (an employee number is reissued, say), JIM will not chase it into the Connected System. That is deliberate: re-identifying an existing object is a decision for an administrator, not something a synchronisation run should do quietly.
+
+The Attribute Flow editor marks an export mapping whose target is set on creation only, so it is clear at a glance which mappings apply during provisioning alone, and a Connected System Object's detail page marks the attribute itself, so the same is obvious when looking at a single object's values.
+
+## Attribute data types
+
+Every discovered attribute is recorded with a JIM data type, shown in the Schema tab's **Type** column. An Attribute Flow requires its source and target to be the same type, so this is what decides which Metaverse Attributes an attribute can be mapped to.
+
+Most of the time the Connected System states its type unambiguously and JIM simply records it. A directory's schema and a SCIM service provider's schema are both definitive, so their attribute types are fixed and cannot be changed.
+
+### When the source cannot say
+
+Two cases leave JIM inferring rather than reading.
+
+A delimited file names no types at all, so the File Connector has always asked you to choose.
+
+A relational database states a type for every column, but not every database distinguishes types the way JIM does. Microsoft SQL Server does: `int` is a whole number, `bigint` a 64-bit whole number, `decimal(9,4)` a fractional figure, and JIM records each accordingly. **Oracle has a single numeric type.** An employee identifier, a large counter and a fractional figure are all `NUMBER`, distinguished only by the precision and scale the column was declared with.
+
+JIM therefore reads that declaration and picks the narrowest type guaranteed to hold every value the column permits:
+
+| Declared | Becomes | Why |
+|----------|---------|-----|
+| `NUMBER(p,0)`, p up to 9 | Number | The widest such column holds 999,999,999, which fits a 32-bit whole number. |
+| `NUMBER(p,0)`, p from 10 to 18 | Long Number | Ten digits already exceed a 32-bit whole number, so the ordinary sequence-backed key lands here. |
+| `NUMBER(p,0)`, p of 19 or more | Decimal | Nineteen digits can exceed a 64-bit whole number, so narrowing would risk losing a value. |
+| `NUMBER(p,s)` with a scale | Decimal | The column is genuinely fractional. |
+| `NUMBER` with no precision | Decimal | The declaration states no width, so JIM assumes the widest. |
+
+`NUMBER(1)` is a whole number unless you switch on **Treat NUMBER(1) Columns as Boolean** on the Connected System, which is opt-in because a single-digit column is just as often a small number as a flag.
+
+### Overriding an inferred type
+
+Where a Connector's schema cannot state a type definitively, the Schema tab shows an **Edit** control on each attribute row. Choose the type the column is actually for and the attribute is recorded with it.
+
+The attribute's **Description** states the source column type it was built from (`Source column type: NUMBER(10).`), so you can see what the inference was based on before deciding whether to disagree with it.
+
+This is how an Oracle `NUMBER(10)` employee identifier is pointed at the built-in `Employee Number` Metaverse Attribute, which is a Number. Use the built-in attributes wherever they fit: a custom attribute created only to work around a type is one no other Connected System will match on.
+
+!!! warning "Set the type before you build on it"
+    An override is refused once the attribute is referenced by a Synchronisation Rule or already holds values, because changing it then would reinterpret data that was imported under the previous type. If you need to change it later, remove the references, or clear the Connected System Objects, first.
+
+From PowerShell:
+
+```powershell
+Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeId 10 -Type Integer
+```
+
+`Integer` is the friendly name for the Number type, matching `New-JIMMetaverseAttribute`. There is no bulk equivalent: the bulk attribute endpoint refuses a request carrying a data type rather than ignoring it, so a scripted build cannot appear to succeed having changed nothing.
+
+The same field is available on the REST API's attribute update, `PUT api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}`.
+
+An override survives a schema refresh. JIM records that the type was chosen rather than inferred, so a refresh restates everything the Connector discovered (writability, plurality, the source column type) and leaves your choice alone. To go back to the inferred type, set it back yourself; a refresh will not do it for you.
+
+!!! note "Existing Connected Systems"
+    Improvements to how JIM infers a type apply when a schema is next retrieved. An existing Connected System keeps the types it already holds until you refresh its schema.
 
 ## Credential attributes are never managed
 
@@ -111,6 +369,8 @@ Attributes that merely *look* credential-bearing, such as `pwdLastSet`, `badPwdC
 ## Password policy and the password channel
 
 Where a Connected System can accept passwords, its Schema tab carries a Password Channel panel. It has two jobs: showing you the password rules JIM read from the system itself, and letting you check the channel works before you rely on it.
+
+[Passwords](../concepts/passwords.md) explains the channel as a whole: why passwords do not travel through attribute flow, what discovery can and cannot tell you, and how a refused password is resolved.
 
 ### Discovered password policy
 
@@ -149,7 +409,7 @@ A preflight is not stored. Reachability, permissions and policy all change witho
 
 Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. This writes the password straight to the Connected System: it is not staged as a Pending Export, not retried, and not stored anywhere in JIM.
 
-Use it for the account whose provisioning password was refused, the person who never received theirs, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the account, where they happen without anybody watching.
+Use it for the new starter about to sign in for the first time, the account whose provisioning password was refused, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the account, where they happen without anybody watching.
 
 The dialog is built around one rule: **the password is masked from the moment it is generated, and copying it does not require showing it.**
 
@@ -162,13 +422,13 @@ Choose what happens to the password once it is set (requiring a change at the ne
 
 A Connected System that refuses the password says why, and the dialog stays open carrying its own words so you can try another one. Every attempt is recorded as an Activity against the object, whether it succeeded or not; the Activity records that a password was set, never the password.
 
-!!! warning "This is a password-reset primitive"
+!!! warning "This resets the password on whichever account you point it at"
     Anyone who can reach this action can reset the password of any account in this connector space, up to and including privileged ones, subject only to what the Connected System's own service account is permitted to do. Grant the Administrator role accordingly, and scope the service account's rights to the containers JIM manages.
 
 !!! note "Copying and your operating system's clipboard"
     Copying needs an HTTPS connection: browsers deny clipboard access over plain HTTP, and the button says so rather than silently doing nothing. JIM clears the clipboard when the dialog closes where the browser allows it, but your operating system may keep the value in its own clipboard history, which no web page can reach.
 
-The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, with one difference: you supply the password there rather than asking JIM to generate one, because a generated password would have to be returned in a response body and JIM's API never puts a password in one.
+The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, which can either take a password you supply or generate one against the discovered policy. A generated password is returned to the caller, once, because they asked for it; nothing is stored either way.
 
 ### One password across several Connected Systems
 
@@ -219,7 +479,7 @@ classes that alter outcomes are counted:
 | Class | Examples | How it shows |
 |-------|----------|--------------|
 | Sync-affecting | Scoping criteria, Attribute Flow, Object Matching Rules, schema selection | Amber, with the number of changes |
-| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
+| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning, or leave objects joined and contributing values that never refresh |
 
 **Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose
 Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises

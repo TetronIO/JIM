@@ -56,7 +56,12 @@ public class ActivityStatCounterDatabaseTests
         // those connections are built from the JIM_DB_* environment variables, not the test
         // context's connection string. Point them at the scratch database for the duration of
         // this fixture so the parallel path cannot write anywhere else.
-        SetDbEnvVar(Constants.Config.DatabaseHostname, host);
+        //
+        // There is no JIM_DB_* port variable: BuildConnectionString emits no Port, so Npgsql would
+        // default to 5432 and this fixture could only ever pass against a database on the default
+        // port. Npgsql accepts "host:port" in the Host field, so a non-default port is carried that
+        // way (matching how a deployment against a non-default port has to configure it).
+        SetDbEnvVar(Constants.Config.DatabaseHostname, port == "5432" ? host : $"{host}:{port}");
         SetDbEnvVar(Constants.Config.DatabaseName, dbName);
         SetDbEnvVar(Constants.Config.DatabaseUsername, user);
         SetDbEnvVar(Constants.Config.DatabasePassword, pass);
@@ -308,6 +313,56 @@ public class ActivityStatCounterDatabaseTests
         var stats = await repository.Activity.GetActivityRunProfileExecutionStatsAsync(activity.Id);
         Assert.That(stats.TotalCsoAdds, Is.EqualTo(1));
         Assert.That(stats.TotalCsoUpdates, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task RecordExclusionDiscardCountsAsync_SecondCall_AccumulatesPerContainer()
+    {
+        // A paged import reports what each call read and threw away, so the Activity's figure is the sum. The
+        // upsert is what makes "report per page" and "report once" the same answer.
+        var activity = await SeedActivityAsync();
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        await repository.Sync.RecordExclusionDiscardCountsAsync(activity.Id, new Dictionary<int, long> { [51] = 12 });
+        await repository.Sync.RecordExclusionDiscardCountsAsync(activity.Id, new Dictionary<int, long> { [51] = 8, [52] = 3 });
+
+        var counters = await GetCountersAsync(activity.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counters[(ActivityStatDimension.ExcludedContainer, "51")], Is.EqualTo(20));
+            Assert.That(counters[(ActivityStatDimension.ExcludedContainer, "52")], Is.EqualTo(3));
+        }
+    }
+
+    [Test]
+    public async Task FinaliseActivityRunProfileExecutionStats_LeavesTheExclusionDiscardCountsAlone()
+    {
+        // Finalisation replaces the counters with an exact aggregation over the execution items, which means
+        // deleting first. A discarded entry produced no execution item by definition, so a blanket delete would
+        // drop the count at the moment the run completed and the Activity would report an exclusion cost of zero
+        // for a run that read and threw away thousands of entries.
+        var activity = await SeedActivityAsync();
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        await repository.Sync.BulkInsertRpeisAsync([NewRpei(activity.Id, ObjectChangeType.Added)]);
+        await repository.Sync.RecordExclusionDiscardCountsAsync(activity.Id, new Dictionary<int, long> { [51] = 12 });
+
+        activity.Status = ActivityStatus.Complete;
+        await repository.Activity.FinaliseActivityRunProfileExecutionStatsAsync(activity);
+        await repository.Activity.UpdateActivityAsync(activity);
+
+        var counters = await GetCountersAsync(activity.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counters.GetValueOrDefault((ActivityStatDimension.ExcludedContainer, "51")), Is.EqualTo(12));
+            Assert.That(counters[(ActivityStatDimension.ObjectChangeType, EnumKey(ObjectChangeType.Added))], Is.EqualTo(1),
+                "the dimensions finalisation does own must still be recomputed exactly");
+        }
+
+        var stats = await repository.Activity.GetActivityRunProfileExecutionStatsAsync(activity.Id);
+        Assert.That(stats.EntriesDiscardedByExcludedContainer, Is.EquivalentTo(new Dictionary<int, int> { [51] = 12 }));
     }
 
     [Test]

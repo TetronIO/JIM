@@ -211,16 +211,26 @@ public static class CausalityModelBuilder
                 or ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated
                 or ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
                 or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected
+                // Preview-only (#1475): whether an object or an attribute is imported at all is a statement about
+                // what comes in, which is this lane, even though the harm it describes lands on the Metaverse.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported
                 => CausalityLane.Source,
 
-            // Provisioning and export-side events: what it caused
+            // Provisioning and export-side events: what it caused. WouldStageDeleteExport is preview-only but
+            // describes the same export-side event as DeprovisionQueued, so it lives in the same lane.
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
                 or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
                 or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned
+                // Preview-only (#1462): an account that would not be created, and an object that would be left to
+                // diverge, are both statements about the target system rather than about the Metaverse.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift
                 => CausalityLane.Downstream,
 
             // Metaverse-side events: what JIM did

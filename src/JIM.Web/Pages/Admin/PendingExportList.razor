@@ -3,12 +3,12 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
 @using JIM.Models.Transactional.DTOs
-@using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Services
+@using JIM.Web.Shared
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -21,7 +21,7 @@
     change and need to be synchronised to this target system.
 </MudText>
 
-@if (_connectedSystemHeader != null && _preferencesLoaded)
+@if (_connectedSystemHeader != null)
 {
     <MudPaper Elevation="0" Class="pa-4 mt-4" Outlined="true">
         <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
@@ -36,141 +36,183 @@
         </MudSelect>
     </MudPaper>
 
-    <MudTable @ref="_table"
-              T="PendingExportHeader"
-              ServerData="ServerReload"
-              RowsPerPage="@_rowsPerPage"
-              RowsPerPageChanged="OnRowsPerPageChanged"
-              Hover="true"
-              Dense="@_dense"
-              Breakpoint="Breakpoint.Sm"
-              Class="@(_dense ? "mt-5 dense-body-only" : "mt-5")"
-              Outlined="true"
-              Elevation="0"
-              OnRowClick="HandleRowClick"
-              RowClass="cursor-pointer"
-              Loading="@_loading"
-              LoadingProgressColor="Color.Primary">
-        <ToolBarContent>
-            <TableDensityToggle @bind-Dense="_dense" />
-            <MudSpacer />
-            <SearchField ValueChanged="@(s => OnSearch(s))"
-                         Placeholder="Search target, source MVO, or errors"
-                         Class="mt-0" />
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh>
-                <MudTableSortLabel SortLabel="changetype" T="PendingExportHeader">
-                    <MudText Typo="Typo.button">Change Type</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="status" T="PendingExportHeader">
-                    <MudText Typo="Typo.button">Status</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="sourcemvo" T="PendingExportHeader">
-                    <MudText Typo="Typo.button">Source MVO</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="targetobject" T="PendingExportHeader">
-                    <MudText Typo="Typo.button">Target Object</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="changes" T="PendingExportHeader">
-                    <MudText Typo="Typo.button">Changes</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="created" T="PendingExportHeader" InitialDirection="SortDirection.Descending">
-                    <MudText Typo="Typo.button">Created</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="errors" T="PendingExportHeader">
-                    <MudText Typo="Typo.button">Errors</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="nextretry" T="PendingExportHeader">
-                    <MudText Typo="Typo.button">Next Retry</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Change Type">
-                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.ChangeType)" Style="font-size: 1rem;">
-                    @context.ChangeType
-                </MudChip>
-            </MudTd>
-            <MudTd DataLabel="Status">
-                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Status)" Style="font-size: 1rem;">
-                    @context.Status.ToString().SplitOnCapitalLetters()
-                </MudChip>
-            </MudTd>
-            <MudTd DataLabel="Source MVO">
-                @if (context.SourceMetaverseObjectId.HasValue)
-                {
-                    <MudLink Href="@($"/admin/metaverse/objects/{context.SourceMetaverseObjectId}")">
-                        @(context.SourceMetaverseObjectDisplayName ?? context.SourceMetaverseObjectId.ToString())
-                    </MudLink>
-                }
-                else
-                {
-                    <span>-</span>
-                }
-            </MudTd>
-            <MudTd DataLabel="Target Object">
-                @if (context.ConnectedSystemObjectId.HasValue)
-                {
-                    <MudLink Href="@($"/admin/connected-systems/{Id}/connector-space/{context.ConnectedSystemObjectId}")">
-                        @(context.TargetObjectIdentifier ?? context.ConnectedSystemObjectId.ToString())
-                    </MudLink>
-                }
-                else
-                {
-                    <span class="mud-text-secondary">New object</span>
-                }
-            </MudTd>
-            <MudTd DataLabel="Changes">@context.AttributeChangeCount</MudTd>
-            <MudTd DataLabel="Created">
-                <MudTooltip Text="@context.CreatedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                    <span>@context.CreatedAt.ToLocalTime().ToRelativeTime()</span>
-                </MudTooltip>
-            </MudTd>
-            <MudTd DataLabel="Errors">
-                @if (context.ErrorCount > 0)
-                {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
-                        @context.ErrorCount / @context.MaxRetries
+    @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, density, the
+       search box) lives in the shared grid; this page supplies the columns, the window loader, the Status filter
+       above and the empty states. *@
+    <VirtualisedDataGrid @ref="_grid" T="PendingExportHeader"
+                         ContainerId="pending-export-list"
+                         DefaultSortBy="created"
+                         DefaultSortDescending="true"
+                         LoadWindow="LoadWindowAsync"
+                         RowClicked="HandleRowClicked"
+                         SingularName="Pending Export"
+                         PluralName="Pending Exports"
+                         SearchPlaceholder="Search target, source MVO, or errors">
+        <Columns>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Change Type" Name="changetype" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.Item.ChangeType)" Style="font-size: 1rem;">
+                        @context.Item.ChangeType
                     </MudChip>
-                }
-                else
-                {
-                    <span>0</span>
-                }
-            </MudTd>
-            <MudTd DataLabel="Next Retry">
-                @if (context.NextRetryAt.HasValue)
-                {
-                    @context.NextRetryAt.Value.ToFriendlyDate()
-                }
-                else
-                {
-                    <span>-</span>
-                }
-            </MudTd>
-        </RowTemplate>
-        <NoRecordsContent>
-            <MudText>There are no Pending Exports for this Connected System.</MudText>
-        </NoRecordsContent>
-        <PagerContent>
-            <MudTablePager />
-        </PagerContent>
-    </MudTable>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Status" Name="status" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Item.Status)" Style="font-size: 1rem;">
+                        @context.Item.Status.ToString().SplitOnCapitalLetters()
+                    </MudChip>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Source MVO" Name="sourcemvo" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.SourceMetaverseObjectId.HasValue)
+                    {
+                        var sourceMetaverseObjectId = context.Item.SourceMetaverseObjectId.Value;
+                        @* The row navigates on click and so does this link; stopping the click here keeps a link
+                           click to one navigation while preserving middle-click and open-in-new-tab. *@
+                        <span @onclick:stopPropagation="true">
+                            <MudLink Href="@($"/admin/metaverse/objects/{sourceMetaverseObjectId}")">
+                                @(context.Item.SourceMetaverseObjectDisplayName ?? sourceMetaverseObjectId.ToString())
+                            </MudLink>
+                        </span>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Target Object" Name="targetobject" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.ConnectedSystemObjectId.HasValue)
+                    {
+                        var connectedSystemObjectId = context.Item.ConnectedSystemObjectId.Value;
+                        <span @onclick:stopPropagation="true">
+                            <MudLink Href="@($"/admin/connected-systems/{Id}/connector-space/{connectedSystemObjectId}")">
+                                @(context.Item.TargetObjectIdentifier ?? connectedSystemObjectId.ToString())
+                            </MudLink>
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="mud-text-secondary">New object</span>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Changes" Name="changes" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @context.Item.AttributeChangeCount
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Created" Name="created" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    <MudTooltip Text="@context.Item.CreatedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <span>@context.Item.CreatedAt.ToLocalTime().ToRelativeTime()</span>
+                    </MudTooltip>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Errors" Name="errors" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.ErrorCount > 0)
+                    {
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
+                            @context.Item.ErrorCount / @context.Item.MaxRetries
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <span>0</span>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="References Owed" Name="references" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @* How many reference changes this export could not write yet because their targets
+                       have no resolvable object in the Connected System (#1398); the detail page explains
+                       each owed reference and its reason. *@
+                    @if (context.Item.UnresolvedReferenceCount > 0)
+                    {
+                        <MudTooltip Text="This export was written without these references; they retry automatically once their targets exist. The detail page explains each one." Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">
+                                @context.Item.UnresolvedReferenceCount
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Next Retry" Name="nextretry" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.NextRetryAt.HasValue)
+                    {
+                        var nextRetryAt = context.Item.NextRetryAt.Value;
+                        @nextRetryAt.ToFriendlyDate()
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @* An empty list means one of three different things, and the message says which: a search that matched
+               nothing, a Status filter that matched nothing (each with the way out as the action), or genuinely no
+               Pending Exports, which is the good state: everything has been exported. *@
+            @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No Pending Exports match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
+            }
+            else if (_statusFilters.Any())
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                                 PrimaryText="No Pending Exports match the Status filter"
+                                 SecondaryText="Try different statuses, or clear the filter."
+                                 ActionText="Clear Filter"
+                                 OnAction="@(() => OnStatusFiltersChanged(new HashSet<PendingExportStatus>()))" />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.TaskAlt"
+                                 PrimaryText="No Pending Exports"
+                                 SecondaryText="Changes waiting to be written to this Connected System appear here." />
+            }
+        </EmptyContent>
+    </VirtualisedDataGrid>
 }
 else
 {
@@ -181,15 +223,10 @@ else
     [Parameter]
     public int Id { get; set; }
 
-    private MudTable<PendingExportHeader>? _table;
+    private VirtualisedDataGrid<PendingExportHeader>? _grid;
     private ConnectedSystemHeader? _connectedSystemHeader;
-    private string _searchString = "";
     private IReadOnlyCollection<PendingExportStatus> _statusFilters = new HashSet<PendingExportStatus>();
     private List<BreadcrumbItem> _breadcrumbs = null!;
-    private bool _loading;
-    private int _rowsPerPage = 10;
-    private bool _preferencesLoaded;
-    private bool _dense;
 
     protected override async Task OnInitializedAsync()
     {
@@ -211,69 +248,20 @@ else
         };
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task<VirtualisedWindow<PendingExportHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                _rowsPerPage = preferredSize;
-                _dense = await PreferenceService.GetTableDenseAsync() == true;
-                _preferencesLoaded = true;
-                StateHasChanged(); // Re-render to show the table now that preference is loaded
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
-    }
+        using var jim = JimFactory.Create();
+        var result = await jim.ConnectedSystems.GetPendingExportHeadersRangeAsync(
+            Id,
+            request.StartIndex,
+            request.Count,
+            _statusFilters.Any() ? _statusFilters : null,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
+            includeTotalCount: request.IncludeTotalCount);
 
-    private async Task OnRowsPerPageChanged(int newSize)
-    {
-        _rowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
-    }
-
-    private async Task<TableData<PendingExportHeader>> ServerReload(TableState state, CancellationToken token)
-    {
-        _loading = true;
-        StateHasChanged();
-
-        try
-        {
-            // Convert MudBlazor's 0-indexed page to our 1-indexed page
-            var page = state.Page + 1;
-            var sortDescending = state.SortDirection == SortDirection.Descending;
-
-            using var jim = JimFactory.Create();
-            var result = await jim.ConnectedSystems.GetPendingExportHeadersAsync(
-                Id,
-                page,
-                state.PageSize,
-                _statusFilters.Any() ? _statusFilters : null,
-                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
-                state.SortLabel,
-                sortDescending);
-
-            return new TableData<PendingExportHeader>
-            {
-                TotalItems = result.TotalResults,
-                Items = result.Results
-            };
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
-        }
-    }
-
-    private void OnSearch(string text)
-    {
-        _searchString = text;
-        _table?.ReloadServerData();
+        return new VirtualisedWindow<PendingExportHeader>(result.Results, result.TotalResults);
     }
 
     private string GetStatusFilterText(IReadOnlyList<string> selectedValues)
@@ -287,15 +275,24 @@ else
         return $"{selectedValues.Count} selected";
     }
 
-    private void OnStatusFiltersChanged(IReadOnlyCollection<PendingExportStatus> newFilters)
+    /// <summary>
+    /// Applies a Status filter change and reloads the grid. The filter changes which objects match, so the total
+    /// (and the unfiltered baseline it anchors) must be re-counted, and the reader's scroll position describes a
+    /// match set that no longer exists, so they are returned to the top.
+    /// </summary>
+    private async Task OnStatusFiltersChanged(IReadOnlyCollection<PendingExportStatus> newFilters)
     {
         _statusFilters = newFilters;
-        _table?.ReloadServerData();
+
+        if (_grid != null)
+        {
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
+        }
     }
 
-    private void HandleRowClick(TableRowClickEventArgs<PendingExportHeader> args)
+    private void HandleRowClicked(PendingExportHeader item)
     {
-        if (args.Item != null)
-            NavManager.NavigateTo($"/admin/connected-systems/{Id}/pending-exports/{args.Item.Id}");
+        NavManager.NavigateTo($"/admin/connected-systems/{Id}/pending-exports/{item.Id}");
     }
 }

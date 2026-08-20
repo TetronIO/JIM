@@ -1,12 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Scheduling;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
@@ -202,7 +204,12 @@ public class ActivityRepository : IActivityRepository
         bool? hasChildActivities = null,
         IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
         DateTime? createdFrom = null,
-        DateTime? createdTo = null)
+        DateTime? createdTo = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -214,6 +221,124 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var query = BuildTopLevelActivitiesQuery(
+            searchQuery, sortBy, sortDescending, initiatedById, operationFilter, outcomeFilter, typeFilter,
+            statusFilter, hasChildActivities, initiatorTypeFilter, createdFrom, createdTo,
+            connectedSystemFilter, runProfileFilter, initiatedByFilter, initiatedBySchedule, scheduleFilter);
+
+        // Get total count for pagination
+        var grossCount = await query.CountAsync();
+        var offset = (page - 1) * pageSize;
+        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
+
+        var pagedResultSet = new PagedResultSet<Activity>
+        {
+            PageSize = pageSize,
+            TotalResults = grossCount,
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <summary>
+    /// The largest window any of this repository's range reads will return, bounding the latency of a single
+    /// read. It is deliberately five times the paged readers' page-size cap, because the two caps protect against
+    /// different things: a page size is a number a person picked from a fixed list and never approaches 100,
+    /// whereas a virtualiser asks for however many rows the viewport needs, and a cap it can actually reach
+    /// truncates the window silently, rendering the shortfall as blank rows rather than raising anything.
+    /// 500 puts it out of a viewport's reach; the derivation from the list grid's height and row-height
+    /// arithmetic lives on <c>MetaverseRepository.MaxHeaderWindowSize</c>, which this cap mirrors.
+    /// </summary>
+    private const int MaxActivityWindowSize = 500;
+
+    /// <inheritdoc/>
+    public async Task<RangeResultSet<Activity>> GetActivitiesRangeAsync(
+        int startIndex,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        Guid? initiatedById = null,
+        IEnumerable<ActivityTargetOperationType>? operationFilter = null,
+        IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
+        IEnumerable<ActivityTargetType>? typeFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null,
+        IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (startIndex < 0)
+            startIndex = 0;
+
+        if (count > MaxActivityWindowSize)
+            count = MaxActivityWindowSize;
+
+        var query = BuildTopLevelActivitiesQuery(
+            searchQuery, sortBy, sortDescending, initiatedById, operationFilter, outcomeFilter, typeFilter,
+            statusFilter, hasChildActivities, initiatorTypeFilter, createdFrom, createdTo,
+            connectedSystemFilter, runProfileFilter, initiatedByFilter, initiatedBySchedule, scheduleFilter);
+
+        // Counting scans every matching Activity rather than a window of them, so it is the expensive half of
+        // this method at scale and is skipped entirely when the caller already holds the total. Sorting cannot
+        // change how many Activities match, so a caller only has to re-count when the filters change.
+        int? grossCount = null;
+        if (includeTotalCount)
+            grossCount = await query.CountAsync();
+
+        var results = await query.Skip(startIndex).Take(count).ToListAsync();
+
+        return new RangeResultSet<Activity>
+        {
+            Results = results,
+            TotalResults = grossCount
+        };
+    }
+
+    /// <summary>
+    /// Shared query core for the paged and range Activity list reads: applies every filter and the sort to the
+    /// top-level (parentless) Activities and returns the composed query for the caller to count and window.
+    /// Shared so the two reads can never disagree on which Activities match; callers own input validation.
+    /// </summary>
+    private IQueryable<Activity> BuildTopLevelActivitiesQuery(
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        Guid? initiatedById,
+        IEnumerable<ActivityTargetOperationType>? operationFilter,
+        IEnumerable<ActivityOutcomeType>? outcomeFilter,
+        IEnumerable<ActivityTargetType>? typeFilter,
+        IEnumerable<ActivityStatus>? statusFilter,
+        bool? hasChildActivities,
+        IEnumerable<ActivityInitiatorType>? initiatorTypeFilter,
+        DateTime? createdFrom,
+        DateTime? createdTo,
+        IEnumerable<string>? connectedSystemFilter,
+        IEnumerable<string>? runProfileFilter,
+        string? initiatedByFilter,
+        bool? initiatedBySchedule,
+        IEnumerable<Guid>? scheduleFilter)
+    {
         var query = Repository.Database.Activities
 
             .Where(a => a.ParentActivityId == null)
@@ -256,6 +381,40 @@ public class ActivityRepository : IActivityRepository
             if (initiatorTypes.Count > 0)
                 query = query.Where(a => initiatorTypes.Contains(a.InitiatedByType));
         }
+
+        // Apply the Connected System filter, which matches the Activity's Target Context (the system the
+        // operation was performed against).
+        var connectedSystems = connectedSystemFilter?.ToList();
+        if (connectedSystems is { Count: > 0 })
+            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext));
+
+        // Apply the Run Profile filter, which matches the Activity's Target Name.
+        var runProfiles = runProfileFilter?.ToList();
+        if (runProfiles is { Count: > 0 })
+            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName));
+
+        // Apply the initiator-name filter. Distinct from initiatedById above: this is a case-insensitive
+        // partial match on the recorded name, for callers who know who they are looking for but not their id.
+        if (!string.IsNullOrWhiteSpace(initiatedByFilter))
+        {
+            var filterLower = initiatedByFilter.ToLower();
+            query = query.Where(a => a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(filterLower));
+        }
+
+        // Apply the Schedule attribution filters. The attribution is denormalised onto the Activity, so both of
+        // these are plain indexed predicates rather than a join through Schedule Executions.
+        if (initiatedBySchedule == true)
+        {
+            query = query.Where(a => a.ScheduledByScheduleId != null);
+        }
+        else if (initiatedBySchedule == false)
+        {
+            query = query.Where(a => a.ScheduledByScheduleId == null);
+        }
+
+        var scheduleIds = scheduleFilter?.ToList();
+        if (scheduleIds is { Count: > 0 })
+            query = query.Where(a => a.ScheduledByScheduleId != null && scheduleIds.Contains(a.ScheduledByScheduleId!.Value));
 
         // Apply date-range filter (either bound may be open). Captured into non-nullable locals so the query
         // expressions carry plain DateTime values.
@@ -315,7 +474,7 @@ public class ActivityRepository : IActivityRepository
         }
 
         // Apply sorting
-        query = sortBy?.ToLower() switch
+        var ordered = sortBy?.ToLower() switch
         {
             "targetcontext" or "connectedsystem" => sortDescending
                 ? query.OrderByDescending(a => a.TargetContext)
@@ -343,29 +502,11 @@ public class ActivityRepository : IActivityRepository
                 : query.OrderBy(a => a.Created) // Default: sort by Created
         };
 
-        // Get total count for pagination
-        var grossCount = await query.CountAsync();
-        var offset = (page - 1) * pageSize;
-        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
-
-        var pagedResultSet = new PagedResultSet<Activity>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        // Deterministic tie-break: Skip/Take windows are only stable under a total order, and every sort key
+        // above can tie (a Schedule that fans several Run Profiles out at once stamps them all with the same
+        // created time). Without it, PostgreSQL may order tied rows differently per window, repeating some
+        // Activities and skipping others as the reader scrolls.
+        return ordered.ThenBy(a => a.Id);
     }
 
     public async Task<Activity?> GetActivityAsync(Guid id)
@@ -390,19 +531,16 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        var query = Repository.Database.Activities
-            .Where(a => a.ParentActivityId == parentActivityId)
-            .OrderBy(a => a.Created);
-
-        // Get total count for pagination
-        var grossCount = await query.CountAsync();
         var offset = (page - 1) * pageSize;
-        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
+        var (results, grossCount) = await QueryChildActivitiesByRangeAsync(
+            parentActivityId, offset, pageSize, searchQuery: null, includeTotalCount: true);
 
         var pagedResultSet = new PagedResultSet<Activity>
         {
             PageSize = pageSize,
-            TotalResults = grossCount,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = grossCount ?? throw new InvalidOperationException(
+                "The paged child Activity read asked for the total match count and did not receive one."),
             CurrentPage = page,
             Results = results
         };
@@ -417,6 +555,78 @@ public class ActivityRepository : IActivityRepository
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<Activity>> GetChildActivitiesRangeAsync(
+        Guid parentActivityId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxActivityWindowSize)
+            count = MaxActivityWindowSize;
+
+        var (results, grossCount) = await QueryChildActivitiesByRangeAsync(
+            parentActivityId, offset, count, searchQuery, includeTotalCount);
+
+        return new RangeResultSet<Activity>
+        {
+            Results = results,
+            TotalResults = grossCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range child Activity reads: the direct children of one Activity,
+    /// oldest first, windowed by absolute <paramref name="offset"/> and <paramref name="count"/>, alongside the
+    /// total child count (or null for that total when <paramref name="includeTotalCount"/> is false). Shared so
+    /// the two reads can never disagree on which Activities are children; callers own input validation.
+    /// </summary>
+    private async Task<(List<Activity> Results, int? TotalResults)> QueryChildActivitiesByRangeAsync(
+        Guid parentActivityId,
+        int offset,
+        int count,
+        string? searchQuery,
+        bool includeTotalCount)
+    {
+        var children = Repository.Database.Activities
+            .Where(a => a.ParentActivityId == parentActivityId);
+
+        // Case-insensitive search over what the table shows for a child: what it acted on, and what it said.
+        // ToLower/Contains rather than ILike so the shared core stays executable on the in-memory provider the
+        // unit tier uses.
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var searchLower = searchQuery.ToLower();
+            children = children.Where(a =>
+                (a.TargetName != null && a.TargetName.ToLower().Contains(searchLower)) ||
+                (a.TargetContext != null && a.TargetContext.ToLower().Contains(searchLower)) ||
+                (a.Message != null && a.Message.ToLower().Contains(searchLower)));
+        }
+
+        var query = children
+            .OrderBy(a => a.Created)
+            // Deterministic tie-break: Skip/Take windows are only stable under a total order, and a run that
+            // spawns its children in one batch gives them all the same created time. Without it, PostgreSQL may
+            // order tied rows differently per window, repeating some children and skipping others.
+            .ThenBy(a => a.Id);
+
+        // Counting scans every child rather than a window of them, so it is skipped entirely when the caller
+        // already holds the total. Ordering cannot change how many children there are.
+        int? grossCount = null;
+        if (includeTotalCount)
+            grossCount = await query.CountAsync();
+
+        var results = await query.Skip(offset).Take(count).ToListAsync();
+        return (results, grossCount);
     }
 
     public async Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds)
@@ -428,116 +638,6 @@ public class ActivityRepository : IActivityRepository
             .GroupBy(a => a.ParentActivityId!.Value)
             .Select(g => new { ParentId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.ParentId, x => x.Count);
-    }
-
-    /// <summary>
-    /// Retrieves a page's worth of worker task activities - operations executed by the worker service
-    /// such as Run Profile executions, data generation, and Connected System operations.
-    /// </summary>
-    public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
-        int page,
-        int pageSize,
-        IEnumerable<string>? connectedSystemFilter = null,
-        IEnumerable<string>? runProfileFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null,
-        string? initiatedByFilter = null,
-        string? sortBy = null,
-        bool sortDescending = true,
-        bool? hasChildActivities = null)
-    {
-        if (pageSize < 1)
-            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
-
-        if (page < 1)
-            page = 1;
-
-        // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 100)
-            pageSize = 100;
-
-        var query = BuildWorkerTaskQuery();
-
-        // Apply filters
-        var connectedSystems = connectedSystemFilter?.ToList();
-        if (connectedSystems is { Count: > 0 })
-            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext));
-
-        var runProfiles = runProfileFilter?.ToList();
-        if (runProfiles is { Count: > 0 })
-            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName));
-
-        var statuses = statusFilter?.ToList();
-        if (statuses is { Count: > 0 })
-            query = query.Where(a => statuses.Contains(a.Status));
-
-        if (!string.IsNullOrWhiteSpace(initiatedByFilter))
-        {
-            var filterLower = initiatedByFilter.ToLower();
-            query = query.Where(a => a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(filterLower));
-        }
-
-        // Apply child activities filter
-        if (hasChildActivities == true)
-        {
-            query = query.Where(a => Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
-        }
-        else if (hasChildActivities == false)
-        {
-            query = query.Where(a => !Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
-        }
-
-        // Apply sorting
-        query = sortBy?.ToLower() switch
-        {
-            "targetcontext" or "connectedsystem" => sortDescending
-                ? query.OrderByDescending(a => a.TargetContext)
-                : query.OrderBy(a => a.TargetContext),
-            "targettype" or "type" => sortDescending
-                ? query.OrderByDescending(a => a.TargetType)
-                : query.OrderBy(a => a.TargetType),
-            "targetname" or "target" => sortDescending
-                ? query.OrderByDescending(a => a.TargetName)
-                : query.OrderBy(a => a.TargetName),
-            "targetoperationtype" or "operation" => sortDescending
-                ? query.OrderByDescending(a => a.TargetOperationType)
-                : query.OrderBy(a => a.TargetOperationType),
-            "initiatedbyname" or "initiatedby" => sortDescending
-                ? query.OrderByDescending(a => a.InitiatedByName)
-                : query.OrderBy(a => a.InitiatedByName),
-            "status" => sortDescending
-                ? query.OrderByDescending(a => a.Status)
-                : query.OrderBy(a => a.Status),
-            "executiontime" => sortDescending
-                ? query.OrderByDescending(a => a.ExecutionTime)
-                : query.OrderBy(a => a.ExecutionTime),
-            _ => sortDescending
-                ? query.OrderByDescending(a => a.Created)
-                : query.OrderBy(a => a.Created)
-        };
-
-        // Get total count for pagination
-        var grossCount = await query.CountAsync();
-        var offset = (page - 1) * pageSize;
-        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
-
-        var pagedResultSet = new PagedResultSet<Activity>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
     }
 
     public async Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync()
@@ -558,16 +658,35 @@ public class ActivityRepository : IActivityRepository
             .OrderBy(name => name)
             .ToListAsync();
 
+        // One option per Schedule id, carrying the most recently recorded name: a Schedule renamed part-way through
+        // its history would otherwise yield two options sharing an id, which a MudSelect cannot represent.
+        var schedules = await query
+            .Where(a => a.ScheduledByScheduleId != null && a.ScheduledByScheduleName != null)
+            .GroupBy(a => a.ScheduledByScheduleId!.Value)
+            .Select(g => new ScheduleFilterOption
+            {
+                Id = g.Key,
+                Name = g.OrderByDescending(a => a.Created).Select(a => a.ScheduledByScheduleName!).First()
+            })
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+
         return new ActivityFilterOptions
         {
             ConnectedSystems = connectedSystems,
-            RunProfiles = runProfiles
+            RunProfiles = runProfiles,
+            Schedules = schedules
         };
     }
 
     /// <summary>
     /// Builds the base query for worker task activities, filtering to parent activities
     /// with worker task target types and operation types.
+    ///
+    /// Only <see cref="GetWorkerTaskActivityFilterOptionsAsync"/> uses this now: the Worker Task Activity
+    /// *listing* is served by <see cref="GetActivitiesAsync"/>, to which Operations &gt; History passes the
+    /// same target types and operations as its typeFilter and operationFilter. Keep the two in step; the
+    /// drop-downs must offer exactly the values the list can return.
     /// </summary>
     private IQueryable<Activity> BuildWorkerTaskQuery()
     {
@@ -608,6 +727,40 @@ public class ActivityRepository : IActivityRepository
             .ToListAsync();
     }
 
+    public async Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds)
+    {
+        if (scheduleExecutionIds.Count == 0)
+            return [];
+
+        var rows = await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ScheduleExecutionId.HasValue &&
+                        scheduleExecutionIds.Contains(a.ScheduleExecutionId.Value) &&
+                        a.ScheduleStepIndex.HasValue)
+            .OrderBy(a => a.ScheduleStepIndex)
+            .ThenBy(a => a.Created)
+            .Select(a => new
+            {
+                ScheduleExecutionId = a.ScheduleExecutionId!.Value,
+                StepIndex = a.ScheduleStepIndex!.Value,
+                ActivityId = a.Id,
+                a.TargetContext,
+                a.TargetName,
+                a.Status
+            })
+            .ToListAsync();
+
+        return rows
+            .GroupBy(r => r.ScheduleExecutionId)
+            .ToDictionary(g => g.Key, g => g.Select(r => new ScheduleStepObservation
+            {
+                StepIndex = r.StepIndex,
+                Name = ScheduleStepReading.NameOf(r.TargetContext, r.TargetName, r.StepIndex),
+                ActivityId = r.ActivityId,
+                ActivityStatus = r.Status
+            }).ToList());
+    }
+
     public async Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex)
     {
         return await Repository.Database.Activities
@@ -629,6 +782,18 @@ public class ActivityRepository : IActivityRepository
             .OrderByDescending(a => a.Created)
             .Select(a => (DateTime?)a.Created)
             .FirstOrDefaultAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> HasAnyRunProfileExecutionAsync()
+    {
+        // TargetOperationType must be Execute: creating, editing and deleting a Run Profile all record
+        // ConnectedSystemRunProfile-typed Activities too, and without this filter merely defining a Run Profile
+        // would read as having run one. Status is deliberately unfiltered; a run that is in progress or that
+        // failed was still run, which is all this question asks.
+        return await Repository.Database.Activities
+            .AnyAsync(a => a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                           && a.TargetOperationType == ActivityTargetOperationType.Execute);
     }
 
     private IQueryable<Activity> ConfigurationChangeQuery(ActivityTargetType targetType, int targetObjectId)
@@ -863,6 +1028,86 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var offset = (page - 1) * pageSize;
+        var (results, totalCount) = await QueryActivityRunProfileExecutionItemHeadersByRangeAsync(
+            activityId, offset, pageSize, searchQuery, sortBy, sortDescending,
+            objectTypeFilter, errorTypeFilter, outcomeTypeFilter, includeTotalCount: true);
+
+        // Build paged result set
+        var pagedResultSet = new PagedResultSet<ActivityRunProfileExecutionItemHeader>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged execution item header read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersRangeAsync(
+        Guid activityId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        IEnumerable<string>? objectTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxActivityWindowSize)
+            count = MaxActivityWindowSize;
+
+        var (results, totalCount) = await QueryActivityRunProfileExecutionItemHeadersByRangeAsync(
+            activityId, offset, count, searchQuery, sortBy, sortDescending,
+            objectTypeFilter, errorTypeFilter, outcomeTypeFilter, includeTotalCount);
+
+        return new RangeResultSet<ActivityRunProfileExecutionItemHeader>
+        {
+            Results = results,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Run Profile Execution Item header reads: applies every filter and the
+    /// sort to one Activity's execution items, windows them by absolute <paramref name="offset"/> and
+    /// <paramref name="count"/>, and projects the window to header DTOs, alongside the total match count (or
+    /// null for that total when <paramref name="includeTotalCount"/> is false). Shared so the two reads can
+    /// never disagree on which items match; callers own input validation and clamping.
+    /// </summary>
+    private async Task<(List<ActivityRunProfileExecutionItemHeader> Results, int? TotalResults)> QueryActivityRunProfileExecutionItemHeadersByRangeAsync(
+        Guid activityId,
+        int offset,
+        int count,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        IEnumerable<string>? objectTypeFilter,
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter,
+        bool includeTotalCount)
+    {
         // Execution items can reference Connected System Objects in any system, so name candidates are
         // matched by attribute name rather than by pre-resolved ids. Lowered here so the comparison
         // translates to a plain lower(...) = ... in SQL. Coalesced in tier order below; extend alongside
@@ -943,31 +1188,37 @@ public class ActivityRepository : IActivityRepository
                 // Search display name (snapshot fallback)
                 (item.DisplayNameSnapshot != null &&
                  EF.Functions.ILike(item.DisplayNameSnapshot, searchPattern)) ||
-                // Search external ID (live CSO attribute)
+                // Search external ID (live CSO attribute), rendered by the same shared definition the
+                // projection below uses so a non-Text anchor is matchable as it is displayed (#1286)
                 (item.ConnectedSystemObject != null &&
-                 item.ConnectedSystemObject.AttributeValues.Any(av =>
-                    av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId &&
-                    av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, searchPattern))) ||
+                 item.ConnectedSystemObject.AttributeValues
+                    .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .Any(externalIdText => EF.Functions.ILike(externalIdText!, searchPattern))) ||
                 // Search external ID (snapshot fallback)
                 (item.ExternalIdSnapshot != null &&
                  EF.Functions.ILike(item.ExternalIdSnapshot, searchPattern)));
         }
 
         // Apply sorting
-        query = sortBy?.ToLower() switch
+        var ordered = sortBy?.ToLower() switch
         {
+            // Sorts on the rendered external id, so the sort key matches what the External Id column
+            // shows for every anchor type rather than only for a Text one (#1286).
             "externalid" => sortDescending
                 ? query.OrderByDescending(item => item.ConnectedSystemObject != null
                     ? item.ConnectedSystemObject.AttributeValues
                         .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
-                        .Select(av => av.StringValue)
+                        .AsQueryable()
+                        .Select(ExternalIdValueText.FromAttributeValue)
                         .FirstOrDefault() ?? item.ExternalIdSnapshot
                     : item.ExternalIdSnapshot)
                 : query.OrderBy(item => item.ConnectedSystemObject != null
                     ? item.ConnectedSystemObject.AttributeValues
                         .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
-                        .Select(av => av.StringValue)
+                        .AsQueryable()
+                        .Select(ExternalIdValueText.FromAttributeValue)
                         .FirstOrDefault() ?? item.ExternalIdSnapshot
                     : item.ExternalIdSnapshot),
             // Sorts on the resolved live name, coalescing the naming tiers in preference order so the
@@ -1000,18 +1251,28 @@ public class ActivityRepository : IActivityRepository
                 : query.OrderBy(item => item.Id)
         };
 
-        // Get total count before pagination
-        var totalCount = await query.CountAsync();
+        // Deterministic tie-break: Skip/Take windows are only stable under a total order, and every named sort
+        // key above can tie (a run over one object type gives every item the same type; a clean run gives every
+        // item the same null error type). Without it, PostgreSQL may order tied rows differently per window,
+        // repeating some items and skipping others as the reader scrolls. The default sort is already by id, so
+        // the tie-break is a no-op there rather than a second key that could disagree with the first.
+        query = ordered.ThenBy(item => item.Id);
 
-        // Apply pagination, then project in SQL to only the columns the header needs. The live
+        // Count query. It scans every matching item rather than a window of them, so it is the expensive half
+        // of this method at scale and is skipped entirely when the caller already holds the total. Sorting
+        // cannot change how many items match, so a caller only has to re-count when the filters change.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
+
+        // Apply the window, then project in SQL to only the columns the header needs. The live
         // display name and external-id value are pulled with correlated subqueries against the CSO's
         // AttributeValues (no full-collection materialisation), falling back to the RPEI snapshot
         // columns when the CSO is gone or the value is absent. External-id formatting mirrors
-        // ConnectedSystemObjectAttributeValue.ToStringNoName and runs in memory over the <= pageSize
+        // ConnectedSystemObjectAttributeValue.ToStringNoName and runs in memory over the <= count
         // projected rows.
-        var offset = (page - 1) * pageSize;
         var projected = await query
-            .Skip(offset).Take(pageSize)
+            .Skip(offset).Take(count)
             .Select(i => new
             {
                 i.Id,
@@ -1026,29 +1287,16 @@ public class ActivityRepository : IActivityRepository
                     ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
                     ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault(),
                 TypeLive = i.ConnectedSystemObject!.Type!.Name,
-                // External id resolved as per-column scalar subqueries. A single multi-column
-                // projection here (`.Select(av => new {...}).FirstOrDefault()`) makes EF Core emit a
+                // External id rendered by ExternalIdValueText, the shared definition the Connector Space
+                // list uses too. Keep the projection single-column: selecting an anonymous type of the raw
+                // columns here (`.Select(av => new {...}).FirstOrDefault()`) makes EF Core emit a
                 // ROW_NUMBER() window over the WHOLE AttributeValues table instead of a correlated
-                // subquery, which is catastrophic at scale; separate single-column subqueries each
-                // translate to a cheap correlated scalar subquery run only for the page's rows.
-                ExtIdString = i.ConnectedSystemObject!.AttributeValues
+                // subquery, which is catastrophic at scale.
+                ExtIdText = i.ConnectedSystemObject!.AttributeValues
                     .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.StringValue).FirstOrDefault(),
-                ExtIdDateTime = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.DateTimeValue).FirstOrDefault(),
-                ExtIdInt = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.IntValue).FirstOrDefault(),
-                ExtIdLong = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.LongValue).FirstOrDefault(),
-                ExtIdGuid = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.GuidValue).FirstOrDefault(),
-                ExtIdBool = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.BoolValue).FirstOrDefault()
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .FirstOrDefault()
             })
             .ToListAsync();
 
@@ -1057,9 +1305,7 @@ public class ActivityRepository : IActivityRepository
         var results = projected.Select(p => new ActivityRunProfileExecutionItemHeader
         {
             Id = p.Id,
-            ExternalIdValue = FormatExternalIdValue(
-                p.ExtIdString, p.ExtIdDateTime, p.ExtIdInt,
-                p.ExtIdLong, p.ExtIdGuid, p.ExtIdBool) ?? p.ExternalIdSnapshot,
+            ExternalIdValue = p.ExtIdText ?? p.ExternalIdSnapshot,
             DisplayName = p.DisplayNameLive ?? p.DisplayNameSnapshot,
             ConnectedSystemObjectType = p.TypeLive ?? p.ObjectTypeSnapshot,
             ErrorType = p.ErrorType,
@@ -1067,49 +1313,7 @@ public class ActivityRepository : IActivityRepository
             OutcomeSummary = p.OutcomeSummary
         }).ToList();
 
-        // Build paged result set
-        var pagedResultSet = new PagedResultSet<ActivityRunProfileExecutionItemHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
-    }
-
-    /// <summary>
-    /// Formats an external-id attribute value from its raw value columns, mirroring
-    /// <see cref="JIM.Models.Staging.ConnectedSystemObjectAttributeValue.ToStringNoName"/> for the
-    /// scalar column set an external id can use (string, date, int, long, guid, bool; reference and
-    /// binary do not apply to an external id). Returns null when no value column is populated, so the
-    /// caller can fall back to the RPEI external-id snapshot column.
-    /// </summary>
-    private static string? FormatExternalIdValue(string? stringValue, DateTime? dateTimeValue, int? intValue, long? longValue, Guid? guidValue, bool? boolValue)
-    {
-        if (!string.IsNullOrEmpty(stringValue))
-            return stringValue;
-        if (dateTimeValue != null)
-            return dateTimeValue.ToString();
-        if (intValue != null)
-            return intValue.ToString();
-        if (longValue != null)
-            return longValue.ToString();
-        if (guidValue != null)
-            return guidValue.ToString();
-        if (boolValue != null)
-            return boolValue.ToString();
-        return null;
+        return (results, totalCount);
     }
 
     /// <summary>
@@ -1125,6 +1329,13 @@ public class ActivityRepository : IActivityRepository
         public Dictionary<ActivityRunProfileExecutionItemErrorType, int> ErrorTypeCounts { get; } = new();
         public Dictionary<NoChangeReason, int> NoChangeReasonCounts { get; } = new();
         public Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, int> OutcomeTypeCounts { get; } = new();
+
+        /// <summary>
+        /// Entries an import read and discarded through an exclusion, keyed by the excluded Container's id
+        /// (#1255). Only ever populated from the counter rows: there are no execution items to aggregate it
+        /// from, which is the whole reason the count has to be written as the import runs.
+        /// </summary>
+        public Dictionary<int, int> ExclusionDiscardCounts { get; } = new();
     }
 
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
@@ -1274,6 +1485,9 @@ public class ActivityRepository : IActivityRepository
                 case ActivityStatDimension.OutcomeType when int.TryParse(counter.Key, out var outcomeType):
                     aggregation.OutcomeTypeCounts[(ActivityRunProfileExecutionItemSyncOutcomeType)outcomeType] = count;
                     break;
+                case ActivityStatDimension.ExcludedContainer when int.TryParse(counter.Key, out var containerId):
+                    aggregation.ExclusionDiscardCounts[containerId] = count;
+                    break;
             }
         }
 
@@ -1289,6 +1503,17 @@ public class ActivityRepository : IActivityRepository
         var aggregation = new ActivityStatAggregation();
         var rpeiQuery = Repository.Database.ActivityRunProfileExecutionItems
             .Where(q => q.Activity.Id == activityId);
+
+        // The one dimension this source cannot answer, read from its counter rows so that an aggregation is a
+        // complete answer whichever path built it. A discarded entry produced no execution item to aggregate,
+        // which is exactly why the import writes the count as it runs (#1255).
+        var exclusionCounters = await Repository.Database.ActivityStatCounters
+            .AsNoTracking()
+            .Where(c => c.ActivityId == activityId && c.Dimension == ActivityStatDimension.ExcludedContainer)
+            .ToListAsync();
+        foreach (var counter in exclusionCounters.Where(c => int.TryParse(c.Key, CultureInfo.InvariantCulture, out _)))
+            aggregation.ExclusionDiscardCounts[int.Parse(counter.Key, CultureInfo.InvariantCulture)] =
+                (int)Math.Min(counter.Count, int.MaxValue);
 
         var changeTypeData = await rpeiQuery
             .GroupBy(q => new { q.ObjectChangeType, q.NoChangeReason })
@@ -1363,7 +1588,13 @@ public class ActivityRepository : IActivityRepository
         var ownTransaction = database.CurrentTransaction == null ? await database.BeginTransactionAsync() : null;
         try
         {
-            await database.ExecuteSqlRawAsync(@"DELETE FROM ""ActivityStatCounters"" WHERE ""ActivityId"" = {0}", activityId);
+            // Only the dimensions this aggregation recomputes. Counters that cannot be derived from the execution
+            // items (the exclusion discard counts, #1255: a discarded entry produced no item) would otherwise be
+            // deleted and never rewritten, so the Activity would lose them the moment it completed.
+            await database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""ActivityStatCounters"" WHERE ""ActivityId"" = {0} AND ""Dimension"" = ANY({1})",
+                activityId,
+                RunProfileExecutionStatsDimensions.RecomputedFromExecutionItems.Select(d => (int)d).ToArray());
             await ActivityStatCounterWriter.UpsertDeltasAsync(Repository.Database, deltas);
             if (alsoPersistFinalisedFlag)
                 await database.ExecuteSqlRawAsync(@"UPDATE ""Activities"" SET ""RunProfileExecutionStatsFinalised"" = TRUE WHERE ""Id"" = {0}", activityId);
@@ -1497,6 +1728,7 @@ public class ActivityRepository : IActivityRepository
             TotalObjectTypes = totalObjectTypes,
             ObjectTypeCounts = objectTypeCounts,
             ErrorTypeCounts = errorTypeCounts,
+            EntriesDiscardedByExcludedContainer = aggregation.ExclusionDiscardCounts,
 
             // Import stats
             TotalCsoAdds = totalCsoAdds,

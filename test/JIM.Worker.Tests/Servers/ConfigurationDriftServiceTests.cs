@@ -70,14 +70,14 @@ public class ConfigurationDriftServiceTests
     {
         var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.HasPendingChanges, Is.False);
             Assert.That(result.IsDeterminable, Is.True);
             Assert.That(result.ChangeCount, Is.EqualTo(0));
             Assert.That(result.LastFullSynchronisation, Is.EqualTo(LastFullSync));
             Assert.That(result.HighestChangeClass, Is.EqualTo(ConfigurationChangeClass.NotClassified));
-        });
+        }
     }
 
     [Test]
@@ -87,13 +87,13 @@ public class ConfigurationDriftServiceTests
 
         var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.HasPendingChanges, Is.True);
             Assert.That(result.ChangeCount, Is.EqualTo(1));
             Assert.That(result.MostRecentChange, Is.EqualTo(AfterSync));
             Assert.That(result.HighestChangeClass, Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
-        });
+        }
     }
 
     [Test]
@@ -119,12 +119,12 @@ public class ConfigurationDriftServiceTests
 
         var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.ChangeCount, Is.EqualTo(2));
             Assert.That(result.HighestChangeClass, Is.EqualTo(ConfigurationChangeClass.Destructive));
             Assert.That(result.MostRecentChange, Is.EqualTo(AfterSync.AddMinutes(10)));
-        });
+        }
     }
 
     [Test]
@@ -209,11 +209,11 @@ public class ConfigurationDriftServiceTests
 
         var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.HasPendingChanges, Is.True);
             Assert.That(result.HighestChangeClass, Is.EqualTo(ConfigurationChangeClass.Destructive));
-        });
+        }
     }
 
     [Test]
@@ -224,13 +224,13 @@ public class ConfigurationDriftServiceTests
 
         var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.NeverFullySynchronised, Is.True);
             Assert.That(result.HasPendingChanges, Is.False);
             Assert.That(result.IsDeterminable, Is.False);
             Assert.That(result.LastFullSynchronisation, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -240,12 +240,12 @@ public class ConfigurationDriftServiceTests
 
         var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.TrackingDisabled, Is.True);
             Assert.That(result.HasPendingChanges, Is.False);
             Assert.That(result.IsDeterminable, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -264,11 +264,11 @@ public class ConfigurationDriftServiceTests
 
         var results = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync([SystemId, OtherSystemId]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[SystemId].HasPendingChanges, Is.True);
             Assert.That(results[OtherSystemId].HasPendingChanges, Is.False);
-        });
+        }
     }
 
     [Test]

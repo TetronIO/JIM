@@ -22,11 +22,11 @@ public class ConnectedSystemDirectoryServerDtoTests
 
         var dto = ConnectedSystemDirectoryServerDto.FromModel(model);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(dto.HostName, Is.EqualTo("dc01.corp.local"));
             Assert.That(dto.Site, Is.EqualTo("Default-First-Site-Name"));
-        });
+        }
     }
 
     [Test]

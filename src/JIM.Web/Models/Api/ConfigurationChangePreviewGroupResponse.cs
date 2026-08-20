@@ -33,7 +33,12 @@ public class ConfigurationChangePreviewGroupResponse
 
     public string? NewValue { get; set; }
 
-    /// <summary>The pattern a detector recognised across this group's deltas, or null when none did.</summary>
+    /// <summary>
+    /// What kind of edit this group describes, as a stable identifier: EmailDomainChanged, ContainerChanged,
+    /// CasingChanged, PrefixAdded, PrefixRemoved, SuffixAdded or SuffixRemoved. Null where nothing recognised the
+    /// change, and also where the group's objects did not all make the same kind of edit: a named pattern is a
+    /// statement about every object in the group, never a majority of them.
+    /// </summary>
     public string? PatternKey { get; set; }
 
     /// <summary>

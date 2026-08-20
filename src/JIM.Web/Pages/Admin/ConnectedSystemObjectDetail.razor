@@ -9,9 +9,9 @@
 @using JIM.Models.Enums
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
-@inject IUserPreferenceService PreferenceService
 @inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -125,57 +125,97 @@
                 and are awaiting confirmation via a subsequent import. Once confirmed, these changes will be reflected in the
                 CSO attribute values below.
             </MudText>
-            <MudTable @ref="_pendingExportTable" T="PendingExportAttributeValueChange"
-                      ServerData="LoadPendingExportsPagedAsync"
-                      Hover="true" Dense="true" Outlined="true" Elevation="0"
-                      Loading="@_pendingExportLoading" LoadingProgressColor="Color.Primary">
-                <ToolBarContent>
-                    <SearchField Value="@_pendingExportSearchText"
-                                 ValueChanged="@OnPendingExportSearch"
-                                 Placeholder="Search Pending Exports..." />
-                </ToolBarContent>
-                <HeaderContent>
-                    <MudTh>
-                        <MudText Typo="Typo.button">Attribute</MudText>
-                    </MudTh>
-                    <MudTh>
-                        <MudText Typo="Typo.button">Change Type</MudText>
-                    </MudTh>
-                    <MudTh>
-                        <MudText Typo="Typo.button">Value</MudText>
-                    </MudTh>
-                    <MudTh>
-                        <MudText Typo="Typo.button">Status</MudText>
-                    </MudTh>
-                    <MudTh>
-                        <MudText Typo="Typo.button">Export Attempts</MudText>
-                    </MudTh>
-                    <MudTh>
-                        <MudText Typo="Typo.button">Last Exported</MudText>
-                    </MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Attribute">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudTd>
-                    <MudTd DataLabel="Change Type">
-                        <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.ChangeType)"
-                           >
-                            @context.ChangeType
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Value"><TextValueDisplay Value="@GetAttributeValue(context)" /></MudTd>
-                    <MudTd DataLabel="Status">
-                        <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Status)"
-                           >
-                            @context.Status.ToString().SplitOnCapitalLetters()
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Export Attempts">@context.ExportAttemptCount</MudTd>
-                    <MudTd DataLabel="Last Exported">@(context.LastExportedAt?.ToFriendlyDate() ?? "-")</MudTd>
-                </RowTemplate>
-                <PagerContent>
-                    <MudTablePager />
-                </PagerContent>
-            </MudTable>
+            @* Queued changes are unbounded (one Pending Export can carry every value of a large group), so the
+               grid streams windows from a range read rather than the page loading them all. No column offers a
+               sort: the read has no sort parameter, and a header that reordered nothing would be a lie. *@
+            <VirtualisedDataGrid T="PendingExportAttributeValueChange"
+                                 ContainerId="cso-pending-exports"
+                                 UrlParameterPrefix="pe-"
+                                 StateKey="@CsoId"
+                                 DefaultSortBy="@SourceOrderSort"
+                                 LoadWindow="LoadPendingExportWindowAsync"
+                                 SearchPlaceholder="Search Pending Exports..."
+                                 SingularName="Change"
+                                 PluralName="Changes">
+                <Columns>
+                    <TemplateColumn Title="Attribute" Sortable="false">
+                        <HeaderTemplate>
+                            <MudText Typo="Typo.button">Attribute</MudText>
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @(context.Item.Attribute?.Name ?? $"Attribute {context.Item.AttributeId}")
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Change Type" Sortable="false">
+                        <HeaderTemplate>
+                            <MudText Typo="Typo.button">Change Type</MudText>
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.Item.ChangeType)">
+                                @context.Item.ChangeType
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Value" Sortable="false">
+                        <HeaderTemplate>
+                            <MudText Typo="Typo.button">Value</MudText>
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <TextValueDisplay Value="@GetAttributeValue(context.Item)" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Status" Sortable="false">
+                        <HeaderTemplate>
+                            <MudText Typo="Typo.button">Status</MudText>
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Item.Status)">
+                                @context.Item.Status.ToString().SplitOnCapitalLetters()
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Export Attempts" Sortable="false">
+                        <HeaderTemplate>
+                            <MudText Typo="Typo.button">Export Attempts</MudText>
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @context.Item.ExportAttemptCount
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Last Exported" Sortable="false">
+                        <HeaderTemplate>
+                            <MudText Typo="Typo.button">Last Exported</MudText>
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @if (context.Item.LastExportedAt.HasValue)
+                            {
+                                var lastExportedAt = context.Item.LastExportedAt.Value;
+                                @lastExportedAt.ToFriendlyDate()
+                            }
+                            else
+                            {
+                                <EmptyValue />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <EmptyContent Context="grid">
+                    @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                         PrimaryText="@($"No queued changes match \"{grid.SearchText}\"")"
+                                         SecondaryText="Try a different search term, or clear the search."
+                                         ActionText="Clear Search"
+                                         OnAction="@(() => grid.ClearSearchAsync())" />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.PublishedWithChanges"
+                                         PrimaryText="No changes are queued for this object"
+                                         SecondaryText="Changes appear here while a Pending Export waits to be exported, and are cleared once the Connected System confirms them." />
+                    }
+                </EmptyContent>
+            </VirtualisedDataGrid>
         </MudPaper>
     }
 
@@ -183,100 +223,115 @@
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync"
                       TabPanelsClass="pa-0 mt-6">
         <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
-            <MudTable Items="@GetGroupedAttributes()" Hover="true" Dense="@_dense" Elevation="0" Outlined="true"
-                Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")"
-                Breakpoint="Breakpoint.None">
-                <ToolBarContent>
-                    <TableDensityToggle @bind-Dense="_dense" />
-                </ToolBarContent>
-                <HeaderContent>
-                    <MudTh Class="jim-attr-header-name">
-                        <MudTableSortLabel SortBy="@_sortByAttribute"
-                            InitialDirection="SortDirection.Ascending" T="AttributeGroup">
-                            <MudText Typo="Typo.button">Attribute</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                    <MudTh Class="jim-attr-header-value">
-                        <MudTableSortLabel SortBy="@_sortByValue" T="AttributeGroup">
-                            <MudText Typo="Typo.button">Value</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                    <MudTh Class="jim-attr-header-type">
-                        <MudTableSortLabel SortBy="@_sortByType" T="AttributeGroup">
-                            <MudText Typo="Typo.button">Type</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                    <MudTh Class="jim-attr-header-plurality">
-                        <MudTableSortLabel SortBy="@_sortByPlurality" T="AttributeGroup">
-                            <MudText Typo="Typo.button">Plurality</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                    <MudTh Class="jim-attr-header-extid">
-                        <MudTableSortLabel SortBy="@_sortByExternalId" T="AttributeGroup">
-                            <MudText Typo="Typo.button">External ID?</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Attribute" Class="@($"jim-attr-name {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
-                        @if (IsUnmanagedAttribute(context))
-                        {
-                            <MudTooltip Text="Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Unmanaged</MudChip>
-                            </MudTooltip>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                        @if (context.Values.Count == 1)
-                        {
-                            <CsoAttributeValue Value="@context.Values[0]" />
-                        }
-                        else if (context.TotalCount <= MvaInlineThreshold)
-                        {
-                            <div class="jim-attr-expanded">
-                                @foreach (var val in context.Values)
+            @* One row per attribute, as before; the object's attribute values were loaded with the rest of the
+               page (capped per multi-valued attribute), so windows are sliced from that list in memory rather
+               than costing a database read per scroll. The sorts are the same five the paged table offered. *@
+            <VirtualisedDataGrid T="AttributeGroup"
+                                 ContainerId="cso-attributes"
+                                 UrlParameterPrefix="attr-"
+                                 StateKey="@CsoId"
+                                 DefaultSortBy="attribute"
+                                 LoadWindow="LoadAttributeWindowAsync"
+                                 SearchPlaceholder="Search attribute name or value"
+                                 SingularName="Attribute"
+                                 PluralName="Attributes">
+                <Columns>
+                    <TemplateColumn Title="Attribute" Sortable="false" HeaderClass="jim-attr-header-name" CellClass="jim-attr-name">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Item.AttributeName</MudText>
+                            @if (IsUnmanagedAttribute(context.Item))
+                            {
+                                <MudTooltip Text="Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Unmanaged</MudChip>
+                                </MudTooltip>
+                            }
+                            @if (IsCreateOnlyAttribute(context.Item))
+                            {
+                                <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Set on creation only</MudChip>
+                                </MudTooltip>
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Value" Sortable="false" HeaderClass="jim-attr-header-value" CellClass="jim-attr-value">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Value" Name="value" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @* A row in a virtualised table is one line: the virtualiser positions every row from
+                               one fixed ItemSize, so a cell that stacks its values (or nests a whole table) puts
+                               everything below it at an offset nothing on the page agrees with. A multi-valued
+                               attribute therefore shows its first value and sends the rest to a dialog, which
+                               holds a virtualised grid of them so none is out of reach however many there are. *@
+                            @{ var group = context.Item; }
+                            <div class="jim-one-line-list">
+                                <span class="jim-one-line-list-value"><CsoAttributeValue Value="@group.Values[0]" /></span>
+                                @if (group.TotalCount > 1)
                                 {
-                                    <div class="jim-attr-expanded-item">
-                                        <CsoAttributeValue Value="@val" />
-                                    </div>
+                                    <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                               OnClick="@(() => OpenMvaDialogAsync(group))">
+                                        +@((group.TotalCount - 1).ToString("N0")) more
+                                    </MudButton>
                                 }
                             </div>
-                        }
-                        else
-                        {
-                            <CsoMvaTable @key="context.AttributeName"
-                                         AttributeName="@context.AttributeName"
-                                         ConnectedSystemObjectId="@ConnectedSystemObject.Id"
-                                         IsReferenceAttribute="@context.IsReference"
-                                         Dense="@_dense" />
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Type" Class="@($"jim-attr-type {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values[0].Attribute.Type</MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Plurality" Class="@($"jim-attr-plurality {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.IsMultiValued ? "Multi" : "Single")</MudText>
-                    </MudTd>
-                    <MudTd DataLabel="External ID?" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")" Style="white-space: nowrap">
-                        @if (IsExternalId(context.Values[0]))
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
-                        }
-                        else if (IsSecondaryExternalId(context.Values[0]))
-                        {
-                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
-                        }
-                        else
-                        {
-                            <span>-</span>
-                        }
-                    </MudTd>
-                </RowTemplate>
-                <NoRecordsContent>
-                    <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
-                </NoRecordsContent>
-            </MudTable>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Type" Sortable="false" HeaderClass="jim-attr-header-type" CellClass="jim-attr-type">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Type" Name="type" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Item.Values[0].Attribute.Type</MudText>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Plurality" Sortable="false" HeaderClass="jim-attr-header-plurality" CellClass="jim-attr-plurality">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Plurality" Name="plurality" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.Item.IsMultiValued ? "Multi" : "Single")</MudText>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="External ID?" Sortable="false" HeaderClass="jim-attr-header-extid">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="External ID?" Name="externalid" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @if (IsExternalId(context.Item.Values[0]))
+                            {
+                                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                            }
+                            else if (IsSecondaryExternalId(context.Item.Values[0]))
+                            {
+                                <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                            }
+                            else
+                            {
+                                <EmptyValue />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <EmptyContent Context="grid">
+                    @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                         PrimaryText="@($"No attributes match \"{grid.SearchText}\"")"
+                                         SecondaryText="Try a different search term, or clear the search."
+                                         ActionText="Clear Search"
+                                         OnAction="@(() => grid.ClearSearchAsync())" />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
+                                         PrimaryText="This object has no attribute values"
+                                         SecondaryText="Values appear here once an Import brings them in from the Connected System." />
+                    }
+                </EmptyContent>
+            </VirtualisedDataGrid>
         </MudTabPanel>
         <MudTabPanel Text="Change History" Icon="@Icons.Material.Filled.History" BadgeData="@_changeCount.ToString("N0")" BadgeColor="Color.Primary">
             @if (_changeHistoryLoading && _changeHistoryRows.Count == 0)
@@ -343,10 +398,14 @@
 
     private PendingExport? PendingExport { get; set; }
 
-    private MudTable<PendingExportAttributeValueChange>? _pendingExportTable;
-    private string _pendingExportSearchText = string.Empty;
-    private bool _pendingExportLoading;
     private int _pendingExportTotalCount;
+
+    /// <summary>
+    /// The sort key standing for "the order the application layer returned them in". A Pending Export's queued
+    /// changes are read with no sort parameter, so no column offers a sort; naming the default something no
+    /// header claims keeps the grid from showing a sort arrow over an order it did not choose.
+    /// </summary>
+    private const string SourceOrderSort = "order";
 
     // Change-history lazy-load state. Initial detail load returns only the count so the badge
     // can render immediately; the rows are fetched the first time the user opens the Change
@@ -360,9 +419,6 @@
     private readonly List<ChangeHistoryTimeline.ChangeGroup> _changeHistoryRows = new();
 
     private List<BreadcrumbItem> Breadcrumbs { get; set; } = null!;
-
-    private bool _dense;
-    private bool _preferencesLoaded;
 
     // What the Connector can do with a password, and the generator settings a Generate in the dialog should
     // follow. Read once with the rest of the page rather than when the dialog opens, so the Set Password action
@@ -439,23 +495,6 @@
             ConnectedSystemObject?.MetaverseObjectId ?? Guid.Empty, accounts, password, options, user, progress, CancellationToken.None);
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                _dense = await PreferenceService.GetTableDenseAsync() == true;
-                _preferencesLoaded = true;
-                StateHasChanged();
-            }
-            catch (InvalidOperationException)
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
-    }
-
     protected override async Task OnParametersSetAsync()
     {
         using var jim = JimFactory.Create();
@@ -486,6 +525,10 @@
         ConnectedSystemObject = detailResult.ConnectedSystemObject;
         AttributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
         _changeCount = detailResult.ChangeCount;
+
+        // Grouped once here rather than per window read: the attributes grid slices its windows from this list,
+        // and re-grouping every value on every scroll would do the same work again for no new information.
+        _attributeGroups = GetGroupedAttributes();
 
         Breadcrumbs = new List<BreadcrumbItem>
         {
@@ -598,20 +641,84 @@
         };
     }
 
-    private static readonly Func<AttributeGroup, object> _sortByAttribute = g => g.AttributeName;
-    private static readonly Func<AttributeGroup, object> _sortByValue = g => g.Values[0].ToStringNoName() ?? "";
-    private static readonly Func<AttributeGroup, object> _sortByType = g => g.Values[0].Attribute.Type.ToString();
-    private static readonly Func<AttributeGroup, object> _sortByPlurality = g => g.IsMultiValued;
-    private Func<AttributeGroup, object> _sortByExternalId => g => GetExternalIdSortOrder(g);
+    /// <summary>
+    /// Opens the whole set of one multi-valued attribute's values, which the grid's own row cannot show: a row is
+    /// one line tall, so the cell shows the first value and this dialog carries the rest, virtualised, so a group
+    /// with half a million members is still reachable in full.
+    /// </summary>
+    private async Task OpenMvaDialogAsync(AttributeGroup group)
+    {
+        if (ConnectedSystemObject == null)
+            return;
 
-    private const int MvaInlineThreshold = 10;
+        // Captured before it is handed to the dialog rather than dereferenced through the guard in an initialiser:
+        // a chained dereference under an @if is what CodeQL reads as a possible null (JIM.Web/CLAUDE.md).
+        var connectedSystemObjectId = ConnectedSystemObject.Id;
 
-    private record AttributeGroup(
+        var parameters = new DialogParameters<CsoMvaDialog>
+        {
+            { x => x.AttributeName, group.AttributeName },
+            { x => x.ConnectedSystemObjectId, connectedSystemObjectId },
+            { x => x.IsReferenceAttribute, group.IsReference },
+            { x => x.TotalCount, group.TotalCount }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<CsoMvaDialog>(group.AttributeName, parameters, options);
+    }
+
+    /// <summary>
+    /// One row of the attributes grid: an attribute and the values of it this object holds. Public so the grid's
+    /// window loader can be exercised by name from the component tests.
+    /// </summary>
+    public record AttributeGroup(
     string AttributeName,
     List<ConnectedSystemObjectAttributeValue> Values,
     bool IsMultiValued,
     int TotalCount,
     bool IsReference);
+
+    private List<AttributeGroup> _attributeGroups = new();
+
+    /// <summary>
+    /// Slices one window of attributes from the list the page already holds, applying the grid's search (the
+    /// attribute's name and its loaded values) and the same five sorts the paged table offered. The values came
+    /// back with the rest of the page, so a scroll costs no database read; the count is only taken when the
+    /// request asks for it, so a null total means "not counted" rather than "nothing matched".
+    /// </summary>
+    private Task<VirtualisedWindow<AttributeGroup>> LoadAttributeWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<AttributeGroup> groups = _attributeGroups;
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            groups = groups.Where(g =>
+                g.AttributeName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                g.Values.Any(v => (v.ToStringNoName() ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        IOrderedEnumerable<AttributeGroup> Order<TKey>(Func<AttributeGroup, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? groups.OrderByDescending(key, comparer) : groups.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "value" => Order(g => g.Values[0].ToStringNoName() ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "type" => Order(g => g.Values[0].Attribute.Type),
+            "plurality" => Order(g => g.IsMultiValued),
+            "externalid" => Order(GetExternalIdSortOrder),
+            _ => Order(g => g.AttributeName, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
 
     private List<AttributeGroup> GetGroupedAttributes()
     {
@@ -675,6 +782,16 @@
         return _unmanagedAttributeIds.Contains(attributeId);
     }
 
+    /// <summary>
+    /// Whether the Connected System will only accept a value for this attribute when the object is created.
+    /// Unlike Initial Export Only, this is a property of the discovered schema rather than of the Attribute
+    /// Flow, so it holds whatever the Synchronisation Rules say and needs no rule lookup.
+    /// </summary>
+    private static bool IsCreateOnlyAttribute(AttributeGroup group)
+    {
+        return group.Values[0].Attribute?.Writability == AttributeWritability.WritableOnCreate;
+    }
+
     private int GetExternalIdSortOrder(AttributeGroup group)
     {
         if (IsExternalId(group.Values[0])) return 0;
@@ -696,40 +813,27 @@
         return attributeId == ConnectedSystemObject.SecondaryExternalIdAttributeId;
     }
 
-    private async Task<TableData<PendingExportAttributeValueChange>> LoadPendingExportsPagedAsync(
-        TableState state, CancellationToken token)
+    /// <summary>
+    /// Reads one window of the Pending Export's queued attribute value changes. One Pending Export can carry
+    /// every value of a large group, so the changes are read by offset and count rather than loaded whole, and
+    /// the request's skip-the-count contract is passed straight through: a null total means "not counted", never
+    /// that nothing matched.
+    /// </summary>
+    private async Task<VirtualisedWindow<PendingExportAttributeValueChange>> LoadPendingExportWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken token)
     {
-        _pendingExportLoading = true;
+        if (PendingExport == null)
+            return new VirtualisedWindow<PendingExportAttributeValueChange>([], request.IncludeTotalCount ? 0 : null);
 
-        try
-        {
-            if (PendingExport == null)
-                return new TableData<PendingExportAttributeValueChange> { Items = [], TotalItems = 0 };
+        using var jim = JimFactory.Create();
+        var result = await jim.ConnectedSystems.GetAllPendingExportChangesRangeAsync(
+            PendingExport.Id,
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.IncludeTotalCount);
 
-            var page = state.Page + 1; // MudBlazor is 0-indexed, API is 1-indexed
-            var pageSize = state.PageSize;
-            var searchText = string.IsNullOrWhiteSpace(_pendingExportSearchText) ? null : _pendingExportSearchText;
-
-            using var jim = JimFactory.Create();
-            var result = await jim.ConnectedSystems.GetAllPendingExportChangesPagedAsync(
-                PendingExport.Id, page, pageSize, searchText);
-
-            return new TableData<PendingExportAttributeValueChange>
-            {
-                Items = result.Results,
-                TotalItems = result.TotalResults
-            };
-        }
-        finally
-        {
-            _pendingExportLoading = false;
-        }
-    }
-
-    private void OnPendingExportSearch(string text)
-    {
-        _pendingExportSearchText = text;
-        _pendingExportTable?.ReloadServerData();
+        return new VirtualisedWindow<PendingExportAttributeValueChange>(result.Results, result.TotalResults);
     }
 
     private static string GetAttributeValue(PendingExportAttributeValueChange change)

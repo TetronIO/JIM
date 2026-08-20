@@ -6,10 +6,9 @@
 @using JIM.Models.Search
 @using JIM.Models.Utility
 @using JIM.Utilities
-@using JIM.Web.Services
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -19,12 +18,12 @@
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Search, or browse for @ObjectTypeName</MudText>
 
-@if (_isInitialised && _preferencesLoaded && PredefinedSearch != null)
+@if (_isInitialised && PredefinedSearch != null)
 {
     @if (_hasAttributeName != null)
     {
         <MudChip T="string" Color="Color.Primary" Variant="Variant.Text" Icon="@Icons.Material.Filled.FilterAlt"
-                 OnClose="ClearHasAttributeFilter" Class="mt-3">Has a value for: @_hasAttributeName</MudChip>
+                 OnClose="ClearHasAttributeFilterAsync" Class="mt-3">Has a value for: @_hasAttributeName</MudChip>
 
         @if (_hasAttributeUnknown)
         {
@@ -34,51 +33,78 @@
         }
     }
 
-    <MudTable @ref="_table" T="MetaverseObjectHeader" ServerData="ServerReload" @bind-CurrentPage="_currentPage" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Hover="true"
-        Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 dense-body-only" : "mt-5")" Outlined="true" Elevation="0" OnRowClick="HandleRowClick"
-        RowClass="cursor-pointer" Loading="@_loading" LoadingProgressColor="Color.Primary">
-        <ToolBarContent>
-            <TableDensityToggle @bind-Dense="_dense" />
-            <MudSpacer />
-            <SearchField ValueChanged="@(s => OnSearch(s))" Placeholder="Search..." Class="mt-0" />
-        </ToolBarContent>
-        <HeaderContent>
+    @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
+       shared grid; this page supplies the Predefined Search's columns, the window loader and the empty states. *@
+    <VirtualisedDataGrid @ref="_grid" T="MetaverseObjectHeader"
+                         ContainerId="metaverse-object-list"
+                         StateKey="@($"{TypeNameUrlParam}/{PredefinedSearchUri}")"
+                         DefaultSortBy="@Constants.BuiltInAttributes.DisplayName"
+                         LoadWindow="LoadWindowAsync"
+                         RowClicked="HandleRowClicked"
+                         SingularName="@(PredefinedSearch.IsDefaultForMetaverseObjectType ? MetaverseObjectType?.Name : null)"
+                         PluralName="@PageTitle">
+        <Columns>
             @foreach (var psa in PredefinedSearch.Attributes)
             {
-                <MudTh>
-                    <MudTableSortLabel SortLabel="@psa.MetaverseAttribute.Name" T="MetaverseObjectHeader"
-                        InitialDirection="@(psa.MetaverseAttribute.Name == Constants.BuiltInAttributes.DisplayName ? SortDirection.Ascending : SortDirection.None)">
-                        <MudText Typo="Typo.button">@psa.MetaverseAttribute.Name</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
+                var attrName = psa.MetaverseAttribute.Name;
+                var isDisplayName = attrName == Constants.BuiltInAttributes.DisplayName;
+                <TemplateColumn Title="@attrName" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="@attrName" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (isDisplayName)
+                        {
+                            @* The row navigates on click and so does this link, so without stopping the click here a
+                               reader who clicks the name gets two identical history entries and has to press Back
+                               twice to leave the object. Keeping both affordances and silencing one is the right way
+                               round: the link is what offers middle-click and open-in-new-tab, which a row-click
+                               handler cannot, while the row click is what makes the rest of the row a target. *@
+                            <span @onclick:stopPropagation="true">
+                                <MudLink Href="@Utilities.GetMetaverseObjectHref(context.Item)">@Utilities.GetMetaverseObjectHrefText(context.Item)</MudLink>
+                            </span>
+                        }
+                        else
+                        {
+                            var value = context.Item.GetAttributeValue(attrName)?.StringValue;
+                            @if (string.IsNullOrEmpty(value))
+                            {
+                                <EmptyValue />
+                            }
+                            else
+                            {
+                                @value
+                            }
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
             }
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="@Constants.BuiltInAttributes.DisplayName">
-                <MudLink Href="@Utilities.GetMetaverseObjectHref(context)">@Utilities.GetMetaverseObjectHrefText(context)</MudLink>
-            </MudTd>
-            @foreach (var psa in PredefinedSearch.Attributes.Where(q => q.MetaverseAttribute.Name != Constants.BuiltInAttributes.DisplayName))
+        </Columns>
+        <EmptyContent Context="grid">
+            @* The noun is the Predefined Search's name (PageTitle), not the type's plural: a search's page
+               (/t/users/s/service-principals) must say "No Service Principals ...", never "No Users ...". *@
+            @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
-                var value = context.GetAttributeValue(psa.MetaverseAttribute.Name)?.StringValue;
-                <MudTd DataLabel="@psa.MetaverseAttribute.Name">
-                    @if (string.IsNullOrEmpty(value))
-                    {
-                        <EmptyValue />
-                    }
-                    else
-                    {
-                        @value
-                    }
-                </MudTd>
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No {PageTitle} match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
             }
-        </RowTemplate>
-        <NoRecordsContent>
-            No results
-        </NoRecordsContent>
-        <PagerContent>
-            <MudTablePager />
-        </PagerContent>
-    </MudTable>
+            else if (_hasAttributeName != null)
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                                 PrimaryText="@($"No {PageTitle} have a value for {_hasAttributeName}")"
+                                 SecondaryText="@($"Clear the filter above to browse all {PageTitle}.")" />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)"
+                                 PrimaryText="@($"No {PageTitle} yet")"
+                                 SecondaryText="Objects appear here once they are created or imported." />
+            }
+        </EmptyContent>
+    </VirtualisedDataGrid>
 }
 else if (_isInitialised)
 {
@@ -99,14 +125,8 @@ else if (_isInitialised)
     [Parameter]
     public string? PredefinedSearchUri { get; set; }
 
-    private MudTable<MetaverseObjectHeader>? _table;
-    private string _searchString = "";
-    private int _rowsPerPage = 10;
-    private bool _preferencesLoaded;
-    private bool _loading;
+    private VirtualisedDataGrid<MetaverseObjectHeader>? _grid;
     private bool _isInitialised;
-    private bool _dense;
-    private int _currentPage;
 
     // Attribute-presence filter (the ?search=hasAttribute:{name} deep link). _hasAttributeName is the parsed token
     // (null when no presence filter is active); _hasAttributeId is its resolved attribute id; _hasAttributeUnknown is
@@ -129,9 +149,6 @@ else if (_isInitialised)
         _hasAttributeId = null;
         _hasAttributeUnknown = false;
 
-        // Read page from URL query string (MudTable uses 0-indexed pages)
-        _currentPage = GetPageFromUrl() - 1;
-
         using var jim = JimFactory.Create();
         var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
         MetaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, false);
@@ -142,7 +159,7 @@ else if (_isInitialised)
         }
 
         // Attribute-presence filter from the URL (?search=hasAttribute:{name}). Resolve the name to an attribute id so
-        // the table can filter by it; an unrecognised name yields no results (surfaced as a clear empty state).
+        // the grid can filter by it; an unrecognised name yields no results (surfaced as a clear empty state).
         var searchToken = GetSearchFromUrl();
         if (!string.IsNullOrWhiteSpace(searchToken) &&
             searchToken.StartsWith(Utilities.HasAttributeSearchToken, StringComparison.OrdinalIgnoreCase))
@@ -203,129 +220,46 @@ else if (_isInitialised)
             };
         }
 
-        // Mark as initialised - now the table can render and load data
+        // Mark as initialised - now the grid can render and load data
         _isInitialised = true;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task<VirtualisedWindow<MetaverseObjectHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                _rowsPerPage = preferredSize;
-                _dense = await PreferenceService.GetTableDenseAsync() == true;
-                _preferencesLoaded = true;
-                StateHasChanged(); // Re-render to show the table now that preference is loaded
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
+        // No search, or a presence filter naming an attribute that does not exist: nothing can match.
+        if (PredefinedSearch == null || _hasAttributeUnknown)
+            return new VirtualisedWindow<MetaverseObjectHeader>([], 0);
+
+        using var jim = JimFactory.Create();
+        var result = await jim.Metaverse.GetMetaverseObjectHeadersRangeAsync(
+            PredefinedSearch,
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
+            _hasAttributeId,
+            includeTotalCount: request.IncludeTotalCount);
+
+        return new VirtualisedWindow<MetaverseObjectHeader>(result.Results, result.TotalResults);
     }
 
-    private async Task OnRowsPerPageChanged(int newSize)
-    {
-        _rowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
-    }
-
-    private async Task<TableData<MetaverseObjectHeader>> ServerReload(TableState state, CancellationToken token)
-    {
-        if (PredefinedSearch == null)
-        {
-            return new TableData<MetaverseObjectHeader> { TotalItems = 0, Items = [] };
-        }
-
-        // A presence filter naming an attribute that does not exist cannot match any object; return an empty page
-        // rather than falling through to an unfiltered query.
-        if (_hasAttributeUnknown)
-        {
-            return new TableData<MetaverseObjectHeader> { TotalItems = 0, Items = [] };
-        }
-
-        _loading = true;
-        StateHasChanged();
-
-        try
-        {
-            // Convert MudBlazor's 0-indexed page to our 1-indexed page
-            var page = state.Page + 1;
-            var sortDescending = state.SortDirection == SortDirection.Descending;
-
-            // Update URL with current page (without triggering navigation/reload)
-            UpdateUrlWithPage(page);
-
-            using var jim = JimFactory.Create();
-            var result = await jim.Metaverse.GetMetaverseObjectHeadersPagedAsync(
-                PredefinedSearch,
-                page,
-                state.PageSize,
-                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
-                state.SortLabel,
-                sortDescending,
-                _hasAttributeId);
-
-            return new TableData<MetaverseObjectHeader>
-            {
-                TotalItems = result.TotalResults,
-                Items = result.Results
-            };
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
-        }
-    }
-
-    private void UpdateUrlWithPage(int page)
-    {
-        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-        var baseUrl = uri.GetLeftPart(UriPartial.Path);
-
-        // Preserve the attribute-presence filter and add ?p= only past page 1, so paging (and sharing a page-2 URL)
-        // keeps the filter rather than silently dropping it.
-        var queryParts = new List<string>();
-        if (_hasAttributeName != null)
-            queryParts.Add($"search={Utilities.HasAttributeSearchToken}{Uri.EscapeDataString(_hasAttributeName)}");
-        if (page > 1)
-            queryParts.Add($"p={page}");
-
-        var newUrl = queryParts.Count > 0 ? $"{baseUrl}?{string.Join("&", queryParts)}" : baseUrl;
-
-        // Update URL without navigation (replace current history entry)
-        NavManager.NavigateTo(newUrl, replace: true);
-    }
-
-    private void OnSearch(string text)
-    {
-        _searchString = text;
-        _table?.ReloadServerData();
-    }
-
-    private void ClearHasAttributeFilter()
+    private async Task ClearHasAttributeFilterAsync()
     {
         _hasAttributeName = null;
         _hasAttributeId = null;
         _hasAttributeUnknown = false;
 
-        // Drop the presence filter from the URL (keep the base path) without a full reload, then refresh the table.
-        var baseUrl = NavManager.ToAbsoluteUri(NavManager.Uri).GetLeftPart(UriPartial.Path);
-        NavManager.NavigateTo(baseUrl, replace: true);
-        _table?.ReloadServerData();
-    }
-
-    private int GetPageFromUrl()
-    {
-        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        var pageStr = query["p"];
-        if (int.TryParse(pageStr, out var page) && page > 0)
-            return page;
-        return 1; // Default to page 1
+        // Drop the presence filter from the URL while keeping the search, sort and (reset) position the grid owns.
+        // Rewriting in place rather than navigating keeps OnParametersSetAsync, and so the page's whole load, out of
+        // what is only a filter change. The filter is part of the baseline the toolbar count compares a search
+        // against, so the totals are invalidated for a re-count.
+        if (_grid != null)
+        {
+            await _grid.ClearQueryParameterAsync("search");
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
+        }
     }
 
     private string? GetSearchFromUrl()
@@ -335,14 +269,10 @@ else if (_isInitialised)
         return query["search"];
     }
 
-    private void HandleRowClick(TableRowClickEventArgs<MetaverseObjectHeader> args)
+    private void HandleRowClicked(MetaverseObjectHeader item)
     {
-        // Prevent navigation while data is loading to avoid concurrent EF operations
-        if (_loading || args.Item == null)
-            return;
-
         // Navigate using absolute path to ensure no query params are carried over
-        var href = Utilities.GetMetaverseObjectHref(args.Item);
+        var href = Utilities.GetMetaverseObjectHref(item);
         var uri = NavManager.ToAbsoluteUri(href);
         NavManager.NavigateTo(uri.AbsolutePath);
     }

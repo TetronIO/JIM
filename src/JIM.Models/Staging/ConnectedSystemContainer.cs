@@ -34,6 +34,20 @@ public class ConnectedSystemContainer
     public string ExternalId { get; set; } = null!;
 
     /// <summary>
+    /// The Connected System's own immutable identifier for this container, where the Connector can supply one:
+    /// objectGUID on Active Directory, entryUUID on OpenLDAP. Null for containers enumerated before stable
+    /// identifiers were recorded, and for Connectors that have none to give.
+    /// </summary>
+    /// <remarks>
+    /// This is what container identity is keyed on during a hierarchy refresh, because <see cref="ExternalId"/> is
+    /// the Distinguished Name and therefore changes on every rename and move. Matching on the Distinguished Name
+    /// alone read those as a removal plus an addition, and the re-added container arrived unselected, quietly taking
+    /// its objects out of import scope and obsoleting them on the next Full Import. Populated on the next hierarchy
+    /// refresh for containers that predate it; the merge falls back to the Distinguished Name until then.
+    /// </remarks>
+    public string? StableId { get; set; }
+
+    /// <summary>
     /// The human-readable name for the container.
     /// </summary>
     public string Name { get; set; } = null!;
@@ -55,10 +69,64 @@ public class ConnectedSystemContainer
     public bool Selected { get; set; }
 
     /// <summary>
+    /// Indicates whether the Container has been carved out of a selection an ancestor made, i.e. whether objects
+    /// beneath a managed branch are deliberately left unimported.
+    /// </summary>
+    /// <remarks>
+    /// Mutually exclusive with <see cref="Selected"/>: a Container states one thing about itself, and "manage this"
+    /// and "do not manage this" cannot both be it. The two are kept apart by
+    /// <c>ContainerSelectionEditor</c> rather than by the database, because the invariant is about what an edit
+    /// means, not about what a row may hold.
+    ///
+    /// An exclusion only says anything where a selected ancestor would otherwise reach: excluding a Container
+    /// nothing covers changes nothing, exactly as selecting a Container an ancestor already covers changes nothing.
+    /// Whichever statement is nearest to an object decides its fate, so a Container beneath an excluded one may be
+    /// selected in its own right to bring that branch back into scope.
+    /// </remarks>
+    public bool Excluded { get; set; }
+
+    /// <summary>
+    /// How far this Container's own statement reaches, whether that statement is <see cref="Selected"/> or
+    /// <see cref="Excluded"/>. Subtree (the default) reaches this Container and every Container beneath it;
+    /// OneLevel reaches only objects held directly in this Container, leaving descendants to be spoken for in
+    /// their own right. Ignored when the Container states nothing.
+    /// </summary>
+    public ConnectedSystemContainerScope Scope { get; set; } = ConnectedSystemContainerScope.Subtree;
+
+    /// <summary>
     /// Containers can container children containers.
     /// Enables a hierarchy of containers to be built out, i.e a directory DIT.
     /// </summary>
     public HashSet<ConnectedSystemContainer> ChildContainers { get; } = new();
+
+    /// <summary>
+    /// How many objects sit directly in this Container in the Connected System, as at the last hierarchy
+    /// retrieval. Null where the Connector cannot report counts, or has not been asked yet.
+    /// </summary>
+    /// <remarks>
+    /// Read from the Connected System, not derived from the Connected System Objects JIM holds (#1276). The
+    /// question an administrator is asking while choosing Containers is "what is in there?", and they are usually
+    /// asking it before anything has been imported, when a figure derived from JIM's own data would read zero for
+    /// every Container.
+    ///
+    /// Zero and null mean different things and must stay distinguishable: zero is a Container the Connector
+    /// searched and found nothing in, null is one nobody has counted. Rendering them the same way would tell an
+    /// administrator a Container is empty when JIM has no idea either way.
+    ///
+    /// Counts what a Full Import would return for the currently selected Object Types, so the figure and the
+    /// import agree. It is deliberately blind to selections and exclusions: what JIM would actually take in once
+    /// those apply is the Configuration Change Preview's answer (#1251), and answering it in two places is how the
+    /// two come to disagree.
+    /// </remarks>
+    public int? ObjectCount { get; set; }
+
+    /// <summary>
+    /// <see cref="ObjectCount"/> plus every descendant Container's, which is what a
+    /// <see cref="ConnectedSystemContainerScope.Subtree"/> statement over this Container reaches. Null when this
+    /// Container has not been counted. Recalculated from the hierarchy; never stored.
+    /// </summary>
+    [NotMapped]
+    public int? SubtreeObjectCount { get; set; }
 
     #region For MudBlazor TreeView
     public ConnectedSystemContainer? ParentContainer { get; set; }
@@ -73,8 +141,25 @@ public class ConnectedSystemContainer
     [NotMapped]
     public bool Expanded { get; set; }
 
+    /// <summary>
+    /// Whether a selected ancestor's search already covers this Container, so it neither needs nor can be selected
+    /// in its own right. Recalculated from the hierarchy; never stored.
+    /// </summary>
     [NotMapped]
     public bool Included { get; set; }
+
+    /// <summary>
+    /// Whether an excluded ancestor has already carved this Container out, so it is out of scope without stating
+    /// anything itself. Recalculated from the hierarchy; never stored.
+    /// </summary>
+    /// <remarks>
+    /// The sibling of <see cref="Included"/>, and mutually exclusive with it: both answer "what has an ancestor
+    /// already decided about me?", and only the nearest ancestor with an opinion gets to answer. Selecting such a
+    /// Container is meaningful (it brings the branch back into scope), which is what separates this from
+    /// <see cref="Included"/>, where selecting would only restate what an ancestor already says.
+    /// </remarks>
+    [NotMapped]
+    public bool ExcludedByAncestor { get; set; }
     #endregion
 
     public void AddChildContainer(ConnectedSystemContainer container)

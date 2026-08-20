@@ -152,6 +152,25 @@ public class SyncExportTaskProcessor
             return;
         }
 
+        // Tell the Connector which containers the administrator manages, so it can refuse to write outside them.
+        // Container selection used to apply only on the way in, so an Attribute Flow that moved an object into an
+        // unselected container wrote it where JIM could not read it back: the export went unconfirmed, the next
+        // Full Import treated the object as deleted, and synchronisation then disconnected and re-provisioned it.
+        // Stated only when there is a selection to state; a Connected System with none permits everything, exactly
+        // as before.
+        // Selections and exclusions both, because both decide where JIM may write: an export into an excluded
+        // branch is as unreadable on the way back as one into a container that was never selected (#1255).
+        if (_connector is IConnectorManagedScope scopedConnector)
+        {
+            var managedContainers = _connectedSystem.GetScopeDecidingContainers();
+            if (managedContainers.Count > 0)
+            {
+                scopedConnector.SetManagedScope(managedContainers);
+                Log.Debug("PerformExportAsync: Stated a managed scope of {ContainerCount} container(s) to the {Connector} connector",
+                    managedContainers.Count, _connector.Name);
+            }
+        }
+
         try
         {
             // Resolve the degree of export batch parallelism (issue #985d): an explicit
@@ -323,6 +342,7 @@ public class SyncExportTaskProcessor
         span.SetTag("attempted", result.AttemptedCount);
         span.SetTag("delivered", result.DeliveredCount);
         span.SetTag("parked", result.ParkedCount);
+        span.SetTag("expired", result.ExpiredCount);
 
         if (!result.HasSomethingToReport)
             return;
@@ -346,6 +366,10 @@ public class SyncExportTaskProcessor
             parts.Add($"{result.ParkedCount:N0} needing attention");
         if (result.RetryingCount > 0)
             parts.Add($"{result.RetryingCount:N0} to retry");
+        // Named on the Activity rather than left to the log. These accounts were provisioned and will never now
+        // get an initial password from JIM, which an administrator has to be told rather than left to discover.
+        if (result.ExpiredCount > 0)
+            parts.Add($"{result.ExpiredCount:N0} expired without one");
 
         return $"Initial passwords: {string.Join(", ", parts)}";
     }
@@ -385,11 +409,16 @@ public class SyncExportTaskProcessor
             {
                 Activity = _activity,
                 ActivityId = _activity.Id,
-                ObjectChangeType = exportItem.ChangeType switch
-                {
-                    PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
-                    _ => ObjectChangeType.Exported
-                },
+                // An export that wrote nothing this run (deferred whole, issue #1398) is a Pending Export
+                // still staged, not something exported; its item exists to carry why it is waiting.
+                ObjectChangeType = exportItem.Deferred
+                    ? ObjectChangeType.PendingExport
+                    : exportItem.ChangeType switch
+                    {
+                        PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
+                        _ => ObjectChangeType.Exported
+                    },
+                PendingExportId = exportItem.Deferred ? exportItem.PendingExportId : null
             };
 
             // Link to the Connected System Object if available.
@@ -411,7 +440,7 @@ public class SyncExportTaskProcessor
                 ObjectNaming.ConnectedSystemNameRank);
 
             // Set error information if the export failed
-            if (!exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
+            if (!exportItem.Deferred && !exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
                 executionItem.ErrorType = exportItem.ErrorType switch
                 {
@@ -424,10 +453,20 @@ public class SyncExportTaskProcessor
                         ? $"Export failed: {exportItem.ErrorMessage}"
                         : exportItem.ErrorMessage;
             }
+            else if (!string.IsNullOrEmpty(exportItem.UnresolvedReferenceMessage))
+            {
+                // Issue #1398: the export (written in part, or deferred whole) refers to an object that has
+                // no Connected System Object in this system. Reported as the import side reports its own
+                // unresolved references: an Unresolved Reference error on the object, which completes the
+                // Activity with a warning. Only raised under Error handling; see
+                // ExportExecutionServer.BuildUnresolvedReferenceNotesAsync.
+                executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+                executionItem.ErrorMessage = exportItem.UnresolvedReferenceMessage;
+            }
 
-            // Build sync outcome
+            // Build sync outcome. A deferred item wrote nothing, so there is no export outcome to record.
             ActivityRunProfileExecutionItemSyncOutcome? exportOutcome = null;
-            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            if (!exportItem.Deferred && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var outcomeType = exportItem.ChangeType switch
                 {
@@ -521,6 +560,18 @@ public class SyncExportTaskProcessor
         // Update activity progress
         _activity.ObjectsProcessed = result.TotalPendingExports;
 
+        // Issue #1398: under Warn handling, references that could not be written because the referenced
+        // object has no Connected System Object in this system are summarised on the Activity rather than
+        // marked per object; under Error handling the per-object items above carry them, and under Ignore
+        // they are logged only. Mirrors the import side's Warn summary.
+        if (_connectedSystem.UnresolvedReferenceHandling == UnresolvedReferenceHandling.Warn && result.UnresolvableReferenceCount > 0)
+        {
+            var warningSummary = $"{result.UnresolvableReferenceCount} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System. The referenced objects are out of scope for every Synchronisation Rule into this system, or have not been provisioned yet; view the affected Pending Exports for details.";
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+                ? warningSummary
+                : $"{_activity.WarningMessage}\n{warningSummary}";
+        }
+
         // Set completion message based on mode and results
         string completionMessage;
         if (_runMode == SyncRunMode.PreviewOnly)
@@ -531,7 +582,8 @@ public class SyncExportTaskProcessor
         {
             var processed = result.SuccessCount + result.FailedCount + result.DeferredCount;
             completionMessage = ExportOutcomeMessage.ForExport(
-                result.SuccessCount, result.FailedCount, result.DeferredCount, throughput.FormatCompletion(processed));
+                result.SuccessCount, result.FailedCount, result.DeferredCount, throughput.FormatCompletion(processed),
+                result.PartiallyExportedCount);
         }
 
         await _syncRepo.UpdateActivityAsync(_activity);

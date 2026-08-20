@@ -15,7 +15,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -25,6 +25,38 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     private ICredentialProtection? _credentialProtection;
     private LdapTrustedCertificateDirectory? _trustDirectory;
     private LdapConnectorExport? _currentExport;
+
+    /// <summary>
+    /// The containers JIM manages, supplied via <see cref="IConnectorManagedScope"/>. Empty until JIM states a
+    /// scope, which it does not do when the Connected System has no container selections, so an unset scope
+    /// permits every write. Each container carries its own Container Scope, so a One Level container permits
+    /// writes directly within it and not into anything beneath it.
+    /// </summary>
+    private IReadOnlyList<ConnectedSystemContainer> _managedScope = [];
+
+    /// <inheritdoc />
+    public void SetManagedScope(IReadOnlyList<ConnectedSystemContainer> selectedContainers)
+    {
+        _managedScope = selectedContainers;
+
+        // Applies immediately when an export is already under way, and is otherwise handed to the exporter when
+        // one is created.
+        _currentExport?.SetManagedScope(selectedContainers);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The same rule the import builds its search scope from and the export guard enforces, so a preview of a
+    /// container deselection counts exactly the objects an import would stop returning and an export would refuse
+    /// to write to. Deliberately free of connection state: a preview asks this without ever opening a connection to
+    /// the directory.
+    /// </remarks>
+    public bool IsWithinContainer(string? objectIdentifier, ConnectedSystemContainer container)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+
+        return LdapConnectorUtilities.IsDnWithinContainerScope(objectIdentifier, container);
+    }
 
     /// <summary>
     /// The persisted connector state replayed by JIM at connection open (issue #230), including any
@@ -288,6 +320,44 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
             return await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+    }
+    #endregion
+
+    #region IConnectorContainerObjectCounts members
+    /// <summary>
+    /// Counts the objects each Container in a partition holds, using one attribute-free paged subtree search.
+    /// </summary>
+    /// <remarks>
+    /// Opens its own connection, exactly as partition discovery does, because it runs from the portal rather than
+    /// inside a Run Profile execution and has no session to borrow.
+    /// </remarks>
+    public async Task<ConnectorContainerObjectCountResult> GetContainerObjectCountsAsync(
+        List<ConnectedSystemSettingValue> settingValues,
+        ConnectorPartition connectorPartition,
+        IReadOnlyList<string> objectTypeNames,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connectorPartition);
+        ArgumentNullException.ThrowIfNull(objectTypeNames);
+
+        OpenImportConnection(settingValues, null, logger);
+
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to count Container objects with");
+
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var containerCounts = new LdapConnectorContainerCounts(
+                new LdapOperationExecutor(_connection), logger, rootDse.SupportsPaging);
+
+            return await containerCounts.CountAsync(connectorPartition, objectTypeNames, cancellationToken);
         }
         finally
         {
@@ -622,6 +692,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         connection.SessionOptions.ProtocolVersion = 3;
         connection.Timeout = timeout;
 
+        // Every connection JIM opens, not just the primary one: a referral can be returned to any search, and a
+        // parallel import connection chasing one anonymously fails exactly as the primary would.
+        LdapConnectorUtilities.DisableReferralChasing(connection, logger);
+
         // Configure LDAPS if enabled
         if (useSsl)
         {
@@ -756,10 +830,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         {
             case ConnectedSystemRunType.FullImport:
                 logger.Debug("ImportAsync: Full Import requested");
-                return WithPinValidationWarningAsync(import, import.GetFullImportObjectsAsync());
+                return FinaliseImportResultAsync(import, import.GetFullImportObjectsAsync());
             case ConnectedSystemRunType.DeltaImport:
                 logger.Debug("ImportAsync: Delta Import requested");
-                return WithPinValidationWarningAsync(import, import.GetDeltaImportObjectsAsync());
+                return FinaliseImportResultAsync(import, import.GetDeltaImportObjectsAsync());
             case ConnectedSystemRunType.FullSynchronisation:
             case ConnectedSystemRunType.DeltaSynchronisation:
             case ConnectedSystemRunType.Export:
@@ -769,15 +843,20 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     }
 
     /// <summary>
-    /// Carries a rejected-domain-controller warning from the import session onto its result, which is how it
-    /// reaches the Activity (issue #230 Phase 2). A warning the import raised about itself always wins: it
-    /// describes how the import was performed, which matters more than a note about domain controller pinning.
+    /// Everything an import session has to say once its work is done, applied to the result it is about to hand
+    /// back: the entries excluded Containers caused it to discard, and any rejected-domain-controller warning.
     /// </summary>
-    private static async Task<ConnectedSystemImportResult> WithPinValidationWarningAsync(
+    /// <remarks>
+    /// A warning the import raised about itself always wins over the domain controller pinning note (issue #230
+    /// Phase 2): it describes how the import was performed, which matters more than a note about plumbing.
+    /// </remarks>
+    private static async Task<ConnectedSystemImportResult> FinaliseImportResultAsync(
         LdapConnectorImport import,
         Task<ConnectedSystemImportResult> resultTask)
     {
         var result = await resultTask;
+
+        import.ReportEntriesDiscardedByExclusion(result);
 
         if (result.WarningMessage == null && import.PinValidationWarning != null)
             result.WarningMessage = import.PinValidationWarning;
@@ -886,6 +965,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md.
         var executor = new LdapOperationExecutor(_connection);
         _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType, placeholderMemberDn);
+        _currentExport.SetManagedScope(_managedScope);
         return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
     }
 
@@ -1328,17 +1408,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// </summary>
     /// <param name="containerExternalId">The container's DN.</param>
     /// <returns>The container name (e.g., "Sales" from "OU=Sales,DC=example,DC=com").</returns>
-    public string GetContainerDisplayName(string containerExternalId)
-    {
-        if (string.IsNullOrEmpty(containerExternalId))
-            return string.Empty;
-
-        // The display name is the (unescaped) value of the leaf RDN's first component, e.g. "Sales" from "OU=Sales".
-        if (LdapDistinguishedName.TryParse(containerExternalId, out var parsedDn) && parsedDn.LeafRdn.Components.Count > 0)
-            return parsedDn.LeafRdn.Components[0].Value;
-
-        return containerExternalId;
-    }
+    public string GetContainerDisplayName(string containerExternalId) =>
+        LdapConnectorUtilities.GetContainerDisplayNameFromDn(containerExternalId);
     #endregion
 
     #region IConnectorCertificateAware members

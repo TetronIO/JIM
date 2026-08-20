@@ -217,7 +217,7 @@ public class HelpersShellHighlightTests
     [Test]
     public void HighlightShell_UnclosedString_DoesNotThrow()
     {
-        Assert.DoesNotThrow(() => Helpers.HighlightShell("echo \"unterminated", ShellLanguage.Bash));
+        Assert.That(() => Helpers.HighlightShell("echo \"unterminated", ShellLanguage.Bash), Throws.Nothing);
         var result = Helpers.HighlightShell("echo \"unterminated", ShellLanguage.Bash);
         Assert.That(result, Does.Contain("jim-code-string"));
     }

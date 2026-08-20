@@ -1,103 +1,153 @@
 @using JIM.Models.Staging
 @using JIM.Models.Core
 @using JIM.Utilities
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* Inline, searchable, server-paged table of a single CSO attribute's values. Used directly in the
-   attributes table's value cell for multi-valued attributes whose value count exceeds the inline cap,
-   so all values are browsable in place without a dialog. *@
+@* Searchable, virtualised table of a single Connected System Object attribute's values. It is the content of
+   the dialog a multi-valued attribute's "+n more" opens, rather than something rendered into a row: a row in a
+   virtualised table is one line tall, so a table inside one puts every row below it at an offset the virtualiser
+   cannot know about. The scrolling, the search box, the count and the density all belong to the shared grid;
+   this component only says how a value renders and how a window of values is read. *@
 
+<div class="jim-mva-dialog-table">
 @if (_isReferenceAttribute)
 {
-    <MudTable @ref="_table" T="ConnectedSystemObjectAttributeValue"
-              ServerData="ServerReloadAsync"
-              Dense="@Dense" Hover="true" Elevation="0" Outlined="true"
-              Class="jim-mva-dialog-table"
-              Loading="@_loading" LoadingProgressColor="Color.Primary">
-        <ToolBarContent>
-            <SearchField Value="@_searchText"
-                         ValueChanged="@OnSearch"
-                         Placeholder="@($"Search {AttributeName.ToLower()}...")" />
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh>Display Name</MudTh>
-            <MudTh>Type</MudTh>
-            <MudTh>Secondary ID</MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Display Name">
-                @if (context.ReferenceValue != null)
-                {
-                    <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
-                        @context.ReferenceValue.NameOrId
-                    </MudLink>
-                }
-                else if (context.UnresolvedReferenceValue != null)
-                {
-                    <span class="jim-attr-unresolved">
-                        <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="mr-1" />
-                        <span class="mud-text-secondary jim-text-code">@context.UnresolvedReferenceValue</span>
-                    </span>
-                }
-                else
-                {
-                    <span class="jim-text-code">@(context.ToStringNoName())</span>
-                }
-            </MudTd>
-            <MudTd DataLabel="Type">
-                @if (context.ReferenceValue != null)
-                {
-                    <MudLink Href="@Utilities.GetConnectedSystemSchemaHref(context.ReferenceValue.ConnectedSystemId, context.ReferenceValue.Type.Name)">
-                        @context.ReferenceValue.Type.Name
-                    </MudLink>
-                }
-            </MudTd>
-            <MudTd DataLabel="Secondary ID">
-                @if (context.ReferenceValue?.SecondaryExternalIdAttributeValue != null)
-                {
-                    <span class="mud-text-secondary jim-text-code">
-                        @context.ReferenceValue.SecondaryExternalIdAttributeValue.ToStringNoName()
-                    </span>
-                }
-            </MudTd>
-        </RowTemplate>
-        <PagerContent>
-            <MudTablePager />
-        </PagerContent>
-    </MudTable>
+    <VirtualisedDataGrid T="ConnectedSystemObjectAttributeValue"
+                         ContainerId="@($"cso-mva-{_slug}-references")"
+                         UrlParameterPrefix="@($"{_slug}-")"
+                         StateKey="@AttributeName"
+                         MaxHeight="@MaxHeight"
+                         TrackUrlState="@TrackUrlState"
+                         DefaultSortBy="@SourceOrderSort"
+                         LoadWindow="LoadValueWindowAsync"
+                         SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
+                         SingularName="Value"
+                         PluralName="Values">
+        <Columns>
+            <TemplateColumn Title="Display Name" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Display Name</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.ReferenceValue != null)
+                    {
+                        var reference = context.Item.ReferenceValue;
+                        <MudLink Href="@Utilities.GetConnectedSystemObjectHref(reference)">
+                            @reference.NameOrId
+                        </MudLink>
+                    }
+                    else if (context.Item.UnresolvedReferenceValue != null)
+                    {
+                        <span class="jim-attr-unresolved">
+                            <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="mr-1" />
+                            <span class="mud-text-secondary jim-text-code">@context.Item.UnresolvedReferenceValue</span>
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="jim-text-code">@(context.Item.ToStringNoName())</span>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Type" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Type</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.ReferenceValue != null)
+                    {
+                        var reference = context.Item.ReferenceValue;
+                        <MudLink Href="@Utilities.GetConnectedSystemSchemaHref(reference.ConnectedSystemId, reference.Type.Name)">
+                            @reference.Type.Name
+                        </MudLink>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Secondary ID" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Secondary ID</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    @{
+                        // Captured before the guard rather than dereferenced through it in the markup: a chained
+                        // dereference under an @if is what CodeQL reads as a possible null (JIM.Web/CLAUDE.md).
+                        var secondaryId = context.Item.ReferenceValue?.SecondaryExternalIdAttributeValue;
+                    }
+                    @if (secondaryId != null)
+                    {
+                        <span class="mud-text-secondary jim-text-code">
+                            @secondaryId.ToStringNoName()
+                        </span>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @RenderEmptyState(grid)
+        </EmptyContent>
+    </VirtualisedDataGrid>
 }
 else
 {
-    <MudTable @ref="_table" T="ConnectedSystemObjectAttributeValue"
-              ServerData="ServerReloadAsync"
-              Dense="@Dense" Hover="true" Elevation="0" Outlined="true"
-              Class="jim-mva-dialog-table"
-              Loading="@_loading" LoadingProgressColor="Color.Primary">
-        <ToolBarContent>
-            <SearchField Value="@_searchText"
-                         ValueChanged="@OnSearch"
-                         Placeholder="@($"Search {AttributeName.ToLower()}...")" />
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh>Value</MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Value">
-                <CsoAttributeValue Value="@context" />
-            </MudTd>
-        </RowTemplate>
-        <PagerContent>
-            <MudTablePager />
-        </PagerContent>
-    </MudTable>
+    <VirtualisedDataGrid T="ConnectedSystemObjectAttributeValue"
+                         ContainerId="@($"cso-mva-{_slug}-values")"
+                         UrlParameterPrefix="@($"{_slug}-")"
+                         StateKey="@AttributeName"
+                         MaxHeight="@MaxHeight"
+                         TrackUrlState="@TrackUrlState"
+                         DefaultSortBy="@SourceOrderSort"
+                         LoadWindow="LoadValueWindowAsync"
+                         SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
+                         SingularName="Value"
+                         PluralName="Values">
+        <Columns>
+            <TemplateColumn Title="Value" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Value</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <CsoAttributeValue Value="@context.Item" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @RenderEmptyState(grid)
+        </EmptyContent>
+    </VirtualisedDataGrid>
+}
+</div>
+
+@* ─── Render Fragments ─── *@
+
+@* A search that matched nothing is a different situation from an attribute that genuinely holds no values,
+   and only the first has a way out to offer. *@
+@{
+    RenderFragment RenderEmptyState(VirtualisedDataGrid<ConnectedSystemObjectAttributeValue> grid) => __builder =>
+    {
+        if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No values match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.List"
+                             PrimaryText="This attribute has no values"
+                             SecondaryText="Values appear here once an Import brings them in from the Connected System." />
+        }
+    };
 }
 
 @code {
     /// <summary>
-    /// The name of the attribute whose values are being paged.
+    /// The name of the attribute whose values are being listed.
     /// </summary>
     [Parameter]
     public string AttributeName { get; set; } = string.Empty;
@@ -115,62 +165,70 @@ else
     public bool IsReferenceAttribute { get; set; }
 
     /// <summary>
-    /// Whether to render compact rows, driven by the host page's density toggle.
+    /// Whether the host page's tables are showing compact rows. Retained for the host's binding: the grid reads
+    /// the same saved density preference the host's toggle writes, so it no longer needs threading through.
     /// </summary>
     [Parameter]
     public bool Dense { get; set; }
 
-    private MudTable<ConnectedSystemObjectAttributeValue>? _table;
-    private string _searchText = string.Empty;
+    /// <summary>
+    /// An explicit height ceiling for the values grid, passed straight through. A host whose container is not the
+    /// page (a dialog) has to state one, because the grid's default ceiling is measured from where the page footer
+    /// lands, which describes the page behind the dialog rather than the box the table is in.
+    /// </summary>
+    [Parameter]
+    public string? MaxHeight { get; set; }
+
+    /// <summary>
+    /// Whether the values grid keeps its search, sort and scroll position in the address bar. A host that is a
+    /// dialog passes false: that state would outlive the dialog that owns it, and a deep link cannot reopen the
+    /// dialog to put it back.
+    /// </summary>
+    [Parameter]
+    public bool TrackUrlState { get; set; } = true;
+
+    /// <summary>
+    /// The sort key standing for "the order the application layer returned them in". The range read takes no sort
+    /// parameter (it orders by value id, which is the total order its offset and count are addressed against), so
+    /// no column offers a sort; naming the default something no header claims keeps the grid from showing a sort
+    /// arrow over an order it did not choose.
+    /// </summary>
+    private const string SourceOrderSort = "order";
+
     private bool _isReferenceAttribute;
-    private bool _loading;
-    private string? _loadedAttributeName;
+
+    /// <summary>
+    /// The attribute name reduced to a URL- and element-id-safe token. Several of these tables render on one
+    /// page, one per capped multi-valued attribute, so the grid's element id and URL parameters have to carry
+    /// which attribute they belong to.
+    /// </summary>
+    private string _slug = string.Empty;
 
     protected override void OnParametersSet()
     {
         _isReferenceAttribute = IsReferenceAttribute;
-
-        // The host attributes table is sortable; a sort reorders rows and may hand this instance a
-        // different attribute. Reset search and reload so the table reflects the new attribute.
-        if (_loadedAttributeName != null && _loadedAttributeName != AttributeName)
-        {
-            _searchText = string.Empty;
-            _table?.ReloadServerData();
-        }
-
-        _loadedAttributeName = AttributeName;
+        _slug = Slugify(AttributeName);
     }
 
-    private async Task<TableData<ConnectedSystemObjectAttributeValue>> ServerReloadAsync(
-        TableState state, CancellationToken token)
+    /// <summary>
+    /// Reads one window of this attribute's values: one range read at the offset and count the grid asked for.
+    /// The total comes back only when the request asked for it, and a null total is passed straight through
+    /// rather than turned into a zero, which the grid would read as "nothing matched".
+    /// </summary>
+    private async Task<VirtualisedWindow<ConnectedSystemObjectAttributeValue>> LoadValueWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken _)
     {
-        _loading = true;
+        using var jim = JimFactory.Create();
+        var result = await jim.ConnectedSystems.GetAttributeValuesRangeAsync(
+            ConnectedSystemObjectId, AttributeName, request.StartIndex, request.Count,
+            request.SearchText, request.IncludeTotalCount);
 
-        try
-        {
-            var page = state.Page + 1; // MudBlazor is 0-indexed
-            var pageSize = state.PageSize;
-            var searchText = string.IsNullOrWhiteSpace(_searchText) ? null : _searchText;
-
-            using var jim = JimFactory.Create();
-            var result = await jim.ConnectedSystems.GetAttributeValuesPagedAsync(
-                ConnectedSystemObjectId, AttributeName, page, pageSize, searchText);
-
-            return new TableData<ConnectedSystemObjectAttributeValue>
-            {
-                Items = result.Results,
-                TotalItems = result.TotalResults
-            };
-        }
-        finally
-        {
-            _loading = false;
-        }
+        return new VirtualisedWindow<ConnectedSystemObjectAttributeValue>(result.Results, result.TotalResults);
     }
 
-    private void OnSearch(string text)
+    private static string Slugify(string name)
     {
-        _searchText = text;
-        _table?.ReloadServerData();
+        var slug = new string(name.Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '-').ToArray());
+        return string.IsNullOrEmpty(slug) ? "attribute" : slug;
     }
 }

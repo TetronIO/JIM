@@ -13,14 +13,14 @@ function Set-JIMConnectedSystemObjectPassword {
         reason.
 
         This is the automation counterpart of the Set Password action in the administration portal, for the
-        account whose provisioning password was parked, the person who never received theirs, and the reset
+        new starter about to sign in for the first time, the account whose provisioning password was parked, and the reset
         that has to happen now.
 
-        You supply the password. JIM does not generate one here: doing so would mean returning a password in a
-        response body, which this API never does. Use the portal's Set Password dialog when you want JIM to
-        generate a password that follows the Connected System's discovered policy.
+        Supply the password with -Password, or use -Generate to have JIM produce one that follows the Connected
+        System's discovered policy. A generated password is returned once, on GeneratedPassword; JIM stores it
+        nowhere and cannot give it to you again.
 
-        This is a password-reset primitive. Anyone who can call it can reset any account in this connector
+        This resets the password on whichever account it is pointed at. Anyone who can call it can reset any account in this connector
         space, subject only to what the Connected System's own service account is permitted to do.
 
     .PARAMETER ConnectedSystemId
@@ -32,6 +32,15 @@ function Set-JIMConnectedSystemObjectPassword {
     .PARAMETER Password
         The password to set, as a SecureString. Sent to the Connected System and nowhere else: never logged,
         never persisted by JIM, and never echoed back.
+
+    .PARAMETER Generate
+        Has JIM generate a password satisfying the policy it discovered on the Connected System, instead of you
+        supplying one. Use this rather than inventing a password in your own script: JIM knows what the target
+        demands, and a hand-rolled generator rediscovers the passphrase trap, where three words offer two
+        character categories against a directory that wants three.
+
+        The generated password is returned on the result's password property as a SecureString, whether or not
+        -PassThru is given. JIM stores nothing and cannot give it to you again.
 
     .PARAMETER ExpiryBehaviour
         What happens to the password once it is set.
@@ -61,6 +70,13 @@ function Set-JIMConnectedSystemObjectPassword {
         No property carries the password.
 
     .EXAMPLE
+        $result = Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 3 -Id $csoId -Generate -EnableAccount -Force
+        ConvertFrom-SecureString -SecureString $result.password -AsPlainText
+
+        Has JIM produce a compliant password, sets it, enables the account, and reads back what was used.
+        Capture it: this is the only chance to.
+
+    .EXAMPLE
         $password = Read-Host -AsSecureString "New password"
         Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b2c3d4e5f60 -Password $password
 
@@ -86,7 +102,7 @@ function Set-JIMConnectedSystemObjectPassword {
         Get-JIMConnectedSystemObject
         Set-JIMSyncRuleInitialPassword
     #>
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'SuppliedPassword')]
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
@@ -95,9 +111,12 @@ function Set-JIMConnectedSystemObjectPassword {
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$Id,
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ParameterSetName = 'SuppliedPassword')]
         [ValidateNotNull()]
         [securestring]$Password,
+
+        [Parameter(Mandatory, ParameterSetName = 'GeneratedPassword')]
+        [switch]$Generate,
 
         [Parameter()]
         [ValidateSet('RequireChangeAtNextSignIn', 'ExpiresAccordingToTargetPolicy', 'NeverExpires')]
@@ -118,10 +137,29 @@ function Set-JIMConnectedSystemObjectPassword {
             return
         }
 
-        # A SecureString on the parameter so a password never sits in the session's command history in clear
-        # text. It has to be unwrapped to be sent, since the wire format is JSON over TLS; the plain value is
-        # held for the length of one call and nothing else in this function touches it.
-        $plainPassword = ConvertFrom-SecureString -SecureString $Password -AsPlainText
+        if ($Generate) {
+            # Asked for by the caller, so JIM produces one that satisfies what this system itself demands. The
+            # point of asking JIM rather than inventing a password is that JIM knows the target's rules; a
+            # hand-rolled generator rediscovers the passphrase trap, where three words offer two character
+            # categories against a directory that wants three.
+            try {
+                $generated = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/generate-password" -Method 'POST'
+            }
+            catch {
+                Write-Error "Failed to generate a password for Connected System ${ConnectedSystemId}: $_"
+                return
+            }
+
+            $plainPassword = $generated.password
+            $generatedPassword = ConvertTo-SecureString -String $plainPassword -AsPlainText -Force
+        }
+        else {
+            # A SecureString on the parameter so a password never sits in the session's command history in clear
+            # text. It has to be unwrapped to be sent, since the wire format is JSON over TLS; the plain value is
+            # held for the length of one call and nothing else in this function touches it.
+            $plainPassword = ConvertFrom-SecureString -SecureString $Password -AsPlainText
+        }
+
         if ([string]::IsNullOrWhiteSpace($plainPassword)) {
             Write-Error "A password is required."
             return
@@ -147,7 +185,13 @@ function Set-JIMConnectedSystemObjectPassword {
             try {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$Id/password" -Method 'POST' -Body $body
 
-                if ($PassThru) {
+                # A generated password is returned whatever -PassThru says: the caller never had it, and it is
+                # not recoverable from anywhere once this call returns. Withholding it would set a password
+                # nobody can use.
+                if ($Generate) {
+                    $result | Add-Member -NotePropertyName 'password' -NotePropertyValue $generatedPassword -PassThru
+                }
+                elseif ($PassThru) {
                     $result
                 }
             }

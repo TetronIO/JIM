@@ -13,7 +13,13 @@
 
   <ItemGroup>
     <PackageReference Include="CsvHelper" Version="33.1.0" />
-    <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.10" />
+    <!-- Managed ADO.NET providers for the JIM SQL Connector. Approved via Third-Party Dependency
+         Governance on 2026-07-31 and pinned exactly per engineering/DEPENDENCY_PINNING.md.
+         Microsoft.Data.SqlClient.Extensions.Azure must never be added: cloud authentication is a
+         non-goal for this Connector (see engineering/prd/doing/PRD_SQL_DATABASE_CONNECTOR.md). -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.300" />
+    <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup>

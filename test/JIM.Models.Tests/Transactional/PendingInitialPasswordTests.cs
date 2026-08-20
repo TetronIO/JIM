@@ -47,7 +47,7 @@ public class PendingInitialPasswordTests
     {
         var pending = new PendingInitialPassword();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(pending.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
             Assert.That(pending.AttemptCount, Is.Zero);
@@ -55,6 +55,6 @@ public class PendingInitialPasswordTests
             Assert.That(pending.TargetMessage, Is.Null);
             Assert.That(pending.LastAttemptedAt, Is.Null);
             Assert.That(pending.Id, Is.Not.EqualTo(Guid.Empty), "an identity is needed before the row is written, as for a Pending Export");
-        });
+        }
     }
 }

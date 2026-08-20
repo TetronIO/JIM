@@ -4,6 +4,7 @@
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Connectors.SCIM;
+using JIM.Connectors.Sql;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
@@ -42,129 +43,143 @@ internal class SeedingServer
     }
     #endregion
 
+    /// <summary>
+    /// Converges the built-in configuration a JIM instance needs to run towards what this release ships: the
+    /// Metaverse schema, the Predefined Searches, and the Example Data Sets and Template. Runs on every startup and
+    /// again after a factory reset, creating whatever is absent and leaving everything else alone.
+    /// <para>
+    /// Every step is therefore idempotent: check-then-create against the persisted state, never assuming the
+    /// database is empty. Several steps once assumed it was, and a retry against a partially-seeded database
+    /// crash-looped on every subsequent start (issue #1287). Anything already persisted is left alone, so no step
+    /// records a second Create Activity for an object it did not create.
+    /// </para>
+    /// <para>
+    /// This pass used to stop the moment ServiceSettings existed, on the reasoning that seeding had already
+    /// happened. Once every step became check-then-create that guard protected nothing and only prevented
+    /// convergence: a built-in Metaverse Object Type, Predefined Search or Example Data Set introduced in a later
+    /// release reached brand-new deployments only, and a new built-in Object Type additionally crashed worker
+    /// startup on existing ones, because <see cref="SyncBuiltInMetaverseSchemaAsync"/> throws when the catalogue
+    /// names an Object Type it cannot find (issue #916). ServiceSettings is still created last and in the same
+    /// transaction as the rest of the batch, so a crash part way through a first seed still leaves the database
+    /// unseeded.
+    /// </para>
+    /// </summary>
     internal async Task SeedAsync()
     {
         var stopwatch = new Stopwatch();
         stopwatch.Start();
 
-        // has seeding already happened? don't run it twice!
-        // IMPORTANT: ServiceSettings is created at the END of seeding (in SeedDataAsync) to ensure
-        // that if the process crashes during seeding, the next restart will retry seeding from scratch.
-        // This prevents a race condition where ServiceSettings exists but MetaverseAttributes don't.
-        if (await Application.ServiceSettings.ServiceSettingsExistAsync())
-        {
-            Log.Information("SeedAsync: ServiceSettings already exists so believe seeding has already been performed. Stopping.");
-            return;
-        }
-
         // get attributes, if they don't exist, prepare object in list for bulk submission via seeding method
         // create object types as needed
         // if attributes don't exist on type, prepare type attributes and submit in bulk via seeding method
 
-        var attributesToCreate = new List<MetaverseAttribute>();
+        // These two hold every built-in Metaverse Attribute and Example Data Set, whether it was already persisted
+        // or is being created this pass; the create batches are derived from them below. Holding all of them is what
+        // makes a retry after a partial seed work: the built-in Example Data Template is built from these lists, and
+        // a list of only this pass's creations is empty on a retry, so the template could not resolve anything.
+        var allAttributes = new List<MetaverseAttribute>();
+        var allExampleDataSets = new List<ExampleDataSet>();
         var objectTypesToCreate = new List<MetaverseObjectType>();
         var predefinedSearchesToCreate = new List<PredefinedSearch>();
-        var exampleDataSetsToCreate = new List<ExampleDataSet>();
         var dataGenerationTemplatesToCreate = new List<ExampleDataTemplate>();
-        var connectorDefinitions = new List<ConnectorDefinition>();
 
         #region MetaverseAttributes
         // common attributes
-        var accountNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AccountName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var descriptionAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Description, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var displayNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.DisplayName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var distinguishedNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.DistinguishedName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var emailAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Email, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute1 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute1, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute10 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute10, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute11 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute11, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute12 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute12, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute13 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute13, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute14 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute14, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute15 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute15, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute2 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute2, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute3 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute3, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute4 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute4, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute5 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute5, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute6 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute6, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute7 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute7, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute8 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute8, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var extensionAttribute1Attribute9 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute9, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var hideFromAddressListsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HideFromAddressLists, AttributePlurality.SingleValued, AttributeDataType.Boolean, attributesToCreate);
-        var infoAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Info, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var mailNicknameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.MailNickname, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var objectGuidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectGuid, AttributePlurality.SingleValued, AttributeDataType.Guid, attributesToCreate);
-        var objectSidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectSid, AttributePlurality.SingleValued, AttributeDataType.Binary, attributesToCreate);
-        var typeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Type, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
+        var accountNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AccountName, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var descriptionAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Description, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var displayNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.DisplayName, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var distinguishedNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.DistinguishedName, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var emailAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Email, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute1 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute1, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute10 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute10, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute11 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute11, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute12 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute12, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute13 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute13, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute14 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute14, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute15 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute15, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute2 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute2, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute3 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute3, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute4 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute4, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute5 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute5, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute6 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute6, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute7 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute7, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute8 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute8, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var extensionAttribute1Attribute9 = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ExtensionAttribute9, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var hideFromAddressListsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HideFromAddressLists, AttributePlurality.SingleValued, AttributeDataType.Boolean, allAttributes);
+        var infoAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Info, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var mailNicknameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.MailNickname, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var objectGuidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectGuid, AttributePlurality.SingleValued, AttributeDataType.Guid, allAttributes);
+        var objectSidAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectSid, AttributePlurality.SingleValued, AttributeDataType.Binary, allAttributes);
+        var typeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Type, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
 
         // user-specific attributes
-        var accountExpiresAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AccountExpires, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
-        var altSecurityIdentitiesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AltSecurityIdentities, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.List);
-        var commonNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.CommonName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var companyAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Company, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var countryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Country, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var countryCodeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.CountryCode, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var departmentAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Department, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var employeeEndDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeEndDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
-        var employeeIdAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeId, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var employeeNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeNumber, AttributePlurality.SingleValued, AttributeDataType.Number, attributesToCreate);
-        var employeeStartDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeStartDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
-        var employeeTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeType, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var facsimileTelephoneNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.FacsimileTelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var firstNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.FirstName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var homeDirectoryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HomeDirectory, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var homeDriveAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HomeDrive, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var homePhoneAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HomePhone, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var identityAssuranceLevelAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.IdentityAssuranceLevel, AttributePlurality.SingleValued, AttributeDataType.Number, attributesToCreate);
-        var ipPhoneAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.IpPhone, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var jobTitleAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.JobTitle, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var lastNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.LastName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var localityAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Locality, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var managerAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Manager, AttributePlurality.SingleValued, AttributeDataType.Reference, attributesToCreate);
-        var mobileNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.MobileNumber, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var objectIdentifierAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectIdentifier, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var subjectIdentifierAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.SubjectIdentifier, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var officeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Office, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var organisationAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Organisation, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var otherFacsimileTelephoneNumbersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
-        var otherIpPhonesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherIpPhones, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
-        var otherMobilesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherMobiles, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
-        var otherPagersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherPagers, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
-        var otherTelephonesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherTelephones, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
-        var pagerAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Pager, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var photoAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Photo, AttributePlurality.SingleValued, AttributeDataType.Binary, attributesToCreate);
-        var physicalDeliveryOfficeNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PhysicalDeliveryOfficeName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var postOfficeBoxesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostOfficeBoxes, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
-        var postalAddressesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostalAddresses, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.List);
-        var postalCodeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostalCode, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var pronounsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Pronouns, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var proxyAddressesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ProxyAddresses, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.List);
-        var scriptPathAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ScriptPath, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var sidHistoryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.SidHistory, AttributePlurality.MultiValued, AttributeDataType.Binary, attributesToCreate, AttributeRenderingHint.List);
-        var stateOrProvinceAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StateOrProvince, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var statusAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Status, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var streetAddressAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StreetAddress, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var teamAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Team, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var telephoneNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.TelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var urlsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Urls, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.List);
-        var userAccountControlAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserAccountControl, AttributePlurality.SingleValued, AttributeDataType.Number, attributesToCreate);
-        var userCertificatesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserCertificates, AttributePlurality.MultiValued, AttributeDataType.Binary, attributesToCreate, AttributeRenderingHint.List);
-        var userPrincipalNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserPrincipalName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var userSharedFolderAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserSharedFolder, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var webPageAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.WebPage, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
+        var accountExpiresAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AccountExpires, AttributePlurality.SingleValued, AttributeDataType.DateTime, allAttributes);
+        var altSecurityIdentitiesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AltSecurityIdentities, AttributePlurality.MultiValued, AttributeDataType.Text, allAttributes, AttributeRenderingHint.List);
+        var commonNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.CommonName, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var companyAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Company, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var countryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Country, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var countryCodeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.CountryCode, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var departmentAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Department, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var employeeEndDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeEndDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, allAttributes);
+        var employeeIdAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeId, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var employeeNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeNumber, AttributePlurality.SingleValued, AttributeDataType.Number, allAttributes);
+        var employeeStartDateAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeStartDate, AttributePlurality.SingleValued, AttributeDataType.DateTime, allAttributes);
+        var employeeTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.EmployeeType, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var facsimileTelephoneNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.FacsimileTelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var firstNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.FirstName, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var homeDirectoryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HomeDirectory, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var homeDriveAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HomeDrive, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var homePhoneAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.HomePhone, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var identityAssuranceLevelAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.IdentityAssuranceLevel, AttributePlurality.SingleValued, AttributeDataType.Number, allAttributes);
+        var ipPhoneAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.IpPhone, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var jobTitleAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.JobTitle, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var lastNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.LastName, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var localityAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Locality, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var managerAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Manager, AttributePlurality.SingleValued, AttributeDataType.Reference, allAttributes);
+        var mobileNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.MobileNumber, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var objectIdentifierAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ObjectIdentifier, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var subjectIdentifierAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.SubjectIdentifier, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var officeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Office, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var organisationAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Organisation, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var otherFacsimileTelephoneNumbersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributePlurality.MultiValued, AttributeDataType.Text, allAttributes, AttributeRenderingHint.ChipSet);
+        var otherIpPhonesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherIpPhones, AttributePlurality.MultiValued, AttributeDataType.Text, allAttributes, AttributeRenderingHint.ChipSet);
+        var otherMobilesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherMobiles, AttributePlurality.MultiValued, AttributeDataType.Text, allAttributes, AttributeRenderingHint.ChipSet);
+        var otherPagersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherPagers, AttributePlurality.MultiValued, AttributeDataType.Text, allAttributes, AttributeRenderingHint.ChipSet);
+        var otherTelephonesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherTelephones, AttributePlurality.MultiValued, AttributeDataType.Text, allAttributes, AttributeRenderingHint.ChipSet);
+        var pagerAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Pager, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var photoAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Photo, AttributePlurality.SingleValued, AttributeDataType.Binary, allAttributes);
+        var physicalDeliveryOfficeNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PhysicalDeliveryOfficeName, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var postOfficeBoxesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostOfficeBoxes, AttributePlurality.MultiValued, AttributeDataType.Text, allAttributes, AttributeRenderingHint.ChipSet);
+        var postalAddressesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostalAddresses, AttributePlurality.MultiValued, AttributeDataType.Text, allAttributes, AttributeRenderingHint.List);
+        var postalCodeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostalCode, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var pronounsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Pronouns, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var proxyAddressesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ProxyAddresses, AttributePlurality.MultiValued, AttributeDataType.Text, allAttributes, AttributeRenderingHint.List);
+        var scriptPathAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ScriptPath, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var sidHistoryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.SidHistory, AttributePlurality.MultiValued, AttributeDataType.Binary, allAttributes, AttributeRenderingHint.List);
+        var stateOrProvinceAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StateOrProvince, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var statusAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Status, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var streetAddressAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StreetAddress, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var teamAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Team, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var telephoneNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.TelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var urlsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Urls, AttributePlurality.MultiValued, AttributeDataType.Text, allAttributes, AttributeRenderingHint.List);
+        var userAccountControlAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserAccountControl, AttributePlurality.SingleValued, AttributeDataType.Number, allAttributes);
+        var userCertificatesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserCertificates, AttributePlurality.MultiValued, AttributeDataType.Binary, allAttributes, AttributeRenderingHint.List);
+        var userPrincipalNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserPrincipalName, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var userSharedFolderAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserSharedFolder, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var webPageAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.WebPage, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
 
         // group-specific attributes
-        var groupScopeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupScope, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var groupTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupType, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var groupTypeFlagsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupTypeFlags, AttributePlurality.SingleValued, AttributeDataType.Number, attributesToCreate);
-        var managedByAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ManagedBy, AttributePlurality.SingleValued, AttributeDataType.Reference, attributesToCreate);
-        var ownersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Owners, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate, AttributeRenderingHint.Table);
-        var staticMembersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StaticMembers, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate, AttributeRenderingHint.Table);
+        var groupScopeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupScope, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var groupTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupType, AttributePlurality.SingleValued, AttributeDataType.Text, allAttributes);
+        var groupTypeFlagsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupTypeFlags, AttributePlurality.SingleValued, AttributeDataType.Number, allAttributes);
+        var managedByAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ManagedBy, AttributePlurality.SingleValued, AttributeDataType.Reference, allAttributes);
+        var ownersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Owners, AttributePlurality.MultiValued, AttributeDataType.Reference, allAttributes, AttributeRenderingHint.Table);
+        var staticMembersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StaticMembers, AttributePlurality.MultiValued, AttributeDataType.Reference, allAttributes, AttributeRenderingHint.Table);
         #endregion
 
         #region MetaverseObjectTypes
         // prepare the user object type and attribute mappings
-        var userObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, true);
+        var userObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, true, withChangeTracking: true);
         if (userObjectType == null)
         {
             userObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, PluralName = "Users", BuiltIn = true, Icon = "Person" };
@@ -255,7 +270,7 @@ internal class SeedingServer
         AddAttributeToObjectType(userObjectType, webPageAttribute);
 
         // create the group object type and attribute mappings
-        var groupObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, true);
+        var groupObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, true, withChangeTracking: true);
         if (groupObjectType == null)
         {
             groupObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Group, PluralName = "Groups", BuiltIn = true, Icon = "Groups" };
@@ -419,7 +434,7 @@ internal class SeedingServer
             Log.Information("SeedAsync: Preparing Group default PredefinedSearch");
         }
 
-        var securityGroupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("security");
+        var securityGroupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("security-groups");
         if (securityGroupsPredefinedSearch == null)
         {
             securityGroupsPredefinedSearch = new PredefinedSearch
@@ -452,7 +467,7 @@ internal class SeedingServer
             Log.Information("SeedAsync: Preparing Security Groups PredefinedSearch");
         }
 
-        var distributionGroupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("distribution");
+        var distributionGroupsPredefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync("distribution-groups");
         if (distributionGroupsPredefinedSearch == null)
         {
             distributionGroupsPredefinedSearch = new PredefinedSearch
@@ -488,61 +503,12 @@ internal class SeedingServer
         #endregion
 
         #region ExampleDataSets
-        var companiesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Companies, "en", Properties.Resources.Companies_en);
-        if (companiesEnDataSet != null)
-            exampleDataSetsToCreate.Add(companiesEnDataSet);
-
-        var departmentsEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Departments, "en", Properties.Resources.Departments_en);
-        if (departmentsEnDataSet != null)
-            exampleDataSetsToCreate.Add(departmentsEnDataSet);
-
-        var teamsEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Teams, "en", Properties.Resources.Teams_en);
-        if (teamsEnDataSet != null)
-            exampleDataSetsToCreate.Add(teamsEnDataSet);
-
-        var jobTitlesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.JobTitles, "en", Properties.Resources.JobTitles_en);
-        if (jobTitlesEnDataSet != null)
-            exampleDataSetsToCreate.Add(jobTitlesEnDataSet);
-
-        var firstnamesMaleEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.FirstnamesMale, "en", Properties.Resources.FirstnamesMale_en);
-        if (firstnamesMaleEnDataSet != null)
-            exampleDataSetsToCreate.Add(firstnamesMaleEnDataSet);
-
-        var firstnamesFemaleEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.FirstnamesFemale, "en", Properties.Resources.FirstnamesFemale_en);
-        if (firstnamesFemaleEnDataSet != null)
-            exampleDataSetsToCreate.Add(firstnamesFemaleEnDataSet);
-
-        var lastnamesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Lastnames, "en", Properties.Resources.Lastnames_en);
-        if (lastnamesEnDataSet != null)
-            exampleDataSetsToCreate.Add(lastnamesEnDataSet);
-
-        var adjectivesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Adjectives, "en", Properties.Resources.Adjectives_en);
-        if (adjectivesEnDataSet != null)
-            exampleDataSetsToCreate.Add(adjectivesEnDataSet);
-
-        var coloursEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Colours, "en", Properties.Resources.Colours_en);
-        if (coloursEnDataSet != null)
-            exampleDataSetsToCreate.Add(coloursEnDataSet);
-
-        var groupNameEndingsEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.GroupNameEndings, "en", Properties.Resources.GroupNameEndings_en);
-        if (groupNameEndingsEnDataSet != null)
-            exampleDataSetsToCreate.Add(groupNameEndingsEnDataSet);
-
-        var wordsEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Words, "en", Properties.Resources.Words_en);
-        if (wordsEnDataSet != null)
-            exampleDataSetsToCreate.Add(wordsEnDataSet);
-
-        var userStatusesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.UserStatuses, "en", Properties.Resources.UserStatuses_en);
-        if (userStatusesEnDataSet != null)
-            exampleDataSetsToCreate.Add(userStatusesEnDataSet);
-
-        var groupStatusesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.GroupStatuses, "en", Properties.Resources.GroupStatuses_en);
-        if (groupStatusesEnDataSet != null)
-            exampleDataSetsToCreate.Add(groupStatusesEnDataSet);
+        foreach (var (name, culture, resource) in BuiltInExampleDataSets())
+            await GetOrPrepareExampleDataSetAsync(name, culture, resource, allExampleDataSets);
         #endregion
 
         #region ExampleDataTemplates
-        var template = await PrepareUsersAndGroupsExampleDataTemplateAsync(userObjectType, groupObjectType, exampleDataSetsToCreate, attributesToCreate);
+        var template = await PrepareUsersAndGroupsExampleDataTemplateAsync(userObjectType, groupObjectType, allExampleDataSets, allAttributes);
         if (template != null)
         {
             AuditHelper.SetCreatedBySystem(template);
@@ -550,33 +516,33 @@ internal class SeedingServer
         }
         #endregion
 
-        #region Connector Definitions
-        foreach (var connector in BuiltInConnectors())
-        {
-            var connectorDefinition = await PrepareConnectorDefinitionAsync(connector);
-            if (connectorDefinition != null)
-                connectorDefinitions.Add(connectorDefinition);
-        }
-        #endregion
+        // Only the objects that do not exist yet are submitted for creation; an unsaved object is the one without a
+        // database id. Handing an already-persisted object to the create batch inserts it with its existing primary
+        // key, which is the duplicate-key crash that made a retry of a partial seed impossible (issue #1287). Values
+        // added to an already-persisted Example Data Set are written by the same transaction: those sets are loaded
+        // change-tracked, so their modifications flush with this batch's save.
+        var attributesToCreate = allAttributes.Where(q => q.Id == 0).ToList();
+        var exampleDataSetsToCreate = allExampleDataSets.Where(q => q.Id == 0).ToList();
 
         // submit all the preparations to the repository for creation. Roles are not seeded here: built-in Roles
         // carry configuration change history, so they are seeded through the audited create path instead
-        // (see SeedBuiltInRolesAsync), matching the Temporal Scope Reconciliation schedule precedent.
+        // (see SeedBuiltInRolesAsync), matching the Temporal Scope Reconciliation schedule precedent. Built-in
+        // Connector Definitions are not seeded here either: they are created by SyncBuiltInConnectorDefinitionsAsync,
+        // which runs on every start, so a Connector added in a later release reaches upgraded deployments too.
         await Application.Repository.Seeding.SeedDataAsync(
             attributesToCreate,
             objectTypesToCreate,
             predefinedSearchesToCreate,
             exampleDataSetsToCreate,
-            dataGenerationTemplatesToCreate,
-            connectorDefinitions);
+            dataGenerationTemplatesToCreate);
 
         // Record a System-attributed Create Activity and version-1 baseline for each built-in Metaverse Object Type and
         // Metaverse Attribute created this pass, grouped under the seeding pass's parent Activity. Like the Predefined
-        // Searches and Connector Definitions below, the schema is persisted in one cross-referencing batch (attributes
-        // bind to object types), so the baseline is recorded after the batch rather than by re-routing each object
-        // through an individual audited create. The lists hold only objects created this pass (Get/PrepareMetaverse*
-        // only add when absent), so a restart re-baselines nothing. Object types are recorded before attributes so the
-        // higher-level schema entities lead the children list.
+        // Searches below, the schema is persisted in one cross-referencing batch (attributes bind to object types), so
+        // the baseline is recorded after the batch rather than by re-routing each object through an individual audited
+        // create. Baseline the create batches, never the full lists: a retry finds everything already persisted and
+        // must re-baseline nothing, or every restart would record a second Create Activity for the same object.
+        // Object types are recorded before attributes so the higher-level schema entities lead the children list.
         if (objectTypesToCreate.Count > 0)
         {
             var parentActivityId = await GetOrCreateSeedingActivityAsync();
@@ -603,20 +569,11 @@ internal class SeedingServer
                 await Application.Search.RecordSeededPredefinedSearchBaselineAsync(predefinedSearch.Id, predefinedSearch.Name, parentActivityId);
         }
 
-        // Record the same System-attributed Create Activity and version-1 baseline for each built-in Connector
-        // Definition created this pass. PrepareConnectorDefinitionAsync only returns non-null for definitions that did
-        // not already exist, so the list holds only this pass's creations and a restart re-baselines nothing.
-        if (connectorDefinitions.Count > 0)
-        {
-            var parentActivityId = await GetOrCreateSeedingActivityAsync();
-            foreach (var connectorDefinition in connectorDefinitions)
-                await Application.ConnectedSystems.RecordSeededConnectorDefinitionBaselineAsync(connectorDefinition.Id, connectorDefinition.Name, parentActivityId);
-        }
-
         // Record baselines for the built-in Example Data Sets and the built-in Example Data Template created this pass.
-        // Both are batch-seeded (like the Predefined Searches and Connector Definitions), so their baseline is recorded
-        // after the batch persists; PrepareExampleDataSetAsync / PrepareUsersAndGroupsExampleDataTemplateAsync only add
-        // objects that did not already exist, so a restart re-baselines nothing.
+        // Both are batch-seeded (like the Predefined Searches), so their baseline is recorded after the batch persists;
+        // the create batch holds only the sets that did not already exist, and
+        // PrepareUsersAndGroupsExampleDataTemplateAsync returns null when the template does, so a restart re-baselines
+        // nothing.
         if (exampleDataSetsToCreate.Count > 0)
         {
             var parentActivityId = await GetOrCreateSeedingActivityAsync();
@@ -636,25 +593,23 @@ internal class SeedingServer
     }
 
     /// <summary>
-    /// Seeds the built-in schedules that JIM provides and maintains itself. Currently this is the Temporal Scope
-    /// Reconciliation schedule (issue #892), which periodically re-evaluates relative-date scoping for objects
-    /// whose scope membership drifts with the clock but whose source data has not changed. Idempotent: it does
-    /// nothing if the built-in schedule already exists. Administrators may enable/disable it and change its
-    /// interval, but may not rename or delete it (enforced at the API/UI layer). Runs at service startup and
-    /// again after a factory reset (the wipe truncates the Schedules table).
+    /// The declarative catalogue of built-in Schedules JIM ships and maintains itself. Each entry is matched
+    /// against the database by <see cref="Schedule.Name"/>, which is a safe identity because built-in Schedules
+    /// cannot be renamed or deleted (enforced at the API/UI layer, and by SchedulerServer.DeleteScheduleAsync);
+    /// administrators may only enable, disable and re-time them.
+    /// <para>
+    /// A catalogue rather than a hardcoded check because the pass that seeds these once asked "does any built-in
+    /// Schedule carry a Temporal Scope Reconciliation step?" and returned if one did, so a second built-in Schedule
+    /// could never have reached an existing deployment (issue #916). Adding an entry here is all a future release
+    /// needs to do; convergence brings it to deployments that already exist.
+    /// </para>
     /// </summary>
-    internal async Task SeedBuiltInSchedulesAsync()
+    internal static IEnumerable<Schedule> BuiltInSchedules()
     {
-        var schedules = await Application.Repository.Scheduling.GetAllSchedulesAsync();
-        var reconciliationScheduleExists = schedules.Any(s => s.BuiltIn &&
-            s.Steps.Any(st => st.StepType == ScheduleStepType.TemporalScopeReconciliation));
-        if (reconciliationScheduleExists)
-        {
-            Log.Verbose("SeedBuiltInSchedulesAsync: Temporal Scope Reconciliation schedule already present; skipping.");
-            return;
-        }
-
-        var schedule = new Schedule
+        // Temporal Scope Reconciliation (issue #892): periodically re-evaluates relative-date scoping for objects
+        // whose scope membership drifts with the clock but whose source data has not changed, so the
+        // synchronisation and export hot paths do not skip them.
+        yield return new Schedule
         {
             Name = "Temporal Scope Reconciliation",
             Description = "Built-in schedule that re-evaluates relative-date scoping for objects whose scope membership " +
@@ -684,46 +639,78 @@ internal class SeedingServer
                 }
             }
         };
-
-        // Create through the audited path, not the repository, so the schedule's origin is visible in the
-        // portal: a Create Activity attributed to System and a version-1 configuration change snapshot.
-        // A repository-direct seed leaves no audit trace, so the change history would start at whichever
-        // principal touched the schedule next, misattributing its origin.
-        var parentActivityId = await GetOrCreateSeedingActivityAsync();
-        await Application.Scheduler.CreateScheduleAsync(schedule, ActivityInitiatorType.System, null, "System",
-            changeReason: "Built-in schedule created automatically by JIM.", parentActivityId: parentActivityId);
-        Log.Information("SeedBuiltInSchedulesAsync: Created built-in Temporal Scope Reconciliation schedule {ScheduleId} (hourly).", schedule.Id);
     }
 
     /// <summary>
-    /// Seeds the built-in Administrator Role that JIM provides, through the audited create path
-    /// (<see cref="SecurityServer.CreateRoleAsync(Role, MetaverseObject?, string?)"/>) so its change history begins
-    /// with a System-attributed Create Activity and a version-1 configuration change snapshot, rather than starting
-    /// blank the first time an administrator touches its membership. Idempotent: does nothing if the built-in Role
-    /// already exists. Runs at every application startup, mirroring <see cref="SeedBuiltInSchedulesAsync"/>.
+    /// Converges the database towards the built-in Schedule catalogue, creating any entry it does not hold.
+    /// Runs at service startup and again after a factory reset (the wipe truncates the Schedules table).
+    /// </summary>
+    internal async Task SeedBuiltInSchedulesAsync()
+    {
+        var existingNames = (await Application.Repository.Scheduling.GetAllSchedulesAsync())
+            .Where(s => s.BuiltIn)
+            .Select(s => s.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var schedule in BuiltInSchedules().Where(s => !existingNames.Contains(s.Name)))
+        {
+            // Create through the audited path, not the repository, so the schedule's origin is visible in the
+            // portal: a Create Activity attributed to System and a version-1 configuration change snapshot.
+            // A repository-direct seed leaves no audit trace, so the change history would start at whichever
+            // principal touched the schedule next, misattributing its origin.
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            await Application.Scheduler.CreateScheduleAsync(schedule, ActivityInitiatorType.System, null, "System",
+                changeReason: "Built-in schedule created automatically by JIM.", parentActivityId: parentActivityId);
+            Log.Information("SeedBuiltInSchedulesAsync: Created built-in schedule '{ScheduleName}' {ScheduleId}.", schedule.Name, schedule.Id);
+        }
+    }
+
+    /// <summary>
+    /// The declarative catalogue of built-in Roles JIM ships, matched against the database by name. Only the
+    /// Administrator Role is a stored Role; <see cref="Constants.BuiltInRoles.User"/> is a claim added to every
+    /// authenticated identity rather than a row, so it deliberately does not appear here.
+    /// <para>
+    /// A catalogue rather than a hardcoded check for the same reason as <see cref="BuiltInSchedules"/>: the pass
+    /// that seeds these looked for the Administrator Role alone and returned, so a second built-in Role could never
+    /// have reached an existing deployment (issue #916).
+    /// </para>
+    /// </summary>
+    internal static IEnumerable<string> BuiltInRoleNames()
+    {
+        yield return Constants.BuiltInRoles.Administrator;
+    }
+
+    /// <summary>
+    /// Converges the database towards the built-in Role catalogue, creating any entry it does not hold through the
+    /// audited create path (<see cref="SecurityServer.CreateRoleAsync(Role, MetaverseObject?, string?, Guid?)"/>) so
+    /// each Role's change history begins with a System-attributed Create Activity and a version-1 configuration
+    /// change snapshot, rather than starting blank the first time an administrator touches its membership. Runs at
+    /// every application startup, mirroring <see cref="SeedBuiltInSchedulesAsync"/>.
     /// </summary>
     internal async Task SeedBuiltInRolesAsync()
     {
-        var administratorRole = await Application.Security.GetRoleAsync(Constants.BuiltInRoles.Administrator);
-        if (administratorRole != null)
+        foreach (var roleName in BuiltInRoleNames())
         {
-            Log.Verbose("SeedBuiltInRolesAsync: Administrator Role already present; skipping.");
-            return;
+            if (await Application.Security.GetRoleAsync(roleName) != null)
+            {
+                Log.Verbose("SeedBuiltInRolesAsync: Role '{RoleName}' already present; skipping.", roleName);
+                continue;
+            }
+
+            var role = new Role
+            {
+                BuiltIn = true,
+                Name = roleName
+            };
+
+            // Create through the audited path, not the repository, so the Role's origin is visible in the portal: a
+            // Create Activity attributed to System and a version-1 configuration change snapshot. A repository-direct
+            // seed leaves no audit trace, so the change history would start at whichever principal touched the Role
+            // next, misattributing its origin.
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            await Application.Security.CreateRoleAsync(role, changeReason: "Built-in Role created automatically by JIM.", parentActivityId: parentActivityId);
+            Log.Information("SeedBuiltInRolesAsync: Created built-in Role {RoleName} (ID: {RoleId}).", role.Name, role.Id);
         }
-
-        var role = new Role
-        {
-            BuiltIn = true,
-            Name = Constants.BuiltInRoles.Administrator
-        };
-
-        // Create through the audited path, not the repository, so the Role's origin is visible in the portal: a
-        // Create Activity attributed to System and a version-1 configuration change snapshot. A repository-direct
-        // seed leaves no audit trace, so the change history would start at whichever principal touched the Role
-        // next, misattributing its origin.
-        var parentActivityId = await GetOrCreateSeedingActivityAsync();
-        await Application.Security.CreateRoleAsync(role, changeReason: "Built-in Role created automatically by JIM.", parentActivityId: parentActivityId);
-        Log.Information("SeedBuiltInRolesAsync: Created built-in Role {RoleName} (ID: {RoleId}).", role.Name, role.Id);
     }
 
     /// <summary>
@@ -748,6 +735,77 @@ internal class SeedingServer
         await Application.Activities.CreateSystemActivityAsync(activity);
         _seedingActivity = activity;
         return activity.Id;
+    }
+
+    /// <summary>
+    /// Declares which pass keeps each kind of built-in configuration converged. Every entity type carrying a
+    /// <c>BuiltIn</c> flag is configuration JIM ships, so something has to create it on a deployment that predates
+    /// it and restore it after a factory reset truncates or cascades it away.
+    /// <para>
+    /// This exists to be asserted against the EF model, so a new table carrying BuiltIn rows cannot be added
+    /// without that decision being made. Three built-ins reached production without one: the Example Data Template
+    /// (#866), the Temporal Scope Reconciliation Schedule (#911), and everything SeedAsync owned (#916). Each was
+    /// found in production rather than in review.
+    /// </para>
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<Type, string> BuiltInConvergencePaths = new Dictionary<Type, string>
+    {
+        [typeof(MetaverseObjectType)] = nameof(SeedAsync),
+        [typeof(MetaverseAttribute)] = $"{nameof(SeedAsync)} then {nameof(SyncBuiltInMetaverseSchemaAsync)}",
+        [typeof(PredefinedSearch)] = nameof(SeedAsync),
+        [typeof(ExampleDataSet)] = nameof(SeedAsync),
+        [typeof(ExampleDataTemplate)] = $"{nameof(SeedAsync)} then {nameof(EnsureBuiltInExampleDataTemplateAsync)}",
+        [typeof(ConnectorDefinition)] = nameof(SyncBuiltInConnectorDefinitionsAsync),
+        [typeof(Schedule)] = nameof(SeedBuiltInSchedulesAsync),
+        [typeof(Role)] = nameof(SeedBuiltInRolesAsync)
+    };
+
+    /// <summary>
+    /// Runs every built-in configuration pass in dependency order, inside the parent Activity boundary that groups
+    /// what they create. The single definition of "apply JIM's built-in configuration": called at worker startup
+    /// (<see cref="JimApplication.InitialiseDatabaseAsync"/>) and after a factory reset
+    /// (<see cref="SystemServer.ResetSystemAsync"/>), so a built-in added in a later release reaches an existing
+    /// deployment and survives a reset without either caller needing to know the list.
+    /// </summary>
+    internal Task ApplyBuiltInConfigurationAsync() => RunBuiltInConfigurationPipelineAsync(rebaselinePreservedConfiguration: false);
+
+    /// <summary>
+    /// The factory reset's entry point into the pipeline. Identical to <see cref="ApplyBuiltInConfigurationAsync"/>
+    /// except that it also re-records the version-1 baselines of built-ins the wipe *preserved*: the reset truncates
+    /// the Activities table but keeps BuiltIn rows, so the ordinary passes no-op for them and their factory-state
+    /// provenance would be permanently lost. No seeding pass can do that job, which is why the rebaseline is not
+    /// one of the bespoke repairs this pipeline replaced.
+    /// </summary>
+    internal Task RestoreBuiltInConfigurationAfterResetAsync() => RunBuiltInConfigurationPipelineAsync(rebaselinePreservedConfiguration: true);
+
+    private async Task RunBuiltInConfigurationPipelineAsync(bool rebaselinePreservedConfiguration)
+    {
+        try
+        {
+            // Order matters: SeedAsync creates the built-in Metaverse Object Types the schema sync binds attributes
+            // to (that sync throws rather than creating a missing one), and the Example Data Sets the template
+            // repair resolves against.
+            await SeedAsync();
+            await SyncBuiltInMetaverseSchemaAsync();
+            await SeedBuiltInSchedulesAsync();
+            await SeedBuiltInRolesAsync();
+            await SyncBuiltInConnectorDefinitionsAsync();
+            await SyncServiceSettingsAsync();
+            await EnsureBuiltInExampleDataTemplateAsync();
+
+            if (rebaselinePreservedConfiguration)
+                await RebaselineBuiltInConfigurationAsync();
+
+            await CompleteSeedingActivityAsync();
+        }
+        catch (Exception ex)
+        {
+            // Catch-all is deliberate: this is an Activity execution boundary (the "System Initialisation" parent
+            // Activity, if one was created), and any failure here must be recorded on it via
+            // FailSeedingActivityAsync rather than escape silently, then rethrown so the caller still fails loudly.
+            await FailSeedingActivityAsync(ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -786,13 +844,37 @@ internal class SeedingServer
     /// </summary>
     internal static List<IConnector> BuiltInConnectors()
     {
-        return [new LdapConnector(), new FileConnector(), new ScimConnector()];
+        return [new LdapConnector(), new FileConnector(), new ScimConnector(), new SqlConnector()];
     }
 
     /// <summary>
-    /// Synchronises built-in connector definitions with the latest settings from the connector code.
-    /// This should be called on every application startup to ensure connector settings are up-to-date.
-    /// Unlike SeedAsync, this method updates existing connector definitions when their settings change.
+    /// The Example Data Sets JIM ships with, and the embedded resource each is seeded from, named once so that
+    /// seeding and anything that repairs example data agree on what "built-in" means.
+    /// </summary>
+    internal static IEnumerable<(string Name, string Culture, string Resource)> BuiltInExampleDataSets()
+    {
+        yield return (Constants.BuiltInExampleDataSets.Companies, "en", Properties.Resources.Companies_en);
+        yield return (Constants.BuiltInExampleDataSets.Departments, "en", Properties.Resources.Departments_en);
+        yield return (Constants.BuiltInExampleDataSets.Teams, "en", Properties.Resources.Teams_en);
+        yield return (Constants.BuiltInExampleDataSets.JobTitles, "en", Properties.Resources.JobTitles_en);
+        yield return (Constants.BuiltInExampleDataSets.FirstnamesMale, "en", Properties.Resources.FirstnamesMale_en);
+        yield return (Constants.BuiltInExampleDataSets.FirstnamesFemale, "en", Properties.Resources.FirstnamesFemale_en);
+        yield return (Constants.BuiltInExampleDataSets.Lastnames, "en", Properties.Resources.Lastnames_en);
+        yield return (Constants.BuiltInExampleDataSets.Adjectives, "en", Properties.Resources.Adjectives_en);
+        yield return (Constants.BuiltInExampleDataSets.Colours, "en", Properties.Resources.Colours_en);
+        yield return (Constants.BuiltInExampleDataSets.GroupNameEndings, "en", Properties.Resources.GroupNameEndings_en);
+        yield return (Constants.BuiltInExampleDataSets.Words, "en", Properties.Resources.Words_en);
+        yield return (Constants.BuiltInExampleDataSets.UserStatuses, "en", Properties.Resources.UserStatuses_en);
+        yield return (Constants.BuiltInExampleDataSets.GroupStatuses, "en", Properties.Resources.GroupStatuses_en);
+    }
+
+    /// <summary>
+    /// Creates and synchronises the built-in Connector Definitions from the connector code. Called on every
+    /// application startup: it creates any definition the database does not hold yet, and updates the ones it does
+    /// when their declarations or settings have changed. This pass owns creation (SeedAsync does not seed Connector
+    /// Definitions) precisely because SeedAsync short-circuits once ServiceSettings exists; a Connector added to
+    /// <see cref="BuiltInConnectors"/> in a later release must reach upgraded deployments, not just fresh ones
+    /// (issue #1287). Idempotent: a converged database results in no writes and no Activities.
     /// </summary>
     internal async Task SyncBuiltInConnectorDefinitionsAsync()
     {
@@ -1176,6 +1258,17 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.InitialPasswordRetentionPeriod,
+            DisplayName = "Initial password record retention period",
+            Description = "The duration for which an initial-password record that has reached a terminal state (parked for an administrator, or expired without one being set) is kept before housekeeping removes it. Records still being worked are never removed, however old. The Activity recording what happened to the account outlives this. Format: d.hh:mm:ss (e.g., '90.00:00:00' for 90 days).",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.TimeSpan,
+            DefaultValue = "90.00:00:00", // 90 days
+            IsReadOnly = false
+        });
+
         // Change Tracking Settings
         await SeedSettingAsync(new ServiceSetting
         {
@@ -1463,6 +1556,33 @@ internal class SeedingServer
     }
 
     /// <summary>
+    /// Creates a built-in Connector Definition that the database does not hold yet, recording a System-attributed
+    /// Create Activity and version-1 baseline under the seeding pass's parent Activity, exactly as a first-run seed
+    /// would. Creation lives here rather than in <see cref="SeedAsync"/> because SeedAsync short-circuits once
+    /// ServiceSettings exists: a Connector added to <see cref="BuiltInConnectors"/> in a later release would
+    /// otherwise ship only to brand-new deployments and be silently absent from every upgraded one (issue #1287).
+    /// </summary>
+    private async Task CreateBuiltInConnectorDefinitionAsync(IConnector connector, IConnectorCapabilities connectorCapabilities, IConnectorSettings connectorSettings)
+    {
+        var connectorDefinition = new ConnectorDefinition
+        {
+            Name = connector.Name,
+            Description = connector.Description,
+            Url = connector.Url,
+            BuiltIn = true
+        };
+
+        ApplyConnectorDeclarations(connectorCapabilities, connectorDefinition);
+        Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
+        await Application.Repository.ConnectedSystems.CreateConnectorDefinitionAsync(connectorDefinition);
+
+        var parentActivityId = await GetOrCreateSeedingActivityAsync();
+        await Application.ConnectedSystems.RecordSeededConnectorDefinitionBaselineAsync(connectorDefinition.Id, connectorDefinition.Name, parentActivityId);
+
+        Log.Information($"CreateBuiltInConnectorDefinitionAsync: Created built-in Connector Definition '{connector.Name}'");
+    }
+
+    /// <summary>
     /// Synchronises a single connector definition with the latest settings from the connector code.
     /// Updates settings if they have changed (e.g., category, description, default values).
     /// </summary>
@@ -1474,7 +1594,7 @@ internal class SeedingServer
         var existingDefinition = await Application.ConnectedSystems.GetConnectorDefinitionAsync(connector.Name, withChangeTracking: true);
         if (existingDefinition == null)
         {
-            Log.Debug($"SyncConnectorDefinitionAsync: Connector '{connector.Name}' not found in database, skipping sync (will be created during seeding)");
+            await CreateBuiltInConnectorDefinitionAsync(connector, connectorCapabilities, connectorSettings);
             return;
         }
 
@@ -1600,9 +1720,20 @@ internal class SeedingServer
     }
 
     #region private methods
-    private async Task<MetaverseAttribute> GetOrPrepareMetaverseAttributeAsync(string name, AttributePlurality attributePlurality, AttributeDataType attributeDataType, List<MetaverseAttribute> attributeList, AttributeRenderingHint renderingHint = AttributeRenderingHint.Default)
+    /// <summary>
+    /// Returns the built-in Metaverse Attribute of this name, preparing it for creation if it does not exist yet, and
+    /// adds it to <paramref name="allAttributes"/> either way. The caller derives its create batch from the attributes
+    /// in that list that have no database id, and builds the built-in Example Data Template from the whole list, which
+    /// is what lets seeding be retried: on a retry nothing needs creating, and a template built from this pass's
+    /// creations alone could not resolve a single attribute (issue #1287).
+    /// </summary>
+    private async Task<MetaverseAttribute> GetOrPrepareMetaverseAttributeAsync(string name, AttributePlurality attributePlurality, AttributeDataType attributeDataType, List<MetaverseAttribute> allAttributes, AttributeRenderingHint renderingHint = AttributeRenderingHint.Default)
     {
-        var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name);
+        // Loaded change-tracked because this pass mutates and saves what it loads: an already-persisted attribute is
+        // bound to Object Types, referenced by newly-created Predefined Searches, and handed to the create batch as
+        // part of their object graph. An untracked instance would be walked into by AddRange and re-inserted (see
+        // MetaverseRepository.GetMetaverseObjectTypeAsync's tracking flag for the other half of the same rule).
+        var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name, withChangeTracking: true);
         if (attribute == null)
         {
             attribute = new MetaverseAttribute
@@ -1614,10 +1745,10 @@ internal class SeedingServer
                 RenderingHint = renderingHint
             };
             AuditHelper.SetCreatedBySystem(attribute);
-            attributeList.Add(attribute);
             Log.Verbose($"GetOrPrepareMetaverseAttributeAsync: Prepared {name}");
         }
 
+        allAttributes.Add(attribute);
         return attribute;
     }
 
@@ -1630,37 +1761,80 @@ internal class SeedingServer
         }
     }
 
-    private async Task<ExampleDataSet?> PrepareExampleDataSetAsync(string name, string culture, string resourceValues)
+    /// <summary>
+    /// Normalises an embedded example-data resource into the values to seed: split on either line-ending style,
+    /// trimmed, with any leading byte-order mark, blank lines and repeats dropped. Neither line endings nor a leading
+    /// mark can be assumed away here: the resource files are stored LF but a Windows checkout converts them to CRLF,
+    /// so what is compiled into the assembly depends on the build host, while <see cref="Environment.NewLine"/>
+    /// depends on the host the container runs on. Splitting on <see cref="Environment.NewLine"/> left a trailing
+    /// carriage return on every value, which never matched the trimmed value already stored, so every
+    /// already-persisted Example Data Set looked incomplete on a retry (issue #1287). A byte-order mark is stripped
+    /// for the same reason: several of the resource files carry one, and although the resource reader consumes it
+    /// today, a mark that reached a value would sit invisibly at the front of it for the life of the deployment.
+    /// </summary>
+    internal static List<string> NormaliseExampleDataSetValues(string resourceValues)
     {
-        var changes = false;
+        return resourceValues
+            .TrimStart('\uFEFF')
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(value => value.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Returns the built-in Example Data Set of this name and culture, preparing it for creation if it does not exist
+    /// yet and topping up any values the resource holds that it does not, and adds it to
+    /// <paramref name="allDataSets"/> either way. An already-persisted set is never handed to the create batch (the
+    /// caller derives that from the sets with no database id): inserting one carries its existing primary key, which
+    /// is the duplicate-key crash that made a retry of a partial seed impossible (issue #1287). A persisted set that
+    /// gains values is modified in place; it is loaded change-tracked, so those values are written by the seed
+    /// batch's transaction.
+    /// </summary>
+    private async Task<ExampleDataSet> GetOrPrepareExampleDataSetAsync(string name, string culture, string resourceValues, List<ExampleDataSet> allDataSets)
+    {
         var exampleDataSet = await Application.Repository.ExampleData.GetExampleDataSetAsync(name, culture, withChangeTracking: true);
         if (exampleDataSet == null)
         {
-            exampleDataSet = new ExampleDataSet()
+            exampleDataSet = new ExampleDataSet
             {
                 Name = name,
                 Culture = culture,
                 BuiltIn = true
             };
             AuditHelper.SetCreatedBySystem(exampleDataSet);
-            changes = true;
+            Log.Information($"GetOrPrepareExampleDataSetAsync: Preparing Example Data Set '{name}' ({culture})");
         }
 
-        // check if the dataset has all the necessary values
-        var rawValues = resourceValues.Split(Environment.NewLine).ToList();
-        foreach (var rawValue in rawValues)
+        // Both sides of the comparison are normalised. Stored values are trimmed, so comparing them against a raw
+        // resource line never matched once a line ending survived the split, and every persisted set then looked
+        // incomplete on every start.
+        var storedValues = new HashSet<string>(exampleDataSet.Values.Select(q => q.StringValue.Trim()), StringComparer.Ordinal);
+        var valuesAdded = 0;
+        foreach (var value in NormaliseExampleDataSetValues(resourceValues))
         {
-            if (!exampleDataSet.Values.Any(q => q.StringValue == rawValue))
-            {
-                exampleDataSet.Values.Add(new ExampleDataSetValue { StringValue = rawValue.Trim() });
-                if (!changes)
-                    changes = true;
-            }
+            if (!storedValues.Add(value))
+                continue;
+
+            exampleDataSet.Values.Add(new ExampleDataSetValue { StringValue = value });
+            valuesAdded++;
         }
 
-        return changes ? exampleDataSet : null;
+        if (valuesAdded > 0 && exampleDataSet.Id != 0)
+            Log.Information($"GetOrPrepareExampleDataSetAsync: Added {valuesAdded} missing value(s) to the existing Example Data Set '{name}' ({culture})");
+
+        allDataSets.Add(exampleDataSet);
+        return exampleDataSet;
     }
 
+    /// <summary>
+    /// Prepares the built-in "Users &amp; Groups" Example Data Template for creation, or returns null when it already
+    /// exists. <paramref name="dataSets"/> and <paramref name="metaverseAttributes"/> must hold every built-in
+    /// Example Data Set and Metaverse Attribute, persisted or pending, not just the ones being created this pass: the
+    /// template resolves each of its attributes and data sets by name and fails fast when one is absent, and on a
+    /// retry after a partial seed there is nothing being created at all (issue #1287).
+    /// </summary>
     private async Task<ExampleDataTemplate?> PrepareUsersAndGroupsExampleDataTemplateAsync(MetaverseObjectType userType, MetaverseObjectType groupType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
     {
         var templateName = "Users & Groups";
@@ -1692,8 +1866,11 @@ internal class SeedingServer
         if (existing != null && existing.ObjectTypes.Any(ot => ot.TemplateAttributes.Count > 0))
             return; // present and complete: the common case, kept cheap.
 
-        var userType = await Application.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, includeChildObjects: false);
-        var groupType = await Application.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false);
+        // Change-tracked for the same reason SeedAsync tracks its loads: the template graph created below references
+        // these objects, and an untracked instance of a row the pipeline already tracked would collide with it on
+        // TrackGraph ("another instance with the same key value is already being tracked").
+        var userType = await Application.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, includeChildObjects: false, withChangeTracking: true);
+        var groupType = await Application.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false, withChangeTracking: true);
         if (userType == null || groupType == null)
         {
             Log.Warning("EnsureBuiltInExampleDataTemplateAsync: built-in User/Group Metaverse Object Types not found; cannot restore the example data template.");
@@ -1704,8 +1881,8 @@ internal class SeedingServer
         if (existing != null)
             await Application.Repository.ExampleData.DeleteTemplateAsync(existing.Id);
 
-        var metaverseAttributes = (await Application.Metaverse.GetMetaverseAttributesAsync())?.ToList() ?? new List<MetaverseAttribute>();
-        var dataSets = await Application.ExampleData.GetExampleDataSetsAsync();
+        var metaverseAttributes = (await Application.Metaverse.GetMetaverseAttributesAsync(withChangeTracking: true))?.ToList() ?? new List<MetaverseAttribute>();
+        var dataSets = await Application.ExampleData.GetExampleDataSetsAsync(withChangeTracking: true);
 
         var template = new ExampleDataTemplate { Name = templateName, BuiltIn = true };
         AddUsersToExampleDataTemplate(template, userType, dataSets, metaverseAttributes);
@@ -1714,33 +1891,6 @@ internal class SeedingServer
 
         Log.Information("EnsureBuiltInExampleDataTemplateAsync: (re)created the built-in '{TemplateName}' example data template (was {State}).",
             templateName, existing == null ? "missing" : "an incomplete shell");
-    }
-
-    /// <summary>
-    /// Prepare the built-in connectors for seeding.
-    /// </summary>
-    private async Task<ConnectorDefinition?> PrepareConnectorDefinitionAsync(IConnector connector)
-    {
-        var connectorCapabilities = (IConnectorCapabilities)connector ?? throw new ArgumentException("connector does not implement IConnectorCapabilities");
-        var connectorSettings = (IConnectorSettings)connector ?? throw new ArgumentException("connector does not implement IConnectorSettings");
-        var connectorDefinition = await Application.ConnectedSystems.GetConnectorDefinitionAsync(connector.Name);
-        if (connectorDefinition != null)
-            return null;
-
-        connectorDefinition = new ConnectorDefinition
-        {
-            Name = connector.Name,
-            Description = connector.Description,
-            Url = connector.Url,
-            BuiltIn = true
-        };
-
-        // Same method the startup reconcile uses, so a declaration added to a Connector cannot reach fresh
-        // installs while being forgotten on upgrades, or the other way round.
-        ApplyConnectorDeclarations(connectorCapabilities, connectorDefinition);
-
-        Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
-        return connectorDefinition;
     }
 
     private static void AddUsersToExampleDataTemplate(ExampleDataTemplate template, MetaverseObjectType userType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)

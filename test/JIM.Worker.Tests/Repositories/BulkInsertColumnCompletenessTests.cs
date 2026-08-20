@@ -64,7 +64,7 @@ public class BulkInsertColumnCompletenessTests
         var missing = expected.Except(actual).OrderBy(c => c).ToList();
         var unknown = actual.Except(expected).OrderBy(c => c).ToList();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(missing, Is.Empty,
                 "Mutable column(s) in the insert list are missing from MetaverseObjectsUpdate; the raw-SQL update " +
@@ -73,7 +73,7 @@ public class BulkInsertColumnCompletenessTests
             Assert.That(unknown, Is.Empty,
                 "MetaverseObjectsUpdate contains column(s) not in the insert list (or the immutable Id/Created): " +
                 string.Join(", ", unknown));
-        });
+        }
     }
 
     [Test]
@@ -124,7 +124,7 @@ public class BulkInsertColumnCompletenessTests
         var missing = expected.Except(actual).OrderBy(c => c).ToList();
         var unknown = actual.Except(expected).OrderBy(c => c).ToList();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(missing, Is.Empty,
                 "Mutable column(s) in the insert list are in neither ConnectedSystemObjectsUpdate nor the " +
@@ -134,7 +134,7 @@ public class BulkInsertColumnCompletenessTests
             Assert.That(unknown, Is.Empty,
                 "ConnectedSystemObjectsUpdate contains column(s) not in the insert list (or listed as excluded): " +
                 string.Join(", ", unknown));
-        });
+        }
     }
 
     [Test]
@@ -267,7 +267,7 @@ public class BulkInsertColumnCompletenessTests
         var missing = insert.Except(covered).OrderBy(c => c).ToList();
         var unknown = covered.Except(insert).OrderBy(c => c).ToList();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(missing, Is.Empty,
                 $"{tableName}: column(s) are in neither an update list nor the documented exclusion list; a raw " +
@@ -276,7 +276,7 @@ public class BulkInsertColumnCompletenessTests
             Assert.That(unknown, Is.Empty,
                 $"{tableName}: update/exclusion list(s) contain column(s) not in the insert list: " +
                 string.Join(", ", unknown));
-        });
+        }
     }
 
     private void AssertColumnListMatchesModel(Type entityClrType, string tableName, string[] bulkInsertColumns)
@@ -299,7 +299,7 @@ public class BulkInsertColumnCompletenessTests
         var missingFromBulkInsert = mappedColumns.Except(bulkColumns).OrderBy(c => c).ToList();
         var unknownInBulkInsert = bulkColumns.Except(mappedColumns).OrderBy(c => c).ToList();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(missingFromBulkInsert, Is.Empty,
                 $"{tableName}: mapped column(s) missing from the bulk insert list; every bulk-written row would " +
@@ -309,6 +309,6 @@ public class BulkInsertColumnCompletenessTests
             Assert.That(unknownInBulkInsert, Is.Empty,
                 $"{tableName}: bulk insert list contains column(s) the EF model no longer maps: " +
                 string.Join(", ", unknownInBulkInsert));
-        });
+        }
     }
 }

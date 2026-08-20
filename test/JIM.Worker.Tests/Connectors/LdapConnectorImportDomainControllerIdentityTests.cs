@@ -66,8 +66,8 @@ public class LdapConnectorImportDomainControllerIdentityTests
             DnsHostName = "dc1.jim.test"
         };
 
-        Assert.DoesNotThrow(() =>
-            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger));
+        Assert.That(() =>
+            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger), Throws.Nothing);
     }
 
     #endregion
@@ -139,8 +139,8 @@ public class LdapConnectorImportDomainControllerIdentityTests
             DnsHostName = "dc1.jim.test"
         };
 
-        Assert.DoesNotThrow(() =>
-            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger));
+        Assert.That(() =>
+            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger), Throws.Nothing);
     }
 
     [Test]
@@ -159,8 +159,8 @@ public class LdapConnectorImportDomainControllerIdentityTests
             DnsHostName = "dc1.JIM.TEST"
         };
 
-        Assert.DoesNotThrow(() =>
-            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger));
+        Assert.That(() =>
+            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger), Throws.Nothing);
     }
 
     #endregion
@@ -183,8 +183,8 @@ public class LdapConnectorImportDomainControllerIdentityTests
             DnsHostName = null
         };
 
-        Assert.DoesNotThrow(() =>
-            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger));
+        Assert.That(() =>
+            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger), Throws.Nothing);
     }
 
     [Test]
@@ -206,8 +206,8 @@ public class LdapConnectorImportDomainControllerIdentityTests
             DnsHostName = null
         };
 
-        Assert.DoesNotThrow(() =>
-            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger));
+        Assert.That(() =>
+            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger), Throws.Nothing);
     }
 
     #endregion

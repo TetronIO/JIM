@@ -89,10 +89,21 @@ Authoring rules:
 - **No blank lines inside the SVG file.** The snippet is inlined into markdown as a raw-HTML block; a blank line would end the block and the remainder would be parsed as markdown.
 - Root element: `<svg class="jim-diagram" viewBox="..." role="img" aria-labelledby="...">` with a `<title>` and descriptive `<desc>`.
 - Arrowheads are explicit polygons, not `<marker>` elements (markers restyle unreliably across browsers).
+- **Edge labels sit on their edge, with the edge cut away behind them.** Centre the label on its line and let the diagram's `<mask id="…-labelcut">` punch a hole in the edges, arrowheads and packets behind it. Never place an edge label by nudging it off the line by eye: a `<text>` `x`/`y` sits on the *baseline*, but the box that collides reaches about 11.6 user units above it, and on a diagonal the line travels sideways across that height, so a label that looks clear at the baseline is sliced at cap height. (That is exactly how eight touching labels shipped; every one was on a diagonal and none of the vertical ones were affected.) Full rule, and why a knockout stroke is the wrong mechanism here: `engineering/DESIGN.md` > Diagrams.
+- **Never hand-write a cut rectangle; generate it.** Each one comes from the label's *rendered* metrics, so it cannot be reasoned about from the source. After moving, adding or rewording any edge label:
+
+    ```bash
+    pwsh -File ./scripts/Update-DiagramLabelCuts.ps1           # regenerate every diagram's cuts
+    pwsh -File ./scripts/Update-DiagramLabelCuts.ps1 -Check    # verify; non-zero exit on drift
+    ```
+
+    `-Check` enforces that every edge label either fits its cut or stands at least 8 units clear of every edge, and separately that none crosses a node or boundary outline (which a cut cannot fix, because masking a `<rect>` holes its fill). It needs no setup: it drives the Chromium that `.devcontainer/setup.sh` already installs for the Playwright MCP server. Still eyeball the result in both themes afterwards.
+- **A short edge keeps its label beside it.** If the cut would leave less than ~28 units of visible line, the label stays offset rather than erasing the edge it labels; the same goes for step captions that name a stage rather than hug an edge.
+- **Keep boundary titles (`.jimdg-hub-title`) as the last element in the file.** Their knockout stroke only clears the edges underneath if the title paints after them, so the title belongs in a trailing `…-boundary-title` group rather than inside the boundary group next to its `<rect>`.
 - Edge animation uses SMIL data packets (`<circle class="jimdg-packet">` with `animateMotion`), only on live edges, direction matching the arrowheads; `custom.css` hides `.jimdg-packet` under `prefers-reduced-motion`. Full motion rules: `engineering/DESIGN.md` > Diagrams.
 - Follow the snippet include with a `<p class="jim-diagram-caption">` footnote decoding the visual encoding (illustrative examples, dashed = planned). Wrap any sentence that refers to the packet animation in `<span class="jimdg-caption-motion">`; it hides together with the dots under `prefers-reduced-motion`.
 - No build step: the SVG is a static asset edited by hand; preview with `jim-docs` and verify in both themes.
-- GLightbox does not apply to inline SVGs (it wraps `<img>` only); size the composition to be legible at content-column width.
+- Inline SVGs are made click-to-enlarge by `diagram-zoom.js` (see "Diagram lightbox" below), not by GLightbox, which only wraps `<img>`. Nothing per-diagram is needed: the script finds every `svg.jim-diagram`. Still size the composition to be legible at content-column width; the lightbox is for inspecting detail, not a substitute for a readable default.
 - **README exports:** the GitHub README embeds self-contained light/dark copies of `system-context.svg` and `containers.svg` from `.github/diagrams/`. After changing either source (or the `--jimdg-*` tokens in `custom.css`), regenerate them with `pwsh ./scripts/Export-ReadmeDiagrams.ps1` and commit the results.
 
 ## Mermaid Diagrams
@@ -106,30 +117,36 @@ flowchart TD
 ```
 ````
 
-No additional markup or attributes are needed. They are clickable automatically.
+No additional markup or attributes are needed. They are clickable automatically (see "Diagram lightbox" below).
 
-### How mermaid-zoom.js works
+## Diagram lightbox
 
-`docs/assets/javascripts/mermaid-zoom.js` provides the click-to-zoom behaviour. Understanding the internals matters for debugging or upgrading MkDocs Material.
+`docs/assets/javascripts/diagram-zoom.js` makes **both** diagram families click-to-enlarge in one overlay with zoom and pan; styling lives in the "Diagram lightbox" section of `custom.css`. No per-diagram markup is needed. No external dependencies: it uses only the Mermaid instance MkDocs Material already loads.
 
-**The problem:** MkDocs Material renders Mermaid into a **closed Shadow DOM** (`attachShadow({mode:"closed"})`), making the rendered SVG completely inaccessible via `querySelector` or `shadowRoot`.
+The script wraps each diagram in a `<button class="jim-dgz-trigger">` so it is keyboard-reachable, and adds a persistent "Enlarge" chip (a hover-only cue is invisible on touch). The overlay traps focus, restores it on close, and closes on backdrop click or Esc.
 
-**The solution:**
+**Getting an SVG out of the page differs per family:**
 
-1. The script captures each diagram's source text from `<pre class="mermaid">` elements **before** Material replaces them with shadow-host `<div class="mermaid">` elements
-2. Sources and divs are matched by **insertion order** (top-to-bottom DOM order) - stable because Material processes diagrams sequentially
-3. On click, the captured source is re-rendered via the Mermaid JS API (already initialised on the page) using a temporary off-screen DOM node
-4. The resulting SVG is displayed in a custom modal overlay (not GLightbox - Mermaid SVGs are handled separately from image files)
+| Family | How the overlay gets an SVG |
+|--------|-----------------------------|
+| Concept SVGs (`svg.jim-diagram`) | Inlined by pymdownx.snippets, so the node is in the DOM and is cloned directly. |
+| Mermaid | Material renders into a **closed Shadow DOM** (`attachShadow({mode:"closed"})`), so the rendered SVG is unreachable via `querySelector` or `shadowRoot`. The script captures each diagram's source from `<pre class="mermaid">` *before* Material replaces it, pairs sources to shadow hosts by **insertion order**, and re-renders on click through the Mermaid API into a temporary off-screen node. |
 
-**The modal** is theme-aware: dark navy (`#051526`) in slate mode, white in default mode. Closes on backdrop click or Esc.
+**Three non-obvious behaviours worth keeping:**
 
-**No external dependencies** - uses only the Mermaid and GLightbox instances MkDocs Material already loads.
+- **100% is the whole diagram where that is worth having, and fit-to-*width* where it is not.** Fitting a tall Mermaid flowchart to viewport *height* renders it narrower than it already is in the page (measured: 1294px wide at fit-to-width versus 180px at fit-to-height), so those still open full width and pan vertically. But fit-to-width for *everything* was wrong for the concept SVGs, which are only slightly taller than the stage: a 1160x640 diagram on a 2.01-aspect stage opened with its bottom 10% quietly cut off, looking whole rather than looking panable. The opening view (`view.home`, and what 100% and Reset both mean) now contains the diagram unless containing would render it narrower than `MIN_CONTAIN_PX` (560) CSS pixels. **Measure that in pixels, not as a share of the stage.** A share gets the phone case wrong: on a 390px window the stage is tall and narrow, so containing a 4000-unit flowchart costs only 42% of the width, which sounds cheap and is actually a 153px sliver. By absolute width the two populations separate cleanly — on the worst desktop window (1440x620) the tallest concept diagrams contain to 674px and 755px, while a Mermaid flowchart contains to 98–182px on every window tested. Note that `clampView` is where the cap is actually enforced, so a change to the opening width has to be made in both places. `scripts/Test-DiagramLightbox.ps1` guards both halves of the rule and is wired into `changelog-lint`.
+- **The visible window always carries the stage's aspect ratio**, so `preserveAspectRatio="xMidYMid meet"` never letterboxes and pointer coordinates map exactly. Zoom and pan are pure `viewBox` maths; there is no transform layer.
+- **SMIL packets must be primed after any re-parenting.** A cloned or moved `<svg>` is its own timeline root and restarts at zero, which parks every packet with a positive `begin` offset at 0,0 - a dot stuck in the top-left corner for up to 1.2s. `primeAnimations()` winds the clock past the longest offset; it is called both when wrapping an in-page SVG in its trigger and when opening a clone. Removing either call brings the artefact back.
 
-**If diagrams stop being clickable after a MkDocs Material upgrade:** check whether Material changed how it processes Mermaid. Look for changes to the `div.mermaid` shadow host insertion or `attachShadow` call (search for `attachShadow` in the bundle). The relevant function in the current bundle is named `Zn()`.
+**Ids are rewritten on clone, not stripped.** Diagrams whose edge labels sit on the line point at a `<mask id="…-labelcut">` with `mask="url(#…)"`, so a stripped id leaves a dangling reference; a dangling mask reference renders *unmasked*, which would draw the lines straight through the labels in the overlay. `cloneForOverlay()` therefore suffixes every id and repoints every `url(#…)` and `href="#…"` that names one. Stripping happened to survive this at first, because the in-page copy was still in the document for the reference to land on; that stops being true the moment two diagrams share an id.
+
+**If diagrams stop being clickable after a MkDocs Material upgrade:** check whether Material changed how it processes Mermaid. Look for changes to the `div.mermaid` shadow host insertion or `attachShadow` call (search for `attachShadow` in the bundle). The relevant function in the current bundle is named `Zn()`. Concept SVGs are unaffected by Material upgrades; they never enter a shadow root.
+
+**Verifying changes:** Material loads Mermaid from `unpkg.com`, so Mermaid diagrams silently never render in an offline sandbox (the `<pre class="mermaid">` is consumed and nothing replaces it). To test that path, download the bundle once and intercept the CDN request in Playwright; otherwise you are only testing the concept-SVG half.
 
 ## GLightbox (image files)
 
-GLightbox is configured as a plugin in `mkdocs.yml` and wraps all `<img>` tags automatically. No per-image markup is needed.
+GLightbox is configured as a plugin in `mkdocs.yml` and wraps all `<img>` tags automatically. No per-image markup is needed. It handles raster images and any `<img>`-referenced SVG; vector diagrams inlined in the page are handled by `diagram-zoom.js` instead.
 
 The lightbox background is themed via `docs/assets/stylesheets/custom.css` (`.gslide-image img` rules) so transparent SVGs render against the correct surface colour in each theme.
 

@@ -5,7 +5,6 @@ using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Search;
 using JIM.Models.Security;
-using JIM.Models.Staging;
 namespace JIM.Data.Repositories;
 
 public interface ISeedingRepository
@@ -13,15 +12,16 @@ public interface ISeedingRepository
     /// <summary>
     /// Creates all seed data in a single transaction.
     /// ServiceSettings is created LAST to ensure atomicity - if the process crashes during seeding,
-    /// the absence of ServiceSettings will trigger a fresh seeding attempt on restart.
+    /// the absence of ServiceSettings will trigger a fresh seeding attempt on restart. That retry only works if
+    /// every list holds objects that do not exist yet, which is the caller's contract (issue #1287); an
+    /// already-persisted object handed to this method is inserted with its existing primary key and the seed fails.
     /// </summary>
     public Task SeedDataAsync(
         List<MetaverseAttribute> metaverseAttributes,
         List<MetaverseObjectType> metaverseObjectTypes,
         List<PredefinedSearch> predefinedSearches,
         List<ExampleDataSet> exampleDataSets,
-        List<ExampleDataTemplate> dataGenerationTemplates,
-        List<ConnectorDefinition> connectorDefinitions);
+        List<ExampleDataTemplate> dataGenerationTemplates);
 
     /// <summary>
     /// Persists the built-in schema synchronisation pass's changes in a single transaction: the given

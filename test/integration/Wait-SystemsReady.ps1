@@ -96,29 +96,45 @@ else
     SAMBA_ETC="/etc/samba"
 fi
 
-# Generate TLS certificates if they don't exist
+# Generate TLS certificates if they don't exist. The certificate must carry every name
+# JIM might connect by, because certificate validation is always on (#1141) and there is
+# no option to skip it. This mirrors post-provision.sh's SAN logic exactly: the DC's own
+# FQDN (what it advertises as dNSHostName and pins to), the short hostname, the domain,
+# and the Compose service name (the Host an administrator configures on the Connected
+# System, and what these integration tests connect by).
 mkdir -p ${SAMBA_PRIVATE}/tls
 if [ ! -f ${SAMBA_PRIVATE}/tls/cert.pem ]; then
+    LDOMAIN=$(echo "${REALM:-${DOMAIN}}" | tr '[:upper:]' '[:lower:]')
+    DC_SHORT_NAME="$(hostname -s)"
+    DC_FQDN="${DC_SHORT_NAME}.${LDOMAIN}"
+    CERT_SANS="DNS:${DC_FQDN},DNS:${DC_SHORT_NAME},DNS:${LDOMAIN},DNS:samba-ad-primary"
+
     openssl req -x509 -nodes -days 3650 \
         -newkey rsa:2048 \
         -keyout ${SAMBA_PRIVATE}/tls/key.pem \
         -out ${SAMBA_PRIVATE}/tls/cert.pem \
-        -subj "/CN=panoply.local/O=JIM Integration Testing" 2>/dev/null
+        -subj "/CN=${DC_FQDN}/O=JIM Integration Testing" \
+        -addext "subjectAltName=${CERT_SANS}" 2>/dev/null
     cp ${SAMBA_PRIVATE}/tls/cert.pem ${SAMBA_PRIVATE}/tls/ca.pem
     chmod 600 ${SAMBA_PRIVATE}/tls/key.pem
 fi
 
-# Add TLS settings to smb.conf if not present
+# Add TLS settings to smb.conf if not present. "ldap server require strong auth = no"
+# matches post-provision.sh: without it, Samba refuses simple binds over unencrypted
+# LDAP (port 389), which the harness's out-of-band ldapsearch helpers rely on.
 if ! grep -q "tls enabled" ${SAMBA_ETC}/smb.conf; then
     sed -i "/^\[global\]/a\\
 tls enabled = yes\\
 tls keyfile = ${SAMBA_PRIVATE}/tls/key.pem\\
 tls certfile = ${SAMBA_PRIVATE}/tls/cert.pem\\
-tls cafile = ${SAMBA_PRIVATE}/tls/ca.pem" ${SAMBA_ETC}/smb.conf
+tls cafile = ${SAMBA_PRIVATE}/tls/ca.pem\\
+ldap server require strong auth = no" ${SAMBA_ETC}/smb.conf
     echo "TLS configuration added to smb.conf"
 fi
 '@
-                docker exec samba-ad-primary bash -c $script
+                # .ps1 files check out with CRLF endings (.gitattributes), and bash chokes on the carriage
+                # returns, so strip them before handing the script over.
+                docker exec samba-ad-primary bash -c ($script -replace "`r", "")
 
                 # Restart Samba to apply TLS config
                 Write-Host "  Restarting Samba to enable LDAPS..." -ForegroundColor Gray
@@ -148,7 +164,8 @@ fi
     }
 )
 
-# Phase 2 adds these systems
+# Phase 2 adds these systems. All four carry healthchecks in the compose file, so health status is the
+# readiness signal for each and none needs an additional check on top.
 $phase2Systems = @(
     @{
         Name = "sqlserver-hris-a"
@@ -157,8 +174,23 @@ $phase2Systems = @(
         AdditionalCheck = $null
     },
     @{
+        # Oracle is the slow one: its healthcheck waits for the pluggable database to open READ WRITE,
+        # and a first start against an empty volume creates the database before that can happen. The
+        # default -TimeoutSeconds 600 is enough for a warm start; pass more for a cold one.
+        Name = "oracle-hris-b"
+        Description = "Oracle Database Free HRIS B"
+        HasHealthCheck = $true
+        AdditionalCheck = $null
+    },
+    @{
         Name = "postgres-target"
         Description = "PostgreSQL Target"
+        HasHealthCheck = $true
+        AdditionalCheck = $null
+    },
+    @{
+        Name = "mysql-test"
+        Description = "MySQL Test"
         HasHealthCheck = $true
         AdditionalCheck = $null
     }

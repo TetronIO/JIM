@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
@@ -132,12 +133,12 @@ public class MetaverseObjectBulkUpdateDatabaseTests
             .Include(o => o.AttributeValues)
             .SingleAsync(o => o.Id == mvo.Id);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.AttributeValues, Has.Count.EqualTo(2), "both attribute values should be persisted");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DepartmentId && av.StringValue == "Sales"), Is.True, "original Department value");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DisplayNameId && av.StringValue == "Alice Example"), Is.True, "added Display Name value");
-        });
+        }
     }
 
     /// <summary>
@@ -174,13 +175,13 @@ public class MetaverseObjectBulkUpdateDatabaseTests
             .Include(o => o.AttributeValues)
             .SingleAsync(o => o.Id == mvo.Id);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.AttributeValues, Has.Count.EqualTo(2), "one value removed, one added, one unchanged");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DisplayNameId && av.StringValue == "Alice Example"), Is.True, "unchanged Display Name retained");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.JobTitleId && av.StringValue == "Engineer"), Is.True, "added Job Title persisted");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DepartmentId), Is.False, "removed Department deleted");
-        });
+        }
     }
 
     /// <summary>
@@ -215,12 +216,12 @@ public class MetaverseObjectBulkUpdateDatabaseTests
         await using (var verifyCreateCtx = NewContext())
         {
             var created = await verifyCreateCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(created.DeletionTriggeredBySystemId, Is.EqualTo(7), "bulk create must persist DeletionTriggeredBySystemId");
                 Assert.That(created.DeletionTriggeredBySystemName, Is.EqualTo("HR System"), "bulk create must persist DeletionTriggeredBySystemName");
                 Assert.That(created.DeletionPolicySnapshotJson, Is.EqualTo(snapshotJson), "bulk create must persist DeletionPolicySnapshotJson");
-            });
+            }
         }
 
         // A rejoin cancels the scheduled deletion: the markers are cleared together, and the raw bulk update
@@ -232,11 +233,95 @@ public class MetaverseObjectBulkUpdateDatabaseTests
 
         await using var verifyUpdateCtx = NewContext();
         var updated = await verifyUpdateCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(updated.DeletionTriggeredBySystemId, Is.Null, "bulk update must persist a cleared DeletionTriggeredBySystemId");
             Assert.That(updated.DeletionTriggeredBySystemName, Is.Null, "bulk update must persist a cleared DeletionTriggeredBySystemName");
             Assert.That(updated.DeletionPolicySnapshotJson, Is.Null, "bulk update must persist a cleared DeletionPolicySnapshotJson");
-        });
+        }
+    }
+
+    /// <summary>
+    /// Seeds a Connected System and two import Synchronisation Rules, so attribute values can carry real provenance
+    /// foreign keys.
+    /// </summary>
+    private async Task<(int SystemId, int FirstRuleId, int SecondRuleId)> SeedSystemAndRulesAsync(int metaverseObjectTypeId)
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var system = new ConnectedSystem { Name = "HR System", ConnectorDefinition = connectorDefinition };
+        var csType = new ConnectedSystemObjectType { Name = "USER", ConnectedSystem = system, Selected = true };
+        seed.AddRange(connectorDefinition, system, csType);
+        await seed.SaveChangesAsync();
+
+        SyncRule NewRule(string name) => new()
+        {
+            Name = name,
+            Direction = SyncRuleDirection.Import,
+            ConnectedSystemId = system.Id,
+            ConnectedSystemObjectTypeId = csType.Id,
+            MetaverseObjectTypeId = metaverseObjectTypeId
+        };
+
+        var firstRule = NewRule("Import from HR");
+        var secondRule = NewRule("Import from Contractors");
+        seed.SyncRules.AddRange(firstRule, secondRule);
+        await seed.SaveChangesAsync();
+
+        return (system.Id, firstRule.Id, secondRule.Id);
+    }
+
+    /// <summary>
+    /// The provenance of a surviving attribute value (#1292) is the one thing the synchronisation engine changes on a
+    /// row it does not replace: a winning contribution that supplies the value the Metaverse Object already holds
+    /// stages neither an addition nor a removal, and instead takes the row's contributing rule and system over. The
+    /// update path reconciled attribute values purely by id, so that mutation was silently dropped; only a real
+    /// round trip proves it is written, because the in-memory provider stores the mutated object graph verbatim.
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectsAsync_ProvenanceOfSurvivingAttributeValue_IsPersistedAsync()
+    {
+        var ids = await SeedTypeAsync();
+        var rules = await SeedSystemAndRulesAsync(ids.PersonTypeId);
+
+        await using var ctx = NewContext();
+        var repo = new PostgresDataRepository(ctx);
+        var personType = await ctx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
+
+        var departmentValue = TextValue(ids.DepartmentId, "Sales");
+        departmentValue.ContributedBySystemId = rules.SystemId;
+        departmentValue.ContributedBySyncRuleId = rules.SecondRuleId;
+
+        var mvo = new MetaverseObject
+        {
+            Type = personType!,
+            AttributeValues = { departmentValue, TextValue(ids.DisplayNameId, "Alice Example") }
+        };
+
+        await repo.Sync.CreateMetaverseObjectsAsync(new[] { mvo });
+
+        // The higher-priority rule contributes the identical value and takes the row over; the value itself is untouched.
+        departmentValue.ContributedBySyncRuleId = rules.FirstRuleId;
+
+        await repo.Sync.UpdateMetaverseObjectsAsync(new[] { mvo });
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.MetaverseObjects
+            .AsNoTracking()
+            .Include(o => o.AttributeValues)
+            .SingleAsync(o => o.Id == mvo.Id);
+
+        var department = persisted.AttributeValues.Single(av => av.AttributeId == ids.DepartmentId);
+        var displayName = persisted.AttributeValues.Single(av => av.AttributeId == ids.DisplayNameId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(department.ContributedBySyncRuleId, Is.EqualTo(rules.FirstRuleId), "the taken-over provenance must reach the database");
+            Assert.That(department.ContributedBySystemId, Is.EqualTo(rules.SystemId), "the contributing system is unchanged");
+            Assert.That(department.StringValue, Is.EqualTo("Sales"), "the value itself is untouched by a provenance takeover");
+            Assert.That(department.Id, Is.EqualTo(departmentValue.Id), "the row is updated in place, not churned");
+            Assert.That(displayName.ContributedBySyncRuleId, Is.Null, "a value nobody took over keeps its provenance");
+        }
     }
 }

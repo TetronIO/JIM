@@ -1,0 +1,305 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Models.Core;
+using System.Data.Common;
+
+namespace JIM.Connectors.Sql.Providers;
+
+/// <summary>
+/// The dialect seam for the JIM SQL Connector. Everything a database server does differently from
+/// another one lives behind this interface, so the Connector itself never branches on which server it
+/// is talking to and a new provider is additive rather than invasive.
+/// <para>
+/// It plays the role <c>ILdapOperationExecutor</c> plays for the LDAP Connector (the place unit tests
+/// substitute), but it carries dialect knowledge rather than wrapping a sealed type: everything it
+/// hands back is a <see cref="System.Data.Common"/> abstraction, so tests can mock the connection,
+/// command and parameter directly and no provider-specific type crosses the seam.
+/// </para>
+/// <para>
+/// <b>Security contract.</b> Values are always bound as parameters, never interpolated. Identifiers
+/// cannot be parameterised, so the provider quotes and validates them (see <see cref="SqlIdentifier"/>).
+/// Connector configuration is privileged administrator input, but the injection surface it defends is
+/// still exactly these two: value parameterisation and identifier quoting.
+/// </para>
+/// </summary>
+internal interface ISqlProvider
+{
+    /// <summary>
+    /// The database server this provider addresses.
+    /// </summary>
+    SqlDatabaseType DatabaseType { get; }
+
+    /// <summary>
+    /// The server's name as an administrator would recognise it.
+    /// </summary>
+    string DisplayName { get; }
+
+    #region Parameters
+
+    /// <summary>
+    /// The character the dialect prefixes bind variables with ("@" or ":").
+    /// </summary>
+    string ParameterPrefix { get; }
+
+    /// <summary>
+    /// Renders a parameter's placeholder for embedding in command text. Throws when the name is not
+    /// identifier-shaped, because the result is interpolated into SQL.
+    /// </summary>
+    string GetParameterPlaceholder(string parameterName);
+
+    /// <summary>
+    /// Creates a bound parameter carrying a value. A null value becomes <see cref="DBNull"/>, which is
+    /// how ADO.NET expresses SQL NULL.
+    /// </summary>
+    DbParameter CreateParameter(string parameterName, object? value);
+
+    #endregion
+
+    #region Connections
+
+    /// <summary>
+    /// Builds the provider's connection string from the discrete settings an administrator supplied.
+    /// Never logged, and never assembled by string concatenation: each provider uses its own
+    /// connection-string builder so values are escaped by the driver rather than by JIM.
+    /// </summary>
+    string BuildConnectionString(SqlConnectionSettings settings);
+
+    /// <summary>
+    /// Creates a closed connection. The caller owns opening, closing and disposing it.
+    /// </summary>
+    DbConnection CreateConnection(string connectionString);
+
+    /// <summary>
+    /// Applies any configuration this dialect's driver takes on the connection object rather than in
+    /// its connection string, before the connection is opened.
+    /// <para>
+    /// Oracle Database's Native Network Encryption is the case this exists for: it is configured through
+    /// properties on the connection, not through a connection-string keyword, so a provider given only a
+    /// connection string could build a correct one and still open an unencrypted connection.
+    /// </para>
+    /// </summary>
+    void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings);
+
+    /// <summary>
+    /// Applies any configuration this dialect can only apply to a live session, immediately after the
+    /// connection has been opened and before anything is read or written through it.
+    /// <para>
+    /// Oracle Database's session time zone is the case this exists for. It decides what a
+    /// <c>TIMESTAMP WITH LOCAL TIME ZONE</c> column reads back as, ODP.NET defaults it to the client
+    /// host's zone, and the driver offers no way to set it before the connection is open, so
+    /// <see cref="ConfigureConnection"/> cannot reach it. Pinning it to
+    /// <see cref="SqlConnectionSettings.DatabaseTimeZone"/> is half of what keeps that column type
+    /// correct; <see cref="ColumnCarriesAnOffset"/> is the other half.
+    /// </para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The session could not be configured as the Connected System asks, so the connection is unusable rather than quietly reading values in the wrong zone.</exception>
+    void ConfigureOpenedConnection(DbConnection connection, SqlConnectionSettings settings);
+
+    /// <summary>
+    /// Creates a command on a connection, with any dialect-specific command configuration applied.
+    /// </summary>
+    DbCommand CreateCommand(DbConnection connection, string commandText);
+
+    /// <summary>
+    /// The cheapest statement that proves a connection works, used by save-time settings validation.
+    /// </summary>
+    string ConnectivityTestCommandText { get; }
+
+    /// <summary>
+    /// The listener port this dialect uses when an administrator leaves the port unset. The transport
+    /// decides it: Oracle Database listens for TCPS on a port of its own, while Microsoft SQL Server
+    /// negotiates TLS on the one port it already listens on.
+    /// </summary>
+    int GetDefaultPort(SqlConnectionEncryption encryption);
+
+    /// <summary>
+    /// What this dialect calls its encrypted transport, for the wording an administrator is shown when
+    /// a server's certificate is refused ("TLS", "TCPS").
+    /// </summary>
+    string SecureTransportName { get; }
+
+    /// <summary>
+    /// Whether this dialect's driver can be told to accept one specific server certificate, supplied as
+    /// a file through <see cref="SqlConnectionSettings.PinnedServerCertificatePath"/>.
+    /// <para>
+    /// That mechanism is how a certificate an administrator added in Admin &gt; Certificates becomes an
+    /// additional trust anchor: the operating system's own bundle is always tried first, and only a
+    /// certificate JIM's certificate store vouches for is ever pinned. A driver that offers no such
+    /// mechanism returns false, and its connections validate against the operating system bundle alone.
+    /// </para>
+    /// </summary>
+    bool SupportsPinnedServerCertificate { get; }
+
+    #endregion
+
+    #region Identifiers
+
+    /// <summary>
+    /// Quotes a single identifier, doubling any embedded closing quote character so a hostile name
+    /// cannot escape into the surrounding statement.
+    /// </summary>
+    string QuoteIdentifier(string identifier);
+
+    /// <summary>
+    /// Quotes and joins a schema-qualified object name. A null or empty schema yields the object name
+    /// alone, letting the connection's default schema apply.
+    /// </summary>
+    string QualifyObjectName(string? schemaName, string objectName);
+
+    #endregion
+
+    #region Import
+
+    /// <summary>
+    /// Generates one page of a keyset-paginated read of a table or view.
+    /// </summary>
+    string BuildKeysetPageCommandText(SqlKeysetPageRequest request);
+
+    /// <summary>
+    /// Renders the predicate selecting the rows a Delta Import considers changed: the source's own
+    /// watermark, or any of its related tables'. Shared by the page read and by the count that tells the
+    /// Activity how much this run is about to read, so the two can never disagree about what a change is.
+    /// </summary>
+    string BuildChangedRowsPredicate(SqlChangeFilter filter);
+
+    #endregion
+
+    #region Export
+
+    /// <summary>
+    /// How this dialect hands a generated key back to the client.
+    /// </summary>
+    SqlGeneratedKeyRetrieval GeneratedKeyRetrieval { get; }
+
+    /// <summary>
+    /// Generates an INSERT that returns the database-generated key for the new row.
+    /// </summary>
+    string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command);
+
+    /// <summary>
+    /// Generates a plain INSERT, for a row whose key JIM supplies and for a related table's rows.
+    /// </summary>
+    /// <remarks>
+    /// Standard SQL in every dialect JIM speaks, so this and its UPDATE and DELETE siblings are
+    /// implemented once rather than per provider. A dialect that genuinely needs its own shape overrides
+    /// the one statement it differs on, which is what keeps a third provider additive.
+    /// </remarks>
+    string BuildInsertCommandText(SqlInsertCommand command);
+
+    /// <summary>
+    /// Generates an UPDATE of the rows a key identifies.
+    /// </summary>
+    string BuildUpdateCommandText(SqlUpdateCommand command);
+
+    /// <summary>
+    /// Generates a DELETE of the rows a key identifies.
+    /// </summary>
+    string BuildDeleteCommandText(SqlDeleteCommand command);
+
+    /// <summary>
+    /// Creates the output parameter a generated key is returned through, or null where
+    /// <see cref="GeneratedKeyRetrieval"/> is <see cref="SqlGeneratedKeyRetrieval.ResultSet"/> and
+    /// there is no parameter to bind.
+    /// </summary>
+    DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType);
+
+    #endregion
+
+    #region Values
+
+    /// <summary>
+    /// Materialises a value a driver handed back through a bound parameter as the CLR type the rest of
+    /// the Connector works in, so that no provider-specific type crosses this seam.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It exists because a driver is not obliged to answer <see cref="DbParameter.Value"/> with a CLR
+    /// primitive, and ODP.NET does not: a generated key comes back as an
+    /// <c>Oracle.ManagedDataAccess.Types</c> wrapper struct whose type depends on how the parameter was
+    /// bound. Read unwrapped, a sequence-backed <c>NUMBER</c> key fails every create with a cast error
+    /// naming a type an administrator has no way to act on.
+    /// </para>
+    /// <para>
+    /// The data reader path needs none of this: every driver JIM speaks to materialises a column as a
+    /// CLR value already. This is the parameter path only.
+    /// </para>
+    /// <para>
+    /// Null, <see cref="DBNull"/> and a driver's own per-type null sentinel all answer null, so a caller
+    /// has exactly one thing to test for. That matters: a driver's null sentinel need not be
+    /// <see cref="DBNull"/>, and a caller checking only for <see cref="DBNull"/> would read "the database
+    /// returned nothing" as a value.
+    /// </para>
+    /// </remarks>
+    object? ConvertFromDriverValue(object? value);
+
+    /// <summary>
+    /// Materialises a GUID from whatever the reader returned for a GUID-typed column. The byte order
+    /// is dialect-specific and getting it wrong transposes the first three components silently, so it
+    /// belongs behind the seam rather than at the call site.
+    /// </summary>
+    Guid ConvertToGuid(object value);
+
+    /// <summary>
+    /// Renders a GUID in the form this dialect's parameter binding expects, inverting
+    /// <see cref="ConvertToGuid"/>.
+    /// </summary>
+    object ConvertFromGuid(Guid value);
+
+    #endregion
+
+    #region Schema catalogue
+
+    /// <summary>
+    /// Lists base tables as (<see cref="SqlCatalogueColumns.SchemaName"/>,
+    /// <see cref="SqlCatalogueColumns.ObjectName"/>).
+    /// </summary>
+    string TablesCommandText { get; }
+
+    /// <summary>
+    /// Lists views in the same shape as <see cref="TablesCommandText"/>.
+    /// </summary>
+    string ViewsCommandText { get; }
+
+    /// <summary>
+    /// Lists a table or view's columns, filtered by the
+    /// <see cref="SqlCatalogueParameters.SchemaName"/> and <see cref="SqlCatalogueParameters.ObjectName"/>
+    /// parameters, in ordinal order.
+    /// </summary>
+    string ColumnsCommandText { get; }
+
+    /// <summary>
+    /// Lists a table's primary key columns in key order, which is what makes a composite anchor
+    /// reproducible between runs.
+    /// </summary>
+    string PrimaryKeyColumnsCommandText { get; }
+
+    /// <summary>
+    /// Lists a table's foreign key columns with both sides of each constraint, which schema discovery
+    /// turns into Reference suggestions for the administrator to confirm.
+    /// </summary>
+    string ForeignKeyColumnsCommandText { get; }
+
+    #endregion
+
+    #region Type mapping
+
+    /// <summary>
+    /// Maps a column's SQL type onto a JIM attribute type for this dialect. Throws
+    /// <see cref="SqlTypeMappingException"/> rather than degrading an unrecognised type to Text.
+    /// </summary>
+    AttributeDataType MapColumnType(SqlColumnType columnType, SqlTypeMappingOptions options);
+
+    /// <summary>
+    /// Whether a date and time column states the offset of the values it holds, which is what decides
+    /// whether the Connected System's Database Time Zone applies to them.
+    /// <para>
+    /// It lives behind the seam because the answer is a dialect's own vocabulary (<c>datetimeoffset</c>
+    /// against <c>TIMESTAMP WITH TIME ZONE</c>), and because getting it wrong moves an instant by the
+    /// declared zone's offset without any error.
+    /// </para>
+    /// </summary>
+    bool ColumnCarriesAnOffset(SqlColumnType columnType);
+
+    #endregion
+}

@@ -128,7 +128,148 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// Counts towards an Activity's Pending Export totals exactly as <see cref="PendingExportCreated"/> does; it
     /// is one, and only its intent differs.
     /// </summary>
-    DeprovisionQueued
+    DeprovisionQueued,
+
+    /// <summary>
+    /// Preview only: the Connected System Object would leave import scope and is joined to a Metaverse Object, so
+    /// the obsoletion that follows disconnects the two and recalls whatever the object contributed.
+    ///
+    /// Separate from <see cref="WouldFallOutOfScope"/>, which covers the unjoined objects leaving scope, because
+    /// the two have entirely different consequences and an administrator consents to them differently. An unjoined
+    /// object leaving scope loses JIM nothing; a joined one takes its contributed attribute values out of the
+    /// Metaverse with it and may leave its Metaverse Object with no connectors at all.
+    /// </summary>
+    WouldDisconnectFromMetaverseObject,
+
+    /// <summary>
+    /// Preview only (#1115): the next synchronisation would stage a Pending Export of type Delete for this object,
+    /// removing it from its target Connected System. The preview sibling of <see cref="DeprovisionQueued"/>, used
+    /// where a proposed Outbound Deprovision Action of Delete would turn an out-of-scope disconnection into a
+    /// deletion in the target system; the destructive count an administrator consents to.
+    /// </summary>
+    WouldStageDeleteExport,
+
+    /// <summary>
+    /// Preview only (#1115): a joined object that the current configuration would disconnect on its next
+    /// synchronisation would instead keep its Metaverse Object join under the proposal ("once managed, always
+    /// managed"). The relaxing direction of the Inbound Out-of-Scope Action toggle; nothing is destroyed, and the
+    /// preview states it so the administrator knows the disconnections they may have been expecting stop.
+    /// </summary>
+    WouldRemainJoined,
+
+    /// <summary>
+    /// Preview only (#1115): the object is joined and in scope today, so nothing happens to it on save, but the
+    /// fate a future scope exit would hand it changes with the proposed Outbound Deprovision Action (disconnect
+    /// versus delete in the target system). The exposure tier of the destructive-toggle preview: it counts every
+    /// object the changed action now stands over, which is the number that makes "3,400 objects in this system
+    /// move from Disconnect to Delete" readable at a glance. The direction of the change is carried in the
+    /// delta's old and new values.
+    /// </summary>
+    WouldChangeDeprovisionAction,
+
+    /// <summary>
+    /// Preview only (#1437): the proposed Attribute Flow would not evaluate for this object, so the attribute it
+    /// targets is not written at all. The Expression threw, a required input has no value under a Missing Input
+    /// Behaviour that fails, or a multi-valued source flows to a single-valued target.
+    ///
+    /// Its own transition rather than an absent delta, because an Expression that fails on one object in a thousand
+    /// is exactly what an Attribute Flow preview exists to find: reported as no change, the failing objects would
+    /// be indistinguishable from the ones the edit does not touch. Only failures the proposal introduces are
+    /// counted; one the stored configuration already has is not this change's doing.
+    /// </summary>
+    WouldFailAttributeFlow,
+
+    /// <summary>
+    /// Preview only (#1457): the Connected System Object joins to one Metaverse Object under the stored Object
+    /// Matching Rules and would join to a different one under the proposal. The most dangerous transition a
+    /// matching change can produce, because nothing about it fails: the account simply becomes part of the wrong
+    /// identity, and every attribute it contributes goes with it. The old and new values name the two Metaverse
+    /// Objects.
+    /// </summary>
+    WouldJoinDifferentMetaverseObject,
+
+    /// <summary>
+    /// Preview only (#1457): the Connected System Object matches nothing today, so its next synchronisation would
+    /// project a new Metaverse Object for it, and under the proposal it would join an existing one instead. The
+    /// benign direction of a matching change, and the one an administrator widening a rule is usually aiming for.
+    /// </summary>
+    WouldJoinInsteadOfProject,
+
+    /// <summary>
+    /// Preview only (#1457): the inverse, and a duplicate-identity risk. The Connected System Object matches a
+    /// Metaverse Object today and would match nothing under the proposal, so its next synchronisation would project
+    /// a second Metaverse Object beside the one it should have joined.
+    /// </summary>
+    WouldProjectInsteadOfJoin,
+
+    /// <summary>
+    /// Preview only (#1457): the proposed Object Matching Rules match more than one Metaverse Object for this
+    /// object, so its next synchronisation fails it with an ambiguous match rather than joining it to anything. Its
+    /// own transition rather than a validation finding, because ambiguity is a property of the data and not of the
+    /// rule: a rule that is unique across every object but two is invisible until those two are counted.
+    /// </summary>
+    WouldMatchAmbiguously,
+
+    /// <summary>
+    /// Preview only (#1462): the object would have had a new Metaverse Object projected for it on the next
+    /// synchronisation, and under the proposal it would not. It stays in the connector space unmanaged, which is
+    /// what turning Project To Metaverse off, or disabling the rule that does the projecting, actually means.
+    ///
+    /// Its own transition rather than an absent delta because the objects concerned are the ones an administrator
+    /// was expecting identities for; reported as no change they would be indistinguishable from the objects the
+    /// edit does not touch.
+    /// </summary>
+    WouldStopProjecting,
+
+    /// <summary>
+    /// Preview only (#1462): the target-system inverse. The Metaverse Object would have had an object provisioned
+    /// for it in the target Connected System and under the proposal would not, so the account an administrator was
+    /// expecting is never created. Nothing existing is destroyed, which is exactly why it goes unnoticed.
+    /// </summary>
+    WouldStopProvisioning,
+
+    /// <summary>
+    /// Preview only (#1462): the object's divergence from what JIM holds would no longer be corrected, because the
+    /// export rule that stands over it would stop enforcing state. The count of objects free to drift from the
+    /// moment the change is saved.
+    /// </summary>
+    WouldStopCorrectingDrift,
+
+    /// <summary>
+    /// Preview only (#1475): the object would stop being imported, and nothing else would happen to it. Deselecting
+    /// its Object Type removes the type from deletion detection, so the object is never compared against an import
+    /// again: it stays joined to its Metaverse Object and keeps contributing the values it last imported, which stop
+    /// being refreshed.
+    ///
+    /// Where the delta names an attribute, the same freeze at attribute granularity: the Connector stops fetching
+    /// that attribute and the values already held for it stay exactly as they are.
+    ///
+    /// Its own transition rather than a disconnection or an obsoletion, because it is neither. An object that keeps
+    /// contributing stale values while nothing reports it is the failure this preview exists to make visible, and
+    /// borrowing either of those words would describe a cascade that does not happen. See #1474.
+    /// </summary>
+    WouldStopBeingImported,
+
+    /// <summary>
+    /// Preview only (#1475): the inverse. The object, or the attribute the delta names, would start being imported
+    /// again, so values that had frozen resume tracking the Connected System from the next Import Run Profile.
+    /// </summary>
+    WouldResumeBeingImported,
+
+    /// <summary>
+    /// Preview only (#1475): the Metaverse Object would have the values this Connected System contributed withdrawn
+    /// when its obsolete object is next synchronised, where today they would be left in place. What turning Remove
+    /// Contributed Attributes On Obsoletion on means for the objects already waiting: a surviving contributor is
+    /// re-elected where there is one, and the value is cleared where there is not.
+    /// </summary>
+    WouldWithdrawContributedValues,
+
+    /// <summary>
+    /// Preview only (#1475): the inverse. The values this Connected System contributed would be left on the
+    /// Metaverse Object when its obsolete object is next synchronised, rather than withdrawn. They stop tracking
+    /// anything at that point, which is the part a proposal that reads as "keep the data" does not say.
+    /// </summary>
+    WouldRetainContributedValues
 }
 
 /// <summary>
@@ -202,5 +343,20 @@ public enum ActivityStatDimension
     NoChangeReason = 3,
 
     /// <summary>Counts per <see cref="ActivityRunProfileExecutionItemSyncOutcomeType"/> across the Activity's sync outcome rows (key: the enum's integer value).</summary>
-    OutcomeType = 4
+    OutcomeType = 4,
+
+    /// <summary>
+    /// Entries an import read from the Connected System and discarded because an excluded Container carved them
+    /// out (#1255), keyed by that Container's id.
+    /// </summary>
+    /// <remarks>
+    /// The one dimension that is <b>not</b> derived from Run Profile Execution Items, and the only reason it is
+    /// here rather than in a table of its own: a discarded entry produced no item, by definition. It has the same
+    /// shape as every other counter, is written by the same incremental upsert (which matters, because an import
+    /// reports these per page), and is read by the same query. What it costs is that finalisation can no longer
+    /// recompute the whole counter set from the item tables, so
+    /// <see cref="RunProfileExecutionStatsDimensions.RecomputedFromExecutionItems"/> names the dimensions it owns
+    /// and leaves this one alone.
+    /// </remarks>
+    ExcludedContainer = 5
 }

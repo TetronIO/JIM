@@ -67,11 +67,11 @@ public class ConfigurationChangePreflightSurfaceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(System("HR Database (EMEA)"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.RequiresAcknowledgement, Is.False, "renaming a Connected System cannot change a synchronisation outcome");
             Assert.That(result.HighestClass, Is.EqualTo(ConfigurationChangeClass.Cosmetic));
-        });
+        }
     }
 
     [Test]
@@ -85,7 +85,7 @@ public class ConfigurationChangePreflightSurfaceTests
         var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(proposed);
 
         var item = result.DestructiveItems.SingleOrDefault();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsDestructive, Is.True);
             Assert.That(item, Is.Not.Null);
@@ -93,7 +93,7 @@ public class ConfigurationChangePreflightSurfaceTests
                 "deselecting an Object Type obsoletes its objects and deprovisions what they are joined to; the dialog must say so");
             Assert.That(item!.Label, Does.Contain("Person"),
                 "'Object Types > Object Type > Selected' is the same sentence for all twelve of them; the dialog must name the one being deselected");
-        });
+        }
     }
 
     [Test]
@@ -105,12 +105,12 @@ public class ConfigurationChangePreflightSurfaceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsDestructive, Is.True);
             Assert.That(result.DestructiveItems.Single().Label, Does.Contain("EMEA"),
                 "the administrator needs to know which partition they are removing from scope");
-        });
+        }
     }
 
     [Test]
@@ -122,12 +122,12 @@ public class ConfigurationChangePreflightSurfaceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.RequiresAcknowledgement, Is.True, "what a connector reads is what a synchronisation acts on");
             Assert.That(result.IsDestructive, Is.False);
             Assert.That(result.DestructiveItems, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -171,13 +171,13 @@ public class ConfigurationChangePreflightSurfaceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateMetaverseObjectTypeAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsDestructive, Is.True);
             Assert.That(result.DestructiveItems.Select(i => i.Key), Does.Contain("deletionRule"));
             Assert.That(result.DestructiveItems.Single(i => i.Key == "deletionRule").Consequence,
                 Does.Contain("immediately"));
-        });
+        }
     }
 
     [Test]
@@ -217,12 +217,12 @@ public class ConfigurationChangePreflightSurfaceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateMetaverseAttributeAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.RequiresAcknowledgement, Is.True);
             Assert.That(result.IsDestructive, Is.False);
             Assert.That(result.Items.Select(i => i.Key), Does.Contain("attributePlurality"));
-        });
+        }
     }
 
     [Test]
@@ -238,11 +238,11 @@ public class ConfigurationChangePreflightSurfaceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateMetaverseAttributeAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Items, Is.Not.Empty, "the change is real, it is just not consequential");
             Assert.That(result.RequiresAcknowledgement, Is.False);
-        });
+        }
     }
 
     #endregion
@@ -257,11 +257,11 @@ public class ConfigurationChangePreflightSurfaceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateServiceSettingAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Items, Is.Not.Empty);
             Assert.That(result.RequiresAcknowledgement, Is.False, "page size changes throughput, not outcomes");
-        });
+        }
     }
 
     [Test]
@@ -274,11 +274,11 @@ public class ConfigurationChangePreflightSurfaceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateServiceSettingAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.RequiresAcknowledgement, Is.True);
             Assert.That(result.IsDestructive, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -304,11 +304,11 @@ public class ConfigurationChangePreflightSurfaceTests
         var result = await _jim.ConfigurationChangePreflight.EvaluateServiceSettingAsync(
             Setting(Constants.SettingKeys.PartitionValidationMode, "Permissive"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.BaselineUnavailable, Is.True);
             Assert.That(result.RequiresAcknowledgement, Is.False);
-        });
+        }
     }
 
     #endregion

@@ -25,7 +25,7 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class SchedulesController(ILogger<SchedulesController> logger, JimApplication application) : ControllerBase
+public class SchedulesController(ILogger<SchedulesController> logger, JimApplication application) : ApiControllerBase(application, logger)
 {
     private readonly ILogger<SchedulesController> _logger = logger;
     private readonly JimApplication _application = application;
@@ -52,8 +52,8 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     {
         _logger.LogTrace("Requested schedules page {Page}, size {PageSize}, search '{Search}'", page, pageSize, LogSanitiser.Sanitise(search));
 
-        var result = await _application.Scheduler.GetSchedulesAsync(page, pageSize, search, sortBy, sortDescending);
-        var dtos = result.Results.Select(ScheduleDto.FromEntity).ToList();
+        var result = await _application.Scheduler.GetScheduleHeadersAsync(page, pageSize, search, sortBy, sortDescending);
+        var dtos = result.Results.Select(ScheduleDto.FromHeader).ToList();
 
         return Ok(PaginatedResponse<ScheduleDto>.Create(dtos, result.TotalResults, result.CurrentPage, result.PageSize));
     }
@@ -630,29 +630,5 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return "SQL script path is required for SqlScript steps";
         }
         return null;
-    }
-
-    /// <summary>
-    /// Gets the initiator information from the current user context.
-    /// </summary>
-    private async Task<(ActivityInitiatorType Type, Guid? Id, string? Name)> GetInitiatorInfoAsync()
-    {
-        // Check for API key authentication
-        if (HttpContext.Items.TryGetValue("ApiKeyId", out var apiKeyIdObj) && apiKeyIdObj is Guid apiKeyId)
-        {
-            var apiKey = await _application.Security.GetApiKeyAsync(apiKeyId);
-            return (ActivityInitiatorType.ApiKey, apiKeyId, apiKey?.Name ?? "API Key");
-        }
-
-        // User authentication - get name from claims
-        var userIdClaim = User.FindFirst("sub") ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-        var nameClaim = User.FindFirst("name") ?? User.FindFirst(System.Security.Claims.ClaimTypes.Name);
-
-        if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
-        {
-            return (ActivityInitiatorType.User, userId, nameClaim?.Value ?? User.Identity?.Name);
-        }
-
-        return (ActivityInitiatorType.User, null, User.Identity?.Name);
     }
 }

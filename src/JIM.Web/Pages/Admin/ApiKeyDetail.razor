@@ -4,13 +4,13 @@
 @using JIM.Models.Security
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Pages.Admin.Components
 @using JIM.Web.Services
 @using Humanizer
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
-@inject IUserPreferenceService PreferenceService
 @inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -26,7 +26,7 @@
     }
 </div>
 
-@if (_apiKey != null && _preferencesLoaded)
+@if (_apiKey != null)
 {
     <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-5">
 
@@ -141,78 +141,107 @@
 
         <MudTabPanel Text="Activity">
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                All activities initiated by this API key.
+                All Activities initiated by this API Key.
             </MudText>
 
-            <MudTable @ref="_table" T="Activity" ServerData="ServerReload" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-                Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer" Loading="@_loading"
-                LoadingProgressColor="Color.Primary">
-                <ToolBarContent>
-                    <MudSpacer />
-                    <SearchField ValueChanged="@(s => OnSearch(s))"
-                                 Placeholder="Search type or target" Class="mt-0" />
-                </ToolBarContent>
-                <HeaderContent>
-                    <MudTh>
-                        <MudTableSortLabel SortLabel="type" T="Activity">
-                            <MudText Typo="Typo.button">Type</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                    <MudTh>
-                        <MudTableSortLabel SortLabel="target" T="Activity">
-                            <MudText Typo="Typo.button">Target</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                    <MudTh>
-                        <MudTableSortLabel SortLabel="operation" T="Activity">
-                            <MudText Typo="Typo.button">Operation</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                    <MudTh>
-                        <MudTableSortLabel SortLabel="created" T="Activity" InitialDirection="SortDirection.Descending">
-                            <MudText Typo="Typo.button">Created</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                    <MudTh>
-                        <MudTableSortLabel SortLabel="status" T="Activity">
-                            <MudText Typo="Typo.button">Status</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                    <MudTh>
-                        <MudTableSortLabel SortLabel="executiontime" T="Activity">
-                            <MudText Typo="Typo.button">Execution Time</MudText>
-                        </MudTableSortLabel>
-                    </MudTh>
-                </HeaderContent>
-                <RowTemplate Context="context">
-                    <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
-                    <MudTd DataLabel="Target">@(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</MudTd>
-                    <MudTd DataLabel="Operation">
-                        <MudChip T="string" Variant="Variant.Text"
-                            Color="Helpers.GetActivityMudBlazorColorForOperation(context.TargetOperationType)">
-                            @context.TargetOperationType.ToString().SplitOnCapitalLetters()
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Created">
-                        <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                            @context.Created.ToLocalTime().ToRelativeTime()
-                        </MudTooltip>
-                    </MudTd>
-                    <MudTd DataLabel="Status">
-                        <MudChip T="string" Variant="Variant.Text"
-                            Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
-                            @context.Status.ToString().SplitOnCapitalLetters()
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Execution Time">@(context.ExecutionTime?.ToCasualString() ?? "-")</MudTd>
-                </RowTemplate>
-                <NoRecordsContent>
-                    No activities have been recorded for this API key yet.
-                </NoRecordsContent>
-                <PagerContent>
-                    <MudTablePager />
-                </PagerContent>
-            </MudTable>
+            @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, density
+               and the search box) lives in the shared grid; this page supplies the columns, the window loader and
+               the empty states. *@
+            <VirtualisedDataGrid T="Activity"
+                                 ContainerId="api-key-activity"
+                                 StateKey="@Id.ToString()"
+                                 DefaultSortBy="created"
+                                 DefaultSortDescending="true"
+                                 LoadWindow="LoadActivityWindowAsync"
+                                 RowClicked="HandleRowClicked"
+                                 SingularName="Activity"
+                                 PluralName="Activities"
+                                 SearchPlaceholder="Search type or target">
+                <Columns>
+                    <TemplateColumn Title="Type" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Type" Name="type" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @context.Item.TargetType.ToString().SplitOnCapitalLetters()
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Target" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Target" Name="target" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @(!string.IsNullOrEmpty(context.Item.TargetName) ? context.Item.TargetName : "(no name)")
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Operation" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Operation" Name="operation" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudChip T="string" Variant="Variant.Text"
+                                Color="Helpers.GetActivityMudBlazorColorForOperation(context.Item.TargetOperationType)">
+                                @context.Item.TargetOperationType.ToString().SplitOnCapitalLetters()
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Created" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Created" Name="created" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                <span>@context.Item.Created.ToLocalTime().ToRelativeTime()</span>
+                            </MudTooltip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Status" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Status" Name="status" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudChip T="string" Variant="Variant.Text"
+                                Color="Helpers.GetActivityMudBlazorColorForStatus(context.Item.Status)">
+                                @context.Item.Status.ToString().SplitOnCapitalLetters()
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Execution Time" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Execution Time" Name="executiontime" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @if (context.Item.ExecutionTime.HasValue)
+                            {
+                                var executionTime = context.Item.ExecutionTime.Value;
+                                @executionTime.ToCasualString()
+                            }
+                            else
+                            {
+                                <EmptyValue />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <EmptyContent Context="grid">
+                    @* A search that matched nothing has a way out to offer; an API Key that has never been used
+                       has none, so it says what would put rows here instead. *@
+                    @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                         PrimaryText="@($"No Activities match \"{grid.SearchText}\"")"
+                                         SecondaryText="Try a different search term, or clear the search."
+                                         ActionText="Clear Search"
+                                         OnAction="@(() => grid.ClearSearchAsync())" />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.Api"
+                                         PrimaryText="No Activities have been recorded for this API Key"
+                                         SecondaryText="Activities appear here once this API Key is used to call the REST API." />
+                    }
+                </EmptyContent>
+            </VirtualisedDataGrid>
         </MudTabPanel>
 
         <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
@@ -236,11 +265,7 @@ else if (!_loading)
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private ApiKey? _apiKey;
-    private MudTable<Activity>? _table;
-    private string _searchString = "";
     private bool _loading = true;
-    private int _rowsPerPage = 10;
-    private bool _preferencesLoaded;
     private int _changeCount;
     private bool _detailsFormValid;
 
@@ -279,81 +304,32 @@ else if (!_loading)
         Snackbar.Add("API key updated successfully.", Severity.Success);
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                _rowsPerPage = preferredSize;
-                _preferencesLoaded = true;
-                StateHasChanged(); // Re-render to show the table now that preference is loaded
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
-    }
-
-    private async Task OnRowsPerPageChanged(int newSize)
-    {
-        _rowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
-    }
-
-    private async Task<TableData<Activity>> ServerReload(TableState state, CancellationToken token)
+    /// <summary>
+    /// Reads one window of the Activities this API Key initiated. The list is unbounded (an API Key in daily use
+    /// accumulates one Activity per write), so it is read by offset and count rather than loaded and sliced, and
+    /// the request's skip-the-count contract is passed straight through: a null total means "not counted", never
+    /// that nothing matched.
+    /// </summary>
+    private async Task<VirtualisedWindow<Activity>> LoadActivityWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
         if (_apiKey == null)
-        {
-            return new TableData<Activity>
-            {
-                TotalItems = 0,
-                Items = new List<Activity>()
-            };
-        }
+            return new VirtualisedWindow<Activity>([], request.IncludeTotalCount ? 0 : null);
 
-        _loading = true;
-        StateHasChanged();
+        using var jim = JimFactory.Create();
+        var result = await jim.Activities.GetActivitiesRangeAsync(
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
+            _apiKey.Id,
+            includeTotalCount: request.IncludeTotalCount);
 
-        try
-        {
-            // Convert MudBlazor's 0-indexed page to our 1-indexed page
-            var page = state.Page + 1;
-            var sortDescending = state.SortDirection == SortDirection.Descending;
-
-            using var jim = JimFactory.Create();
-            var result = await jim.Activities.GetActivitiesAsync(
-                page,
-                state.PageSize,
-                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
-                state.SortLabel,
-                sortDescending,
-                _apiKey.Id);
-
-            return new TableData<Activity>
-            {
-                TotalItems = result.TotalResults,
-                Items = result.Results
-            };
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
-        }
+        return new VirtualisedWindow<Activity>(result.Results, result.TotalResults);
     }
 
-    private void OnSearch(string text)
+    private void HandleRowClicked(Activity activity)
     {
-        _searchString = text;
-        _table?.ReloadServerData();
-    }
-
-    private void HandleRowClick(TableRowClickEventArgs<Activity> args)
-    {
-        if (args.Item != null)
-            NavManager.NavigateTo($"/activity/{args.Item.Id}");
+        NavManager.NavigateTo($"/activity/{activity.Id}");
     }
 }

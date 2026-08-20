@@ -25,8 +25,9 @@ services:
       # bundled realm. JIM_SSO_PUBLIC_CLIENT_ID tells the /api/v1/auth/config
       # endpoint to advertise that public client to interactive clients.
       - JIM_SSO_PUBLIC_CLIENT_ID=jim-powershell
-      # OpenLDAP TLS configuration for LDAPS connections
-      - LDAPTLS_REQCERT=never
+      # LDAPS certificate validation is real here (#1141): it is not disabled via
+      # LDAPTLS_REQCERT. Trust each directory's CA through the JIM certificate store
+      # (Settings > Certificates, or the Add-JIMCertificate cmdlet) instead.
     ports:
       - "5200:80"
     depends_on:
@@ -36,8 +37,9 @@ services:
     environment:
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
       - JIM_DB_HOSTNAME=jim.database
-      # OpenLDAP TLS configuration for LDAPS connections
-      - LDAPTLS_REQCERT=never
+      # LDAPS certificate validation is real here (#1141): it is not disabled via
+      # LDAPTLS_REQCERT. Trust each directory's CA through the JIM certificate store
+      # (Settings > Certificates, or the Add-JIMCertificate cmdlet) instead.
     volumes:
       # Expose worker logs for metrics streaming (integration tests)
       - ./test/integration/results/logs/worker:/var/log/jim

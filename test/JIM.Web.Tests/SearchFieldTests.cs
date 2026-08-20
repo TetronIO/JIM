@@ -21,11 +21,11 @@ public class SearchFieldTests : JimComponentTestContext
     {
         var field = Render<SearchField>().FindComponent<MudTextField<string>>().Instance;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(field.Immediate, Is.True, "A blur-commit search box does not filter until focus leaves it.");
             Assert.That(field.DebounceInterval, Is.EqualTo(300));
-        });
+        }
     }
 
     [Test]
@@ -51,11 +51,11 @@ public class SearchFieldTests : JimComponentTestContext
 
         var field = cut.FindComponent<MudTextField<string>>().Instance;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(field.Label, Is.EqualTo("Search object types"));
             Assert.That(field.Placeholder, Is.Null, "A label and a duplicate placeholder would read as the same text twice.");
-        });
+        }
     }
 
     [Test]
@@ -77,10 +77,10 @@ public class SearchFieldTests : JimComponentTestContext
 
         await cut.InvokeAsync(() => inner.Instance.ValueChanged.InvokeAsync("ldap"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(observed, Is.EqualTo("ldap"));
             Assert.That(cut.Instance.Value, Is.EqualTo("ldap"), "The component should hold the text it just reported.");
-        });
+        }
     }
 }

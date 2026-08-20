@@ -159,12 +159,12 @@ public class SyncRuleCreationDatabaseTests
 
         await using var verify = NewContext();
         var persisted = await verify.SyncRules.SingleAsync();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.ConnectedSystemId, Is.EqualTo(ids.SystemId));
             Assert.That(persisted.ConnectedSystemObjectTypeId, Is.EqualTo(ids.CsTypeId));
             Assert.That(persisted.MetaverseObjectTypeId, Is.EqualTo(ids.MvTypeId));
-        });
+        }
     }
 
     [Test]
@@ -196,14 +196,14 @@ public class SyncRuleCreationDatabaseTests
 
         await using var verify = NewContext();
         var flow = await verify.SyncRuleMappings.Include(m => m.Sources).SingleAsync();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(flow.TargetMetaverseAttributeId, Is.EqualTo(ids.MvAttrId), "flow target FK");
             Assert.That(flow.Sources.Single().ConnectedSystemAttributeId, Is.EqualTo(ids.CsAttrId), "flow source FK");
             // No duplicate attribute rows should have been inserted by graph traversal.
             Assert.That(verify.MetaverseAttributes.Count(), Is.EqualTo(1), "metaverse attribute count");
             Assert.That(verify.ConnectedSystemAttributes.Count(), Is.EqualTo(1), "Connected System attribute count");
-        });
+        }
     }
 
     [Test]
@@ -240,11 +240,11 @@ public class SyncRuleCreationDatabaseTests
 
         await using var verify = NewContext();
         var persistedGroup = await verify.SyncRuleScopingCriteriaGroups.Include(g => g.Criteria).SingleAsync();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persistedGroup.Criteria, Has.Count.EqualTo(1), "criteria persisted");
             // No duplicate connected-system attribute rows should have been inserted by graph traversal.
             Assert.That(verify.ConnectedSystemAttributes.Count(), Is.EqualTo(1), "Connected System attribute count");
-        });
+        }
     }
 }

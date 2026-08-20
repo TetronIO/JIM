@@ -58,6 +58,20 @@ internal class LdapConnectorImport
     private LdapConnectorRootDse? _previousRootDse;
     private LdapConnectorRootDse? _currentRootDse;
 
+    /// <summary>
+    /// Every Container stating something about scope for this run, held once because every entry the searches
+    /// return is tested against it. Lazy because it depends on the Run Profile's target partitions, and
+    /// thread-safe because the parallel combos convert their entries concurrently.
+    /// </summary>
+    private readonly Lazy<List<ConnectedSystemContainer>> _scopeDecidingContainers;
+
+    /// <summary>
+    /// How many entries each excluded Container caused to be discarded on the way in. Client-side filtering means
+    /// these entries were read from the directory and thrown away, and the design accepted that cost on condition
+    /// it is reported rather than hidden (#1255).
+    /// </summary>
+    private readonly ExclusionDiscardTally _entriesDiscardedByExclusion = new();
+
     internal LdapConnectorImport(
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
@@ -86,6 +100,7 @@ internal class LdapConnectorImport
         _logger = logger;
         _cancellationToken = cancellationToken;
         _progress = progress;
+        _scopeDecidingContainers = new Lazy<List<ConnectedSystemContainer>>(() => GetScopeDecidingContainers(GetTargetPartitions()));
 
         // Get search timeout from settings, defaulting to 5 minutes
         var searchTimeoutSetting = connectedSystem.SettingValues
@@ -396,28 +411,133 @@ internal class LdapConnectorImport
                 previousChangeNumber);
 
             await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changelog since change number {previousChangeNumber:N0}...");
+            var changelogTargetContainers = GetScopeDecidingContainers(GetTargetPartitions());
             await ReportObjectsReadByAsync(result,
-                () => GetDeltaResultsUsingChangelog(result, previousChangeNumber));
+                () => GetDeltaResultsUsingChangelog(result, previousChangeNumber, changelogTargetContainers));
         }
 
         return result;
     }
 
     /// <summary>
-    /// Returns the partitions to import from. If the Run Profile specifies a partition, only that
-    /// partition is returned. Otherwise, all selected partitions on the Connected System are returned.
+    /// Returns the partitions to import from: the partition the Run Profile targets when it targets one, otherwise
+    /// every selected partition. Only selected partitions are ever returned.
     /// </summary>
+    /// <remarks>
+    /// The decision itself lives in <see cref="ConnectedSystemExtensions.GetTargetPartitions"/> so that the Connector,
+    /// the Run Profile validation in JIM.Application and the portal cannot answer "what does this Run Profile read?"
+    /// three different ways. This Connector previously returned a targeted partition without consulting its Selected
+    /// flag, which made deselecting a partition a no-op for any Run Profile that named it.
+    /// </remarks>
     private IEnumerable<ConnectedSystemPartition> GetTargetPartitions()
     {
+        var targets = _connectedSystem.GetTargetPartitions(_connectedSystemRunProfile).ToList();
+
         if (_connectedSystemRunProfile.Partition != null)
         {
-            _logger.Debug("GetTargetPartitions: Run Profile targets specific partition: {PartitionName}",
-                LogSanitiser.Sanitise(_connectedSystemRunProfile.Partition.Name));
-            return [_connectedSystemRunProfile.Partition];
+            _logger.Debug("GetTargetPartitions: Run Profile targets partition {PartitionName}; {Count} partition(s) in scope after applying selection",
+                LogSanitiser.Sanitise(_connectedSystemRunProfile.Partition.Name), targets.Count);
+        }
+        else
+        {
+            _logger.Debug("GetTargetPartitions: No partition specified on Run Profile, importing from all {Count} selected partition(s)", targets.Count);
         }
 
-        _logger.Debug("GetTargetPartitions: No partition specified on Run Profile, importing from all selected partitions");
-        return _connectedSystem.Partitions!.Where(p => p.Selected);
+        return targets;
+    }
+
+    /// <summary>
+    /// Returns every Container stating something about scope across the partitions this run targets: the
+    /// selections and the exclusions alike.
+    /// </summary>
+    /// <remarks>
+    /// This is what decides an object's fate, and it is deliberately a different list from the search roots
+    /// (<see cref="ConnectedSystemUtilities.GetTopLevelSelectedContainers"/>), which say only where to search
+    /// from. A Subtree search of a selected Container returns everything beneath it, including any branch the
+    /// administrator has excluded (#1255), so an exclusion adds no search root of its own and the entries a
+    /// search returns are filtered against this list on the way through. Decomposing the searches to avoid
+    /// excluded branches server-side was rejected in the design: it would make import scope depend on how
+    /// recently the hierarchy was refreshed, so a new Container beneath a selected parent would be silently
+    /// skipped and its objects obsoleted.
+    ///
+    /// Four paths ask this question and all must reach the same answer, or a delta import sees objects a full
+    /// import would not: the full import and the AD USN delta, filtering the entries their searches return; and
+    /// the changelog and accesslog deltas, which read one directory-wide log and have to decide per entry whether
+    /// the changed object is one this Connected System imports.
+    /// </remarks>
+    private List<ConnectedSystemContainer> GetScopeDecidingContainers(IEnumerable<ConnectedSystemPartition> targetPartitions)
+    {
+        return targetPartitions.SelectMany(partition => partition.GetScopeDecidingContainers()).ToList();
+    }
+
+    /// <summary>
+    /// Reports how many entries each excluded Container caused this import call to read and discard, onto the
+    /// result and into the log.
+    /// </summary>
+    /// <remarks>
+    /// Client-side filtering is the deliberate choice (#1255): a directory cannot express "this subtree except
+    /// that branch" in one search, and decomposing the searches instead would make import scope depend on how
+    /// recently the hierarchy was refreshed. The cost is entries transferred only to be thrown away, and the
+    /// design accepted that cost on condition it is visible: these counts are the evidence for revisiting the
+    /// decision if an exclusion turns out to sit in front of a large branch.
+    ///
+    /// Both channels, not one. The log is where an engineer reading a run's output finds it; the result is what
+    /// carries it to the Activity, which is where the administrator who configured the exclusion will look.
+    /// </remarks>
+    internal void ReportEntriesDiscardedByExclusion(ConnectedSystemImportResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (_entriesDiscardedByExclusion.IsEmpty)
+            return;
+
+        var counts = _entriesDiscardedByExclusion.ToCounts();
+        result.EntriesDiscardedByExclusion = counts;
+
+        _logger.Information("LdapConnectorImport: Discarded {DiscardedCount} entries read from excluded Containers across {ContainerCount} exclusion(s)",
+            _entriesDiscardedByExclusion.Total, counts.Count);
+
+        // Named by Distinguished Name in the log even though the count travels by id: the log is read by a person,
+        // and a Container id says nothing to one.
+        var containersById = _scopeDecidingContainers.Value.ToDictionary(container => container.Id);
+        var named = counts.Select(count => (
+            ExternalId: containersById.TryGetValue(count.ContainerId, out var container)
+                ? container.ExternalId
+                : $"Container {count.ContainerId}",
+            count.EntriesDiscarded));
+
+        foreach (var (externalId, discarded) in named)
+            _logger.Information("LdapConnectorImport: Excluded Container '{Container}' discarded {DiscardedCount} entries",
+                LogSanitiser.Sanitise(externalId), discarded);
+    }
+
+    /// <summary>
+    /// Whether an entry a search returned is one this Connected System imports, counting it against the excluded
+    /// Container that carved it out where it is not.
+    /// </summary>
+    /// <remarks>
+    /// Applied to every entry converted, on the full import and both delta paths alike, because a directory
+    /// cannot express "this subtree except that branch" in a single search. Where no Container has been excluded
+    /// this is the same answer the search itself gave, at the cost of one containment test per entry against a
+    /// list bounded by the number of selected Containers.
+    /// </remarks>
+    private bool IsWithinImportScope(string? distinguishedName)
+    {
+        var scopeDecidingContainers = _scopeDecidingContainers.Value;
+
+        // No Container-level opinion to apply: the partition selection alone governs, as it did before Containers
+        // could be excluded.
+        if (scopeDecidingContainers.Count == 0)
+            return true;
+
+        if (LdapConnectorUtilities.IsDnInScope(distinguishedName, scopeDecidingContainers))
+            return true;
+
+        var excludedBy = LdapConnectorUtilities.ResolveMostSpecificContainerScope(distinguishedName, scopeDecidingContainers);
+        if (excludedBy is { Excluded: true })
+            _entriesDiscardedByExclusion.RecordDiscard(excludedBy);
+
+        return false;
     }
 
     /// <summary>
@@ -1017,7 +1137,8 @@ internal class LdapConnectorImport
         // remove any duplicates we might have added and change to a simple array for use with the search request
         var queryAttributes = attributes.Distinct().ToArray();
 
-        var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
+        var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter,
+            LdapConnectorUtilities.GetSearchScope(connectedSystemContainer), queryAttributes);
 
         // Only add paging control if the directory supports it
         // Samba AD claims AD compatibility but returns duplicate results when using paging cookies
@@ -1101,7 +1222,8 @@ internal class LdapConnectorImport
         attributes.Add("isDeleted"); // To detect deleted objects (when searching deleted objects container)
         var queryAttributes = attributes.Distinct().ToArray();
 
-        var searchRequest = new SearchRequest(container.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
+        var searchRequest = new SearchRequest(container.ExternalId, ldapFilter,
+            LdapConnectorUtilities.GetSearchScope(container), queryAttributes);
 
         // Only add paging control if the directory supports it
         var supportsPaging = _currentRootDse?.SupportsPaging ?? true;
@@ -1328,9 +1450,10 @@ internal class LdapConnectorImport
     /// Gets delta results for changelog-based directories (e.g., OpenLDAP, Oracle Directory).
     /// Queries the cn=changelog container for changes since the last change number.
     /// </summary>
-    private void GetDeltaResultsUsingChangelog(ConnectedSystemImportResult result, int previousChangeNumber)
+    private void GetDeltaResultsUsingChangelog(ConnectedSystemImportResult result, int previousChangeNumber, List<ConnectedSystemContainer> targetContainers)
     {
         _logger.Debug("GetDeltaResultsUsingChangelog: Querying for changes since changeNumber {PreviousChange}", previousChangeNumber);
+        var skippedOutOfScope = 0;
 
         var ldapFilter = $"(&(!(cn=changelog))(changeNumber>{previousChangeNumber}))";
         var ldapRequest = new SearchRequest("cn=changelog", ldapFilter, SearchScope.Subtree,
@@ -1362,6 +1485,15 @@ internal class LdapConnectorImport
 
                 if (string.IsNullOrEmpty(targetDn))
                     continue;
+
+                // Filter by Container scope — the changelog is directory-wide, so it reports changes to objects
+                // this Connected System does not import. A full import only reads the selected Containers, each
+                // to its own scope; without this, a delta import would bring in objects a full import never would.
+                if (!LdapConnectorUtilities.IsDnInScope(targetDn, targetContainers))
+                {
+                    skippedOutOfScope++;
+                    continue;
+                }
 
                 // Map changelog changeType to ObjectChangeType
                 // Changelog provides explicit change types, so we use them directly.
@@ -1396,6 +1528,10 @@ internal class LdapConnectorImport
                     }
                 }
             }
+
+            if (skippedOutOfScope > 0)
+                _logger.Information("GetDeltaResultsUsingChangelog: Skipped {SkippedCount} changelog entries for objects outside the selected Container scope",
+                    skippedOutOfScope);
         }
         catch (Exception ex)
         {
@@ -1435,6 +1571,10 @@ internal class LdapConnectorImport
             .Select(p => p.ExternalId)
             .Where(id => !string.IsNullOrEmpty(id))
             .ToList();
+        // Partition filtering alone is not the same selection a full import makes: within a partition, only the
+        // selected Containers are imported from, and each carries its own scope. Applying that here keeps a delta
+        // import to the objects a full import would have returned.
+        var targetContainers = GetScopeDecidingContainers(targetPartitions);
 
         while (iterations < maxIterations)
         {
@@ -1512,6 +1652,14 @@ internal class LdapConnectorImport
                 // from other suffixes to avoid importing objects from the wrong partition.
                 if (partitionSuffixes.Count > 0 &&
                     !partitionSuffixes.Any(suffix => reqDn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+                {
+                    skippedOutOfScope++;
+                    continue;
+                }
+
+                // Filter by Container scope — the entry is within a selected partition, but the administrator
+                // selects Containers within it, and a OneLevel Container excludes everything below its own level.
+                if (!LdapConnectorUtilities.IsDnInScope(reqDn, targetContainers))
                 {
                     skippedOutOfScope++;
                     continue;
@@ -1747,6 +1895,13 @@ internal class LdapConnectorImport
                 _logger.Information("ConvertLdapResults: Cancellation requested. Stopping.");
                 return importObjects;
             }
+
+            // Discard entries an excluded Container carves out. A Subtree search returns everything beneath its
+            // base, so the directory cannot apply an exclusion for us and every path that converts entries has to
+            // apply it here instead (#1255). Nothing beyond this point knows about Containers, so a discarded
+            // entry never becomes an import object, is never staged, and cannot be exported to.
+            if (!IsWithinImportScope(searchResult.DistinguishedName))
+                continue;
 
             // start to build the object that will represent the object in the Connected System. we will pass this back to JIM
             var importObject = new ConnectedSystemImportObject

@@ -324,9 +324,9 @@ if ($Step -eq "ManualTrigger" -or $Step -eq "All") {
     while ($elapsed -lt $maxWaitTime) {
         $finalExecution = Get-JIMScheduleExecution -Id $execution.id
 
-        # Status: Queued, InProgress, Completed, Failed, Cancelled (or 0,1,2,3,4)
+        # Status: Queued, InProgress, Complete, Failed, Cancelled (or 0,1,2,3,4)
         $statusValue = $finalExecution.status
-        $isTerminal = $statusValue -eq "Completed" -or $statusValue -eq "Failed" -or $statusValue -eq "Cancelled"
+        $isTerminal = $statusValue -eq "Complete" -or $statusValue -eq "Failed" -or $statusValue -eq "Cancelled"
         # Also check numeric values if status is returned as int
         if ($statusValue -is [int] -or $statusValue -is [long]) {
             $isTerminal = $statusValue -ge 2
@@ -554,7 +554,7 @@ if ($Step -eq "MultiStep" -or $Step -eq "All") {
         $currentExecution = Get-JIMScheduleExecution -Id $execution.id
 
         $statusValue = $currentExecution.status
-        $isTerminal = $statusValue -eq "Completed" -or $statusValue -eq "Failed" -or $statusValue -eq "Cancelled"
+        $isTerminal = $statusValue -eq "Complete" -or $statusValue -eq "Failed" -or $statusValue -eq "Cancelled"
         if ($statusValue -is [int] -or $statusValue -is [long]) {
             $isTerminal = $statusValue -ge 2
         }
@@ -900,7 +900,7 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
                 $currentExecution = Get-JIMScheduleExecution -Id $execution.id
 
                 $statusValue = $currentExecution.status
-                $isTerminal = $statusValue -eq "Completed" -or $statusValue -eq "Failed" -or $statusValue -eq "Cancelled"
+                $isTerminal = $statusValue -eq "Complete" -or $statusValue -eq "Failed" -or $statusValue -eq "Cancelled"
                 if ($statusValue -is [int] -or $statusValue -is [long]) {
                     $isTerminal = $statusValue -ge 2
                 }
@@ -988,4 +988,10 @@ $testSchedules = Get-JIMSchedule -Name "Integration Test*"
 foreach ($schedule in $testSchedules) {
     Disable-JIMSchedule -Id $schedule.id -ErrorAction SilentlyContinue
 }
+
+# The runner reads this rather than $LASTEXITCODE, which a scenario that returns instead of
+# exiting cannot set; without it the verdict would be whatever the last native command left
+# behind. It matters most under -ContinueOnError, where a failed run reaches here rather than
+# exiting above. See utils/Invoke-IntegrationScenario.ps1 and #1382.
+return $testResults
 Write-Host "Test schedules disabled (not deleted)." -ForegroundColor DarkGray

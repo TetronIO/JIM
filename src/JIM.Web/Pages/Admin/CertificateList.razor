@@ -4,10 +4,8 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Web
-@using JIM.Web.Services
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
-@inject IUserPreferenceService PreferenceService
-@inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -22,104 +20,124 @@
     Certificates can be uploaded directly or referenced from the connector-files mount.
 </MudText>
 
-<MudTable Items="@_certificates" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By"
-    Filter="new Func<TrustedCertificate, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
-    <ToolBarContent>
-        <TableDensityToggle @bind-Dense="_dense" />
-        <MudText Class="mx-2 mud-text-disabled">|</MudText>
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
+   and the toolbar count) lives in the shared grid; this page loads the full list once (Trusted Certificates are
+   a small configuration list) and slices windows from it in memory. *@
+<VirtualisedDataGrid @ref="_grid" T="TrustedCertificate"
+                     ContainerId="certificate-list"
+                     DefaultSortBy="name"
+                     LoadWindow="LoadCertificateWindowAsync"
+                     SingularName="Trusted Certificate"
+                     PluralName="Trusted Certificates">
+    <ToolBarExtras>
         <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary">
             <MudButton OnClick="ShowUploadDialog" StartIcon="@Icons.Material.Filled.Upload" DropShadow="false">Upload Certificate</MudButton>
             <MudButton OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder" DropShadow="false">Reference File Path</MudButton>
         </MudButtonGroup>
-        <MudSpacer />
-        <SearchField @bind-Value="_searchString" Class="mt-0" />
-    </ToolBarContent>
-    <HeaderContent>
-        <MudTh><MudText Typo="Typo.button">Actions</MudText></MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.Name)">
-                <MudText Typo="Typo.button">Name</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.Subject)">
-                <MudText Typo="Typo.button">Subject</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.SourceType)">
-                <MudText Typo="Typo.button">Source</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.ValidTo)">
-                <MudText Typo="Typo.button">Expires</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.IsEnabled)">
-                <MudText Typo="Typo.button">Status</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd>
-            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true">
-                <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="_ => ShowDetailsDialog(context)">View
-                    Details</MudMenuItem>
-                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit
-                </MudMenuItem>
-                <MudMenuItem Icon="@Icons.Material.Outlined.History" OnClick="_ => ShowHistoryDialogAsync(context)">Change History
-                </MudMenuItem>
-                <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context)">Delete
-                </MudMenuItem>
-            </MudMenu>
-        </MudTd>
-        <MudTd DataLabel="Name">@context.Name</MudTd>
-        <MudTd DataLabel="Subject">
-            <MudTooltip Text="@context.Subject" Arrow="true" Placement="Placement.Top">
-                @TruncateSubject(context.Subject)
-            </MudTooltip>
-        </MudTd>
-        <MudTd DataLabel="Source">
-            @if (context.SourceType == CertificateSourceType.Uploaded)
-            {
-                <MudChip T="string" Color="Color.Info">Uploaded</MudChip>
-            }
-            else
-            {
-                <MudChip T="string" Color="Color.Default">File Path</MudChip>
-            }
-        </MudTd>
-        <MudTd DataLabel="Expires">
-            @if (context.IsExpired)
-            {
-                <MudChip T="string" Color="Color.Error">Expired</MudChip>
-            }
-            else if (context.IsExpiringSoon)
-            {
-                <MudChip T="string" Color="Color.Warning">@context.DaysUntilExpiry days</MudChip>
-            }
-            else
-            {
-                @context.ValidTo.ToFriendlyDate()
-            }
-        </MudTd>
-        <MudTd DataLabel="Status">
-            @if (context.IsEnabled)
-            {
-                <MudChip T="string" Color="Color.Success">Enabled</MudChip>
-            }
-            else
-            {
-                <MudChip T="string" Color="Color.Default">Disabled</MudChip>
-            }
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>No trusted certificates have been added yet.</MudText>
-    </NoRecordsContent>
-</MudTable>
+    </ToolBarExtras>
+    <Columns>
+        <TemplateColumn Title="Actions" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Actions</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true">
+                    <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="_ => ShowDetailsDialog(context.Item)">View
+                        Details</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context.Item)">Edit
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Outlined.History" OnClick="_ => ShowHistoryDialogAsync(context.Item)">Change History
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context.Item)">Delete
+                    </MudMenuItem>
+                </MudMenu>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Name" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Name" Name="name" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @context.Item.Name
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Subject" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Subject" Name="subject" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudTooltip Text="@context.Item.Subject" Arrow="true" Placement="Placement.Top">
+                    @TruncateSubject(context.Item.Subject)
+                </MudTooltip>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Source" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Source" Name="source" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.SourceType == CertificateSourceType.Uploaded)
+                {
+                    <MudChip T="string" Color="Color.Info">Uploaded</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Default">File Path</MudChip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Expires" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Expires" Name="expires" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.IsExpired)
+                {
+                    <MudChip T="string" Color="Color.Error">Expired</MudChip>
+                }
+                else if (context.Item.IsExpiringSoon)
+                {
+                    <MudChip T="string" Color="Color.Warning">@context.Item.DaysUntilExpiry days</MudChip>
+                }
+                else
+                {
+                    @context.Item.ValidTo.ToFriendlyDate()
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Status" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Status" Name="status" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.IsEnabled)
+                {
+                    <MudChip T="string" Color="Color.Success">Enabled</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Default">Disabled</MudChip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No Trusted Certificates match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.EnhancedEncryption"
+                             PrimaryText="No Trusted Certificates have been added yet"
+                             SecondaryText="Use the Upload Certificate or Reference File Path buttons to add one." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @* Upload Certificate Dialog *@
 <MudDialog @bind-Visible="_uploadDialogVisible" Options="_dialogOptions">
@@ -299,16 +317,14 @@
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private List<TrustedCertificate>? _certificates;
-    private string _searchString = "";
-    private bool _loading = true;
-    private bool _dense;
+    private VirtualisedDataGrid<TrustedCertificate>? _grid;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
-{
-new("Home", href: "/", icon: Icons.Material.Filled.Home),
-new("Administration", href: "/admin"),
-new("Certificates", href: null, disabled: true)
-};
+    {
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Administration", href: "/admin"),
+        new("Certificates", href: null, disabled: true)
+    };
 
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
 
@@ -338,15 +354,6 @@ new("Certificates", href: null, disabled: true)
     private bool _editEnabled;
     private bool _saving;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
-            StateHasChanged();
-        }
-    }
-
     protected override async Task OnInitializedAsync()
     {
         await LoadCertificatesAsync();
@@ -355,26 +362,51 @@ new("Certificates", href: null, disabled: true)
     private async Task LoadCertificatesAsync()
     {
         using var jim = JimFactory.Create();
-        _loading = true;
         _certificates = await jim.Certificates.GetAllAsync();
-        _loading = false;
     }
 
-    private bool FilterFunc(TrustedCertificate element)
+    /// <summary>
+    /// Reloads the list from the database and refreshes the grid after any action that changes it (upload, add,
+    /// edit, delete), so the rows and the toolbar count stay honest.
+    /// </summary>
+    private async Task ReloadListAsync()
     {
-        if (string.IsNullOrWhiteSpace(_searchString))
-            return true;
+        await LoadCertificatesAsync();
+        if (_grid != null)
+            await _grid.RefreshAsync(invalidateTotals: true);
+    }
 
-        if (element.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+    /// <summary>
+    /// Slices one window of Trusted Certificates from the in-memory list, applying the grid's search (name,
+    /// subject, thumbprint; the same fields the old table filtered) and sort. Trusted Certificates are a small
+    /// configuration list, so there is no repository range read; the full list is loaded once and windowed here.
+    /// </summary>
+    private Task<VirtualisedWindow<TrustedCertificate>> LoadCertificateWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<TrustedCertificate> certificates = _certificates ?? Enumerable.Empty<TrustedCertificate>();
 
-        if (element.Subject.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            certificates = certificates.Where(c =>
+                c.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                c.Subject.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                c.Thumbprint.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
 
-        if (element.Thumbprint.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+        IOrderedEnumerable<TrustedCertificate> Order<TKey>(Func<TrustedCertificate, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? certificates.OrderByDescending(key, comparer) : certificates.OrderBy(key, comparer);
 
-        return false;
+        var sorted = request.SortBy switch
+        {
+            "subject" => Order(c => c.Subject, StringComparer.OrdinalIgnoreCase),
+            "source" => Order(c => c.SourceType),
+            "expires" => Order(c => c.ValidTo),
+            "status" => Order(c => c.IsEnabled),
+            _ => Order(c => c.Name, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
     }
 
     private static string TruncateSubject(string subject)
@@ -462,7 +494,7 @@ new("Certificates", href: null, disabled: true)
 
             Snackbar.Add("Certificate uploaded successfully.", Severity.Success);
             _uploadDialogVisible = false;
-            await LoadCertificatesAsync();
+            await ReloadListAsync();
         }
         catch (Exception ex)
         {
@@ -495,7 +527,7 @@ new("Certificates", href: null, disabled: true)
 
             Snackbar.Add("Certificate added successfully.", Severity.Success);
             _filePathDialogVisible = false;
-            await LoadCertificatesAsync();
+            await ReloadListAsync();
         }
         catch (Exception ex)
         {
@@ -534,7 +566,7 @@ new("Certificates", href: null, disabled: true)
 
             Snackbar.Add("Certificate updated successfully.", Severity.Success);
             _editDialogVisible = false;
-            await LoadCertificatesAsync();
+            await ReloadListAsync();
         }
         catch (Exception ex)
         {
@@ -575,7 +607,7 @@ new("Certificates", href: null, disabled: true)
             await jim.Certificates.DeleteAsync(certificate.Id, user, changeReason);
 
             Snackbar.Add("Certificate deleted successfully.", Severity.Success);
-            await LoadCertificatesAsync();
+            await ReloadListAsync();
         }
         catch (Exception ex)
         {

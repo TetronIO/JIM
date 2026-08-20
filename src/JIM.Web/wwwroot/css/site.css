@@ -43,21 +43,17 @@ h1:focus {
 }
 
 .mud-skeleton-wave::after {
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.55),
-        transparent
-    ) !important;
+    background: linear-gradient(90deg,
+            transparent,
+            rgba(255, 255, 255, 0.55),
+            transparent) !important;
 }
 
 body.jim-dark-mode .mud-skeleton-wave::after {
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.18),
-        transparent
-    ) !important;
+    background: linear-gradient(90deg,
+            transparent,
+            rgba(255, 255, 255, 0.18),
+            transparent) !important;
 }
 
 .mud-simple-table table * tr>th {
@@ -289,7 +285,7 @@ html[lang] .mud-table-outlined {
 
 /* Thin separator between adjacent panels — skips the first to avoid
    doubling with the container's top border */
-.jim-expansion-panel .mud-expand-panel + .mud-expand-panel {
+.jim-expansion-panel .mud-expand-panel+.mud-expand-panel {
     border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
 }
 
@@ -354,31 +350,58 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
     background-color: var(--mud-palette-surface);
 }
 
-/* Operations Queue: hide task rows when their schedule group is collapsed */
-.jim-queue-collapsed-row {
-    display: none !important;
+/* ─── Operations Queue: one block per Schedule Execution ───
+   The queue is a grid per group rather than one grouped table (MudBlazor cannot group and virtualise at once),
+   so each Schedule Execution's header is an ordinary block that has to join the grid beneath it into one box:
+   it carries the top corners and leaves its bottom edge to the grid's own top border. */
+.jim-queue-group-header {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.5rem 1rem;
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-bottom: none;
+    border-radius: var(--jim-container-radius) var(--jim-container-radius) 0 0;
 }
 
-/* Operations Queue: collapse empty group header rows for standalone tasks */
-.jim-queue-standalone-group {
-    padding: 0 !important;
-    height: 0 !important;
-    border: none !important;
-    line-height: 0 !important;
-    font-size: 0 !important;
+/* The block leading the queue sits under the worker status bar, which already draws the box's top edge. */
+.jim-queue-group-header--joined {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 
-/* Operations Queue: visible separator before standalone tasks to delineate from schedule groups */
-.jim-queue-standalone-separator {
-    height: 3px !important;
-    background-color: var(--mud-palette-lines-default);
+/* Collapsed, the header is the whole box: it closes itself off rather than opening onto nothing. */
+.jim-queue-group-header--collapsed {
+    border-bottom: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-bottom-left-radius: var(--jim-container-radius);
+    border-bottom-right-radius: var(--jim-container-radius);
 }
 
-/* Operations Queue: remove top border radius when worker activity bar connects */
-.jim-queue-table-active.mud-table-outlined {
+/* The Schedule's name and position, which is also what collapses the group. */
+.jim-queue-group-toggle {
+    flex: 0 0 auto;
+    cursor: pointer;
+}
+
+/* Pushed right so the Schedule's actions land over the Actions column of the rows beneath. */
+.jim-queue-group-actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+/* Every cell hangs from the top of its row, so the progress rails line up across the grid rather than floating
+   at a height that shifts with each cell's contents. Scoped to the queue's own grids. */
+.jim-queue-grid td {
+    vertical-align: top;
+}
+
+/* Joined to the block directly above it (its Schedule Execution's header, or the worker status bar), so the two
+   read as one box. !important because the portal's own container-radius rule above (.mud-table) carries it, and
+   a longhand without it loses to a shorthand that has it however specific the selector is. */
+html[lang] .jim-queue-grid--joined.mud-table-outlined {
     border-top-left-radius: 0 !important;
     border-top-right-radius: 0 !important;
-    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
 }
 
 /* Worker activity indicator bar — shown above queue table when tasks are processing */
@@ -400,21 +423,24 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(
-        90deg,
-        transparent 0%,
-        var(--mud-palette-primary) 40%,
-        var(--mud-palette-primary) 60%,
-        transparent 100%
-    );
+    background: linear-gradient(90deg,
+            transparent 0%,
+            var(--mud-palette-primary) 40%,
+            var(--mud-palette-primary) 60%,
+            transparent 100%);
     opacity: 0.08;
     background-size: 200% 100%;
     animation: jim-worker-shimmer 3s ease-in-out infinite;
 }
 
 @keyframes jim-worker-shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
 }
 
 .jim-worker-activity-text {
@@ -437,12 +463,29 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
 }
 
 @keyframes jim-worker-icon-tick {
-    0%   { transform: rotate(0deg); }
-    8%   { transform: rotate(0deg); }
-    13%  { transform: rotate(90deg); }
-    50%  { transform: rotate(90deg); }
-    55%  { transform: rotate(180deg); }
-    100% { transform: rotate(180deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    8% {
+        transform: rotate(0deg);
+    }
+
+    13% {
+        transform: rotate(90deg);
+    }
+
+    50% {
+        transform: rotate(90deg);
+    }
+
+    55% {
+        transform: rotate(180deg);
+    }
+
+    100% {
+        transform: rotate(180deg);
+    }
 }
 
 /* Idle worker status bar: resting state (no shimmer rendered, icon static and muted) */
@@ -495,7 +538,13 @@ html[lang] .mud-paper .mud-tabs-tabbar {
     background-color: var(--jim-inner-surface, transparent);
 }
 
-html[lang] .mud-paper .mud-tabs-panels {
+/* Only where the tab set applies its effects to the whole container (ApplyEffectsToContainer="true"), which is
+   the one arrangement whose panels sit INSIDE the outlined, rounded box and so have to carry its fill and its
+   bottom corners. MudBlazor marks that case by putting the paper classes on the tabs root rather than on the
+   tab bar. Every tab set in the portal is the other arrangement: the bar is its own outlined box and the panels
+   are ordinary page content below it, where a fill with no border and no padding is not a panel at all, just a
+   grey strip behind the content. */
+html[lang] .mud-paper .mud-tabs.mud-paper-outlined .mud-tabs-panels {
     background-color: var(--jim-inner-surface, transparent);
     border-radius: 0 0 8px 8px;
 }
@@ -737,7 +786,7 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
    flex child of `.jim-drawer-logo`, so the auto margin must be applied there.
    Icon rotates 180deg when the drawer is unpinned so the chevron always points the
    direction the drawer will move when clicked. */
-.jim-drawer-logo > .mud-tooltip-root:has(.jim-drawer-toggle) {
+.jim-drawer-logo>.mud-tooltip-root:has(.jim-drawer-toggle) {
     margin-left: auto;
     margin-right: 8px;
 }
@@ -1237,6 +1286,22 @@ html[lang] .mud-alert-filled-normal {
     overflow-wrap: anywhere;
 }
 
+/* A preview's object counts are a column of numbers and are read by comparing them, so they are right-aligned and
+   set in tabular figures; left alone they start wherever the label beside them happens to end, and no two line up.
+   Qualified with .mud-table-cell because MudBlazor's own cell rule sets text-align and loads after site.css. */
+.jim-preview-count.mud-table-cell {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The chevron column: as narrow as its icon, and never the thing that wraps. */
+.jim-preview-open.mud-table-cell {
+    width: 1%;
+    padding-left: 0;
+    text-align: right;
+}
+
 /* Switch/checkbox label text */
 .mud-switch .mud-switch-label,
 .mud-checkbox .mud-checkbox-label {
@@ -1283,7 +1348,7 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
 /* Fix double scrollbar on MudSelect dropdown popovers.
    Both the popover container and the inner mud-list have overflow-y: auto by default,
    producing two nested scrollbars. Let the popover handle scrolling alone. */
-.mud-popover.mud-popover-open > .mud-list {
+.mud-popover.mud-popover-open>.mud-list {
     overflow-y: unset;
     max-height: unset;
 }
@@ -1303,11 +1368,6 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
 
 .mud-button-group-override-styles {
     box-shadow: none !important;
-}
-
-/* Centre-align alert icon and close button vertically */
-html[lang] .mud-alert-position {
-    align-items: center;
 }
 
 /* Schema refresh results alert - position close icon in top right */
@@ -1350,11 +1410,6 @@ html[lang] .jim-schema-change-table td {
 .jim-readonly-row {
     opacity: 0.65;
     color: var(--mud-palette-text-disabled);
-}
-
-/* Hide page footer on pages that need maximum vertical space */
-.jim-hide-footer .jim-page-footer {
-    display: none;
 }
 
 /* Log detail slide-out panel */
@@ -1457,7 +1512,7 @@ html[lang] .jim-schema-change-table td {
 
 .jim-json-syntax {
     font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     line-height: 1.5;
     margin: 0;
     padding: 12px;
@@ -1711,6 +1766,85 @@ html[lang] .jim-schema-change-table td {
     align-self: flex-start;
 }
 
+/* The "+n more" affordance on a single-line list (<OverflowList />): low-lighted text rather than a button, so
+   it reads as a quiet continuation of the row instead of competing with the chips beside it. !important beats
+   MudLink's own .mud-primary-text colour rule (site.css > "Content/data links"), which otherwise wins on
+   specificity per the cascade note in JIM.Web/CLAUDE.md. */
+.jim-attr-expand-link.mud-link {
+    color: var(--mud-palette-text-secondary) !important;
+    opacity: 0.8;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.jim-attr-expand-link.mud-link:hover {
+    opacity: 1;
+}
+
+/* ─── One-line cells (every virtualised row is exactly one line) ───
+   The virtualiser positions every row arithmetically from one fixed ItemSize, so a cell that wraps, or that
+   stacks two block elements, puts every row below it at an offset nothing else on the page agrees with: the
+   scroll position, the row index written to the URL and the reserved scroll space all drift from what is on
+   screen. These two primitives are how a cell is kept to one line without losing anything.
+
+   .jim-one-line is the clamp: a block box whose content is truncated with an ellipsis rather than wrapped. It
+   is used directly wherever the cell's content is markup (a linkified description, an icon beside a name), and
+   through <OneLineText /> wherever it is a string. Whatever is clipped stays available in the element's title,
+   in a dialog, or on the detail page the row links to; nothing is ever only visible when it happens to fit. */
+.jim-one-line {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* An icon sharing the line with text sits on the text's baseline by default, which drops it below the line it
+   belongs to; centre it against the text instead. */
+.jim-one-line .mud-icon-root {
+    vertical-align: middle;
+}
+
+/* Secondary text that used to sit on a second line, now inline after the value it qualifies. The colour and
+   opacity are set here rather than borrowing .mud-text-secondary, because site.css gives that class an extra
+   opacity of its own and the two routes render as two different greys (see JIM.Web/CLAUDE.md). */
+.jim-one-line-secondary {
+    margin-left: 8px;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+    opacity: 0.8;
+}
+
+/* .jim-one-line-list is the clamp for a cell holding a LIST: the first item is shown, clipped rather than
+   wrapped, and the "+n more" affordance beside it opens the whole set in a dialog (<OverflowList />). Also used
+   directly where a cell holds a small fixed set of elements that must not wrap. */
+.jim-one-line-list {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+/* Everything on the row holds its size; only the designated value gives way, so the affordance (or a modifier
+   chip) can never be the thing that disappears when the value beside it is long. */
+.jim-one-line-list>* {
+    flex-shrink: 0;
+}
+
+.jim-one-line-list>.jim-one-line-list-value {
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+/* The shared affordance button is authored for the old stacked layout, where it sat under the values and so
+   aligned to the start of a column. On this one-line row it has to sit beside the value. */
+.jim-one-line-list .jim-attr-expand-btn {
+    align-self: center;
+}
+
 .jim-attr-expanded {
     display: flex;
     flex-direction: column;
@@ -1719,6 +1853,14 @@ html[lang] .jim-schema-change-table td {
 
 .jim-attr-expanded-item {
     padding: 2px 0;
+}
+
+/* The whole set, inside <OverflowListDialog />. The ceiling is stated rather than measured, because the dialog's
+   container is not the page; it matches the figure the Connected System Object's and Pending Export's own value
+   dialogs state, so the three read as the same kind of thing. */
+.jim-overflow-list-dialog {
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 /* MVA rows: top-align cells so attribute name stays at top when values stack vertically */
@@ -1750,7 +1892,7 @@ html[lang] .jim-schema-change-table td {
    top-level chip back by that much so every value in the column shares one left edge.
    Chips nested inside a link (the CSO/MVO chip links) are deliberately excluded: they
    lead with an avatar that already carries its own negative margin. */
-.jim-detail-table tbody tr td > .mud-chip {
+.jim-detail-table tbody tr td>.mud-chip {
     margin-left: -12px;
 }
 
@@ -1828,8 +1970,13 @@ html[lang] .jim-schema-change-table td {
     transition: background-color 0.2s ease;
 }
 
+/* Raised towards the ink rather than towards a fixed grey, so the lift goes the right way in both
+   theme families: lighter on a dark surface, darker on a light one. It previously reached for
+   --mud-palette-background-gray, which no theme sets and which resolves to MudBlazor's opaque
+   rgb(245,245,245), so hovering this chip on any dark theme painted it near-white under near-white
+   text: 1.16:1, measured. It now reads 9.0:1 or better on every theme. */
 .jim-audit-chip:hover {
-    background-color: var(--mud-palette-background-gray);
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 8%, var(--mud-palette-surface));
 }
 
 .jim-audit-chip .mud-icon-root {
@@ -2535,9 +2682,17 @@ html[lang] .jim-schema-change-table td {
 }
 
 @keyframes jim-phase-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0.5); }
-    70%  { box-shadow: 0 0 0 0.5rem rgba(var(--mud-palette-primary-rgb), 0); }
-    100% { box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0); }
+    0% {
+        box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0.5);
+    }
+
+    70% {
+        box-shadow: 0 0 0 0.5rem rgba(var(--mud-palette-primary-rgb), 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0);
+    }
 }
 
 .jim-phase-h-title {
@@ -2601,18 +2756,22 @@ html[lang] .jim-schema-change-table td {
    even while its width holds steady. */
 .jim-phase-h-connector-fill--active {
     background-color: var(--mud-palette-primary);
-    background-image: linear-gradient(
-        45deg,
-        rgba(255, 255, 255, 0.25) 25%, transparent 25%,
-        transparent 50%, rgba(255, 255, 255, 0.25) 50%,
-        rgba(255, 255, 255, 0.25) 75%, transparent 75%);
+    background-image: linear-gradient(45deg,
+            rgba(255, 255, 255, 0.25) 25%, transparent 25%,
+            transparent 50%, rgba(255, 255, 255, 0.25) 50%,
+            rgba(255, 255, 255, 0.25) 75%, transparent 75%);
     background-size: 0.75rem 0.75rem;
     animation: jim-phase-stripes 1s linear infinite;
 }
 
 @keyframes jim-phase-stripes {
-    from { background-position: 0 0; }
-    to   { background-position: 0.75rem 0; }
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 0.75rem 0;
+    }
 }
 
 /* The steps inside the running step, shown in the readout beneath the rail rather than above it,
@@ -2624,11 +2783,265 @@ html[lang] .jim-schema-change-table td {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
     .jim-phase-h-label--active,
     .jim-password-rail-marker--active,
     .jim-phase-h-connector-fill--active {
         animation: none;
     }
+}
+
+/* ─── Run steps in a table cell (#1162) ───
+   The Operations queue's Progress cell: the whole run as a row of segments, the running step's own
+   bar beneath it, and a caption naming the step the figures measure. The Activity page's rail says
+   the same thing with labels, icons and durations; this is what survives at row height. */
+.jim-queue-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+/* Whatever comes first in the cell carries the alignment offset, so its centre lands on the centre
+   of the first line of text in every other column and the rail rules straight across the table.
+   8px is half the difference between the rendered text line and the 6px rail, measured off the page
+   rather than derived: the computed line box is a little over the nominal 20px, and 7px left the
+   rail a pixel high.
+   An offset rather than a one-line-tall box: a box would centre the rail inside it and leave the
+   same dead space underneath, opening up the gap to the bar for no alignment gain. */
+.jim-queue-progress-first {
+    padding-top: 8px;
+}
+
+.jim-queue-steps {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+}
+
+/* Sized by share rather than by width, so a six-step export and an eight-step import both fill the
+   column and neither reads as the longer run purely by being wider. */
+/* A step not reached yet has to be legible without shouting, and the two requirements pull apart
+   across the themes. Measured on the running page, in order: --mud-palette-lines-default (the
+   divider colour, tuned for hairlines) gave 1.45:1 on the dark table surface, and
+   --mud-palette-text-disabled 2.24:1, both under the 3:1 that meaningful non-text UI needs
+   (WCAG 1.4.11) - and how many segments are still grey is precisely what says how much of the run
+   is left. --mud-palette-text-secondary fixed the dark theme at 6.13:1 but reached 7.53:1 in the
+   light one, where it out-weighed the green of a finished step and inverted the hierarchy.
+   One fixed neutral satisfies both by construction: measured 3.45:1 on the light surface and
+   4.88:1 on the dark, recessive against the green of a finished step in each. Deliberately not a
+   palette token, because a token that adapts per theme is what created the problem. */
+:root {
+    --jim-run-step-pending: #8a8a8a;
+}
+
+.jim-queue-step {
+    flex: 1 1 0;
+    min-width: 10px;
+    height: 6px;
+    border-radius: 2px;
+    background-color: var(--jim-run-step-pending);
+}
+
+/* Not reached yet is the rail's resting state, so this restates the base rule above. Written out
+   rather than left implicit because every other status has a rule, and a modifier with none reads
+   as an omission. */
+.jim-queue-step--pending {
+    background-color: var(--jim-run-step-pending);
+}
+
+.jim-queue-step--completed {
+    background-color: var(--mud-palette-success);
+}
+
+.jim-queue-step--failed {
+    background-color: var(--mud-palette-error);
+}
+
+/* Hatched rather than a colour of its own: a skipped step is the absence of work, and giving it a
+   fourth solid colour would make a Delta Import's rail look busier than an import that did more. */
+.jim-queue-step--skipped {
+    background-image: repeating-linear-gradient(45deg,
+            var(--mud-palette-text-disabled) 0 2px,
+            transparent 2px 4px);
+    background-color: transparent;
+    opacity: 0.55;
+}
+
+/* Striped end to end rather than part-filled: how far through the step the run is belongs to the
+   bar underneath, and saying it twice in two geometries reads as two different facts. */
+.jim-queue-step--active {
+    background-color: color-mix(in srgb, var(--mud-palette-info) 28%, transparent);
+    background-image: repeating-linear-gradient(45deg,
+            var(--mud-palette-info) 0 4px,
+            color-mix(in srgb, var(--mud-palette-info) 45%, transparent) 4px 8px);
+    background-size: 11.31px 11.31px;
+    animation: jim-queue-step-stripes 1s linear infinite;
+}
+
+@keyframes jim-queue-step-stripes {
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 11.31px 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jim-queue-step--active {
+        animation: none;
+    }
+}
+
+.jim-queue-progress-bar {
+    display: flex;
+    align-items: center;
+}
+
+/* A task with no steps has its bar first, and the bar is 4px where the rail is 6px, so it needs a
+   pixel more offset to put its centre on the same line. Measured, not derived. */
+.jim-queue-progress-bar.jim-queue-progress-first {
+    padding-top: 9px;
+}
+
+.jim-queue-progress-caption {
+    color: var(--mud-palette-text-secondary);
+    line-height: 1.4;
+}
+
+/* Tabular figures so the count does not shift the caption's remaining words sideways on every
+   poll, which is about once a second while a run is in flight. */
+.jim-queue-progress-count {
+    font-variant-numeric: tabular-nums;
+}
+
+/* ─── A Schedule Execution's steps in a queue group header (#1162) ───
+   One marker per step group, joined by legs, with the step names underneath. The unit here is honest
+   in a way the per-task rail's is not: one segment is one whole Run Profile execution, and there is
+   no comparably-sized alternative to divide the Schedule into. */
+.jim-schedule-rail-block {
+    flex: 1 1 auto;
+    min-width: 12rem;
+    max-width: 26rem;
+}
+
+.jim-schedule-rail {
+    display: flex;
+    align-items: center;
+}
+
+/* The unstyled state is the pending one: a hollow ring, which every modifier below then overrides. So
+   jim-schedule-node--pending is emitted by the component and has no rule here, deliberately. It is the one
+   modifier that should NOT be added if a sweep for classes named in Razor but missing from this file reports
+   it; the others would each render as an unstyled div, which is the fault such a sweep is looking for. */
+.jim-schedule-node {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+    border: 1.5px solid var(--jim-run-step-pending);
+    color: var(--mud-palette-surface);
+}
+
+/* The icon rides inside a 12px marker, so it is sized against the marker rather than left at the
+   inherited font size, which would overflow it. */
+.jim-schedule-node .mud-icon-root {
+    width: 9px;
+    height: 9px;
+    font-size: 9px;
+}
+
+.jim-schedule-node--completed {
+    background-color: var(--mud-palette-success);
+    border-color: var(--mud-palette-success);
+}
+
+.jim-schedule-node--failed {
+    background-color: var(--mud-palette-error);
+    border-color: var(--mud-palette-error);
+}
+
+.jim-schedule-node--cancelled {
+    background-color: var(--mud-palette-warning);
+    border-color: var(--mud-palette-warning);
+}
+
+/* A halo rather than a pulse. The worker activity bar immediately above the group header shimmers
+   while tasks are processing, and a second animation beside it would leave two things competing for
+   one glance; a static ring says "here" just as well and survives prefers-reduced-motion untouched. */
+.jim-schedule-node--running {
+    background-color: var(--mud-palette-info);
+    border-color: var(--mud-palette-info);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mud-palette-info) 22%, transparent);
+}
+
+/* A step running several tasks concurrently is drawn as one marker divided into a wedge per task,
+   painted by an inline conic gradient the component builds (the wedge count is a property of the
+   Schedule, not of this stylesheet). Larger than a whole marker because it is carrying more.
+   It keeps the outline every marker has, rather than relying on the gradient to reach the edge: a
+   step whose tasks have all yet to start has nothing but empty wedges, and without the ring there
+   would be nothing there at all. */
+.jim-schedule-node--divided {
+    width: 16px;
+    height: 16px;
+    border-color: var(--jim-run-step-pending);
+}
+
+.jim-schedule-leg {
+    flex: 1 1 28px;
+    min-width: 18px;
+    height: 3px;
+    border-radius: 2px;
+    background-color: var(--jim-run-step-pending);
+}
+
+.jim-schedule-leg--done {
+    background-color: var(--mud-palette-success);
+}
+
+/* Each name has to sit under the marker it belongs to, which equal shares do not achieve: the markers
+   are spaced from the first to the last, so they sit at 0%, 50% and 100% of a three-step rail, while
+   equal-share labels centre at 17%, 50% and 83%. On a short rail that drift puts the last name nearer
+   its neighbour's marker than its own, which is worse than no name at all when the question being
+   asked is which step failed.
+   Half a share to each end label, aligned outwards, puts every name back under its marker: the ends
+   line up with the rail's ends, and each middle label centres on (0.5 + k) of the remaining shares,
+   which is exactly where its marker is. */
+.jim-schedule-labels {
+    display: flex;
+    margin-top: 0.25rem;
+}
+
+.jim-schedule-labels span {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 0.7rem;
+    text-align: center;
+    color: var(--mud-palette-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.jim-schedule-labels span:first-child {
+    flex: 0.5 1 0;
+    text-align: left;
+}
+
+.jim-schedule-labels span:last-child {
+    flex: 0.5 1 0;
+    text-align: right;
+}
+
+/* A Schedule of one step has one marker, drawn at the left where the rail begins. */
+.jim-schedule-labels span:only-child {
+    flex: 1 1 0;
+    text-align: left;
 }
 
 /* ─── Live progress metrics beneath a run's steps ───
@@ -2708,6 +3121,8 @@ html[lang] .jim-schema-change-table td {
 
 .jim-run-metric-value {
     font-variant-numeric: tabular-nums;
+}
+
 /* ─── Set Password dialog (#1121, #1172) ───
    The fan-out across several Connected Systems is reported the same way a Run Profile execution is: a rail of
    markers with a filling line between them. It is not the same component (a password set is not an Activity,
@@ -2869,17 +3284,7 @@ html[lang] .jim-schema-change-table td {
 html[lang] .jim-password-guidance.mud-alert {
     margin-top: 0.5rem;
     background-color: color-mix(in srgb, var(--mud-palette-info) 10%,
-        var(--jim-dialog-inner-surface, var(--mud-palette-surface))) !important;
-}
-
-/* The icon belongs beside the headline, not halfway down the advice. JIM centres alert icons app-wide (see
-   "Centre-align alert icon and close button vertically" above), which is right for the one-line alerts that
-   rule was written for and leaves the icon adrift beside the third bullet of a panel this tall. Opting out
-   here rather than changing the global rule, and qualified with html[lang] to match that rule's specificity:
-   the alert root's own align-items does not reach the icon, and an equal-specificity selector loses to it. */
-html[lang] .jim-password-guidance .mud-alert-position {
-    align-items: flex-start;
-    padding-top: 0.125rem;
+            var(--jim-dialog-inner-surface, var(--mud-palette-surface))) !important;
 }
 
 /* The alert supplies the tint, the rule and the icon; the layout of the advice inside it stays here. */
@@ -2985,11 +3390,31 @@ html[lang] .jim-password-guidance .mud-alert-position {
    specificity; qualifying the selector with the wrapper's class is what makes the offset stick. */
 .jim-password-account-control.mud-input-control {
     margin-top: -0.375rem;
+}
 
 /* Count chip inside a navigation button (the Connector Space and Pending Exports actions on a
    Connected System). Sits inside the button label rather than as a MudBadge corner overlay, so the
    number reads as part of the destination's name. The warning variant marks work waiting to be
-   exported without turning the whole button orange. */
+   exported without turning the whole button orange.
+
+   The number takes the button's own text colour rather than naming a palette token, because every
+   theme repaints outlined primary button text to --mud-palette-primary-lighten for readability
+   ("Lighten outlined/text primary button text" in each theme file). A chip hard-coded to
+   --mud-palette-primary therefore rendered the count in the un-lightened base colour beside a
+   lightened label: two different purples in one button, the count failing contrast on the dark
+   themes. Inheriting also tracks the hover and disabled states for free.
+
+   The fill and the ring are derived from that same currentColor for the same reason, and because
+   --mud-palette-*-hover is not theme-aware: the theme files override --mud-palette-primary but not
+   its -hover sibling, so the tint was a 6%-alpha wash of MudBlazor's default indigo regardless of
+   the theme in force, and all but invisible against a dark surface.
+
+   The ring does the work of defining the chip and the fill is kept to 8%, which is deliberate and
+   measured. A chip fill can only ever move the background TOWARDS the text it sits behind, so it
+   costs contrast in every theme: on navy-o6-dark the label's own 7.83:1 against the page drops to
+   7.0:1 at 8% and 5.74:1 at 18%. An outline costs nothing, so the chip reads as a chip on its ring
+   and spends only 0.8 of a ratio on looking filled. Measured against the rendered page across all
+   twelve themes; if this is ever retuned, re-measure rather than eyeball it. */
 .jim-nav-count {
     display: inline-flex;
     align-items: center;
@@ -3003,11 +3428,402 @@ html[lang] .jim-password-guidance .mud-alert-position {
     font-weight: 600;
     letter-spacing: 0;
     font-variant-numeric: tabular-nums;
-    background-color: var(--mud-palette-primary-hover);
+    color: inherit;
+    background-color: color-mix(in srgb, currentColor 8%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 40%, transparent);
+}
+
+/* Only the colour changes; the fill and ring above follow currentColor, so they re-mix themselves. */
+.jim-nav-count-warning {
+    color: var(--mud-palette-warning);
+}
+
+/* ─── Scoped hierarchy picker ────────────────────────────────────────────────────────────────
+   The Container tree on a Connected System's Partitions & Containers tab. Rows are a grid rather
+   than free-flowing inline content so the checkbox, name, scope control and metadata line up in
+   columns down the tree, and so a row costs ~32px instead of ~56px: a directory with a couple of
+   hundred OUs has to be navigable, not just renderable.
+
+   The depth indent is driven by --jim-picker-depth, set per row as an inline custom property, so
+   nesting needs no per-level class. The token lives on :root because more than one rule below
+   depends on it (a token declared on the component's own selector resolves to nothing anywhere
+   else, which has bitten this codebase before). */
+:root {
+    --jim-picker-indent: 1.25rem;
+    --jim-picker-depth: 0;
+}
+
+.jim-picker {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+}
+
+.jim-picker-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--mud-palette-divider-light);
+    background-color: var(--mud-palette-background-grey);
+}
+
+.jim-picker-filter {
+    flex: 1 1 14rem;
+    min-width: 9rem;
+}
+
+.jim-picker-count {
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.jim-picker-count strong {
+    color: var(--mud-palette-text-primary);
+    font-weight: 600;
+}
+
+.jim-picker-empty {
+    padding: 1.25rem 0.75rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-picker-rows {
+    padding: 0.125rem 0;
+    max-height: 32rem;
+    overflow-y: auto;
+}
+
+.jim-picker-row {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto auto;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2rem;
+    padding: 0.125rem 0.75rem 0.125rem calc(0.25rem + (var(--jim-picker-depth) * var(--jim-picker-indent)));
+}
+
+.jim-picker-row+.jim-picker-row {
+    border-top: 1px solid var(--mud-palette-divider-light);
+}
+
+.jim-picker-row:hover {
+    background-color: var(--mud-palette-action-default-hover);
+}
+
+/* Tints throughout this picker are mixed from the accent rather than read from
+   --mud-palette-primary-hover, which no theme sets: that token keeps MudBlazor's stock indigo at 6%
+   alpha whatever the theme's accent is, so a selected row tinted indigo on a cyan-accented theme and
+   was close to invisible on the dark ones. 12% is measured: it leaves the row's own text at 9.3:1 or
+   better on every theme, against a ceiling of 10.6:1 to 17.3:1 untinted. */
+.jim-picker-row-selected {
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
+}
+
+/* A Container an ancestor has already spoken for, whether by covering it or by carving it out: still readable,
+   plainly not stating anything itself. */
+.jim-picker-row-covered .jim-picker-name,
+.jim-picker-row-covered .jim-picker-meta {
+    opacity: 0.6;
+}
+
+/* A Container carved out of a selection above it. Tinted like a selected row is, because both are deliberate
+   statements an administrator made; the colour is what says which one, so the label carries it too. */
+.jim-picker-row-excluded {
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 12%, transparent);
+}
+
+.jim-picker-row-excluded .jim-picker-meta-excluded {
+    color: var(--mud-palette-warning);
+}
+
+/* Exclude and Include. Include shows at rest; Exclude appears on hover and on keyboard focus, because every
+   Container beneath a selected branch is a candidate for it and a large directory would otherwise carry hundreds of
+   buttons at rest. :focus-within rather than :focus-visible on the button itself: MudBlazor's ripple sits over the
+   label, so the focus lands on the button element while the rule has to reach the whole cell. */
+.jim-picker-row-covered .jim-picker-action {
+    visibility: hidden;
+}
+
+.jim-picker-row:hover .jim-picker-action,
+.jim-picker-row:focus-within .jim-picker-action {
+    visibility: visible;
+}
+
+.jim-picker-action.mud-button-root {
+    padding: 0 0.5rem;
+    min-width: 0;
+    font-size: 0.65rem;
+    line-height: 1.3rem;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+/* Reserves the expander column on rows without children, so every name starts at the same x. */
+.jim-picker-expander {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    flex: none;
+}
+
+.jim-picker-name {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--mud-palette-text-primary);
+    overflow-wrap: anywhere;
+}
+
+/* Fixed widths on the two trailing columns. Each row is its own grid, so without them every row
+   sizes its own columns and the scope controls stagger down the tree instead of forming a column. */
+.jim-picker-meta {
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    min-width: 6.5rem;
+    text-align: right;
+}
+
+/* How many objects a Container holds (#1276). Right-aligned and tabular so a column of them can be compared down
+   the tree, which is the whole point of putting the figure on the row; the Container names beside them are
+   indented by depth and cannot be. Weighted a step above the meta text beside it because the number is what the
+   selection decision turns on, not a footnote to it. */
+.jim-picker-objects {
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    min-width: 4.5rem;
+    text-align: right;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-picker-scope {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 11rem;
+}
+
+/* The two-segment scope control. Both states stay visible: scope decides what the next import
+   returns, so which one is active must be readable without hovering anything. Deliberately below
+   the site-wide "default sizes" rule (JIM.Web/CLAUDE.md > UI element sizing): at default size the
+   pair dominated the row it annotates, and it sits on a ~32px row by design. */
+.jim-picker-seg .mud-button-root {
+    padding: 0 0.4rem;
+    min-width: 0;
+    font-size: 0.65rem;
+    line-height: 1.15rem;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+html[lang] .jim-picker-seg .jim-picker-seg-on {
+    background-color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+    border-color: var(--mud-palette-primary);
+}
+
+html[lang] .jim-picker-seg .jim-picker-seg-off {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* ─── Scope selection: summary, guidance strip and action bar ────────────────────────────────
+   The Partitions & Containers tab's page furniture around the picker above. The summary answers
+   "what does this system import?" before anything explains how to change it; the hint strip
+   demotes the hierarchy-refresh guidance from a permanent alert to a line carrying the fact that
+   is actually useful (when it was last retrieved), with the caveat behind a disclosure. */
+.jim-scope-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    padding: 0 0 0.25rem;
+}
+
+.jim-scope-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.0625rem;
+}
+
+.jim-scope-stat-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-scope-stat-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-scope-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+    background-color: var(--mud-palette-background-grey);
+    border: 1px solid var(--mud-palette-divider-light);
+    border-radius: var(--mud-default-borderradius);
+}
+
+.jim-scope-partition-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 1rem;
+}
+
+.jim-scope-partition-name {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--mud-palette-text-primary);
+    overflow-wrap: anywhere;
+}
+
+.jim-scope-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.jim-scope-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex: 1 1 auto;
+    font-size: 0.8125rem;
     color: var(--mud-palette-primary);
 }
 
-.jim-nav-count-warning {
-    background-color: var(--mud-palette-warning-hover);
-    color: var(--mud-palette-warning);
+.jim-scope-pending-clean {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* ─── Table empty state (see <TableEmptyState>) ───
+   Rendered inside a table or data grid's no-rows fragment. The min-height gives the message room in an
+   ordinary (non-virtualised) table so it sits near the visual centre rather than pinned under the header,
+   while staying shallow enough not to stretch a small table; virtualised grids collapse instead, below. */
+.jim-table-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 3rem 1.5rem;
+    min-height: 40vh;
+}
+
+/* A virtualised grid's fitted height is a ceiling, not a floor, so an empty grid collapses to its content
+   like an ordinary table and needs no artificial stretch to centre the message in leftover space; it just
+   carries a healthy block of padding so the message does not sit cramped under the header. */
+.jim-virtualised-list .jim-table-empty-state {
+    min-height: 0;
+    padding: 4rem 1.5rem;
+}
+
+/* Qualified with .mud-icon-root because MudBlazor's own size rule loads after site.css and wins ties. */
+.jim-table-empty-state-icon.mud-icon-root {
+    font-size: 3rem;
+    width: 3rem;
+    height: 3rem;
+    opacity: 0.4;
+}
+
+/* ─── Virtualised list (see <VirtualisedDataGrid>) ───
+   The grid's outer paper rounds and clips its own corners, while MudBlazor also gives the first and last
+   sticky header cells a 4px corner radius of their own. Sticky cells paint above the rows scrolling beneath
+   them, so that radius opens a small transparent arc at the table's top corners through which a row's cell
+   styling (the Logs severity stripe) peeks as a curved sliver once the list is scrolled. Square the inner
+   cells off; rounding the outside is the paper's job. The selector chain matters: MudBlazor's own rule
+   (.mud-table-sticky-header * .mud-table-root .mud-table-head * .mud-table-cell:first-child) weighs in at
+   five class-level selectors, so this one carries .mud-table-root plus the html[lang] qualifier to outrank
+   it; anything shorter loses the cascade and the radius silently survives. */
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-head .mud-table-cell {
+    border-radius: 0;
+    /* The shaded header row every other table in the portal has. A sticky header must be opaque, because the
+       rows scroll underneath it, so MudBlazor paints each header CELL with the plain surface colour in the
+       same rule that makes it sticky; that fill covers the header ROW's inner-surface background (see "Table
+       header row background" above) and leaves a virtualised grid's header the same colour as its body. Paint
+       the cells with the inner surface instead, falling back to the surface so a theme that defines no inner
+       surface keeps MudBlazor's own behaviour. */
+    background-color: var(--jim-inner-surface, var(--mud-palette-surface));
+}
+
+/* The last row of a virtualised grid keeps the row separator that an ordinary table drops, because the
+   virtualiser closes its rows with a zero-height spacer <tr>: the real last row is no longer :last-child, so
+   MudBlazor's border-removal rule never matches it and the separator lands directly on the grid's own outline,
+   reading as one heavy 2px edge. Target the row before the spacer instead. On a list long enough to scroll
+   this is a row well below the fold (OverscanCount renders 30 beyond the viewport), so it only ever shows
+   where it should: at the true bottom of the list. */
+html[lang] .jim-virtualised-list .mud-table-root>tbody>tr:nth-last-of-type(2)>.mud-table-cell {
+    border-bottom: none;
+}
+
+/* First-paint ceiling, before jimVirtualList.fit measures where the page footer lands. A grid whose container is
+   not the page (a dialog, a cell) states its own ceiling instead, as the custom property, and skips the
+   measurement; the property's fallback is what every ordinary list uses. */
+.jim-virtualised-list .mud-table-container {
+    max-height: var(--jim-virtualised-list-max-height, calc(100vh - 320px));
+    overflow-y: auto;
+}
+
+/* Container Scope: Simple / Advanced mode switch and the text editor behind it (#1255) */
+.jim-scope-mode {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* The scope is a list of Distinguished Names, so it is read column-by-column: a proportional face makes two
+   near-identical paths hard to tell apart, which is the one thing an administrator is doing here. */
+/* The scope is a column of Distinguished Names read one against another, so it is set in the same monospace face
+   as every other code-like value in the portal (.jim-text-code). Qualified with html[lang] and !important for the
+   reason that class documents: MudBlazor's stylesheet loads after this one and its own input typography
+   (.mud-input-root and friends) otherwise wins the tie, leaving the field silently proportional. */
+html[lang] .jim-scope-text .mud-input-slot {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace !important;
+    font-size: 0.875rem !important;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+.jim-scope-text-error-list {
+    margin: 0;
+    padding-inline-start: 1.25rem;
+}
+
+.jim-scope-text-error-list li + li {
+    margin-top: 0.25rem;
+}
+
+/* Connectors list: auto table layout sizes a column to its widest content before .jim-one-line ever gets a
+   chance to clip it, so the SCIM Connector's long, unbroken Description grows its column past the grid's own
+   width and the whole table gains a horizontal scrollbar instead of the cell's ellipsis firing. Fixed layout
+   gives every column a bounded box up front instead: the three narrow columns keep their explicit
+   HeaderStyle width (the pattern already used in Logs.razor and OperationsQueueTab.razor) and Description
+   takes what is left. Scoped to this one grid rather than added to .jim-virtualised-list generally: several
+   other grids (the Activity list's Target column among them) rely on auto layout handing them more room than
+   their content needs and have no width hint or .jim-one-line of their own, so applying this portal-wide
+   turns their cells' overflow into a wrap instead, which breaks the virtualiser's fixed row height. Fixing
+   those is a separate, larger sweep (audit every virtualised grid's columns for a width hint or
+   OneLineText), not a side effect of this one page's fix. */
+#connector-list .mud-table-root {
+    table-layout: fixed;
 }

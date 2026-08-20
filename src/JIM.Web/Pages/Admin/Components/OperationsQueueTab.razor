@@ -1,9 +1,12 @@
+@using JIM.Models.Activities
 @using JIM.Models.Core
+@using JIM.Models.Scheduling
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Tasking
 @using JIM.Models.Tasking.DTOs
 @using JIM.Utilities
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -15,7 +18,9 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<MudText Typo="Typo.h6" Class="mb-1">Execute a Run Profile</MudText>
+@* mt-5 rather than a tab-panel padding: the Operations page hands its tabs no top padding of their own, because
+   the Schedules tab opens straight onto a grid that already supplies this same gap. *@
+<MudText Typo="Typo.h6" Class="mt-5 mb-1">Execute a Run Profile</MudText>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Add a Synchronisation Run to the queue. If it's empty, it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
 
 @if (_connectedSystemHeaders is { Count: > 0 })
@@ -73,143 +78,195 @@ else
 }
 else
 {
-    <MudTable T="WorkerTaskHeader" Items="@GetSortedQueueItems()" Hover="true" Breakpoint="Breakpoint.Sm"
-              Outlined="true" Elevation="0" Dense="true" GroupBy="@_groupDefinition"
-              Class="jim-queue-table-active"
-              RowClassFunc="@((item, _) => IsGroupCollapsed(item) ? "jim-queue-collapsed-row" : "")">
-        <ColGroup>
-            <col style="width: 70px;" />
-            <col />
-            <col />
-            <col style="min-width: 200px;" />
-            <col />
-            <col />
-        </ColGroup>
-        <HeaderContent>
-            <MudTh><MudText Typo="Typo.button">Step</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Progress</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
-            <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
-        </HeaderContent>
-        <GroupHeaderTemplate>
-            @{
-                var groupTasks = context.Items.ToList();
-                var isScheduleGroup = groupTasks.First().ScheduleExecutionId.HasValue;
-            }
-            @if (isScheduleGroup)
-            {
-                var scheduleName = groupTasks.First().ScheduleExecutionName ?? "Schedule";
-                var totalTasks = groupTasks.Count;
-                var processing = groupTasks.Count(t => t.Status == WorkerTaskStatus.Processing);
-                var queued = groupTasks.Count(t => t.Status == WorkerTaskStatus.Queued);
-                var waiting = groupTasks.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
-                var distinctSteps = groupTasks.Select(t => t.ScheduleStepIndex).Distinct().Count();
-                var executionId = groupTasks.First().ScheduleExecutionId!.Value;
-                var groupKey = executionId.ToString();
-                var isCollapsed = _collapsedGroups.Contains(groupKey);
+    @* One grid per Schedule Execution, plus one for everything running outside a Schedule. MudBlazor's grouping
+       and its virtualisation are mutually exclusive branches of the same component, so the queue cannot be a
+       single virtualised grid that also groups; a grid per group keeps both, and each grid windows only its own
+       rows. They are Embedded (several to a page: no density toggle repeated per Schedule, no URL state for
+       siblings to collide over), carry no search box (a box over one Schedule's handful of steps is a control
+       asking to be used for no benefit) and take an explicit height ceiling, so a Schedule with twenty steps
+       cannot push every other block off the page. *@
+    @for (var i = 0; i < _queueGroups.Count; i++)
+    {
+        var group = _queueGroups[i];
+        var groupKey = group.Key;
+        var collapsed = _collapsedGroups.Contains(groupKey);
 
-                <MudTh Class="mud-table-cell-custom-group" colspan="6">
-                    <div class="d-flex align-center justify-space-between" style="width: 100%;">
-                        <div class="d-flex align-center gap-3" style="cursor: pointer;" @onclick="() => ToggleGroupCollapse(groupKey)">
-                            <MudIcon Icon="@Icons.Material.Filled.Schedule" />
-                            <div>
-                                <MudText Typo="Typo.body1"><b>@scheduleName</b></MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                    @totalTasks tasks across @distinctSteps steps
-                                    @if (processing > 0) { <span> — @processing processing</span> }
-                                    @if (queued > 0) { <span>, @queued queued</span> }
-                                    @if (waiting > 0) { <span>, @waiting waiting</span> }
-                                </MudText>
-                            </div>
+        @* The worker status bar above is drawn as the top of whichever block leads the queue, so the first one
+           squares off its top corners and joins it. *@
+        var joinsWorkerBar = i == 0;
+
+        <div @key="groupKey" class="@(joinsWorkerBar ? "" : "mt-6")">
+            @if (group.ScheduleExecutionId.HasValue)
+            {
+                var executionId = group.ScheduleExecutionId.Value;
+                var scheduleName = group.ScheduleName ?? "Schedule";
+                var processing = group.Tasks.Count(t => t.Status == WorkerTaskStatus.Processing);
+                var queued = group.Tasks.Count(t => t.Status == WorkerTaskStatus.Queued);
+                var waiting = group.Tasks.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
+                var scheduleProgress = _scheduleProgress.GetValueOrDefault(executionId);
+
+                <div class="jim-queue-group-header @(joinsWorkerBar ? "jim-queue-group-header--joined" : "") @(collapsed ? "jim-queue-group-header--collapsed" : "")">
+                    <div class="jim-queue-group-toggle d-flex align-center gap-3" @onclick="() => ToggleGroupCollapse(groupKey)">
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" />
+                        <div>
+                            <MudText Typo="Typo.body1"><b>@scheduleName</b></MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @SchedulePosition(scheduleProgress, group.Tasks.Count)@if (processing > 0)
+                                {<span>, @processing processing</span>}@if (queued > 0)
+                                {<span>, @queued queued</span>}@if (waiting > 0)
+                                {<span>, @waiting waiting</span>}
+                            </MudText>
                         </div>
+                    </div>
+                    <ScheduleStepRail Progress="@scheduleProgress" />
+
+                    @* Pushed right so they land over the Actions column, in line with the per-task cancel
+                       buttons in the rows below rather than adrift in the middle of the header. *@
+                    <div class="jim-queue-group-actions d-flex align-center gap-2">
+                        <MudTooltip Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced" Arrow="true" Placement="Placement.Top">
+                            <MudButton Variant="Variant.Text" Size="Size.Small" DropShadow="false"
+                                       StartIcon="@Icons.Material.Filled.OpenInNew"
+                                       Href="@($"/admin/operations/schedule-executions/{executionId}")">
+                                View execution
+                            </MudButton>
+                        </MudTooltip>
                         <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Left">
                             <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
                                            OnClick="() => HandleCancelScheduleExecutionAsync(executionId)" Size="Size.Small" />
                         </MudTooltip>
                     </div>
-                </MudTh>
+                </div>
             }
-            else
+
+            @if (!collapsed)
             {
-                <MudTh Class="jim-queue-standalone-group jim-queue-standalone-separator" colspan="6"></MudTh>
+                <VirtualisedDataGrid T="WorkerTaskHeader" @ref="_grids[groupKey]"
+                                     ContainerId="@($"operations-queue-{groupKey}")"
+                                     Embedded="true"
+                                     ShowSearch="false"
+                                     MaxHeight="400px"
+                                     GridClass="@GroupGridClass(joinsWorkerBar || group.ScheduleExecutionId.HasValue)"
+                                     DefaultSortBy="step"
+                                     LoadWindow="@((request, _) => LoadGroupWindowAsync(groupKey, request))"
+                                     SingularName="Worker Task"
+                                     PluralName="Worker Tasks">
+                    <Columns>
+                        @* A task outside a Schedule has no step, so its grid does not carry a column of blanks. *@
+                        @if (group.ScheduleExecutionId.HasValue)
+                        {
+                            <TemplateColumn T="WorkerTaskHeader" Title="Step" Sortable="false" HeaderStyle="width: 70px;">
+                                <HeaderTemplate>
+                                    <MudText Typo="Typo.button">Step</MudText>
+                                </HeaderTemplate>
+                                <CellTemplate>
+                                    @{ var task = context.Item; }
+                                    @if (task.ScheduleExecutionId.HasValue)
+                                    {
+                                        var stepDisplay = (task.ScheduleStepIndex ?? 0) + 1;
+                                        @if (IsParallelStep(task))
+                                        {
+                                            <MudTooltip Text="Parallel step: runs concurrently with other tasks in this step" Arrow="true" Placement="Placement.Right">
+                                                <div class="d-flex align-center gap-1">
+                                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@stepDisplay</MudText>
+                                                    <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mud-text-secondary" Style="font-size: 0.875rem;" />
+                                                </div>
+                                            </MudTooltip>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@stepDisplay</MudText>
+                                        }
+                                    }
+                                </CellTemplate>
+                            </TemplateColumn>
+                        }
+                        <TemplateColumn T="WorkerTaskHeader" Title="Name" Sortable="false">
+                            <HeaderTemplate>
+                                <MudText Typo="Typo.button">Name</MudText>
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                @{ var task = context.Item; }
+                                @if (task.ActivityId.HasValue)
+                                {
+                                    var activityId = task.ActivityId.Value;
+                                    <MudLink Href="@($"/activity/{activityId}?from=operations")">@task.Name</MudLink>
+                                }
+                                else
+                                {
+                                    @task.Name
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="WorkerTaskHeader" Title="Status" Sortable="false">
+                            <HeaderTemplate>
+                                <MudText Typo="Typo.button">Status</MudText>
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                <MudChip T="string" Variant="Variant.Text" Color="GetTaskStatusColor(context.Item.Status)" Class="ml-0">@GetTaskStatusDisplay(context.Item)</MudChip>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="WorkerTaskHeader" Title="Progress" Sortable="false" HeaderStyle="min-width: 200px;">
+                            <HeaderTemplate>
+                                <MudText Typo="Typo.button">Progress</MudText>
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                @{ var task = context.Item; }
+                                <WorkerTaskProgress Status="@task.Status" ObjectsToProcess="@task.ObjectsToProcess" ObjectsProcessed="@task.ObjectsProcessed" ProgressMessage="@task.ProgressMessage" Steps="@task.Steps" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="WorkerTaskHeader" Title="Initiated By" Sortable="false">
+                            <HeaderTemplate>
+                                <MudText Typo="Typo.button">Initiated By</MudText>
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                @{ var task = context.Item; }
+                                @if (task.InitiatedByType == ActivityInitiatorType.User)
+                                {
+                                    <div class="d-flex align-center">
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" />
+                                        <AuditPrincipalLink PrincipalType="task.InitiatedByType" PrincipalId="task.InitiatedById" PrincipalName="@task.InitiatedByName" />
+                                    </div>
+                                }
+                                else if (task.InitiatedByType == ActivityInitiatorType.ApiKey)
+                                {
+                                    <div class="d-flex align-center">
+                                        <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" />
+                                        <AuditPrincipalLink PrincipalType="task.InitiatedByType" PrincipalId="task.InitiatedById" PrincipalName="@task.InitiatedByName" />
+                                    </div>
+                                }
+                                else if (task.InitiatedByType == ActivityInitiatorType.System)
+                                {
+                                    <div class="d-flex align-center">
+                                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" />
+                                        <span>@(task.InitiatedByName ?? "Scheduler")</span>
+                                    </div>
+                                }
+                                else if (!string.IsNullOrEmpty(task.InitiatedByName))
+                                {
+                                    <span>@task.InitiatedByName</span>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="WorkerTaskHeader" Title="Actions" Sortable="false"
+                                        HeaderStyle="text-align: right;" CellStyle="text-align: right;">
+                            <HeaderTemplate>
+                                <MudText Typo="Typo.button">Actions</MudText>
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                @{ var task = context.Item; }
+                                @if (task.Status != WorkerTaskStatus.WaitingForPreviousStep)
+                                {
+                                    <MudTooltip Text="Cancel Task" Arrow="true" Placement="Placement.Left">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" OnClick="() => HandleCancelTaskAsync(task)" Size="Size.Small" />
+                                    </MudTooltip>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </VirtualisedDataGrid>
             }
-        </GroupHeaderTemplate>
-        <RowTemplate>
-            <MudTd DataLabel="Step">
-                @if (context.ScheduleExecutionId.HasValue)
-                {
-                    var stepDisplay = (context.ScheduleStepIndex ?? 0) + 1;
-                    var isParallel = IsParallelStep(context);
-                    @if (isParallel)
-                    {
-                        <MudTooltip Text="Parallel step — runs concurrently with other tasks in this step" Arrow="true" Placement="Placement.Right">
-                            <div class="d-flex align-center gap-1">
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@stepDisplay</MudText>
-                                <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mud-text-secondary" Style="font-size: 0.875rem;" />
-                            </div>
-                        </MudTooltip>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@stepDisplay</MudText>
-                    }
-                }
-            </MudTd>
-            <MudTd DataLabel="Name">
-                @if (context.ActivityId.HasValue)
-                {
-                    <MudLink Href="@($"/activity/{context.ActivityId.Value}?from=operations")">@context.Name</MudLink>
-                }
-                else
-                {
-                    @context.Name
-                }
-            </MudTd>
-            <MudTd DataLabel="Status">
-                <MudChip T="string" Variant="Variant.Text" Color="GetTaskStatusColor(context.Status)" Class="ml-0">@GetTaskStatusDisplay(context)</MudChip>
-            </MudTd>
-            <MudTd DataLabel="Progress">
-                <WorkerTaskProgress Status="@context.Status" ObjectsToProcess="@context.ObjectsToProcess" ObjectsProcessed="@context.ObjectsProcessed" ProgressMessage="@context.ProgressMessage" />
-            </MudTd>
-            <MudTd DataLabel="Initiated By">
-                @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User)
-                {
-                    <div class="d-flex align-center">
-                        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" />
-                        <AuditPrincipalLink PrincipalType="context.InitiatedByType" PrincipalId="context.InitiatedById" PrincipalName="@context.InitiatedByName" />
-                    </div>
-                }
-                else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey)
-                {
-                    <div class="d-flex align-center">
-                        <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" />
-                        <AuditPrincipalLink PrincipalType="context.InitiatedByType" PrincipalId="context.InitiatedById" PrincipalName="@context.InitiatedByName" />
-                    </div>
-                }
-                else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.System)
-                {
-                    <div class="d-flex align-center">
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" />
-                        <span>@(context.InitiatedByName ?? "Scheduler")</span>
-                    </div>
-                }
-                else if (!string.IsNullOrEmpty(context.InitiatedByName))
-                {
-                    <span>@context.InitiatedByName</span>
-                }
-            </MudTd>
-            <MudTd DataLabel="Actions" Style="text-align: right;">
-                @if (context.Status != WorkerTaskStatus.WaitingForPreviousStep)
-                {
-                    <MudTooltip Text="Cancel Task" Arrow="true" Placement="Placement.Left">
-                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" OnClick="() => HandleCancelTaskAsync(context)" Size="Size.Small"/>
-                    </MudTooltip>
-                }
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
+        </div>
+    }
 }
 
 @code {
@@ -226,25 +283,25 @@ else
     private bool _hasProcessingTasks;
     private readonly HashSet<string> _collapsedGroups = new();
 
-    private readonly TableGroupDefinition<WorkerTaskHeader> _groupDefinition = new()
-    {
-        GroupName = "Queue Group",
-        Selector = t => t.ScheduleExecutionId?.ToString() ?? $"standalone-{t.Id}"
-    };
+    /// <summary>
+    /// Each Schedule Execution in the queue, reduced to the shape its group header draws (#1162).
+    /// Kept beside the task headers rather than derived in markup: it needs the steps whose tasks have
+    /// already been deleted, which only their Activities still record.
+    /// </summary>
+    private Dictionary<Guid, ScheduleExecutionProgress?> _scheduleProgress = new();
 
-    private IEnumerable<WorkerTaskHeader> GetSortedQueueItems()
-    {
-        return _workerTaskHeaders
-            .OrderBy(t => GetStatusSortOrder(t.Status))
-            .ThenBy(t => t.ScheduleStepIndex ?? 0)
-            .ThenBy(t => t.Timestamp);
-    }
+    /// <summary>
+    /// The queue divided into the blocks it is drawn as: one per Schedule Execution, one for everything else.
+    /// Derived from <see cref="_workerTaskHeaders"/> whenever that changes rather than in markup, because the
+    /// grids' window loaders read it and must see the same grouping the render did.
+    /// </summary>
+    private List<WorkerTaskQueueGroup> _queueGroups = [];
 
-    private bool IsGroupCollapsed(WorkerTaskHeader task)
-    {
-        return task.ScheduleExecutionId.HasValue &&
-               _collapsedGroups.Contains(task.ScheduleExecutionId.Value.ToString());
-    }
+    /// <summary>
+    /// Each group's grid, by group key, so a queue change can tell the affected grids to re-read. A virtualised
+    /// grid caches the rows it has fetched, so re-rendering the tab around one leaves its rows as they were.
+    /// </summary>
+    private readonly Dictionary<string, VirtualisedDataGrid<WorkerTaskHeader>> _grids = new();
 
     private void ToggleGroupCollapse(string groupKey)
     {
@@ -260,14 +317,24 @@ else
             t.ScheduleStepIndex == task.ScheduleStepIndex) > 1;
     }
 
-    private static int GetStatusSortOrder(WorkerTaskStatus status) => status switch
+    /// <summary>
+    /// The queue is a live snapshot the tab already holds, so a group's window is a slice of its own tasks rather
+    /// than a second read. The group is looked up by key rather than captured, so a window loaded after a refresh
+    /// cannot serve the rows of a group that has since been rebuilt.
+    /// </summary>
+    private Task<VirtualisedWindow<WorkerTaskHeader>> LoadGroupWindowAsync(string groupKey, VirtualisedWindowRequest request)
     {
-        WorkerTaskStatus.Processing => 0,
-        WorkerTaskStatus.CancellationRequested => 1,
-        WorkerTaskStatus.Queued => 2,
-        WorkerTaskStatus.WaitingForPreviousStep => 3,
-        _ => 4
-    };
+        var group = _queueGroups.FirstOrDefault(g => g.Key == groupKey);
+        IEnumerable<WorkerTaskHeader> tasks = group?.Tasks ?? [];
+        return Task.FromResult(tasks.ToWindow(request));
+    }
+
+    /// <summary>
+    /// A grid sitting directly beneath the block above it (its Schedule Execution's header, or the worker status
+    /// bar) squares off its top corners so the two read as one box; a block of its own keeps its corners.
+    /// </summary>
+    private static string GroupGridClass(bool joined) =>
+        joined ? "jim-queue-grid jim-queue-grid--joined" : "jim-queue-grid";
 
     protected override async Task OnInitializedAsync()
     {
@@ -283,7 +350,9 @@ else
             {
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
                 _workerTaskHeaders = GenerateDemoData(user.Id, user.NameOrId);
+                _scheduleProgress = GenerateDemoScheduleProgress(_workerTaskHeaders);
                 _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
+                _queueGroups = WorkerTaskQueueGroup.Build(_workerTaskHeaders);
                 return;
             }
         }
@@ -291,6 +360,8 @@ else
         // Get initial data for worker task table rendering
         _workerTaskHeaders = await jim.Tasking.GetWorkerTaskHeadersAsync();
         _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
+        _queueGroups = WorkerTaskQueueGroup.Build(_workerTaskHeaders);
+        await RefreshScheduleProgressAsync(jim);
 
         // Event-driven refresh (issue #307): database notifications trigger an immediate refresh, so the
         // queue reacts in real time rather than waiting for the next polling cycle.
@@ -370,13 +441,39 @@ else
             if (stateHasChanged)
             {
                 _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
-                await InvokeAsync(StateHasChanged);
+                _queueGroups = WorkerTaskQueueGroup.Build(_workerTaskHeaders);
+                await RefreshScheduleProgressAsync(refreshJim);
+
+                // Repaint first, so a Schedule that has just joined the queue has a grid to be reloaded; then tell
+                // the grids to re-read, because the rows a virtualiser holds are cached and a repaint alone leaves
+                // a running step frozen at the figures it had.
+                await InvokeAsync(async () =>
+                {
+                    StateHasChanged();
+                    await RefreshQueueGridsAsync();
+                });
             }
         }
         finally
         {
             _refreshLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Re-reads the grid of every group still on screen, invalidating its total: a group's contents changing
+    /// changes how many rows it has, so the count in its toolbar and the size of its scroll area are both stale.
+    /// A collapsed group has no grid to reload, and one whose Schedule has left the queue no longer has a
+    /// component behind its reference, so both are skipped and the departed ones are forgotten.
+    /// </summary>
+    private async Task RefreshQueueGridsAsync()
+    {
+        foreach (var group in _queueGroups.Where(g => !_collapsedGroups.Contains(g.Key) && _grids.ContainsKey(g.Key)))
+            await _grids[group.Key].RefreshAsync(invalidateTotals: true);
+
+        var liveGroupKeys = _queueGroups.Select(g => g.Key).ToHashSet();
+        foreach (var departedGroupKey in _grids.Keys.Where(key => !liveGroupKeys.Contains(key)).ToList())
+            _grids.Remove(departedGroupKey);
     }
 
     private void OnWorkerTaskChanged(WorkerTaskChangeNotification notification) => TriggerNotificationRefresh();
@@ -487,8 +584,49 @@ else
         }
         else
         {
-            Snackbar.Add("Could not cancel execution — it may have already completed.", Severity.Warning);
+            Snackbar.Add("Could not cancel execution; it may have already completed.", Severity.Warning);
         }
+    }
+
+    /// <summary>
+    /// The clause a group header opens with: where the Schedule has got to, or, where nothing is
+    /// running, how much of it there is.
+    /// </summary>
+    private static string SchedulePosition(ScheduleExecutionProgress? progress, int taskCount)
+    {
+        if (progress == null)
+            return $"{taskCount} tasks";
+
+        return progress.CurrentStepNumber.HasValue
+            ? $"Step {progress.CurrentStepNumber} of {progress.TotalSteps}"
+            : $"{taskCount} tasks across {progress.TotalSteps} steps";
+    }
+
+    /// <summary>
+    /// Rebuilds each Schedule Execution's shape from the queue's own tasks plus what its finished
+    /// tasks left behind. One query for the whole queue, run only when the queue has actually changed.
+    /// </summary>
+    private async Task RefreshScheduleProgressAsync(JimApplication jim)
+    {
+        var executionIds = _workerTaskHeaders
+            .Where(t => t.ScheduleExecutionId.HasValue)
+            .Select(t => t.ScheduleExecutionId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (executionIds.Count == 0)
+        {
+            _scheduleProgress = new Dictionary<Guid, ScheduleExecutionProgress?>();
+            return;
+        }
+
+        var outcomes = await jim.Activities.GetScheduleStepOutcomesAsync(executionIds);
+
+        _scheduleProgress = executionIds.ToDictionary(
+            executionId => executionId,
+            executionId => ScheduleStepReading.FromQueue(
+                _workerTaskHeaders.Where(t => t.ScheduleExecutionId == executionId).ToList(),
+                outcomes.GetValueOrDefault(executionId, [])));
     }
 
     private static string GetTaskStatusDisplay(WorkerTaskHeader task)
@@ -522,9 +660,11 @@ else
                 Id = Guid.NewGuid(), Name = "HR System - Full Import", Type = "Synchronisation",
                 Status = WorkerTaskStatus.Processing, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 1,
                 ObjectsToProcess = 12500, ObjectsProcessed = 8320,
                 ProgressMessage = "Importing users",
+                Steps = DemoImportSteps(RunPhaseKeys.ImportSave),
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
             new()
@@ -532,9 +672,11 @@ else
                 Id = Guid.NewGuid(), Name = "AD - Full Import", Type = "Synchronisation",
                 Status = WorkerTaskStatus.Processing, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 1,
                 ObjectsToProcess = 45000, ObjectsProcessed = 31200,
                 ProgressMessage = "Importing objects",
+                Steps = DemoImportSteps(RunPhaseKeys.ImportFetch),
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
             new()
@@ -542,6 +684,7 @@ else
                 Id = Guid.NewGuid(), Name = "HR System - Delta Sync", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 2,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -550,6 +693,7 @@ else
                 Id = Guid.NewGuid(), Name = "AD - Delta Sync", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 2,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -558,6 +702,7 @@ else
                 Id = Guid.NewGuid(), Name = "AD - Export", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 3,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -566,6 +711,7 @@ else
                 Id = Guid.NewGuid(), Name = "AD - Confirming Import", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 4,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -576,6 +722,7 @@ else
                 Id = Guid.NewGuid(), Name = "Azure AD - Export", Type = "Synchronisation",
                 Status = WorkerTaskStatus.Queued, Timestamp = now.AddMinutes(-1),
                 ScheduleExecutionId = executionId2, ScheduleExecutionName = "Cloud Provisioning",
+                ScheduleTotalSteps = 3, ScheduleCurrentStepIndex = 0,
                 ScheduleStepIndex = 0,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -584,6 +731,7 @@ else
                 Id = Guid.NewGuid(), Name = "Azure AD - Confirming Import", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-1),
                 ScheduleExecutionId = executionId2, ScheduleExecutionName = "Cloud Provisioning",
+                ScheduleTotalSteps = 3, ScheduleCurrentStepIndex = 0,
                 ScheduleStepIndex = 1,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -592,6 +740,7 @@ else
                 Id = Guid.NewGuid(), Name = "Azure AD - Delta Sync", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-1),
                 ScheduleExecutionId = executionId2, ScheduleExecutionName = "Cloud Provisioning",
+                ScheduleTotalSteps = 3, ScheduleCurrentStepIndex = 0,
                 ScheduleStepIndex = 2,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -603,8 +752,83 @@ else
                 Status = WorkerTaskStatus.Queued, Timestamp = now.AddSeconds(-30),
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.User,
                 InitiatedById = currentUserId, InitiatedByName = currentUserName
+            },
+
+            // Standalone task that is not a Run Profile execution, so it records no steps. Present
+            // deliberately: the demo has to show the queue degrading to a bare bar as well as
+            // drawing the rail, because that is the case a change to this cell is most likely to break.
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "Clear Connected System Objects", Type = "Clear Connected System Objects",
+                Status = WorkerTaskStatus.Processing, Timestamp = now.AddSeconds(-20),
+                ProgressMessage = "Deleting Connected System Objects",
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.User,
+                InitiatedById = currentUserId, InitiatedByName = currentUserName
             }
         };
+    }
+
+    /// <summary>
+    /// The demo queue's Schedule Executions, assembled the way the real ones are. The finished and
+    /// failed steps are supplied here as Activity outcomes because that is where they come from in
+    /// earnest: a task is deleted the moment it ends, so a demo built only from queued tasks could
+    /// not show a completed step, and could not show the case the divided marker exists for, a
+    /// parallel step where one task has failed while its sibling is still running.
+    /// </summary>
+    private static Dictionary<Guid, ScheduleExecutionProgress?> GenerateDemoScheduleProgress(List<WorkerTaskHeader> headers)
+    {
+        var demoOutcomes = new Dictionary<string, List<ScheduleStepObservation>>
+        {
+            ["Nightly Full Sync"] =
+            [
+                new ScheduleStepObservation
+                {
+                    StepIndex = 0, Name = "HR System - Full Import", ActivityId = Guid.NewGuid(),
+                    ActivityStatus = JIM.Models.Activities.ActivityStatus.Complete
+                },
+                new ScheduleStepObservation
+                {
+                    StepIndex = 1, Name = "Legacy CRM - Full Import", ActivityId = Guid.NewGuid(),
+                    ActivityStatus = JIM.Models.Activities.ActivityStatus.FailedWithError
+                }
+            ]
+        };
+
+        return headers
+            .Where(t => t.ScheduleExecutionId.HasValue)
+            .GroupBy(t => t.ScheduleExecutionId!.Value)
+            .ToDictionary(g => g.Key, g => ScheduleStepReading.FromQueue(
+                g.ToList(),
+                demoOutcomes.GetValueOrDefault(g.First().ScheduleExecutionName ?? string.Empty, [])));
+    }
+
+    /// <summary>
+    /// A Full Import's steps as the demo queue shows them, with <paramref name="activeKey"/> running,
+    /// everything before it done, and the connection step skipped so the rail's skipped state is
+    /// visible without having to contrive a run that skips something more obscure.
+    /// </summary>
+    private static RunPhaseSummary DemoImportSteps(string activeKey)
+    {
+        var declared = RunProfilePhaseCatalogue.GetPhases(ConnectedSystemRunType.FullImport);
+        var activeIndex = declared.ToList().FindIndex(p => p.Key == activeKey);
+
+        var phases = declared.Select((phase, index) => new ActivityPhase
+        {
+            Id = Guid.NewGuid(),
+            Key = phase.Key,
+            Name = phase.Name,
+            ParentKey = phase.ParentKey,
+            Order = index,
+            Status = phase.Key == RunPhaseKeys.ImportConnect
+                ? ActivityPhaseStatus.Skipped
+                : index < activeIndex
+                    ? ActivityPhaseStatus.Completed
+                    : index == activeIndex
+                        ? ActivityPhaseStatus.Active
+                        : ActivityPhaseStatus.Pending
+        }).ToList();
+
+        return RunPhaseSummary.From(phases)!;
     }
 
     private static bool HasWorkerTaskHeaderChanged(WorkerTaskHeader existing, WorkerTaskHeader updated)

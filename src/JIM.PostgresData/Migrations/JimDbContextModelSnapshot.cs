@@ -18,7 +18,7 @@ namespace JIM.PostgresData.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.10")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -208,6 +208,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ScheduleStepIndex")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ScheduledByScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ScheduledByScheduleName")
+                        .HasColumnType("text");
+
                     b.Property<string>("SecurityEventReason")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -303,6 +309,12 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectId")
                         .HasDatabaseName("IX_Activities_MetaverseObjectId");
+
+                    b.HasIndex("ScheduleExecutionId")
+                        .HasDatabaseName("IX_Activities_ScheduleExecutionId");
+
+                    b.HasIndex("ScheduledByScheduleId")
+                        .HasDatabaseName("IX_Activities_ScheduledByScheduleId");
 
                     b.HasIndex("SyncRuleId");
 
@@ -1691,6 +1703,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Source")
                         .HasColumnType("integer");
 
+                    b.Property<string>("StaticPasswordEncryptedValue")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("StaticPasswordSetAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("SyncRuleId")
                         .HasColumnType("integer");
 
@@ -1792,6 +1810,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text");
 
                     b.Property<int?>("MetaverseAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MissingInputBehaviour")
                         .HasColumnType("integer");
 
                     b.Property<int>("Order")
@@ -2224,7 +2245,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ScheduleId");
+                    b.HasIndex("ScheduleId", "QueuedAt")
+                        .HasDatabaseName("IX_ScheduleExecutions_ScheduleId_QueuedAt");
 
                     b.HasIndex("Status", "QueuedAt")
                         .HasDatabaseName("IX_ScheduleExecutions_Status_QueuedAt");
@@ -2637,6 +2659,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<TimeSpan?>("InitialPasswordTimeToLive")
+                        .HasColumnType("interval");
+
                     b.Property<DateTime?>("LastSyncCompletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2695,6 +2720,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<bool>("Excluded")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ExternalId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2706,14 +2734,23 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("ObjectCount")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ParentContainerId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("PartitionId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("Selected")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("StableId")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -3068,6 +3105,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("ReferencedObjectTypeId")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("Selected")
                         .HasColumnType("boolean");
 
@@ -3077,6 +3117,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("TypeSetByAdministrator")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("Writability")
                         .HasColumnType("integer");
 
@@ -3084,7 +3127,38 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemObjectTypeId");
 
+                    b.HasIndex("ReferencedObjectTypeId");
+
                     b.ToTable("ConnectedSystemAttributes");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectTypeTag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConnectedSystemObjectTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemObjectTypeId", "Key", "Value")
+                        .IsUnique();
+
+                    b.ToTable("ConnectedSystemObjectTypeTags");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
@@ -3283,6 +3357,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("StableId")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectorContainerId");
@@ -3413,9 +3490,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("ImplementsIConnector")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ImplementsIContainers")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("ImplementsIExportUsingCalls")
@@ -4203,7 +4277,8 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasOne("JIM.Models.ExampleData.ExampleDataTemplate", null)
                         .WithMany("ObjectTypes")
-                        .HasForeignKey("ExampleDataTemplateId");
+                        .HasForeignKey("ExampleDataTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("JIM.Models.Core.MetaverseObjectType", "MetaverseObjectType")
                         .WithMany()
@@ -4237,7 +4312,8 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasOne("JIM.Models.ExampleData.ExampleDataSet", null)
                         .WithMany("Values")
-                        .HasForeignKey("ExampleDataSetId");
+                        .HasForeignKey("ExampleDataSetId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplateAttribute", b =>
@@ -4252,7 +4328,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.ExampleData.ExampleDataObjectType", null)
                         .WithMany("TemplateAttributes")
-                        .HasForeignKey("ExampleDataObjectTypeId");
+                        .HasForeignKey("ExampleDataObjectTypeId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
                         .WithMany()
@@ -4280,7 +4357,8 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasOne("JIM.Models.ExampleData.ExampleDataTemplateAttribute", null)
                         .WithMany("WeightedStringValues")
-                        .HasForeignKey("ExampleDataTemplateAttributeId");
+                        .HasForeignKey("ExampleDataTemplateAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.ObjectMatchingRule", b =>
@@ -4598,7 +4676,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.Search.PredefinedSearchCriteriaGroup", null)
                         .WithMany("Criteria")
-                        .HasForeignKey("PredefinedSearchCriteriaGroupId");
+                        .HasForeignKey("PredefinedSearchCriteriaGroupId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("MetaverseAttribute");
                 });
@@ -4607,11 +4686,13 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasOne("JIM.Models.Search.PredefinedSearchCriteriaGroup", "ParentGroup")
                         .WithMany("ChildGroups")
-                        .HasForeignKey("ParentGroupId");
+                        .HasForeignKey("ParentGroupId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("JIM.Models.Search.PredefinedSearch", null)
                         .WithMany("CriteriaGroups")
-                        .HasForeignKey("PredefinedSearchId");
+                        .HasForeignKey("PredefinedSearchId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("ParentGroup");
                 });
@@ -4790,6 +4871,24 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", "ReferencedObjectType")
+                        .WithMany()
+                        .HasForeignKey("ReferencedObjectTypeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ConnectedSystemObjectType");
+
+                    b.Navigation("ReferencedObjectType");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectTypeTag", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", "ConnectedSystemObjectType")
+                        .WithMany("Tags")
+                        .HasForeignKey("ConnectedSystemObjectTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("ConnectedSystemObjectType");
                 });
 
@@ -4877,7 +4976,8 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasOne("JIM.Models.Staging.ConnectorDefinition", null)
                         .WithMany("Settings")
-                        .HasForeignKey("ConnectorDefinitionId");
+                        .HasForeignKey("ConnectorDefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.WorkerTask", b =>
@@ -5205,6 +5305,8 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Attributes");
 
                     b.Navigation("ObjectMatchingRules");
+
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>

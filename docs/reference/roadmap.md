@@ -1,12 +1,12 @@
 # Product Roadmap
 
-JIM has completed **pre-release stabilisation**. The core identity lifecycle -- Import, Sync, Export, and Schedule -- is fully functional, and the platform has been hardened for production with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all sync scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
+JIM has completed **pre-release stabilisation**. The core identity lifecycle - Import, Sync, Export, and Schedule - is fully functional, and the platform has been hardened for production with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all sync scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
 
 For the latest status and issue tracking, see the public [JIM Roadmap project board](https://github.com/orgs/TetronIO/projects/1).
 
 ---
 
-## 🎯 v1.0 -- Identity Lifecycle Complete
+## 🎯 v1.0 - Identity Lifecycle Complete
 
 The first stable release, delivering a production-ready identity lifecycle platform.
 
@@ -17,25 +17,23 @@ The first stable release, delivering a production-ready identity lifecycle platf
 
 ---
 
-## 🌳 v1.x -- Connector Ecosystem
+## 🌳 v1.x - Connector Ecosystem
 
-Expanding the range of systems JIM can connect to out of the box.
+Expanding the range of systems JIM can connect to out of the box. The SCIM 2.0 Client Connector has already shipped and is listed here for continuity.
 
-| Connector | Description | Target |
+| Connector | Description | Status |
 |---|---|---|
-| JIM SQL Server Connector | Microsoft SQL Server databases | v1.x |
-| JIM PostgreSQL Connector | PostgreSQL databases | v1.x |
-| JIM MySQL Connector | MySQL databases | v1.x |
-| JIM Oracle Connector | Oracle databases | v1.x |
-| JIM PowerShell Connector | PowerShell Core scripts | v1.x |
-| JIM SCIM Connector | SCIM 2.0 endpoints | v1.x |
-| JIM REST Connector | REST API web services | v1.x |
+| [JIM SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md) | SCIM 2.0 endpoints | ✅ Available |
+| [JIM SQL Connector](../connectors/jim-sql-connector.md) | Microsoft SQL Server and Oracle Database | ✅ Available |
+| JIM SQL Connector: PostgreSQL and MySQL | The same connector, extended to two further engines | Planned |
+| JIM PowerShell Connector | PowerShell Core scripts | Planned |
+| JIM REST Connector | REST API web services | Planned |
 
-Each connector will follow JIM's established connector architecture, supporting schema discovery, full and delta import, and export with the same reliability guarantees as the built-in connectors.
+Each connector follows JIM's established connector architecture, supporting schema discovery, full and delta import, and export with the same reliability guarantees as the built-in connectors.
 
 ---
 
-## 🏛️ v2.0 -- IGA Foundation
+## 🏛️ v2.0 - IGA Foundation
 
 Evolves JIM's core IDAM capabilities so identities can be managed directly in JIM, without depending on Source-of-Record systems for everyday changes. The focus is depth in the existing identity surface (Users, Groups, custom types) rather than branching into adjacent domains.
 

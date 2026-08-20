@@ -10,6 +10,7 @@ using JIM.Models.Enums;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 
 namespace JIM.Application.Servers;
@@ -320,9 +321,8 @@ public class SyncServer : ISyncServer
     #region Export Evaluation
 
     public Task<ExportEvaluationCache> BuildExportEvaluationCacheAsync(
-        int sourceConnectedSystemId,
         List<SyncRule>? preloadedSyncRules = null)
-        => _exportEval.BuildExportEvaluationCacheAsync(sourceConnectedSystemId, preloadedSyncRules);
+        => _exportEval.BuildExportEvaluationCacheAsync(preloadedSyncRules);
 
     public Task RefreshExportEvaluationCacheForPageAsync(ExportEvaluationCache cache, IEnumerable<Guid> mvoIds)
         => _exportEval.RefreshExportEvaluationCacheForPageAsync(cache, mvoIds);
@@ -330,25 +330,26 @@ public class SyncServer : ISyncServer
     public Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> changedAttributes,
-        ConnectedSystem? sourceSystem,
         ExportEvaluationCache cache,
         bool deferSave = false,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         List<PendingExport>? existingPendingExports = null)
         => _exportEval.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem, cache, deferSave, removedAttributes, existingPendingExports);
+            mvo, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports);
 
     public Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
-        ConnectedSystem? sourceSystem,
-        ExportEvaluationCache cache)
-        => _exportEval.EvaluateOutOfScopeExportsAsync(mvo, sourceSystem, cache);
+        ExportEvaluationCache cache,
+        ExportEvaluationWorkingSet? workingSet = null)
+        => _exportEval.EvaluateOutOfScopeExportsAsync(mvo, cache, workingSet);
 
-    public Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null)
-        => _exportEval.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);
+    public Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null,
+        ExportEvaluationWorkingSet? workingSet = null)
+        => _exportEval.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache, workingSet);
 
-    public Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos, ExportEvaluationCache? exportEvaluationCache = null)
-        => _exportEval.EvaluateMvoDeletionsAsync(mvos, exportEvaluationCache);
+    public Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos, ExportEvaluationCache? exportEvaluationCache = null,
+        ExportEvaluationWorkingSet? workingSet = null)
+        => _exportEval.EvaluateMvoDeletionsAsync(mvos, exportEvaluationCache, workingSet);
 
     public Task<ReferenceRecallContext> CaptureReferenceRecallContextAsync(IReadOnlyCollection<Guid> deletionCandidateMvoIds)
         => _exportEval.CaptureReferenceRecallContextAsync(deletionCandidateMvoIds);

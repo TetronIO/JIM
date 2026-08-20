@@ -441,7 +441,7 @@ public class OptimisticExportApplyCalculatorTests
             AttributeValueChanges = [change]
         };
 
-        Assert.DoesNotThrow(() => OptimisticExportApplyCalculator.CalculateDelta([pe]));
+        Assert.That(() => OptimisticExportApplyCalculator.CalculateDelta([pe]), Throws.Nothing);
         var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty);

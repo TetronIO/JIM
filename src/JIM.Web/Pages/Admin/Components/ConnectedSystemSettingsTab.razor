@@ -47,7 +47,9 @@
 
                             if (!string.IsNullOrEmpty(requiredGroup))
                             {
-                                // consecutive settings sharing a RequiredGroup render together: at least one of them must be supplied
+                                // consecutive settings sharing a RequiredGroup render together: at least one of them must be supplied.
+                                // categorySettings has already dropped the members whose condition is unmet, so a group with no
+                                // applicable members contributes nothing here and its container is never drawn.
                                 var groupMembers = new List<ConnectedSystemSettingValue>();
                                 while (j < categorySettings.Count && categorySettings[j].Setting.RequiredGroup == requiredGroup)
                                 {
@@ -56,7 +58,11 @@
                                 }
                                 var groupSpacingClass = j >= categorySettings.Count ? "pa-4" : "pa-4 mb-5";
                                 var groupSatisfied = ConnectorSettingValidator.IsGroupSatisfied(ConnectedSystem.SettingValues, requiredGroup);
-                                var groupCardinality = ConnectorSettingValidator.GetGroupCardinality(groupMembers);
+
+                                // read the cardinality from the group's applicable members rather than the run rendered here, so the
+                                // caption states the same rule the save gate and the validation message enforce
+                                var groupCardinality = ConnectorSettingValidator.GetGroupCardinality(
+                                    ConnectorSettingValidator.GetApplicableGroupMembers(ConnectedSystem.SettingValues, requiredGroup));
                                 var groupCaption = groupCardinality == ConnectorSettingRequiredGroupCardinality.ExactlyOne
                                     ? "Provide a value for exactly one of the following settings:"
                                     : "Provide a value for at least one of the following settings:";
@@ -133,7 +139,7 @@
                     <MudSelect T="UnresolvedReferenceHandling"
                                Label="Unresolved Reference Handling"
                                @bind-Value="ConnectedSystem.UnresolvedReferenceHandling"
-                               HelperText="Controls what happens when an imported reference value (for example a group member) cannot be resolved to a Connected System Object, commonly because the referenced object is outside the configured Container Scope."
+                               HelperText="Controls what happens when an imported reference value (for example a group member) cannot be resolved to a Connected System Object, commonly because the referenced object sits outside the configured Container Scope, or inside a Container it excludes."
                                Variant="Variant.Outlined">
                         <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Error">Error (default): record an error on each affected object</MudSelectItem>
                         <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Warn">Warn: complete with a warning summary</MudSelectItem>
@@ -160,6 +166,34 @@
                                   HelperText="Number of export batches to process concurrently (1 = sequential). Each parallel batch uses its own database connection and connector instance."
                                   InputType="InputType.Number"
                                   Variant="Variant.Outlined" />
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+
+        @* Only meaningful where the Connector can set a password at all; without that no account is ever owed one. *@
+        @if (ConnectedSystem.ConnectorDefinition is { SupportsPasswordSet: true })
+        {
+            <MudExpansionPanel Expanded="@GetCategoryExpanded("Initial Passwords")"
+                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Initial Passwords", expanded))">
+                <TitleContent>
+                    <MudText Typo="Typo.h5">Initial Passwords</MudText>
+                </TitleContent>
+                <ChildContent>
+                    <MudText Class="mud-text-secondary mb-5">
+                        How long JIM keeps trying to give an account provisioned into this Connected System its first
+                        password. It applies to every Synchronisation Rule that provisions here.
+                    </MudText>
+                    <MudNumericField T="int?"
+                                     Label="Give up after"
+                                     Value="@InitialPasswordTimeToLiveDays"
+                                     ValueChanged="@OnInitialPasswordTimeToLiveDaysChanged"
+                                     Immediate="true"
+                                     Min="1"
+                                     Max="365"
+                                     Adornment="Adornment.End"
+                                     AdornmentText="days"
+                                     HelperText="Leave empty to use JIM's default of 7 days. Raise it before taking this system out of service for longer than the current window; accounts provisioned meanwhile would otherwise expire without a password, and need one set by hand."
+                                     Variant="Variant.Outlined" />
                 </ChildContent>
             </MudExpansionPanel>
         }
@@ -338,6 +372,17 @@
 
     private void OnCategoryExpandedChanged(string categoryKey, bool expanded) => _categoryExpandedStates[categoryKey] = expanded;
 
+    /// <summary>
+    /// The initial-password time to live, in whole days, which is the only granularity that means anything for a
+    /// window measured against a system outage. The model holds a TimeSpan so it can share Password
+    /// Synchronisation's setting later; a day picker over a duration field is what an administrator wants now.
+    /// </summary>
+    private int? InitialPasswordTimeToLiveDays =>
+        ConnectedSystem.InitialPasswordTimeToLive is { } timeToLive ? (int)Math.Round(timeToLive.TotalDays) : null;
+
+    private void OnInitialPasswordTimeToLiveDaysChanged(int? days) =>
+        ConnectedSystem.InitialPasswordTimeToLive = days is > 0 ? TimeSpan.FromDays(days.Value) : null;
+
     private async Task HandleValidSettingsSubmitAsync()
     {
         using var jim = JimFactory.Create();
@@ -477,7 +522,8 @@
 
     /// <summary>
     /// Determines whether every RequiredGroup across the Connected System's settings is satisfied: at least one value
-    /// supplied for AtLeastOne groups, exactly one for ExactlyOne groups.
+    /// supplied for AtLeastOne groups, exactly one for ExactlyOne groups. A group whose members do not currently apply
+    /// asks for nothing, so it never blocks the save.
     /// Gates the save button alongside MudForm validity, as group constraints span multiple fields.
     /// </summary>
     private bool AreSettingGroupsSatisfied()

@@ -25,10 +25,9 @@ function Resolve-JIMExampleDataTemplate {
 
     Write-Verbose "Resolving Data Generation Template name: $Name"
 
-    $response = Invoke-JIMApi -Endpoint "/api/v1/example-data/templates"
-
-    # Handle paginated response
-    $templates = if ($response.items) { $response.items } else { $response }
+    # The list endpoint is paginated with a server-side default page size, so read every page;
+    # a name beyond the first page could otherwise never resolve (#894).
+    $templates = Get-JIMPagedItems -Endpoint "/api/v1/example-data/templates"
 
     # Find by name (exact match)
     $matches = @($templates | Where-Object { $_.name -eq $Name })

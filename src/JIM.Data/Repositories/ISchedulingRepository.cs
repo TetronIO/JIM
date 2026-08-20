@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Scheduling;
+using JIM.Models.Scheduling.DTOs;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -18,12 +19,44 @@ public interface ISchedulingRepository
 
     Task<List<Schedule>> GetAllSchedulesAsync();
 
-    Task<PagedResultSet<Schedule>> GetSchedulesAsync(
+    /// <summary>
+    /// Gets a page of Schedules projected into lightweight headers, each carrying its step count and the outcome of
+    /// its most recent execution. The last-execution fields are projected in the same query, so a page costs one
+    /// round trip rather than one query per Schedule.
+    /// </summary>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page (capped at 100).</param>
+    /// <param name="searchQuery">Optional case-insensitive filter over name and description.</param>
+    /// <param name="sortBy">Optional field to sort by (name, isEnabled, lastRunTime, nextRunTime); defaults to created.</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    Task<PagedResultSet<ScheduleHeader>> GetScheduleHeadersAsync(
         int page,
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false);
+
+    /// <summary>
+    /// Gets a window of Schedule headers addressed by absolute <paramref name="offset"/> and
+    /// <paramref name="count"/>, for the virtualised (infinite-scroll) Schedules grid. Takes the same search and
+    /// sort as <see cref="GetScheduleHeadersAsync"/> and shares its query core, so the two reads can never
+    /// disagree on which Schedules match.
+    /// </summary>
+    /// <param name="offset">The zero-based index of the first Schedule wanted; negative values read as zero.</param>
+    /// <param name="count">How many Schedules are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive filter over name and description.</param>
+    /// <param name="sortBy">Optional sort key: "name", "isEnabled", "lastRunTime", "nextRunTime"; defaults to created.</param>
+    /// <param name="sortDescending">Whether the sort is descending.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    Task<RangeResultSet<ScheduleHeader>> GetScheduleHeadersRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        bool includeTotalCount = true);
 
     Task CreateScheduleAsync(Schedule schedule);
 
@@ -61,6 +94,32 @@ public interface ISchedulingRepository
         int pageSize,
         string? sortBy = null,
         bool sortDescending = true);
+
+    /// <summary>
+    /// Gets a window of Schedule Executions addressed by absolute <paramref name="offset"/> and
+    /// <paramref name="count"/>, for the virtualised (infinite-scroll) Schedule Execution grids. Takes the same
+    /// filter and sort as <see cref="GetScheduleExecutionsAsync"/> and shares its query core, so the two reads
+    /// can never disagree on which executions match.
+    /// </summary>
+    /// <param name="scheduleId">Optional Schedule to narrow to; null lists every Schedule's executions.</param>
+    /// <param name="offset">The zero-based index of the first execution wanted; negative values read as zero.</param>
+    /// <param name="count">How many executions are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive filter over the Schedule name and the initiator's
+    /// name; the paged read passes none.</param>
+    /// <param name="sortBy">Optional sort key: "status", "startedat"/"started", "completedat"/"completed", or
+    /// the queued time (the default).</param>
+    /// <param name="sortDescending">Whether the sort is descending (default: true, newest first).</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    Task<RangeResultSet<ScheduleExecution>> GetScheduleExecutionsRangeAsync(
+        Guid? scheduleId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true);
 
     Task CreateScheduleExecutionAsync(ScheduleExecution execution);
 

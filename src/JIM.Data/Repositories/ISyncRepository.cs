@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -104,6 +105,13 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, long attributeValue);
 
     /// <summary>
+    /// Gets a Connected System Object by a decimal attribute value. Oracle's <c>NUMBER</c> is discovered
+    /// as Decimal, so this covers the ordinary sequence-backed primary key on that provider (#1283).
+    /// Matching is numeric, so a stored 4200.00 matches a supplied 4200.
+    /// </summary>
+    Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, decimal attributeValue);
+
+    /// <summary>
     /// Gets a CSO by its secondary external ID attribute value.
     /// Used during confirming imports to match exported objects.
     /// </summary>
@@ -196,6 +204,13 @@ public interface ISyncRepository
     /// Gets all external ID attribute values of type long.
     /// </summary>
     Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+
+    /// <summary>
+    /// Gets all external ID attribute values of type decimal. Oracle's <c>NUMBER</c> is discovered as
+    /// Decimal, so this covers the ordinary sequence-backed primary key on that provider (#1283).
+    /// Equal decimals hash equally regardless of scale, so the caller may set-compare these directly.
+    /// </summary>
+    Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     /// <summary>
     /// Loads CSOs by ID for cross-page reference resolution.
@@ -360,6 +375,13 @@ public interface ISyncRepository
     /// re-evaluation of Temporal Scope Reconciler-flagged objects (issue #892).
     /// </summary>
     Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
+    /// The cached display names of the given Metaverse Objects, keyed by id, for naming a referenced
+    /// object in an export's unresolved-reference message without loading it (issue #1398). Objects
+    /// that do not exist are absent from the result.
+    /// </summary>
+    Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on Metaverse Objects the sync engine has re-evaluated for export
@@ -560,6 +582,95 @@ public interface ISyncRepository
     Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// Returns every parked initial-password record for a Synchronisation Rule to the outstanding state, so the
+    /// next delivery pass attempts it again, and returns how many were released.
+    /// <para>
+    /// Parking stops the retry loop on purpose, which is only safe because this exists: the administrator
+    /// changing the configuration the target objected to is the event that makes another attempt worth making.
+    /// Records in any other state are left alone, because a record awaiting retry is already going to be tried
+    /// and an expired one has outlived the purpose it was created for.
+    /// </para>
+    /// <para>
+    /// The target's reason goes with the release. It described a configuration that no longer exists, so
+    /// keeping it would have the portal report a complaint an administrator has already acted on. The attempt
+    /// count survives: those attempts really were made, and a release is not another one.
+    /// </para>
+    /// </summary>
+    Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId);
+
+    /// <summary>
+    /// Marks every initial-password record on a Connected System whose time to live has passed as expired, and
+    /// returns how many were expired.
+    /// <para>
+    /// Expiry is recorded, never a deletion. An account that quietly stopped being owed a password, with nothing
+    /// left to say so, is the silent loss this whole feature is built to avoid: nobody would learn that it was
+    /// provisioned without a working password.
+    /// </para>
+    /// <para>
+    /// Covers records awaiting retry and parked records alike. Parking waits for an administrator, and one who
+    /// never comes is exactly what an expiry is for; leaving those parked for ever would hold a permanent
+    /// needs-attention marker over work nobody is going to do. A record with no expiry never expires, so rows
+    /// staged before initial passwords carried a time to live are left alone rather than being given one
+    /// retrospectively.
+    /// </para>
+    /// </summary>
+    Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf);
+
+    /// <summary>
+    /// Deletes initial-password records that have reached a terminal state and have since had their retention
+    /// period, and returns how many were removed.
+    /// <para>
+    /// Terminal means Parked or Expired. Those states are deliberately retained so an administrator can see what
+    /// became of an account, which is exactly why something has to age them out: without a trim they accumulate
+    /// one row per account for as long as the deployment lives, and a Synchronisation Rule provisioning into a
+    /// directory that refuses its passwords accumulates them quickly.
+    /// </para>
+    /// <para>
+    /// A record still being worked is never removed, however old it is: an account owed a password that a long
+    /// outage has held up must still get one when the target comes back. Age runs from the last attempt where
+    /// there has been one, so a record parked long ago, released, and parked again yesterday is treated as the
+    /// current work it is.
+    /// </para>
+    /// </summary>
+    /// <param name="olderThan">The retention cutoff; records last touched before this are eligible.</param>
+    /// <param name="maxRecords">The most to remove in one pass, bounding the transaction.</param>
+    Task<int> DeleteTerminalInitialPasswordsAsync(DateTime olderThan, int maxRecords);
+
+    /// <summary>
+    /// Counts the accounts needing a person's attention over their initial password, by Synchronisation Rule.
+    /// <para>
+    /// One grouped count for every rule on the page rather than one query per row: this backs a list indicator,
+    /// which is exactly the shape that turns into N+1 queries if each row asks for itself.
+    /// </para>
+    /// <para>
+    /// A rule with nothing outstanding is absent from the result rather than present with zeroes, so a caller
+    /// that renders nothing for a settled rule can do so by lookup failure alone.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
+    /// The Connected System counterpart of
+    /// <see cref="GetInitialPasswordAttentionBySyncRuleAsync"/>, for the Connected Systems list.
+    /// <para>
+    /// Counted against the record's own denormalised Connected System rather than through its Synchronisation
+    /// Rule, so an account whose rule has since been deleted is still counted against the system it lives in.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds);
+
+    /// <summary>
+    /// The distinct reasons a target gave for refusing the initial passwords parked against a Synchronisation
+    /// Rule, each with how many accounts it is holding up, most accounts first.
+    /// <para>
+    /// Grouped rather than listed per account because the administrator reading this is fixing a setting: the
+    /// number of distinct reasons is the number of problems, and it is almost always very much smaller than the
+    /// number of accounts.
+    /// </para>
+    /// </summary>
+    Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId);
+
+    /// <summary>
     /// Bulk deletes Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
@@ -669,6 +780,20 @@ public interface ISyncRepository
     /// idempotent, so a retried call is harmless.
     /// </remarks>
     Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases);
+
+    /// <summary>
+    /// Records how many entries an import read from the Connected System and discarded because an excluded
+    /// Container carved them out (#1255), keyed by that Container's id.
+    /// </summary>
+    /// <remarks>
+    /// Counts are added to whatever the Activity already holds, so a paged import can call this once per page or
+    /// once at the end and reach the same total. Callers pass only Containers that discarded something; a zero is
+    /// not worth a row, and every Activity would otherwise carry one per excluded Container.
+    ///
+    /// Reporting how a run was performed must never fail it, so callers treat a failure here as cosmetic, exactly
+    /// as they do for <see cref="SaveActivityPhasesAsync"/>.
+    /// </remarks>
+    Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId);
 
     /// <summary>
     /// Bulk inserts RPEIs via raw SQL, bypassing the EF change tracker.
@@ -1065,6 +1190,20 @@ public interface ISyncRepository
     /// Used during parallel export processing to reload exports in a separate context.
     /// </summary>
     Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
+
+    #endregion
+
+    #region Preview Backstops (#288)
+
+    /// <summary>
+    /// Begins a database transaction that is unconditionally rolled back when the returned scope is disposed,
+    /// whatever happened inside it: the outermost defence-in-depth layer around the synchronisation preview's
+    /// zero-side-effect guarantee (PRD requirement 8). Any write that slipped past the preview path's other
+    /// guards is discarded rather than committed. Returns null when the underlying provider is not relational
+    /// (the in-memory test repository), where there is no transaction to hold; the preview's other layers
+    /// still apply there.
+    /// </summary>
+    Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync();
 
     #endregion
 }

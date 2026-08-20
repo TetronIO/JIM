@@ -31,7 +31,7 @@ FROM mcr.microsoft.com/devcontainers/dotnet:2-10.0-noble@sha256:0ad11caaa728e35c
 # JIM.Web's current RuntimeFrameworkVersion.
 RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --version 10.0.301 --install-dir /usr/share/dotnet --no-path \
+    && /tmp/dotnet-install.sh --version 10.0.400 --install-dir /usr/share/dotnet --no-path \
     && rm /tmp/dotnet-install.sh
 
 # Remove the PowerShell bundled in the base image (stable 7.6.x in the 2.x image

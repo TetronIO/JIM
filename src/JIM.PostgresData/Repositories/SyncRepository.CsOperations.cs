@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -813,6 +814,137 @@ public partial class SyncRepository
             """DELETE FROM "PendingInitialPasswords" WHERE "Id" = ANY({0})""", idList);
     }
 
+    public async Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
+    {
+        // A targeted status mark rather than a write of the entity, so it is deliberately not driven from
+        // PendingInitialPasswordBulkColumns: the three columns here are exactly the ones a release changes, and
+        // a future column must not be swept into it by being added to that list.
+        //
+        // The WHERE clause carries the Parked filter rather than the caller doing it: a record awaiting retry is
+        // already going to be tried, and an expired one has outlived the purpose it was created for, so neither
+        // should be disturbed by an administrator saving a rule.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PendingInitialPasswords"
+            SET "Status" = {0}, "FailureReason" = NULL, "TargetMessage" = NULL
+            WHERE "SyncRuleId" = {1} AND "Status" = {2}
+            """,
+            (int)PendingInitialPasswordStatus.Pending,
+            syncRuleId,
+            (int)PendingInitialPasswordStatus.Parked);
+    }
+
+    public async Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
+    {
+        // A targeted status mark, deliberately not driven from PendingInitialPasswordBulkColumns for the same
+        // reason as the release above: these are exactly the columns an expiry changes.
+        //
+        // The reason and attempt count are left as they are. They say why the account never got its password,
+        // which is the whole value of recording the expiry rather than deleting the row.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PendingInitialPasswords"
+            SET "Status" = {0}
+            WHERE "ConnectedSystemId" = {1} AND "ExpiresAt" IS NOT NULL AND "ExpiresAt" < {2}
+              AND "Status" <> {0}
+            """,
+            (int)PendingInitialPasswordStatus.Expired,
+            connectedSystemId,
+            asOf);
+    }
+
+    public async Task<int> DeleteTerminalInitialPasswordsAsync(DateTime olderThan, int maxRecords)
+    {
+        if (maxRecords <= 0)
+            return 0;
+
+        // A targeted delete of whole rows, so there is no column list to drift from the EF model.
+        //
+        // The batch is chosen by a sub-select rather than deleted outright so one pass cannot turn into a long
+        // transaction on a deployment that has accumulated a large backlog; housekeeping runs again and drains
+        // the rest. Ordering the sub-select by age makes successive passes drain oldest-first rather than
+        // returning an arbitrary slice each time.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            DELETE FROM "PendingInitialPasswords"
+            WHERE "Id" IN (
+                SELECT "Id" FROM "PendingInitialPasswords"
+                WHERE "Status" = ANY({0}) AND COALESCE("LastAttemptedAt", "CreatedAt") < {1}
+                ORDER BY COALESCE("LastAttemptedAt", "CreatedAt")
+                LIMIT {2}
+            )
+            """,
+            new[] { (int)PendingInitialPasswordStatus.Parked, (int)PendingInitialPasswordStatus.Expired },
+            olderThan,
+            maxRecords);
+    }
+
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        // Grouped in the database rather than by materialising the records: this backs a list indicator, and the
+        // only thing the indicator needs is two numbers per row.
+        var counts = await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => p.SyncRuleId.HasValue && syncRuleIds.Contains(p.SyncRuleId.Value) &&
+                        (p.Status == PendingInitialPasswordStatus.Parked || p.Status == PendingInitialPasswordStatus.Expired))
+            .GroupBy(p => new { SyncRuleId = p.SyncRuleId!.Value, p.Status })
+            .Select(g => new { g.Key.SyncRuleId, g.Key.Status, Count = g.Count() })
+            .ToListAsync();
+
+        return ToAttentionByKey(counts.Select(c => (c.SyncRuleId, c.Status, c.Count)));
+    }
+
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return [];
+
+        var counts = await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => connectedSystemIds.Contains(p.ConnectedSystemId) &&
+                        (p.Status == PendingInitialPasswordStatus.Parked || p.Status == PendingInitialPasswordStatus.Expired))
+            .GroupBy(p => new { p.ConnectedSystemId, p.Status })
+            .Select(g => new { g.Key.ConnectedSystemId, g.Key.Status, Count = g.Count() })
+            .ToListAsync();
+
+        return ToAttentionByKey(counts.Select(c => (c.ConnectedSystemId, c.Status, c.Count)));
+    }
+
+    public async Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId)
+    {
+        return await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .GroupBy(p => p.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Max(p => p.FailureReason),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(p => p.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Folds one row per (key, status) into one <see cref="InitialPasswordAttention"/> per key. The query groups
+    /// by status because that is what the database can count in one pass; the surfaces want them side by side.
+    /// </summary>
+    private static Dictionary<int, InitialPasswordAttention> ToAttentionByKey(IEnumerable<(int Key, PendingInitialPasswordStatus Status, int Count)> counts)
+    {
+        return counts
+            .GroupBy(c => c.Key)
+            .ToDictionary(g => g.Key, g => new InitialPasswordAttention
+            {
+                ParkedCount = g.Where(c => c.Status == PendingInitialPasswordStatus.Parked).Sum(c => c.Count),
+                ExpiredCount = g.Where(c => c.Status == PendingInitialPasswordStatus.Expired).Sum(c => c.Count)
+            });
+    }
+
     public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         var pendingExportsList = pendingExports.ToList();
@@ -1471,22 +1603,22 @@ public partial class SyncRepository
 
         var idList = csoIds as IList<Guid> ?? csoIds.ToList();
 
-        // Correlated single-column scalar subqueries keyed on the CSO's external-ID attribute; a
-        // single-column projection emits a clean correlated subquery rather than the whole-table
-        // ROW_NUMBER() a multi-column projection would produce, and filtering by ExternalIdAttributeId
-        // rides the (ConnectedSystemObjectId, AttributeId) index instead of scanning member values.
+        // A correlated single-column scalar subquery keyed on the CSO's external-ID attribute, rendering
+        // the anchor via the shared ExternalIdValueText definition; a single-column projection emits a
+        // clean correlated subquery rather than the whole-table ROW_NUMBER() a multi-column projection
+        // would produce, and filtering by ExternalIdAttributeId rides the
+        // (ConnectedSystemObjectId, AttributeId) index instead of scanning member values.
         var rows = await _context.ConnectedSystemObjects
             .AsNoTracking()
             .Where(cso => idList.Contains(cso.Id))
             .Select(cso => new
             {
                 cso.Id,
-                ExtIdString = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.StringValue).FirstOrDefault(),
-                ExtIdDateTime = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.DateTimeValue).FirstOrDefault(),
-                ExtIdInt = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.IntValue).FirstOrDefault(),
-                ExtIdLong = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.LongValue).FirstOrDefault(),
-                ExtIdGuid = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.GuidValue).FirstOrDefault(),
-                ExtIdBool = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.BoolValue).FirstOrDefault(),
+                ExtIdText = cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .FirstOrDefault(),
                 TypeName = cso.Type!.Name
             })
             .ToListAsync();
@@ -1494,30 +1626,9 @@ public partial class SyncRepository
         return rows.ToDictionary(r => r.Id, r => new ConnectedSystemObjectDisplaySnapshot
         {
             ConnectedSystemObjectId = r.Id,
-            ExternalId = FormatExternalIdSnapshotValue(r.ExtIdString, r.ExtIdDateTime, r.ExtIdInt, r.ExtIdLong, r.ExtIdGuid, r.ExtIdBool),
+            ExternalId = r.ExtIdText,
             TypeName = r.TypeName
         });
-    }
-
-    /// <summary>
-    /// Formats a Connected System Object external-ID attribute value from its typed columns, mirroring
-    /// the priority order in <see cref="ConnectedSystemObjectAttributeValue.ToStringNoName"/>.
-    /// </summary>
-    private static string? FormatExternalIdSnapshotValue(string? stringValue, DateTime? dateTimeValue, int? intValue, long? longValue, Guid? guidValue, bool? boolValue)
-    {
-        if (!string.IsNullOrEmpty(stringValue))
-            return stringValue;
-        if (dateTimeValue != null)
-            return dateTimeValue.ToString();
-        if (intValue != null)
-            return intValue.ToString();
-        if (longValue != null)
-            return longValue.ToString();
-        if (guidValue != null)
-            return guidValue.ToString();
-        if (boolValue != null)
-            return boolValue.ToString();
-        return null;
     }
 
     /// <summary>

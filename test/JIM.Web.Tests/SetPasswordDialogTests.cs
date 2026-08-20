@@ -234,11 +234,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         Generate(provider);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(IsMasked(provider), Is.True);
             Assert.That(PasswordInput(provider).GetAttribute("value"), Is.EqualTo($"{GeneratedPassword}-1"));
-        });
+        }
     }
 
     /// <summary>
@@ -307,11 +307,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         provider.WaitForState(() => provider.FindAll($"[data-testid='{NoClipboardMarker}']").Count > 0);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(Button(provider, CopyMarker).HasAttribute("disabled"), Is.True);
             Assert.That(provider.FindAll($"[data-testid='{NoClipboardMarker}']"), Is.Not.Empty);
-        });
+        }
     }
 
     /// <summary>
@@ -392,11 +392,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindAll($"[data-testid='{AccountMarker}']"), Is.Empty);
             Assert.That(provider.FindAll($"[data-testid='{RailMarker}']"), Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -417,12 +417,12 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         provider.WaitForState(() => _runs.Count > 0);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_runs[0].Password, Is.EqualTo($"{GeneratedPassword}-1"));
             Assert.That(_runs[0].Options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
             Assert.That(_runs[0].Accounts, Has.Count.EqualTo(1));
-        });
+        }
     }
 
     /// <summary>
@@ -459,11 +459,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         provider.WaitForState(() => provider.FindAll($"[data-testid='{SummaryMarker}']").Count > 0);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Find($"[data-testid='{SummaryMarker}']").TextContent, Does.Contain("Contoso AD"));
             Assert.That(provider.FindAll($"[data-testid='{SubmitMarker}']"), Is.Not.Empty, "the dialog must stay open");
-        });
+        }
     }
 
     /// <summary>
@@ -477,11 +477,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         provider.WaitForElement($"[data-testid='{UnsupportedMarker}']");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindAll($"[data-testid='{GenerateMarker}']"), Is.Empty);
             Assert.That(Button(provider, SubmitMarker).HasAttribute("disabled"), Is.True);
-        });
+        }
     }
 
     #endregion
@@ -497,13 +497,13 @@ public class SetPasswordDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog(allowSelection: true);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindAll($"[data-testid='{AccountMarker}'] input[type=checkbox]:checked"), Is.Empty);
             Assert.That(Button(provider, SubmitMarker).HasAttribute("disabled"), Is.True);
             Assert.That(Button(provider, GenerateMarker).HasAttribute("disabled"), Is.True,
                 "there is nothing yet to generate a password for");
-        });
+        }
     }
 
     /// <summary>
@@ -515,11 +515,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog(allowSelection: true);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindAll($"[data-testid='{AccountMarker}']"), Has.Count.EqualTo(2));
             Assert.That(provider.Find($"[data-testid='{UnsettableMarker}']").TextContent, Does.Contain("Payroll (File)"));
-        });
+        }
     }
 
     [Test]
@@ -635,12 +635,12 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         Click(provider, SelectAllMarker);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Find($"[data-testid='{IrreconcilableMarker}']").TextContent, Does.Contain("Contoso AD"));
             Assert.That(Button(provider, GenerateMarker).HasAttribute("disabled"), Is.True);
             Assert.That(Button(provider, SubmitMarker).HasAttribute("disabled"), Is.True);
-        });
+        }
     }
 
     /// <summary>
@@ -665,11 +665,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         provider.WaitForState(() => provider.FindAll($"[data-testid='{SharedPermanentMarker}']").Count > 0);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindAll($"[data-testid='{SharedPermanentMarker}']"), Is.Not.Empty);
             Assert.That(Button(provider, SubmitMarker).HasAttribute("disabled"), Is.False, "warned, not refused");
-        });
+        }
     }
 
     #endregion
@@ -694,11 +694,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
         provider.WaitForState(() => provider.FindAll($"[data-testid='{SummaryMarker}']").Count > 0);
 
         var summary = provider.Find($"[data-testid='{SummaryMarker}']").TextContent;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(summary, Does.Contain("Fabrikam HR"));
             Assert.That(summary, Does.Contain("unchanged"));
-        });
+        }
     }
 
     /// <summary>
@@ -757,11 +757,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
         Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 2);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_runs[1].Password, Is.EqualTo(_runs[0].Password));
             Assert.That(_generateCalls, Is.EqualTo(1), "no new password was generated for the retry");
-        });
+        }
     }
 
     /// <summary>
@@ -785,12 +785,12 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         provider.WaitForState(() => _runs.Count == 2);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_runs[1].Accounts.Select(a => a.ConnectedSystemName),
                 Is.EqualTo(new[] { "Contoso AD", "Fabrikam HR" }), "the accounts that succeeded are rewritten too, so this person keeps one password");
             Assert.That(_runs[1].Password, Is.Not.EqualTo(_runs[0].Password));
-        });
+        }
     }
 
     #endregion
@@ -813,14 +813,14 @@ public class SetPasswordDialogTests : JimComponentTestContext
         TickAccount(provider, 0);
 
         var notice = provider.Find("[data-testid='jim-set-password-unknown-policy']");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // The exact label on the Schema tab's button, so the notice names what they will actually see.
             Assert.That(notice.TextContent, Does.Contain("Refresh Schema"));
             Assert.That(notice.QuerySelector("a")?.GetAttribute("href"), Does.Contain("?t=schema"),
                 "the notice has to reach the place the repair happens");
             Assert.That(provider.FindAll("[data-testid='jim-set-password-no-published-policy']"), Is.Empty);
-        });
+        }
     }
 
     /// <summary>
@@ -838,12 +838,12 @@ public class SetPasswordDialogTests : JimComponentTestContext
         TickAccount(provider, 0);
 
         var notice = provider.Find("[data-testid='jim-set-password-no-published-policy']");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(notice.TextContent, Does.Contain("nothing to configure"));
             Assert.That(provider.FindAll("[data-testid='jim-set-password-unknown-policy']"), Is.Empty,
                 "there is no schema import that would help here");
-        });
+        }
     }
 
     [Test]
@@ -856,11 +856,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
         ]);
         TickAccount(provider, 0);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindAll("[data-testid='jim-set-password-unknown-policy']"), Is.Empty);
             Assert.That(provider.FindAll("[data-testid='jim-set-password-no-published-policy']"), Is.Empty);
-        });
+        }
     }
 
     #endregion
@@ -883,13 +883,13 @@ public class SetPasswordDialogTests : JimComponentTestContext
         Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindAll($"[data-testid='{AccountMarker}']"), Is.Empty,
                 "the picker has nothing left to ask once the writing is done");
             Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']"), Has.Count.EqualTo(2),
                 "one row per account the password was written to");
-        });
+        }
     }
 
     /// <summary>
@@ -908,11 +908,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
         provider.WaitForState(() => _runs.Count == 1);
 
         var rows = provider.FindAll($"[data-testid='{ResultMarker}']").Select(r => r.TextContent).ToList();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(rows[0], Does.Contain("Contoso AD").And.Contain("Password set."));
             Assert.That(rows[1], Does.Contain("Fabrikam HR").And.Contain("Refused."));
-        });
+        }
     }
 
     /// <summary>
@@ -931,13 +931,13 @@ public class SetPasswordDialogTests : JimComponentTestContext
         Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindAll($"[data-testid='{ResultsMarker}']"), Is.Empty);
             Assert.That(provider.FindAll($"[data-testid='{SummaryMarker}']"), Is.Not.Empty);
             Assert.That(provider.FindAll("[data-testid='jim-password-guidance-toggle']"), Is.Not.Empty,
                 "guidance must survive the collapse; it is the only thing telling them what to do next");
-        });
+        }
     }
 
     /// <summary>
@@ -958,11 +958,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         // One leg, between the failed first step and the second.
         var leg = provider.Find($"[data-testid='{RailMarker}'] .jim-password-rail-connector-fill");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(leg.ClassName, Does.Contain("jim-password-rail-connector-fill--failed"));
             Assert.That(leg.ClassName, Does.Not.Contain("jim-password-rail-connector-fill--completed"));
-        });
+        }
     }
 
     /// <summary>
@@ -1027,11 +1027,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
         provider.WaitForState(() => _runs.Count == 1);
 
         var rows = provider.FindAll($"[data-testid='{ResultMarker}']");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(rows[0].ClassName, Does.Not.Contain("jim-password-result--failed"));
             Assert.That(rows[1].ClassName, Does.Contain("jim-password-result--failed"));
-        });
+        }
     }
 
     /// <summary>
@@ -1051,11 +1051,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         var markers = provider.FindAll($"[data-testid='{RailMarker}'] .jim-password-rail-marker")
             .Select(m => m.ClassName ?? string.Empty).ToList();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(markers[0], Does.Contain("jim-password-rail-marker--completed"));
             Assert.That(markers[1], Does.Contain("jim-password-rail-marker--failed"));
-        });
+        }
     }
 
     #endregion

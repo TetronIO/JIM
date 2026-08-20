@@ -62,7 +62,7 @@ If you prefer more control:
 # 2. Set up infrastructure API key
 pwsh test/integration/Setup-InfrastructureApiKey.ps1
 
-# 3. Generate test data (S1 target directory starts empty — no Populate-SambaAD.ps1 needed)
+# 3. Generate test data (S1 target directory starts empty; no Populate-SambaAD.ps1 needed)
 pwsh test/integration/Generate-TestCSV.ps1 -Template Small
 
 # 4. Run scenarios only (skips setup)
@@ -94,10 +94,17 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 - **Scenario 9: Partition-Scoped Imports** - Partition filtering on import Run Profiles
 - **Scenario 10: Synchronisation Rule Scoping Behaviour** - Inbound/outbound scope transitions, deprovisioning actions, cross-system cascade
 - **Scenario 11: Scoping Criteria Evaluation Matrix** - Operator x value-type x group-structure coverage via per-cell CSO/MV types; three coverage tiers (Quick / Default / Exhaustive), round-trip persistence and API negative-cell probes
+- **Scenario 12: Relative-Date Inbound Scoping** - Date-driven joiner provisioning and leaver deprovisioning, re-evaluated each run against the live clock
+- **Scenario 13: Relative-Date Outbound Scoping** - Staged downstream provisioning released via the Temporal Scope Reconciler's outbound lane
+- **Scenario 14: Attribute Priority** - Multi-source winner resolution across two contributing import Synchronisation Rules (OpenLDAP only)
+- **Scenario 15: SCIM 2.0 Client Connector** - End-to-end drive against the containerised SCIM test service provider over HTTPS
+- **Scenario 17: Initial Password Provisioning** - the Initial Password JIM sets on a provisioned account, proven from the account holder's side: sign in with it (Active Directory answers `773`, "correct password, must change"), contrast against a wrong password (`52e`), change it as the account holder, then sign in with the newly chosen one. Samba AD only, because "must change at next sign-in" has no portable equivalent elsewhere; `-Template` is ignored, since the scenario asserts against a single account. This is the only coverage that drives the password channel against a real directory: the connector unit tests assert against a mocked LDAP executor, so they prove what JIM sends and nothing about what a directory does with it
 
-### Phase 2 (Planned)
-- Database connector testing (requires [#170](https://github.com/TetronIO/JIM/issues/170))
-- SQL Server, Oracle, PostgreSQL, MySQL connectors
+### Phase 2 Scenarios
+- **Scenario 16: JIM SQL Connector Matrix** - the connector's provider x capability matrix driven against Microsoft SQL Server and Oracle Database ([#170](https://github.com/TetronIO/JIM/issues/170)). Accepts `-Provider SqlServer|Oracle|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import. `-Template` is ignored; the scenario seeds its own rows.
+  - Green on both providers at every tier: 17 of 17 default-tier cells on SQL Server and 19 of 19 on Oracle, plus the 500,000-row scale import on each (`-FullMatrix`: 18 of 18 and 20 of 20), none not exercised. See the Scenario 16 section of `engineering/INTEGRATION_TESTING.md` for the detail, the seeder and scale-import timings, and the `jim-network` and Windows-host gotchas.
+  - Rows that cannot be exercised report **`skip` with a reason, never `pass`**. Preserve that: a matrix whose green cells include things nobody ran is worse than no matrix. Every row is exercised today; the delta rows change the identity system's Delta Import Mode mid-run to reach both modes and the fallback, and put it back.
+- Still road-mapped: multi-source aggregation across two database sources, and performance baselines. PostgreSQL and MySQL support are the connector's priority 2 providers and are not covered yet.
 
 ## Available Scripts
 
@@ -111,6 +118,8 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 | `Generate-TestCSV.ps1` | test/integration/ | Generate HR CSV files |
 | `Setup-Scenario1.ps1` | test/integration/ | Configure JIM for Scenario 1 |
 | `Invoke-Scenario1-HRToIdentityDirectory.ps1` | test/integration/scenarios/ | Run Scenario 1 tests (Joiner, Mover, Leaver, Reconnection) |
+| `Setup-Scenario17.ps1` | test/integration/ | Configure JIM for Scenario 17 (composes Setup-Scenario1, then enables the Initial Password) |
+| `Invoke-Scenario17-InitialPasswordProvisioning.ps1` | test/integration/scenarios/ | Run Scenario 17 tests (sign in with the Initial Password, change it, sign in again) |
 | `Get-HostFingerprint.ps1` | test/integration/ | Capture hardware profile for cross-host performance comparison |
 | `Stream-WorkerLogs.ps1` | test/integration/ | Stream diagnostic logs to Metrics API during test runs (background job) |
 | `Submit-TestResults.ps1` | test/integration/ | Submit end-of-run summary to Metrics API |
@@ -216,13 +225,33 @@ Names are distributed using a prime-based algorithm to ensure realistic diversit
 - **Panoply APAC** - Port 10389 (LDAP) - Profile: scenario2
 - **Panoply EMEA** - Port 11389 (LDAP) - Profile: scenario2
 
-### Phase 2 (Planned)
+### Phase 2 (profile: phase2)
 
-- **SQL Server** - Port 1433 - Profile: phase2
-- **Oracle XE** - Port 1521 - Profile: phase2
-- **PostgreSQL** - Port 5433 - Profile: phase2
-- **MySQL** - Port 3306 - Profile: phase2
-- **OpenLDAP** - Port 12389 - Profile: phase2
+**No ports are published to the host.** These containers are reachable only on the `jim-network` Docker network, by container name; the ports below are container-internal. Use `docker exec` for ad-hoc queries.
+
+Live for Scenario 16, started by the runner on demand (only the containers the requested `-Provider` needs):
+
+- **`sqlserver-hris-a`** - Microsoft SQL Server 2022, port 1433. SA password from `SQL_SA_PASSWORD` (passed to the container as `MSSQL_SA_PASSWORD`).
+- **`oracle-hris-b`** - Oracle Database Free 23ai, port 1521. CDB service `FREE`; the pluggable database JIM connects to is **`FREEPDB1`**. Pulls anonymously from Oracle's own registry (no `docker login`, no licence click-through); the image is 13.6GB, which dominates a cold first run.
+
+Staged for the JIM SQL Connector's priority 2 providers, not used by Scenario 16:
+
+- **`postgres-target`** - PostgreSQL 16, port 5432
+- **`mysql-test`** - MySQL 8, port 3306
+
+These images deliberately use mutable tags: `engineering/DEPENDENCY_PINNING.md` row 9 records integration test images as an accepted exception to digest pinning, updated manually as needed.
+
+Debugging connections (verified):
+
+```powershell
+docker exec sqlserver-hris-a /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Test@123!' -Q "SELECT @@VERSION"
+
+# The password must be double-quoted inside the connect string: it contains '@', which EZConnect
+# would otherwise read as the host separator.
+docker exec oracle-hris-b sqlplus -s 'system/"Test@123!"@//localhost:1521/FREEPDB1'
+```
+
+See `engineering/INTEGRATION_TESTING.md` for the Oracle start-up troubleshooting (healthcheck exit codes, ORA-00845, what "DATABASE IS READY TO USE!" means).
 
 ## Test Lifecycle
 

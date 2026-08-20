@@ -211,7 +211,7 @@ public class InitialPasswordProvisioningDatabaseTests
         await using var verify = NewContext();
         var stored = await verify.SyncRuleInitialPasswords.AsNoTracking().SingleAsync(ip => ip.SyncRuleId == syncRuleId);
         var policy = stored.CustomPolicy;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.Enabled, Is.True);
             Assert.That(stored.Source, Is.EqualTo(InitialPasswordSource.Custom));
@@ -230,7 +230,7 @@ public class InitialPasswordProvisioningDatabaseTests
             Assert.That(policy.AppendedDigitCount, Is.EqualTo(3));
             Assert.That(policy.AppendSymbol, Is.True);
             Assert.That(policy.ExcludeAmbiguousCharacters, Is.False);
-        });
+        }
     }
 
     /// <summary>
@@ -333,7 +333,7 @@ public class InitialPasswordProvisioningDatabaseTests
 
         await using var verify = NewContext();
         var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync(p => p.Id == id);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(csoId));
             Assert.That(stored.ConnectedSystemId, Is.EqualTo(systemId));
@@ -345,7 +345,7 @@ public class InitialPasswordProvisioningDatabaseTests
             Assert.That(stored.CreatedAt, Is.EqualTo(createdAt).Within(TimeSpan.FromMilliseconds(1)));
             Assert.That(stored.LastAttemptedAt, Is.EqualTo(lastAttemptedAt).Within(TimeSpan.FromMilliseconds(1)));
             Assert.That(stored.ExpiresAt, Is.EqualTo(expiresAt).Within(TimeSpan.FromMilliseconds(1)));
-        });
+        }
     }
 
     /// <summary>
@@ -367,7 +367,7 @@ public class InitialPasswordProvisioningDatabaseTests
 
         await using var verify = NewContext();
         var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync(p => p.Id == id);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.SyncRuleId, Is.Null);
             Assert.That(stored.FailureReason, Is.Null);
@@ -376,7 +376,7 @@ public class InitialPasswordProvisioningDatabaseTests
             Assert.That(stored.ExpiresAt, Is.Null);
             Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
             Assert.That(stored.AttemptCount, Is.Zero);
-        });
+        }
     }
 
     /// <summary>
@@ -418,12 +418,12 @@ public class InitialPasswordProvisioningDatabaseTests
 
         await using var verify = NewContext();
         var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.Id, Is.EqualTo(firstId));
             Assert.That(stored.AttemptCount, Is.EqualTo(2), "the existing record's progress must not be reset by re-staging");
             Assert.That(stored.TargetMessage, Is.EqualTo("The directory was unreachable."));
-        });
+        }
     }
 
     /// <summary>
@@ -504,7 +504,7 @@ public class InitialPasswordProvisioningDatabaseTests
 
         await using var verify = NewContext();
         var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync(p => p.Id == id);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Parked));
             Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
@@ -517,7 +517,7 @@ public class InitialPasswordProvisioningDatabaseTests
             Assert.That(stored.ConnectedSystemId, Is.EqualTo(systemId));
             Assert.That(stored.SyncRuleId, Is.EqualTo(syncRuleId));
             Assert.That(stored.CreatedAt, Is.EqualTo(createdAt).Within(TimeSpan.FromMilliseconds(1)), "when the work was staged is not something an attempt changes");
-        });
+        }
     }
 
     /// <summary>
@@ -580,6 +580,105 @@ public class InitialPasswordProvisioningDatabaseTests
         Assert.That(outstanding[0].ConnectedSystemObjectId, Is.EqualTo(pendingCsoId));
         Assert.That(outstanding[0].ConnectedSystemObject, Is.Not.Null,
             "the delivery pass sets the password on this object; without it there is nothing to deliver to");
+    }
+
+    /// <summary>
+    /// The retention trim removes terminal records past their cutoff and nothing else. Written against real
+    /// PostgreSQL because the statement is raw SQL: the sub-select's <c>COALESCE</c> over the last attempt, the
+    /// status filter and the batch <c>LIMIT</c> are all invisible to the in-memory provider, which runs its own
+    /// LINQ equivalent rather than this SQL.
+    /// </summary>
+    [Test]
+    public async Task DeleteTerminalInitialPasswordsAsync_RemovesOnlyAgedTerminalRecordsAsync()
+    {
+        var (systemId, syncRuleId) = await SeedSystemAndRuleAsync();
+        var oldParkedId = Guid.NewGuid();
+        var oldExpiredId = Guid.NewGuid();
+        var recentParkedId = Guid.NewGuid();
+        var oldPendingId = Guid.NewGuid();
+
+        await using (var stage = NewContext())
+        {
+            var repository = new PostgresDataRepository(stage).Sync;
+            await repository.StageInitialPasswordsAsync([
+                new PendingInitialPassword { Id = oldParkedId, ConnectedSystemObjectId = await SeedAccountAsync(systemId), ConnectedSystemId = systemId, SyncRuleId = syncRuleId, CreatedAt = DateTime.UtcNow.AddDays(-200) },
+                new PendingInitialPassword { Id = oldExpiredId, ConnectedSystemObjectId = await SeedAccountAsync(systemId), ConnectedSystemId = systemId, SyncRuleId = syncRuleId, CreatedAt = DateTime.UtcNow.AddDays(-200) },
+                new PendingInitialPassword { Id = recentParkedId, ConnectedSystemObjectId = await SeedAccountAsync(systemId), ConnectedSystemId = systemId, SyncRuleId = syncRuleId, CreatedAt = DateTime.UtcNow.AddDays(-1) },
+                new PendingInitialPassword { Id = oldPendingId, ConnectedSystemObjectId = await SeedAccountAsync(systemId), ConnectedSystemId = systemId, SyncRuleId = syncRuleId, CreatedAt = DateTime.UtcNow.AddDays(-200) }
+            ]);
+            await repository.RecordInitialPasswordAttemptsAsync([
+                new PendingInitialPassword { Id = oldParkedId, Status = PendingInitialPasswordStatus.Parked, AttemptCount = 1, LastAttemptedAt = DateTime.UtcNow.AddDays(-200) },
+                new PendingInitialPassword { Id = oldExpiredId, Status = PendingInitialPasswordStatus.Expired, AttemptCount = 1, LastAttemptedAt = DateTime.UtcNow.AddDays(-200) },
+                new PendingInitialPassword { Id = recentParkedId, Status = PendingInitialPasswordStatus.Parked, AttemptCount = 1, LastAttemptedAt = DateTime.UtcNow.AddDays(-1) }
+            ]);
+        }
+
+        int deleted;
+        await using (var trim = NewContext())
+        {
+            deleted = await new PostgresDataRepository(trim).Sync.DeleteTerminalInitialPasswordsAsync(DateTime.UtcNow.AddDays(-90), 100);
+        }
+
+        await using var verify = NewContext();
+        var remaining = await verify.PendingInitialPasswords.Select(p => p.Id).ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.EqualTo(2));
+            Assert.That(remaining, Is.EquivalentTo(new[] { recentParkedId, oldPendingId }),
+                "a terminal record inside retention, and any record still being worked, are both kept");
+        }
+    }
+
+    /// <summary>
+    /// The batch cap bounds one pass, so a large backlog drains over several housekeeping cycles rather than in
+    /// one long transaction.
+    /// </summary>
+    [Test]
+    public async Task DeleteTerminalInitialPasswordsAsync_HonoursTheBatchCapAsync()
+    {
+        var (systemId, syncRuleId) = await SeedSystemAndRuleAsync();
+        var ids = new List<Guid>();
+
+        await using (var stage = NewContext())
+        {
+            var repository = new PostgresDataRepository(stage).Sync;
+            var staged = new List<PendingInitialPassword>();
+            for (var i = 0; i < 5; i++)
+            {
+                var id = Guid.NewGuid();
+                ids.Add(id);
+                staged.Add(new PendingInitialPassword
+                {
+                    Id = id,
+                    ConnectedSystemObjectId = await SeedAccountAsync(systemId),
+                    ConnectedSystemId = systemId,
+                    SyncRuleId = syncRuleId,
+                    CreatedAt = DateTime.UtcNow.AddDays(-200)
+                });
+            }
+
+            await repository.StageInitialPasswordsAsync(staged);
+            await repository.RecordInitialPasswordAttemptsAsync(ids.Select(id => new PendingInitialPassword
+            {
+                Id = id,
+                Status = PendingInitialPasswordStatus.Expired,
+                AttemptCount = 1,
+                LastAttemptedAt = DateTime.UtcNow.AddDays(-200)
+            }));
+        }
+
+        int deleted;
+        await using (var trim = NewContext())
+        {
+            deleted = await new PostgresDataRepository(trim).Sync.DeleteTerminalInitialPasswordsAsync(DateTime.UtcNow.AddDays(-90), 2);
+        }
+
+        await using var verify = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.EqualTo(2));
+            Assert.That(await verify.PendingInitialPasswords.CountAsync(), Is.EqualTo(3));
+        }
     }
 
     private async Task<(int SystemId, int SyncRuleId, Guid CsoId)> SeedSystemRuleAndAccountAsync()

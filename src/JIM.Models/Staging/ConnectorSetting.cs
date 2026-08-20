@@ -31,7 +31,11 @@ public class ConnectorSetting
     /// When set, at least one setting in the same named group must have a value supplied by the administrator.
     /// Use for either/or requirements, where individual settings are optional but the group as a whole is required.
     /// Grouped settings should share the same Category and be declared consecutively so the UI can render them together.
-    /// Enforced generically by JIM when validating Connected System settings; see ConnectorSettingGroupValidator.
+    /// Members are never required individually, including where they declare <see cref="RequiredWhenSetting"/>: the
+    /// group's <see cref="RequiredGroupCardinality"/> is what decides how many of them need a value. Combine with
+    /// <see cref="RequiredWhenSetting"/> to scope the whole either/or to a subset of configurations; a group whose
+    /// members do not currently apply asks for nothing.
+    /// Enforced generically by JIM when validating Connected System settings; see ConnectorSettingValidator.
     /// </summary>
     public string? RequiredGroup { get; set; }
 
@@ -49,7 +53,9 @@ public class ConnectorSetting
     /// relevant (shown and required) while the controlling setting's current value equals <see cref="RequiredWhenValue"/>;
     /// otherwise it is hidden in the UI and ignored by validation. Use for conditionally-relevant settings, e.g. a
     /// setting that only applies when a "use secure connection" checkbox is enabled. Must be paired with
-    /// <see cref="RequiredWhenValue"/>. Enforced generically; see ConnectorSettingValidator.
+    /// <see cref="RequiredWhenValue"/>. Conditions may be chained: a setting whose controlling setting is itself
+    /// hidden is hidden too, so a value left behind by an earlier configuration never brings it back.
+    /// Enforced generically; see ConnectorSettingValidator.
     /// </summary>
     public string? RequiredWhenSetting { get; set; }
 

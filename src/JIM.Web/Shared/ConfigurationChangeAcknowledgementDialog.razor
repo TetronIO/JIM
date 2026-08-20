@@ -11,7 +11,12 @@
 @* so the experience does not vary by page. It is replaced per surface by the preview-driven confirmation    *@
 @* as each adapter lands. See engineering/plans/doing/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2, FR17).       *@
 
-<ConsequenceConfirmationDialog Consequences="@ConfigurationChangePreflightConsequences.For(Preflight)"
+@* The verdict and the counts are the same answer twice, so only one of them is ever shown. The sentence wins where *@
+@* there is one: an administrator deciding whether to save reads "2 objects would become eligible for deletion"     *@
+@* faster than they read a two-row table, and the counts remain for surfaces whose adapter has not landed yet.      *@
+<ConsequenceConfirmationDialog LeadingContent="@RenderVerdict"
+                               Consequences="@ConfigurationChangePreflightConsequences.For(Preflight)"
+                               Counts="@(Verdict == null ? Counts : [])"
                                AdditionalContent="@RenderChanges"
                                ConfirmButtonText="Save changes"
                                BusyText="Saving..."
@@ -35,6 +40,35 @@
     /// </summary>
     [Parameter]
     public string? ObjectName { get; set; }
+
+    /// <summary>
+    /// What a Configuration Change Preview found this change would do, as counts (#827). Empty where no preview was
+    /// run, or where the surface has no adapter yet, in which case the dialog is exactly what it was before.
+    ///
+    /// This is the difference between "you are changing the Deletion Rule" and "you are changing the Deletion Rule,
+    /// and 4,812 Metaverse Objects become eligible for deletion when you do". Only the second is something an
+    /// administrator can meaningfully consent to.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ImpactCount> Counts { get; set; } = [];
+
+    /// <summary>
+    /// The same finding as a sentence, worst consequence first (#1275). Where a surface supplies one it replaces
+    /// <see cref="Counts"/> rather than joining it, because the two state the same numbers.
+    /// </summary>
+    [Parameter]
+    public PreviewVerdict? Verdict { get; set; }
+
+    private RenderFragment? RenderVerdict => Verdict is not { } verdict
+        ? null
+        : @<MudAlert Severity="@verdict.Severity" Variant="Variant.Outlined" data-testid="jim-acknowledgement-verdict">
+              <MudText Typo="Typo.body1"><b>@verdict.Lead</b></MudText>
+              @if (!string.IsNullOrEmpty(verdict.Detail))
+              {
+                  <MudText Typo="Typo.body2" Class="mt-1">@verdict.Detail</MudText>
+              }
+              <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">From the preview.</MudText>
+          </MudAlert>;
 
     // A change touching dozens of properties is real (a scoping rewrite, a bulk mapping edit); listing every one
     // turns the dialog into a wall nobody reads. The most consequential lead, and the tail is counted.
@@ -61,9 +95,11 @@
                             @if (item.IsCollectionItem)
                             {
                                 @* A whole item joining or leaving a collection. There is no before-and-after pair to *@
-                                @* show: the label names it, and this says which way it went.                        *@
+                                @* show: the label names it, and this says which way it went, unless the item        *@
+                                @* carries a truer word for what it did (a Container carved out of a selection is in  *@
+                                @* the snapshot for the first time, so it arrives, but it was not "Added").           *@
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                    @(item.ChangeType == ConfigurationDiffChangeType.Added ? "Added" : "Removed")
+                                    @(item.CollectionItemVerb ?? (item.ChangeType == ConfigurationDiffChangeType.Added ? "Added" : "Removed"))
                                 </MudText>
                             }
                             else if (item.OldDisplayValue == null && item.NewDisplayValue == null)
@@ -100,8 +136,21 @@
     /// needs no acknowledgement (cosmetic, unchanged, a create, or one JIM cannot judge) returns true without showing
     /// anything, so callers can invoke this unconditionally on every save path.
     /// </summary>
+    /// <param name="dialogService">The dialog service to show the acknowledgement with.</param>
+    /// <param name="preflight">The evaluated change.</param>
+    /// <param name="objectTypeLabel">The kind of object being changed, e.g. "Metaverse Object Type".</param>
+    /// <param name="objectName">The object's own name.</param>
+    /// <param name="counts">
+    /// What a Configuration Change Preview found the change would do, where one was run. Optional: a preview is an
+    /// affordance, not a precondition, and every surface without an adapter passes nothing.
+    /// </param>
+    /// <param name="verdict">
+    /// The same finding as a sentence, where the surface has one. Supplying it suppresses the counts table, because
+    /// the two state the same numbers.
+    /// </param>
     public static async Task<bool> ConfirmAsync(IDialogService dialogService, ConfigurationChangePreflight preflight,
-        string objectTypeLabel, string? objectName)
+        string objectTypeLabel, string? objectName, IReadOnlyList<ImpactCount>? counts = null,
+        PreviewVerdict? verdict = null)
     {
         ArgumentNullException.ThrowIfNull(dialogService);
         ArgumentNullException.ThrowIfNull(preflight);
@@ -113,7 +162,9 @@
         {
             { x => x.Preflight, preflight },
             { x => x.ObjectTypeLabel, objectTypeLabel },
-            { x => x.ObjectName, objectName }
+            { x => x.ObjectName, objectName },
+            { x => x.Counts, counts ?? [] },
+            { x => x.Verdict, verdict }
         };
         var options = new DialogOptions
         {

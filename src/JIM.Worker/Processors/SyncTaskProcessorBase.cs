@@ -46,10 +46,10 @@ public abstract class SyncTaskProcessorBase
     protected Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
     protected ExportEvaluationCache? _exportEvaluationCache;
 
-    // Run-scoped export evaluation cache for reference recall staging (#1003), built once per run
-    // with sourceConnectedSystemId 0: recall is state assertion, so no source system is excluded
-    // (Q3 does not apply to deletions), which is why _exportEvaluationCache cannot be shared.
-    // Eliminates the per-flush Synchronisation Rule reload inside StageReferenceRecallExportsAsync.
+    // Run-scoped export evaluation cache for reference recall staging (#1003), built once per run.
+    // A separate instance from _exportEvaluationCache because each cache's per-page refresh loads a
+    // different Metaverse Object set, and sharing one would let each refresh clobber the other's
+    // lookups. Eliminates the per-flush Synchronisation Rule reload inside StageReferenceRecallExportsAsync.
     protected ExportEvaluationCache? _recallExportEvaluationCache;
 
     // Cache for drift detection: maps (ConnectedSystemId, MvoAttributeId) to import mappings
@@ -732,6 +732,25 @@ public abstract class SyncTaskProcessorBase
 
             Log.Error(expressionEx, "ProcessActiveConnectedSystemObjectAsync: Expression evaluation error during pass 2 for {CsoId}. Target attribute '{Attribute}', expression '{Expression}'.",
                 connectedSystemObject.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
+        }
+        catch (SyncExpressionMissingInputException missingInputEx)
+        {
+            // An Expression read an attribute this object has no value for, and the mapping's Missing Input
+            // Behaviour is Fail the object: the administrator has said a partially populated object is worse than
+            // none here, so error it and leave the Metaverse Object untouched (the CSO's pending attribute changes
+            // are discarded), while every other object in the run carries on. Nothing failed to evaluate, which is
+            // why this is not an ExpressionEvaluationError.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
+            runProfileExecutionItem.ErrorMessage = missingInputEx.Message +
+                " Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.";
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            Log.Warning("ProcessActiveConnectedSystemObjectAsync: Expression not evaluated for {CsoId}; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
+                connectedSystemObject.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
+                LogSanitiser.Sanitise(missingInputEx.TargetAttributeName), LogSanitiser.Sanitise(missingInputEx.Expression));
         }
         catch (Exception e)
         {
@@ -1459,10 +1478,17 @@ public abstract class SyncTaskProcessorBase
         // are we joined yet?
         if (connectedSystemObject.MetaverseObject != null)
         {
-            // Get the inbound Synchronisation Rules for this CSO type
-            var inboundSyncRules = activeSyncRules
-                .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
-                .ToList();
+            // Get the inbound Synchronisation Rules for this CSO type that this CSO is in scope for (#1199).
+            // Scope is per rule, not per Connected System: a system may hold several import rules over the same
+            // object type with different Scoping Criteria, which is the mechanism behind fine-grained authority
+            // (a narrowly scoped rule taking authority for a subset of objects; see the worked example in
+            // engineering/plans/doing/ATTRIBUTE_PRIORITY.md). Flowing every rule regardless of its own scope
+            // would let a rule the object is explicitly excluded from contribute anyway, which both corrupts the
+            // Attribute Priority resolution for that attribute and silently ignores the administrator's scope.
+            // inScopeImportRules is already filtered to this CSO's type and direction (it derives from
+            // importSyncRules above) and treats an unscoped rule as in scope, so the common single-rule
+            // topology is unaffected.
+            var inboundSyncRules = inScopeImportRules;
 
             // process Synchronisation Rules to see if we need to flow any attribute updates from the CSO to the MVO.
             // IMPORTANT: Skip reference attributes in the first pass. Reference attributes (e.g., group members)
@@ -1486,10 +1512,9 @@ public abstract class SyncTaskProcessorBase
                 var errorRpei = _activity.PrepareRunProfileExecutionItem();
                 errorRpei.ConnectedSystemObject = connectedSystemObject;
                 errorRpei.ConnectedSystemObjectId = connectedSystemObject.Id;
-                errorRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued;
-                errorRpei.ErrorMessage = $"Multi-valued source attribute '{attributeFlowError.SourceAttributeName}' has {attributeFlowError.ValueCount} values " +
-                    $"but target attribute '{attributeFlowError.TargetAttributeName}' is single-valued, so no value was flowed for this attribute. " +
-                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.";
+                var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: false, targetSystemName: null);
+                errorRpei.ErrorType = errorType;
+                errorRpei.ErrorMessage = errorMessage;
                 _activity.RunProfileExecutionItems.Add(errorRpei);
             }
 
@@ -1709,7 +1734,6 @@ public abstract class SyncTaskProcessorBase
                 result = await _syncServer.EvaluateExportRulesWithNoNetChangeDetectionAsync(
                     mvo,
                     changedAttributes,
-                    _connectedSystem,
                     _exportEvaluationCache,
                     deferSave: true,
                     removedAttributes: removedAttributes,
@@ -1730,6 +1754,23 @@ public abstract class SyncTaskProcessorBase
                     mvo.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
                 return;
             }
+            catch (SyncExpressionMissingInputException missingInputEx)
+            {
+                // An export Expression read an attribute this Metaverse Object has no value for, and the mapping's
+                // Missing Input Behaviour is Fail the object. Export evaluation aborted before any Pending Export
+                // was collected, so nothing partial is staged for this object; every other object still exports.
+                var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+                runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
+                runProfileExecutionItem.ErrorMessage = missingInputEx.Message +
+                    $" No Pending Export was generated for Metaverse Object {mvo.Id} on '{_connectedSystem.Name}'. Supply the missing value, " +
+                    "handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.";
+                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+                Log.Warning("EvaluateOutboundExportsAsync: Expression not evaluated for MVO {MvoId}; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
+                    mvo.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
+                    LogSanitiser.Sanitise(missingInputEx.TargetAttributeName), LogSanitiser.Sanitise(missingInputEx.Expression));
+                return;
+            }
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
@@ -1740,12 +1781,19 @@ public abstract class SyncTaskProcessorBase
             foreach (var attributeFlowError in result.AttributeFlowErrors)
             {
                 var errorRpei = _activity.PrepareRunProfileExecutionItem();
-                errorRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued;
-                errorRpei.ErrorMessage = $"Multi-valued Metaverse source attribute '{attributeFlowError.SourceAttributeName}' has {attributeFlowError.ValueCount} values " +
-                    $"but target attribute '{attributeFlowError.TargetAttributeName}' on '{_connectedSystem.Name}' is single-valued, so no value was exported for this attribute. " +
-                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.";
+                var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: true, targetSystemName: _connectedSystem.Name);
+                errorRpei.ErrorType = errorType;
+                errorRpei.ErrorMessage = errorMessage;
                 _activity.RunProfileExecutionItems.Add(errorRpei);
             }
+
+            // Create error RPEIs where an outbound Synchronisation Rule could not export because the Metaverse
+            // Object's one Connected System Object in this system is of a different Object Type (#1331). No
+            // Pending Export was staged for that Rule; the object's other export Rules are unaffected. Reported
+            // rather than thrown, because it is a configuration fault for the administrator to resolve and the
+            // rest of the run still carries useful work.
+            foreach (var conflict in result.ObjectTypeConflicts)
+                _activity.RunProfileExecutionItems.Add(BuildObjectTypeConflictRpei(conflict));
 
             // Collect provisioning CSOs for batch creation at end of page (must be created before Pending Exports)
             if (result.ProvisioningCsosToCreate.Count > 0)
@@ -1782,11 +1830,12 @@ public abstract class SyncTaskProcessorBase
             {
                 // Prefer the AttributeFlow child as parent (MVO is fully formed after Attribute Flow),
                 // fall back to root outcome, fall back to creating outcomes at root level.
-                var rootOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
-                    !o.ParentSyncOutcomeId.HasValue);
+                // These outcomes were built in memory earlier in this page, so their parent link is the
+                // navigation property and not yet the FK; ask IsChildOutcome, which reads whichever is set.
+                var rootOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o => !o.IsChildOutcome);
                 var attributeFlowChild = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
                     o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                    && o.ParentSyncOutcomeId.HasValue);
+                    && o.IsChildOutcome);
                 var exportParent = attributeFlowChild ?? rootOutcome;
 
                 // Track Provisioned outcomes by CS ID so we can nest Pending Exports under them
@@ -1923,12 +1972,15 @@ public abstract class SyncTaskProcessorBase
             }
         }
 
-        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
+        // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data.
+        // A Connected System Object of a different Object Type than a Rule targets is skipped quietly inside
+        // the evaluation (#1331, #1399): its own type's Rule owns its lifecycle, so there is nothing to report
+        // here, and reporting it raised a warning per correctly provisioned object on every synchronisation
+        // of a system whose Rules split their Object Types across disjoint scopes.
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
             var deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
                 mvo,
-                _connectedSystem,
                 _exportEvaluationCache!);
 
             // Track CSOs deprovisioned this page (newly staged or reused Delete Pending Exports; they
@@ -1948,6 +2000,27 @@ public abstract class SyncTaskProcessorBase
     /// newly assigned MVO IDs. This is necessary because AutoDetectChangesEnabled is disabled
     /// during page flush, so EF does not detect CSO scalar property changes automatically.
     /// </summary>
+    /// <summary>
+    /// Builds the Run Profile Execution Item reporting that an outbound Synchronisation Rule could not act,
+    /// because the Metaverse Object's one Connected System Object in this system is of a different Connected
+    /// System Object Type than the Rule targets (#1331). Shared by export evaluation and out-of-scope
+    /// deprovisioning so both read identically on the Activity.
+    /// </summary>
+    private ActivityRunProfileExecutionItem BuildObjectTypeConflictRpei(ExportObjectTypeConflict conflict)
+    {
+        var rpei = _activity.PrepareRunProfileExecutionItem();
+        rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject;
+        rpei.ConnectedSystemObjectId = conflict.ExistingConnectedSystemObjectId;
+        rpei.ErrorMessage =
+            $"Metaverse Object {conflict.MetaverseObjectId}: Synchronisation Rule '{conflict.SyncRuleName}' targets Connected System " +
+            $"Object Type '{conflict.TargetObjectTypeName}' in '{_connectedSystem.Name}', but this Metaverse Object is already " +
+            $"represented there by a '{conflict.ExistingObjectTypeName}' object. A Metaverse Object can have only one Connected " +
+            "System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no " +
+            "Metaverse Object satisfies two outbound Synchronisation Rules targeting this Connected System, or give the exported " +
+            "Object Types their own Connected System over the same target.";
+        return rpei;
+    }
+
     protected async Task PersistPendingMetaverseObjectsAsync()
     {
         if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0 && _pendingScopeReviewClears.Count == 0)
@@ -2241,7 +2314,7 @@ public abstract class SyncTaskProcessorBase
                                 {
                                     var attrFlowChild = existingChangeEntry.Rpei.SyncOutcomes.FirstOrDefault(o =>
                                         o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                                        && o.ParentSyncOutcomeId.HasValue);
+                                        && o.IsChildOutcome);
                                     if (attrFlowChild != null)
                                         attrFlowChild.DetailCount = existingChangeEntry.Rpei.AttributeFlowCount;
                                 }
@@ -2485,20 +2558,20 @@ public abstract class SyncTaskProcessorBase
                         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                             && rpei.ObjectChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined)
                         {
-                            // Use the FK (ParentSyncOutcomeId) rather than the navigation property
-                            // so the check works whether or not EF populated ParentSyncOutcome —
-                            // AsNoTracking + Include(SyncOutcomes) loads the list but not the
-                            // per-node parent navigation.
+                            // This RPEI was read back from the database, so its outcomes carry the FK and
+                            // not the navigation property (AsNoTracking + Include(SyncOutcomes) loads the
+                            // list but not the per-node parent navigation). IsChildOutcome reads whichever
+                            // link is populated, so the same lookup is correct on either shape.
                             var attrFlowChild = rpei.SyncOutcomes.FirstOrDefault(o =>
                                 o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                                && o.ParentSyncOutcomeId.HasValue);
+                                && o.IsChildOutcome);
                             if (attrFlowChild != null)
                                 attrFlowChild.DetailCount = rpei.AttributeFlowCount;
                             else
                             {
                                 // No child yet (e.g., initial projection had no scalar attribute changes).
                                 // Add an AttributeFlow child under the root Projected/Joined outcome.
-                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => !o.ParentSyncOutcomeId.HasValue);
+                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => !o.IsChildOutcome);
                                 if (rootOutcome != null)
                                 {
                                     SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
@@ -3265,6 +3338,11 @@ public abstract class SyncTaskProcessorBase
                 deletionCandidatesByCsoId[cso.Id] = mvo;
         }
 
+        // One working set for the whole flush (#288 Phase 1a): the bulk evaluation records the Delete Pending
+        // Exports it stages, so when the per-MVO fallback below re-evaluates the same objects it reuses them
+        // from the working set instead of reading this flush's own writes back from the database.
+        var exportEvaluationWorkingSet = new ExportEvaluationWorkingSet();
+
         var deletedMvoIds = new List<Guid>();
         try
         {
@@ -3280,7 +3358,8 @@ public abstract class SyncTaskProcessorBase
                     // consider export Synchronisation Rules to every system, including this
                     // run's source (Q3 does not apply to deletions).
                     var deleteExports = await _syncServer.EvaluateMvoDeletionsAsync(
-                        deletionsToProcess.Select(d => d.Mvo).ToList(), _recallExportEvaluationCache);
+                        deletionsToProcess.Select(d => d.Mvo).ToList(), _recallExportEvaluationCache,
+                        exportEvaluationWorkingSet);
                     if (deleteExports.Count > 0)
                     {
                         foreach (var deleteExport in deleteExports)
@@ -3323,7 +3402,8 @@ public abstract class SyncTaskProcessorBase
             // succeeded and only the delete failed, its CSO disconnects are already persisted, so the
             // fallback's re-evaluation finds no joined CSOs and returns nothing. Anything the fallback does
             // stage is merged over the top, deduplicated by Pending Export id.
-            deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(deletionsToProcess, deletePendingExports));
+            deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(
+                deletionsToProcess, deletePendingExports, exportEvaluationWorkingSet));
         }
 
         // Deletion cascade (#1044): fold the staged delete Pending Exports into Activity reporting, so the
@@ -3774,9 +3854,13 @@ public abstract class SyncTaskProcessorBase
     /// Export id, so the caller can report them on the Activity (#1044). A Pending Export ensured for an object
     /// whose deletion then failed is still collected: the export is staged and pending, so an administrator must
     /// see it.</param>
+    /// <param name="exportEvaluationWorkingSet">The flush's working set (#288 Phase 1a), carrying the Delete
+    /// Pending Exports the failed bulk attempt already staged so this fallback reuses them without re-reading
+    /// the flush's own writes from the database.</param>
     private async Task<List<Guid>> ProcessMvoDeletionsIndividuallyAsync(
         List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletionsToProcess,
-        Dictionary<Guid, PendingExport> deletePendingExports)
+        Dictionary<Guid, PendingExport> deletePendingExports,
+        ExportEvaluationWorkingSet exportEvaluationWorkingSet)
     {
         var deletedMvoIds = new List<Guid>();
         foreach (var (mvo, finalAttributeValues) in deletionsToProcess)
@@ -3786,7 +3870,8 @@ public abstract class SyncTaskProcessorBase
                 // Create delete Pending Exports for CSOs whose export Synchronisation Rule action
                 // is Delete (issue #655). This handles WhenAuthoritativeSourceDisconnected where
                 // target CSOs still exist. Recall cache: Q3 does not apply to deletions.
-                var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(mvo, _recallExportEvaluationCache);
+                var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(
+                    mvo, _recallExportEvaluationCache, exportEvaluationWorkingSet);
                 if (deleteExports.Count > 0)
                 {
                     foreach (var deleteExport in deleteExports)
@@ -4334,6 +4419,42 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Turns an Attribute Flow error into the execution item's error type and message. One place, so the two call
+    /// sites (inbound flow and export evaluation) cannot describe the same fault differently, and so a new
+    /// <see cref="AttributeFlowErrorKind"/> has exactly one place to be worded.
+    /// </summary>
+    /// <param name="error">The error the flow recorded.</param>
+    /// <param name="exporting">True when describing an export, which generates no Pending Export rather than flowing no value.</param>
+    /// <param name="targetSystemName">The Connected System being exported to, named in the message; null when importing.</param>
+    private static (ActivityRunProfileExecutionItemErrorType ErrorType, string Message) DescribeAttributeFlowError(
+        AttributeFlowError error, bool exporting, string? targetSystemName)
+    {
+        var target = exporting && targetSystemName != null
+            ? $"'{error.TargetAttributeName}' on '{targetSystemName}'"
+            : $"'{error.TargetAttributeName}'";
+        var outcome = exporting ? "no Pending Export was generated for this attribute" : "no value was flowed for this attribute";
+
+        switch (error.Kind)
+        {
+            case AttributeFlowErrorKind.ExpressionMissingInput:
+                return (ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput,
+                    $"The Expression for target attribute {target} was not evaluated because this object has no value for " +
+                    $"{string.Join(", ", error.MissingInputs)}, so {outcome}; the object's other attributes were unaffected. " +
+                    "Missing Input Behaviour is set to Fail this mapping on this Attribute Flow. Supply the missing value, " +
+                    "handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.");
+
+            case AttributeFlowErrorKind.MultiValuedToSingleValued:
+            default:
+                var source = exporting
+                    ? $"Multi-valued Metaverse source attribute '{error.SourceAttributeName}'"
+                    : $"Multi-valued source attribute '{error.SourceAttributeName}'";
+                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
+                    $"{source} has {error.ValueCount} values but target attribute {target} is single-valued, so {outcome}. " +
+                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.");
+        }
+    }
+
+    /// <summary>
     /// Does not perform any delta processing. This is for MVO create scenarios where there are not MVO attribute values already.
     /// </summary>
     /// <param name="connectedSystemObject">The source Connected System Object to map values from.</param>
@@ -4372,10 +4493,10 @@ public abstract class SyncTaskProcessorBase
         var objectTypeId = mvo.Type.Id;
         var recalledAttributeIds = recalledValues.Select(av => av.AttributeId).Distinct().ToList();
 
-        var contestedAttributeIds = recalledAttributeIds
+        var multiContributorAttributeIds = recalledAttributeIds
             .Where(id => priorityContext.GetContributorCount(objectTypeId, id) > 1)
             .ToList();
-        if (contestedAttributeIds.Count == 0)
+        if (multiContributorAttributeIds.Count == 0)
             return;
 
         // Survivor discovery must query the repository, not the mvo.ConnectedSystemObjects navigation: the sync
@@ -4391,7 +4512,7 @@ public abstract class SyncTaskProcessorBase
         var survivorsToReflow = new List<(ConnectedSystemObject Cso, SyncRule Rule)>();
         var seen = new HashSet<(Guid CsoId, int RuleId)>();
 
-        foreach (var attributeId in contestedAttributeIds)
+        foreach (var attributeId in multiContributorAttributeIds)
         {
             // Contributing rules other than the leaver's own (whose contribution is gone). Project to the rule and
             // filter in one pipeline so the leaver's rule and any rule-less mapping are excluded before the body.

@@ -1,7 +1,7 @@
 # Plan: Scheduler Step Failure Detection (Activity-Based)
 
 - **Status:** Done
-- **Note:** Phase 1 (the fix) shipped and is verified in the codebase. Phase 2 was always "Future -- No Commitment"; of its five items only 2e (Queue tab schedule attribution) was built, and it went further than the sketch, grouping queued tasks under their schedule execution with a step count and a cancel action. 2a-2d (schedule execution detail view, History tab schedule filter, Activity detail schedule banner, Schedules tab execution history) remain unbuilt: the data and API surface each needs already exists, so they stay available as UX work whenever they are wanted.
+- **Note:** Phase 1 (the fix) shipped and is verified in the codebase. Phase 2 was written as "Future -- No Commitment"; 2e (Queue tab schedule attribution) was built alongside it, going further than the sketch by grouping queued tasks under their schedule execution with a step count and a cancel action. 2a-2d were subsequently committed to and built under [#1196](https://github.com/TetronIO/JIM/issues/1196), which supersedes the no-commitment framing: without them the Phase 1 fix is unobservable, because the scheduler correctly records a failure that nothing in the portal ever surfaces.
 - **Milestone:** MVP
 - **Issue:** none filed; the fix was delivered directly on `feature/scheduler-step-failure-detection`
 

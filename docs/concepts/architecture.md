@@ -23,7 +23,7 @@ The following diagram shows JIM in the context of the systems and users it inter
 
 --8<-- "assets/diagrams/system-context.svg"
 
-<p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems. Dashed elements indicate planned connectivity.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
+<p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ## Containers
 

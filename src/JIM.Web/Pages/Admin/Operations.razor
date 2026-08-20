@@ -13,7 +13,9 @@
     Manage tasks, view execution history, and configure schedules.
 </MudText>
 
-<NavigableMudTabs TabPanelsClass="pt-5" Class="mt-5">
+@* TabPanelsClass is pa-0 rather than pt-5 because the Schedules tab opens straight onto a virtualised grid, which
+   supplies its own top margin; stacking both double-counts the gap. Each tab's own first block carries it. *@
+<NavigableMudTabs TabPanelsClass="pa-0" Class="mt-5">
     <MudTabPanel Text="Queue" Icon="@Icons.Material.Filled.Queue">
         <OperationsQueueTab />
     </MudTabPanel>

@@ -63,9 +63,33 @@ public interface IConnectedSystemRepository
         int pageSize,
         string? searchText = null);
 
+    /// <summary>
+    /// Gets a window of one attribute's values on a Connected System Object addressed by absolute
+    /// <paramref name="offset"/> and <paramref name="count"/>, for a virtualised (infinite-scroll) multi-valued
+    /// attribute on the object's detail page. Ordered by value id, and shares its query core with
+    /// <see cref="GetAttributeValuesPagedAsync"/> so the two reads can never disagree on which values match.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The Connected System Object whose values are wanted.</param>
+    /// <param name="attributeName">The attribute whose values are wanted.</param>
+    /// <param name="offset">The zero-based index of the first value wanted; negative values read as zero.</param>
+    /// <param name="count">How many values are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value, the unresolved
+    /// reference and the referenced object's own values.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    public Task<RangeResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue);
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, decimal attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
 
     /// <summary>
@@ -155,6 +179,13 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
+
+    /// <summary>
+    /// Names the given Containers, for a surface holding their ids and needing to render them. Ids that no longer
+    /// resolve are simply absent, which is the honest answer for a Container removed since whatever recorded the
+    /// id happened.
+    /// </summary>
+    Task<List<ConnectedSystemContainerSummary>> GetConnectedSystemContainerSummariesAsync(IReadOnlyCollection<int> containerIds);
 
     /// <summary>
     /// Retrieves all the Pending Exports for a given Connected System.
@@ -336,6 +367,31 @@ public interface IConnectedSystemRepository
         bool sortDescending = true);
 
     /// <summary>
+    /// Retrieves a window of Pending Export headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetPendingExportHeadersAsync"/>. The window is clamped to a documented cap that a viewport
+    /// cannot reach. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match set when
+    /// the caller already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one.</param>
+    /// <param name="statusFilters">Optional filter by one or more statuses.</param>
+    /// <param name="searchQuery">Optional search query to filter by target object identifier, source MVO display name, or error message.</param>
+    /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    public Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        IEnumerable<PendingExportStatus>? statusFilters = null,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Retrieves a single Pending Export by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the Pending Export.</param>
@@ -368,6 +424,30 @@ public interface IConnectedSystemRepository
         string? searchText = null);
 
     /// <summary>
+    /// Gets a window of one attribute's changes on a Pending Export addressed by absolute
+    /// <paramref name="offset"/> and <paramref name="count"/>, for a virtualised (infinite-scroll) multi-valued
+    /// attribute. Ordered by change id, and shares its query core with
+    /// <see cref="GetPendingExportAttributeChangesPagedAsync"/> so the two reads can never disagree on which
+    /// changes match.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="attributeName">The name of the attribute to retrieve changes for.</param>
+    /// <param name="offset">The zero-based index of the first change wanted; negative values read as zero.</param>
+    /// <param name="count">How many changes are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value and the unresolved
+    /// reference.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    public Task<RangeResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesRangeAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Retrieves a paged list of all attribute value changes across all attributes for a Pending Export.
     /// Used by the CSO detail page for server-side pagination of the Pending Exports table.
     /// </summary>
@@ -381,6 +461,27 @@ public interface IConnectedSystemRepository
         int page,
         int pageSize,
         string? searchText = null);
+
+    /// <summary>
+    /// Gets a window of a Pending Export's attribute value changes addressed by absolute
+    /// <paramref name="offset"/> and <paramref name="count"/>, for the virtualised (infinite-scroll) Pending
+    /// Export grid on the Connected System Object detail page. Ordered by attribute name, and shares its query
+    /// core with <see cref="GetAllPendingExportChangesPagedAsync"/> so the two reads can never disagree on which
+    /// changes match.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="offset">The zero-based index of the first change wanted; negative values read as zero.</param>
+    /// <param name="count">How many changes are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional search text to filter changes by value or attribute name.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    public Task<RangeResultSet<PendingExportAttributeValueChange>> GetAllPendingExportChangesRangeAsync(
+        Guid pendingExportId,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true);
 
     /// <summary>
     /// Retrieves the Pending Export header (without attribute value changes) for a specific Connected System Object,
@@ -547,6 +648,13 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
 
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a lightweight projection for resolving
+    /// a Reference attribute's declared target name (#1285) without loading the ReferencedObjectType
+    /// navigation into an entity graph a mutating path might attach.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId);
+
     public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
@@ -590,6 +698,18 @@ public interface IConnectedSystemRepository
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null);
 
     /// <summary>
+    /// Retrieves every attribute data flow, in both directions, for the system-wide Data Flow view (#1199). One flow
+    /// per Synchronisation Rule mapping, filtered by the supplied query.
+    /// </summary>
+    /// <remarks>
+    /// Returns the whole filtered set rather than a page. A flow exists per configured mapping, so the population is
+    /// bounded by how much an administrator has configured (hundreds at most), not by how many objects are
+    /// synchronised, and the view's value is in seeing and sorting the whole map at once.
+    /// </remarks>
+    /// <param name="query">The filters to apply. All are optional and combine with AND.</param>
+    public Task<IList<DataFlowHeader>> GetDataFlowHeadersAsync(DataFlowQuery query);
+
+    /// <summary>
     /// Gets the change history for a Connected System Object.
     /// Includes all attribute changes and value changes for displaying in the UI.
     /// </summary>
@@ -628,6 +748,30 @@ public interface IConnectedSystemRepository
         int pageSize = 50);
 
     /// <summary>
+    /// Gets a window of deleted Connected System Object changes addressed by absolute offset and count, for the
+    /// virtualised (infinite-scroll) Deleted Objects list. Shares its filters and includes with
+    /// <see cref="GetDeletedCsoChangesAsync"/>, and keeps the same fixed ordering: deletion time, newest first.
+    /// The window is clamped to a documented cap that a viewport cannot reach. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one.</param>
+    /// <param name="connectedSystemId">Optional filter by Connected System ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="externalIdSearch">Optional case-insensitive search over the preserved External ID.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    Task<RangeResultSet<ConnectedSystemObjectChange>> GetDeletedCsoChangesRangeAsync(
+        int offset,
+        int count,
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Gets the full change history for a deleted CSO by its change ID.
     /// </summary>
     /// <param name="changeId">The ID of the CSO change record.</param>
@@ -657,6 +801,14 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="id">The unique identifier of the mapping.</param>
     Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id);
+
+    /// <summary>
+    /// Gets a specific Synchronisation Rule mapping by ID, tracked, so that a caller mutating and saving it
+    /// actually persists the change. Use this only on write paths; ordinary reads take
+    /// <see cref="GetSyncRuleMappingAsync"/>.
+    /// </summary>
+    /// <param name="id">The unique identifier of the mapping.</param>
+    Task<SyncRuleMapping?> GetSyncRuleMappingForUpdateAsync(int id);
 
     /// <summary>
     /// Creates a new Synchronisation Rule mapping.
@@ -699,6 +851,17 @@ public interface IConnectedSystemRepository
     Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
 
     /// <summary>
+    /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
+    /// database, keyed by mapping id (#1199). Deliberately a scalar projection rather than an entity load: a
+    /// whole-rule save mutates the tracked rule graph in memory before persisting it, and this is the "before"
+    /// state that identifies which mappings the save adds, removes or retargets. Materialising entities would
+    /// resolve to those already-mutated instances and report the new state as the old one. Export mappings are
+    /// excluded (priority is an inbound concern).
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose import mappings are read.</param>
+    Task<Dictionary<int, int>> GetImportMappingTargetMetaverseAttributesAsync(int syncRuleId);
+
+    /// <summary>
     /// Persists priority/null-handling changes across a set of mappings in a single transaction (one
     /// SaveChanges). Used when reordering an attribute's priority list, which inherently renumbers sibling
     /// <see cref="SyncRuleMapping.Priority"/> rows across other Synchronisation Rules (#91).
@@ -728,6 +891,35 @@ public interface IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null);
+
+    /// <summary>
+    /// Retrieves a window of Connected System Object headers addressed by absolute offset and count, for
+    /// virtualised (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetConnectedSystemObjectHeadersAsync"/>. The window is clamped to a documented cap that a
+    /// viewport cannot reach. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match
+    /// set when the caller already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return Connected System Objects for.</param>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one.</param>
+    /// <param name="searchQuery">Optional search over display name, external id and secondary external id.</param>
+    /// <param name="sortBy">Optional column key to sort by (e.g. "externalid", "displayname", "created").</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="statusFilter">Optional filter by one or more statuses.</param>
+    /// <param name="objectTypeFilter">Optional filter by one or more object type ids.</param>
+    /// <param name="joinTypeFilter">Optional filter by one or more join types.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    public Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool includeTotalCount = true);
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
@@ -801,6 +993,17 @@ public interface IConnectedSystemRepository
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
+    /// Gets just a Synchronisation Rule's initial-password configuration, or null where it sets no initial
+    /// passwords.
+    /// <para>
+    /// Read on the save path to compare what the rule is about to become against what it was, which decides
+    /// whether the accounts parked against it are released. That comparison only needs these few settings, so it
+    /// does not pay for the whole rule graph on every save.
+    /// </para>
+    /// </summary>
+    public Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId);
+
+    /// <summary>
     /// Gets the password policy JIM last discovered on a Connected System, or null where none was discovered.
     /// <para>
     /// Read on its own rather than through a Connected System navigation, because the caller that needs it (the
@@ -833,6 +1036,111 @@ public interface IConnectedSystemRepository
     public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId);
 
     /// <summary>
+    /// Streams every Connected System Object in a Connected System, reduced to where it sits and what it is joined
+    /// to, for evaluating what a change to the partition and container selection would take out of import scope
+    /// (#1251).
+    /// </summary>
+    /// <remarks>
+    /// Streamed rather than returned as a list because a preview runs over the whole connector space, and a
+    /// customer's connector space is routinely hundreds of thousands of objects; materialising it would put all of
+    /// them in JIM.Web's process at once. Ordered so a preview re-run over unchanged data produces its groups in
+    /// the same order.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose objects to stream.</param>
+    public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId);
+
+    /// <summary>
+    /// Streams the joined Connected System Objects of one type in a Connected System, with the attribute values
+    /// and type loaded that Synchronisation Rule scope evaluation reads, for previewing what a destructive
+    /// Synchronisation Rule toggle would do to the objects the rule stands over (#1115).
+    /// </summary>
+    /// <remarks>
+    /// Streamed and untracked for the same reason as <see cref="StreamConnectedSystemObjectScopeCandidates"/>:
+    /// previews run over whole connector spaces. Only joined objects are streamed because both destructive
+    /// toggles decide the fate of a join; an unjoined object has nothing to disconnect, keep or delete. Ordered
+    /// so a preview re-run over unchanged data produces its groups in the same order.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose objects to stream.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type the rule targets.</param>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// Streams every Connected System Object of one type in a Connected System, joined or not, with the attribute
+    /// values a Scoping Criteria evaluation reads.
+    /// </summary>
+    /// <remarks>
+    /// The unjoined objects are the point of this over
+    /// <see cref="StreamJoinedConnectedSystemObjects"/>: a scope change decides which objects a rule manages at
+    /// all, so the objects a widened scope would newly project are exactly the ones that have no Metaverse Object
+    /// yet. Streamed and untracked for the same reason as the other scope reads.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System to stream from.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type to stream.</param>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many Connected System Objects of one type a Connected System holds, joined or not. The cheap cost
+    /// estimate behind a scope-change preview.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to count in.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type to count.</param>
+    public Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's live, unjoined objects of one type: the population a
+    /// synchronisation would put to Object Matching on its next run.
+    /// </summary>
+    /// <remarks>
+    /// Identifiers rather than objects, and a list rather than a stream, because the caller queries the database
+    /// per object it evaluates. Holding a result-set reader open across those queries is what Npgsql refuses (one
+    /// command per connection), so the population is read once and the objects are fetched in batches behind it.
+    /// </remarks>
+    public Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many live, unjoined objects of one type a Connected System holds. The count behind
+    /// <see cref="GetUnjoinedConnectedSystemObjectIdsOfTypeAsync"/>, for callers that need the size before
+    /// deciding whether to read the population at all.
+    /// </summary>
+    public Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type, joined or not: the population that stops
+    /// being imported when the type is deselected (#1475).
+    /// </summary>
+    /// <remarks>
+    /// Identifiers rather than objects, for the reason
+    /// <see cref="GetUnjoinedConnectedSystemObjectIdsOfTypeAsync"/> gives: the caller fetches in batches behind the
+    /// population read, because Npgsql allows one command per connection.
+    /// </remarks>
+    public Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type that hold at least one value for a given
+    /// attribute: the population whose values freeze when that attribute is deselected (#1475). Objects holding no
+    /// value for it have nothing to freeze, so reporting them would inflate the count with objects the change does
+    /// not touch.
+    /// </summary>
+    public Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's obsolete objects of one type that are still joined to a Metaverse
+    /// Object: the objects awaiting the synchronisation that will disconnect them, and therefore the population
+    /// whose fate changes when Remove Contributed Attributes On Obsoletion is toggled (#1475).
+    /// </summary>
+    public Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
+    /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type the rule targets.</param>
+    public Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>
@@ -863,6 +1171,7 @@ public interface IConnectedSystemRepository
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
     public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+    public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
     public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
 

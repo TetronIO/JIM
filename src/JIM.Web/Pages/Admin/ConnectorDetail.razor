@@ -3,6 +3,7 @@
 @using JIM.Models.Activities
 @using JIM.Models.Interfaces;
 @using JIM.Models.Staging;
+@using JIM.Web.Models
 @using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
@@ -70,33 +71,74 @@
         </MudGrid>
     </MudPaper>
 
-    <MudTable Items="@_connector.Files" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Outlined="true" Elevation="0">
-        <ToolBarContent>
+    @* A Connector's files are a handful of assemblies, so the window is sliced from the list already loaded with the
+       Connector rather than from a database range read. The title stays in the toolbar where the old table carried
+       it, which is why the count beside it is a bare number: the title already names what is being counted. *@
+    <VirtualisedDataGrid T="ConnectorDefinitionFile"
+                         ContainerId="connector-file-list"
+                         DefaultSortBy="filename"
+                         LoadWindow="LoadFileWindowAsync"
+                         SearchPlaceholder="Search files">
+        <ToolBarExtras>
             <MudText Typo="Typo.h6">Files</MudText>
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.Filename)"><MudText Typo="Typo.button">Filename</MudText></MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.FileSizeBytes)"><MudText Typo="Typo.button">Filesize (kb)</MudText></MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => GetFileInterfaces(x))"><MudText Typo="Typo.button">Interfaces</MudText></MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.Version)"><MudText Typo="Typo.button">Version</MudText></MudTableSortLabel></MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Filename">@context.Filename</MudTd>
-            <MudTd DataLabel="Filesize (kb)">@(context.FileSizeBytes/1000)</MudTd>
-            <MudTd DataLabel="Interfaces">@GetFileInterfaces(context)</MudTd>
-            <MudTd DataLabel="Version">@context.Version</MudTd>
-        </RowTemplate>
-        <NoRecordsContent>
-            @if (_connector.BuiltIn)
+        </ToolBarExtras>
+        <Columns>
+            <TemplateColumn Title="Filename" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Filename" Name="filename" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @context.Item.Filename
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Filesize (kb)" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Filesize (kb)" Name="filesize" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @(context.Item.FileSizeBytes / 1000)
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Interfaces" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Interfaces" Name="interfaces" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @GetFileInterfaces(context.Item)
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Version" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Version" Name="version" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @context.Item.Version
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
-                <MudText>No files due to it being a built-in connector</MudText>
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No files match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
+            }
+            else if (BuiltInConnector)
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.Inventory2"
+                                 PrimaryText="No files"
+                                 SecondaryText="This is a built-in Connector, so it ships inside JIM rather than as uploaded files." />
             }
             else
             {
-                <MudText>No files. Upload some to make this connector functional</MudText>
+                <TableEmptyState Icon="@Icons.Material.Filled.Inventory2"
+                                 PrimaryText="No files"
+                                 SecondaryText="Upload the Connector's assemblies to make it functional." />
             }
-        </NoRecordsContent>
-    </MudTable>
+        </EmptyContent>
+    </VirtualisedDataGrid>
         </MudTabPanel>
 
         <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
@@ -113,6 +155,43 @@
     private ConnectorDefinition? _connector;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private int _changeCount;
+
+    /// <summary>
+    /// Whether this is a built-in Connector, read through a property so the empty state can branch on it without
+    /// dereferencing the nullable Connector in markup.
+    /// </summary>
+    private bool BuiltInConnector => _connector?.BuiltIn == true;
+
+    /// <summary>
+    /// Slices one window of the Connector's files from the list loaded with the Connector itself, applying the
+    /// grid's search (filename and implemented interfaces) and sort. A Connector carries a handful of assemblies,
+    /// so there is no database range read to grow here.
+    /// </summary>
+    private Task<VirtualisedWindow<ConnectorDefinitionFile>> LoadFileWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        IEnumerable<ConnectorDefinitionFile> files = _connector?.Files ?? new List<ConnectorDefinitionFile>();
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            files = files.Where(f =>
+                f.Filename.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                GetFileInterfaces(f).Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        IOrderedEnumerable<ConnectorDefinitionFile> Order<TKey>(Func<ConnectorDefinitionFile, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? files.OrderByDescending(key, comparer) : files.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "filesize" => Order(f => f.FileSizeBytes),
+            "interfaces" => Order(GetFileInterfaces, StringComparer.OrdinalIgnoreCase),
+            "version" => Order(f => f.Version, StringComparer.OrdinalIgnoreCase),
+            _ => Order(f => f.Filename, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -148,9 +227,6 @@
 
         if (file.ImplementsISettings)
             interfaces += nameof(IConnectorSettings) + ", ";
-
-        if (file.ImplementsIContainers)
-            interfaces += nameof(IConnectorContainers) + ", ";
 
         if (file.ImplementsISchema)
             interfaces += nameof(IConnectorSchema) + ", ";

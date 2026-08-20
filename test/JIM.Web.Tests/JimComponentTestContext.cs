@@ -2,6 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using Bunit;
+using JIM.Web.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using MudBlazor.Services;
 
 namespace JIM.Web.Tests;
@@ -18,11 +21,30 @@ namespace JIM.Web.Tests;
 /// </summary>
 public abstract class JimComponentTestContext : BunitContext
 {
+    /// <summary>
+    /// How long a <c>WaitForElement</c> / <c>WaitForState</c> waits before failing.
+    /// <para>
+    /// bUnit's own default is one second, which is a measurement of the machine rather than of the component: a
+    /// MudBlazor dialog's first render on a contended CI runner does not reliably finish inside it, and the
+    /// failure arrives as an ordinary assertion failure naming a test that is perfectly correct. That is worse
+    /// than a slow suite, because it teaches everyone to re-run rather than to read. Ten seconds is long enough
+    /// that only a component genuinely never reaching the state can exhaust it, and costs nothing on a passing
+    /// test, which stops waiting the moment its condition is met.
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(10);
+
     protected JimComponentTestContext()
     {
         ConfigureAdditionalServices();
+
+        // Any component holding a table now renders a VirtualisedDataGrid, which reads the saved row density,
+        // so a preference service is part of the baseline rather than something each fixture remembers. TryAdd,
+        // so a fixture that registered its own (to assert on what was written) keeps it.
+        Services.TryAddSingleton<IUserPreferenceService, FakeUserPreferenceService>();
         Services.AddMudServices();
         JSInterop.Mode = JSRuntimeMode.Loose;
+        DefaultWaitTimeout = WaitTimeout;
     }
 
     /// <summary>

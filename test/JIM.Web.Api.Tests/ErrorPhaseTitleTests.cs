@@ -37,6 +37,15 @@ public class ErrorPhaseTitleTests
     }
 
     [Test]
+    public void GetErrorPhaseTitle_ForAMissingExpressionInput_NamesWhatHappenedRatherThanAPhase()
+    {
+        // The one error type covers both Missing Input Behaviour failures: Fail this mapping costs the object one
+        // attribute, Fail the object costs it the synchronisation. A phase heading would misdescribe one of them.
+        Assert.That(JIM.Web.Helpers.GetErrorPhaseTitle(ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput),
+            Is.EqualTo("Expression Not Evaluated"));
+    }
+
+    [Test]
     public void GetErrorPhaseTitle_ForAnAttributeValueError_DoesNotClaimTheObjectFailed()
     {
         // The object imported; only the failing attribute was omitted. Saying "Synchronisation Failed" or

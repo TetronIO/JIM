@@ -251,7 +251,26 @@ param(
     [string]$OperatorFilter,
 
     [Parameter(Mandatory=$false)]
-    [bool]$IncludeNegativeCells
+    [bool]$IncludeNegativeCells,
+
+    # ─── Scenario 16 (JIM SQL Connector matrix) — provider and coverage options ───
+    # Ignored by every scenario except Scenario16-SqlConnectorMatrix.
+
+    # Which database provider to exercise. "Both" runs the whole matrix against each in turn, and is
+    # what the pre-release gate uses; naming one provider is the quicker loop while working on it.
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("SqlServer", "Oracle", "Both")]
+    [string]$Provider = "Both",
+
+    # The full matrix including the 500,000-row scale import. Off by default because the scale row
+    # alone is the bulk of the runtime; -Quick is the representative subset for the regular gate.
+    [Parameter(Mandatory=$false)]
+    [switch]$FullMatrix,
+
+    # Runs the suite from a linked git worktree, which the preflight below otherwise refuses. Only
+    # correct when no other JIM stack is running on this host; see the preflight for why.
+    [Parameter(Mandatory=$false)]
+    [switch]$AllowWorktree
 )
 
 Set-StrictMode -Version Latest
@@ -272,9 +291,15 @@ $NC = "$ESC[0m"
 $scriptRoot = $PSScriptRoot
 $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
 
+# Preflight: refuse to run from a linked git worktree, because the reset below removes the JIM volumes
+# by their global names and would take the primary checkout's instance with them.
+. "$repoRoot/scripts/Assert-PrimaryCheckout.ps1"
+Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "the integration suite"
+
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
 . "$scriptRoot/utils/Initialize-WorkerLogDirectories.ps1"
+. "$scriptRoot/utils/Invoke-IntegrationScenario.ps1"
 
 # Hydrate JIM_BENCH_* from .env when not already set in the process environment.
 # .env is the canonical config surface for the project, but Docker Compose only
@@ -598,6 +623,9 @@ function Show-ScenarioMenu {
                 "*Scenario13*" { "Relative-date outbound scoping (staged provisioning)" }
                 "*Scenario14*" { "Attribute priority (multi-source winner resolution)" }
                 "*Scenario15*" { "SCIM 2.0 Client Connector (import, join, bulk export, confirm)" }
+                "*Scenario16*" { "JIM SQL Connector provider x capability matrix (SQL Server, Oracle)" }
+                "*Scenario17*" { "Initial Password provisioning (account holder signs in and changes it)" }
+                "*Scenario18*" { "Writeback into the source Connected System (derived values flow; contributed values are not echoed)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1222,7 +1250,10 @@ $templateIrrelevantScenarios = @(
     "*Scenario12*",  # Relative-Date Scoping - fixed test users positioned relative to "now"
     "*Scenario13*",  # Relative-Date Outbound Scoping - fixed test users positioned relative to "now"
     "*Scenario14*",  # Attribute Priority - fixed six-user dataset per suffix, no template scaling
-    "*Scenario15*"   # SCIM Connector - data comes from the SCIM test provider's own seed and a bespoke CSV
+    "*Scenario15*",  # SCIM Connector - data comes from the SCIM test provider's own seed and a bespoke CSV
+    "*Scenario16*",  # JIM SQL Connector matrix - its own deterministic SQL seeder sizes the data, not Template
+    "*Scenario17*",  # Initial Password - asserts against one account; a larger template only lengthens the export
+    "*Scenario18*"   # Writeback To Source - three seeded people; the question is per-object, not per-population
 )
 
 function Test-TemplateRelevant {
@@ -2206,13 +2237,21 @@ if (-not $SkipReset) {
     docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
     # Use --profile to stop containers from all scenarios (scenario2, scenario8, etc.)
     # Without specifying profiles, containers started with profiles won't be stopped
+    # The phase2 profile is deliberately absent. Its two database servers are the only integration
+    # containers whose start-up is measured in tens of minutes rather than seconds: the Oracle image is
+    # 13.6GB and its first boot creates the database from scratch. Destroying them on every reset makes
+    # Scenario 16 unusable as a local loop, and buys nothing, because their contents are guaranteed by
+    # New-Scenario16TestDatabase.ps1 rather than by their being new: it drops and recreates its whole
+    # schema, and a content hash of the generated script decides whether it needs to. A stale Scenario 16
+    # database is therefore not reachable. Everything else here stays ephemeral.
     docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap --profile scim down -v --remove-orphans 2>&1 | Out-Null
 
     # Force-remove any leftover integration test containers by name.
     # This handles containers that were created under a different Docker Compose project name
     # (e.g., 'jim' instead of 'jim-integration') and are therefore not cleaned up by 'down -v'.
+    # The phase2 databases are excluded for the reason above.
     Write-Step "Removing any leftover integration test containers..."
-    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "openldap-primary", "sqlserver-hris-a", "oracle-hris-b", "postgres-target", "mysql-test")
+    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "openldap-primary", "postgres-target", "mysql-test")
     foreach ($container in $integrationContainers) {
         docker rm -f $container 2>&1 | Out-Null
     }
@@ -2220,7 +2259,8 @@ if (-not $SkipReset) {
     # Also remove any orphan integration test volumes that might have different names
     # This ensures a completely clean state even if volume naming has changed
     Write-Step "Removing any orphan integration test volumes..."
-    $orphanVolumes = docker volume ls --format '{{.Name}}' | Where-Object { $_ -match 'jim-integration' }
+    $preservedVolumes = @("jim-integration-oracle-data", "jim-integration-sqlserver-data")
+    $orphanVolumes = docker volume ls --format '{{.Name}}' | Where-Object { $_ -match 'jim-integration' -and $preservedVolumes -notcontains $_ }
     foreach ($vol in $orphanVolumes) {
         docker volume rm $vol 2>&1 | Out-Null
     }
@@ -2346,7 +2386,12 @@ Initialize-WorkerLogDirectories -LogDirectory (Join-Path $scriptRoot "results" "
 # writes), so spacing them out reduces total I/O, not just stalls. lz4 WAL compression
 # shrinks the full-page images that dominate bulk-load WAL. shm_size must exceed
 # shared_buffers with ~25% headroom (see docker-compose.yml).
-$jimDbProfile = switch -Wildcard ($Template) {
+#
+# Scenario 16 does not use the templates (its data lives in the phase2 database servers), but its
+# -FullMatrix tier imports 500,000 rows into JIM, which is exactly the load the Scale500k profile was
+# sized for; the default profile would checkpoint-storm through it just as it did for the CSV template.
+$jimDbProfileTemplate = if ($FullMatrix -and $Scenario -like "*Scenario16*") { "Scale500k65Groups" } else { $Template }
+$jimDbProfile = switch -Wildcard ($jimDbProfileTemplate) {
     "Scale1m*"   { @{ SharedBuffers = "8GB"; EffectiveCache = "16GB"; ShmSize = "10gb"; MaxWal = "24GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
     "Scale750k*" { @{ SharedBuffers = "6GB"; EffectiveCache = "12GB"; ShmSize = "8gb";  MaxWal = "20GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
     "Scale500k*" { @{ SharedBuffers = "4GB"; EffectiveCache = "8GB";  ShmSize = "5gb";  MaxWal = "16GB"; MinWal = "1GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
@@ -2368,7 +2413,7 @@ $env:JIM_DB_WAL_BUFFERS          = $jimDbProfile.WalBuffers
 $env:JIM_DB_CHECKPOINT_TIMEOUT   = $jimDbProfile.CheckpointTimeout
 $env:JIM_DB_WAL_COMPRESSION      = $jimDbProfile.WalCompression
 if ($jimDbProfile.SharedBuffers) {
-    Write-Host "  PostgreSQL scaled for $Template template: shared_buffers=$($jimDbProfile.SharedBuffers), max_wal_size=$($jimDbProfile.MaxWal), checkpoint_timeout=$($jimDbProfile.CheckpointTimeout), wal_compression=$($jimDbProfile.WalCompression)" -ForegroundColor Gray
+    Write-Host "  PostgreSQL scaled for $jimDbProfileTemplate profile: shared_buffers=$($jimDbProfile.SharedBuffers), max_wal_size=$($jimDbProfile.MaxWal), checkpoint_timeout=$($jimDbProfile.CheckpointTimeout), wal_compression=$($jimDbProfile.WalCompression)" -ForegroundColor Gray
 }
 
 Write-Step "Starting JIM stack..."
@@ -2406,9 +2451,10 @@ $env:SAMBA_IMAGE_TARGET = $null
 $env:OPENLDAP_IMAGE_PRIMARY = $null
 
 # Check for pre-populated snapshot images (Scenario 1 / primary)
-# Note: "*Scenario1*" also substring-matches "Scenario14-...", so it must be excluded explicitly;
-# Scenario 14 is OpenLDAP only (enforced above) and has no Samba AD snapshot of its own.
-if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario15*") {
+# Note: "*Scenario1*" also substring-matches "Scenario14-...", "Scenario15-..." and "Scenario16-...",
+# so each must be excluded explicitly; Scenario 14 is OpenLDAP only (enforced above) and has no Samba
+# AD snapshot of its own, and Scenarios 15 and 16 touch no directory at all.
+if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario15*" -and $Scenario -notlike "*Scenario16*") {
     $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario1"
     $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
     if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
@@ -2608,6 +2654,53 @@ if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
     }
     Write-Success "Samba AD Source and Target started for Scenario 8"
 }
+
+# Start the phase2 database containers for Scenario 16 (JIM SQL Connector matrix). The profile carries
+# four services, but only the ones the requested provider needs are named here: Oracle alone is a 13.6GB
+# image and several minutes of start-up, so bringing it up for a SQL-Server-only run would be pure cost.
+# PostgreSQL and MySQL stay dormant; they are staged for the priority 2 providers, which Scenario 16
+# does not yet cover.
+if ($Scenario -like "*Scenario16*") {
+    # @(...) around the switch is load-bearing: PowerShell unwraps a single-element array returned from
+    # a switch to a bare string, and splatting a string passes it one character at a time, so a
+    # single-provider run asked Compose to start a service called "o". Only -Provider Both survived.
+    $phase2Services = @(switch ($Provider) {
+        "SqlServer" { @("sqlserver-hris-a") }
+        "Oracle"    { @("oracle-hris-b") }
+        default     { @("sqlserver-hris-a", "oracle-hris-b") }
+    })
+
+    Write-Step "Starting database containers for Scenario 16 ($($phase2Services -join ', '))..."
+    $phase2Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 up -d @phase2Services 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start the Scenario 16 database containers"
+        Write-Host "${GRAY}$phase2Result${NC}"
+        exit 1
+    }
+    Write-Success "Database containers started"
+
+    # Both images report health through their own healthchecks, and neither is usable before it does:
+    # SQL Server accepts TCP connections well before it will answer a query, and Oracle's pluggable
+    # database spends its first stretch MOUNTED rather than open. Waiting on the healthcheck is the
+    # only readiness signal that means anything for either.
+    foreach ($phase2Service in $phase2Services) {
+        Write-Step "Waiting for $phase2Service to report healthy..."
+        $phase2Healthy = $false
+        # Oracle's first start creates the database; the ceiling is generous for that path and is
+        # reached quickly on the far more common warm-volume start.
+        for ($phase2Wait = 0; $phase2Wait -lt 120; $phase2Wait++) {
+            $phase2Health = docker inspect --format='{{.State.Health.Status}}' $phase2Service 2>$null
+            if ($phase2Health -eq "healthy") { $phase2Healthy = $true; break }
+            Start-Sleep -Seconds 10
+        }
+        if (-not $phase2Healthy) {
+            Write-Failure "$phase2Service did not report healthy within 20 minutes"
+            docker logs $phase2Service --tail 40 2>&1 | ForEach-Object { Write-Host "${GRAY}$_${NC}" }
+            exit 1
+        }
+        Write-Success "$phase2Service is healthy"
+    }
+}
 $timings["3. Start Services"] = (Get-Date) - $step3Start
 
 # Step 4: Wait for services
@@ -2732,11 +2825,38 @@ if (-not $jimApiReady) {
 
 $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 
+# Step 4a: Trust Samba AD certificates in the JIM certificate store (#1141)
+# LDAPTLS_REQCERT=never no longer disables LDAPS certificate validation for jim.web / jim.worker, so
+# every Samba AD scenario connection from here on is validated for real. Trust each running instance's
+# self-signed CA (it doubles as its own CA) before any scenario setup script connects to it, so the
+# very first LDAPS connection succeeds instead of failing with a validation error that reads exactly
+# like "server unavailable". Skipped entirely for OpenLDAP-only runs, which connect unencrypted and
+# have no certificate to trust.
+if ($DirectoryType -eq "SambaAD") {
+    Write-Section "Step 4a: Trusting Samba AD Certificates"
+
+    Add-SambaCertificateToJimStore -ContainerName "samba-ad-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+
+    # samba-ad-source / samba-ad-target only run under the scenario2 / scenario8 Compose profiles, and
+    # may be left running across scenarios in -Scenario All mode (see Get-DirectoryConfig and
+    # Clear-ConnectorFilesVolume's remarks on containers kept alive between scenarios). Detect with
+    # docker ps rather than the scenario name, so a container kept alive from an earlier scenario in
+    # this run is trusted too.
+    foreach ($otherSambaContainer in @("samba-ad-source", "samba-ad-target")) {
+        $otherSambaRunning = docker ps --filter "name=^/${otherSambaContainer}$" --format '{{.Names}}' 2>$null
+        if ($otherSambaRunning) {
+            Add-SambaCertificateToJimStore -ContainerName $otherSambaContainer -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+        }
+    }
+}
+
 # Step 4b: Prepare Samba AD for testing
 # For Scenario 1, we need a clean Corp OU - delete if exists and recreate
 # Scenario 2 uses TestUsers OU which is handled by the scenario setup script
 # Skip when using snapshots — the snapshot already has populated data
-if ($Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario15*" -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
+# Scenario 16 is excluded on the same reasoning as Scenario 15: it is a database scenario with no
+# directory at all, and "*Scenario1*" substring-matches its name.
+if ($Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario15*" -and $Scenario -notlike "*Scenario16*" -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
     Write-Section "Step 4b: Preparing Samba AD for Testing"
 
     # First, try to delete the Corp OU if it exists (to ensure clean state)
@@ -2842,6 +2962,7 @@ $step5Start = Get-Date
 # Extract scenario number from name (e.g., "Scenario1-HRToIdentityDirectory" -> "1")
 $scenarioNumber = if ($Scenario -match 'Scenario(\d+)') { $Matches[1] } else { $null }
 $isScenario11 = ($scenarioNumber -eq "11")
+$isScenario16 = ($scenarioNumber -eq "16")
 
 if ($SetupOnly) {
     # SetupOnly mode: configure JIM with connected systems and sync rules, then stop
@@ -3062,6 +3183,12 @@ if ($isScenario11) {
         Write-Host "  Include Negative Cells:  $IncludeNegativeCells"
     }
 }
+
+if ($isScenario16) {
+    $matrixTier = if ($Quick) { 'Quick' } elseif ($FullMatrix) { 'Full matrix (includes the scale import)' } else { 'Default' }
+    Write-Host "  Database Provider:       $Provider"
+    Write-Host "  Coverage Tier:           $matrixTier"
+}
 if ($IgnoreSnapshots) {
     Write-Host "  Ignore Snapshots:        Yes"
 }
@@ -3112,6 +3239,14 @@ if ($isScenario11) {
     if ($PSBoundParameters.ContainsKey('IncludeNegativeCells')) {
         $scenarioParams.IncludeNegativeCells = $IncludeNegativeCells
     }
+}
+
+# Scenario 16 (JIM SQL Connector matrix) accepts -Provider, -Quick and -FullMatrix. Gated the same way
+# as Scenario 11's switches: a scenario that does not declare a parameter fails the splat outright.
+if ($isScenario16) {
+    $scenarioParams.Provider = $Provider
+    if ($Quick)      { $scenarioParams.Quick = $true }
+    if ($FullMatrix) { $scenarioParams.FullMatrix = $true }
 }
 
 # Start metrics streaming background job (if enabled).
@@ -3186,8 +3321,12 @@ $errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $st
 $env:JIM_RUNPROFILE_ABORT_SENTINEL = $errWatcherSentinel
 
 try {
-    & $scenarioScript @scenarioParams
-    $scenarioExitCode = $LASTEXITCODE
+    # Not `& $scenarioScript; $scenarioExitCode = $LASTEXITCODE`. PowerShell does not set
+    # $LASTEXITCODE for a .ps1 that returns rather than exits, so that read picked up
+    # whatever the last native command inside the scenario had left behind and the
+    # scenario's own verdict was never consulted. See Invoke-IntegrationScenario and #1382.
+    $scenarioOutcome = Invoke-IntegrationScenario -Path $scenarioScript -Parameters $scenarioParams
+    $scenarioExitCode = $scenarioOutcome.ExitCode
 }
 catch {
     $scenarioExitCode = 1

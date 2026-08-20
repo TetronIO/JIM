@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 
 namespace JIM.Models.Preview;
 
@@ -135,6 +136,37 @@ public class ConfigurationChangePreview
         SummaryStatus == ConfigurationChangePreviewStageStatus.Failed ||
         DeltasStatus == ConfigurationChangePreviewStageStatus.Failed;
 
+    /// <summary>
+    /// Stage 1's findings, read from the stored document.
+    /// </summary>
+    public List<PreviewValidationFinding> ReadValidationFindings() => ReadDocument<PreviewValidationFinding>(ValidationFindings);
+
+    /// <summary>
+    /// Stage 2's counts, read from the stored document.
+    /// </summary>
+    public List<PreviewImpactCount> ReadImpactCounts() => ReadDocument<PreviewImpactCount>(ImpactCounts);
+
     private static bool IsStageSettled(ConfigurationChangePreviewStageStatus status) =>
         status is ConfigurationChangePreviewStageStatus.Complete or ConfigurationChangePreviewStageStatus.NotApplicable;
+
+    /// <summary>
+    /// Reads one of the stored jsonb documents. An unreadable document yields an empty list rather than throwing:
+    /// the rest of the preview is still worth showing, and the stage's own status already says how far it got.
+    /// Lives on the model because three surfaces (the panel, the API response and the editors that host a preview)
+    /// all need the same answer, and three copies of the same try/catch is three chances to disagree about it.
+    /// </summary>
+    private static List<T> ReadDocument<T>(string? document)
+    {
+        if (string.IsNullOrWhiteSpace(document))
+            return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<T>>(document) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
 }

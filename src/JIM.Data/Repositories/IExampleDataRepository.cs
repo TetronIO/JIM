@@ -8,7 +8,7 @@ namespace JIM.Data.Repositories;
 
 public interface IExampleDataRepository
 {
-    public Task<List<ExampleDataSet>> GetExampleDataSetsAsync();
+    public Task<List<ExampleDataSet>> GetExampleDataSetsAsync(bool withChangeTracking = false);
     public Task<List<ExampleDataSetHeader>> GetExampleDataSetHeadersAsync();
     public Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture, bool withChangeTracking = false);
     public Task<ExampleDataSet?> GetExampleDataSetAsync(int id);
@@ -29,6 +29,11 @@ public interface IExampleDataRepository
     /// <param name="id">The id of the template to retrieve</param>
     public Task<ExampleDataTemplate?> GetTemplateAsync(int id);
     public Task<ExampleDataTemplateHeader?> GetTemplateHeaderAsync(int id);
+
+    /// <summary>
+    /// Persists a new Data Generation Template graph. Identical to <see cref="CreateTemplateGraphAsync"/>: a submitted
+    /// template always references already-persisted entities, so creation is graph-safe by definition.
+    /// </summary>
     public Task CreateTemplateAsync(ExampleDataTemplate template);
 
     /// <summary>
@@ -39,7 +44,19 @@ public interface IExampleDataRepository
     /// </summary>
     public Task CreateTemplateGraphAsync(ExampleDataTemplate template);
 
-    public Task UpdateTemplateAsync(ExampleDataTemplate template);
+    /// <summary>
+    /// Updates a Data Generation Template from a detached graph: the persisted template is loaded tracked and the
+    /// incoming template's scalar and audit fields are copied onto it.
+    /// </summary>
+    /// <param name="template">The detached template carrying the new state. Its <c>Id</c> identifies the template to update.</param>
+    /// <param name="replaceObjectTypes">
+    /// When true, the persisted Object Types (and the template attributes and child rows below them) are deleted and
+    /// replaced by the incoming graph's; the persisted entities that graph references (Metaverse Object Types,
+    /// Metaverse Attributes, Connected System Object Type Attributes and Example Data Sets) are neither re-inserted nor
+    /// modified. When false, the persisted children are left untouched, which is the scalar-only (rename) case.
+    /// </param>
+    /// <exception cref="InvalidOperationException">No template exists with the incoming template's id, or the incoming graph references an entity that does not exist.</exception>
+    public Task UpdateTemplateAsync(ExampleDataTemplate template, bool replaceObjectTypes);
     public Task DeleteTemplateAsync(int templateId);
 
     /// <summary>

@@ -43,10 +43,49 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, "Would Cease To Be Deletion Eligible")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate, "Would Change Deletion Eligible Date")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued, "CSO Pending Delete")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, "Would Disconnect From Metaverse Object")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, "Would Stage Delete Export")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined, "Would Remain Joined")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction, "Would Change Deprovision Action")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow, "Would Fail Attribute Flow")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject, "Would Join Different Metaverse Object")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject, "Would Join Instead Of Project")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin, "Would Project Instead Of Join")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously, "Would Match Ambiguously")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting, "Would Stop Projecting")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, "Would Stop Provisioning")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift, "Would Stop Correcting Drift")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported, "Would Stop Being Imported")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported, "Would Resume Being Imported")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues, "Would Withdraw Contributed Values")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, "Would Retain Contributed Values")]
     public void GetOutcomeTypeDisplayName_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
     {
         Assert.That(Helpers.GetOutcomeTypeDisplayName(outcomeType), Is.EqualTo(expected));
+    }
+
+    // The technical label above is what the Activity and causality views want: an operator reading a run's outcomes
+    // is looking for the exact outcome name. A Configuration Change Preview (#827) is read by an administrator
+    // deciding whether to save, and there the plain label is the right one; these two methods exist so a surface
+    // states which audience it is writing for rather than picking a label by accident.
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope, "Enters import scope")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, "Leaves import scope")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, "Becomes eligible for deletion")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, "No longer eligible for deletion")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate, "Deletion date changes")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, "Disconnects from its Metaverse Object")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, "Removed from the target system")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined, "Keeps its Metaverse Object join")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction, "Scope-exit action changes")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow, "Attribute Flow does not evaluate")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject, "Joins a different Metaverse Object")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin, "Projects instead of joining")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, "Identity created")]
+    public void GetOutcomeTypePlainName_EveryOutcomeType_ReturnsThePlainLabel(
+        ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
+    {
+        Assert.That(Helpers.GetOutcomeTypePlainName(outcomeType), Is.EqualTo(expected));
     }
 
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded, Color.Success)]
@@ -75,6 +114,22 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, Color.Success)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued, Color.Error)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, Color.Error)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined, Color.Success)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow, Color.Error)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject, Color.Error)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject, Color.Success)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin, Color.Error)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported, Color.Success)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, Color.Info)]
     public void GetOutcomeTypeMudBlazorColor_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, Color expected)
     {
@@ -111,7 +166,23 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] = Icons.Material.Filled.DeleteOutline,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = Icons.Material.Filled.RestoreFromTrash,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] = Icons.Material.Filled.EditCalendar,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = Icons.Material.Filled.AutoDelete
+            [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = Icons.Material.Filled.AutoDelete,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = Icons.Material.Filled.LinkOff,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] = Icons.Material.Filled.AutoDelete,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] = Icons.Material.Filled.Link,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = Icons.Material.Filled.SwapHoriz,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = Icons.Material.Filled.RuleFolder,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] = Icons.Material.Filled.SwapHoriz,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] = Icons.Material.Filled.Link,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] = Icons.Material.Filled.CallSplit,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = Icons.Material.Filled.QuestionMark,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] = Icons.Material.Filled.PersonOff,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] = Icons.Material.Filled.NoAccounts,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = Icons.Material.Filled.SyncDisabled,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] = Icons.Material.Filled.CloudOff,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] = Icons.Material.Filled.CloudSync,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = Icons.Material.Filled.Undo,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = Icons.Material.Filled.Inventory2
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

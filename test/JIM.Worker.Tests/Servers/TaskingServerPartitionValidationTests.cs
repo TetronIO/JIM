@@ -66,11 +66,11 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Connected System not found").IgnoreCase);
-        });
+        }
         _mockTaskingRepository.Verify(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()), Times.Never);
     }
 
@@ -89,13 +89,13 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert — error message must name the system and cite the specific incomplete-configuration reason
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Resurgam AD"));
             Assert.That(result.ErrorMessage, Does.Contain("hierarchy"));
             Assert.That(result.ErrorMessage, Does.Contain("Partitions & Containers"));
-        });
+        }
     }
 
     [Test]
@@ -117,12 +117,12 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert — message must include the partition count to aid diagnosis
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("2"));
             Assert.That(result.ErrorMessage, Does.Contain("none").IgnoreCase);
-        });
+        }
     }
 
     [Test]
@@ -152,13 +152,13 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert — error must name the selected partition and indicate containers exist but none selected
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("container").IgnoreCase);
             Assert.That(result.ErrorMessage, Does.Contain("DC=resurgam,DC=local"));
             Assert.That(result.ErrorMessage, Does.Contain("2")); // 2 containers in the tree (Corp + Users)
-        });
+        }
     }
 
     [Test]
@@ -187,12 +187,12 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert — task should be created despite incomplete config, with the diagnostic surfaced as a warning
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.Warnings, Has.Count.GreaterThan(0));
             Assert.That(result.Warnings[0], Does.Contain("hierarchy"));
-        });
+        }
         _mockTaskingRepository.Verify(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()), Times.Once);
     }
 
@@ -225,14 +225,139 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.Warnings, Is.Empty);
-        });
+        }
         _mockTaskingRepository.Verify(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()), Times.Once);
         // ServiceSettings should not even be consulted when the configuration is valid
         _mockServiceSettingsRepository.Verify(r => r.GetSettingAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The condition this validation was blind to. Selection was only ever checked in aggregate ("is anything
+    /// selected on this Connected System?"), which passes while any other partition is selected, and the Connector
+    /// then imported the targeted partition regardless of its own Selected flag. An administrator who deselected a
+    /// partition got no error, no warning, and no change in behaviour.
+    /// </summary>
+    [Test]
+    public async Task CreateWorkerTaskAsync_WhenRunProfileTargetsDeselectedPartition_ReturnsFailedNamingThePartitionAsync()
+    {
+        var connectedSystem = BuildLdapConnectedSystem();
+        var retired = new ConnectedSystemPartition
+        {
+            Id = 7,
+            Name = "DC=retired,DC=local",
+            Selected = false,
+            Containers = [new ConnectedSystemContainer { Name = "OU=Corp", Selected = true }]
+        };
+        var live = new ConnectedSystemPartition
+        {
+            Id = 8,
+            Name = "DC=resurgam,DC=local",
+            Selected = true,
+            Containers = [new ConnectedSystemContainer { Name = "OU=Corp", Selected = true }]
+        };
+        connectedSystem.Partitions = [retired, live];
+
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId, false))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemRunProfilesAsync(ConnectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile>
+            {
+                new() { Id = 100, Name = "Retired Full Import", RunType = ConnectedSystemRunType.FullImport, Partition = retired }
+            });
+
+        var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False, "the Run Profile reads scope the administrator has removed from management");
+            Assert.That(result.ErrorMessage, Does.Contain("DC=retired,DC=local"));
+            Assert.That(result.ErrorMessage, Does.Contain("Retired Full Import"));
+        }
+        _mockTaskingRepository.Verify(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The Partition Validation Mode setting governs *incomplete* configuration, a bootstrap condition where nothing
+    /// has been selected yet and an import would harmlessly return nothing. A Run Profile aimed at a deselected
+    /// partition is a different thing: the configuration is complete, and honouring the run would read scope the
+    /// administrator has explicitly withdrawn. Warning mode does not soften it.
+    /// </summary>
+    [Test]
+    public async Task CreateWorkerTaskAsync_WhenRunProfileTargetsDeselectedPartitionInWarningMode_StillBlocksAsync()
+    {
+        var connectedSystem = BuildLdapConnectedSystem();
+        var retired = new ConnectedSystemPartition
+        {
+            Id = 7,
+            Name = "DC=retired,DC=local",
+            Selected = false,
+            Containers = [new ConnectedSystemContainer { Name = "OU=Corp", Selected = true }]
+        };
+        var live = new ConnectedSystemPartition
+        {
+            Id = 8,
+            Name = "DC=resurgam,DC=local",
+            Selected = true,
+            Containers = [new ConnectedSystemContainer { Name = "OU=Corp", Selected = true }]
+        };
+        connectedSystem.Partitions = [retired, live];
+
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId, false))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemRunProfilesAsync(ConnectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile>
+            {
+                new() { Id = 100, Name = "Retired Full Import", RunType = ConnectedSystemRunType.FullImport, Partition = retired }
+            });
+        _mockServiceSettingsRepository.Setup(r => r.GetSettingAsync(Constants.SettingKeys.PartitionValidationMode))
+            .ReturnsAsync(new ServiceSetting { Key = Constants.SettingKeys.PartitionValidationMode, Value = "Warning" });
+
+        var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
+
+        Assert.That(result.Success, Is.False);
+    }
+
+    /// <summary>
+    /// A Run Profile that targets no partition follows whatever is selected, so it is never left pointing at nothing
+    /// and must not be caught by the new gate.
+    /// </summary>
+    [Test]
+    public async Task CreateWorkerTaskAsync_WhenRunProfileTargetsNoPartition_DoesNotBlockAsync()
+    {
+        var connectedSystem = BuildLdapConnectedSystem();
+        connectedSystem.Partitions =
+        [
+            new ConnectedSystemPartition
+            {
+                Id = 7,
+                Name = "DC=retired,DC=local",
+                Selected = false,
+                Containers = [new ConnectedSystemContainer { Name = "OU=Corp", Selected = true }]
+            },
+            new ConnectedSystemPartition
+            {
+                Id = 8,
+                Name = "DC=resurgam,DC=local",
+                Selected = true,
+                Containers = [new ConnectedSystemContainer { Name = "OU=Corp", Selected = true }]
+            }
+        ];
+
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId, false))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemRunProfilesAsync(ConnectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile>
+            {
+                new() { Id = 100, Name = "Full Import", RunType = ConnectedSystemRunType.FullImport }
+            });
+
+        var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
+
+        Assert.That(result.Success, Is.True);
     }
 
     #region Helper methods

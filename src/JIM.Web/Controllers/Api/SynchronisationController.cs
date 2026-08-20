@@ -7,6 +7,7 @@ using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Application.Services;
@@ -15,6 +16,7 @@ using JIM.Models.Connectors;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Preview;
 using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
@@ -98,8 +100,10 @@ public class SynchronisationController(
         var pendingExportCount = await _application.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
         var objectCount = await _application.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
         var configurationDrift = await _application.ConfigurationDrift.GetConnectedSystemDriftAsync(connectedSystemId);
+        var initialPasswordAttention = await _application.InitialPasswords.GetAttentionByConnectedSystemAsync([connectedSystemId]);
 
-        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount, configurationDrift));
+        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount, configurationDrift,
+            initialPasswordAttention.GetValueOrDefault(connectedSystemId) ?? new InitialPasswordAttention()));
     }
 
     /// <summary>
@@ -118,7 +122,10 @@ public class SynchronisationController(
         if (objectTypes == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        var dtos = objectTypes.Select(ConnectedSystemObjectTypeDto.FromEntity);
+        // Sibling names resolve a Reference attribute's declared target (#1285) without the entity graph
+        // carrying a ReferencedObjectType navigation.
+        var objectTypeNamesById = objectTypes.ToDictionary(ot => ot.Id, ot => ot.Name);
+        var dtos = objectTypes.Select(objectType => ConnectedSystemObjectTypeDto.FromEntity(objectType, objectTypeNamesById));
         return Ok(dtos);
     }
 
@@ -149,7 +156,7 @@ public class SynchronisationController(
         if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
 
-        return Ok(ConnectedSystemObjectTypeDto.FromEntity(objectType));
+        return Ok(ConnectedSystemObjectTypeDto.FromEntity(objectType, await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId)));
     }
 
     /// <summary>
@@ -203,16 +210,26 @@ public class SynchronisationController(
 
         // Get the current API key for Activity attribution if authenticated via API key
         var apiKey = await GetCurrentApiKeyAsync();
-        if (apiKey != null)
-            await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, apiKey);
-        else
-            await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, initiatedBy);
+        try
+        {
+            if (apiKey != null)
+                await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, apiKey);
+            else
+                await _application.ConnectedSystems.UpdateObjectTypeAsync(objectType, initiatedBy);
+        }
+        catch (InvalidSettingValuesException ex)
+        {
+            // the Connector refused the selection against the Connected System's settings (a Delta Import Mode the
+            // Object Type is not equipped for, say); the message is the Connector's own and names what to change.
+            _logger.LogInformation("Object type {ObjectTypeId} ({Name}) selection refused: {Reason}", objectType.Id, objectType.Name, ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
 
         _logger.LogInformation("Updated object type {ObjectTypeId} ({Name})", objectType.Id, objectType.Name);
 
         // Return the updated object type
         var updated = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
-        return Ok(ConnectedSystemObjectTypeDto.FromEntity(updated!));
+        return Ok(ConnectedSystemObjectTypeDto.FromEntity(updated!, await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId)));
     }
 
     /// <summary>
@@ -223,6 +240,11 @@ public class SynchronisationController(
     /// - Selected: Whether the Attribute is managed by JIM
     /// - IsExternalId: Whether this is the unique identifier for objects
     /// - IsSecondaryExternalId: Whether this is a secondary identifier (e.g., DN for LDAP)
+    /// - Type: Overrides the data type schema discovery inferred, where the Connector supports it
+    ///
+    /// A data type override is accepted only where the Connector declares
+    /// SupportsUserSelectedAttributeTypes, and only while the attribute is neither referenced by a
+    /// Synchronisation Rule nor holding values.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="objectTypeId">The unique identifier of the Object Type.</param>
@@ -288,9 +310,51 @@ public class SynchronisationController(
                 "These attributes must remain selected to ensure sync operations function correctly."));
         }
 
+        // Validate: the data type may only be overridden where the Connector says its schema cannot state
+        // one definitively, and only while nothing has been built on the type JIM inferred. A delimited file
+        // names no types at all; Oracle has a single numeric type, so NUMBER(10) may be a whole number, a
+        // counter or a fractional figure and only the administrator knows which (#1354).
+        if (request.Type.HasValue)
+        {
+            if (request.Type.Value == AttributeDataType.NotSet)
+            {
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    "An attribute's data type cannot be set to NotSet. Choose the type the Connected System actually holds."));
+            }
+
+            // An absent Connector Definition is treated as not supporting the override: refusing a change
+            // JIM cannot justify is always safer than applying one it cannot check.
+            if (connectedSystem.ConnectorDefinition?.SupportsUserSelectedAttributeTypes != true)
+            {
+                _logger.LogWarning("Attempted to change the data type of attribute {AttributeId} on a Connector that does not support it", attributeId);
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"The '{connectedSystem.ConnectorDefinition?.Name ?? connectedSystem.Name}' Connector states each attribute's data type from the " +
+                    "Connected System's own schema, so it cannot be overridden."));
+            }
+
+            if (request.Type.Value != attribute.Type &&
+                await _application.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(attribute))
+            {
+                _logger.LogWarning("Attempted to change the data type of referenced attribute {AttributeId} ({Name})", attributeId, LogSanitiser.Sanitise(attribute.Name));
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"The data type of attribute '{attribute.Name}' cannot be changed because it is referenced by a Synchronisation Rule, or already holds values. " +
+                    "Changing it would reinterpret data imported under the previous type. Remove the references, or clear the Connected System Objects, and try again."));
+            }
+        }
+
         // Apply updates
         if (request.Selected.HasValue)
             attribute.Selected = request.Selected.Value;
+
+        if (request.Type.HasValue)
+        {
+            attribute.Type = request.Type.Value;
+
+            // Recorded, not inferred from the value being different: a schema refresh must leave this type
+            // alone even where the administrator happened to choose what discovery would have picked anyway,
+            // because the Connector's inference can change between releases.
+            attribute.TypeSetByAdministrator = true;
+        }
 
         // Get the current API key for Activity attribution if authenticated via API key
         var apiKey = await GetCurrentApiKeyAsync();
@@ -337,7 +401,7 @@ public class SynchronisationController(
 
         // Return the updated attribute
         var updated = await _application.ConnectedSystems.GetAttributeAsync(attributeId);
-        return Ok(ConnectedSystemAttributeDto.FromEntity(updated!));
+        return Ok(ConnectedSystemAttributeDto.FromEntity(updated!, await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId)));
     }
 
     /// <summary>
@@ -391,6 +455,19 @@ public class SynchronisationController(
         if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
 
+        // A data type override is refused here rather than dropped. Bulk update applies its changes through a
+        // single application-layer call that carries only the three selection flags, so honouring Type would
+        // need that contract widened; accepting and ignoring it would let a scripted build report success
+        // having changed nothing. The single-attribute endpoint applies it, one attribute at a time (#1354).
+        var typeOverrides = request.Attributes.Where(kvp => kvp.Value.Type.HasValue).Select(kvp => kvp.Key).ToList();
+        if (typeOverrides.Count > 0)
+        {
+            _logger.LogWarning("Rejected bulk attribute update carrying {Count} data type override(s)", typeOverrides.Count);
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"A data type cannot be set through a bulk attribute update ({typeOverrides.Count} attribute(s) requested one). " +
+                "Update each attribute individually via PUT connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}."));
+        }
+
         // Convert request DTOs to the format expected by the server
         var attributeUpdates = request.Attributes.ToDictionary(
             kvp => kvp.Key,
@@ -409,11 +486,12 @@ public class SynchronisationController(
             updated.Count, errors.Count);
 
         // Build the response
+        var objectTypeNamesById = await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId);
         var response = new BulkUpdateConnectedSystemAttributesResponse
         {
             ActivityId = activity.Id,
             UpdatedCount = updated.Count,
-            UpdatedAttributes = updated.Select(ConnectedSystemAttributeDto.FromEntity).ToList(),
+            UpdatedAttributes = updated.Select(attribute => ConnectedSystemAttributeDto.FromEntity(attribute, objectTypeNamesById)).ToList(),
             Errors = errors.Count > 0
                 ? errors.Select(e => new BulkUpdateAttributeError { AttributeId = e.AttributeId, ErrorMessage = e.Error }).ToList()
                 : null
@@ -443,6 +521,150 @@ public class SynchronisationController(
         return Ok(ConnectedSystemObjectDetailDto.FromDetailResult(result));
     }
 
+
+    /// <summary>
+    /// Get the password policy JIM discovered on a Connected System
+    /// </summary>
+    /// <remarks>
+    /// What the system itself said it will accept, read during a previous connection. Nothing here opens a new
+    /// connection or changes anything.
+    ///
+    /// Every field is nullable, and a null means JIM could not read that rule rather than that no such rule
+    /// exists: a directory withholds what a caller may not see by omitting it rather than refusing. Check
+    /// `hasAnyDiscoveredConstraint` before treating the figures as a description of what the system will accept.
+    /// Where the domain has policies applying to only some accounts, the figures are a floor rather than a
+    /// guarantee; `fineGrainedPolicySignal` says which case this is.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <response code="200">The discovered policy, or an empty one where nothing has been discovered.</response>
+    /// <response code="404">No such Connected System.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/password-policy", Name = "GetConnectedSystemPasswordPolicy")]
+    [ProducesResponseType(typeof(ConnectedSystemPasswordPolicyResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetConnectedSystemPasswordPolicyAsync(int connectedSystemId)
+    {
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (system == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var policy = await _application.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId);
+
+        // A system with nothing discovered is reported as such rather than as a 404: the system exists, and "we
+        // could not read its policy" is a different answer from "there is no such system".
+        return Ok(ConnectedSystemPasswordPolicyResponse.FromEntity(policy));
+    }
+
+    /// <summary>
+    /// Generate a password that satisfies a Connected System's discovered policy
+    /// </summary>
+    /// <remarks>
+    /// Produces a password and returns it. Nothing is set, staged or stored: the value exists in this response
+    /// and nowhere else, and JIM cannot give it to you again.
+    ///
+    /// **This is the only endpoint in JIM whose response body carries a password**, and that is deliberate. What
+    /// JIM never does is store a password, or return one nobody asked for; here the caller asked and is the only
+    /// party that can use it, so withholding it would make the call pointless. The response is marked
+    /// `no-store` so nothing between JIM and the caller keeps a copy.
+    ///
+    /// Pass the result to the set-password endpoint to apply it. The point of asking JIM rather than inventing
+    /// one is that JIM knows what the target demands: `satisfiesDiscoveredPolicy` says whether the result was
+    /// checked against a real policy, and is false where there is none to check against rather than where the
+    /// password failed one.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <response code="200">The generated password, and what JIM can say about it.</response>
+    /// <response code="404">No such Connected System.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/generate-password", Name = "GenerateConnectedSystemPassword")]
+    [ProducesResponseType(typeof(GeneratedPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GenerateConnectedSystemPasswordAsync(int connectedSystemId)
+    {
+        // Logs that a password was generated and for which system, never anything about the value, including
+        // its length.
+        _logger.LogInformation("Generating a password against the discovered policy of Connected System {ConnectedSystemId}", connectedSystemId);
+
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (system == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var discoveredPolicy = await _application.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId);
+        var generationPolicy = _application.PasswordGenerator.DeriveFrom(discoveredPolicy);
+
+        var password = _application.PasswordGenerator.Generate(generationPolicy);
+        var assessment = _application.PasswordGenerator.Assess(generationPolicy, discoveredPolicy);
+
+        // The one response in JIM that must not be kept by anything on its way back to the caller.
+        Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+        Response.Headers.Pragma = "no-cache";
+
+        return Ok(GeneratedPasswordResponse.FromGenerated(password, assessment, discoveredPolicy?.HasAnyDiscoveredConstraint == true));
+    }
+
+
+    /// <summary>
+    /// Generate one password that satisfies every named Connected System
+    /// </summary>
+    /// <remarks>
+    /// The counterpart of the single-system generate, for setting one password across a person's accounts. JIM
+    /// reconciles the systems' discovered policies into one set of rules and generates against that: the longest
+    /// minimum length any of them demands, and only the character categories all of them count, since a category
+    /// one system does not recognise cannot help satisfy another's complexity rule.
+    ///
+    /// This is the case that most needs JIM rather than the caller: an administrator would otherwise have to
+    /// guess a password acceptable to the strictest of several systems whose policies they cannot see.
+    ///
+    /// Where no single password can satisfy them all, that is reported as a refusal rather than by handing back
+    /// a password that would be accepted on the first account and refused on the second, after the first has
+    /// already been changed. A system JIM could read nothing from is named in the response rather than passed
+    /// over: the password is about to be set there and JIM cannot promise it will be accepted.
+    ///
+    /// As with the single-system generate, the response body carries the password, is marked `no-store`, and
+    /// nothing about the value is written down or logged.
+    /// </remarks>
+    /// <param name="request">The Connected Systems the password has to work on.</param>
+    /// <response code="200">The generated password, and what JIM can say about it.</response>
+    /// <response code="400">No Connected Systems were named, or their policies cannot be reconciled.</response>
+    /// <response code="404">One of the named Connected Systems does not exist.</response>
+    [HttpPost("connected-systems/generate-password", Name = "GeneratePasswordForSystems")]
+    [ProducesResponseType(typeof(GeneratedPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GeneratePasswordForSystemsAsync([FromBody] GeneratePasswordForSystemsRequest request)
+    {
+        if (request.ConnectedSystemIds.Count == 0)
+            return BadRequest(ApiErrorResponse.BadRequest("At least one Connected System is required."));
+
+        _logger.LogInformation("Generating a password against the reconciled policies of {Count} Connected Systems",
+            request.ConnectedSystemIds.Count);
+
+        var policies = new List<PasswordPolicyForSystem>();
+        foreach (var connectedSystemId in request.ConnectedSystemIds.Distinct())
+        {
+            var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+            if (system == null)
+                return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+            policies.Add(new PasswordPolicyForSystem
+            {
+                ConnectedSystemName = system.Name,
+                Policy = await _application.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId)
+            });
+        }
+
+        var reconciliation = _application.PasswordGenerator.Reconcile(policies);
+        if (!reconciliation.IsUsable)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "No single password can satisfy every named Connected System: " + string.Join(" ", reconciliation.Conflicts)));
+
+        var password = _application.PasswordGenerator.Generate(reconciliation.Policy);
+        var assessment = _application.PasswordGenerator.Assess(reconciliation.Policy, targetPolicy: null);
+
+        Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+        Response.Headers.Pragma = "no-cache";
+
+        return Ok(GeneratedPasswordResponse.FromReconciled(password, assessment, reconciliation));
+    }
+
     /// <summary>
     /// Set the password on a Connected System Object
     /// </summary>
@@ -451,11 +673,12 @@ public class SynchronisationController(
     /// nowhere in JIM to keep a password and no second attempt worth keeping one for. The attempt is recorded as
     /// an Activity against the object, carrying the outcome and, where the target refused, its verbatim reason.
     ///
-    /// The password is supplied by the caller. JIM does not generate one here, because doing so would mean
-    /// returning it in a response body, and password values do not go in those.
+    /// The password is supplied by the caller. To have JIM produce one that satisfies what the Connected System
+    /// itself demands, call the generate endpoint first and pass the result here.
     ///
-    /// This is a password-reset primitive: an administrator who can call it can reset any account in this
-    /// connector space, subject only to what the Connected System's own service account is permitted to do.
+    /// This resets the password on whichever account it is pointed at: an administrator who can call it can
+    /// reset any account in this connector space, subject only to what the Connected System's own service
+    /// account is permitted to do.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
@@ -911,10 +1134,12 @@ public class SynchronisationController(
     /// <param name="request">The update request with new values.</param>
     /// <returns>The updated Container details.</returns>
     /// <response code="200">Container updated successfully.</response>
+    /// <response code="400">The request would leave the Container both selected and excluded.</response>
     /// <response code="404">Connected System or Container not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/containers/{containerId:int}", Name = "UpdateConnectedSystemContainer")]
     [ProducesResponseType(typeof(ConnectedSystemContainerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateConnectedSystemContainerAsync(int connectedSystemId, int containerId, [FromBody] UpdateConnectedSystemContainerRequest request)
@@ -943,9 +1168,28 @@ public class SynchronisationController(
         if (!belongsToSystem)
             return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found in Connected System {connectedSystemId}."));
 
+        // A Container states one thing about itself, and "manage this" and "do not manage this" cannot both be it.
+        // The portal keeps the two apart by construction, so this is the only surface that can ask for both, and it
+        // refuses rather than picking one: guessing which half the caller meant is how a branch ends up imported
+        // that an administrator excluded. Evaluated against the state the request would leave behind, because a
+        // request naming one half against a stored other is just as contradictory as one naming both.
+        var wouldBeSelected = request.Selected ?? container.Selected;
+        var wouldBeExcluded = request.Excluded ?? container.Excluded;
+        if (wouldBeSelected && wouldBeExcluded)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Container with ID {containerId} cannot be both selected and excluded. Send Selected as false in the same request to replace the selection with an exclusion, or Excluded as false to replace the exclusion with a selection."));
+        }
+
         // Apply updates
         if (request.Selected.HasValue)
             container.Selected = request.Selected.Value;
+
+        if (request.Excluded.HasValue)
+            container.Excluded = request.Excluded.Value;
+
+        if (request.Scope.HasValue)
+            container.Scope = request.Scope.Value;
 
         // Container selection is configuration; the server records the change with an Activity and a versioned snapshot.
         var apiKey = await GetCurrentApiKeyAsync();
@@ -957,6 +1201,382 @@ public class SynchronisationController(
         // Reload to get full entity with relationships
         var updated = await _application.ConnectedSystems.GetConnectedSystemContainerAsync(containerId);
         return Ok(ConnectedSystemContainerDto.FromEntity(updated!));
+    }
+
+    /// <summary>
+    /// Read a Connected System's Container Scope as text (Advanced Mode)
+    /// </summary>
+    /// <remarks>
+    /// One statement per line, in hierarchy order: <c>include</c> or <c>exclude</c>, an optional <c>one-level</c>,
+    /// then the Container's path. This is the canonical form, so text read here and sent straight back to
+    /// <c>PUT connected-systems/{id}/container-scope-text</c> leaves the scope exactly as it was.
+    ///
+    /// A Connected System with nothing selected returns empty text rather than nothing at all.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <response code="200">The Container Scope, as text.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/container-scope-text", Name = "GetConnectedSystemContainerScopeText")]
+    [ProducesResponseType(typeof(ConnectedSystemContainerScopeTextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemContainerScopeTextAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested Container Scope text for Connected System: {Id}", connectedSystemId);
+
+        var text = await _application.ConnectedSystems.GetContainerScopeTextAsync(connectedSystemId);
+        if (text == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        return Ok(new ConnectedSystemContainerScopeTextDto { Text = text });
+    }
+
+    /// <summary>
+    /// State a Connected System's Container Scope as text (Advanced Mode)
+    /// </summary>
+    /// <remarks>
+    /// Replaces the whole of Container Scope with what the text states, which is what makes it usable on a
+    /// hierarchy too large to click through: a Container the text does not name states nothing, so empty text
+    /// clears every selection and exclusion. Partition selection is left alone, except that naming a Container
+    /// selects the partition holding it.
+    ///
+    /// Applied all-or-nothing, because a scope applied halfway takes objects out of import scope without anyone
+    /// asking for it. A path naming no Container, a Container named twice, and a statement an ancestor already
+    /// makes are each refused with the line that caused them, and nothing is changed. The response reports the
+    /// canonical text now in force.
+    ///
+    /// The change is recorded as one Activity and one versioned configuration snapshot, exactly as saving the tree
+    /// in the portal is. Preview what it would cost first with
+    /// <c>POST connected-systems/{id}/scope-selection/preview</c>.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The Container Scope to apply.</param>
+    /// <response code="200">The Container Scope was applied. The response carries the canonical text.</response>
+    /// <response code="400">The text could not be applied. Nothing was changed.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/container-scope-text", Name = "UpdateConnectedSystemContainerScopeText")]
+    [ProducesResponseType(typeof(ConnectedSystemContainerScopeTextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateConnectedSystemContainerScopeTextAsync(int connectedSystemId,
+        [FromBody] UpdateConnectedSystemContainerScopeTextRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        _logger.LogInformation("Applying Container Scope text to Connected System {Id}", connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for Container Scope text update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.ConnectedSystems.ApplyContainerScopeTextAsync(connectedSystemId, request.Text, apiKey)
+            : await _application.ConnectedSystems.ApplyContainerScopeTextAsync(connectedSystemId, request.Text, initiatedBy);
+
+        if (result == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        if (!result.Applied)
+        {
+            // Every problem at once, each tied to its line: an administrator correcting a scope of any size one
+            // round trip at a time is how a half-corrected text gets saved.
+            var detail = string.Join(" ", result.Errors.Select(e => $"line {e.LineNumber}: {e.Message}"));
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"The Container Scope text could not be applied, so nothing was changed. {detail}"));
+        }
+
+        return Ok(new ConnectedSystemContainerScopeTextDto { Text = result.Text });
+    }
+
+    /// <summary>
+    /// Preview a change to a Connected System's partition and container selection
+    /// </summary>
+    /// <remarks>
+    /// Answers what a proposed selection would do, without making it (#827/#1251): which Connected System Objects
+    /// would leave import scope, which of those are joined and would disconnect from their Metaverse Object, which
+    /// would come back into scope, and which Metaverse Objects would become eligible for automatic deletion once
+    /// the disconnections land.
+    ///
+    /// This matters because a deselection is silently destructive. The objects beneath a deselected container stop
+    /// being searched, so the next Full Import does not return them, so they are marked obsolete, and the following
+    /// synchronisation disconnects them and recalls whatever they contributed to the Metaverse.
+    ///
+    /// Send the whole selection, not one flag: what a deselection costs depends on the rest of the selection, since
+    /// an object leaves scope only when nothing else still covers it. Omitted lists preview the stored selection.
+    /// Apply the previewed change through <c>PUT connected-systems/{id}/partitions/{partitionId}</c> and
+    /// <c>PUT connected-systems/{id}/containers/{containerId}</c>.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    ///
+    /// A selection that leaves nothing manageable comes back with a validation finding and is still evaluated; that
+    /// is the answer the caller asked for, not a reason to refuse the request.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The proposed selection.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="400">A named partition or container does not belong to this Connected System.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/scope-selection/preview", Name = "StartConnectedSystemScopeSelectionPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartConnectedSystemScopeSelectionPreviewAsync(int connectedSystemId,
+        [FromBody] StartConnectedSystemScopeSelectionPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var currentSelection = ConnectedSystemScopeSelectionProposal.FromCurrentSelection(connectedSystem);
+
+        // An omitted list means "leave this half of the selection as it stands", for all three: a caller changing
+        // only the containers has not asked to lift every exclusion, and reading silence that way would preview
+        // objects flooding back into scope. An explicitly empty list is a different statement and is honoured.
+        var proposal = new ConnectedSystemScopeSelectionProposal(
+            request.SelectedPartitionIds ?? currentSelection.SelectedPartitionIds,
+            request.SelectedContainerIds ?? currentSelection.SelectedContainerIds,
+            request.ExcludedContainerIds ?? currentSelection.ExcludedContainerIds);
+
+        // An id naming nothing in this hierarchy is different in kind from a selection the preview disagrees with:
+        // there is no coherent proposal to evaluate, and silently ignoring it would produce a confident answer to a
+        // question the caller did not ask. Everything the selection could be *unwise* about is a validation finding.
+        var unknownIds = UnknownScopeSelectionIds(connectedSystem, proposal);
+        if (unknownIds != null)
+            return BadRequest(unknownIds);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ConnectedSystem,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started partition and container selection preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// Preview a change to a Connected System's schema selection
+    /// </summary>
+    /// <remarks>
+    /// Answers what a proposed schema selection would do, without making it (#827 gap G6, #1475): which Connected
+    /// System Objects would stop being imported, which attributes would stop being refreshed and on how many
+    /// objects, and which Metaverse Objects would have this system's contributed values withdrawn, or kept, when
+    /// their obsolete objects are next synchronised.
+    ///
+    /// This matters because the change has no visible effect. Nothing fails, nothing is deleted and nothing is
+    /// disconnected; JIM simply stops reading, and everything downstream carries on over data that has stopped
+    /// moving. In particular, deselecting an Object Type does **not** obsolete the objects already imported from
+    /// it: they stay joined to their Metaverse Objects and go on contributing the values they last imported.
+    ///
+    /// Every omission means "leave this as it stands". An Object Type the request does not name is left alone, and
+    /// a field it does not set keeps that Type's stored value, so a request changing one attribute cannot
+    /// accidentally propose deselecting a whole Type.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The proposed schema selection.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="400">A named Object Type or attribute does not belong to this Connected System.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/schema-selection/preview", Name = "StartConnectedSystemSchemaPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartConnectedSystemSchemaPreviewAsync(int connectedSystemId,
+        [FromBody] StartConnectedSystemSchemaPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var objectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId) ?? [];
+        var stored = ConnectedSystemSchemaProposal.FromCurrentConfiguration(objectTypes);
+
+        // An id naming nothing in this schema is different in kind from a selection the preview disagrees with:
+        // there is no coherent proposal to evaluate, and silently ignoring it would produce a confident answer to
+        // a question the caller did not ask.
+        var unknown = UnknownSchemaSelectionIds(objectTypes, request);
+        if (unknown != null)
+            return BadRequest(unknown);
+
+        var proposal = MergeSchemaProposal(stored, request);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ConnectedSystemSchema,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started schema selection preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// The whole proposed schema, built by laying the request's overrides over the stored selection. Every
+    /// omission keeps the stored value, at both levels: an Object Type the request does not name is carried
+    /// through untouched, and a field it does not set on a Type it does name keeps that Type's setting.
+    /// </summary>
+    /// <remarks>
+    /// Merging here rather than in the adapter is what lets a caller change one flag. The type defaults are the
+    /// destructive answers (an omitted <c>selected</c> read as false deselects an Object Type; an omitted
+    /// attribute list read as empty deselects every attribute), so silence has to reach the stored value before
+    /// anything compares the two.
+    /// </remarks>
+    private static ConnectedSystemSchemaProposal MergeSchemaProposal(ConnectedSystemSchemaProposal stored,
+        StartConnectedSystemSchemaPreviewRequest request)
+    {
+        var requested = (request.ObjectTypes ?? [])
+            .GroupBy(objectType => objectType.ObjectTypeId)
+            .ToDictionary(group => group.Key, group => group.Last());
+
+        return new ConnectedSystemSchemaProposal(stored.ObjectTypes
+            .Select(storedType => requested.TryGetValue(storedType.ObjectTypeId, out var proposed)
+                ? storedType with
+                {
+                    Selected = proposed.Selected ?? storedType.Selected,
+                    RemoveContributedAttributesOnObsoletion = proposed.RemoveContributedAttributesOnObsoletion
+                                                              ?? storedType.RemoveContributedAttributesOnObsoletion,
+                    SelectedAttributeIds = proposed.SelectedAttributeIds ?? storedType.SelectedAttributeIds
+                }
+                : storedType)
+            .ToList());
+    }
+
+    /// <summary>
+    /// The error response for a proposal naming an Object Type or attribute this Connected System does not have,
+    /// or null when every id in the proposal resolves.
+    /// </summary>
+    private static ApiErrorResponse? UnknownSchemaSelectionIds(
+        IReadOnlyCollection<ConnectedSystemObjectType> objectTypes, StartConnectedSystemSchemaPreviewRequest request)
+    {
+        foreach (var proposed in request.ObjectTypes ?? [])
+        {
+            var storedType = objectTypes.FirstOrDefault(objectType => objectType.Id == proposed.ObjectTypeId);
+            if (storedType == null)
+                return ApiErrorResponse.BadRequest(
+                    $"Object Type {proposed.ObjectTypeId} does not belong to this Connected System.");
+
+            if (proposed.SelectedAttributeIds == null)
+                continue;
+
+            var knownAttributeIds = storedType.Attributes.Select(attribute => attribute.Id).ToHashSet();
+            var unknown = proposed.SelectedAttributeIds.Where(id => !knownAttributeIds.Contains(id)).ToList();
+            if (unknown.Count > 0)
+                return ApiErrorResponse.BadRequest(
+                    $"Attribute(s) {string.Join(", ", unknown.Order())} do not belong to Object Type " +
+                    $"{storedType.Name} on this Connected System.");
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The error response for a proposal naming a partition or container this Connected System does not have, or
+    /// stating that one Container is both managed and carved out, or null when the proposal is coherent.
+    /// </summary>
+    private static ApiErrorResponse? UnknownScopeSelectionIds(
+        ConnectedSystem connectedSystem, ConnectedSystemScopeSelectionProposal proposal)
+    {
+        var partitions = connectedSystem.Partitions ?? [];
+        var knownPartitionIds = partitions.Select(p => p.Id).ToHashSet();
+        var knownContainerIds = partitions
+            .Where(p => p.Containers != null)
+            .SelectMany(p => FlattenContainerIds(p.Containers!))
+            .ToHashSet();
+
+        var unknownPartitions = proposal.SelectedPartitionIds.Where(id => !knownPartitionIds.Contains(id)).ToList();
+        if (unknownPartitions.Count > 0)
+        {
+            return ApiErrorResponse.BadRequest(
+                $"Partition ID(s) {string.Join(", ", unknownPartitions)} do not belong to Connected System {connectedSystem.Id}.");
+        }
+
+        var proposedExclusions = proposal.ExcludedContainerIds ?? [];
+        var unknownContainers = proposal.SelectedContainerIds
+            .Concat(proposedExclusions)
+            .Where(id => !knownContainerIds.Contains(id))
+            .Distinct()
+            .ToList();
+
+        if (unknownContainers.Count > 0)
+        {
+            return ApiErrorResponse.BadRequest(
+                $"Container ID(s) {string.Join(", ", unknownContainers)} do not belong to Connected System {connectedSystem.Id}.");
+        }
+
+        // A Container is managed or carved out, never both (#1255). The write endpoints refuse the contradiction
+        // rather than resolving it, and a preview has even less business picking a winner: it would go on to state
+        // a confident object count for a configuration that could not be saved.
+        var contradictory = proposedExclusions.Intersect(proposal.SelectedContainerIds).ToList();
+        if (contradictory.Count > 0)
+        {
+            return ApiErrorResponse.BadRequest(
+                $"Container ID(s) {string.Join(", ", contradictory)} are named as both selected and excluded. " +
+                "A Container states one or the other, so name it in one list only.");
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<int> FlattenContainerIds(IEnumerable<ConnectedSystemContainer> containers)
+    {
+        foreach (var container in containers)
+        {
+            yield return container.Id;
+
+            foreach (var childId in FlattenContainerIds(container.ChildContainers))
+                yield return childId;
+        }
     }
     #endregion
 
@@ -1167,6 +1787,9 @@ public class SynchronisationController(
         if (request.MaxExportParallelism.HasValue)
             connectedSystem.MaxExportParallelism = request.MaxExportParallelism.Value;
 
+        if (request.InitialPasswordTimeToLive.HasValue)
+            connectedSystem.InitialPasswordTimeToLive = request.InitialPasswordTimeToLive.Value;
+
         if (request.UnresolvedReferenceHandling.HasValue)
             connectedSystem.UnresolvedReferenceHandling = request.UnresolvedReferenceHandling.Value;
 
@@ -1305,6 +1928,59 @@ public class SynchronisationController(
         {
             _logger.LogError(ex, "Failed to import schema for Connected System: {Id}", connectedSystemId);
             return BadRequest(ApiErrorResponse.BadRequest($"Schema import failed: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// Preview a schema refresh for a Connected System
+    /// </summary>
+    /// <remarks>
+    /// Connects to the external system, retrieves its schema and reports what a refresh would change, without
+    /// persisting anything or recording an Activity. Removals and attribute definition changes are flagged via
+    /// <c>hasRemovalsOrDefinitionChanges</c>; a refresh never deletes retained entries. To commit, call the
+    /// import-schema endpoint after reviewing this result.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>A result object describing what a schema refresh would change.</returns>
+    /// <response code="200">Schema retrieved and compared successfully.</response>
+    /// <response code="400">Schema retrieval failed (e.g., connection error, invalid settings).</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/import-schema/preview", Name = "PreviewConnectedSystemSchemaImport")]
+    [ProducesResponseType(typeof(SchemaRefreshResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> PreviewConnectedSystemSchemaImportAsync(int connectedSystemId)
+    {
+        _logger.LogInformation("Schema refresh preview requested for Connected System: {Id}", connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for schema refresh preview");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // No change tracking: the merge mutates the loaded instance in memory only, and this request discards it
+        // after building the response.
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        try
+        {
+            var result = await _application.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+            return Ok(SchemaRefreshResultDto.FromModel(result));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Deliberately broad, with the cancellation exclusion the fallback-dispatcher rule requires: schema
+            // retrieval fails in as many concrete types as there are connectors (file IO, LDAP, SQL, HTTP), and
+            // every one of them is a fact about the Connected System's configuration or reachability that the
+            // caller must see as a 400 with the reason, not a 500. A cancelled request still propagates.
+            _logger.LogError(ex, "Failed to preview schema refresh for Connected System: {Id}", connectedSystemId);
+            return BadRequest(ApiErrorResponse.BadRequest($"Schema refresh preview failed: {ex.Message}"));
         }
     }
 
@@ -1621,7 +2297,7 @@ public class SynchronisationController(
     /// <param name="id">The unique identifier of the Connector Definition.</param>
     /// <returns>The Connector Definition details including all settings and capabilities.</returns>
     [HttpGet("connector-definitions/{id:int}", Name = "GetConnectorDefinition")]
-    [ProducesResponseType(typeof(ConnectorDefinition), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectorDefinitionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectorDefinitionAsync(int id)
@@ -1631,7 +2307,7 @@ public class SynchronisationController(
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with ID {id} not found."));
 
-        return Ok(definition);
+        return Ok(ConnectorDefinitionDto.FromEntity(definition));
     }
 
     /// <summary>
@@ -1640,7 +2316,7 @@ public class SynchronisationController(
     /// <param name="name">The name of the Connector Definition (e.g., "CSV File", "LDAP").</param>
     /// <returns>The Connector Definition details including all settings and capabilities.</returns>
     [HttpGet("connector-definitions/by-name/{name}", Name = "GetConnectorDefinitionByName")]
-    [ProducesResponseType(typeof(ConnectorDefinition), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectorDefinitionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectorDefinitionByNameAsync(string name)
@@ -1650,7 +2326,7 @@ public class SynchronisationController(
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with name '{name}' not found."));
 
-        return Ok(definition);
+        return Ok(ConnectorDefinitionDto.FromEntity(definition));
     }
 
     #endregion
@@ -1972,6 +2648,49 @@ public class SynchronisationController(
 
     #endregion
 
+    #region Data Flow
+
+    /// <summary>
+    /// List attribute data flows
+    /// </summary>
+    /// <remarks>
+    /// A system-wide map of every attribute data flow, in both directions: what contributes each Metaverse Attribute,
+    /// and what each Connected System attribute is written from. One flow per Synchronisation Rule mapping.
+    /// <para>
+    /// An Import flow reads Connected System attributes and writes a single Metaverse Attribute, so it carries
+    /// <c>targetMetaverseAttribute*</c>, its <c>priority</c> and its <c>nullIsValue</c> flag. An Export flow reads
+    /// Metaverse Attributes and writes a single Connected System attribute, so it carries
+    /// <c>targetConnectedSystemAttribute*</c> and the owning rule's <c>enforceState</c>. The fields that do not apply
+    /// to a flow's direction are null rather than defaulted, so a caller never has to guess which are meaningful.
+    /// </para>
+    /// <para>
+    /// Import flows also carry <c>contributorCount</c>: how many flows contribute to the same Metaverse Attribute,
+    /// counted across the whole configuration rather than the filtered results, so filtering to one Connected System
+    /// does not make a shared attribute look like a sole contributor.
+    /// </para>
+    /// </remarks>
+    /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
+    /// <param name="filter">Direction, Connected System, object type, attribute and free-text filters.</param>
+    /// <returns>A paginated list of attribute data flows.</returns>
+    [HttpGet("data-flows", Name = "GetDataFlows")]
+    [ProducesResponseType(typeof(PaginatedResponse<DataFlowHeader>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetDataFlowsAsync([FromQuery] PaginationRequest pagination, [FromQuery] DataFlowFilterRequest filter)
+    {
+        _logger.LogTrace("Requested attribute data flows (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
+
+        var flows = await _application.ConnectedSystems.GetDataFlowsAsync(filter.ToQuery());
+
+        var result = flows
+            .AsQueryable()
+            .ApplySortAndFilter(pagination)
+            .ToPaginatedResponse(pagination);
+
+        return Ok(result);
+    }
+
+    #endregion
+
     #region Synchronisation Rules
 
     /// <summary>
@@ -2169,9 +2888,9 @@ public class SynchronisationController(
         var apiKey = await GetCurrentApiKeyAsync();
         bool success;
         if (apiKey != null)
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason);
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId);
         else
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason);
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId);
         if (!success)
         {
             var validationErrors = syncRule.Validate();
@@ -2184,6 +2903,290 @@ public class SynchronisationController(
         // Retrieve the updated Synchronisation Rule
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         return Ok(SyncRuleHeader.FromEntity(updated!));
+    }
+
+    /// <summary>
+    /// Preview a Synchronisation Rule behaviour change
+    /// </summary>
+    /// <remarks>
+    /// Answers what changing the rule's behaviour toggles would do before anything is saved: how many objects
+    /// would stop having an identity created for them, how many would stop having an account created, and how many
+    /// would be left free to drift from what JIM holds, along with each of their inverses.
+    ///
+    /// These are the settings whose consequences are hardest to picture, because none of them names a population.
+    /// Disabling a rule reads like pausing it and is closer to withdrawing every value it owns; turning
+    /// `provisionToConnectedSystem` on reads like granting a capability and is account creation at scale.
+    ///
+    /// Every omitted toggle is taken from the stored rule, exactly as the update endpoint does, so a caller
+    /// proposing one change never silently proposes a second.
+    ///
+    /// `direction` is accepted and refused with a blocking finding rather than evaluated: a saved rule's Attribute
+    /// Flow mappings and Object Matching Rules are written for the direction it has, and would all address the
+    /// wrong side after a flip. Create a rule in the direction you need instead.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from `GET /previews/{activityId}`, drill-down rows from
+    /// `GET /previews/{activityId}/deltas`, and abandon a running preview with `DELETE /previews/{activityId}`.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed behaviour toggles.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/behaviour/preview", Name = "StartSyncRuleBehaviourPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleBehaviourPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleBehaviourPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var proposal = request.ToProposal(syncRule);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleBehaviour,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started behaviour-toggle preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// Preview what changing a Synchronisation Rule's destructive toggles would do
+    /// </summary>
+    /// <remarks>
+    /// Evaluates a proposed Outbound Deprovision Action and/or Inbound Out-of-Scope Action against the rule's
+    /// persisted configuration, without saving either: which joined objects the next synchronisation would
+    /// disconnect, keep joined, or remove from the target Connected System, and which Metaverse Objects would
+    /// become eligible for deletion once the disconnections land.
+    ///
+    /// This matters because both toggles are silently destructive. Flipping the Deprovisioning Action to Delete
+    /// converts every future scope exit into a deletion in the target system; flipping the Out-of-Scope Action to
+    /// Disconnect can mass-disconnect joined objects, recalling what they contributed to the Metaverse.
+    ///
+    /// An omitted or null field previews the stored rule's value, matching the update endpoint's semantics
+    /// exactly. Apply the previewed change through <c>PUT sync-rules/{id}</c>.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    ///
+    /// A toggle the rule's direction never reads (the Outbound Deprovision Action on an import rule, and the
+    /// reverse) comes back with a validation finding saying so and no counted impact; that is the answer the
+    /// caller asked for, not a reason to refuse the request.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed toggles.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/destructive-toggles/preview", Name = "StartSyncRuleDestructiveTogglesPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleDestructiveTogglesPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleDestructiveTogglesPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        // An omitted toggle means "as the rule stands", so a caller proposing one change is never silently
+        // proposing a second; the adapter then reports honestly that the unchanged one changes nothing.
+        var proposal = new SyncRuleDestructiveToggleProposal(
+            request.OutboundDeprovisionAction ?? syncRule.OutboundDeprovisionAction,
+            request.InboundOutOfScopeAction ?? syncRule.InboundOutOfScopeAction);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRule,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started destructive-toggle preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// Preview what changing a Synchronisation Rule's Scoping Criteria would do
+    /// </summary>
+    /// <remarks>
+    /// Evaluates a proposed set of Scoping Criteria against the rule's persisted configuration, without saving
+    /// either: which objects would leave scope and what that costs each of them, which would enter scope and what
+    /// would be created for them, and which Metaverse Objects the departures would leave eligible for deletion.
+    ///
+    /// This matters because a scope change decides which objects a rule manages at all, while what happens to the
+    /// ones that leave is decided by a different setting: an import rule's Out-of-Scope Action can disconnect every
+    /// object that goes, and an export rule's Deprovisioning Action can delete them from the target system.
+    ///
+    /// Omitting <c>criteriaGroups</c> (or sending null) previews the rule's stored criteria, matching the update
+    /// endpoints' semantics. Sending an EMPTY array is a real and much larger proposal: it removes every criterion,
+    /// handing the rule every object of its type. Apply the previewed change through the Scoping Criteria
+    /// endpoints, passing the preview's Activity id so the change records what was read before it.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    ///
+    /// A criterion naming an attribute the rule's direction cannot read comes back as a blocking validation
+    /// finding rather than being evaluated around, because a criterion that can never match would silently make
+    /// the previewed scope wider than the one described.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed Scoping Criteria.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria/preview", Name = "StartSyncRuleScopingPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleScopingPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleScopingPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var proposal = request.ToProposal(syncRule);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleScope,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started Scoping Criteria preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// Preview what changing a Synchronisation Rule's Attribute Flow would write
+    /// </summary>
+    /// <remarks>
+    /// Evaluates a proposed set of Attribute Flow mappings against the rule's persisted configuration, without
+    /// saving either, and reports per object and per attribute what the values would become.
+    ///
+    /// This matters because a changed mapping rewrites an attribute on every object the rule manages, on the next
+    /// synchronisation, with no statement of what the values become; an Expression that malforms one case in a
+    /// thousand is invisible until it has flowed.
+    ///
+    /// The evaluation is the synchronisation engine's own, run twice per object (once against the stored
+    /// configuration, once against the proposal) and diffed, so Attribute Priority, Missing Input Behaviour and
+    /// Expression evaluation are the engine's answers rather than this endpoint's reading of the configuration. A
+    /// proposed mapping that would lose Attribute Priority comes back as a validation finding: it would be
+    /// evaluated and then write nothing, and reporting the values it produces without saying so would be a
+    /// confident statement about a write that never happens.
+    ///
+    /// Omitting <c>mappings</c> (or sending null) previews the rule's stored mappings, matching the update
+    /// endpoints' semantics. Sending an EMPTY array is a real proposal: it removes every mapping, so the rule flows
+    /// nothing. Note that removing a mapping changes no value on the next synchronisation; inbound flow contributes
+    /// what its mappings produce, so a mapping that no longer exists leaves the values it last wrote in place, and
+    /// the preview reports that as a finding rather than as a withdrawal.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>. Apply the previewed change through the Attribute Flow endpoints,
+    /// passing the preview's Activity id so the change records what was read before it.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed Attribute Flow mappings.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/mappings/preview", Name = "StartSyncRuleAttributeFlowPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleAttributeFlowPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleAttributeFlowPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var proposal = request.ToProposal(syncRule);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started Attribute Flow preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
     }
 
     /// <summary>
@@ -2207,7 +3210,13 @@ public class SynchronisationController(
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
-        return Ok(SyncRuleInitialPasswordResponse.FromEntity(syncRule.InitialPassword));
+        // The parked work is reported with the settings that caused it: an administrator scripting a check across
+        // every rule wants the answer in the response they were already fetching, not a second call per rule.
+        var parkedReasons = await _application.InitialPasswords.GetParkedReasonsAsync(id);
+        var attention = await _application.InitialPasswords.GetAttentionBySyncRuleAsync([id]);
+
+        return Ok(SyncRuleInitialPasswordResponse.FromEntity(
+            syncRule.InitialPassword, parkedReasons, attention.GetValueOrDefault(id)));
     }
 
     /// <summary>
@@ -2217,6 +3226,10 @@ public class SynchronisationController(
     /// Every field is optional; an omitted one leaves the stored value unchanged. Supplying `customPolicy`
     /// replaces the generator settings as a set rather than merging field by field, because they only make
     /// sense together.
+    ///
+    /// `staticPassword` is write-only: it is encrypted before it is stored and is never returned. Omit it to
+    /// leave the stored password as it is. A rule using the `Static` source with no password stored is refused,
+    /// because delivery would park every account it provisions.
     ///
     /// Only Export rules that provision can set an initial password: only an account JIM has just created has
     /// never had one, and resetting an existing account's password is not something a Synchronisation Rule does.
@@ -2263,6 +3276,24 @@ public class SynchronisationController(
         if (request.EnableAccount.HasValue)
             configuration.EnableAccount = request.EnableAccount.Value;
 
+        // Assessed before it is stored, and against the same discovered policy the generator is checked against.
+        // One static password goes to every account this rule provisions, so a value the target refuses is not
+        // one account's problem, and the administrator sending it is the person who can fix it.
+        if (!string.IsNullOrEmpty(request.StaticPassword))
+        {
+            var suppliedAssessment = _application.PasswordGenerator.AssessSupplied(
+                request.StaticPassword,
+                await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId));
+
+            // The assessment's problems never quote the password, which is what makes them safe to return here.
+            if (!suppliedAssessment.IsUsable)
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"This password cannot be used: {string.Join(" ", suppliedAssessment.Problems)}"));
+
+            configuration.StaticPasswordEncryptedValue = _application.InitialPasswords.ProtectStaticPassword(request.StaticPassword);
+            configuration.StaticPasswordSetAt = DateTime.UtcNow;
+        }
+
         // Refused rather than silently accepted: a rule that never creates an account has nothing to give a
         // first password to, and storing the setting anyway would have it do nothing while reading as configured.
         if (configuration.Enabled && !(syncRule.Direction == SyncRuleDirection.Export && syncRule.ProvisionToConnectedSystem == true))
@@ -2270,19 +3301,14 @@ public class SynchronisationController(
                 "An initial password can only be set by an Export Synchronisation Rule that provisions to the Connected System."));
 
         // Checked here rather than left to fail per account: an unsatisfiable configuration parks every account
-        // it touches, and the administrator saving it is the person who can fix it.
-        if (configuration.Enabled)
-        {
-            var discoveredPolicy = await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId);
-            var policy = configuration.Source == InitialPasswordSource.Custom
-                ? configuration.CustomPolicy
-                : _application.PasswordGenerator.DeriveFrom(discoveredPolicy);
+        // it touches, and the administrator saving it is the person who can fix it. The same assessment gates
+        // the portal's Save, so the two surfaces accept and refuse exactly the same settings.
+        var problems = _application.InitialPasswords.AssessConfiguration(
+            configuration, await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId));
 
-            var assessment = _application.PasswordGenerator.Assess(policy, discoveredPolicy);
-            if (!assessment.IsUsable)
-                return BadRequest(ApiErrorResponse.BadRequest(
-                    $"These password settings cannot be satisfied: {string.Join(" ", assessment.Problems)}"));
-        }
+        if (problems.Count > 0)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"These password settings cannot be satisfied: {string.Join(" ", problems)}"));
 
         var apiKey = await GetCurrentApiKeyAsync();
         var success = apiKey != null
@@ -2687,6 +3713,12 @@ public class SynchronisationController(
                     return BadRequest(ApiErrorResponse.BadRequest($"Invalid expression: {validationResult.ErrorMessage}"));
 
                 source.Expression = sourceRequest.Expression;
+
+                // Missing Input Behaviour applies to expression sources only: an attribute source has no inputs to
+                // be missing. Left at the entity default (EvaluateAnyway) when the request omits it, so an existing
+                // caller's mappings behave exactly as they did.
+                if (sourceRequest.MissingInputBehaviour.HasValue)
+                    source.MissingInputBehaviour = sourceRequest.MissingInputBehaviour.Value;
             }
             else if (syncRule.Direction == SyncRuleDirection.Import)
             {
@@ -2758,6 +3790,75 @@ public class SynchronisationController(
     {
         return $"Attribute '{attributeName}' holds credential material and cannot be used in an Attribute Flow. " +
                "Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.";
+    }
+
+    /// <summary>
+    /// Update an Attribute Flow Mapping's settings
+    /// </summary>
+    /// <remarks>
+    /// Changes how an existing Attribute Flow behaves, leaving what it reads and writes alone. Omit a field to
+    /// leave that setting as it is. Retargeting a mapping, or swapping its source between an attribute and an
+    /// Expression, is not supported here: delete the mapping and create it again.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="mappingId">The unique identifier of the mapping to update.</param>
+    /// <param name="request">The settings to change.</param>
+    /// <returns>The updated mapping.</returns>
+    /// <response code="200">Returns the updated mapping.</response>
+    /// <response code="400">The request named no setting, named one that does not apply to this mapping, or carried an invalid Expression.</response>
+    /// <response code="404">Synchronisation Rule or mapping not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPatch("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "UpdateSyncRuleMapping")]
+    [ProducesResponseType(typeof(SyncRuleMappingDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateSyncRuleMappingAsync(int syncRuleId, int mappingId, [FromBody] UpdateSyncRuleMappingRequest request)
+    {
+        _logger.LogInformation("Updating mapping {MappingId} for Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for mapping update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var existing = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
+        if (existing == null || (existing.SyncRule?.Id ?? existing.SyncRuleId) != syncRuleId)
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
+
+        // Validated here rather than in the application layer, so that a bad Expression is refused by the same
+        // evaluator, with the same message, as when the mapping was created.
+        if (request.Expression != null)
+        {
+            var validationResult = _expressionEvaluator.Validate(request.Expression);
+            if (!validationResult.IsValid)
+                return BadRequest(ApiErrorResponse.BadRequest($"Invalid expression: {validationResult.ErrorMessage}"));
+        }
+
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            var updated = apiKey != null
+                ? await _application.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(mappingId, request.ToSettingsUpdate(), apiKey)
+                : await _application.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(mappingId, request.ToSettingsUpdate(), initiatedBy);
+
+            if (updated == null)
+                return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
+
+            _logger.LogInformation("Updated mapping {MappingId} on Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
+            return Ok(SyncRuleMappingDto.FromEntity(updated));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to update Synchronisation Rule mapping: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
     }
 
     /// <summary>
@@ -3405,6 +4506,80 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
 
         return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+    }
+
+    /// <summary>
+    /// Preview an Object Matching change
+    /// </summary>
+    /// <remarks>
+    /// Answers what changing a Connected System's Object Matching Rules would do before anything is saved: which
+    /// of its unjoined objects would join a different Metaverse Object, which would join instead of projecting a
+    /// new identity, which would project instead of joining, and which would match ambiguously and fail.
+    ///
+    /// This matters because none of those outcomes fails at synchronisation time. A rule matched too loosely
+    /// merges an account into the wrong identity and takes every value it contributes with it; a rule matched too
+    /// tightly projects a duplicate identity beside the right one. Both look like a successful run.
+    ///
+    /// The evaluation is the matching engine's own, run twice per object (once against the stored rules, once
+    /// against the proposal) and diffed, so a match is the engine's answer rather than this endpoint's reading of
+    /// the configuration.
+    ///
+    /// Only objects that are not already joined to a Metaverse Object are evaluated, because only they are ever
+    /// matched again. A Connected System Object already joined keeps the Metaverse Object it has, whatever this
+    /// change does.
+    ///
+    /// Omitting `mode` previews the Connected System's stored mode, and omitting `rules` previews its stored
+    /// rules, matching the update endpoints' semantics. Sending an EMPTY `rules` array is a real proposal: it
+    /// removes every rule, so nothing would ever join.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from `GET /previews/{activityId}`, drill-down rows from
+    /// `GET /previews/{activityId}/deltas`, and abandon a running preview with `DELETE /previews/{activityId}`.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The proposed Object Matching configuration.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/matching-rules/preview", Name = "StartObjectMatchingPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartObjectMatchingPreviewAsync(int connectedSystemId,
+        [FromBody] StartObjectMatchingPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var objectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
+        var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, false);
+        var proposal = request.ToProposal(connectedSystem, objectTypes, syncRules);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ObjectMatching,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started Object Matching preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
     }
 
     /// <summary>

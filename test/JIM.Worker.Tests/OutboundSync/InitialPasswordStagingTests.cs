@@ -135,7 +135,7 @@ public class InitialPasswordStagingTests
         Assert.That(SyncRepo.PendingInitialPasswords, Has.Count.EqualTo(1));
 
         var staged = SyncRepo.PendingInitialPasswords.Values.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(staged.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
             Assert.That(staged.ConnectedSystemId, Is.EqualTo(system.Id));
@@ -143,7 +143,48 @@ public class InitialPasswordStagingTests
             Assert.That(staged.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
             Assert.That(staged.AttemptCount, Is.Zero, "nothing has been attempted at staging time");
             Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1));
-        });
+        }
+    }
+
+    /// <summary>
+    /// The staged expiry follows the Connected System's own time to live, so a system known to be going out of
+    /// service for longer than a week can be given a window that outlasts the outage.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_SystemWithATimeToLive_StagesTheExpiryAgainstItAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        system.InitialPasswordTimeToLive = TimeSpan.FromDays(30);
+
+        var before = DateTime.UtcNow;
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+        var after = DateTime.UtcNow;
+
+        var staged = SyncRepo.PendingInitialPasswords.Values.Single();
+        Assert.That(staged.ExpiresAt, Is.InRange(before.AddDays(30), after.AddDays(30)));
+    }
+
+    /// <summary>
+    /// A Connected System that says nothing keeps the seven days every deployment has had, so upgrading changes
+    /// nothing until somebody sets a value.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_SystemWithNoTimeToLive_StagesTheExpiryAgainstTheDefaultAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        var before = DateTime.UtcNow;
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+        var after = DateTime.UtcNow;
+
+        var staged = SyncRepo.PendingInitialPasswords.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(system.InitialPasswordTimeToLive, Is.Null);
+            Assert.That(staged.ExpiresAt, Is.InRange(
+                before.Add(PendingInitialPassword.DefaultTimeToLive),
+                after.Add(PendingInitialPassword.DefaultTimeToLive)));
+        }
     }
 
     /// <summary>
@@ -212,7 +253,7 @@ public class InitialPasswordStagingTests
 
         var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.SuccessCount, Is.EqualTo(1), "the account was created; the export must still say so");
             Assert.That(result.FailedCount, Is.Zero);
@@ -221,7 +262,7 @@ public class InitialPasswordStagingTests
             Assert.That(result.InitialPasswordStagingFailedCount, Is.EqualTo(1),
                 "contained, but never silent: the Activity has to be able to report it");
             Assert.That(result.InitialPasswordsStagedCount, Is.Zero);
-        });
+        }
     }
 
     /// <summary>
@@ -262,12 +303,12 @@ public class InitialPasswordStagingTests
         Assert.That(SyncRepo.PendingInitialPasswords, Has.Count.EqualTo(1));
 
         var staged = SyncRepo.PendingInitialPasswords.Values.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(staged.ConnectedSystemObjectId, Is.EqualTo(passwordCso.Id));
             Assert.That(staged.ConnectedSystemObjectId, Is.Not.EqualTo(otherCso.Id));
             Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1));
-        });
+        }
     }
 
     #region Helper Methods

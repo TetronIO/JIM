@@ -14,6 +14,14 @@ public class ConnectorSchemaObjectType
     public List<ConnectorSchemaAttribute> Attributes { get; set; }
 
     /// <summary>
+    /// Optional classification for this object type, i.e. whether it is a structural or auxiliary class. JIM's
+    /// schema screen uses this to group and filter object types, so populate what maps for the system being
+    /// connected to and leave the rest unset; an unclassified type is shown, just not grouped.
+    /// See <see cref="ObjectTypeTags"/> for the well-known keys and values.
+    /// </summary>
+    public List<ConnectorSchemaObjectTypeTag> Tags { get; set; } = new();
+
+    /// <summary>
     /// Which attribute for this object type, is recommended to uniquely identify the object in the Connected System?
     /// The recommended attribute should be immutable for the lifetime of the object so that JIM can always identify it and not see Connected System Objects as being deleted or created when unique ids change in the Connected System.
     /// Generally, it's best to use a system-generated attribute for this where appropriate, rather than using business-generated attribute as system-generated attributes are less likely to change value over time.

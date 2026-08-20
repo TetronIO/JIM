@@ -42,18 +42,16 @@ function Get-JIMActivityProgressDisplay {
     $objectsProcessed = [int]($Progress.objectsProcessed ?? 0)
     $message = "$($Progress.message ?? '')"
 
-    # The step the run is on, where the server records them (#454). Shown as "step 3 of 7: Saving
+    # The step the run is on, where the server records them (#454). Shown as "Step 3 of 7: Saving
     # changes" so the counter restarting between steps reads as progress rather than lost work.
+    # Composed by the shared helper so this sentence matches the portal and the other cmdlets (#1162).
     $stepText = ''
     $currentPhaseName = "$($Progress.currentPhase.name ?? '')"
     if ($currentPhaseName) {
-        $stepNumber = $Progress.currentPhaseNumber
-        $totalPhases = [int]($Progress.totalPhases ?? 0)
-        $stepText = if ($null -ne $stepNumber -and $totalPhases -gt 0) {
-            "Step $([int]$stepNumber) of ${totalPhases}: $currentPhaseName"
-        } else {
-            $currentPhaseName
-        }
+        $stepText = Get-JIMStepPositionDisplay `
+            -StepNumber $Progress.currentPhaseNumber `
+            -TotalSteps ([int]($Progress.totalPhases ?? 0)) `
+            -StepName $currentPhaseName
     }
 
     $statusText = $status

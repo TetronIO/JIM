@@ -2,8 +2,10 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AngleSharp.Dom;
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -24,6 +26,14 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class CausalityPanelTests
 {
+    /// <summary>
+    /// How many attribute rows a rendered detail table is actually showing. The rows live in a virtualised grid,
+    /// which brackets them with two empty spacer rows (that is how a virtualiser reserves the height of what it
+    /// has not rendered), so counting every row in the body counts two that carry nothing.
+    /// </summary>
+    private static int AttributeRowCount(IReadOnlyList<IElement> rows) =>
+        rows.Count(row => row.Children.Length > 0);
+
     private BunitContext _context = null!;
     private FakeUserPreferenceService _preferences = null!;
 
@@ -210,7 +220,7 @@ public class CausalityPanelTests
 
         Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
         Assert.That(cut.Find(".drawer-title").TextContent.Trim(), Is.EqualTo("Export queued"));
-        Assert.That(cut.FindAll(".drawer tbody tr"), Has.Count.EqualTo(3));
+        Assert.That(AttributeRowCount(cut.FindAll(".drawer tbody tr")), Is.EqualTo(3));
     }
 
     [Test]
@@ -250,7 +260,7 @@ public class CausalityPanelTests
 
         Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
         Assert.That(cut.Find(".drawer-title").TextContent.Trim(), Is.EqualTo("Export queued"));
-        Assert.That(cut.FindAll(".drawer tbody tr"), Has.Count.EqualTo(3));
+        Assert.That(AttributeRowCount(cut.FindAll(".drawer tbody tr")), Is.EqualTo(3));
     }
 
     [Test]

@@ -6,7 +6,7 @@ For per-object documentation (Connected Systems, Synchronisation Rules, Schedule
 
 --8<-- "assets/diagrams/hub-and-spoke.svg"
 
-<p class="jim-diagram-caption">The Connected Systems shown are illustrative examples. Dashed elements indicate planned connectivity.<span class="jimdg-caption-motion"> Moving dots trace identity data flowing through JIM.</span></p>
+<p class="jim-diagram-caption">The Connected Systems shown are illustrative examples.<span class="jimdg-caption-motion"> Moving dots trace identity data flowing through JIM.</span></p>
 
 ## 🏗️ Architecture
 
@@ -19,6 +19,10 @@ JIM processes identity data in three distinct phases: **Import**, **Sync**, and 
 ## 🔄 JML Lifecycle
 
 The **Joiner/Mover/Leaver** lifecycle is the core automation model for identity management. JIM handles new starters, role changes, and leavers through configurable rules that provision, update, and deprovision accounts across your estate. The [JML Lifecycle](jml-lifecycle.md) page covers each phase.
+
+## 🔑 Passwords
+
+Where a Connector supports it and you have configured it, JIM can set passwords on the accounts it manages. It does so through a **password channel** that runs parallel to attribute flow and never through it: nothing is held in the Metaverse, staged as a Pending Export, or read back. The [Passwords](passwords.md) page covers how JIM discovers what a target will accept, where a password comes from, what happens to an account whose password a target refuses, and the security rules that hold across every surface.
 
 ## 🧮 Expressions
 

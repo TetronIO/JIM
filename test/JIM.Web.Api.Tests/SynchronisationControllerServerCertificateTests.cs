@@ -118,11 +118,11 @@ public class SynchronisationControllerServerCertificateTests
         Assert.That(result, Is.Not.Null);
         var response = result!.Value as ServerCertificateResponse;
         Assert.That(response, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response!.Certificate.Thumbprint, Is.EqualTo(_leaf.Thumbprint));
             Assert.That(response!.ReadAt, Is.Not.EqualTo(default(DateTime)));
-        });
+        }
         _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
     }
 
@@ -185,11 +185,11 @@ public class SynchronisationControllerServerCertificateTests
         });
 
         Assert.That(probed, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(probed!.Host, Is.EqualTo("hr.corp.local"));
             Assert.That(probed!.Port, Is.EqualTo(8443));
-        });
+        }
     }
 
     #endregion
@@ -205,11 +205,11 @@ public class SynchronisationControllerServerCertificateTests
         Assert.That(result!.StatusCode, Is.EqualTo(StatusCodes.Status201Created));
         var response = result!.Value as TrustServerCertificateResponse;
         Assert.That(response, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response!.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
             Assert.That(response!.Certificate, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -220,12 +220,12 @@ public class SynchronisationControllerServerCertificateTests
         Assert.That(result, Is.Not.Null);
         var response = result!.Value as TrustServerCertificateResponse;
         Assert.That(response, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response!.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.ThumbprintMismatch));
             Assert.That(response!.ExpectedThumbprint, Is.EqualTo("0123456789ABCDEF0123456789ABCDEF01234567"));
             Assert.That(response!.PresentedThumbprint, Is.EqualTo(_leaf.Thumbprint));
-        });
+        }
         _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
     }
 

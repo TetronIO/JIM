@@ -1,0 +1,350 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Models.Core;
+using System.Text;
+
+namespace JIM.Connectors.Sql.Providers;
+
+/// <summary>
+/// Maps a column's SQL type onto a JIM <see cref="AttributeDataType"/>.
+/// <para>
+/// Most type families mean the same thing on every server, so they live in one table; the handful that
+/// do not are resolved per dialect before that table is consulted. Reference attributes are never
+/// inferred from a type: a column holding another object type's anchor looks exactly like any other
+/// column, so it is explicit per-column configuration.
+/// </para>
+/// <para>
+/// An unrecognised type throws. Degrading it to Text would import values JIM then compares
+/// lexicographically, which is precisely the defect the Decimal attribute type was introduced to fix.
+/// </para>
+/// </summary>
+internal static class SqlTypeMapper
+{
+    /// <summary>
+    /// The families that mean the same thing on every supported server. Priority 2 spellings
+    /// (PostgreSQL's <c>bytea</c> and <c>uuid</c>, for example) are present so adding those providers
+    /// stays additive.
+    /// </summary>
+    private static readonly Dictionary<string, AttributeDataType> CommonTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Character data.
+        ["VARCHAR"] = AttributeDataType.Text,
+        ["VARCHAR2"] = AttributeDataType.Text,
+        ["NVARCHAR"] = AttributeDataType.Text,
+        ["NVARCHAR2"] = AttributeDataType.Text,
+        ["CHAR"] = AttributeDataType.Text,
+        ["NCHAR"] = AttributeDataType.Text,
+        ["CHARACTER"] = AttributeDataType.Text,
+        ["TEXT"] = AttributeDataType.Text,
+        ["NTEXT"] = AttributeDataType.Text,
+        ["CLOB"] = AttributeDataType.Text,
+        ["NCLOB"] = AttributeDataType.Text,
+        ["LONG"] = AttributeDataType.Text,
+
+        // Integers narrow enough for a 32-bit value.
+        ["INT"] = AttributeDataType.Number,
+        ["INTEGER"] = AttributeDataType.Number,
+        ["SMALLINT"] = AttributeDataType.Number,
+        ["TINYINT"] = AttributeDataType.Number,
+
+        // Integers that need 64 bits.
+        ["BIGINT"] = AttributeDataType.LongNumber,
+
+        // Two-state values.
+        ["BIT"] = AttributeDataType.Boolean,
+        ["BOOLEAN"] = AttributeDataType.Boolean,
+        ["BOOL"] = AttributeDataType.Boolean,
+
+        // Points in time. Offset-carrying types are normalised to UTC on import; zoneless types are
+        // interpreted per the Connected System's time zone setting.
+        ["DATE"] = AttributeDataType.DateTime,
+        ["DATETIME"] = AttributeDataType.DateTime,
+        ["DATETIME2"] = AttributeDataType.DateTime,
+        ["SMALLDATETIME"] = AttributeDataType.DateTime,
+        ["TIMESTAMP"] = AttributeDataType.DateTime,
+        ["DATETIMEOFFSET"] = AttributeDataType.DateTime,
+        ["TIMESTAMP WITH TIME ZONE"] = AttributeDataType.DateTime,
+        ["TIMESTAMP WITH LOCAL TIME ZONE"] = AttributeDataType.DateTime,
+
+        // Identifiers.
+        ["UNIQUEIDENTIFIER"] = AttributeDataType.Guid,
+        ["UUID"] = AttributeDataType.Guid,
+
+        // Opaque bytes.
+        ["BINARY"] = AttributeDataType.Binary,
+        ["VARBINARY"] = AttributeDataType.Binary,
+        ["IMAGE"] = AttributeDataType.Binary,
+        ["BLOB"] = AttributeDataType.Binary,
+        ["RAW"] = AttributeDataType.Binary,
+        ["LONG RAW"] = AttributeDataType.Binary,
+        ["BYTEA"] = AttributeDataType.Binary,
+
+        // Exact numerics.
+        ["DECIMAL"] = AttributeDataType.Decimal,
+        ["DEC"] = AttributeDataType.Decimal,
+        ["NUMERIC"] = AttributeDataType.Decimal,
+        ["MONEY"] = AttributeDataType.Decimal,
+        ["SMALLMONEY"] = AttributeDataType.Decimal,
+        ["NUMBER"] = AttributeDataType.Decimal,
+
+        // Approximate numerics. Decimal keeps numeric comparison semantics, which a Text mapping would
+        // lose; the trade is that a binary-to-decimal round trip is not bit-exact, which is a
+        // documented caveat rather than a defect.
+        ["FLOAT"] = AttributeDataType.Decimal,
+        ["REAL"] = AttributeDataType.Decimal,
+        ["DOUBLE"] = AttributeDataType.Decimal,
+        ["DOUBLE PRECISION"] = AttributeDataType.Decimal,
+        ["BINARY_FLOAT"] = AttributeDataType.Decimal,
+        ["BINARY_DOUBLE"] = AttributeDataType.Decimal
+    };
+
+    /// <summary>
+    /// The date and time types that carry their own UTC offset. Every one of them maps to DateTime like
+    /// its zoneless siblings, so the distinction is invisible to <see cref="Map"/>; it matters only to
+    /// the value conversions either side of it.
+    /// <para>
+    /// The spellings are the ones each catalogue reports, normalised: SQL Server's
+    /// <c>datetimeoffset</c> and Oracle's <c>TIMESTAMP(n) WITH TIME ZONE</c>. PostgreSQL's
+    /// <c>timestamptz</c> is present on the same reasoning as the priority 2 spellings above: adding
+    /// that provider stays additive.
+    /// </para>
+    /// <para>
+    /// <b>Oracle's <c>TIMESTAMP(n) WITH LOCAL TIME ZONE</c> is deliberately absent, and its absence is
+    /// the one worth explaining.</b> The catalogue names it as though it carried an offset, but the wire
+    /// says otherwise: ODP.NET hands the column back as a bare <see cref="DateTime"/> with
+    /// <see cref="DateTimeKind.Unspecified"/>, the same shape a zoneless <c>TIMESTAMP</c> arrives in,
+    /// because Oracle has already converted the stored value into the session's time zone. Listing it
+    /// here is what made import and export disagree about one column: import decides from the CLR type
+    /// the driver returned (zoneless, so the Database Time Zone applies), while export decides from this
+    /// set (offset-carrying, so it did not). Treating it as zoneless is what makes the two agree.
+    /// </para>
+    /// <para>
+    /// <b>That agreement is only correct because
+    /// <see cref="OracleProvider.ConfigureOpenedConnection"/> pins the session time zone to the
+    /// Connected System's Database Time Zone.</b> The two changes are one fix. Left unpinned, Oracle
+    /// converts the value into whichever zone the Worker's host happens to run in, and the zoneless path
+    /// then reads that wall clock as though it were the administrator's declared zone, silently out by
+    /// the difference. Neither half is redundant: removing either one reintroduces the defect.
+    /// </para>
+    /// </summary>
+    private static readonly HashSet<string> OffsetCarryingTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "DATETIMEOFFSET",
+        "TIMESTAMP WITH TIME ZONE",
+        "TIMESTAMPTZ"
+    };
+
+    /// <summary>
+    /// Whether a column states the offset of the values it holds.
+    /// </summary>
+    /// <remarks>
+    /// This is what decides whether the Connected System's Database Time Zone applies to a value. A
+    /// column carrying an offset is unambiguous at the wire level, so it needs no setting to interpret
+    /// it (PRD requirement 9): import takes the instant the driver hands back, and export writes the
+    /// instant JIM holds. A zoneless column states nothing, so its values are wall-clock time in the
+    /// zone the administrator declared, and both directions convert through it.
+    /// <para>
+    /// "At the wire level" is the whole test, and it is why Oracle's <c>TIMESTAMP WITH LOCAL TIME
+    /// ZONE</c> answers false here despite a catalogue name that reads otherwise. See
+    /// <see cref="OffsetCarryingTypes"/>.
+    /// </para>
+    /// </remarks>
+    internal static bool CarriesAnOffset(SqlColumnType columnType)
+    {
+        ArgumentNullException.ThrowIfNull(columnType);
+
+        return OffsetCarryingTypes.Contains(Normalise(columnType.TypeName));
+    }
+
+    /// <summary>
+    /// Maps a column's SQL type onto a JIM attribute type.
+    /// </summary>
+    /// <exception cref="SqlTypeMappingException">The type has no JIM equivalent.</exception>
+    internal static AttributeDataType Map(SqlDatabaseType databaseType, SqlColumnType columnType, SqlTypeMappingOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(columnType);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var normalisedTypeName = Normalise(columnType.TypeName);
+        if (normalisedTypeName.Length == 0)
+            throw new SqlTypeMappingException(columnType.TypeName ?? string.Empty, databaseType);
+
+        var dialectSpecific = MapDialectSpecific(databaseType, normalisedTypeName, columnType, options);
+        if (dialectSpecific.HasValue)
+            return dialectSpecific.Value;
+
+        if (CommonTypes.TryGetValue(normalisedTypeName, out var mapped))
+            return mapped;
+
+        throw new SqlTypeMappingException(columnType.TypeName, databaseType);
+    }
+
+    /// <summary>
+    /// The types whose meaning depends on which server declared them, resolved before the shared table
+    /// so a dialect can override a shared entry.
+    /// </summary>
+    private static AttributeDataType? MapDialectSpecific(
+        SqlDatabaseType databaseType,
+        string normalisedTypeName,
+        SqlColumnType columnType,
+        SqlTypeMappingOptions options)
+    {
+        return databaseType switch
+        {
+            SqlDatabaseType.SqlServer => MapSqlServerSpecific(normalisedTypeName),
+            SqlDatabaseType.Oracle => MapOracleSpecific(normalisedTypeName, columnType, options),
+            _ => null
+        };
+    }
+
+    private static AttributeDataType? MapSqlServerSpecific(string normalisedTypeName)
+    {
+        // SQL Server's 'timestamp' is a row version: eight opaque bytes with no relationship to a
+        // point in time. The shared table maps TIMESTAMP to DateTime because that is what it means
+        // everywhere else, so this override has to come first.
+        if (normalisedTypeName is "TIMESTAMP" or "ROWVERSION")
+            return AttributeDataType.Binary;
+
+        return null;
+    }
+
+    private static AttributeDataType? MapOracleSpecific(string normalisedTypeName, SqlColumnType columnType, SqlTypeMappingOptions options)
+    {
+        // NUMBER(1) is a perfectly ordinary number unless an administrator has said the estate stores
+        // flags that way, so the reinterpretation is opt-in rather than inferred.
+        if (normalisedTypeName == "NUMBER")
+        {
+            var isSingleDigitInteger = columnType.Precision == 1 && (columnType.Scale ?? 0) == 0;
+            if (options.TreatSingleDigitNumberAsBoolean && isSingleDigitInteger)
+                return AttributeDataType.Boolean;
+
+            return MapOracleNumberWidth(columnType);
+        }
+
+        // RAW(16) is just as commonly a digest as a GUID, so this is opt-in on the same reasoning.
+        if (normalisedTypeName == "RAW")
+        {
+            return options.TreatRaw16AsGuid && columnType.MaxLength == 16
+                ? AttributeDataType.Guid
+                : AttributeDataType.Binary;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Chooses the narrowest JIM type that is guaranteed to hold every value an Oracle
+    /// <c>NUMBER</c> column can contain, from its declared precision and scale.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Oracle has a single numeric type, so the declaration is the only statement available about
+    /// whether a column holds whole numbers and how wide they are. Mapping the whole family to
+    /// <see cref="AttributeDataType.Decimal"/> discarded that, which put every built-in numeric
+    /// Metaverse Attribute out of reach of an Oracle Connected System: the mapping validator requires
+    /// the source and target types to match, and no built-in is a Decimal.
+    /// </para>
+    /// <para>
+    /// The boundaries are chosen so that the <b>widest value the declaration permits</b> fits, not so
+    /// that the values presently in the table fit. Nine digits is the widest that always fits a 32-bit
+    /// whole number (999,999,999), and eighteen the widest that always fits a 64-bit one. Ten digits
+    /// already exceeds <see cref="int.MaxValue"/>, which is why the ordinary Oracle
+    /// <c>NUMBER(10)</c> primary key is a LongNumber rather than a Number, and nineteen straddles
+    /// <see cref="long.MaxValue"/> rather than clearing it, so it is not treated as safe.
+    /// </para>
+    /// <para>
+    /// Three shapes decline to narrow at all. An absent precision is a floating <c>NUMBER</c>, which
+    /// permits up to 38 digits. A positive scale is genuinely fractional. A negative scale (
+    /// <c>NUMBER(10,-2)</c> rounds to hundreds) widens the range beyond the declared precision, so the
+    /// arithmetic above does not hold; it is refused rather than reasoned about.
+    /// </para>
+    /// <para>
+    /// This is Oracle's alone. SQL Server's catalogue reports a numeric precision for its integer
+    /// types too, but its named types state the width exactly, so they are mapped by name and never
+    /// reach here. An author who writes <c>numeric(5,0)</c> there rather than <c>int</c> has chosen an
+    /// exact numeric, and JIM does not overrule a definitive name.
+    /// </para>
+    /// <para>
+    /// Where the inference is not what the estate meant, the administrator overrides it per attribute
+    /// on the Schema tab; the SQL Connector declares
+    /// <see cref="JIM.Models.Interfaces.IConnectorCapabilities.SupportsUserSelectedAttributeTypes"/>
+    /// for exactly that reason.
+    /// </para>
+    /// </remarks>
+    private static AttributeDataType MapOracleNumberWidth(SqlColumnType columnType)
+    {
+        if (columnType.Precision is not { } precision)
+            return AttributeDataType.Decimal;
+
+        var scale = columnType.Scale ?? 0;
+        if (scale != 0)
+            return AttributeDataType.Decimal;
+
+        return precision switch
+        {
+            <= MaxPrecisionForInt => AttributeDataType.Number,
+            <= MaxPrecisionForLong => AttributeDataType.LongNumber,
+            _ => AttributeDataType.Decimal
+        };
+    }
+
+    /// <summary>
+    /// The widest decimal precision every value of which fits a 32-bit whole number: 999,999,999 is
+    /// below <see cref="int.MaxValue"/>, whereas ten digits reach 9,999,999,999 and do not.
+    /// </summary>
+    private const int MaxPrecisionForInt = 9;
+
+    /// <summary>
+    /// The widest decimal precision every value of which fits a 64-bit whole number. Nineteen digits
+    /// reach 9,999,999,999,999,999,999, which exceeds <see cref="long.MaxValue"/>.
+    /// </summary>
+    private const int MaxPrecisionForLong = 18;
+
+    /// <summary>
+    /// Reduces a catalogue's type name to its family: upper case, with any parenthesised size or
+    /// precision removed and internal whitespace collapsed. Oracle reports "TIMESTAMP(6) WITH TIME
+    /// ZONE" and "INTERVAL DAY(2) TO SECOND(6)", where the family is all that decides the mapping.
+    /// </summary>
+    private static string Normalise(string? typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+            return string.Empty;
+
+        var builder = new StringBuilder(typeName.Length);
+        var parenthesisDepth = 0;
+        var lastAppendedWasSpace = true;
+
+        foreach (var character in typeName)
+        {
+            switch (character)
+            {
+                case '(':
+                    parenthesisDepth++;
+                    continue;
+                case ')' when parenthesisDepth > 0:
+                    parenthesisDepth--;
+                    continue;
+            }
+
+            if (parenthesisDepth > 0)
+                continue;
+
+            if (char.IsWhiteSpace(character))
+            {
+                if (!lastAppendedWasSpace)
+                {
+                    builder.Append(' ');
+                    lastAppendedWasSpace = true;
+                }
+
+                continue;
+            }
+
+            builder.Append(char.ToUpperInvariant(character));
+            lastAppendedWasSpace = false;
+        }
+
+        return builder.ToString().Trim();
+    }
+}

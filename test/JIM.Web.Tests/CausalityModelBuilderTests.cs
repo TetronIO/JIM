@@ -92,7 +92,31 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = CausalityLane.Identity,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] = CausalityLane.Identity
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = CausalityLane.Identity,
+            // WouldStageDeleteExport describes the same export-side event as DeprovisionQueued, so it shares
+            // its Downstream lane; the other two destructive-toggle preview transitions are Metaverse-side.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = CausalityLane.Identity,
+            // A mapping that would not evaluate leaves a Metaverse Object attribute unwritten, so it belongs beside
+            // the other Metaverse-side transitions rather than in the export-side Downstream lane.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = CausalityLane.Identity,
+            // Every Object Matching transition decides which Metaverse Object an account belongs to, which is the
+            // Identity lane's whole subject.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = CausalityLane.Identity,
+            // Projecting decides whether an identity exists at all, so it is Metaverse-side; the other two are
+            // about what reaches, or stops reaching, the target system.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] = CausalityLane.Source,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] = CausalityLane.Source,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = CausalityLane.Identity
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
@@ -487,7 +511,7 @@ public class CausalityModelBuilderTests
         foreach (var outcomeType in Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>())
             CausalityTestData.AddOutcome(item, outcomeType, parent: null, ordinal: (int)outcomeType);
 
-        Assert.DoesNotThrow(() => CausalityModelBuilder.Build(item, CausalityTestData.EmptyContext()));
+        Assert.That(() => CausalityModelBuilder.Build(item, CausalityTestData.EmptyContext()), Throws.Nothing);
     }
 
     [Test]

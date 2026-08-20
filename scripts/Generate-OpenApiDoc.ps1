@@ -16,12 +16,21 @@
     Where to write the OpenAPI JSON. Defaults to
     src/JIM.Web/wwwroot/api/openapi/v1.json.
 
+.PARAMETER NoBuild
+    Run the already-built JIM.Web rather than building it first. For callers that
+    have just built the solution, such as the openapi-document CI job; the build
+    would otherwise be repeated for no benefit.
+
 .EXAMPLE
     ./scripts/Generate-OpenApiDoc.ps1
+
+.EXAMPLE
+    ./scripts/Generate-OpenApiDoc.ps1 -NoBuild -OutputPath /tmp/openapi-v1.json
 #>
 [CmdletBinding()]
 param(
-    [string]$OutputPath
+    [string]$OutputPath,
+    [switch]$NoBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,6 +45,20 @@ if (-not $OutputPath) {
 # Set lightweight generation mode
 $env:JIM_OPENAPI_GENERATE = "true"
 $env:JIM_OPENAPI_OUTPUT_PATH = $OutputPath
+
+# Workstation GC, for this run only. JIM.Web is a web application, so Server GC is on by
+# default: one heap per core, collected only under memory pressure. That is right for a
+# server holding a working set for hours, and wrong for a process that allocates hard for
+# five minutes, writes a 1 MB file and exits. Schema generation walks every route and every
+# response type, allocating transiently the whole way, and with nothing pushing back the
+# heaps simply grew: measured 11.3 GB peak resident on main, and 15.25 GB on a branch that
+# added three fields, at which point the process is killed by the OOM killer on a 16 GB
+# GitHub-hosted runner. The same run under Workstation GC peaks at 1.28 GB and produces a
+# byte-identical document.
+#
+# Set here rather than in JIM.Web.csproj so it applies only to generation: the shipped
+# application keeps Server GC, which is the right choice for it.
+$env:DOTNET_gcServer = "0"
 
 # Provide minimal placeholder env vars for any that are not already set
 if (-not $env:JIM_LOG_LEVEL)         { $env:JIM_LOG_LEVEL = "Warning" }
@@ -53,7 +76,9 @@ if (-not $env:JIM_DB_USERNAME)       { $env:JIM_DB_USERNAME = "jim" }
 if (-not $env:JIM_DB_PASSWORD)       { $env:JIM_DB_PASSWORD = "placeholder" }
 
 Write-Host "Generating OpenAPI document..." -ForegroundColor Cyan
-dotnet run --project $projectPath --no-launch-profile
+$runArgs = @("run", "--project", $projectPath, "--no-launch-profile")
+if ($NoBuild) { $runArgs += "--no-build" }
+dotnet @runArgs
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "OpenAPI generation failed with exit code $LASTEXITCODE"

@@ -1,4 +1,5 @@
 @using JIM.Models.Core
+@using JIM.Web.Models
 @using System.Globalization
 @using Utilities
 @inject IJimApplicationFactory JimFactory
@@ -6,80 +7,116 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* Inline, searchable, server-paged table of a single Metaverse Object attribute's values. Used directly
+@* Inline, searchable, virtualised table of a single Metaverse Object attribute's values. Used directly
    in the details table's value cell for multi-valued attributes whose value count exceeds the inline cap,
-   so all values are browsable in place without a dialog. *@
+   so all values are browsable in place without a dialog. The scrolling, the search box, the count and the
+   density all belong to the shared grid; this component only says how a value renders and how a window of
+   values is read. *@
 
+<div class="jim-mva-dialog-table">
 @if (_isReferenceAttribute)
 {
-    <MudTable @ref="_table" T="MetaverseObjectAttributeValue"
-              ServerData="ServerReloadAsync"
-              Dense="@Dense" Hover="true" Elevation="0" Outlined="true"
-              Class="jim-mva-dialog-table"
-              Loading="@_loading" LoadingProgressColor="Color.Primary">
-        <ToolBarContent>
-            <SearchField Value="@_searchText"
-                         ValueChanged="@OnSearch"
-                         Placeholder="@($"Search {AttributeName.ToLower()}...")" />
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh>Display Name</MudTh>
-            <MudTh>Type</MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Display Name">
-                @if (context.ReferenceValue != null)
-                {
-                    <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
-                        @(context.ReferenceValue.NameOrId ?? context.ReferenceValue.Id.ToString())
-                    </MudLink>
-                }
-                else
-                {
-                    <TextValueDisplay Value="@GetDisplayValue(context)" />
-                }
-            </MudTd>
-            <MudTd DataLabel="Type">
-                @if (context.ReferenceValue != null)
-                {
-                    @context.ReferenceValue.Type?.Name
-                }
-            </MudTd>
-        </RowTemplate>
-        <PagerContent>
-            <MudTablePager />
-        </PagerContent>
-    </MudTable>
+    <VirtualisedDataGrid T="MetaverseObjectAttributeValue"
+                         ContainerId="@($"mvo-mva-{_slug}-references")"
+                         UrlParameterPrefix="@($"{_slug}-")"
+                         StateKey="@AttributeName"
+                         DefaultSortBy="@SourceOrderSort"
+                         LoadWindow="LoadValueWindowAsync"
+                         SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
+                         SingularName="Value"
+                         PluralName="Values">
+        <Columns>
+            <TemplateColumn Title="Display Name" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Display Name</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.ReferenceValue != null)
+                    {
+                        var reference = context.Item.ReferenceValue;
+                        <MudLink Href="@Utilities.GetMetaverseObjectHref(reference)">
+                            @(reference.NameOrId ?? reference.Id.ToString())
+                        </MudLink>
+                    }
+                    else
+                    {
+                        <TextValueDisplay Value="@GetDisplayValue(context.Item)" />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Type" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Type</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.ReferenceValue != null)
+                    {
+                        var reference = context.Item.ReferenceValue;
+                        @reference.Type?.Name
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @RenderEmptyState(grid)
+        </EmptyContent>
+    </VirtualisedDataGrid>
 }
 else
 {
-    <MudTable @ref="_table" T="MetaverseObjectAttributeValue"
-              ServerData="ServerReloadAsync"
-              Dense="@Dense" Hover="true" Elevation="0" Outlined="true"
-              Class="jim-mva-dialog-table"
-              Loading="@_loading" LoadingProgressColor="Color.Primary">
-        <ToolBarContent>
-            <SearchField Value="@_searchText"
-                         ValueChanged="@OnSearch"
-                         Placeholder="@($"Search {AttributeName.ToLower()}...")" />
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh>Value</MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Value">
-                <TextValueDisplay Value="@GetDisplayValue(context)" />
-            </MudTd>
-        </RowTemplate>
-        <PagerContent>
-            <MudTablePager />
-        </PagerContent>
-    </MudTable>
+    <VirtualisedDataGrid T="MetaverseObjectAttributeValue"
+                         ContainerId="@($"mvo-mva-{_slug}-values")"
+                         UrlParameterPrefix="@($"{_slug}-")"
+                         StateKey="@AttributeName"
+                         DefaultSortBy="@SourceOrderSort"
+                         LoadWindow="LoadValueWindowAsync"
+                         SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
+                         SingularName="Value"
+                         PluralName="Values">
+        <Columns>
+            <TemplateColumn Title="Value" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Value</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <TextValueDisplay Value="@GetDisplayValue(context.Item)" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @RenderEmptyState(grid)
+        </EmptyContent>
+    </VirtualisedDataGrid>
+}
+</div>
+
+@* ─── Render Fragments ─── *@
+
+@* A search that matched nothing is a different situation from an attribute that genuinely holds no values,
+   and only the first has a way out to offer. *@
+@{
+    RenderFragment RenderEmptyState(VirtualisedDataGrid<MetaverseObjectAttributeValue> grid) => __builder =>
+    {
+        if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No values match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.List"
+                             PrimaryText="This attribute has no values"
+                             SecondaryText="Values arrive here from a Connected System through an Inbound Synchronisation Rule." />
+        }
+    };
 }
 
 @code {
     /// <summary>
-    /// The name of the attribute whose values are being paged.
+    /// The name of the attribute whose values are being listed.
     /// </summary>
     [Parameter]
     public string AttributeName { get; set; } = string.Empty;
@@ -97,63 +134,55 @@ else
     public bool IsReferenceAttribute { get; set; }
 
     /// <summary>
-    /// Whether to render compact rows, driven by the host page's density toggle.
+    /// Whether the host page's tables are showing compact rows. Retained for the host's binding: the grid reads
+    /// the same saved density preference the host's toggle writes, so it no longer needs threading through.
     /// </summary>
     [Parameter]
     public bool Dense { get; set; }
 
-    private MudTable<MetaverseObjectAttributeValue>? _table;
-    private string _searchText = string.Empty;
+    /// <summary>
+    /// The sort key standing for "the order the application layer returned them in". The range read takes no sort
+    /// parameter (it orders by value id, which is the total order its offset and count are addressed against), so
+    /// no column offers a sort; naming the default something no header claims keeps the grid from showing a sort
+    /// arrow over an order it did not choose.
+    /// </summary>
+    private const string SourceOrderSort = "order";
+
     private bool _isReferenceAttribute;
-    private bool _loading;
-    private string? _loadedAttributeName;
+
+    /// <summary>
+    /// The attribute name reduced to a URL- and element-id-safe token. Several of these tables render on one
+    /// page, one per capped multi-valued attribute, so the grid's element id and URL parameters have to carry
+    /// which attribute they belong to.
+    /// </summary>
+    private string _slug = string.Empty;
 
     protected override void OnParametersSet()
     {
         _isReferenceAttribute = IsReferenceAttribute;
-
-        // The host details table can re-render (density toggle) and its rows are grouped; if this
-        // instance is handed a different attribute, reset search and reload so it reflects it.
-        if (_loadedAttributeName != null && _loadedAttributeName != AttributeName)
-        {
-            _searchText = string.Empty;
-            _table?.ReloadServerData();
-        }
-
-        _loadedAttributeName = AttributeName;
+        _slug = Slugify(AttributeName);
     }
 
-    private async Task<TableData<MetaverseObjectAttributeValue>> ServerReloadAsync(
-        TableState state, CancellationToken token)
+    /// <summary>
+    /// Reads one window of this attribute's values: one range read at the offset and count the grid asked for.
+    /// The total comes back only when the request asked for it, and a null total is passed straight through
+    /// rather than turned into a zero, which the grid would read as "nothing matched".
+    /// </summary>
+    private async Task<VirtualisedWindow<MetaverseObjectAttributeValue>> LoadValueWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken _)
     {
-        _loading = true;
+        using var jim = JimFactory.Create();
+        var result = await jim.Metaverse.GetAttributeValuesRangeAsync(
+            MetaverseObjectId, AttributeName, request.StartIndex, request.Count,
+            request.SearchText, request.IncludeTotalCount);
 
-        try
-        {
-            var page = state.Page + 1; // MudBlazor is 0-indexed
-            var pageSize = state.PageSize;
-            var searchText = string.IsNullOrWhiteSpace(_searchText) ? null : _searchText;
-
-            using var jim = JimFactory.Create();
-            var result = await jim.Metaverse.GetAttributeValuesPagedAsync(
-                MetaverseObjectId, AttributeName, page, pageSize, searchText);
-
-            return new TableData<MetaverseObjectAttributeValue>
-            {
-                Items = result.Results,
-                TotalItems = result.TotalResults
-            };
-        }
-        finally
-        {
-            _loading = false;
-        }
+        return new VirtualisedWindow<MetaverseObjectAttributeValue>(result.Results, result.TotalResults);
     }
 
-    private void OnSearch(string text)
+    private static string Slugify(string name)
     {
-        _searchText = text;
-        _table?.ReloadServerData();
+        var slug = new string(name.Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '-').ToArray());
+        return string.IsNullOrEmpty(slug) ? "attribute" : slug;
     }
 
     private static string GetDisplayValue(MetaverseObjectAttributeValue value)

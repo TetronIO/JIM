@@ -4,14 +4,16 @@
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Logic.DTOs
+@using JIM.Models.Preview
 @using JIM.Models.Staging
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
-@inject IUserPreferenceService PreferenceService
+@inject IConfigurationChangePreviewStarter PreviewStarter
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -159,8 +161,34 @@
                         Disabled="@(!CanSave())">
                         Save Changes
                     </MudButton>
+                    @* Preview (#1114): the one change in JIM that can make existing Metaverse Objects eligible for *@
+                    @* deletion the moment it is saved, so it is the one that most needs answering beforehand.      *@
+                    <MudButton data-testid="jim-preview-deletion-settings" Variant="Variant.Outlined" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDeletionRulesAsync"
+                        Disabled="@(!CanSave() || _startingPreview)">
+                        Preview Changes
+                    </MudButton>
                     <MudButton Variant="Variant.Text" OnClick="ResetDeletionRules">Reset</MudButton>
                 </MudStack>
+
+                @if (_previewActivityId.HasValue)
+                {
+                    var previewActivityId = _previewActivityId.Value;
+
+                    @if (DeletionSettingsPreviewIsStale)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                                  data-testid="jim-preview-stale">
+                            The deletion settings have been edited since this preview ran, so it no longer describes
+                            what saving would do. Preview again for an answer about the current settings.
+                        </MudAlert>
+                    }
+
+                    <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
+                                                     Title="Preview: Deletion Rules"
+                                                     OnPreviewChanged="OnDeletionSettingsPreviewChanged"
+                                                     Class="mt-6" />
+                }
             </MudPaper>
 
             <MudPaper Class="pa-4 mt-6" Outlined="true">
@@ -170,31 +198,39 @@
                     determines what happens to the corresponding object in its Connected System: Disconnect leaves it in place;
                     Delete removes it. Disabled Synchronisation Rules do not apply during synchronisation.</MudText>
 
-                @if (_exportRuleHeaders == null || _exportRuleHeaders.Count == 0)
-                {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                        No export Synchronisation Rules target this Metaverse Object Type. When Metaverse Objects of this type
-                        are deleted, no objects in Connected Systems are affected.
-                    </MudAlert>
-                }
-                else
-                {
-                    <MudTable Items="@_exportRuleHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Elevation="0" Outlined="true">
-                        <HeaderContent>
-                            <MudTh><MudText Typo="Typo.button">Connected System</MudText></MudTh>
-                            <MudTh><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTh>
-                            <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-                            <MudTh><MudText Typo="Typo.button">Deprovisioning Action</MudText></MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Connected System">
-                                <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@context.ConnectedSystemName</MudLink>
-                            </MudTd>
-                            <MudTd DataLabel="Synchronisation Rule">
-                                <MudLink Href="@($"/admin/sync-rules/{context.Id}")">@context.Name</MudLink>
-                            </MudTd>
-                            <MudTd DataLabel="Status">
-                                @if (context.Enabled)
+                @* The export Synchronisation Rules targeting this type are a handful even on a large deployment, and
+                   are already loaded, so the grid slices its windows from memory rather than reading a range. *@
+                <VirtualisedDataGrid @ref="_deprovisioningGrid" T="SyncRuleHeader"
+                                     ContainerId="mvot-deprovisioning-list"
+                                     UrlParameterPrefix="dp-"
+                                     DefaultSortBy="connectedsystem"
+                                     LoadWindow="LoadExportRuleWindowAsync"
+                                     SingularName="Synchronisation Rule"
+                                     PluralName="Synchronisation Rules"
+                                     SearchPlaceholder="Search rules">
+                    <Columns>
+                        <TemplateColumn Title="Connected System" Sortable="false">
+                            <HeaderTemplate>
+                                <VirtualisedSortHeader Title="Connected System" Name="connectedsystem" />
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                <MudLink Href="@($"/admin/connected-systems/{context.Item.ConnectedSystemId}")">@context.Item.ConnectedSystemName</MudLink>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Synchronisation Rule" Sortable="false">
+                            <HeaderTemplate>
+                                <VirtualisedSortHeader Title="Synchronisation Rule" Name="name" />
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                <MudLink Href="@($"/admin/sync-rules/{context.Item.Id}")">@context.Item.Name</MudLink>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Status" Sortable="false">
+                            <HeaderTemplate>
+                                <VirtualisedSortHeader Title="Status" Name="status" />
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                @if (context.Item.Enabled)
                                 {
                                     <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
                                 }
@@ -202,18 +238,42 @@
                                 {
                                     <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
                                 }
-                            </MudTd>
-                            <MudTd DataLabel="Deprovisioning Action">
-                                <MudSelect T="OutboundDeprovisionAction" Value="@context.OutboundDeprovisionAction"
-                                           ValueChanged="@((OutboundDeprovisionAction newAction) => OnDeprovisionActionChangedAsync(context, newAction))"
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Deprovisioning Action" Sortable="false">
+                            <HeaderTemplate>
+                                <VirtualisedSortHeader Title="Deprovisioning Action" Name="deprovisioningaction" />
+                            </HeaderTemplate>
+                            <CellTemplate>
+                                @{
+                                    var header = context.Item;
+                                }
+                                <MudSelect T="OutboundDeprovisionAction" Value="@header.OutboundDeprovisionAction"
+                                           ValueChanged="@((OutboundDeprovisionAction newAction) => OnDeprovisionActionChangedAsync(header, newAction))"
                                            Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-0" Style="max-width: 200px;">
                                     <MudSelectItem Value="OutboundDeprovisionAction.Disconnect">Disconnect</MudSelectItem>
                                     <MudSelectItem Value="OutboundDeprovisionAction.Delete">Delete</MudSelectItem>
                                 </MudSelect>
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <EmptyContent Context="grid">
+                        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                        {
+                            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                             PrimaryText="@($"No export Synchronisation Rules match \"{grid.SearchText}\"")"
+                                             SecondaryText="Try a different search term, or clear the search."
+                                             ActionText="Clear Search"
+                                             OnAction="@(() => grid.ClearSearchAsync())" />
+                        }
+                        else
+                        {
+                            <TableEmptyState Icon="@Icons.Material.Filled.Output"
+                                             PrimaryText="No export Synchronisation Rules target this Metaverse Object Type"
+                                             SecondaryText="When Metaverse Objects of this type are deleted, no objects in Connected Systems are affected. Create an export Synchronisation Rule for this type to change that." />
+                        }
+                    </EmptyContent>
+                </VirtualisedDataGrid>
             </MudPaper>
         </MudTabPanel>
 
@@ -235,7 +295,7 @@
                         {
                             <MudChip Value="@type.Key"
                                      Color="@(_selectedTypes.Contains(type.Key) ? Color.Default : Color.Primary)"
-                                     Variant="@(_selectedTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                     Variant="@(_selectedTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
                                      SelectedColor="Color.Primary">
                                 @type.Key.ToString().SplitOnCapitalLetters()
                                 <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
@@ -255,7 +315,7 @@
                         {
                             <MudChip Value="@plurality.Key"
                                      Color="@(_selectedPluralities.Contains(plurality.Key) ? Color.Default : Color.Info)"
-                                     Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)"
+                                     Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Filled : Variant.Outlined)"
                                      SelectedColor="Color.Info">
                                 @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
                                 <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
@@ -275,7 +335,7 @@
                         {
                             <MudChip Value="@builtIn.Key"
                                      Color="Color.Default"
-                                     Variant="@(_selectedBuiltIn.Contains(builtIn.Key) ? Variant.Outlined : Variant.Text)"
+                                     Variant="@(_selectedBuiltIn.Contains(builtIn.Key) ? Variant.Filled : Variant.Outlined)"
                                      SelectedColor="Color.Default">
                                 @(builtIn.Key ? "Yes" : "No")
                                 <MudText Typo="Typo.caption" Class="ml-1">(@builtIn.Value)</MudText>
@@ -285,119 +345,163 @@
                 </div>
             </MudStack>
 
-            <MudTable Items="@_metaverseObjectType.Attributes.OrderBy(a => a.Name)" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Elevation="0" Outlined="true" Filter="new Func<MetaverseAttribute, bool>(FilterAttributes)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged">
-                <ToolBarContent>
-                    <MudText Typo="Typo.h6">Attributes on this Object Type</MudText>
-                    <MudSpacer />
-                    <SearchField @bind-Value="_attributeSearchString" Class="mt-0" />
+            @* The attributes bound to an Object Type run to a few hundred on a well-modelled deployment, and are
+               already loaded with it, so the grid slices its windows from memory. The chip filters above stay the
+               page's own: they change which attributes match, so each one re-counts and returns the reader to the
+               top rather than leaving a total and a scroll position describing a match set that has gone. *@
+            <VirtualisedDataGrid @ref="_attributeGrid" T="MetaverseAttribute"
+                                 ContainerId="mvot-attribute-list"
+                                 UrlParameterPrefix="at-"
+                                 DefaultSortBy="name"
+                                 LoadWindow="LoadAttributeWindowAsync"
+                                 SingularName="Attribute"
+                                 PluralName="Attributes"
+                                 SearchPlaceholder="Search attributes">
+                <ToolBarExtras>
                     <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                               DropShadow="false" Class="ml-3" OnClick="OpenAddAttributeBindingDialogAsync">Add Attribute</MudButton>
-                </ToolBarContent>
-                <HeaderContent>
-                    <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-                    <MudTh>
-                        <MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => _contributorCounts.GetValueOrDefault(x.Id, 0))">
-                            <MudTooltip Text="The number of Synchronisation Rules that contribute this attribute inbound. More than one means an Attribute Priority order determines which wins." Arrow="true" Placement="Placement.Top">
-                                <MudText Typo="Typo.button">Contributors</MudText>
-                            </MudTooltip>
-                        </MudTableSortLabel>
-                    </MudTh>
-                    <MudTh></MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Name">@context.Name</MudTd>
-                    <MudTd DataLabel="Type">
-                        <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
-                            @context.Type.ToString().SplitOnCapitalLetters()
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Plurality">
-                        <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
-                            @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Built-in?">
-                        @if (context.BuiltIn)
-                        {
-                            <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
-                                <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
-                            </MudTooltip>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Custom</MudText>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Created">
-                        <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                            @context.Created.ToLocalTime().ToRelativeTime()
-                        </MudTooltip>
-                    </MudTd>
-                    <MudTd DataLabel="Contributors">
-                        @{
-                            var contributorCount = _contributorCounts.GetValueOrDefault(context.Id, 0);
-                        }
-                        @if (contributorCount > 1)
-                        {
-                            <MudTooltip Text="Multiple contributors. Click to manage the Attribute Priority order." Arrow="true" Placement="Placement.Top">
-                                <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
-                                           EndIcon="@(_expandedAttributeIds.Contains(context.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                                           OnClick="@(() => ToggleAttributeExpanded(context.Id))">
-                                    @contributorCount contributors
-                                </MudButton>
-                            </MudTooltip>
-                        }
-                        else if (contributorCount == 1)
-                        {
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">1</MudText>
-                        }
-                        else
-                        {
-                            <EmptyValue />
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="">
-                        <div class="d-flex justify-end">
-                            <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context))" />
-                            </MudTooltip>
-                            @if (context.BuiltIn)
+                               DropShadow="false" OnClick="OpenAddAttributeBindingDialogAsync">Add Attribute</MudButton>
+                </ToolBarExtras>
+                <Columns>
+                    <TemplateColumn Title="Name" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Name" Name="name" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @context.Item.Name
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Type" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Type" Name="type" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
+                                @context.Item.Type.ToString().SplitOnCapitalLetters()
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Plurality" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Plurality" Name="plurality" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.Item.AttributePlurality)" Variant="Variant.Text">
+                                @(context.Item.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Built-in?" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Built-in?" Name="builtin" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @if (context.Item.BuiltIn)
                             {
-                                <MudTooltip Text="Built-in attributes cannot be unbound." Arrow="true" Placement="Placement.Top">
-                                    <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary ml-2" />
+                                <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
+                                    <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
                                 </MudTooltip>
                             }
                             else
                             {
-                                <MudTooltip Text="Remove this attribute from the Object Type" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.Close" Color="Color.Error" OnClick="@(() => OpenRemoveAttributeBindingDialogAsync(context))" />
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Custom</MudText>
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Created" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Created" Name="created" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @{
+                                var created = context.Item.Created.ToLocalTime();
+                            }
+                            <MudTooltip Text="@created.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                @created.ToRelativeTime()
+                            </MudTooltip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Contributors" Sortable="false">
+                        <HeaderTemplate>
+                            <MudTooltip Text="The number of Synchronisation Rules that contribute this attribute inbound. More than one means an Attribute Priority order determines which wins." Arrow="true" Placement="Placement.Top">
+                                <VirtualisedSortHeader Title="Contributors" Name="contributors" />
+                            </MudTooltip>
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @{
+                                var attribute = context.Item;
+                                var contributorCount = _contributorCounts.GetValueOrDefault(attribute.Id, 0);
+                            }
+                            @if (contributorCount > 1)
+                            {
+                                <MudTooltip Text="Multiple contributors. Click to manage the Attribute Priority order." Arrow="true" Placement="Placement.Top">
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                               EndIcon="@Icons.Material.Filled.OpenInNew"
+                                               OnClick="@(() => OpenAttributePriorityDialog(attribute))">
+                                        @contributorCount contributors
+                                    </MudButton>
                                 </MudTooltip>
                             }
-                        </div>
-                    </MudTd>
-                </RowTemplate>
-                <ChildRowContent>
-                    @if (_expandedAttributeIds.Contains(context.Id))
+                            else if (contributorCount == 1)
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">1</MudText>
+                            }
+                            else
+                            {
+                                <EmptyValue />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Sortable="false">
+                        <HeaderTemplate></HeaderTemplate>
+                        <CellTemplate>
+                            @{
+                                var rowAttribute = context.Item;
+                            }
+                            <div class="d-flex justify-end">
+                                <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(rowAttribute))" />
+                                </MudTooltip>
+                                @if (rowAttribute.BuiltIn)
+                                {
+                                    <MudTooltip Text="Built-in attributes cannot be unbound." Arrow="true" Placement="Placement.Top">
+                                        <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary ml-2" />
+                                    </MudTooltip>
+                                }
+                                else
+                                {
+                                    <MudTooltip Text="Remove this attribute from the Object Type" Arrow="true" Placement="Placement.Top">
+                                        <MudIconButton Icon="@Icons.Material.Outlined.Close" Color="Color.Error" OnClick="@(() => OpenRemoveAttributeBindingDialogAsync(rowAttribute))" />
+                                    </MudTooltip>
+                                }
+                            </div>
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <EmptyContent Context="grid">
+                    @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                     {
-                        <MudTr>
-                            <td colspan="7" class="pa-4" style="background-color: var(--mud-palette-background-grey);">
-                                <MudText Typo="Typo.subtitle2" Class="mb-1">Attribute Priority: @context.Name</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                                    Multiple Synchronisation Rules can contribute this attribute. Drag to set which wins when more than one supplies a value; the highest priority is at the top. The first to supply a value wins (unless <code class="jim-code-inline jim-code-inline-strong">Null is a value</code> is selected). Disabled rules hold their position but never contribute.
-                                </MudText>
-                                <AttributePriorityList MetaverseObjectTypeId="Id" MetaverseAttributeId="context.Id" MetaverseAttributeName="@context.Name" />
-                            </td>
-                        </MudTr>
+                        <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                         PrimaryText="@($"No attributes match \"{grid.SearchText}\"")"
+                                         SecondaryText="Try a different search term, or clear the search."
+                                         ActionText="Clear Search"
+                                         OnAction="@(() => grid.ClearSearchAsync())" />
                     }
-                </ChildRowContent>
-                <PagerContent>
-                    <MudTablePager />
-                </PagerContent>
-            </MudTable>
+                    else if (HasAttributeChipFilters)
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                                         PrimaryText="No attributes match the selected filters"
+                                         SecondaryText="Clear the Type, Plurality and Built-in filters above to see every attribute bound to this Metaverse Object Type."
+                                         ActionText="Clear Filters"
+                                         OnAction="ClearAttributeFiltersAsync" />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
+                                         PrimaryText="No attributes are bound to this Metaverse Object Type"
+                                         SecondaryText="Use the Add Attribute button to bind one; until then, Metaverse Objects of this type can hold no values." />
+                    }
+                </EmptyContent>
+            </VirtualisedDataGrid>
             </MudPaper>
         </MudTabPanel>
 
@@ -406,6 +510,31 @@
         </MudTabPanel>
 
     </NavigableMudTabs>
+
+    @* Attribute Priority (#91, Surface 2). This was an expander row underneath the attribute it belongs to, which a
+       virtualised grid cannot carry: the virtualiser positions rows from a fixed row height, and a row that grows a
+       drag-and-drop list underneath itself breaks the arithmetic every row below it depends on. A dialog keeps the
+       ordering editable, and keeps it anchored to the attribute by naming it in the title. *@
+    <MudDialog @bind-Visible="_priorityDialogVisible" Options="_priorityDialogOptions">
+        <TitleContent>
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.LowPriority" Class="mr-3" />Attribute Priority: @_priorityAttribute?.Name
+            </MudText>
+        </TitleContent>
+        <DialogContent>
+            @if (_priorityAttribute != null)
+            {
+                var priorityAttribute = _priorityAttribute;
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                    Multiple Synchronisation Rules can contribute this attribute. Drag to set which wins when more than one supplies a value; the highest priority is at the top. The first to supply a value wins (unless <code class="jim-code-inline jim-code-inline-strong">Null is a value</code> is selected). Disabled rules hold their position but never contribute.
+                </MudText>
+                <AttributePriorityList MetaverseObjectTypeId="Id" MetaverseAttributeId="priorityAttribute.Id" MetaverseAttributeName="@priorityAttribute.Name" />
+            }
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="CloseAttributePriorityDialog" DropShadow="false">Close</MudButton>
+        </DialogActions>
+    </MudDialog>
 }
 
 @code {
@@ -417,14 +546,19 @@
 
     private MetaverseObjectType? _metaverseObjectType;
     private List<BreadcrumbItem> _breadcrumbs = null!;
-    private string _attributeSearchString = "";
-    private int _rowsPerPage = 10;
     private int _changeCount;
 
     // Attribute Priority (#91, Surface 2): per-attribute import contributor counts (drives the multi-contributor
-    // badge) and the set of attribute rows whose priority expander is open.
+    // badge), and the attribute whose priority order is open in the dialog.
     private Dictionary<int, int> _contributorCounts = new();
-    private readonly HashSet<int> _expandedAttributeIds = new();
+    private MetaverseAttribute? _priorityAttribute;
+    private bool _priorityDialogVisible;
+    private readonly DialogOptions _priorityDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Medium, CloseButton = true };
+
+    // The two virtualised grids on this page. Each holds its own search, sort and scroll state, under its own URL
+    // parameter prefix, and is refreshed by the page whenever the page's own filters or data change underneath it.
+    private VirtualisedDataGrid<MetaverseAttribute>? _attributeGrid;
+    private VirtualisedDataGrid<SyncRuleHeader>? _deprovisioningGrid;
 
     // Attribute filter state
     private IReadOnlyCollection<AttributeDataType> _selectedTypes = new List<AttributeDataType>();
@@ -439,6 +573,14 @@
     private int _gracePeriodMinutes;
     private HashSet<int> _selectedAuthoritativeSources = new();
     private List<(int Id, string Name)> _contributingSystems = new();
+
+    // Configuration Change Preview of the deletion settings (#1114). The proposal the preview was started for is
+    // kept beside its Activity id so the panel can be labelled stale the moment the form moves on from it: a
+    // preview presented against settings it did not evaluate is worse than no preview, because it is believed.
+    private Guid? _previewActivityId;
+    private MetaverseObjectTypeDeletionSettingsProposal? _previewedProposal;
+    private ConfigurationChangePreview? _preview;
+    private bool _startingPreview;
 
     // Original values for change detection
     private MetaverseObjectDeletionRule _originalDeletionRule;
@@ -455,7 +597,6 @@
     protected override async Task OnInitializedAsync()
     {
         using var jim = JimFactory.Create();
-        _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
         _metaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Id, true);
         if (_metaverseObjectType == null)
         {
@@ -498,6 +639,7 @@
             if (rule == null)
             {
                 Snackbar.Add("The Synchronisation Rule could not be found. It may have been deleted.", Severity.Error);
+                await RevertDeprovisionSelectAsync();
                 return;
             }
 
@@ -509,8 +651,7 @@
             if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
                     "Synchronisation Rule", rule.Name))
             {
-                // re-render so the select reverts to the unchanged header value
-                StateHasChanged();
+                await RevertDeprovisionSelectAsync();
                 return;
             }
 
@@ -518,7 +659,7 @@
             var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
             if (cancelled)
             {
-                StateHasChanged();
+                await RevertDeprovisionSelectAsync();
                 return;
             }
 
@@ -527,7 +668,7 @@
             if (!success)
             {
                 Snackbar.Add($"Failed to update Synchronisation Rule '{rule.Name}'.", Severity.Error);
-                StateHasChanged();
+                await RevertDeprovisionSelectAsync();
                 return;
             }
 
@@ -537,8 +678,21 @@
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Snackbar.Add($"Failed to update the Synchronisation Rule: {ex.Message}", Severity.Error);
-            StateHasChanged();
+            await RevertDeprovisionSelectAsync();
         }
+    }
+
+    /// <summary>
+    /// Puts the Deprovisioning Action drop-down back to the value on the header, after a change the administrator
+    /// abandoned or that failed to save. A page re-render is not enough: the grid caches the rows it is holding,
+    /// so the select keeps showing the abandoned choice until the grid itself repaints them.
+    /// </summary>
+    private async Task RevertDeprovisionSelectAsync()
+    {
+        if (_deprovisioningGrid != null)
+            await _deprovisioningGrid.RefreshAsync();
+        else
+            StateHasChanged();
     }
 
     private async Task LoadContributingSystemsAsync()
@@ -589,6 +743,16 @@
         _gracePeriodHours = _originalGracePeriodHours;
         _gracePeriodMinutes = _originalGracePeriodMinutes;
         _selectedAuthoritativeSources = new HashSet<int>(_originalAuthoritativeSources);
+
+        // Reset means "discard my edits", and the preview is an answer about exactly those edits.
+        DiscardDeletionSettingsPreview();
+    }
+
+    private void DiscardDeletionSettingsPreview()
+    {
+        _previewActivityId = null;
+        _previewedProposal = null;
+        _preview = null;
     }
 
     private void ToggleAuthoritativeSource(int systemId, bool selected)
@@ -644,6 +808,85 @@
         return HasChanges();
     }
 
+    // ─── Configuration Change Preview (#1114) ───
+
+    /// <summary>
+    /// The deletion settings currently entered, as the preview framework's proposal type. Built from the form
+    /// rather than the entity so the preview evaluates what an administrator is about to save, which is the whole
+    /// point of asking before saving it.
+    /// </summary>
+    private MetaverseObjectTypeDeletionSettingsProposal BuildDeletionSettingsProposal() =>
+        new(_deletionRule,
+            GetEditedGracePeriod(),
+            _deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                ? _selectedAuthoritativeSources.OrderBy(id => id).ToList()
+                : [],
+            _deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                ? _deletionTriggerMode
+                : _metaverseObjectType?.DeletionTriggerMode ?? AuthoritativeSourceTriggerMode.AllSourcesDisconnect);
+
+    /// <summary>
+    /// Whether the form has moved on from the settings the visible preview was run against.
+    /// </summary>
+    private bool DeletionSettingsPreviewIsStale =>
+        _previewedProposal is not null && !BuildDeletionSettingsProposal().DescribesSameSettingsAs(_previewedProposal);
+
+    private async Task PreviewDeletionRulesAsync()
+    {
+        if (_metaverseObjectType == null || _startingPreview)
+            return;
+
+        _startingPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var proposal = BuildDeletionSettingsProposal();
+
+            // The starter, not StartAndDispatchPreviewAsync: it owns the question of whether a large preview keeps
+            // every drill-down row, and that decision belongs in one place rather than at each surface.
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.MetaverseObjectType,
+                TargetId = _metaverseObjectType.Id,
+                TargetName = _metaverseObjectType.Name,
+                ProposedConfiguration = proposal,
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user?.Id,
+                InitiatedByName = user?.Name
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _previewActivityId = activityId;
+            _previewedProposal = proposal;
+            _preview = null;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            DiscardDeletionSettingsPreview();
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingPreview = false;
+        }
+    }
+
+    /// <summary>
+    /// Records the panel's latest read of the preview, for the save confirmation to state.
+    ///
+    /// Deliberately does not call <c>StateHasChanged</c>. The panel re-reads on every parameter set, so a page that
+    /// re-rendered in response to this callback would set the panel's parameters again, which would refresh again,
+    /// which would raise this again: a render loop that never settles and, worse, cancels and restarts the panel's
+    /// reconciliation poll on every pass, so its delay never elapses and the panel sits on stage 1 for ever. Found
+    /// by driving the portal; no test in the suite could have seen it. Nothing the page renders depends on this
+    /// value, so storing it is enough.
+    /// </summary>
+    private void OnDeletionSettingsPreviewChanged(ConfigurationChangePreview? preview) => _preview = preview;
+
     private bool HasChanges()
     {
         if (_deletionRule != _originalDeletionRule) return true;
@@ -691,10 +934,13 @@
             using var jim = JimFactory.Create();
 
             // Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects
-            // eligible for deletion, with no synchronisation run in between; the acknowledgement says so.
+            // eligible for deletion, with no synchronisation run in between; the acknowledgement says so, and where
+            // a preview was run it says how many objects that is (#1114).
             var preflight = await jim.ConfigurationChangePreflight.EvaluateMetaverseObjectTypeAsync(_metaverseObjectType);
             if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                    "Metaverse Object Type", _metaverseObjectType.Name))
+                    "Metaverse Object Type", _metaverseObjectType.Name,
+                    ConfigurationChangePreviewCounts.ForConfirmation(_preview, DeletionSettingsPreviewIsStale),
+                    ConfigurationChangePreviewCounts.ForConfirmationVerdict(_preview, DeletionSettingsPreviewIsStale)))
             {
                 RollBack();
                 return;
@@ -708,8 +954,12 @@
                 return;
             }
 
+            // The preview is linked only when it actually describes this change. A link to a preview run against
+            // different settings would make the audit assert something untrue about what the administrator read.
+            var previewActivityId = DeletionSettingsPreviewIsStale ? null : _previewActivityId;
+
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType, user, changeReason);
+            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType, user, changeReason, previewActivityId);
 
             // Update original values to reflect saved state
             _originalDeletionRule = _deletionRule;
@@ -732,10 +982,16 @@
         }
     }
 
-    private void ToggleAttributeExpanded(int attributeId)
+    private void OpenAttributePriorityDialog(MetaverseAttribute attribute)
     {
-        if (!_expandedAttributeIds.Remove(attributeId))
-            _expandedAttributeIds.Add(attributeId);
+        _priorityAttribute = attribute;
+        _priorityDialogVisible = true;
+    }
+
+    private void CloseAttributePriorityDialog()
+    {
+        _priorityDialogVisible = false;
+        _priorityAttribute = null;
     }
 
     private async Task ShowAttributeHistoryDialogAsync(MetaverseAttribute attribute)
@@ -777,49 +1033,125 @@
         _metaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Id, true);
         _contributorCounts = await jim.ConnectedSystems.GetAttributeContributorCountsAsync(Id);
         StateHasChanged();
+
+        // Binding or unbinding an attribute changes how many there are, so the grid's total and the chip filter
+        // counts above it both describe a list that no longer exists until it is re-counted.
+        if (_attributeGrid != null)
+            await _attributeGrid.RefreshAsync(invalidateTotals: true);
     }
 
-    private bool FilterAttributes(MetaverseAttribute attribute)
+    /// <summary>
+    /// Slices one window of the attributes bound to this Object Type, applying the page's three chip filters, the
+    /// grid's search (name; the same field the old table filtered) and its sort. The attributes are loaded with
+    /// the Object Type, so there is no database range read here.
+    /// </summary>
+    private Task<VirtualisedWindow<MetaverseAttribute>> LoadAttributeWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
-        // Text search filter
-        if (!string.IsNullOrWhiteSpace(_attributeSearchString) &&
-            !attribute.Name.Contains(_attributeSearchString, StringComparison.OrdinalIgnoreCase))
-            return false;
+        IEnumerable<MetaverseAttribute> attributes = _metaverseObjectType?.Attributes ?? new List<MetaverseAttribute>();
 
-        // Type filter
-        if (_selectedTypes.Count > 0 && !_selectedTypes.Contains(attribute.Type))
-            return false;
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            attributes = attributes.Where(a => a.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
 
-        // Plurality filter
-        if (_selectedPluralities.Count > 0 && !_selectedPluralities.Contains(attribute.AttributePlurality))
-            return false;
+        if (_selectedTypes.Count > 0)
+            attributes = attributes.Where(a => _selectedTypes.Contains(a.Type));
 
-        // Built-in filter
-        if (_selectedBuiltIn.Count > 0 && !_selectedBuiltIn.Contains(attribute.BuiltIn))
-            return false;
+        if (_selectedPluralities.Count > 0)
+            attributes = attributes.Where(a => _selectedPluralities.Contains(a.AttributePlurality));
 
-        return true;
+        if (_selectedBuiltIn.Count > 0)
+            attributes = attributes.Where(a => _selectedBuiltIn.Contains(a.BuiltIn));
+
+        IOrderedEnumerable<MetaverseAttribute> Order<TKey>(Func<MetaverseAttribute, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? attributes.OrderByDescending(key, comparer) : attributes.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "type" => Order(a => a.Type),
+            "plurality" => Order(a => a.AttributePlurality),
+            "builtin" => Order(a => a.BuiltIn),
+            "created" => Order(a => a.Created),
+            "contributors" => Order(a => _contributorCounts.GetValueOrDefault(a.Id, 0)),
+            _ => Order(a => a.Name, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
     }
 
-    private void OnTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selectedTypes)
+    /// <summary>
+    /// Slices one window of the export Synchronisation Rules targeting this Object Type, applying the grid's
+    /// search (rule name and Connected System name) and sort.
+    /// </summary>
+    private Task<VirtualisedWindow<SyncRuleHeader>> LoadExportRuleWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<SyncRuleHeader> headers = _exportRuleHeaders ?? new List<SyncRuleHeader>();
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            headers = headers.Where(h =>
+                h.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                h.ConnectedSystemName.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        IOrderedEnumerable<SyncRuleHeader> Order<TKey>(Func<SyncRuleHeader, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? headers.OrderByDescending(key, comparer) : headers.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "name" => Order(h => h.Name, StringComparer.OrdinalIgnoreCase),
+            "status" => Order(h => h.Enabled),
+            "deprovisioningaction" => Order(h => h.OutboundDeprovisionAction),
+            _ => Order(h => h.ConnectedSystemName, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    /// <summary>Whether any of the three chip filters is narrowing the attribute list.</summary>
+    private bool HasAttributeChipFilters =>
+        _selectedTypes.Count > 0 || _selectedPluralities.Count > 0 || _selectedBuiltIn.Count > 0;
+
+    private async Task OnTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selectedTypes)
     {
         _selectedTypes = selectedTypes;
+        await RefreshAttributeGridAsync();
     }
 
-    private void OnPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selectedPluralities)
+    private async Task OnPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selectedPluralities)
     {
         _selectedPluralities = selectedPluralities;
+        await RefreshAttributeGridAsync();
     }
 
-    private void OnBuiltInFilterChanged(IReadOnlyCollection<bool> selectedBuiltIn)
+    private async Task OnBuiltInFilterChanged(IReadOnlyCollection<bool> selectedBuiltIn)
     {
         _selectedBuiltIn = selectedBuiltIn;
+        await RefreshAttributeGridAsync();
     }
 
-    private async Task OnRowsPerPageChanged(int newSize)
+    private async Task ClearAttributeFiltersAsync()
     {
-        _rowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
+        _selectedTypes = new List<AttributeDataType>();
+        _selectedPluralities = new List<AttributePlurality>();
+        _selectedBuiltIn = new List<bool>();
+        await RefreshAttributeGridAsync();
+    }
+
+    /// <summary>
+    /// Re-runs the attribute window under the page's chip filters. The match set is different, so the total (and
+    /// the unfiltered baseline the toolbar count compares against) has to be counted again, and the scroll
+    /// position describes rows that are no longer there.
+    /// </summary>
+    private async Task RefreshAttributeGridAsync()
+    {
+        if (_attributeGrid == null)
+            return;
+
+        await _attributeGrid.ResetScrollAsync();
+        await _attributeGrid.RefreshAsync(invalidateTotals: true);
     }
 
     private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableTypes()

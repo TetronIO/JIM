@@ -16,6 +16,22 @@ Because priority is held per Synchronisation Rule mapping, the same Connected Sy
 
 A single-source attribute (only one rule maps to it) needs no configuration and is unaffected.
 
+## 🎯 Giving one system authority over a subset of objects
+
+Because the priority list is a list of **Synchronisation Rules**, not of Connected Systems, a system can appear in it more than once through rules with different Scoping Criteria. That is how you express "this system is authoritative for these objects, that system is authoritative for the rest" without any extra machinery.
+
+The usual shape is two import rules on the same Connected System:
+
+- an **unscoped** rule that applies to everything it imports, sitting low in the priority order; and
+- a **narrowly scoped** rule covering just the exception objects, sitting at the top.
+
+An object inside the scoped rule's criteria is contributed by that rule and wins. An object outside them is not contributed by that rule at all (the rule has no opinion for it, exactly as a disabled rule has none), so the next priority decides. Authority is therefore per object, not per system, and the two rules never fight: at most one of them applies to any given object.
+
+Two consequences are worth stating plainly:
+
+- **Scoping Criteria are evaluated against Connected System Object attributes, so an object can move in and out of a rule's scope as its own attributes change.** Renaming a group so it matches an exceptions pattern transfers authority for it on the next synchronisation. That is the intended behaviour, and it is quiet: nothing announces it beyond the resolution decision itself.
+- **The losing system is not corrected automatically.** A change made directly in a system that loses resolution never reaches the Metaverse, but it stays in that system until an export Synchronisation Rule with **Enforce State** targets it, at which point export re-evaluation stages a corrective Pending Export and puts the winning value back. Without such a rule the losing system simply remains divergent; the Metaverse and every other system are protected either way.
+
 ## ⛔ "Null is a value"
 
 By default, if the highest-priority source has **no** value for an attribute, JIM falls through to the next source. Sometimes that is wrong: when the authoritative source clears a value, you want the clear to propagate, not to be back-filled from a stale secondary copy.
@@ -56,6 +72,8 @@ Together these distinguish the two kinds of blank an administrator may need to i
 
 The same provenance is visible per value: retrieving a Metaverse Object through the REST API or `Get-JIMMetaverseObject` returns, for each attribute value, the Connected System and the exact Synchronisation Rule that won resolution and contributed it. An asserted null appears as a value row flagged `nullValue` with provenance but no value, so automation can distinguish a deliberate blank from an attribute that simply has no contributor; consumers should treat such a row as "no value present", never as a value.
 
+Provenance follows the winner even when the value does not change. Two contributors often hold the same value for an attribute, so a change of winner need not be a change of value: a higher-priority source joining, a priority reorder, or the deletion of the Synchronisation Rule that contributed the value all hand the value to a different rule while the value itself stays exactly as it was. The next synchronisation of the winning contributor records the hand-over, so the contributing rule shown against a value is the rule that would win resolution for it today, not the one that happened to write it first.
+
 ## 🛠️ Configuring priority
 
 Attribute priority is configured per (Metaverse Object Type, Metaverse attribute).
@@ -74,12 +92,29 @@ In the expanded list (highest priority at the top):
 - **Disabled Synchronisation Rules** stay in the list, greyed out, holding their position but never contributing.
 - Changes are held until you click **Save order**, and you can **Reset** to discard them.
 
+### 🧭 In the Attribute Flow editor
+
+Priority is also surfaced where an Attribute Flow is created, so you are not left to discover it afterwards. When you add or edit an inbound Attribute Flow (**Administration → Synchronisation Rules → _rule_ → Attribute Flow**) targeting a Metaverse attribute another Synchronisation Rule already contributes, the dialog shows that attribute's current priority order, read-only, with your mapping in place:
+
+- A **new** mapping appears at the bottom of the list, marked "this mapping, once saved". That is where it will be created: a newly added inbound Attribute Flow always lands at the lowest priority, so it cannot start winning resolution the moment it is saved. Promote it deliberately on the Object Type page afterwards.
+- An **existing** mapping is marked "this mapping" at its current position.
+- **Changing a mapping's target attribute** moves it out of one attribute's priority list and into another's, where it again arrives at the bottom rather than keeping the position it held for its old attribute.
+
+Reordering is not offered here: priority is managed in one place, and the dialog links through to the Object Type page for it.
+
+### 🔀 Finding the attributes several systems contribute
+
+Both surfaces above start from something you already suspect: an Object Type, or a mapping you are editing. To find the attributes worth reviewing in the first place, use the [Data Flow](../configuration/data-flow.md) view (**Administration → Schema → Data Flow**) with **Multiple contributors** switched on. It lists every inbound flow whose target Metaverse Attribute is fed by more than one Synchronisation Rule, across all Connected Systems at once, which is the set whose priority order decides anything.
+
+**"Null is a value"** is set in this dialog rather than on the Object Type page when you are creating the mapping, because it belongs to that mapping rather than to the ordering. It can be changed later from either surface.
+
 ### 🔧 Via the REST API and PowerShell
 
 The same configuration is available for automation:
 
 - Read the ordered contributor list for an attribute.
 - Replace the whole order, or move a single contributor to a position (JIM renumbers the others for you, so the list is never left in an inconsistent state).
+- Set **"Null is a value"** when creating an inbound mapping: `New-JIMSyncRuleMapping -NullIsValue`. On an existing mapping it is set through the priority surface instead, with `Set-JIMMetaverseAttributePriority` or `Move-JIMMetaverseAttributePriority`, which write it in the same transaction as the ordering.
 
 ### When changes take effect
 

@@ -147,7 +147,7 @@ public class TaskingServerStepAdvancementTests
         // Assert: Execution marked as completed
         _mockSchedulingRepository.Verify(
             r => r.UpdateScheduleExecutionAsync(It.Is<ScheduleExecution>(e =>
-                e.Status == ScheduleExecutionStatus.Completed &&
+                e.Status == ScheduleExecutionStatus.Complete &&
                 e.CompletedAt != null)),
             Times.Once);
     }
@@ -271,8 +271,8 @@ public class TaskingServerStepAdvancementTests
             .ThrowsAsync(new InvalidOperationException("DB error"));
 
         // Act & Assert: Should not throw
-        Assert.DoesNotThrowAsync(() =>
-            _application.Tasking.CompleteWorkerTaskAsync(task));
+        Assert.That(() =>
+            _application.Tasking.CompleteWorkerTaskAsync(task), Throws.Nothing);
     }
 
     #region Helper methods

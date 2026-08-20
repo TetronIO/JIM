@@ -1,0 +1,62 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Every value of one multi-valued attribute of a Connected System Object. A row in a virtualised table is one
+   line, so the attributes grid shows the first value and sends the rest here; the list is virtualised rather
+   than capped, so a group with half a million members is still reachable in full. The dialog states its own
+   height ceiling (its container is not the page, so the grid's footer-based measurement would describe the page
+   behind it) and keeps no URL state (it would outlive the dialog, and no deep link can reopen one). *@
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-3 mud-text-secondary">
+            @TotalCount.ToString("N0") values
+        </MudText>
+        <CsoMvaTable AttributeName="@AttributeName"
+                     ConnectedSystemObjectId="@ConnectedSystemObjectId"
+                     IsReferenceAttribute="@IsReferenceAttribute"
+                     MaxHeight="@GridMaxHeight"
+                     TrackUrlState="false" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// The name of the attribute whose values are being listed.
+    /// </summary>
+    [Parameter]
+    public string AttributeName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The owning Connected System Object's ID.
+    /// </summary>
+    [Parameter]
+    public Guid ConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// Whether this attribute holds reference values (drives the multi-column reference layout).
+    /// </summary>
+    [Parameter]
+    public bool IsReferenceAttribute { get; set; }
+
+    /// <summary>
+    /// How many values the attribute holds in total, stated above the list so the reader knows the size of what
+    /// they are scrolling before they scroll it.
+    /// </summary>
+    [Parameter]
+    public int TotalCount { get; set; }
+
+    /// <summary>
+    /// The height ceiling handed to the values grid. The same figure the Pending Export's dialog states, so the
+    /// two read as the same kind of thing rather than as two dialogs sized by different hands.
+    /// </summary>
+    private const string GridMaxHeight = "400px";
+
+    private void Close() => MudDialog.Close();
+}

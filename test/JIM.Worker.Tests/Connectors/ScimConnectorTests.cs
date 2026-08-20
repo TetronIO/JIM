@@ -44,7 +44,7 @@ public class ScimConnectorTests
     [Test]
     public void Capabilities_MatchScimConnectorContract()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_connector.SupportsFullImport, Is.True, nameof(_connector.SupportsFullImport));
             Assert.That(_connector.SupportsDeltaImport, Is.True, nameof(_connector.SupportsDeltaImport));
@@ -58,7 +58,7 @@ public class ScimConnectorTests
             Assert.That(_connector.SupportsParallelExport, Is.True, nameof(_connector.SupportsParallelExport));
             Assert.That(_connector.SupportsPaging, Is.True, nameof(_connector.SupportsPaging));
             Assert.That(_connector.SupportsFilePaths, Is.False, nameof(_connector.SupportsFilePaths));
-        });
+        }
     }
 
     #endregion
@@ -78,12 +78,12 @@ public class ScimConnectorTests
     {
         var setting = GetSetting(ScimConnectorConstants.SettingBaseUrl);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Required, Is.True);
             Assert.That(setting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Connectivity));
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.String));
-        });
+        }
     }
 
     [Test]
@@ -91,7 +91,7 @@ public class ScimConnectorTests
     {
         var setting = GetSetting(ScimConnectorConstants.SettingAuthenticationMethod);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Required, Is.True);
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
@@ -103,7 +103,7 @@ public class ScimConnectorTests
                 ScimConnectorConstants.AuthMethodCustomHeader
             }));
             Assert.That(setting.DefaultStringValue, Is.EqualTo(ScimConnectorConstants.AuthMethodOAuthClientCredentials));
-        });
+        }
     }
 
     [Test]
@@ -117,11 +117,11 @@ public class ScimConnectorTests
             ScimConnectorConstants.SettingAuthenticationHeaderValue
         };
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             foreach (var name in secretSettingNames)
                 Assert.That(GetSetting(name).Type, Is.EqualTo(ConnectedSystemSettingType.StringEncrypted), name);
-        });
+        }
     }
 
     [Test]
@@ -139,7 +139,7 @@ public class ScimConnectorTests
             (ScimConnectorConstants.SettingAuthenticationHeaderValue, ScimConnectorConstants.AuthMethodCustomHeader)
         };
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             foreach (var (settingName, requiredWhenValue) in expectations)
             {
@@ -147,7 +147,7 @@ public class ScimConnectorTests
                 Assert.That(setting.RequiredWhenSetting, Is.EqualTo(ScimConnectorConstants.SettingAuthenticationMethod), settingName);
                 Assert.That(setting.RequiredWhenValue, Is.EqualTo(requiredWhenValue), settingName);
             }
-        });
+        }
     }
 
     [Test]
@@ -155,7 +155,7 @@ public class ScimConnectorTests
     {
         var setting = GetSetting(ScimConnectorConstants.SettingCertificateValidation);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
             Assert.That(setting.DropDownValues, Is.EquivalentTo(new[]
@@ -164,7 +164,7 @@ public class ScimConnectorTests
                 ScimConnectorConstants.CertValidationSkip
             }));
             Assert.That(setting.DefaultStringValue, Is.EqualTo(ScimConnectorConstants.CertValidationFull));
-        });
+        }
     }
 
     [Test]
@@ -172,7 +172,7 @@ public class ScimConnectorTests
     {
         var setting = GetSetting(ScimConnectorConstants.SettingMinimumTlsVersion);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
             Assert.That(setting.DropDownValues, Is.EquivalentTo(new[]
@@ -181,7 +181,7 @@ public class ScimConnectorTests
                 ScimConnectorConstants.TlsVersion13
             }));
             Assert.That(setting.DefaultStringValue, Is.EqualTo(ScimConnectorConstants.TlsVersion12));
-        });
+        }
     }
 
     #endregion
@@ -286,13 +286,13 @@ public class ScimConnectorTests
 
     private static void AssertSingleInvalidBaseUrlResult(List<ConnectorSettingValueValidationResult> results)
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Has.Count.EqualTo(1));
             Assert.That(results[0].IsValid, Is.False);
             Assert.That(results[0].ErrorMessage, Is.Not.Null.And.Not.Empty);
             Assert.That(results[0].SettingValue?.Setting.Name, Is.EqualTo(ScimConnectorConstants.SettingBaseUrl));
-        });
+        }
     }
 
     #endregion

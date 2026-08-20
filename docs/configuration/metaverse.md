@@ -39,6 +39,22 @@ Rather than deleting immediately when the Deletion Rule triggers, a configurable
 
 If the identity reappears during the grace period, the scheduled deletion is cancelled; but only when the reappearance undoes what triggered it. Under **When Last Connector Disconnected**, any system reconnecting cancels. Under **When Authoritative Source Disconnected**, a reconnection from any selected source cancels in All sources mode, while in Specific mode only the system whose disconnection scheduled the deletion cancels it. An unrelated system reconnecting never rescues an object whose trigger condition still holds.
 
+#### Previewing a deletion settings change
+
+Deletion settings are the one change in JIM that can make existing Metaverse Objects eligible for deletion the moment it is saved, with no synchronisation run in between. **Preview Changes**, beside Save on the Object Type's Deletion Rules panel, answers what the change would actually do before you make it.
+
+The preview evaluates the objects already marked for deletion (those whose last, or authoritative, connector has gone) twice: once under the settings in force and once under the ones you have entered. Where the two answers differ, it reports which of three things would happen:
+
+- **Would become eligible for deletion**<br /> The object is safe today and would be eligible under the proposed settings. This is the number to read before saving.
+- **Would cease to be eligible for deletion**<br /> The object is eligible today and would stop being so.
+- **Deletion date would change**<br /> The object is neither eligible now nor under the proposal, but the date it becomes eligible on moves.
+
+Objects carrying no disconnection mark cannot be affected by any settings change, so they are not evaluated; the preview is quick even on a large metaverse.
+
+The authoritative sources and the trigger mode are deliberately not part of that evaluation, and the preview says so rather than reporting a misleading zero. They are read at the moment a Connected System Object disconnects, not by the housekeeping pass that acts on objects already marked, so changing them moves no object's deletion date today; what they change is what happens the next time something disconnects.
+
+Saving after a preview states its counts on the confirmation and records the preview against the change's [Activity](activities.md). See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally, and the [preview cmdlets](../powershell/previews.md) for the same evaluation from PowerShell.
+
 ### Custom object types
 
 Alongside JIM's built-in `User` and `Group` types, administrators can create their own **custom object types** to model whatever categories their organisation needs (for example `Device`, `Room`, or `Contract`). Manage them from the **Object Types** tab of the Schema area, or via [PowerShell](../powershell/metaverse.md) and the [REST API](../../api/reference/).
@@ -48,6 +64,8 @@ Alongside JIM's built-in `User` and `Group` types, administrators can create the
 - **Icon**<br /> An optional MudBlazor icon name (for example `Devices`) gives the type a recognisable glyph throughout the portal.
 - **Rename and re-icon**<br /> Edit a custom type's name, plural name and icon from the Edit action on its row in the Object Types tab, or from the Edit button on its detail page.
 - **Built-in protection**<br /> The `User` and `Group` types cannot be renamed, re-iconed or deleted; their deletion rules remain editable.
+
+Above the list, filters narrow it by Deletion Rule, whether the type has Predefined Searches, and whether it is built-in; the Attributes tab carries the equivalent filters for Type, Plurality, Built-in status and bound Object Type.
 
 ### Deleting object types
 

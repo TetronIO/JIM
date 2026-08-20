@@ -43,6 +43,16 @@ public class InitialPasswordRunResult
     public int NoLongerApplicableCount { get; set; }
 
     /// <summary>
+    /// Records whose time to live passed before they could be delivered, so JIM stopped trying and said so.
+    /// <para>
+    /// Counted rather than quietly cleaned up. These are accounts that were provisioned and never got a working
+    /// password, which is precisely the outcome an administrator has to know about; a silent removal would take
+    /// the last evidence of it with them.
+    /// </para>
+    /// </summary>
+    public int ExpiredCount { get; set; }
+
+    /// <summary>
     /// True when the Connected System's Connector cannot set passwords at all, so nothing was attempted. The
     /// outstanding records are left exactly as they are: the capability may arrive with a Connector upgrade,
     /// and discarding the work would lose the record that the accounts still need one.
@@ -64,5 +74,6 @@ public class InitialPasswordRunResult
     /// True when anything at all happened, which is what decides whether a run is worth narrating.
     /// </summary>
     public bool HasSomethingToReport =>
-        AttemptedCount > 0 || NoLongerApplicableCount > 0 || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords;
+        AttemptedCount > 0 || NoLongerApplicableCount > 0 || ExpiredCount > 0 ||
+        CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords;
 }

@@ -154,7 +154,7 @@ public class ImportConnectorReportedErrorTests : WorkflowTestBase
             unknownTypeObject
         };
 
-        Assert.DoesNotThrowAsync(async () => await RunImportAsync(context, importObjects));
+        Assert.That(async () => await RunImportAsync(context, importObjects), Throws.Nothing);
 
         var errored = SingleErroredRpei(context.Activity);
         Assert.That(errored.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType));

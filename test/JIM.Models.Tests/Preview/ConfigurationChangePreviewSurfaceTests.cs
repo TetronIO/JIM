@@ -19,6 +19,10 @@ namespace JIM.Models.Tests.Preview;
 /// Activity for, including operational work no adapter could ever preview (a housekeeping sweep, a factory reset).
 /// A registry keyed on it would accept nonsense. The cost of the separation is that the mapping can rot, which is
 /// what these assert against.
+///
+/// The mapping is deliberately many-to-one: a surface is a kind of change rather than an entity (see the remarks on
+/// <see cref="ConfigurationChangePreviewSurface"/>), so every surface must resolve to a target type but several may
+/// resolve to the same one.
 /// </summary>
 [TestFixture]
 public class ConfigurationChangePreviewSurfaceTests
@@ -36,17 +40,24 @@ public class ConfigurationChangePreviewSurfaceTests
     }
 
     [Test]
-    public void ToActivityTargetType_NoTwoSurfaces_ShareATargetType()
+    public void ToActivityTargetType_SurfacesOnTheSameEntity_MayShareATargetType()
     {
-        // Two surfaces mapping to one target type would make the change history ambiguous about which preview
-        // produced a result, and would let a registry lookup by target type return the wrong adapter.
-        var duplicates = PreviewableSurfaces()
-            .GroupBy(ConfigurationChangePreviewSurfaces.ToActivityTargetType)
-            .Where(group => group.Count() > 1)
-            .Select(group => $"{group.Key}: {string.Join(" and ", group)}")
-            .ToList();
+        // A surface is a kind of change, not an entity, because exactly one adapter may serve a surface and one
+        // entity's settings need several adapters: a Synchronisation Rule's Scoping Criteria, its Attribute Flow and
+        // its deprovisioning actions are three different evaluations over three different populations. They all
+        // target the same object, so they all map to the same target type, and that is the mapping working.
+        //
+        // This test previously asserted the opposite, on the reasoning that a shared target type would make the
+        // change history ambiguous and could make a registry lookup by target type return the wrong adapter.
+        // Neither holds: a preview Activity is identified by its own preview record, which carries the surface, and
+        // no lookup is keyed on target type (the registry is keyed on the surface itself).
+        var scopeTargetType = ConfigurationChangePreviewSurfaces.ToActivityTargetType(
+            ConfigurationChangePreviewSurface.SynchronisationRuleScope);
+        var deprovisioningTargetType = ConfigurationChangePreviewSurfaces.ToActivityTargetType(
+            ConfigurationChangePreviewSurface.SynchronisationRule);
 
-        Assert.That(duplicates, Is.Empty, "preview surfaces sharing an Activity target type: " + string.Join("; ", duplicates));
+        Assert.That(scopeTargetType, Is.EqualTo(deprovisioningTargetType),
+            "both surfaces preview changes to a Synchronisation Rule, so both Activities attach to one");
     }
 
     [Test]

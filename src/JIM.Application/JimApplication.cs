@@ -88,6 +88,7 @@ public class JimApplication : IDisposable
     public SecurityServer Security { get; }
     public SecurityAuditServer SecurityAudit { get; }
     public ServiceSettingsServer ServiceSettings { get; }
+    public SyncPreviewServer SyncPreview { get; }
     public SystemServer System { get; }
     public TaskingServer Tasking { get; }
 
@@ -120,7 +121,14 @@ public class JimApplication : IDisposable
         ConfigurationChangePreviews = new ConfigurationChangePreviewServer(this,
             previewAdapters ?? new ConfigurationChangePreviewAdapterRegistry(
             [
-                new MetaverseObjectTypeDeletionSettingsPreviewAdapter(this)
+                new MetaverseObjectTypeDeletionSettingsPreviewAdapter(this),
+                new ConnectedSystemScopeSelectionPreviewAdapter(this, new SyncEngine()),
+                new SyncRuleDestructiveTogglePreviewAdapter(this, new SyncEngine()),
+                new SyncRuleScopingPreviewAdapter(this, new SyncEngine()),
+                new SyncRuleAttributeFlowPreviewAdapter(this, new SyncEngine()),
+                new ObjectMatchingPreviewAdapter(this),
+                new SyncRuleBehaviourTogglePreviewAdapter(this, new SyncEngine()),
+                new ConnectedSystemSchemaPreviewAdapter(this)
             ]));
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationDrift = new ConfigurationDriftService(this);
@@ -132,8 +140,14 @@ public class JimApplication : IDisposable
                                      // Bootstrap calls (SSO init, auth) don't use SyncRepo.
         ExportEvaluation = new ExportEvaluationServer(this, SyncRepo);
         ExportExecution = new ExportExecutionServer(this, SyncRepo);
+        SyncPreview = new SyncPreviewServer(this, SyncRepo);
         PasswordGenerator = new PasswordGeneratorService();
-        InitialPasswords = new InitialPasswordDeliveryServer(SyncRepo, PasswordGenerator);
+        // Credential protection is reached through a delegate because the hosts assign CredentialProtection after
+        // constructing this facade, so a value read here would always be the null that precedes it. The fallback
+        // is the same one ExportExecutionServer uses, and reads the same shared key directory, so a caller that
+        // never had one set still decrypts what the portal encrypted.
+        InitialPasswords = new InitialPasswordDeliveryServer(SyncRepo, PasswordGenerator,
+            () => CredentialProtection ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider()));
         ScopingEvaluation = new ScopingEvaluationServer();
         ScopeReconciliation = new ScopeReconciliationServer(this);
         FileSystem = new FileSystemServer(this);
@@ -161,31 +175,12 @@ public class JimApplication : IDisposable
     public async Task InitialiseDatabaseAsync()
     {
         await Repository.InitialiseDatabaseAsync();
-        try
-        {
-            await Seeding.SeedAsync();
-            // converge the built-in Metaverse schema towards the BuiltInMetaverseSchema catalogue. Runs after
-            // SeedAsync (which short-circuits on already-seeded databases) so newly-introduced built-in
-            // Metaverse Attributes and their advisory Standard Mappings reach existing deployments too.
-            await Seeding.SyncBuiltInMetaverseSchemaAsync();
-            await Seeding.SeedBuiltInSchedulesAsync();
-            await Seeding.SeedBuiltInRolesAsync();
-            await Seeding.SyncBuiltInConnectorDefinitionsAsync();
-            await Seeding.SyncServiceSettingsAsync();
-            // Repair the built-in example data template if a previous factory reset stripped its attributes (its rows are
-            // collateral of the reset's TRUNCATE ... CASCADE). SeedAsync skips an already-present template, so this runs
-            // separately; it is a cheap no-op when the template is intact.
-            await Seeding.EnsureBuiltInExampleDataTemplateAsync();
-            await Seeding.CompleteSeedingActivityAsync();
-        }
-        catch (Exception ex)
-        {
-            // Catch-all is deliberate: this is an Activity execution boundary (the "System Initialisation" parent
-            // Activity, if one was created), and any failure here must be recorded on it via
-            // FailSeedingActivityAsync rather than escape silently, then rethrown so startup still fails loudly.
-            await Seeding.FailSeedingActivityAsync(ex);
-            throw;
-        }
+        // Converges the database towards the built-in configuration this release ships, creating whatever is
+        // absent and leaving everything else alone. Runs on every start, not just the first, so a built-in
+        // introduced in a later release reaches deployments that already exist. The pass ordering, and the
+        // Activity boundary that groups what it creates, belong to the pipeline rather than to this caller
+        // (SystemServer.ResetSystemAsync runs the same one).
+        await Seeding.ApplyBuiltInConfigurationAsync();
         await Repository.InitialisationCompleteAsync();
     }
 

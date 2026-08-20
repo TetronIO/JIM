@@ -725,8 +725,8 @@ public class MetaverseServerChangeTrackingTests
         };
 
         // Act & Assert — should not throw
-        Assert.DoesNotThrow(() =>
-            change.AddAttributeValueChange(attrValue, ValueChangeType.Remove));
+        Assert.That(() =>
+            change.AddAttributeValueChange(attrValue, ValueChangeType.Remove), Throws.Nothing);
 
         // No value change recorded (nothing to track)
         Assert.That(change.AttributeChanges.Single().ValueChanges, Is.Empty);
@@ -751,8 +751,8 @@ public class MetaverseServerChangeTrackingTests
         };
 
         // Act & Assert — skipped without throwing, and no value change recorded
-        Assert.DoesNotThrow(() =>
-            change.AddAttributeValueChange(attrValue, ValueChangeType.Add));
+        Assert.That(() =>
+            change.AddAttributeValueChange(attrValue, ValueChangeType.Add), Throws.Nothing);
         Assert.That(change.AttributeChanges, Is.Empty);
     }
 

@@ -86,6 +86,57 @@ and Destructive changes count, so a rename never registers here.
 | `ChangeCount` | `int` | How many qualifying changes there are |
 | `HighestChangeClass` | `string` | `Cosmetic`, `SyncAffecting` or `Destructive`; `NotClassified` when there are no changes |
 
+### Get-JIMConnectedSystemPasswordPolicy
+
+Reports what the Connected System itself said it will accept, read during a previous connection. Nothing here
+opens a new connection or changes anything.
+
+```powershell
+Get-JIMConnectedSystemPasswordPolicy -Id 3
+Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordPolicy
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `discovered` | `datetime?` | When JIM last read this from the system |
+| `minimumLength` | `int?` | The shortest password the system will accept |
+| `complexityRequired` | `bool?` | Whether the system enforces a complexity rule |
+| `requiredCharacterClassCount` | `int?` | How many character categories a password must draw on |
+| `recognisedCharacterClasses` | `string[]` | The categories this system counts towards that rule |
+| `passwordHistoryLength` | `int?` | How many previous passwords it remembers and refuses |
+| `maximumPasswordAgeDays` | `int?` | How long a password may live |
+| `minimumPasswordAgeDays` | `int?` | How soon it may be changed again |
+| `fineGrainedPolicySignal` | `string` | `Absent`, `Present` or `CouldNotDetermine` |
+| `hasAnyDiscoveredConstraint` | `bool` | Whether JIM discovered anything at all |
+
+!!! warning "A null means JIM could not read that rule, not that no such rule exists"
+    A directory withholds what a caller may not see by omitting it rather than refusing, so a null minimum
+    length does not mean any length is acceptable. Check `hasAnyDiscoveredConstraint` before treating the
+    figures as a description of what the system will accept. Where `fineGrainedPolicySignal` is `Present` or
+    `CouldNotDetermine`, the figures are a floor rather than a guarantee, because some accounts may be governed
+    by a stricter policy.
+
+#### Initial password attention (ById only)
+
+How many accounts in the Connected System are waiting on a person over their initial password.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ParkedInitialPasswordCount` | `int?` | Accounts whose target refused the password and which JIM has stopped retrying |
+| `ExpiredInitialPasswordCount` | `int?` | Accounts never given an initial password within its time to live |
+
+The two are never summed, because they ask for different things. Parked accounts are released by correcting the
+initial password settings on the [Synchronisation Rule](synchronisation-rules.md) that provisioned them and saving;
+`Get-JIMSyncRuleInitialPassword` reports what the target actually said. Expired accounts cannot be helped that way at
+all and need a password set by other means.
+
+```powershell title="Find the systems with initial password work waiting"
+Get-JIMConnectedSystem -All |
+    ForEach-Object { Get-JIMConnectedSystem -Id $_.Id } |
+    Where-Object { $_.ParkedInitialPasswordCount -or $_.ExpiredInitialPasswordCount } |
+    Select-Object Name, ParkedInitialPasswordCount, ExpiredInitialPasswordCount
+```
+
 !!! warning "Check `IsDeterminable` before treating `HasPendingChanges` as false"
     `HasPendingChanges` is also `$false` when JIM cannot tell: when the Connected System has never completed a Full
     Synchronisation, and when configuration change tracking is switched off. Scripts that gate a run on
@@ -148,12 +199,14 @@ Updates the configuration of an existing Connected System.
 # ById (default)
 Set-JIMConnectedSystem -Id <int> [-Name <string>] [-Description <string>]
     [-SettingValues <hashtable>] [-MaxExportParallelism <int>]
+    [-InitialPasswordTimeToLive <timespan>]
     [-UnresolvedReferenceHandling <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
     [-Description <string>] [-SettingValues <hashtable>]
-    [-MaxExportParallelism <int>] [-UnresolvedReferenceHandling <string>]
+    [-MaxExportParallelism <int>] [-InitialPasswordTimeToLive <timespan>]
+    [-UnresolvedReferenceHandling <string>]
     [-ChangeReason <string>] [-PassThru]
 ```
 
@@ -167,6 +220,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
 | `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16). Leave unset to let the connector recommend a conservative value (the LDAP Connector recommends 2 for capable directories, those tuned to a high Export Concurrency); JIM stays sequential (1) if the connector offers no recommendation. An explicitly set value always takes precedence. |
+| `InitialPasswordTimeToLive` | `timespan` | No | 7 days | How long an account provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Raise it ahead of a planned outage longer than the current window; accounts provisioned meanwhile otherwise expire without a password. See [Passwords](../concepts/passwords.md#how-long-jim-keeps-trying). |
 | `UnresolvedReferenceHandling` | `string` | No | `Error` | How import-time reference values that cannot be resolved to a Connected System Object are treated: `Error`, `Warn`, or `Ignore`. See [Unresolved reference handling](../configuration/connected-systems.md#unresolved-reference-handling). |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
@@ -261,10 +315,10 @@ Imports (or re-imports) the schema from the connected data source. This discover
 
 ```powershell
 # ById (default)
-Import-JIMConnectedSystemSchema -Id <int> [-PassThru]
+Import-JIMConnectedSystemSchema -Id <int> [-Preview] [-PassThru]
 
 # ByInputObject
-Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-PassThru]
+Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-PassThru]
 ```
 
 ### Parameters
@@ -273,16 +327,24 @@ Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-PassThru]
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById) | | Connected System identifier |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
-| `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after schema import |
+| `Preview` | `switch` | No | `$false` | Retrieves the schema and returns what a refresh would change, without persisting anything |
+| `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after schema import (not needed with `-Preview`, which always returns its result) |
 
 ### Output
 
-When `-PassThru` is specified, returns the Connected System Object. Otherwise, no output.
+With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output.
 
 ### Examples
 
 ```powershell title="Import schema for a Connected System"
 Import-JIMConnectedSystemSchema -Id 3
+```
+
+```powershell title="Preview a refresh, then apply only when nothing was removed or redefined"
+$preview = Import-JIMConnectedSystemSchema -Id 3 -Preview
+if (-not $preview.HasRemovalsOrDefinitionChanges) {
+    Import-JIMConnectedSystemSchema -Id 3 -Confirm:$false
+}
 ```
 
 ```powershell title="Pipeline: create a system, then import its schema"
@@ -292,9 +354,10 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 
 ### Notes
 
-- This operation is **destructive**: it replaces the existing schema. Any object type or attribute selections that no longer match the new schema are removed.
+- A refresh never deletes: additions and attribute definition updates are applied, while object types and attributes the Connected System no longer reports are retained in JIM and flagged in the result. See [Refreshing the schema](../configuration/connected-systems.md#refreshing-the-schema).
+- Check the preview's `DiscoveryWarnings` before applying: a partial schema read (for example, missing permissions) can make entries appear removed when they are not.
 - Schema import is required before creating Synchronisation Rules for a Connected System.
-- Supports `ShouldProcess` (Medium impact).
+- Supports `ShouldProcess` (Medium impact). `-Preview` bypasses it; a preview changes nothing, so there is nothing to confirm.
 
 ---
 
@@ -506,10 +569,12 @@ Get-JIMConnectorDefinition |
 
 Retrieves the object types and their attributes for a Connected System.
 
+Object Types the Connected System classified as internal (a directory's own configuration and operational classes) are omitted by default, matching what the portal's Schema tab shows. Pass `-IncludeInternal` to return them as well. An Object Type that is already selected is always returned, whatever its classification.
+
 ### Syntax
 
 ```powershell
-Get-JIMConnectedSystemObjectType -ConnectedSystemId <int>
+Get-JIMConnectedSystemObjectType -ConnectedSystemId <int> [-IncludeInternal]
 ```
 
 ### Parameters
@@ -517,15 +582,33 @@ Get-JIMConnectedSystemObjectType -ConnectedSystemId <int>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+| `IncludeInternal` | `switch` | No | Off | Also return Object Types the Connected System classified as internal. |
 
 ### Output
 
 Object type definitions with their attributes, selection state, and external ID configuration.
 
+Each Object Type also carries `Tags`, the classification key/value pairs the Connected System reported (for example `class-kind` = `structural`, `visibility` = `internal`), and `IsInternal`, derived from them.
+
+Each attribute carries `writability`, one of `Writable`, `ReadOnly` or `WritableOnCreate`. See [Attribute writability](../configuration/connected-systems.md#attribute-writability) for what each one means for Attribute Flow.
+
+A Reference attribute additionally carries `referencedObjectTypeId` and `referencedObjectTypeName` when the Connected System's schema declares which Object Type the reference points at (the SQL Connector's `referencesObjectType`); import reference resolution then resolves the reference within that Object Type alone. Both are `null` when the schema does not say. Read-only: discovered from the schema, never settable.
+
 ### Examples
 
 ```powershell title="Get object types for a Connected System"
 Get-JIMConnectedSystemObjectType -ConnectedSystemId 3
+```
+
+```powershell title="List the attributes JIM may only set when it creates the object"
+Get-JIMConnectedSystemObjectType -ConnectedSystemId 3 |
+    ForEach-Object { $_.attributes } |
+    Where-Object { $_.writability -eq 'WritableOnCreate' } |
+    Select-Object name, type
+```
+
+```powershell title="Include the directory's own internal object types"
+Get-JIMConnectedSystemObjectType -ConnectedSystemId 3 -IncludeInternal
 ```
 
 ```powershell title="Pipeline from Get-JIMConnectedSystem"
@@ -578,12 +661,13 @@ Set-JIMConnectedSystemObjectType -ConnectedSystemId 3 -ObjectTypeId 2 -Selected 
 ### Notes
 
 - Supports `ShouldProcess` (Medium impact).
+- Selecting an Object Type is refused, with the Connector's own message, when the Connected System's settings cannot serve it: for the JIM SQL Connector, selecting an Object Type that lacks a `watermarkColumn` or a `changeLog` while the matching Delta Import Mode is set. Deselecting is always accepted.
 
 ---
 
 ## Set-JIMConnectedSystemAttribute
 
-Updates the selection and external ID configuration of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
+Updates the selection, external ID configuration and data type of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
 
 ### Syntax
 
@@ -591,7 +675,7 @@ Updates the selection and external ID configuration of attributes on a Connected
 # Single (default)
 Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
     -AttributeId <int> [-Selected <bool>] [-IsExternalId <bool>]
-    [-IsSecondaryExternalId <bool>] [-PassThru]
+    [-IsSecondaryExternalId <bool>] [-Type <string>] [-PassThru]
 
 # Bulk
 Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
@@ -608,8 +692,11 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
 | `Selected` | `bool` | No (Single) | | Whether this attribute is selected for synchronisation |
 | `IsExternalId` | `bool` | No (Single) | | Whether this attribute is the primary external identifier |
 | `IsSecondaryExternalId` | `bool` | No (Single) | | Whether this attribute is a secondary external identifier |
-| `AttributeUpdates` | `hashtable` | Yes (Bulk) | | Hashtable of updates. Keys are attribute IDs; values are hashtables with `selected`, `isExternalId`, and/or `isSecondaryExternalId`. |
+| `Type` | `string` | No (Single) | | Overrides the data type schema discovery inferred. One of `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary`. `Integer` is the friendly name for the Number type. |
+| `AttributeUpdates` | `hashtable` | Yes (Bulk) | | Hashtable of updates. Keys are attribute IDs; values are hashtables with `selected`, `isExternalId`, and/or `isSecondaryExternalId`. A data type cannot be set in bulk. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated attribute(s) |
+
+`-Type` is accepted only where the Connector's schema cannot state a type definitively, which today means the JIM File Connector and the JIM SQL Connector. It is refused once the attribute is referenced by a Synchronisation Rule or holds values. See [Attribute data types](../configuration/connected-systems.md#attribute-data-types) for when an override is needed and why.
 
 ### Output
 
@@ -623,6 +710,12 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeI
 
 ```powershell title="Mark an attribute as the primary external ID"
 Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 10 -IsExternalId $true
+```
+
+```powershell title="Correct the data type of an Oracle NUMBER column"
+# Oracle has one numeric type, so a NUMBER(10) employee identifier is read as a Long Number by default.
+# Recording it as a whole number lets it flow into the built-in Employee Number Metaverse Attribute.
+Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 5 -Type Integer
 ```
 
 ```powershell title="Bulk-update multiple attributes"
@@ -754,13 +847,13 @@ Set-JIMConnectedSystemPartition -ConnectedSystemId 3 -PartitionId 1 -Selected $f
 
 ## Set-JIMConnectedSystemContainer
 
-Updates the selection state of a container within a partition.
+Updates the selection state, exclusion and scope of a container within a partition.
 
 ### Syntax
 
 ```powershell
 Set-JIMConnectedSystemContainer -ConnectedSystemId <int> -ContainerId <int>
-    [-Selected <bool>] [-PassThru]
+    [-Selected <bool>] [-Excluded <bool>] [-Scope <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -770,6 +863,8 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId <int> -ContainerId <int>
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
 | `ContainerId` | `int` | Yes | | Container identifier. Alias: `Id`. Accepts pipeline input by property name. |
 | `Selected` | `bool` | No | | Whether this container is selected for synchronisation |
+| `Excluded` | `bool` | No | | Whether this container is carved out of a selection an ancestor made, leaving the objects within it deliberately unimported. Omit to leave the stored exclusion unchanged. |
+| `Scope` | `string` | No | | How far beneath the container objects are imported from: `Subtree` or `OneLevel`. Omit to leave the stored scope unchanged. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated container |
 
 ### Output
@@ -782,6 +877,26 @@ When `-PassThru` is specified, returns the updated container. Otherwise, no outp
 Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Selected $true
 ```
 
+```powershell title="Select a container without its child containers"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Selected $true -Scope OneLevel
+```
+
+```powershell title="Widen an already selected container back to its whole subtree"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Scope Subtree
+```
+
+```powershell title="Exclude a container from the selection above it"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Excluded $true
+```
+
+```powershell title="Replace a selection with an exclusion"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Selected $false -Excluded $true
+```
+
+```powershell title="Hand an excluded container back into scope"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Excluded $false
+```
+
 ```powershell title="Select multiple containers via pipeline"
 @(7, 8, 9) | ForEach-Object {
     Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId $_ -Selected $true
@@ -791,7 +906,122 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Selected $t
 ### Notes
 
 - The parent partition must also be selected for container selection to take effect during import operations.
+- `Scope` defaults to `Subtree` on containers that have never had it set, which is how container selection behaved before the option existed.
+- Narrowing a container to `OneLevel` takes the objects beneath it out of scope, exactly as deselecting those containers would. The Connected System Objects already imported from them become obsolete on the next import.
+- `Selected` and `Excluded` are mutually exclusive: a container states one thing about itself. A request that would leave both set is rejected with a 400, whether it names both or names one against a stored other, so moving a container from a selection to an exclusion means setting both in the same call.
+- Excluding a container takes the objects within it, and within every container beneath it, out of scope. A container beneath an exclusion can be selected in its own right to bring that branch back, because whichever statement is nearest to an object decides its fate. See [Excluding a Container](../connectors/jim-ldap-connector.md#excluding-a-container).
 - Supports `ShouldProcess` (Medium impact).
+
+---
+
+## Get-JIMConnectedSystemContainerScopeText
+
+Reads a Connected System's Container Scope as text, one statement per line.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemContainerScopeText -ConnectedSystemId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name. |
+
+### Output
+
+A `string`: the Container Scope in canonical form, one statement per line, in hierarchy order. Empty where nothing is selected.
+
+Text read here can be passed straight back to `Set-JIMConnectedSystemContainerScopeText`, which leaves the scope exactly as it was.
+
+### Examples
+
+```powershell title="Read the Container Scope"
+Get-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3
+```
+
+```text
+include OU=Corp,DC=example,DC=com
+exclude OU=Service Accounts,OU=Corp,DC=example,DC=com
+include OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com
+```
+
+```powershell title="Save the Container Scope to a file"
+Get-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3 | Set-Content ./scope.txt
+```
+
+```powershell title="Copy the Container Scope to another Connected System"
+Get-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3 |
+    Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId 4
+```
+
+### Notes
+
+- Every path is the Container's identifier in the Connected System's own terms, which for a directory is its Distinguished Name.
+- Copying a scope between Connected Systems requires the target to have discovered the same Containers; a path naming one it has not is refused.
+
+---
+
+## Set-JIMConnectedSystemContainerScopeText
+
+States a Connected System's whole Container Scope as text.
+
+### Syntax
+
+```powershell
+Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId <int> -Text <string> [-PassThru]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
+| `Text` | `string` | Yes | | The Container Scope to apply. Accepts pipeline input. Empty text clears every selection and exclusion. |
+| `PassThru` | `switch` | No | `$false` | Returns the canonical text for the scope now in force |
+
+Each line is a directive, an optional `one-level`, then the Container's path:
+
+| Statement | Means |
+|---|---|
+| `include <path>` | Manage this Container and everything beneath it. `+` is accepted as shorthand. |
+| `include one-level <path>` | Manage the objects held directly in this Container, and no Container beneath it. |
+| `exclude <path>` | Carve this Container out of the selection an ancestor made. `-` is accepted as shorthand. |
+| `exclude one-level <path>` | Carve out the objects held directly in this Container only. |
+
+Blank lines and whole lines beginning with `#` are ignored.
+
+### Output
+
+When `-PassThru` is specified, returns the canonical Container Scope text as a `string`. Otherwise, no output.
+
+### Examples
+
+```powershell title="State a Container Scope with a carve-out and a re-inclusion"
+Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3 -Text @"
+include OU=Corp,DC=example,DC=com
+exclude OU=Service Accounts,OU=Corp,DC=example,DC=com
+include OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com
+"@
+```
+
+```powershell title="Apply a Container Scope held in a file"
+Get-Content ./scope.txt -Raw | Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3
+```
+
+```powershell title="Manage only the objects held directly in a container"
+Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3 -Text 'include one-level OU=Corp,DC=example,DC=com' -PassThru
+```
+
+### Notes
+
+- The text states the whole of Container Scope rather than a change to it. A Container it does not name states nothing, so omitting a line is how a Container is deselected, and empty text clears the scope entirely.
+- Partition selection is left alone, except that naming a Container selects the partition holding it.
+- It is applied all-or-nothing. A path naming no Container, a Container named twice, and a statement an ancestor already makes are each refused with the line that caused them, and nothing is changed.
+- This is a synchronisation-affecting change: taking a Container out of scope obsoletes the objects imported through it on the next Full Import, and the synchronisation after that disconnects them. Preview it first with [`New-JIMConfigurationChangePreview`](previews.md).
+- Supports `ShouldProcess` (High impact), so it prompts before applying unless you pass `-Confirm:$false`.
 
 ---
 
@@ -1152,7 +1382,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All 
 ### Output
 
 - **List / ListAll**: Pending Export operations with export type (Add, Update, Delete) and summary of changes.
-- **ById**: Detailed view of a single Pending Export, including all attribute changes.
+- **ById**: Detailed view of a single Pending Export, including all attribute changes. `UnresolvedReferences` lists each reference change not yet written (`AttributeName`, `ReferencedMetaverseObjectId`, `ReferencedMetaverseObjectDisplayName`) with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object exists in this Connected System but has no anchor yet) or `NotInTargetSystem` (the referenced object has no Connected System Object in this Connected System). See [Unresolved reference handling on export](../configuration/connected-systems.md#on-export).
 - **AttributeChanges / AttributeChangesAll**: Paged or complete list of changes for a specific multi-valued attribute.
 
 ### Examples
@@ -1232,7 +1462,7 @@ Sets the password on one Connected System Object.
 
 The password is written straight to the Connected System: nothing is staged as a Pending Export, nothing is retried, and JIM stores nothing. The attempt is recorded as an Activity against the object, carrying the outcome and, where the system refused, its verbatim reason.
 
-This is the automation counterpart of the **Set Password** action in the administration portal. You supply the password rather than asking JIM to generate one, because a generated password would have to be returned in a response body and JIM's API never puts a password in one. Use the portal when you want JIM to generate one that follows the discovered policy.
+This is the automation counterpart of the **Set Password** action in the administration portal. Supply the password with `-Password`, or have JIM generate one that follows the Connected System's discovered policy with `-Generate`. A generated password is returned to you, once, because you asked for it; JIM stores it nowhere.
 
 ### Syntax
 
@@ -1282,11 +1512,22 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b
 
 ### Notes
 
-- **This is a password-reset primitive.** Anyone who can call it can reset the password of any account in this connector space, subject only to what the Connected System's own service account is permitted to do.
+- **This resets the password on whichever account you point it at.** Anyone who can call it can reset the password of any account in this connector space, subject only to what the Connected System's own service account is permitted to do.
 - The password is taken as a `SecureString` so it does not sit in your session's command history in clear text. It is unwrapped only to be sent over TLS.
 - A Connected System that cannot honour the requested expiry behaviour applies what it can and reports the difference in `ExpiryBehaviourWarning`; the password is still set.
 - A rejected password returns an error carrying the system's own reason. A Connected System that could not be reached is reported distinctly, because nothing was established about the password itself and the same request is worth repeating.
 - Routine initial passwords belong on the Synchronisation Rule that provisions the account; see `Set-JIMSyncRuleInitialPassword`.
+- Pass `-Generate` instead of `-Password` to have JIM produce a password satisfying the policy it discovered on
+  the Connected System. Prefer this to inventing one in your own script: JIM knows what the target demands, and
+  a hand-rolled generator rediscovers the passphrase trap, where three words offer two character categories
+  against a directory that wants three. The generated password comes back on the result's `password` property
+  as a SecureString, whether or not `-PassThru` is given, and **that is the only chance to capture it**; JIM
+  stores nothing and cannot return it again.
+
+```powershell title="Set a compliant password without choosing one"
+$result = Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 3 -Id $csoId -Generate -EnableAccount -Force
+ConvertFrom-SecureString -SecureString $result.password -AsPlainText
+```
 
 ---
 

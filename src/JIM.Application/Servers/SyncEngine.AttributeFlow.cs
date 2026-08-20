@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using DynamicExpresso.Exceptions;
+using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -73,6 +74,19 @@ public partial class SyncEngine
                     contributingSyncRuleId, syncRuleMapping.TargetMetaverseAttribute.Id, mvo.Id);
                 return;
             }
+
+            // This contribution has won the gate, so under winner-takes-all-values a losing rule contributes
+            // nothing. Discard any values a losing rule staged for this attribute earlier in this same pass
+            // (#1199). The Process*Attribute writers below diff against the Metaverse Object's PERSISTED values,
+            // which cannot see a pending addition, so without this a second contributing rule appends its value
+            // beside the loser's instead of replacing it, leaving a single-valued attribute holding two values.
+            // Reachable only when two contributing rules are evaluated in the same pass, which in turn requires
+            // two import rules on the SAME Connected System contributing to one attribute: the fine-grained
+            // authority topology. Contributions from different systems arrive in different runs, by which point
+            // the incumbent's value is persisted and the ordinary diff removes it.
+            mvo.PendingAttributeValueAdditions.RemoveAll(av =>
+                av.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id &&
+                av.ContributedBySyncRuleId != contributingSyncRuleId);
         }
 
         foreach (var source in syncRuleMapping.Sources.OrderBy(q => q.Order))
@@ -114,6 +128,7 @@ public partial class SyncEngine
 
                                 errors?.Add(new AttributeFlowError
                                 {
+                                    Kind = AttributeFlowErrorKind.MultiValuedToSingleValued,
                                     SourceAttributeName = csotAttribute.Name,
                                     TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute.Name,
                                     ValueCount = effectiveValueCount
@@ -175,7 +190,7 @@ public partial class SyncEngine
             }
             else if (!string.IsNullOrWhiteSpace(source.Expression))
             {
-                ProcessExpressionMapping(cso, mvo, syncRuleMapping, source, csoType, expressionEvaluator, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
+                ProcessExpressionMapping(cso, mvo, syncRuleMapping, source, csoType, expressionEvaluator, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext, errors);
             }
             else if (source.MetaverseAttribute != null)
                 throw new InvalidDataException("SyncRuleMappingSource.MetaverseAttribute being populated is not supported for synchronisation operations. " +
@@ -194,6 +209,47 @@ public partial class SyncEngine
     /// </summary>
     private static IEnumerable<MetaverseObjectAttributeValue> GetEffectiveAttributeValues(MetaverseObject mvo, int attributeId)
         => mvo.AttributeValues.Where(av => av.AttributeId == attributeId && !mvo.PendingAttributeValueRemovals.Contains(av));
+
+    /// <summary>
+    /// Takes over provenance on the values a winning contribution left in place (#1292). The typed writers below
+    /// diff by value, so a contribution that supplies the value the Metaverse Object already holds stages neither an
+    /// addition nor a removal, and the surviving row keeps whichever rule and system stamped it last. That stamp is
+    /// not cosmetic: it is what <see cref="FindEffectiveIncumbentSyncRuleId"/> reads, so leaving it stale hands the
+    /// priority gate the wrong incumbent. Two consequences, both reachable through ordinary administration:
+    /// <list type="bullet">
+    /// <item>Deleting a contributing Synchronisation Rule nulls the stamp (the FK is <c>ON DELETE SET NULL</c>). A
+    /// null incumbent opens the gate to every contributor, and the surviving contributor's identical value would
+    /// never repair it.</item>
+    /// <item>A higher-priority rule that contributes the same value as the incumbent would leave the lower-priority
+    /// rule recorded as owner. The gate always lets a rule overwrite its own value, so the loser could then change
+    /// the attribute out from under the winner.</item>
+    /// </list>
+    /// Call this from each writer AFTER its removals are staged: <see cref="GetEffectiveAttributeValues"/> then
+    /// returns exactly the rows this contribution matched, and the call is a no-op when the value was replaced.
+    /// A contribution with no persisted Synchronisation Rule id takes nothing over, so an unpersisted rule (tests,
+    /// preview evaluation) cannot erase a real stamp. Only rows whose provenance actually differs are touched, so
+    /// the persistence layer writes nothing for the overwhelmingly common unchanged case.
+    /// </summary>
+    private static void TakeOverProvenance(
+        MetaverseObject mvo,
+        int attributeId,
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
+    {
+        if (!contributingSyncRuleId.HasValue)
+            return;
+
+        foreach (var surviving in GetEffectiveAttributeValues(mvo, attributeId)
+            .Where(av => av.ContributedBySyncRuleId != contributingSyncRuleId || av.ContributedBySystemId != contributingSystemId))
+        {
+            Log.Verbose("TakeOverProvenance: Synchronisation Rule {RuleId} takes over attribute {AttributeId} on MVO {MvoId} " +
+                "from Synchronisation Rule {PreviousRuleId}.",
+                contributingSyncRuleId, attributeId, mvo.Id, surviving.ContributedBySyncRuleId);
+
+            surviving.ContributedBySyncRuleId = contributingSyncRuleId;
+            surviving.ContributedBySystemId = contributingSystemId;
+        }
+    }
 
     /// <summary>
     /// Identifies the Synchronisation Rule that currently owns a Metaverse Object attribute's value (the incumbent,
@@ -297,7 +353,8 @@ public partial class SyncEngine
         int? contributingSystemId,
         int? contributingSyncRuleId,
         int mvoObjectTypeId,
-        AttributePriorityContext? priorityContext)
+        AttributePriorityContext? priorityContext,
+        List<AttributeFlowError>? errors)
     {
         if (expressionEvaluator == null)
         {
@@ -313,6 +370,51 @@ public partial class SyncEngine
         var context = new ExpressionContext(
             metaverseAttributes: null,
             connectedSystemAttributes: csAttributeDictionary);
+
+        // Missing Input Behaviour (#1361): an Expression whose input is absent does not fail, it evaluates cleanly
+        // and returns a structurally broken value ("ada.@corp.local" for a person with no surname) that no layer
+        // downstream can tell from a good one. Whether that matters is the administrator's call, not JIM's: an
+        // Expression built on IIF or IsNullOrEmpty handles the absence itself, and one building an identifier
+        // must not run at all.
+        //
+        // Only Connected System inputs are considered here. Inbound Attribute Flow evaluates against the Connected
+        // System Object alone (metaverseAttributes above is deliberately null), so an mv[...] accessor in an
+        // inbound Expression is unsupported rather than an object missing a value, and treating it as missing
+        // would fail every object on a mapping that is misconfigured in a different way entirely.
+        if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
+        {
+            var missingInputs = ExpressionInputResolver.FindMissingInputs(source.Expression, ExpressionInputSource.ConnectedSystem, csAttributeDictionary);
+            if (missingInputs.Count > 0)
+            {
+                switch (source.MissingInputBehaviour)
+                {
+                    case MissingInputBehaviour.ContributeNoValue:
+                        // Not a fault: the same outcome an Expression returning null produces, resolved by
+                        // Attribute Priority and "Null is a value", so a lower-priority contributor can win.
+                        Log.Debug("ProcessExpressionMapping: not evaluating for CSO {CsoId}; no value for {MissingInputs}. Contributing no value.",
+                            cso.Id, string.Join(", ", missingInputs));
+                        ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
+                        return;
+
+                    case MissingInputBehaviour.FailMapping:
+                        // One attribute lost, the object's others unaffected: the shape MultiValuedToSingleValued
+                        // already uses, recorded by the worker as an ExpressionMissingInput execution item.
+                        errors?.Add(new AttributeFlowError
+                        {
+                            Kind = AttributeFlowErrorKind.ExpressionMissingInput,
+                            TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute!.Name,
+                            Expression = source.Expression,
+                            MissingInputs = missingInputs
+                        });
+                        return;
+
+                    case MissingInputBehaviour.FailObject:
+                        // The whole object is left untouched, exactly as for an Expression that threw.
+                        throw new SyncExpressionMissingInputException(source.Expression,
+                            syncRuleMapping.TargetMetaverseAttribute?.Name, missingInputs);
+                }
+            }
+        }
 
         // Only the evaluation itself is guarded. A thrown expression must be surfaced as an errored
         // object, never swallowed and never conflated with a deliberate null (which clears the value).
@@ -407,6 +509,8 @@ public partial class SyncEngine
                         syncRuleMapping.TargetMetaverseAttribute!.Name, LogSanitiser.Sanitise(resultString), mvo.Id);
                 }
             }
+
+            TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
         }
     }
 
@@ -511,6 +615,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, targetAttributeId, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessNumberAttribute(
@@ -544,6 +650,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessLongNumberAttribute(
@@ -575,6 +683,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessDecimalAttribute(
@@ -608,6 +718,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessDateTimeAttribute(
@@ -649,6 +761,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessBinaryAttribute(
@@ -683,6 +797,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessReferenceAttribute(
@@ -801,6 +917,11 @@ public partial class SyncEngine
 
             mvo.PendingAttributeValueAdditions.Add(newMvoAv);
         }
+
+        // Only take provenance over when this pass saw the whole picture. With unresolved references the removals are
+        // deferred to the cross-page resolution pass, so the surviving rows are not yet this contribution's set.
+        if (!hasUnresolvedReferences)
+            TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessGuidAttribute(
@@ -834,6 +955,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessBooleanAttribute(
@@ -875,6 +998,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static Dictionary<string, object?> BuildCsoAttributeDictionary(
@@ -983,6 +1108,8 @@ public partial class SyncEngine
             Log.Debug("ProcessExpressionArrayResult: Expression array result for {AttributeName} - removing {RemoveCount}, adding {AddCount} values on MVO {MvoId}",
                 targetAttribute.Name, valuesToRemove.Count(), valuesToAdd.Count(), mvo.Id);
         }
+
+        TakeOverProvenance(mvo, targetAttribute.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static MetaverseObjectAttributeValue? CreateMvoAttributeValueFromExpressionResult(

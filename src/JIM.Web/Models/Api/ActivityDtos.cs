@@ -197,6 +197,28 @@ public class ActivityHeader
     public int ChildActivityCount { get; set; }
 
     /// <summary>
+    /// If a Schedule Execution produced this Activity, the execution's unique identifier. Null otherwise.
+    /// </summary>
+    public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>
+    /// The step within the Schedule Execution that produced this Activity (0-based). Read with
+    /// <see cref="ScheduleExecutionId"/> to identify exactly which step ran. Null when no Schedule produced it.
+    /// </summary>
+    public int? ScheduleStepIndex { get; set; }
+
+    /// <summary>
+    /// If a Schedule produced this Activity, the Schedule's unique identifier. Null otherwise.
+    /// </summary>
+    public Guid? ScheduledByScheduleId { get; set; }
+
+    /// <summary>
+    /// The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads
+    /// correctly after the Schedule has been renamed or deleted. Null when no Schedule produced this Activity.
+    /// </summary>
+    public string? ScheduledByScheduleName { get; set; }
+
+    /// <summary>
     /// Creates a header DTO from an Activity entity.
     /// </summary>
     public static ActivityHeader FromEntity(Activity activity)
@@ -247,7 +269,13 @@ public class ActivityHeader
             TotalPendingExports = activity.TotalPendingExports,
 
             // Shared
-            TotalErrors = activity.TotalErrors
+            TotalErrors = activity.TotalErrors,
+
+            // Schedule attribution
+            ScheduleExecutionId = activity.ScheduleExecutionId,
+            ScheduleStepIndex = activity.ScheduleStepIndex,
+            ScheduledByScheduleId = activity.ScheduledByScheduleId,
+            ScheduledByScheduleName = activity.ScheduledByScheduleName
         };
     }
 
@@ -420,6 +448,28 @@ public class ActivityDetailDto
     public List<ActivityPhaseDto> Phases { get; set; } = [];
 
     /// <summary>
+    /// If a Schedule Execution produced this Activity, the execution's unique identifier. Null otherwise.
+    /// </summary>
+    public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>
+    /// The step within the Schedule Execution that produced this Activity (0-based). Read with
+    /// <see cref="ScheduleExecutionId"/> to identify exactly which step ran. Null when no Schedule produced it.
+    /// </summary>
+    public int? ScheduleStepIndex { get; set; }
+
+    /// <summary>
+    /// If a Schedule produced this Activity, the Schedule's unique identifier. Null otherwise.
+    /// </summary>
+    public Guid? ScheduledByScheduleId { get; set; }
+
+    /// <summary>
+    /// The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads
+    /// correctly after the Schedule has been renamed or deleted. Null when no Schedule produced this Activity.
+    /// </summary>
+    public string? ScheduledByScheduleName { get; set; }
+
+    /// <summary>
     /// For a configuration-change activity, the optional reason supplied for the change.
     /// </summary>
     public string? ChangeReason { get; set; }
@@ -473,6 +523,10 @@ public class ActivityDetailDto
             MetaverseObjectId = activity.MetaverseObjectId,
             ExampleDataTemplateId = activity.ExampleDataTemplateId,
             ExecutionStats = stats != null ? ActivityRunProfileExecutionStatsDto.FromEntity(stats) : null,
+            ScheduleExecutionId = activity.ScheduleExecutionId,
+            ScheduleStepIndex = activity.ScheduleStepIndex,
+            ScheduledByScheduleId = activity.ScheduledByScheduleId,
+            ScheduledByScheduleName = activity.ScheduledByScheduleName,
             ChangeReason = activity.ChangeReason,
             ConfigurationChangeVersion = activity.ConfigurationChangeVersion,
             ConfigurationChangeSnapshot = ConfigurationSnapshotService.Deserialise(activity.ConfigurationChangeSnapshot)
@@ -620,6 +674,26 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalCreated { get; set; }
     #endregion
 
+    #region Container Exclusion Stats
+    /// <summary>
+    /// How many entries this import read from the Connected System and discarded because an excluded Container
+    /// carved them out, keyed by that Container's id.
+    /// </summary>
+    /// <remarks>
+    /// A directory cannot express "this subtree except that branch" in one search, so an exclusion is honoured by
+    /// reading the entries it covers and throwing them away. Empty for every run that discarded nothing, which is
+    /// every run on a Connected System carrying no exclusions. Keyed by id because the Container can be renamed
+    /// or removed after the run; resolve the name through
+    /// <c>GET connected-systems/{id}/partitions</c> when displaying it.
+    /// </remarks>
+    public Dictionary<int, int> EntriesDiscardedByExcludedContainer { get; set; } = new();
+
+    /// <summary>
+    /// Entries discarded across every exclusion, which is the figure that answers "why was this import slow?".
+    /// </summary>
+    public int TotalEntriesDiscardedByExclusion { get; set; }
+    #endregion
+
     /// <summary>
     /// Creates a DTO from the stats entity.
     /// </summary>
@@ -662,7 +736,11 @@ public class ActivityRunProfileExecutionStatsDto
             TotalPendingExportsFailed = stats.TotalPendingExportsFailed,
 
             // Direct Creation
-            TotalCreated = stats.TotalCreated
+            TotalCreated = stats.TotalCreated,
+
+            // Container exclusions
+            EntriesDiscardedByExcludedContainer = stats.EntriesDiscardedByExcludedContainer,
+            TotalEntriesDiscardedByExclusion = stats.TotalEntriesDiscardedByExclusion
         };
     }
 }

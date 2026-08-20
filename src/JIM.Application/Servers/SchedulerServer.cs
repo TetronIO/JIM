@@ -6,6 +6,7 @@ using System.Text.Json;
 using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
+using JIM.Models.Scheduling.DTOs;
 using JIM.Models.Tasking;
 using JIM.Models.Utility;
 using NCrontab;
@@ -49,14 +50,49 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetAllSchedulesAsync();
     }
 
-    public async Task<PagedResultSet<Schedule>> GetSchedulesAsync(
+    /// <summary>
+    /// Gets a page of Schedules as lightweight headers, each carrying its step count and the outcome of its most
+    /// recent execution, so a list view can show whether the last run succeeded rather than only when it happened.
+    /// </summary>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="searchQuery">Optional filter over name and description.</param>
+    /// <param name="sortBy">Optional field to sort by (name, isEnabled, lastRunTime, nextRunTime).</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    public async Task<PagedResultSet<ScheduleHeader>> GetScheduleHeadersAsync(
         int page,
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false)
     {
-        return await Application.Repository.Scheduling.GetSchedulesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
+        return await Application.Repository.Scheduling.GetScheduleHeadersAsync(page, pageSize, searchQuery, sortBy, sortDescending);
+    }
+
+    /// <summary>
+    /// Gets a window of Schedule headers addressed by absolute offset and count, for the virtualised
+    /// (infinite-scroll) Schedules grid. Takes the same search and sort as
+    /// <see cref="GetScheduleHeadersAsync"/> and shares its query core. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="offset">The zero-based index of the first Schedule wanted; negative values read as zero.</param>
+    /// <param name="count">How many Schedules are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive filter over name and description.</param>
+    /// <param name="sortBy">Optional field to sort by (name, isEnabled, lastRunTime, nextRunTime).</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<ScheduleHeader>> GetScheduleHeadersRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Scheduling.GetScheduleHeadersRangeAsync(
+            offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
     }
 
     public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
@@ -241,6 +277,34 @@ public class SchedulerServer
     }
 
     /// <summary>
+    /// Gets a window of Schedule Executions addressed by absolute offset and count, for the virtualised
+    /// (infinite-scroll) Schedule Execution grids. Takes the same filter and sort as
+    /// <see cref="GetScheduleExecutionsAsync"/> and shares its query core. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="scheduleId">Optional filter by Schedule ID; null lists every Schedule's executions.</param>
+    /// <param name="offset">The zero-based index of the first execution wanted; negative values read as zero.</param>
+    /// <param name="count">How many executions are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive filter over the Schedule name and the initiator's name.</param>
+    /// <param name="sortBy">Optional field to sort by (queuedAt, startedAt, completedAt, status).</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<ScheduleExecution>> GetScheduleExecutionsRangeAsync(
+        Guid? scheduleId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Scheduling.GetScheduleExecutionsRangeAsync(
+            scheduleId, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
+    }
+
+    /// <summary>
     /// Gets a Schedule Execution by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the execution.</param>
@@ -256,6 +320,175 @@ public class SchedulerServer
     public async Task<ScheduleExecution?> GetScheduleExecutionWithScheduleAsync(Guid id)
     {
         return await Application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(id);
+    }
+
+    /// <summary>
+    /// Gets a Schedule Execution with its Schedule and the derived state of every step: how far each step got, when,
+    /// what it reported, and which Activity produced it.
+    /// </summary>
+    /// <remarks>
+    /// Step outcomes are read from Activities rather than Worker Tasks. Worker Tasks are deleted the moment they
+    /// finish, so they only describe steps that are still live; Activities persist and are the durable record. A
+    /// still-live Worker Task therefore takes precedence (its Activity is necessarily still in progress), the
+    /// Activity is used once the task is gone, and where neither exists the status is inferred from how far the
+    /// execution itself got.
+    /// Shared by GET /api/v1/schedule-executions/{id} and the portal's Schedule Execution detail page; the two must
+    /// not diverge.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the execution.</param>
+    /// <returns>The execution and its per-step state, or null if no such execution exists.</returns>
+    public async Task<ScheduleExecutionDetail?> GetScheduleExecutionDetailAsync(Guid id)
+    {
+        var execution = await Application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(id);
+        if (execution == null)
+            return null;
+
+        var detail = new ScheduleExecutionDetail { Execution = execution };
+
+        // A deleted Schedule leaves its executions behind, so there are no step definitions to describe.
+        if (execution.Schedule == null)
+            return detail;
+
+        // Activities survive Worker Task deletion, so they carry the outcome of every step that has run.
+        var activities = await Application.Activities.GetActivitiesByScheduleExecutionAsync(id);
+        var activitiesByStep = activities.GroupBy(a => a.ScheduleStepIndex ?? -1)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Worker Tasks only exist while a step is queued or running; they describe the live steps.
+        var workerTasks = await Application.Tasking.GetWorkerTasksByScheduleExecutionAsync(id);
+        var tasksByStep = workerTasks.GroupBy(t => t.ScheduleStepIndex ?? -1)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var steps = await Application.Repository.Scheduling.GetScheduleStepsAsync(execution.ScheduleId);
+        var stepsByIndex = steps.GroupBy(s => s.StepIndex)
+            .ToDictionary(g => g.Key, g => g.OrderBy(s => s.ConnectedSystemId).ToList());
+
+        var stepNames = await GetRunProfileStepNamesAsync(steps);
+
+        foreach (var stepIndex in stepsByIndex.Keys.OrderBy(i => i))
+        {
+            var stepsAtIndex = stepsByIndex[stepIndex];
+            var stepActivities = activitiesByStep.GetValueOrDefault(stepIndex);
+            var stepTasks = tasksByStep.GetValueOrDefault(stepIndex);
+
+            foreach (var step in stepsAtIndex)
+            {
+                // Parallel steps share a step index, so the Connected System is what tells their Activities apart.
+                // Where an index holds a single step, fall back to whatever is there: steps that are not Run
+                // Profile steps carry no Connected System to match on.
+                var activity = stepActivities?.FirstOrDefault(a => a.ConnectedSystemId == step.ConnectedSystemId)
+                               ?? (stepsAtIndex.Count == 1 ? stepActivities?.FirstOrDefault() : null);
+                var task = stepTasks?.FirstOrDefault(t => t is SynchronisationWorkerTask swt && swt.ConnectedSystemId == step.ConnectedSystemId)
+                           ?? (stepsAtIndex.Count == 1 ? stepTasks?.FirstOrDefault() : null);
+
+                string? connectedSystemName = null;
+                string? runProfileName = null;
+                if (step.ConnectedSystemId.HasValue && stepNames.TryGetValue(step.ConnectedSystemId.Value, out var names))
+                {
+                    connectedSystemName = names.ConnectedSystemName;
+                    if (step.RunProfileId.HasValue)
+                        runProfileName = names.RunProfileNames.GetValueOrDefault(step.RunProfileId.Value);
+                }
+
+                detail.Steps.Add(new ScheduleExecutionStepState
+                {
+                    ScheduleStepId = step.Id,
+                    StepIndex = stepIndex,
+                    Name = step.Name ?? $"Step {stepIndex + 1}",
+                    StepType = step.StepType,
+                    ExecutionMode = step.ExecutionMode,
+                    ConnectedSystemId = step.ConnectedSystemId,
+                    ConnectedSystemName = connectedSystemName,
+                    RunProfileId = step.RunProfileId,
+                    RunProfileName = runProfileName,
+                    Status = DeriveStepStatus(task, activity, stepIndex, execution.CurrentStepIndex, execution.Status),
+                    TaskId = task?.Id,
+                    StartedAt = activity?.Executed,
+                    CompletedAt = activity != null && IsTerminal(activity.Status)
+                        ? activity.Executed + (activity.TotalActivityTime ?? TimeSpan.Zero)
+                        : null,
+                    ErrorMessage = activity?.ErrorMessage,
+                    ActivityId = activity?.Id,
+                    ActivityStatus = activity?.Status,
+                    ContinueOnFailure = step.ContinueOnFailure
+                });
+            }
+        }
+
+        return detail;
+    }
+
+    /// <summary>
+    /// Resolves the Connected System and Run Profile names for a Schedule's Run Profile steps.
+    /// </summary>
+    /// <remarks>
+    /// Run Profile steps store no name of their own, so without this every one of them reads "Step 1", "Step 2" and
+    /// the step list says nothing about what actually ran. One Run Profile lookup per distinct Connected System,
+    /// not per step, so a Schedule with several steps against one system costs one query.
+    /// </remarks>
+    private async Task<Dictionary<int, (string? ConnectedSystemName, Dictionary<int, string> RunProfileNames)>> GetRunProfileStepNamesAsync(
+        List<ScheduleStep> steps)
+    {
+        var connectedSystemIds = steps
+            .Where(s => s.ConnectedSystemId.HasValue)
+            .Select(s => s.ConnectedSystemId!.Value)
+            .Distinct()
+            .ToList();
+
+        var names = new Dictionary<int, (string? ConnectedSystemName, Dictionary<int, string> RunProfileNames)>();
+        if (connectedSystemIds.Count == 0)
+            return names;
+
+        var headers = await Application.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        var headersById = headers.ToDictionary(h => h.Id, h => h.Name);
+
+        // Only the Connected Systems that actually have a Run Profile step need their Run Profiles listing; a
+        // PowerShell or executable step names a Connected System without referencing a Run Profile at all.
+        var systemsWithRunProfileSteps = steps
+            .Where(s => s.ConnectedSystemId.HasValue && s.RunProfileId.HasValue)
+            .Select(s => s.ConnectedSystemId!.Value)
+            .Distinct()
+            .ToHashSet();
+
+        foreach (var connectedSystemId in connectedSystemIds)
+        {
+            var runProfileNames = new Dictionary<int, string>();
+            if (systemsWithRunProfileSteps.Contains(connectedSystemId))
+            {
+                var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
+                runProfileNames = runProfiles.ToDictionary(rp => rp.Id, rp => rp.Name);
+            }
+
+            names[connectedSystemId] = (headersById.GetValueOrDefault(connectedSystemId), runProfileNames);
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// Whether an Activity has finished, in any outcome. Only then does it have an end time.
+    /// </summary>
+    private static bool IsTerminal(ActivityStatus status)
+    {
+        return status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning
+            or ActivityStatus.CompleteWithError or ActivityStatus.FailedWithError or ActivityStatus.Cancelled;
+    }
+
+    /// <summary>
+    /// Determines a step's display status from its Worker Task, its Activity, or failing both, the execution's own
+    /// position. Prefers the Activity over the Worker Task, because the Worker Task is deleted on completion.
+    /// </summary>
+    private static ScheduleExecutionStepStatus DeriveStepStatus(
+        WorkerTask? task,
+        Activity? activity,
+        int stepIndex,
+        int currentStepIndex,
+        ScheduleExecutionStatus executionStatus)
+    {
+        // One definition, shared with the Operations queue's group header, which aggregates the same
+        // status per step group (#1162). Deriving it twice is how the two surfaces would come to
+        // disagree about a step that is finishing at the moment they are each asked.
+        return ScheduleStepReading.StatusOf(task?.Status, activity?.Status, stepIndex, currentStepIndex, executionStatus);
     }
 
     /// <summary>
@@ -299,7 +532,9 @@ public class SchedulerServer
             ScheduleName = schedule.Name,
             Status = ScheduleExecutionStatus.InProgress,
             CurrentStepIndex = 0,
-            TotalSteps = schedule.Steps.Count,
+            // Step groups, not step rows: CurrentStepIndex advances one group at a time, and the two are
+            // read together as "step X of Y". Steps sharing a StepIndex are one position, not several.
+            TotalSteps = distinctStepIndices.Count,
             StartedAt = DateTime.UtcNow,
             InitiatedByType = initiatorType,
             InitiatedById = initiatorId,
@@ -461,7 +696,7 @@ public class SchedulerServer
             // No more waiting steps - execution complete
             Log.Information("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} completed successfully.", execution.Id);
 
-            freshExecution.Status = ScheduleExecutionStatus.Completed;
+            freshExecution.Status = ScheduleExecutionStatus.Complete;
             freshExecution.CompletedAt = DateTime.UtcNow;
             await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
             return false;

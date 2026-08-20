@@ -152,6 +152,71 @@ public class ConfigurationSnapshotServiceTests
         Assert.That(Child(flow, "initialExportOnly")!.Label, Is.EqualTo("Initial Export Only"));
     }
 
+    /// <summary>
+    /// A Synchronisation Rule now carries a secret: the one password an administrator chose for every account it
+    /// provisions (#1273). Change history has to record that it changed, and only that; the ciphertext must not
+    /// reach the snapshot, and neither must the password behind it.
+    /// </summary>
+    [Test]
+    public void CreateSnapshot_SyncRule_HashesTheStaticInitialPasswordRatherThanRecordingIt()
+    {
+        const string password = "Brown-Chicken-Ladder-47";
+        var rule = new SyncRule
+        {
+            Id = 42,
+            Name = "Directory Outbound",
+            Direction = SyncRuleDirection.Export,
+            InitialPassword = new SyncRuleInitialPassword
+            {
+                Id = 9,
+                Enabled = true,
+                Source = InitialPasswordSource.Static,
+                StaticPasswordEncryptedValue = _protection.Protect(password)
+            }
+        };
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+        var json = ConfigurationSnapshotService.Serialise(snapshot);
+
+        var node = Child(Child(snapshot.Root, "initialPassword")!, "staticPassword")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(node.IsSecret, Is.True, "a password must be recorded as a secret, never as a value");
+            Assert.That(node.Value, Is.Not.Empty);
+            Assert.That(json, Does.Not.Contain(password), "the password itself must never reach a snapshot");
+            Assert.That(json, Does.Not.Contain(rule.InitialPassword.StaticPasswordEncryptedValue!),
+                "nor may the stored ciphertext, which is the password to anyone holding the encryption key");
+        }
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_WithADifferentStaticInitialPassword_ProducesADifferentHash()
+    {
+        // The whole point of hashing it: an auditor has to be able to see that the shared password changed, and
+        // when, without the history carrying the password.
+        static SyncRule RuleWith(string? encrypted) => new()
+        {
+            Id = 42,
+            Name = "Directory Outbound",
+            Direction = SyncRuleDirection.Export,
+            InitialPassword = new SyncRuleInitialPassword { Id = 9, Enabled = true, Source = InitialPasswordSource.Static, StaticPasswordEncryptedValue = encrypted }
+        };
+
+        var first = _service.CreateSnapshot(RuleWith(_protection.Protect("Brown-Chicken-Ladder-47")), HashKey);
+        var second = _service.CreateSnapshot(RuleWith(_protection.Protect("Green-Otter-Bicycle-12")), HashKey);
+        var none = _service.CreateSnapshot(RuleWith(null), HashKey);
+
+        var firstHash = Child(Child(first.Root, "initialPassword")!, "staticPassword")!.Value;
+        var secondHash = Child(Child(second.Root, "initialPassword")!, "staticPassword")!.Value;
+        var noneHash = Child(Child(none.Root, "initialPassword")!, "staticPassword")!.Value;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(secondHash, Is.Not.EqualTo(firstHash));
+            Assert.That(noneHash, Is.Empty, "no password set is its own state, and diffs against one that is");
+        }
+    }
+
     [Test]
     public void CreateSnapshot_SyncRule_OmitsSentinelPriority()
     {
@@ -282,6 +347,42 @@ public class ConfigurationSnapshotServiceTests
         var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
 
         Assert.That(Child(snapshot.Root, "unresolvedReferenceHandling")!.Value, Is.EqualTo("Warn"));
+    }
+
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_CapturesWritableOnCreateAttributeWritability()
+    {
+        // A schema refresh that changes an attribute's writability changes what JIM may export to it, so the
+        // third state has to reach the snapshot with its own value rather than collapsing onto another.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3,
+            Name = "HR Database",
+            ConnectorDefinitionId = 4,
+            ObjectTypes =
+            [
+                new ConnectedSystemObjectType
+                {
+                    Id = 7, Name = "employees", Selected = true,
+                    Attributes =
+                    [
+                        new ConnectedSystemObjectTypeAttribute
+                        {
+                            Id = 11, Name = "employee_number", Type = AttributeDataType.Text, Selected = true,
+                            Writability = AttributeWritability.WritableOnCreate
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var attribute = Child(Child(snapshot.Root, "objectTypes")!.Children![0], "attributes")!.Children![0];
+        var writability = Child(attribute, "writability")!;
+        Assert.That(writability.Value, Is.EqualTo("WritableOnCreate"));
+        Assert.That(writability.DisplayValue, Is.EqualTo("Writable On Create"),
+            "the diff shows administrators the display value, so it must read as words rather than an enum name");
     }
 
     [Test]

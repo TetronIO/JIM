@@ -46,9 +46,26 @@ public class ExportExecutionResult
     public int FailedCount { get; set; }
 
     /// <summary>
-    /// Number of exports that were deferred due to unresolved references.
+    /// Number of exports that were deferred due to unresolved references. Counts exports that wrote
+    /// nothing this run; an export that wrote what it could and is waiting only on its references is
+    /// counted in <see cref="SuccessCount"/> and <see cref="PartiallyExportedCount"/> instead.
     /// </summary>
     public int DeferredCount { get; set; }
+
+    /// <summary>
+    /// Number of exports written in part (issue #1398): every change that could be written was, and
+    /// the export stays pending for the reference changes that could not be resolved yet. Also
+    /// counted in <see cref="SuccessCount"/>, because something was written.
+    /// </summary>
+    public int PartiallyExportedCount { get; set; }
+
+    /// <summary>
+    /// Number of reference values left unwritten because the referenced Metaverse Object has no
+    /// Connected System Object in the target at all (issue #1398). A reference whose target exists
+    /// but has no anchor yet is merely waiting and is not counted here. Reported per the Connected
+    /// System's <see cref="ConnectedSystem.UnresolvedReferenceHandling"/>.
+    /// </summary>
+    public int UnresolvableReferenceCount { get; set; }
 
     /// <summary>
     /// Number of Pending Exports cancelled by pre-export reconciliation.
@@ -177,8 +194,9 @@ public class ProcessedExportItem
     public ConnectedSystemExportErrorType? ErrorType { get; set; }
 
     /// <summary>
-    /// The Pending Export this item carried out, captured before it is deleted. Identifies the export cycle
-    /// on the causal edge recording why the export happened (#1223).
+    /// The Pending Export this item reports on, captured before it is deleted. Set for every item raised by
+    /// execution so a deferred item (one that wrote nothing) can still be tied to its export, and identifies
+    /// the export cycle on the causal edge recording why the export happened (#1223).
     /// </summary>
     public Guid? PendingExportId { get; set; }
 
@@ -221,4 +239,20 @@ public class ProcessedExportItem
         ProvisioningSyncRuleId = export.ProvisioningSyncRuleId;
         return this;
     }
+
+    /// <summary>
+    /// True when nothing was written to the Connected System for this export this run: it was deferred
+    /// whole and this item exists only to carry <see cref="UnresolvedReferenceMessage"/>. Such an item
+    /// is neither a success nor a failure of the export.
+    /// </summary>
+    public bool Deferred { get; set; }
+
+    /// <summary>
+    /// Set when the export left references unwritten that can never resolve as things stand: the
+    /// referenced Metaverse Object has no Connected System Object in the target (issue #1398). Names
+    /// the attribute and the referenced object. Only populated when the Connected System's Unresolved
+    /// Reference Handling is Error; the processor records it on the Run Profile Execution Item as an
+    /// unresolved reference error, exactly as the import side reports its own.
+    /// </summary>
+    public string? UnresolvedReferenceMessage { get; set; }
 }

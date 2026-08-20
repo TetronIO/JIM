@@ -4,6 +4,7 @@
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -26,6 +27,13 @@ public class ConnectedSystemDetailDto
     public int? MaxExportParallelism { get; set; }
 
     /// <summary>
+    /// How long an account provisioned into this Connected System stays owed an initial password before JIM
+    /// records an expiry and stops trying. Null means JIM's default of seven days, and is reported as null rather
+    /// than as the default so a caller can tell a system configured to seven days from one never configured.
+    /// </summary>
+    public TimeSpan? InitialPasswordTimeToLive { get; set; }
+
+    /// <summary>
     /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
     /// is treated. Default is Error (current behaviour); Warn downgrades to an Activity warning; Ignore suppresses
     /// both the per-object error and the Activity warning while still logging the occurrence.
@@ -37,6 +45,20 @@ public class ConnectedSystemDetailDto
     /// create and update responses, which describe the write that just happened rather than the system's readiness.
     /// </summary>
     public ConfigurationDriftDto? ConfigurationDrift { get; set; }
+
+    /// <summary>
+    /// How many accounts in this Connected System are waiting on a person over their initial password: refused by
+    /// the target and parked, or never given one before its time to live passed. Null on the create and update
+    /// responses, which describe the write that just happened rather than the system's readiness.
+    /// <para>
+    /// The two counts are never summed. Parked work is fixed on the Synchronisation Rules that provisioned those
+    /// accounts, by correcting their initial password settings; expired work cannot be fixed there at all.
+    /// </para>
+    /// </summary>
+    public int? ParkedInitialPasswordCount { get; set; }
+
+    /// <inheritdoc cref="ParkedInitialPasswordCount"/>
+    public int? ExpiredInitialPasswordCount { get; set; }
 
     /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
@@ -53,12 +75,17 @@ public class ConnectedSystemDetailDto
     /// <param name="configurationDrift">
     /// Pre-computed configuration drift status, or null to omit it (create and update responses do not carry it).
     /// </param>
+    /// <param name="initialPasswordAttention">
+    /// Pre-computed initial-password counts, or null to omit them (create and update responses do not carry them).
+    /// </param>
     public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0, int objectCount = 0,
-        ConfigurationDriftStatus? configurationDrift = null)
+        ConfigurationDriftStatus? configurationDrift = null, InitialPasswordAttention? initialPasswordAttention = null)
     {
         return new ConnectedSystemDetailDto
         {
             ConfigurationDrift = configurationDrift == null ? null : ConfigurationDriftDto.FromStatus(configurationDrift),
+            ParkedInitialPasswordCount = initialPasswordAttention?.ParkedCount,
+            ExpiredInitialPasswordCount = initialPasswordAttention?.ExpiredCount,
             Id = entity.Id,
             Name = entity.Name,
             Description = entity.Description,
@@ -67,18 +94,30 @@ public class ConnectedSystemDetailDto
             Status = entity.Status,
             SettingValuesValid = entity.SettingValuesValid,
             MaxExportParallelism = entity.MaxExportParallelism,
+            InitialPasswordTimeToLive = entity.InitialPasswordTimeToLive,
             UnresolvedReferenceHandling = entity.UnresolvedReferenceHandling,
             Connector = new ConnectorReferenceDto
             {
                 Id = entity.ConnectorDefinition?.Id ?? 0,
                 Name = entity.ConnectorDefinition?.Name ?? string.Empty
             },
-            ObjectTypes = entity.ObjectTypes?
-                .Select(ConnectedSystemObjectTypeDto.FromEntity)
-                .ToList() ?? new(),
+            ObjectTypes = MapObjectTypes(entity.ObjectTypes),
             ObjectCount = objectCount,
             PendingExportCount = pendingExportCount
         };
+    }
+
+    /// <summary>
+    /// Maps the Object Types with their sibling names in hand, so a Reference attribute's declared target
+    /// (#1285) resolves to a name without the entity graph carrying a ReferencedObjectType navigation.
+    /// </summary>
+    private static List<ConnectedSystemObjectTypeDto> MapObjectTypes(List<ConnectedSystemObjectType>? objectTypes)
+    {
+        if (objectTypes == null)
+            return new();
+
+        var objectTypeNamesById = objectTypes.ToDictionary(ot => ot.Id, ot => ot.Name);
+        return objectTypes.Select(ot => ConnectedSystemObjectTypeDto.FromEntity(ot, objectTypeNamesById)).ToList();
     }
 }
 
@@ -102,9 +141,25 @@ public class ConnectedSystemObjectTypeDto
     public bool Selected { get; set; }
     public bool RemoveContributedAttributesOnObsoletion { get; set; }
     public int AttributeCount { get; set; }
+
+    /// <summary>
+    /// How the Connected System classified this object type, as open key/value tags. A directory connector reports
+    /// the class kind (structural, auxiliary, abstract) and, for classes the directory keeps for its own
+    /// configuration or operation, a visibility of "internal". An object type carrying no tags is unclassified,
+    /// which means "show it".
+    /// </summary>
+    public List<ConnectedSystemObjectTypeTagDto> Tags { get; set; } = [];
+
+    /// <summary>
+    /// Whether the Connected System reported this object type as one it uses internally. Derived from
+    /// <see cref="Tags"/>, and offered here so callers can filter on it without matching tag strings themselves.
+    /// The portal hides these object types by default.
+    /// </summary>
+    public bool IsInternal { get; set; }
+
     public List<ConnectedSystemAttributeDto>? Attributes { get; set; }
 
-    public static ConnectedSystemObjectTypeDto FromEntity(ConnectedSystemObjectType entity)
+    public static ConnectedSystemObjectTypeDto FromEntity(ConnectedSystemObjectType entity, IReadOnlyDictionary<int, string>? objectTypeNamesById = null)
     {
         return new ConnectedSystemObjectTypeDto
         {
@@ -114,11 +169,24 @@ public class ConnectedSystemObjectTypeDto
             Selected = entity.Selected,
             RemoveContributedAttributesOnObsoletion = entity.RemoveContributedAttributesOnObsoletion,
             AttributeCount = entity.Attributes?.Count ?? 0,
+            Tags = entity.Tags
+                .Select(tag => new ConnectedSystemObjectTypeTagDto { Key = tag.Key, Value = tag.Value })
+                .ToList(),
+            IsInternal = entity.IsInternal(),
             Attributes = entity.Attributes?
-                .Select(ConnectedSystemAttributeDto.FromEntity)
+                .Select(attribute => ConnectedSystemAttributeDto.FromEntity(attribute, objectTypeNamesById))
                 .ToList()
         };
     }
+}
+
+/// <summary>
+/// API representation of a classification tag on a ConnectedSystemObjectType.
+/// </summary>
+public class ConnectedSystemObjectTypeTagDto
+{
+    public string Key { get; set; } = null!;
+    public string Value { get; set; } = null!;
 }
 
 /// <summary>
@@ -132,6 +200,13 @@ public class ConnectedSystemAttributeDto
     public string? ClassName { get; set; }
     public DateTime Created { get; set; }
     public string Type { get; set; } = null!;
+
+    /// <summary>
+    /// Whether <see cref="Type"/> was chosen by an administrator rather than inferred by schema discovery.
+    /// A chosen type is left alone by a schema refresh; an inferred one is restated from the Connector.
+    /// </summary>
+    public bool TypeSetByAdministrator { get; set; }
+
     public string AttributePlurality { get; set; } = null!;
     public bool Selected { get; set; }
     public bool IsExternalId { get; set; }
@@ -144,12 +219,33 @@ public class ConnectedSystemAttributeDto
     public bool SelectionLocked { get; set; }
 
     /// <summary>
-    /// Indicates whether this attribute can be written to in the Connected System.
-    /// Read-only attributes can be imported but cannot be targeted by export Attribute Flows.
+    /// Indicates whether this attribute can be written to in the Connected System. One of
+    /// <c>Writable</c>, <c>ReadOnly</c> or <c>WritableOnCreate</c>.
+    /// <c>ReadOnly</c> attributes can be imported but cannot be targeted by export Attribute Flows.
+    /// <c>WritableOnCreate</c> attributes can be targeted, but only ever flow on a Create Pending Export.
     /// </summary>
+    /// <remarks>
+    /// Read-only: discovered from the Connected System's schema, never set through this API. The value is
+    /// the enum name so that a client can switch on it; the portal renders its own wording.
+    /// </remarks>
     public string Writability { get; set; } = null!;
 
-    public static ConnectedSystemAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute entity)
+    /// <summary>
+    /// For a Reference attribute, the id of the Object Type this reference points at, when the Connected
+    /// System's schema declares one (the SQL Connector's <c>referencesObjectType</c>). Import reference
+    /// resolution resolves the reference within that Object Type alone; null means the schema does not say
+    /// and resolution requires the value to be unambiguous across Object Types.
+    /// </summary>
+    /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
+    public int? ReferencedObjectTypeId { get; set; }
+
+    /// <summary>
+    /// The name of the Object Type identified by <see cref="ReferencedObjectTypeId"/>, when declared.
+    /// </summary>
+    /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
+    public string? ReferencedObjectTypeName { get; set; }
+
+    public static ConnectedSystemAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute entity, IReadOnlyDictionary<int, string>? objectTypeNamesById = null)
     {
         return new ConnectedSystemAttributeDto
         {
@@ -159,13 +255,33 @@ public class ConnectedSystemAttributeDto
             ClassName = entity.ClassName,
             Created = entity.Created,
             Type = entity.Type.ToString(),
+            TypeSetByAdministrator = entity.TypeSetByAdministrator,
             AttributePlurality = entity.AttributePlurality.ToString(),
             Selected = entity.Selected,
             IsExternalId = entity.IsExternalId,
             IsSecondaryExternalId = entity.IsSecondaryExternalId,
             SelectionLocked = entity.SelectionLocked,
-            Writability = entity.Writability.ToString()
+            Writability = entity.Writability.ToString(),
+            ReferencedObjectTypeId = entity.ReferencedObjectTypeId,
+            ReferencedObjectTypeName = ResolveReferencedObjectTypeName(entity, objectTypeNamesById)
         };
+    }
+
+    /// <summary>
+    /// Resolves the declared target's name from the sibling name dictionary when the caller has one, else
+    /// from the navigation if it happens to be loaded. The navigation is deliberately not eager-loaded by
+    /// the object type retrievals (#1285): under no-tracking queries a self-referencing Object Type would
+    /// materialise twice and an update's graph attach then fails on the duplicate key.
+    /// </summary>
+    private static string? ResolveReferencedObjectTypeName(ConnectedSystemObjectTypeAttribute entity, IReadOnlyDictionary<int, string>? objectTypeNamesById)
+    {
+        if (entity.ReferencedObjectTypeId is not { } referencedObjectTypeId)
+            return null;
+
+        if (objectTypeNamesById != null && objectTypeNamesById.TryGetValue(referencedObjectTypeId, out var name))
+            return name;
+
+        return entity.ReferencedObjectType?.Name;
     }
 }
 
@@ -338,6 +454,36 @@ public class ConnectedSystemContainerDto
     public string? Description { get; set; }
     public bool Hidden { get; set; }
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// Whether this Container is carved out of a selection an ancestor made, leaving the objects within it
+    /// deliberately unimported.
+    /// </summary>
+    public bool Excluded { get; set; }
+
+    /// <summary>
+    /// How far beneath this Container objects are imported from, when it is selected.
+    /// </summary>
+    public ConnectedSystemContainerScope Scope { get; set; }
+
+    /// <summary>
+    /// How many objects sit directly in this Container in the Connected System, as at the last hierarchy
+    /// retrieval. Null where the Connector cannot report counts, or the hierarchy has not been retrieved since
+    /// counting was introduced.
+    /// </summary>
+    /// <remarks>
+    /// Zero and null mean different things: zero is a Container the Connector searched and found nothing in, null
+    /// is one nobody has counted. Counts what a Full Import would return for the selected Object Types, and is
+    /// deliberately blind to Container selections and exclusions.
+    /// </remarks>
+    public int? ObjectCount { get; set; }
+
+    /// <summary>
+    /// <see cref="ObjectCount"/> plus every descendant Container's, which is what a Subtree statement over this
+    /// Container reaches. Null where this Container has not been counted.
+    /// </summary>
+    public int? SubtreeObjectCount { get; set; }
+
     public int? PartitionId { get; set; }
     public int? ConnectedSystemId { get; set; }
     public List<ConnectedSystemContainerDto> ChildContainers { get; set; } = new();
@@ -352,6 +498,10 @@ public class ConnectedSystemContainerDto
             Description = entity.Description,
             Hidden = entity.Hidden,
             Selected = entity.Selected,
+            Excluded = entity.Excluded,
+            Scope = entity.Scope,
+            ObjectCount = entity.ObjectCount,
+            SubtreeObjectCount = entity.SubtreeObjectCount,
             PartitionId = entity.Partition?.Id,
             ConnectedSystemId = entity.ConnectedSystem?.Id,
             ChildContainers = entity.ChildContainers

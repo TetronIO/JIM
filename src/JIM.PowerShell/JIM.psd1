@@ -1,3 +1,6 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
 @{
     # Script module or binary module file associated with this manifest.
     RootModule = 'JIM.psm1'
@@ -18,7 +21,7 @@
     CompanyName = 'Tetron'
 
     # Copyright statement for this module
-    Copyright = '(c) Tetron Limited. All rights reserved.'
+    Copyright = 'Copyright (c) Tetron Limited. All rights reserved.'
 
     # Description of the functionality provided by this module
     Description = 'PowerShell module for administering JIM (Junctional Identity Manager). Provides cmdlets for managing Connected Systems, Synchronisation Rules, Run Profiles, Metaverse Objects, Activities, API Keys, Certificates, and more. Supports both interactive (SSO) and non-interactive (API Key) authentication.'
@@ -49,6 +52,8 @@
         'Get-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemContainer',
+        'Get-JIMConnectedSystemContainerScopeText',
+        'Set-JIMConnectedSystemContainerScopeText',
         'Get-JIMConnectedSystemDirectoryServer',
         'Get-JIMConnectedSystemObject',
         'Get-JIMConnectedSystemObjectType',
@@ -57,8 +62,12 @@
         'Get-JIMConnectedSystemDeletionPreview',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
         'Get-JIMConnectedSystemCapability',
+        'Get-JIMConnectedSystemPasswordPolicy',
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
+
+        # Data Flow
+        'Get-JIMDataFlow',
 
         # Synchronisation Rules
         'Get-JIMSyncRule',
@@ -75,6 +84,7 @@
         'Get-JIMSyncRuleMapping',
         'New-JIMSyncRuleMapping',
         'Remove-JIMSyncRuleMapping',
+        'Set-JIMSyncRuleMapping',
 
         # Object Matching Rules
         'Get-JIMMatchingRule',
@@ -178,12 +188,16 @@
         'Remove-JIMRoleMember',
 
         # Data Generation
+        'Add-JIMExampleDataTemplateAttribute',
         'Get-JIMExampleDataSet',
         'Get-JIMExampleDataTemplate',
         'Invoke-JIMExampleDataTemplate',
         'New-JIMExampleDataSet',
+        'New-JIMExampleDataTemplate',
         'Remove-JIMExampleDataSet',
+        'Remove-JIMExampleDataTemplate',
         'Set-JIMExampleDataSet',
+        'Set-JIMExampleDataTemplate',
 
         # Expressions
         'Test-JIMExpression',
@@ -192,6 +206,12 @@
         'Get-JIMDeletedObject',
         'Get-JIMHistoryCount',
         'Invoke-JIMHistoryCleanup',
+
+        # Configuration Change Previews
+        'New-JIMConfigurationChangePreview',
+        'Get-JIMConfigurationChangePreview',
+        'Get-JIMConfigurationChangePreviewDelta',
+        'Stop-JIMConfigurationChangePreview',
 
         # Worker Tasks
         'Get-JIMWorkerTask',

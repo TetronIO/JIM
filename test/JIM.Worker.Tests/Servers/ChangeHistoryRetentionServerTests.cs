@@ -23,6 +23,7 @@ public class ChangeHistoryRetentionServerTests
     private Mock<IActivityRepository> _activityRepo = null!;
     private Mock<IServiceSettingsRepository> _settingsRepo = null!;
     private Mock<IChangeHistoryRepository> _changeHistoryRepo = null!;
+    private Mock<ISyncRepository> _syncRepo = null!;
     private JimApplication _jim = null!;
 
     [SetUp]
@@ -34,6 +35,7 @@ public class ChangeHistoryRetentionServerTests
         _activityRepo = new Mock<IActivityRepository>();
         _settingsRepo = new Mock<IServiceSettingsRepository>();
         _changeHistoryRepo = new Mock<IChangeHistoryRepository>();
+        _syncRepo = new Mock<ISyncRepository>();
         _repo.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repo.Setup(r => r.ServiceSettings).Returns(_settingsRepo.Object);
         _repo.Setup(r => r.ChangeHistory).Returns(_changeHistoryRepo.Object);
@@ -41,7 +43,9 @@ public class ChangeHistoryRetentionServerTests
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
-        _jim = new JimApplication(_repo.Object);
+        // The cleanup now trims initial-password work records too, which reach the database through the sync
+        // repository rather than the change-history one.
+        _jim = new JimApplication(_repo.Object, syncRepository: _syncRepo.Object);
     }
 
     [TearDown]
@@ -53,17 +57,22 @@ public class ChangeHistoryRetentionServerTests
         var generalCutoff = DateTime.UtcNow.AddDays(-90);
         var configurationCutoff = DateTime.UtcNow.AddDays(-3650);
         var securityCutoff = DateTime.UtcNow.AddDays(-365);
+        var initialPasswordCutoff = DateTime.UtcNow.AddDays(-90);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredCsoChangesAsync(generalCutoff, 100)).ReturnsAsync(5);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredMvoChangesAsync(generalCutoff, 100)).ReturnsAsync(4);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredActivitiesAsync(generalCutoff, 100)).ReturnsAsync(3);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredConfigurationChangeActivitiesAsync(configurationCutoff, 100)).ReturnsAsync(2);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredSecurityEventActivitiesAsync(securityCutoff, 100)).ReturnsAsync(7);
+        _syncRepo.Setup(r => r.DeleteTerminalInitialPasswordsAsync(initialPasswordCutoff, 100)).ReturnsAsync(9);
 
-        var result = await _jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(generalCutoff, configurationCutoff, securityCutoff, 100);
+        var result = await _jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(generalCutoff, configurationCutoff, securityCutoff, initialPasswordCutoff, 100);
 
         Assert.That(result.ActivitiesDeleted, Is.EqualTo(3));
         Assert.That(result.ConfigurationChangeActivitiesDeleted, Is.EqualTo(2));
         Assert.That(result.SecurityEventActivitiesDeleted, Is.EqualTo(7));
+        Assert.That(result.InitialPasswordWorkRecordsDeleted, Is.EqualTo(9));
+        _syncRepo.Verify(r => r.DeleteTerminalInitialPasswordsAsync(initialPasswordCutoff, 100), Times.Once,
+            "initial-password work records are trimmed at their own cutoff, not the general one");
         _changeHistoryRepo.Verify(r => r.DeleteExpiredActivitiesAsync(generalCutoff, 100), Times.Once,
             "general Activities are flushed at the general retention cutoff");
         _changeHistoryRepo.Verify(r => r.DeleteExpiredConfigurationChangeActivitiesAsync(configurationCutoff, 100), Times.Once,
@@ -87,14 +96,14 @@ public class ChangeHistoryRetentionServerTests
             .Callback(() => sequence.Add("activities")).ReturnsAsync(3);
 
         var result = await _jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(
-            generalCutoff, DateTime.UtcNow.AddDays(-3650), DateTime.UtcNow.AddDays(-365), 100);
+            generalCutoff, DateTime.UtcNow.AddDays(-3650), DateTime.UtcNow.AddDays(-365), DateTime.UtcNow.AddDays(-90), 100);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.PreviewsDeleted, Is.EqualTo(6),
                 "housekeeping that removes preview data without reporting it leaves nobody able to explain the storage drop");
             Assert.That(sequence, Is.EqualTo(new[] { "previews", "activities" }));
-        });
+        }
     }
 
     [Test]

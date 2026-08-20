@@ -82,6 +82,19 @@ For example, to scope an export rule to leavers terminated between 30 and 364 da
 
 Configure this in the Scope tab of the Synchronisation Rule editor (choose Relative when the attribute is a date), or via the [PowerShell cmdlets](../powershell/synchronisation-rules.md) and the REST API.
 
+### Previewing a scope change
+
+Changing a Scoping Criterion decides which objects the rule manages at all, and what that costs is decided by a different setting sitting beside it: narrowing an import rule takes objects out of scope, and the **Out-of-Scope Action** then decides whether their Metaverse Object joins survive; narrowing an export rule can delete the objects that leave from the target system, per the **Deprovisioning Action**. Widening pulls objects in, projecting and provisioning identities nobody has counted.
+
+The **Preview Scope Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the criteria as they stand on the form, evaluated against the rule's saved criteria, changing nothing. It reports each object that would move, split by what the move actually costs it:
+
+- **Leaving scope**<br /> A joined object whose join would break, taking whatever it contributed out of the Metaverse with it; a joined object that would keep its join and simply stop receiving Attribute Flow; and an unjoined object that stops matching and loses nothing. Where a broken join would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
+- **Entering scope**<br /> What each object would become, answered by running the same evaluation a synchronisation would: a new Metaverse Object projected, a join to an existing one, or an object provisioned into the target Connected System.
+
+Two answers are deliberately negative rather than reassuring. Removing every criterion is called out as a warning, because it hands the rule every object of its type and is one click away from tidying up. And where another import Synchronisation Rule covers the same object type with **no** criteria of its own, that rule keeps every object in scope whatever this one says, so narrowing this rule disconnects nobody: the preview names that rule and counts no departures, rather than reporting a disconnection wave that would never happen.
+
+Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the criteria afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -ScopingCriteriaGroup`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/scoping-criteria/preview` endpoint.
+
 ## Object Matching Rules
 
 Object Matching Rules define how a Connected System Object is matched to an existing Metaverse Object. Rules specify one or more attribute pairs to compare:
@@ -114,6 +127,72 @@ Object matching can be configured at two levels:
 - **Simple mode**<br /> Configured at the Connected System level; the matching rules are shared across all Synchronisation Rules for that system. Easier to manage when matching is uniform.
 - **Advanced mode**<br /> Configured per Synchronisation Rule, so each rule can match independently. Use this when different Synchronisation Rules need different matching strategies against the same Connected System.
 
+A Simple mode rule also names the **Metaverse Object Type** it searches. It has to: with no Synchronisation Rule
+behind it, nothing else says where to look, and a rule that does not say is skipped during synchronisation. An
+Advanced mode rule does not name one, because the Synchronisation Rule that owns it already does.
+
+JIM refuses to save a rule that could never match, naming what is missing. If any rule already stored has that
+shape, the Matching tab says so and names it, so it can be removed and recreated.
+
+### Previewing a behaviour change
+
+The five behaviour toggles are the settings whose consequences are hardest to picture, because none of them names a
+population. Disabling a rule reads like pausing it and is closer to withdrawing every value it owns. Turning
+**Provision To Connected System** on reads like granting a capability and is account creation at scale. Turning
+**Enforce State** off reads like relaxing a constraint and is a standing decision to let a target system diverge.
+
+**Preview Behaviour Impact**, beside the other previews on the rule's editor, answers what your edited toggles
+would do without saving them:
+
+| Transition | What it means |
+|---|---|
+| No longer creates an identity | Objects that would have had a Metaverse Object projected for them and now would not. They stay in the connector space, unmanaged. |
+| No longer creates an account | Metaverse Objects that would have had an account created in the target system and now would not. Nothing existing is destroyed, which is why it goes unnoticed. |
+| Free to drift from JIM | Objects whose divergence from what JIM holds would no longer be corrected. |
+| Identity created / Provisioned / Drift corrected | The inverses, for a toggle being turned on. |
+
+**Direction cannot be previewed, and cannot be changed.** A saved rule's Attribute Flow mappings and Object
+Matching Rules are written for the direction it has: an import rule's mappings write Metaverse Attributes and its
+matching rules search the Metaverse, so flipped to Export every one of them would address the wrong side. The
+preview refuses with a blocking finding rather than answering about a configuration that cannot work. Create a rule
+in the direction you need instead.
+
+Toggles that do nothing in the rule's direction are called out rather than counted as zero, because "nothing is
+affected" and "this setting does not apply here" are different statements and only one of them explains an empty
+result. **Enforce State** and **Provision To Connected System** apply to Export rules; **Project To Metaverse**
+applies to Import rules.
+
+Automation gets the same evaluation: `New-JIMConfigurationChangePreview -SyncRuleId <id> -RuleState Disabled`, or
+`POST` to the rule's `behaviour/preview` endpoint. See
+[Configuration Change Preview](configuration-changes.md).
+
+### Previewing an Object Matching change
+
+Matching mistakes do not fail. A rule matched too loosely joins an account to the wrong identity, and everything it
+contributes goes with it; a rule matched too tightly projects a second identity beside the right one. Both look like
+a successful synchronisation, and both are found later by a person.
+
+The Matching tab therefore offers **Preview Impact** beside **Add Matching Rule**, and again on the Simple/Advanced
+switch. It answers what the proposed matching would do, without saving it.
+
+The preview reports:
+
+| Transition | What it means |
+|---|---|
+| Joins a different Metaverse Object | The object joins one identity under the rules as they stand and would join a different one. The most dangerous outcome a matching change can produce. |
+| Joins instead of projecting | The object matches nothing today, so the next synchronisation would create a new identity for it, and under the proposal it would join an existing one. Usually what a widened rule is for. |
+| Projects instead of joining | The inverse, and a duplicate-identity risk: the object matches today and would match nothing, so a second identity would be created beside the one it should have joined. |
+| Matches more than one Metaverse Object | The proposal is ambiguous for this object, so its next synchronisation refuses it rather than joining it to anything. |
+
+One thing decides how to read every one of those counts: **Object Matching Rules are evaluated only for objects that
+are not already joined**. An account with a Metaverse Object keeps it, whatever you change here, so the impact covers
+the unjoined population alone. The preview says so before it says anything else.
+
+Automation gets the same evaluation, over the whole matching configuration rather than one rule at a time:
+`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -MatchingRule <rules>`, or `POST` to the Connected
+System's `matching-rules/preview` endpoint. Add `-ObjectMatchingRuleMode` to preview the Simple/Advanced switch. See
+[Configuration Change Preview](configuration-changes.md).
+
 ## Projection and provisioning
 
 These determine what happens when no match is found.
@@ -139,6 +218,91 @@ Every delete queued by a Deprovisioning Action is reported on the Activity of th
 
 This applies wherever the deletion happens: during a Synchronisation Run Profile (when the Metaverse Object Type's [deletion rule](../concepts/jml-lifecycle.md#deletion-rules) has no grace period, so the identity is deleted inline), and in the background [Scheduled Identity Deletion](activities.md#scheduled-identity-deletion) batch that deletes identities once their grace period expires.
 
+### Previewing a destructive toggle change
+
+Two of a Synchronisation Rule's settings can turn a routine scope exit into something you cannot take back: the **Deprovisioning Action** above, and an import rule's **Out-of-Scope Action** (whether objects that leave import scope keep their Metaverse Object join or are disconnected). Both are single dropdowns, and before this preview existed the first sign of what one meant was the synchronisation run that acted on it.
+
+The **Preview Deprovisioning Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the toggles as they stand on the form, evaluated against the rule's saved configuration, changing nothing. It answers two different questions and keeps them apart:
+
+- **What the next synchronisation would do differently.** Objects the rule already has something to act on: a joined object whose Metaverse Object is already outside an export rule's scope would be deleted from the target system rather than disconnected (or the reverse), and a joined object outside import scope, or already marked obsolete, would be disconnected rather than keep its join (or the reverse). Where those disconnections would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
+- **What changes for every object the rule manages.** Flipping an export rule's action to Delete deletes nothing today, but it changes what every future scope exit means for every managed object. The preview states that exposure as its own count ("scope-exit action changes"), so "3,400 objects in this system move from Disconnect to Delete" reads at a glance without overstating what the save itself does.
+
+Where several import rules cover the same object type, the Out-of-Scope Action that applies is taken from the first applicable rule. If that is not the rule you are editing, the preview says so by name and counts nothing, because your change would do nothing while that rule exists.
+
+Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit either toggle afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -SyncRuleId`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/destructive-toggles/preview` endpoint.
+
+## Initial password
+
+An account a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** tab of an export Synchronisation Rule tells JIM to set one on every account that rule creates.
+
+For how the password channel works as a whole (policy discovery and its limits, where a password comes from, and the security rules that hold across every surface) see [Passwords](../concepts/passwords.md).
+
+It is off until you turn it on, on every rule: JIM setting passwords on accounts nobody asked it to is not a sensible default.
+
+It also depends on the rule provisioning. Only a newly created account has never had a password, so the tab appears only on an export rule with **Provision ... to the Connected System?** switched on, which is a setting on the Details tab. Switching that off removes the tab and switches the initial password off with it, rather than leaving a setting that reads as configured and can never run; any accounts parked waiting on those settings stop waiting. Switching provisioning back on brings the tab back with its settings intact, switched off.
+
+The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM distinguishes populations. A rule provisioning contractors and a rule provisioning permanent staff into the same directory can reasonably want different password rules.
+
+### What you configure
+
+- **Password Settings**<br /> Where the password comes from. Either the policy JIM discovered on the Connected System itself (the default, so the generated password satisfies the target's own rules without you restating them), or settings you write here, or [one password you choose for every account](#one-password-for-every-account). The first two generate a different password per account: choosing your own settings starts from the discovered policy rather than from nothing, switching between the two never discards what you configured, and the generator produces random characters, words, or a pronounceable password, telling you the minimum length and character classes the result is guaranteed to carry.
+- **After the password is set**<br /> Whether the account holder must choose a new password at their next sign-in (the default), whether it ages normally, or whether it never expires. Only the behaviours the Connector can actually apply are offered.
+- **Enable the account once the password is set**<br /> On by default. A provisioned account nobody can sign in to is rarely what was wanted, and directories that refuse to enable an account without a policy-compliant password need the enable to follow the password rather than accompany the create.
+
+**No generated password is ever stored**, in JIM's database, its logs, its Activities, its API responses or anywhere else. Each is generated at the moment it is delivered, handed to the Connector, and dropped.
+
+**Nobody receives a generated password, including you.** Its job is to get the account into a working state, since most directories will not enable an account or let it be used until it holds a password that meets their rules. When the person actually needs to sign in, set their password then with the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-account) and hand them the value; requiring a change at their next sign-in then does what you would expect. See [Passwords](../concepts/passwords.md#so-how-does-the-person-get-their-password).
+
+### One password for every account
+
+The third Password Settings option sets one password you choose on every account the rule provisions, so you can tell a new starter what it is. **This option is not recommended**, and the portal says so beside it: every account the rule provisions shares that password until each person changes it, so anybody who learns of this can sign in as any new starter who has not.
+
+Leave **After the password is set** on *Require a change at the next sign-in*. It is what ends each account's share of the password; any other choice leaves every account the rule provisions on it until somebody changes it by hand.
+
+This is the only password JIM stores. It is stored encrypted and cannot be shown to you again: the portal fields are blank whenever you open them, no REST response or cmdlet returns it, and configuration change history records a keyed hash rather than the value. It is protected at rest exactly as a Connected System's credentials are. Leaving those fields blank keeps the stored password, so changing another setting is safe.
+
+What JIM will tell you is that a password is set and when it last changed, on the panel and through `Get-JIMSyncRuleInitialPassword` (`staticPasswordSet` and `staticPasswordSetAt`). Change it whenever somebody who knew it leaves; that date is the only thing that can date a shared password:
+
+```powershell
+$password = Read-Host -AsSecureString "New shared initial password"
+Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Rotated after a leaver (CHG0043)"
+```
+
+A password the Connected System would refuse is rejected when you set it, rather than parking every account the rule provisions. A rule set to this option with no password stored is refused too, for the same reason.
+
+### What happens after provisioning
+
+Setting the password is a separate step from creating the account, and deliberately cannot fail the export that created it. The account exists; reporting its export as failed would have JIM retry the create.
+
+The password is therefore delivered in its own pass at the end of every export run, over everything the Connected System still owes rather than only what this run created. An ordinary export run is consequently the retry vehicle: a directory brought back online, or a right granted to JIM's service account, is picked up by the next run that was going to happen anyway, with no separate Run Profile to schedule.
+
+Each account ends up in one of these states, all of them reported on the export's Activity:
+
+| State | Meaning | What clears it |
+|-------|---------|----------------|
+| Delivered | The password was set. | Nothing; the account no longer owes one and JIM keeps no record beyond the Activity. |
+| Retrying | Something JIM cannot control got in the way: the directory was unreachable, or the account was not visible yet (after a create, usually replication catching up). | The next export run over that Connected System. |
+| Parked | The target refused the password itself, for not satisfying the rules in force for that account. Retrying would produce another password refused for the same reason, so JIM stops. | You. See below. |
+| Expired | A week passed without success. JIM stops trying and records the fact rather than quietly forgetting the account. | Nothing automatic; the account needs a password set by other means. |
+
+The target's own words are kept verbatim on a parked account, because why a directory refuses a password is a property of that directory's policy and the single most useful thing to be shown.
+
+### Clearing parked accounts
+
+Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every account parked against that rule**, and they are attempted again on that Connected System's next export run. Nothing needs to be regenerated or invalidated in the meantime: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work.
+
+Saving an unrelated part of the same rule releases nothing. Those accounts were refused on settings the target has already given its answer on, so retrying them unchanged would fail identically and inflate an attempt count that is supposed to mean "distinct configurations tried".
+
+The typical loop is therefore: read what the target said on the parked account, correct the generator settings (most often length or the character classes), save, and let the next export run deliver.
+
+### Where JIM tells you
+
+You do not have to go looking. Parked and expired accounts are reported in three places:
+
+- **The Synchronisation Rules and Connected Systems lists**<br /> An amber chip counts the accounts parked against a rule, and a red one counts those that expired. They stay separate because they ask for different things: parked work is fixed by correcting the settings and saving, expired work cannot be fixed that way at all. A rule or system with nothing outstanding shows no chip, so the lists stay quiet until something needs you.
+- **The rule's Passwords tab itself**<br /> The tab carries the parked count as a badge, so you see it without opening the tab, and the tab shows the accounts grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and it confirms, before you save, how many accounts saving will release; it stays quiet for an edit that would not change what is delivered.
+- **Automation**<br /> `Get-JIMSyncRuleInitialPassword` and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons. `Get-JIMConnectedSystem -Id <id>` carries the two counts for a whole Connected System.
+
 ## Attribute mappings
 
 Attribute mappings define which attributes to synchronise and how to transform them. Each mapping maps a source attribute (or expression) to a target attribute.
@@ -161,6 +325,25 @@ An expression mapping applies a transformation using the JIM [expression languag
 | `Lower(cs["givenName"]) + "." + Lower(cs["sn"]) + "@company.com"` | `Email Address` |
 | `mv["First Name"] + " " + mv["Last Name"]` | `displayName` |
 | `IIF(Eq(mv["Employee Status"], "Active"), 512, 514)` | `userAccountControl` |
+
+#### Missing Input Behaviour
+
+An expression whose input has no value on the object does not fail; it evaluates and produces a structurally broken value (`jane.@company.com`, `CN=,OU=Users,...`) that nothing downstream can tell from a good one. **Missing Input Behaviour**, set beside the expression on each expression source, decides what JIM does instead:
+
+| Behaviour | Effect |
+|-----------|--------|
+| **Evaluate anyway** (default) | Runs the expression regardless; correct where the expression guards the absence itself with `IIF()` or `Coalesce()`. |
+| **Contribute no value** | Skips the mapping without reporting anything; the outcome is resolved by [Attribute Priority](../concepts/attribute-priority.md). |
+| **Fail this mapping** | Skips the mapping and records an **Expression Missing Input** error; the object's other attributes still flow. |
+| **Fail the object** | Nothing flows for the object at all, and it is recorded as an **Expression Missing Input** error. For identity-critical values such as a Distinguished Name. |
+
+JIM derives the inputs from the `mv["..."]` and `cs["..."]` accessors in the expression; you do not list them. An absent attribute, a null and an empty string all count as no value. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess) for the full guidance.
+
+#### Changing a mapping after it is created
+
+A mapping's **settings**, meaning how it behaves rather than what it reads and writes, can be changed at any time: Missing Input Behaviour and the expression itself, "Null is a value" and [inbound value processing](#value-processing-inbound) on an import mapping, and Initial Export Only on an export mapping. Use the portal, `PATCH /sync-rules/{id}/mappings/{mappingId}`, or `Set-JIMSyncRuleMapping`.
+
+What a mapping **targets**, and whether its source is an attribute or an expression, is not editable. Retargeting revalidates against attribute types and plurality, and for an import mapping it reopens the mapping's place in the [Attribute Priority](../concepts/attribute-priority.md) order, so it is a delete and a create rather than an edit. That is deliberate: the priority position is lost either way, and an interface that hid it would lose it silently.
 
 ### Multi-source mappings
 
@@ -229,6 +412,30 @@ Two behaviours to be aware of:
 
 - The setting is honoured live: enabling it on an existing rule stops future exports of that attribute to already-provisioned objects, and disabling it resumes normal management (the next synchronisation and Drift Correction re-assert the Metaverse value).
 - If several export mappings target the same attribute for an object type, the attribute only becomes unmanaged when **every** such mapping is Initial Export Only; a single normally-managed mapping keeps it managed.
+
+Initial Export Only is your choice about an attribute the Connected System would happily let JIM keep writing. Where the Connected System itself only accepts a value at creation, JIM applies the same create-once behaviour on its own, without the setting: see [Attribute writability](connected-systems.md#attribute-writability).
+
+### Previewing an Attribute Flow change
+
+Changing a mapping rewrites an attribute on every object the rule manages, on the next synchronisation, and nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
+
+The **Preview Attribute Flow Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the mappings as they stand on the form, evaluated against the rule's saved mappings, changing nothing. It reports, per object and per attribute:
+
+- **The value the object would end up with**<br /> Stated as an old-to-new pair, so a domain cutover reads as `ada@old.example` becoming `ada@new.example` rather than as a count. JIM groups identical pairs together and recognises the shape of the change (a changed domain, a changed container, a casing change, an added or removed prefix or suffix), so a thousand identical rewrites read as one line with a count beside it.
+- **Values that would be withdrawn**<br /> Where a mapping would stop producing a value for an object, the attribute is left blank rather than rewritten, and that is counted separately.
+- **Objects the mapping could not be evaluated for**<br /> An Expression that throws, or one whose [Missing Input Behaviour](#expression-mappings) fails the mapping because a required attribute has no value on that object. These are the handful of objects a cutover would otherwise leave without an address, and they are reported as their own outcome rather than as no change.
+
+The evaluation is the synchronisation engine's own, run twice per object (once against the saved configuration and once against the proposal) and compared, so [Attribute Priority](#attribute-priority), Missing Input Behaviour and Expression evaluation are answered by the engine rather than approximated.
+
+Both directions state a true before-and-after. An **import** mapping's old value is what the identity holds in the metaverse today; an **export** mapping's is what the object holds in the target Connected System today, including where the saved configuration would write nothing because the target is already correct, which is exactly the case a domain cutover is.
+
+Three answers are deliberately negative rather than reassuring:
+
+- A proposed mapping that would **lose Attribute Priority** to another contributing rule is called out: a synchronisation would evaluate it and then write nothing, so reporting the values it produces would describe a write that never happens.
+- **Removing a mapping outright changes no value.** Inbound Attribute Flow contributes what its mappings produce, so a mapping that no longer exists leaves the values it last wrote in place; they stay as they are and stop being maintained. The preview says so rather than reporting a withdrawal.
+- The preview covers **this Connected System only**. Where another Connected System's rule also writes the attribute, that rule takes its turn on its own next synchronisation, so what it would write instead is named rather than guessed at.
+
+Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the mappings afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -AttributeFlowMapping`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/mappings/preview` endpoint.
 
 ## Attribute Priority
 

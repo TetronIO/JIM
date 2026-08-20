@@ -11,6 +11,7 @@
 @using JIM.Models.Transactional
 @using JIM.Utilities;
 @using JIM.Web.Causality
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
@@ -567,57 +568,78 @@
                     && _activityRunProfileExecutionItem.ObjectChangeType != ObjectChangeType.Deleted
                     && _activityRunProfileExecutionItem.SyncOutcomes.Count == 0)
                     {
-                        var changeCount = _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
-                        .Sum(c => c.ValueChanges.Count);
-
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
-                            <MudText Typo="Typo.h6">
-                                Attribute Changes
-                            </MudText>
-                            <MudChip T="string" Color="Color.Primary">@changeCount.ToString("N0")</MudChip>
-                        </MudStack>
+                        <MudText Typo="Typo.h6" Class="mb-3">Attribute Changes</MudText>
 
                         <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
                             @GetAttributeChangesDescription()
                         </MudText>
 
-                        <MudTable Items="@GetFlattenedChanges()" Hover="true" Dense="true" Outlined="true" Elevation="0" Class="mb-5">
-                            <HeaderContent>
-                                <MudTh Style="width: 1%; white-space: nowrap;">
-                                    <MudText Typo="Typo.button">Attribute</MudText>
-                                </MudTh>
-                                <MudTh Style="width: 1%; white-space: nowrap;">
-                                    <MudText Typo="Typo.button">Change</MudText>
-                                </MudTh>
-                                <MudTh>
-                                    <MudText Typo="Typo.button">Value</MudText>
-                                </MudTh>
-                            </HeaderContent>
-                            <RowTemplate>
-                                <MudTd DataLabel="Attribute">
-                                    <MudText Class="mud-text-secondary">@context.AttributeName</MudText>
-                                </MudTd>
-                                <MudTd DataLabel="Change">
-                                    <MudChip T="string" Variant="Variant.Text"
-                                             Color="@Helpers.GetMudBlazorColorForValueChangeType(context.ChangeType)" Class="ml-0">
-                                        @context.ChangeType
-                                    </MudChip>
-                                </MudTd>
-                                <MudTd DataLabel="Value">
-                                    @if (context.ReferenceValue != null)
-                                    {
-                                        <CsoReferenceLink ReferenceValue="@context.ReferenceValue" />
-                                    }
-                                    else
-                                    {
-                                        <MudText>@context.Value</MudText>
-                                    }
-                                </MudTd>
-                                </RowTemplate>
-                                <NoRecordsContent>
-                                    <MudText Class="pa-4">No attribute changes recorded.</MudText>
-                                </NoRecordsContent>
-                            </MudTable>
+                        @* The change records travel with the execution item, so the window is sliced from memory
+                           rather than read back; the scrolling, the search box, the count and the density all
+                           belong to the shared grid. Its URL parameters carry the ac- prefix so the two grids on
+                           this page cannot overwrite each other's state. *@
+                        <VirtualisedDataGrid T="FlattenedChange"
+                                             ContainerId="rpei-attribute-changes"
+                                             UrlParameterPrefix="ac-"
+                                             StateKey="@Id.ToString()"
+                                             DefaultSortBy="attribute"
+                                             LoadWindow="LoadAttributeChangeWindowAsync"
+                                             SingularName="Attribute Change"
+                                             PluralName="Attribute Changes"
+                                             SearchPlaceholder="Search attribute or value">
+                            <Columns>
+                                <TemplateColumn T="FlattenedChange" Title="Attribute" Sortable="false" CellClass="jim-nowrap">
+                                    <HeaderTemplate>
+                                        <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+                                    </HeaderTemplate>
+                                    <CellTemplate>
+                                        <MudText Class="mud-text-secondary">@context.Item.AttributeName</MudText>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn T="FlattenedChange" Title="Change" Sortable="false" CellClass="jim-nowrap">
+                                    <HeaderTemplate>
+                                        <VirtualisedSortHeader Title="Change" Name="change" />
+                                    </HeaderTemplate>
+                                    <CellTemplate>
+                                        <MudChip T="string" Variant="Variant.Text"
+                                                 Color="@Helpers.GetMudBlazorColorForValueChangeType(context.Item.ChangeType)" Class="ml-0">
+                                            @context.Item.ChangeType
+                                        </MudChip>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn T="FlattenedChange" Title="Value" Sortable="false">
+                                    <HeaderTemplate>
+                                        <MudText Typo="Typo.button">Value</MudText>
+                                    </HeaderTemplate>
+                                    <CellTemplate>
+                                        @if (context.Item.ReferenceValue != null)
+                                        {
+                                            <CsoReferenceLink ReferenceValue="@context.Item.ReferenceValue" />
+                                        }
+                                        else
+                                        {
+                                            <MudText>@context.Item.Value</MudText>
+                                        }
+                                    </CellTemplate>
+                                </TemplateColumn>
+                            </Columns>
+                            <EmptyContent Context="grid">
+                                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                                {
+                                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                                     PrimaryText="@($"No Attribute Changes match \"{grid.SearchText}\"")"
+                                                     SecondaryText="Try a different search term, or clear the search."
+                                                     ActionText="Clear Search"
+                                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                                }
+                                else
+                                {
+                                    <TableEmptyState Icon="@Icons.Material.Filled.EditNote"
+                                                     PrimaryText="No Attribute Changes were recorded"
+                                                     SecondaryText="This operation changed no attribute values on the object." />
+                                }
+                            </EmptyContent>
+                        </VirtualisedDataGrid>
                         }
 else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NoChange)
                         {
@@ -770,6 +792,12 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// Maximum number of values to show for a multi-valued attribute before truncation.
     /// </summary>
     private const int MaxMultiValuePreview = 5;
+
+    /// <summary>
+    /// The sort key standing for "the order the Pending Export staged them in". No column claims it, so the grid
+    /// shows no sort arrow over an order the reader did not choose.
+    /// </summary>
+    private const string PendingExportSourceOrderSort = "order";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -1277,6 +1305,43 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         vc.ReferenceValue
         )));
     }
+
+    /// <summary>
+    /// Slices one window out of this item's attribute changes. They travel with the execution item that is
+    /// already loaded, so the page filters and sorts them itself and hands the result to the shared windowing
+    /// helper, which honours the request's skip-the-count contract.
+    /// </summary>
+    private Task<VirtualisedWindow<FlattenedChange>> LoadAttributeChangeWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken cancellationToken)
+    {
+        var changes = GetFlattenedChanges();
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            changes = changes.Where(change =>
+                ContainsText(change.AttributeName, search)
+                || ContainsText(change.ChangeType.ToString(), search)
+                || ContainsText(change.Value, search)
+                || ContainsText(change.ReferenceValue?.NameOrId, search)
+                || ContainsText(change.ReferenceValue?.Type.Name, search));
+        }
+
+        var sorted = request.SortBy switch
+        {
+            "change" => request.SortDescending
+                ? changes.OrderByDescending(change => change.ChangeType)
+                : changes.OrderBy(change => change.ChangeType),
+            _ => request.SortDescending
+                ? changes.OrderByDescending(change => change.AttributeName, StringComparer.OrdinalIgnoreCase)
+                : changes.OrderBy(change => change.AttributeName, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    private static bool ContainsText(string? value, string searchText) =>
+        value != null && value.Contains(searchText, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Returns the appropriate description for the attribute changes section based on operation type.

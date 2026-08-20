@@ -15,114 +15,76 @@ public class ConnectedSystemUtilitiesTests
         _nextId = 1;
     }
 
-    #region GetAllSelectedContainers Tests
+    #region NewContainerNeedsSelecting Tests
 
     [Test]
-    public void GetAllSelectedContainers_WithNullPartition_ThrowsArgumentNullException()
+    public void NewContainerNeedsSelecting_AtTheTopOfASelectedPartition_ReturnsTrue()
     {
-        // Arrange
-        ConnectedSystemPartition? partition = null;
-
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() =>
-            ConnectedSystemUtilities.GetAllSelectedContainers(partition!));
+        // A container with no parent is covered by nothing, so the partition's own selection decides.
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(null, partitionSelected: true), Is.True);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithNullContainers_ThrowsArgumentException()
+    public void NewContainerNeedsSelecting_AtTheTopOfAnUnselectedPartition_ReturnsFalse()
     {
-        // Arrange
-        var partition = new ConnectedSystemPartition { Containers = null };
-
-        // Act & Assert
-        Assert.Throws<ArgumentException>(() =>
-            ConnectedSystemUtilities.GetAllSelectedContainers(partition));
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(null, partitionSelected: false), Is.False);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithNoSelectedContainers_ReturnsEmptyList()
+    public void NewContainerNeedsSelecting_BeneathASelectedSubtreeParent_ReturnsFalse()
     {
-        // Arrange
-        var partition = CreatePartitionWithContainers(
-            CreateContainer("Root1", false),
-            CreateContainer("Root2", false));
+        // The parent's search already returns the new container's objects; selecting it too would import them twice.
+        var parent = CreateContainer("Parent", true);
 
-        // Act
-        var result = ConnectedSystemUtilities.GetAllSelectedContainers(partition);
-
-        // Assert
-        Assert.That(result, Is.Empty);
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.False);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithSelectedRootContainer_ReturnsRootContainer()
+    public void NewContainerNeedsSelecting_BeneathASelectedOneLevelParent_ReturnsTrue()
     {
-        // Arrange
-        var partition = CreatePartitionWithContainers(
-            CreateContainer("Root1", true),
-            CreateContainer("Root2", false));
+        // The parent's search stops at the objects held directly within it, so it never reaches the new container.
+        var parent = CreateContainer("Parent", true, ConnectedSystemContainerScope.OneLevel);
 
-        // Act
-        var result = ConnectedSystemUtilities.GetAllSelectedContainers(partition);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(1));
-        Assert.That(result[0].Name, Is.EqualTo("Root1"));
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.True);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithSelectedChildContainer_ReturnsChildContainer()
+    public void NewContainerNeedsSelecting_BeneathAnUnselectedParent_ReturnsFalse()
     {
-        // Arrange
-        var child1 = CreateContainer("Child1", true);
-        var child2 = CreateContainer("Child2", false);
-        var root = CreateContainer("Root", false, child1, child2);
-        var partition = CreatePartitionWithContainers(root);
+        // Nothing beneath an unselected parent is in scope, so a new container there must not put itself in scope.
+        var parent = CreateContainer("Parent", false);
 
-        // Act
-        var result = ConnectedSystemUtilities.GetAllSelectedContainers(partition);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(1));
-        Assert.That(result[0].Name, Is.EqualTo("Child1"));
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.False);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithSelectedParentAndChild_ReturnsBoth()
+    public void NewContainerNeedsSelecting_BeneathAOneLevelParentUnderASubtreeGrandparent_ReturnsFalse()
     {
-        // Arrange
-        var child = CreateContainer("Child", true);
-        var parent = CreateContainer("Parent", true, child);
-        var partition = CreatePartitionWithContainers(parent);
+        // Coverage is inherited from any Subtree ancestor, not only the immediate parent.
+        var parent = CreateContainer("Parent", true, ConnectedSystemContainerScope.OneLevel);
+        CreateContainer("Grandparent", true, ConnectedSystemContainerScope.Subtree, parent);
 
-        // Act
-        var result = ConnectedSystemUtilities.GetAllSelectedContainers(partition);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(2));
-        Assert.That(result.Select(c => c.Name), Contains.Item("Parent"));
-        Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.False);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithDeepHierarchy_ReturnsAllSelected()
+    public void NewContainerNeedsSelecting_BeneathAnUnselectedParentUnderASelectedOneLevelGrandparent_ReturnsFalse()
     {
-        // Arrange - Create a 4-level hierarchy with some selected at each level
-        var level4a = CreateContainer("Level4a", false);
-        var level3a = CreateContainer("Level3a", true, level4a);
-        var level2a = CreateContainer("Level2a", false, level3a);
-        var level2b = CreateContainer("Level2b", true);
-        var level1 = CreateContainer("Level1", true, level2a, level2b);
-        var partition = CreatePartitionWithContainers(level1);
+        // The grandparent's OneLevel search does not reach the parent, so the whole branch is out of scope.
+        var parent = CreateContainer("Parent", false);
+        CreateContainer("Grandparent", true, ConnectedSystemContainerScope.OneLevel, parent);
 
-        // Act
-        var result = ConnectedSystemUtilities.GetAllSelectedContainers(partition);
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.False);
+    }
 
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(3));
-        Assert.That(result.Select(c => c.Name), Contains.Item("Level1"));
-        Assert.That(result.Select(c => c.Name), Contains.Item("Level2b"));
-        Assert.That(result.Select(c => c.Name), Contains.Item("Level3a"));
+    [Test]
+    public void NewContainerNeedsSelecting_BeneathAnUnselectedParentUnderASelectedSubtreeGrandparent_ReturnsFalse()
+    {
+        // The grandparent's Subtree search reaches every level beneath it, including the new container.
+        var parent = CreateContainer("Parent", false);
+        CreateContainer("Grandparent", true, ConnectedSystemContainerScope.Subtree, parent);
+
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.False);
     }
 
     #endregion
@@ -320,7 +282,322 @@ public class ConnectedSystemUtilitiesTests
 
     #endregion
 
+    #region Container Scope Tests
+
+    // Subtree is the scope every Container had before the option existed, and its pruning rule ("a selected
+    // Container covers everything beneath it") is what stops duplicate import objects. OneLevel breaks that
+    // rule deliberately: it covers only the objects held directly in the Container, so a selected descendant
+    // is no longer redundant and has to come back as a search root of its own. Pruning it anyway would drop
+    // those objects from the import in silence.
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithOneLevelParentAndSelectedChild_ReturnsBoth()
+    {
+        // Arrange
+        var child = CreateContainer("Child", true);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Parent"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithOneLevelParentAndSelectedGrandchild_ReturnsBoth()
+    {
+        // Arrange - the intervening Container is not selected, so the grandchild is outside the parent's one level
+        var grandchild = CreateContainer("Grandchild", true);
+        var child = CreateContainer("Child", false, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Parent"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Grandchild"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithSubtreeParentAndSelectedOneLevelChild_ReturnsOnlyParent()
+    {
+        // Arrange - the parent's subtree search already covers the child, whatever scope the child carries
+        var child = CreateContainer("Child", true);
+        child.Scope = ConnectedSystemContainerScope.OneLevel;
+        var parent = CreateContainer("Parent", true, child);
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Name, Is.EqualTo("Parent"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithOneLevelParentAndUnselectedDescendants_ReturnsOnlyParent()
+    {
+        // Arrange
+        var grandchild = CreateContainer("Grandchild", false);
+        var child = CreateContainer("Child", false, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Name, Is.EqualTo("Parent"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithNestedOneLevelContainers_ReturnsEachAsItsOwnRoot()
+    {
+        // Arrange - three levels, every one of them OneLevel and selected
+        var grandchild = CreateContainer("Grandchild", true);
+        grandchild.Scope = ConnectedSystemContainerScope.OneLevel;
+        var child = CreateContainer("Child", true, grandchild);
+        child.Scope = ConnectedSystemContainerScope.OneLevel;
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(3));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Parent"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Grandchild"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithSubtreeDescendantOfOneLevelParent_StopsAtTheSubtreeDescendant()
+    {
+        // Arrange - Parent covers its own level; Child covers everything beneath itself, so Grandchild is redundant
+        var grandchild = CreateContainer("Grandchild", true);
+        var child = CreateContainer("Child", true, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Parent"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
+        Assert.That(result.Select(c => c.Name), Does.Not.Contain("Grandchild"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithOneLevelRootContainer_ReturnsSelectedDescendants()
+    {
+        // Arrange - the OneLevel Container is a root of the partition rather than a nested one
+        var child = CreateContainer("Child", true);
+        var root = CreateContainer("Root", true, child);
+        root.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(root);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Root"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
+    }
+
+    #endregion
+
+    #region ApplyContainerInclusion Tests
+
+    // "Included" is the portal's way of saying "you do not need to select this, a selected ancestor already covers
+    // it", and it is what makes a descendant's checkbox disabled. Only a Subtree ancestor covers anything below it;
+    // beneath a OneLevel ancestor, the descendants are not imported at all, so they have to stay selectable. Getting
+    // this wrong locks an administrator out of re-selecting exactly what they just excluded.
+
+    [Test]
+    public void ApplyContainerInclusion_WithSelectedSubtreeParent_MarksDescendantsIncluded()
+    {
+        // Arrange
+        var grandchild = CreateContainer("Grandchild", false);
+        var child = CreateContainer("Child", false, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        ConnectedSystemUtilities.ApplyContainerInclusion(partition);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(parent.Included, Is.False, "a selected container is not included by anything above it");
+            Assert.That(child.Included, Is.True);
+            Assert.That(grandchild.Included, Is.True);
+        });
+    }
+
+    [Test]
+    public void ApplyContainerInclusion_WithSelectedOneLevelParent_LeavesDescendantsSelectable()
+    {
+        // Arrange
+        var grandchild = CreateContainer("Grandchild", false);
+        var child = CreateContainer("Child", false, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        ConnectedSystemUtilities.ApplyContainerInclusion(partition);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(child.Included, Is.False, "a one-level container does not import from the containers beneath it");
+            Assert.That(grandchild.Included, Is.False);
+        });
+    }
+
+    [Test]
+    public void ApplyContainerInclusion_WithSubtreeContainerBeneathAOneLevelParent_MarksItsOwnDescendantsIncluded()
+    {
+        // Arrange
+        var grandchild = CreateContainer("Grandchild", false);
+        var child = CreateContainer("Child", true, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        ConnectedSystemUtilities.ApplyContainerInclusion(partition);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(child.Included, Is.False, "selected in its own right, not covered by the one-level parent");
+            Assert.That(grandchild.Included, Is.True, "covered by the child's own subtree search");
+        });
+    }
+
+    [Test]
+    public void ApplyContainerInclusion_WithNothingSelected_MarksNothingIncluded()
+    {
+        // Arrange
+        var child = CreateContainer("Child", false);
+        var parent = CreateContainer("Parent", false, child);
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        ConnectedSystemUtilities.ApplyContainerInclusion(partition);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(parent.Included, Is.False);
+            Assert.That(child.Included, Is.False);
+        });
+    }
+
+    [Test]
+    public void ApplyContainerInclusion_WhenAContainerIsNarrowed_ClearsInclusionBeneathIt()
+    {
+        // Arrange - the state left behind by a previous pass, which narrowing must undo rather than leave stale
+        var grandchild = CreateContainer("Grandchild", false);
+        var child = CreateContainer("Child", false, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        child.Included = true;
+        grandchild.Included = true;
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        ConnectedSystemUtilities.ApplyContainerInclusion(partition);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(child.Included, Is.False);
+            Assert.That(grandchild.Included, Is.False);
+        });
+    }
+
+    #endregion
+
+    #region Container Scope Tests (model defaults)
+
+    [Test]
+    public void ConnectedSystemContainer_ByDefault_IsSubtreeScoped()
+    {
+        // Arrange, Act
+        var container = new ConnectedSystemContainer { Name = "Test", ExternalId = "OU=Test" };
+
+        // Assert
+        Assert.That(container.Scope, Is.EqualTo(ConnectedSystemContainerScope.Subtree));
+    }
+
+    #endregion
+
     #region Helper Methods
+
+    /// <summary>
+    /// An exclusion filters what a search returns; it does not change where the search starts (#1255).
+    /// </summary>
+    /// <remarks>
+    /// Deliberate, and the design decision most worth pinning: the alternative is to decompose the parent's search
+    /// into one search per unexcluded child, which would make import scope depend on how recently the hierarchy was
+    /// refreshed. A Container created since the last refresh is absent from the stored hierarchy, so a decomposed
+    /// search would never look in it and its objects would be silently obsoleted. If this test is ever changed to
+    /// expect extra search roots, that trade has been made by accident.
+    /// </remarks>
+    [Test]
+    public void GetTopLevelSelectedContainers_WithAnExcludedDescendant_StillReturnsOnlyTheSelectedAncestor()
+    {
+        var excluded = CreateContainer("Service Accounts", selected: false);
+        excluded.Excluded = true;
+        var partition = CreatePartitionWithContainers(CreateContainer("Corp", true, excluded));
+
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Has.Count.EqualTo(1));
+            Assert.That(result[0].Name, Is.EqualTo("Corp"));
+        }
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithAReInclusionBeneathAnExclusion_StillReturnsOnlyTheSelectedAncestor()
+    {
+        // The ancestor's subtree search already returns the re-included Container's objects; which Container decides
+        // their fate is then a question for the membership predicate, not for the search roots.
+        var reIncluded = CreateContainer("App1", true);
+        var excluded = CreateContainer("Service Accounts", selected: false, reIncluded);
+        excluded.Excluded = true;
+        var partition = CreatePartitionWithContainers(CreateContainer("Corp", true, excluded));
+
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Has.Count.EqualTo(1));
+            Assert.That(result[0].Name, Is.EqualTo("Corp"));
+        }
+    }
 
     private static ConnectedSystemPartition CreatePartitionWithContainers(params ConnectedSystemContainer[] rootContainers)
     {
@@ -334,13 +611,17 @@ public class ConnectedSystemUtilitiesTests
         return partition;
     }
 
-    private static ConnectedSystemContainer CreateContainer(string name, bool selected, params ConnectedSystemContainer[] children)
+    private static ConnectedSystemContainer CreateContainer(string name, bool selected, params ConnectedSystemContainer[] children) =>
+        CreateContainer(name, selected, ConnectedSystemContainerScope.Subtree, children);
+
+    private static ConnectedSystemContainer CreateContainer(string name, bool selected, ConnectedSystemContainerScope scope, params ConnectedSystemContainer[] children)
     {
         var container = new ConnectedSystemContainer
         {
             Id = _nextId++,
             Name = name,
             Selected = selected,
+            Scope = scope,
             ExternalId = $"OU={name}"
         };
 

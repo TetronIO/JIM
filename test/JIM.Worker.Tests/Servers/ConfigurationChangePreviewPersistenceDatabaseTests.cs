@@ -80,7 +80,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
         await using var verify = NewContext();
         var preview = await verify.ConfigurationChangePreviews.SingleAsync(p => p.ActivityId == activityId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(preview.Surface, Is.EqualTo(ConfigurationChangePreviewSurface.MetaverseObjectType));
             // Compared as a document, not as a string: the column is jsonb, and PostgreSQL normalises what it
@@ -105,7 +105,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             Assert.That(preview.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Capped));
             Assert.That(preview.DispatchedToWorker, Is.True);
             Assert.That(preview.StalenessBaseline, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -117,7 +117,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
         var group = await verify.ConfigurationChangePreviewGroups.SingleAsync(g => g.ActivityId == activityId);
         var delta = await verify.ConfigurationChangePreviewDeltas.SingleAsync(d => d.ActivityId == activityId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(group.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible));
             Assert.That(group.MetaverseObjectTypeId, Is.EqualTo(11));
@@ -127,7 +127,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             Assert.That(group.AttributeName, Is.EqualTo("Email"));
             Assert.That(group.OldValue, Is.EqualTo("@old.example"));
             Assert.That(group.NewValue, Is.EqualTo("@new.example"));
-            Assert.That(group.PatternKey, Is.EqualTo("email-domain-changed"));
+            Assert.That(group.PatternKey, Is.EqualTo(PreviewPatternKeys.EmailDomainChanged));
             Assert.That(group.ObjectCount, Is.EqualTo(4_812));
             Assert.That(group.DeltasSampled, Is.True);
 
@@ -141,8 +141,8 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             Assert.That(delta.AttributeName, Is.EqualTo("Email"));
             Assert.That(delta.OldValue, Is.EqualTo("ada@old.example"));
             Assert.That(delta.NewValue, Is.EqualTo("ada@new.example"));
-            Assert.That(delta.PatternKey, Is.EqualTo("email-domain-changed"));
-        });
+            Assert.That(delta.PatternKey, Is.EqualTo(PreviewPatternKeys.EmailDomainChanged));
+        }
     }
 
     [Test]
@@ -159,14 +159,14 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
         }
 
         await using var verify = NewContext();
-        Assert.Multiple(async () =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(await verify.ConfigurationChangePreviews.CountAsync(), Is.Zero);
             Assert.That(await verify.ConfigurationChangePreviewGroups.CountAsync(), Is.Zero,
                 "summary groups must not outlive the Activity that owns them");
             Assert.That(await verify.ConfigurationChangePreviewDeltas.CountAsync(), Is.Zero,
                 "delta rows hold attribute values; surviving their Activity means surviving their retention period");
-        });
+        }
     }
 
     [Test]
@@ -211,7 +211,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
         }
 
         await using var verify = NewContext();
-        Assert.Multiple(async () =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(await verify.ConfigurationChangePreviews.AnyAsync(p => p.ActivityId == expired), Is.False);
             Assert.That(await verify.ConfigurationChangePreviewGroups.AnyAsync(g => g.ActivityId == expired), Is.False);
@@ -220,7 +220,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
                 "a preview inside the retention period is not housekeeping's to remove");
             Assert.That(await verify.Activities.AnyAsync(a => a.Id == expired), Is.True,
                 "the Activity is left for the Activity cleanup; removing it here would delete a run record this pass had not budgeted for");
-        });
+        }
     }
 
     [Test]
@@ -307,7 +307,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             AttributeName = "Email",
             OldValue = "@old.example",
             NewValue = "@new.example",
-            PatternKey = "email-domain-changed",
+            PatternKey = PreviewPatternKeys.EmailDomainChanged,
             ObjectCount = 4_812,
             DeltasSampled = true
         };
@@ -327,7 +327,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             AttributeName = "Email",
             OldValue = "ada@old.example",
             NewValue = "ada@new.example",
-            PatternKey = "email-domain-changed"
+            PatternKey = PreviewPatternKeys.EmailDomainChanged
         });
         await context.SaveChangesAsync();
 

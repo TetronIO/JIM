@@ -252,6 +252,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // callers that care about presentation order sort in the UI/API layer where it matters.
         IQueryable<ConnectedSystemObjectType> otQuery = Repository.Database.ConnectedSystemObjectTypes
             .Include(ot => ot.Attributes)
+            .Include(ot => ot.Tags)
             .Where(q => q.ConnectedSystemId == id);
 
         if (withChangeTracking)
@@ -554,6 +555,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var current = await Repository.Database.ConnectedSystemObjectTypes
             .AsTracking()
             .Include(ot => ot.Attributes)
+            .Include(ot => ot.Tags)
             .Where(ot => ot.ConnectedSystemId == connectedSystem.Id)
             .ToListAsync();
         var currentById = current.ToDictionary(ot => ot.Id);
@@ -562,9 +564,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             if (incomingType.Id != 0 && currentById.TryGetValue(incomingType.Id, out var trackedType))
             {
-                // Existing object type: copy scalar values onto the tracked instance, then reconcile attributes.
+                // Existing object type: copy scalar values onto the tracked instance, then reconcile attributes and tags.
                 Repository.Database.Entry(trackedType).CurrentValues.SetValues(incomingType);
                 ReconcileAttributes(trackedType, incomingType);
+                ReconcileObjectTypeTags(trackedType, incomingType);
             }
             else
             {
@@ -630,6 +633,38 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Reconciles the classification tags of a tracked object type against the supplied (detached) object type:
+    /// tags the Connector no longer reports are deleted, and newly reported ones inserted.
+    /// </summary>
+    /// <remarks>
+    /// Unlike attributes (see <see cref="ReconcileAttributes"/>), removals ARE performed here. Tags are
+    /// connector-owned classification carrying no configuration an administrator can invest in and nothing else
+    /// references, so a stale tag is simply wrong rather than something to preserve; leaving one behind would let a
+    /// type keep claiming a classification the Connected System no longer gives it. Matched on key and value
+    /// together, which is the unique index's shape: an unchanged classification is left alone rather than being
+    /// deleted and re-inserted with a new Id on every refresh.
+    /// </remarks>
+    private void ReconcileObjectTypeTags(ConnectedSystemObjectType trackedType, ConnectedSystemObjectType incomingType)
+    {
+        var incomingClassifications = incomingType.Tags.Select(t => (t.Key, t.Value)).ToHashSet();
+        var trackedClassifications = trackedType.Tags.Select(t => (t.Key, t.Value)).ToHashSet();
+
+        // ToList first: removing from the DbSet triggers navigation fixup on trackedType.Tags, which would
+        // otherwise be modified while being enumerated.
+        var staleTags = trackedType.Tags.Where(t => !incomingClassifications.Contains((t.Key, t.Value))).ToList();
+        Repository.Database.ConnectedSystemObjectTypeTags.RemoveRange(staleTags);
+
+        foreach (var newTag in incomingType.Tags.Where(t => !trackedClassifications.Contains((t.Key, t.Value))))
+        {
+            // Link to the tracked object type rather than setting the FK scalar, so EF inserts against that type.
+            // trackedType is already tracked, so Add does not drag a detached graph in.
+            newTag.Id = 0;
+            newTag.ConnectedSystemObjectType = trackedType;
+            Repository.Database.ConnectedSystemObjectTypeTags.Add(newTag);
+        }
+    }
+
+    /// <summary>
     /// Recursively processes containers: adds new ones (Id=0) and updates existing ones
     /// that may be detached from the current DbContext.
     /// </summary>
@@ -661,6 +696,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
             .Include(ot => ot.Attributes)
+            .Include(ot => ot.Tags)
             .Include(ot => ot.ConnectedSystem)
             .SingleOrDefaultAsync(ot => ot.Id == id);
     }
@@ -901,6 +937,102 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var offset = (page - 1) * pageSize;
+        var (results, grossCount) = await QueryConnectedSystemObjectHeadersByRangeAsync(
+            connectedSystemId, offset, pageSize, searchQuery, sortBy, sortDescending,
+            statusFilter, objectTypeFilter, joinTypeFilter, includeTotalCount: true);
+
+        // Build paged result set
+        var pagedResultSet = new PagedResultSet<ConnectedSystemObjectHeader>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging derives TotalPages from it and
+            // cannot work without it. Stated as an invariant rather than dereferenced, so the compiler and CodeQL
+            // both see a non-nullable value.
+            TotalResults = grossCount ?? throw new InvalidOperationException(
+                "The paged header read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <summary>
+    /// The largest window the range header reads in this repository will return, bounding the latency of a single
+    /// read. It is deliberately five times the paged readers' page-size cap, because the two caps protect against
+    /// different things: a page size is a number a person picked from a fixed list and never approaches 100, whereas
+    /// a virtualiser asks for however many rows the viewport needs, and a cap it can actually reach truncates the
+    /// window silently, rendering the shortfall as blank rows rather than raising anything.
+    ///
+    /// 500 puts it out of reach: the virtualised list grids are 100vh minus 320px at 36px per dense row plus the
+    /// virtualiser's overscan, which peaks at roughly 474 rows at Chrome's minimum 25% zoom on a 4320px-tall
+    /// display (the arithmetic lives with MetaverseRepository.MaxHeaderWindowSize, whose value this mirrors). If
+    /// either the grid's height expression or its row height changes, redo that arithmetic rather than assuming
+    /// this still holds.
+    /// </summary>
+    private const int MaxHeaderWindowSize = 500;
+
+    /// <inheritdoc/>
+    public async Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (results, grossCount) = await QueryConnectedSystemObjectHeadersByRangeAsync(
+            connectedSystemId, offset, count, searchQuery, sortBy, sortDescending,
+            statusFilter, objectTypeFilter, joinTypeFilter, includeTotalCount);
+
+        return new RangeResultSet<ConnectedSystemObjectHeader>
+        {
+            Results = results,
+            TotalResults = grossCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Connected System Object header reads: builds the projected, filtered
+    /// and sorted header window for an absolute <paramref name="offset"/>/<paramref name="count"/> and returns it
+    /// alongside the total match count, or null for that total when <paramref name="includeTotalCount"/> is false.
+    /// Callers own input validation and clamping; this method assumes sane values.
+    /// </summary>
+    private async Task<(List<ConnectedSystemObjectHeader> Results, int? TotalResults)> QueryConnectedSystemObjectHeadersByRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter,
+        IEnumerable<int>? objectTypeFilter,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter,
+        bool includeTotalCount)
+    {
         // Pre-resolve the name-candidate attribute IDs for this Connected System, one list per tier of
         // ObjectNaming.ConnectedSystemNameAttributes, to avoid repeated ILike string comparisons in the
         // sort and projection clauses. Each object type in the Connected System may define its own copy
@@ -957,7 +1089,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         // Apply search filter - search on display name, external ID, or secondary external ID
-        // Search is case-insensitive for user convenience
+        // Search is case-insensitive for user convenience.
+        // The external ID clauses match against ExternalIdValueText, the same rendering the sort clauses
+        // and the projection below use, so typing an anchor exactly as the External Id column shows it
+        // finds the row whichever typed column that anchor is stored in (#1286). Matching StringValue
+        // alone silently returned nothing for every Active Directory and Samba AD object, whose objectGUID
+        // anchor lives in GuidValue.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchPattern = $"%{searchQuery}%";
@@ -968,38 +1105,46 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern)) ||
                 // Search external ID (primary)
-                cso.AttributeValues.Any(av =>
-                    av.AttributeId == cso.ExternalIdAttributeId &&
-                    av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, searchPattern)) ||
+                cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .Any(externalIdText => EF.Functions.ILike(externalIdText!, searchPattern)) ||
                 // Search secondary external ID
                 (cso.SecondaryExternalIdAttributeId != null &&
-                 cso.AttributeValues.Any(av =>
-                    av.AttributeId == cso.SecondaryExternalIdAttributeId &&
-                    av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, searchPattern))));
+                 cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .Any(externalIdText => EF.Functions.ILike(externalIdText!, searchPattern))));
         }
 
         // Apply sorting
         query = sortBy?.ToLower() switch
         {
+            // Sorts on the rendered external ID, so the ordering matches what the External Id column
+            // shows rather than treating every non-Text anchor as null (#1286).
             "externalid" => sortDescending
                 ? query.OrderByDescending(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault())
                 : query.OrderBy(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault()),
             "secondaryexternalid" => sortDescending
                 ? query.OrderByDescending(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault())
                 : query.OrderBy(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault()),
             // Sorts on the resolved name, coalescing the naming tiers in preference order so the sort
             // key matches what the Display Name column actually renders.
@@ -1029,17 +1174,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 : query.OrderBy(cso => cso.Created)
         };
 
-        // Get total count before pagination
-        int totalCount;
-        using (var countSpan = ActivitySource.StartActivity("Cso.Headers.Count"))
+        // Count query. It scans every matching object rather than a window of them, so it is the expensive half
+        // of this method at scale and is skipped entirely when the caller already holds the total. Sorting cannot
+        // change how many objects match, so a caller only has to re-count when the filters change.
+        int? totalCount = null;
+        if (includeTotalCount)
         {
+            using var countSpan = ActivitySource.StartActivity("Cso.Headers.Count");
             totalCount = await query.CountAsync();
             countSpan?.SetTag("totalCount", totalCount);
         }
 
-        // Apply pagination
-        var offset = (page - 1) * pageSize;
-        var pagedObjects = query.Skip(offset).Take(pageSize);
+        // Apply the window
+        var pagedObjects = query.Skip(offset).Take(count);
 
         // Project to header DTO using scalar correlated subqueries throughout. The previous shape
         // used a from-from-Include left join over PendingExports plus two SingleOrDefault calls
@@ -1062,9 +1209,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
                     ?? cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
                     ?? cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault(),
+                // Rendered from whichever typed column the anchor occupies, via the same expression the
+                // search and sort clauses above use (#1286).
                 ExternalIdValue = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault(),
                 ExternalIdAttributeName = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
@@ -1074,7 +1224,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     ? null
                     : cso.AttributeValues
                         .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
-                        .Select(av => av.StringValue)
+                        .AsQueryable()
+                        .Select(ExternalIdValueText.FromAttributeValue)
                         .FirstOrDefault(),
                 SecondaryExternalIdAttributeName = cso.SecondaryExternalIdAttributeId == null
                     ? null
@@ -1098,11 +1249,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         .Where(avc => allNameAttributeIds.Contains(avc.AttributeId))
                         .Select(avc => avc.StringValue)
                         .FirstOrDefault(),
+                // A Pending Export carries the same typed value columns as a Connected System Object
+                // Attribute Value, so it needs the same rendering (#1286).
                 PendingExternalId = Repository.Database.PendingExports
                     .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                     .SelectMany(pe => pe.AttributeValueChanges)
                     .Where(avc => avc.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(avc => avc.StringValue)
+                    .Select(ExternalIdValueText.FromPendingExportAttributeValueChange)
                     .FirstOrDefault(),
                 PendingSecondaryExternalId = cso.SecondaryExternalIdAttributeId == null ||
                                               cso.AttributeValues.Any(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
@@ -1111,7 +1264,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                         .SelectMany(pe => pe.AttributeValueChanges)
                         .Where(avc => avc.Attribute.IsSecondaryExternalId)
-                        .Select(avc => avc.StringValue)
+                        .Select(ExternalIdValueText.FromPendingExportAttributeValueChange)
                         .FirstOrDefault()
             });
         List<ConnectedSystemObjectHeader> results;
@@ -1121,25 +1274,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             pageSpan?.SetTag("returned", results.Count);
         }
 
-        // Build paged result set
-        var pagedResultSet = new PagedResultSet<ConnectedSystemObjectHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        return (results, totalCount);
     }
 
     /// <summary>
@@ -1884,6 +2019,65 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int pageSize,
         string? searchText = null)
     {
+        var (values, totalCount) = await QueryAttributeValuesByRangeAsync(
+            connectedSystemObjectId, attributeName, (page - 1) * pageSize, pageSize, searchText, includeTotalCount: true);
+
+        return new PagedResultSet<ConnectedSystemObjectAttributeValue>
+        {
+            Results = values,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged attribute value read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the header range reads in this repository; see the constant's own comment.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (values, totalCount) = await QueryAttributeValuesByRangeAsync(
+            connectedSystemObjectId, attributeName, offset, count, searchText, includeTotalCount);
+
+        return new RangeResultSet<ConnectedSystemObjectAttributeValue>
+        {
+            Results = values,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Connected System Object attribute value reads: one object's values
+    /// for one attribute, optionally narrowed by a case-insensitive search over the stored value, the
+    /// unresolved reference and the referenced object's own values, ordered by id and windowed by absolute
+    /// <paramref name="offset"/> and <paramref name="count"/>, alongside the total match count (or null for
+    /// that total when <paramref name="includeTotalCount"/> is false). Shared so the two reads can never
+    /// disagree on which values match; callers own input validation and clamping.
+    /// </summary>
+    private async Task<(List<ConnectedSystemObjectAttributeValue> Results, int? TotalResults)> QueryAttributeValuesByRangeAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
             .Where(av => av.ConnectedSystemObject.Id == connectedSystemObjectId
                          && av.Attribute.Name == attributeName);
@@ -1899,15 +2093,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             );
         }
 
-        var totalCount = await query.CountAsync();
+        // Counting scans every matching value rather than a window of them, so it is skipped entirely when the
+        // caller already holds the total. Ordering cannot change how many values match.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
 
         // AsTracking required: Include path AttributeValue -> ReferenceValue(CSO) -> AttributeValues creates a cycle.
         var values = await query
             .AsTracking()
             .AsSplitQuery()
+            // The id is the whole sort key, so it is already the total order Skip/Take windows need; there is no
+            // second key that could tie.
             .OrderBy(av => av.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip(offset)
+            .Take(count)
             .Include(av => av.Attribute)
             .Include(av => av.ReferenceValue)
             .ThenInclude(rv => rv!.Type)
@@ -1916,13 +2116,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(rav => rav.Attribute)
             .ToListAsync();
 
-        return new PagedResultSet<ConnectedSystemObjectAttributeValue>
-        {
-            Results = values,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            PageSize = pageSize
-        };
+        return (values, totalCount);
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
@@ -2000,6 +2194,36 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.LongValue == attributeValue))
+            .OrderBy(cso => cso.Id)
+            .ToListAsync();
+
+        if (allMatches.Count > 1)
+        {
+            var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in Connected System {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
+                allMatches.Count, attributeValue, connectedSystemId, csoIds);
+        }
+
+        return allMatches.FirstOrDefault();
+    }
+
+    /// <inheritdoc />
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, decimal attributeValue)
+    {
+        var allMatches = await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues). See #320.
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.Type)
+            .Where(cso =>
+                cso.ConnectedSystem.Id == connectedSystemId &&
+                // Numeric equality in the database, so a stored 4200.00 matches a supplied 4200.
+                cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.DecimalValue == attributeValue))
             .OrderBy(cso => cso.Id)
             .ToListAsync();
 
@@ -2091,7 +2315,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.StringValue,
                         av.IntValue,
                         av.LongValue,
-                        av.GuidValue
+                        av.GuidValue,
+                        av.DecimalValue
                     })
                     .ToList()
             })
@@ -2104,7 +2329,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             // Try primary external ID first
             var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-            var primaryValue = GetExternalIdValueString(primaryAv?.StringValue, primaryAv?.IntValue, primaryAv?.LongValue, primaryAv?.GuidValue);
+            var primaryValue = GetExternalIdValueString(primaryAv?.StringValue, primaryAv?.IntValue, primaryAv?.LongValue, primaryAv?.GuidValue, primaryAv?.DecimalValue);
 
             if (primaryValue != null)
             {
@@ -2117,7 +2342,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (cso.SecondaryExternalIdAttributeId.HasValue)
             {
                 var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                var secondaryValue = GetExternalIdValueString(secondaryAv?.StringValue, secondaryAv?.IntValue, secondaryAv?.LongValue, secondaryAv?.GuidValue);
+                var secondaryValue = GetExternalIdValueString(secondaryAv?.StringValue, secondaryAv?.IntValue, secondaryAv?.LongValue, secondaryAv?.GuidValue, secondaryAv?.DecimalValue);
 
                 if (secondaryValue != null)
                 {
@@ -2177,11 +2402,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Converts an external ID attribute value to its lowercase string representation for cache key building.
     /// Returns null if no value column is populated.
     /// </summary>
-    private static string? GetExternalIdValueString(string? stringValue, int? intValue, long? longValue, Guid? guidValue)
+    private static string? GetExternalIdValueString(string? stringValue, int? intValue, long? longValue, Guid? guidValue, decimal? decimalValue)
     {
         if (stringValue != null) return stringValue.ToLowerInvariant();
         if (intValue.HasValue) return intValue.Value.ToString();
         if (longValue.HasValue) return longValue.Value.ToString();
+        // Canonical rather than raw: a decimal carries its scale, so 4200.00m and 4200m would
+        // otherwise key differently despite being the same anchor (#1283).
+        if (decimalValue.HasValue) return ExternalIdValue.ToCanonicalString(decimalValue.Value);
         if (guidValue.HasValue) return guidValue.Value.ToString().ToLowerInvariant();
         return null;
     }
@@ -2301,43 +2529,180 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.StringValue.ToLower() == lowerValue));
     }
 
+    /// <summary>
+    /// Finds Connected System Objects holding any of the supplied values in the given attribute, for import
+    /// reference resolution's database fallback. Reference values arrive as strings whatever the anchor's
+    /// data type, so each value is read through the attribute's own type and matched against the
+    /// correspondingly typed column (#1285); before this, only StringValue was compared, so a reference to a
+    /// Guid- or int-anchored object could never resolve through the fallback. Results are keyed so the caller
+    /// can probe with the value string it asked for (case-insensitively).
+    /// </summary>
     public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
         var values = attributeValues.ToList();
-        if (values.Count == 0)
-            return new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
-
-        // Use case-insensitive matching consistent with the single-value method
-        var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
-        // Lightweight query: only include AttributeValues with Attribute for key extraction.
-        // No Type/Attributes or deep ReferenceValue chains needed — the CSO entity itself is
-        // sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
-        var csos = await Repository.Database.ConnectedSystemObjects
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Where(cso =>
-                cso.ConnectedSystem.Id == connectedSystemId &&
-                cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && lowerValues.Contains(av.StringValue.ToLower())))
-            .ToListAsync();
-
-        // Build dictionary keyed by lowercase attribute value for case-insensitive lookup.
-        // Use TryAdd for duplicates — first match wins (matching single-value method semantics).
         var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (var cso in csos)
+        if (values.Count == 0)
+            return result;
+
+        var attributeType = await Repository.Database.ConnectedSystemAttributes
+            .Where(a => a.Id == attributeId)
+            .Select(a => (AttributeDataType?)a.Type)
+            .FirstOrDefaultAsync();
+        if (attributeType == null)
+            return result;
+
+        // Lightweight query: only include AttributeValues with Attribute for key extraction.
+        // No Type/Attributes or deep ReferenceValue chains needed; the CSO entity itself is
+        // sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
+        switch (attributeType.Value)
         {
-            var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.StringValue != null);
-            if (matchingAttrValue?.StringValue != null)
+            case AttributeDataType.Text:
             {
-                if (!result.TryAdd(matchingAttrValue.StringValue, cso))
+                // Use case-insensitive matching consistent with the single-value method
+                var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && lowerValues.Contains(av.StringValue.ToLower())))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
                 {
-                    Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Found duplicate Connected System Objects for external ID '{ExternalId}' in Connected System {ConnectedSystemId}. Returning first match.",
-                        matchingAttrValue.StringValue, connectedSystemId);
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.StringValue != null);
+                    if (matchingAttrValue?.StringValue != null && !result.TryAdd(matchingAttrValue.StringValue, cso))
+                        LogDuplicateReferenceFallbackMatch(matchingAttrValue.StringValue, connectedSystemId);
                 }
+
+                break;
             }
+            case AttributeDataType.Guid:
+            {
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (Guid.TryParse(v, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.GuidValue != null && parsedValues.Contains(av.GuidValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.GuidValue.HasValue && requestedByParsedValue.ContainsKey(av.GuidValue.Value));
+                    if (matchingAttrValue?.GuidValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.GuidValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.GuidValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            case AttributeDataType.Number:
+            {
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (int.TryParse(v, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.IntValue != null && parsedValues.Contains(av.IntValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.IntValue.HasValue && requestedByParsedValue.ContainsKey(av.IntValue.Value));
+                    if (matchingAttrValue?.IntValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.IntValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.IntValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            case AttributeDataType.LongNumber:
+            {
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (long.TryParse(v, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.LongValue != null && parsedValues.Contains(av.LongValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.LongValue.HasValue && requestedByParsedValue.ContainsKey(av.LongValue.Value));
+                    if (matchingAttrValue?.LongValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.LongValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.LongValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            case AttributeDataType.Decimal:
+            {
+                // Invariant culture: reference values are written invariant by the import path (#1283).
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (decimal.TryParse(v, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.DecimalValue != null && parsedValues.Contains(av.DecimalValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.DecimalValue.HasValue && requestedByParsedValue.ContainsKey(av.DecimalValue.Value));
+                    if (matchingAttrValue?.DecimalValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.DecimalValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.DecimalValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            default:
+                Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Attribute {AttributeId} has type {AttributeType}, which cannot be used for external ids; no references can be resolved against it.",
+                    attributeId, attributeType.Value);
+                break;
         }
 
         return result;
     }
+
+    /// <summary>
+    /// Parses reference value strings into an anchor's data type, keyed by parsed value with the original
+    /// request string retained, so fallback results can be keyed by exactly what the caller asked for.
+    /// Values that cannot be read as the type are dropped: with several candidate Object Types a value
+    /// legitimately parses for some anchors and not others (#1285).
+    /// </summary>
+    private static Dictionary<TParsed, string> ParseRequestedReferenceValues<TParsed>(IEnumerable<string> values, Func<string, (bool Ok, TParsed Parsed)> parser) where TParsed : notnull =>
+        values
+            .Select(value => (Result: parser(value), Value: value))
+            .Where(pair => pair.Result.Ok)
+            .GroupBy(pair => pair.Result.Parsed)
+            .ToDictionary(group => group.Key, group => group.First().Value);
+
+    /// <summary>
+    /// Duplicates here mean two objects of one type carry the same anchor value in the database; first match
+    /// wins, matching the single-value method's semantics.
+    /// </summary>
+    private static void LogDuplicateReferenceFallbackMatch(string value, int connectedSystemId) =>
+        Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Found duplicate Connected System Objects for external ID '{ExternalId}' in Connected System {ConnectedSystemId}. Returning first match.",
+            value, connectedSystemId);
 
     public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
     {
@@ -2399,6 +2764,150 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (partitionId != null)
             query = query.Where(cso => cso.PartitionId == partitionId);
         return await query.CountAsync();
+    }
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId) =>
+        Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => new ConnectedSystemObjectScopeCandidate(
+                cso.Id,
+                cso.Type.Name,
+                cso.PartitionId,
+                // The secondary external ID is what a directory Connector derives containment from (the
+                // Distinguished Name); systems without one identify the object by its primary external ID, so fall
+                // back to that rather than reporting the object as unlocatable.
+                cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault()
+                ?? cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault(),
+                cso.MetaverseObjectId))
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId != null)
+            .OrderBy(cso => cso.Id)
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            // The attribute ENTITY behind each value, not just the value (#1450). ConnectedSystemObject.Name ranks
+            // candidate naming attributes by the attribute's own name, so without this every candidate is null and
+            // the object falls through to its External ID: for a directory that is a GUID, so a Configuration
+            // Change Preview's drill-down rendered a column of them for the objects an administrator opened it to
+            // recognise. The sibling delta query above already includes it; this one was written without.
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId)
+            .OrderBy(cso => cso.Id)
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
+    public async Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId)
+            .CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await UnjoinedOfType(connectedSystemId, connectedSystemObjectTypeId)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await UnjoinedOfType(connectedSystemId, connectedSystemObjectTypeId).CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await LiveOfType(connectedSystemId, connectedSystemObjectTypeId)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId)
+    {
+        return await LiveOfType(connectedSystemId, connectedSystemObjectTypeId)
+            .Where(cso => cso.AttributeValues.Any(av => av.AttributeId == attributeId))
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId != null &&
+                          cso.Status == ConnectedSystemObjectStatus.Obsolete)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// The live objects of one type, joined or not. What an import would refresh, and so what stops being
+    /// refreshed when the type or one of its attributes is deselected.
+    /// </summary>
+    private IQueryable<ConnectedSystemObject> LiveOfType(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
+
+    /// <summary>
+    /// The live, unjoined objects of one type: what a synchronisation would put to Object Matching. Obsolete
+    /// objects are excluded because a synchronisation never reaches the join step for them.
+    /// </summary>
+    private IQueryable<ConnectedSystemObject> UnjoinedOfType(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
+
+    /// <inheritdoc />
+    public async Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId != null)
+            .CountAsync();
     }
 
     /// <inheritdoc />
@@ -2775,6 +3284,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Select(av => av.LongValue!.Value)).ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int connectedSystemObjectTypeId, int? partitionId = null)
+    {
+        return await BuildDeletionDetectionQuery(connectedSystemId, connectedSystemObjectTypeId, partitionId)
+            .SelectMany(q =>
+                q.AttributeValues.Where(av =>
+                        av.Attribute.Type == AttributeDataType.Decimal &&
+                        av.Attribute.IsExternalId &&
+                        av.DecimalValue.HasValue)
+                    .Select(av => av.DecimalValue!.Value)).ToListAsync();
+    }
+
     public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId, int? partitionId = null)
     {
         return await BuildDeletionDetectionQuery(connectedSystemId, connectedSystemObjectTypeId, partitionId)
@@ -2790,7 +3311,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connected System Object Types
     /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.
-    /// Includes Attributes.
+    /// Includes Attributes and classification Tags.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public async Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
@@ -2798,11 +3319,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
             .Include(q => q.Attributes)
+            .Include(q => q.Tags)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(x => x.ConnectedSystemId == connectedSystemId).OrderBy(x => x.Name)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a Summary-tier projection for
+    /// resolving a Reference attribute's declared target name (#1285) without loading the
+    /// ReferencedObjectType navigation. That navigation is deliberately never eager-loaded here: under
+    /// the web host's no-tracking queries a self-referencing Object Type materialises twice, and the
+    /// update path's graph attach then fails on the duplicate key.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemObjectTypes
+            .Where(ot => ot.ConnectedSystemId == connectedSystemId)
+            .Select(ot => new { ot.Id, ot.Name })
+            .ToDictionaryAsync(ot => ot.Id, ot => ot.Name);
     }
 
     /// <summary>
@@ -2949,6 +3486,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.ConnectedSystemContainers
             .Where(q => q.ConnectedSystem != null && q.ConnectedSystem.Id == connectedSystem.Id)
+            .ToListAsync();
+    }
+
+    public async Task<List<ConnectedSystemContainerSummary>> GetConnectedSystemContainerSummariesAsync(IReadOnlyCollection<int> containerIds)
+    {
+        ArgumentNullException.ThrowIfNull(containerIds);
+
+        if (containerIds.Count == 0)
+            return [];
+
+        // A projection, not a load: GetConnectedSystemContainerAsync pulls the partition, the Connected System
+        // and the children, all of which a caller that only wants to name a Container would throw away.
+        return await Repository.Database.ConnectedSystemContainers
+            .AsNoTracking()
+            .Where(c => containerIds.Contains(c.Id))
+            .Select(c => new ConnectedSystemContainerSummary(c.Id, c.Name, c.ExternalId))
             .ToListAsync();
     }
 
@@ -3578,6 +4131,71 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var offset = (page - 1) * pageSize;
+        var (headers, grossCount) = await QueryPendingExportHeadersByRangeAsync(
+            connectedSystemId, offset, pageSize, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount: true);
+
+        return new PagedResultSet<PendingExportHeader>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging derives TotalPages from it and
+            // cannot work without it. Stated as an invariant rather than dereferenced, so the compiler and CodeQL
+            // both see a non-nullable value.
+            TotalResults = grossCount ?? throw new InvalidOperationException(
+                "The paged header read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = headers
+        };
+    }
+
+    /// <inheritdoc/>
+    public async Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        IEnumerable<PendingExportStatus>? statusFilters = null,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the Connected System Object header range read; see the constant's own comment
+        // for how 500 was derived.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (headers, grossCount) = await QueryPendingExportHeadersByRangeAsync(
+            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount);
+
+        return new RangeResultSet<PendingExportHeader>
+        {
+            Results = headers,
+            TotalResults = grossCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Pending Export header reads: builds the filtered and sorted header
+    /// window for an absolute <paramref name="offset"/>/<paramref name="count"/> and returns it alongside the total
+    /// match count, or null for that total when <paramref name="includeTotalCount"/> is false.
+    /// Callers own input validation and clamping; this method assumes sane values.
+    /// </summary>
+    private async Task<(List<PendingExportHeader> Results, int? TotalResults)> QueryPendingExportHeadersByRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        IEnumerable<PendingExportStatus>? statusFilters,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.PendingExports
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
@@ -3651,6 +4269,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             "errors" => sortDescending
                 ? query.OrderByDescending(pe => pe.ErrorCount)
                 : query.OrderBy(pe => pe.ErrorCount),
+            "references" => sortDescending
+                ? query.OrderByDescending(pe => pe.AttributeValueChanges.Count(ac => ac.UnresolvedReferenceValue != null && ac.UnresolvedReferenceValue != ""))
+                : query.OrderBy(pe => pe.AttributeValueChanges.Count(ac => ac.UnresolvedReferenceValue != null && ac.UnresolvedReferenceValue != "")),
             "nextretry" => sortDescending
                 ? query.OrderByDescending(pe => pe.NextRetryAt ?? DateTime.MaxValue)
                 : query.OrderBy(pe => pe.NextRetryAt ?? DateTime.MaxValue),
@@ -3659,9 +4280,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 : query.OrderBy(pe => pe.CreatedAt) // Default: sort by Created
         };
 
-        var totalCount = await query.CountAsync();
-        var offset = (page - 1) * pageSize;
-        var pagedItems = await query.Skip(offset).Take(pageSize).ToListAsync();
+        // Count query. It scans every matching Pending Export rather than a window of them, so it is the expensive
+        // half of this method at scale and is skipped entirely when the caller already holds the total. Sorting
+        // cannot change how many objects match, so a caller only has to re-count when the filters change.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
+
+        var pagedItems = await query.Skip(offset).Take(count).ToListAsync();
 
         // Convert to headers
         var headers = pagedItems.Select(pe =>
@@ -3675,13 +4301,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return PendingExportHeader.FromEntity(pe, targetIdentifier, sourceMvoDisplayName);
         }).ToList();
 
-        return new PagedResultSet<PendingExportHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = headers
-        };
+        return (headers, totalCount);
     }
 
     /// <summary>
@@ -3783,6 +4403,69 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int pageSize,
         string? searchText = null)
     {
+        if (page < 1) page = 1;
+        if (pageSize > 100) pageSize = 100;
+
+        var offset = (page - 1) * pageSize;
+        var (items, totalCount) = await QueryPendingExportAttributeChangesByRangeAsync(
+            pendingExportId, attributeName, offset, pageSize, searchText, includeTotalCount: true);
+
+        return new PagedResultSet<PendingExportAttributeValueChange>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged Pending Export attribute change read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = items
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesRangeAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the header range reads in this repository; see the constant's own comment.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (items, totalCount) = await QueryPendingExportAttributeChangesByRangeAsync(
+            pendingExportId, attributeName, offset, count, searchText, includeTotalCount);
+
+        return new RangeResultSet<PendingExportAttributeValueChange>
+        {
+            Results = items,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range single-attribute Pending Export change reads: one Pending Export's
+    /// changes to one attribute, optionally narrowed by a case-insensitive search over the stored value and the
+    /// unresolved reference, ordered by id and windowed by absolute <paramref name="offset"/> and
+    /// <paramref name="count"/>, alongside the total match count (or null for that total when
+    /// <paramref name="includeTotalCount"/> is false). Shared so the two reads can never disagree on which
+    /// changes match; callers own input validation and clamping.
+    /// </summary>
+    private async Task<(List<PendingExportAttributeValueChange> Results, int? TotalResults)> QueryPendingExportAttributeChangesByRangeAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.Set<PendingExportAttributeValueChange>()
             .Where(avc => avc.PendingExportId == pendingExportId
                           && avc.Attribute.Name == attributeName);
@@ -3795,26 +4478,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
         }
 
-        var totalCount = await query.CountAsync();
+        // Counting scans every matching change rather than a window of them, so it is skipped entirely when the
+        // caller already holds the total. Ordering cannot change how many changes match.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
 
-        if (page < 1) page = 1;
-        if (pageSize > 100) pageSize = 100;
-
-        var offset = (page - 1) * pageSize;
         var items = await query
+            // The id is the whole sort key, so it is already the total order Skip/Take windows need; there is no
+            // second key that could tie.
             .OrderBy(avc => avc.Id)
             .Skip(offset)
-            .Take(pageSize)
+            .Take(count)
             .Include(avc => avc.Attribute)
             .ToListAsync();
 
-        return new PagedResultSet<PendingExportAttributeValueChange>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = items
-        };
+        return (items, totalCount);
     }
 
     /// <inheritdoc />
@@ -3823,6 +4502,67 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int page,
         int pageSize,
         string? searchText = null)
+    {
+        if (page < 1) page = 1;
+        if (pageSize > 100) pageSize = 100;
+
+        var offset = (page - 1) * pageSize;
+        var (items, totalCount) = await QueryAllPendingExportChangesByRangeAsync(
+            pendingExportId, offset, pageSize, searchText, includeTotalCount: true);
+
+        return new PagedResultSet<PendingExportAttributeValueChange>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged Pending Export change read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = items
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<PendingExportAttributeValueChange>> GetAllPendingExportChangesRangeAsync(
+        Guid pendingExportId,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the header range reads in this repository; see the constant's own comment.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (items, totalCount) = await QueryAllPendingExportChangesByRangeAsync(
+            pendingExportId, offset, count, searchText, includeTotalCount);
+
+        return new RangeResultSet<PendingExportAttributeValueChange>
+        {
+            Results = items,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Pending Export attribute-change reads: one Pending Export's changes,
+    /// optionally narrowed by a case-insensitive search over the attribute name and the change's value, ordered
+    /// by attribute name and windowed by absolute <paramref name="offset"/> and <paramref name="count"/>,
+    /// alongside the total match count (or null for that total when <paramref name="includeTotalCount"/> is
+    /// false). Shared so the two reads can never disagree on which changes match; callers own input validation
+    /// and clamping.
+    /// </summary>
+    private async Task<(List<PendingExportAttributeValueChange> Results, int? TotalResults)> QueryAllPendingExportChangesByRangeAsync(
+        Guid pendingExportId,
+        int offset,
+        int count,
+        string? searchText,
+        bool includeTotalCount)
     {
         var query = Repository.Database.Set<PendingExportAttributeValueChange>()
             .Where(avc => avc.PendingExportId == pendingExportId);
@@ -3836,27 +4576,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
         }
 
-        var totalCount = await query.CountAsync();
+        // Counting scans every matching change rather than a window of them, so it is skipped entirely when the
+        // caller already holds the total. Ordering cannot change how many changes match.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
 
-        if (page < 1) page = 1;
-        if (pageSize > 100) pageSize = 100;
-
-        var offset = (page - 1) * pageSize;
         var items = await query
             .OrderBy(avc => avc.Attribute.Name)
+            // Deterministic tie-break: Skip/Take windows are only stable under a total order, and a
+            // multi-valued attribute contributes several changes under one name.
             .ThenBy(avc => avc.Id)
             .Skip(offset)
-            .Take(pageSize)
+            .Take(count)
             .Include(avc => avc.Attribute)
             .ToListAsync();
 
-        return new PagedResultSet<PendingExportAttributeValueChange>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = items
-        };
+        return (items, totalCount);
     }
 
     /// <inheritdoc />
@@ -4540,6 +5276,120 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<IList<DataFlowHeader>> GetDataFlowHeadersAsync(DataFlowQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        // A flow is a mapping, so the query starts from mappings and reaches up to the owning rule for the direction
+        // and the systems either end. EF projection rather than raw SQL: this is a UI read of a small, configuration-
+        // sized set, not a worker hot path.
+        var mappings = Repository.Database.SyncRuleMappings
+            .AsNoTracking()
+            .Where(m => m.SyncRule != null);
+
+        if (query.Direction.HasValue)
+        {
+            var direction = query.Direction.Value;
+            mappings = mappings.Where(m => m.SyncRule!.Direction == direction);
+        }
+
+        if (query.ConnectedSystemId.HasValue)
+        {
+            var connectedSystemId = query.ConnectedSystemId.Value;
+            mappings = mappings.Where(m => m.SyncRule!.ConnectedSystemId == connectedSystemId);
+        }
+
+        if (query.ConnectedSystemObjectTypeId.HasValue)
+        {
+            var connectedSystemObjectTypeId = query.ConnectedSystemObjectTypeId.Value;
+            mappings = mappings.Where(m => m.SyncRule!.ConnectedSystemObjectTypeId == connectedSystemObjectTypeId);
+        }
+
+        if (query.MetaverseObjectTypeId.HasValue)
+        {
+            var metaverseObjectTypeId = query.MetaverseObjectTypeId.Value;
+            mappings = mappings.Where(m => m.SyncRule!.MetaverseObjectTypeId == metaverseObjectTypeId);
+        }
+
+        // An attribute filter matches whichever side the attribute sits on for the flow's direction: the target on
+        // one side, a source on the other. A flow whose relevant side is an expression cannot match, because an
+        // expression's attribute references live in its text and are not modelled.
+        if (query.ConnectedSystemAttributeId.HasValue)
+        {
+            var connectedSystemAttributeId = query.ConnectedSystemAttributeId.Value;
+            mappings = mappings.Where(m =>
+                m.TargetConnectedSystemAttributeId == connectedSystemAttributeId ||
+                m.Sources.Any(s => s.ConnectedSystemAttributeId == connectedSystemAttributeId));
+        }
+
+        if (query.MetaverseAttributeId.HasValue)
+        {
+            var metaverseAttributeId = query.MetaverseAttributeId.Value;
+            mappings = mappings.Where(m =>
+                m.TargetMetaverseAttributeId == metaverseAttributeId ||
+                m.Sources.Any(s => s.MetaverseAttributeId == metaverseAttributeId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            // Lowered on both sides so the comparison translates to a plain lower(...) LIKE ... in SQL rather than
+            // pulling the rows back to compare in memory.
+            var search = query.Search.Trim().ToLower();
+            mappings = mappings.Where(m =>
+                m.SyncRule!.Name.ToLower().Contains(search) ||
+                m.SyncRule.ConnectedSystem.Name.ToLower().Contains(search) ||
+                m.SyncRule.ConnectedSystemObjectType.Name.ToLower().Contains(search) ||
+                m.SyncRule.MetaverseObjectType.Name.ToLower().Contains(search) ||
+                (m.TargetMetaverseAttribute != null && m.TargetMetaverseAttribute.Name.ToLower().Contains(search)) ||
+                (m.TargetConnectedSystemAttribute != null && m.TargetConnectedSystemAttribute.Name.ToLower().Contains(search)) ||
+                m.Sources.Any(s =>
+                    (s.MetaverseAttribute != null && s.MetaverseAttribute.Name.ToLower().Contains(search)) ||
+                    (s.ConnectedSystemAttribute != null && s.ConnectedSystemAttribute.Name.ToLower().Contains(search)) ||
+                    (s.Expression != null && s.Expression.ToLower().Contains(search))));
+        }
+
+        return await mappings
+            .OrderBy(m => m.SyncRule!.MetaverseObjectType.Name)
+            .ThenBy(m => m.TargetMetaverseAttribute != null ? m.TargetMetaverseAttribute.Name : m.TargetConnectedSystemAttribute!.Name)
+            .ThenBy(m => m.SyncRule!.Direction)
+            .ThenBy(m => m.Priority)
+            .ThenBy(m => m.Id)
+            .Select(m => new DataFlowHeader
+            {
+                SyncRuleMappingId = m.Id,
+                SyncRuleId = m.SyncRuleId!.Value,
+                SyncRuleName = m.SyncRule!.Name,
+                SyncRuleEnabled = m.SyncRule.Enabled,
+                Direction = m.SyncRule.Direction,
+                ConnectedSystemId = m.SyncRule.ConnectedSystemId,
+                ConnectedSystemName = m.SyncRule.ConnectedSystem.Name,
+                ConnectedSystemObjectTypeId = m.SyncRule.ConnectedSystemObjectTypeId,
+                ConnectedSystemObjectTypeName = m.SyncRule.ConnectedSystemObjectType.Name,
+                MetaverseObjectTypeId = m.SyncRule.MetaverseObjectTypeId,
+                MetaverseObjectTypeName = m.SyncRule.MetaverseObjectType.Name,
+                TargetMetaverseAttributeId = m.TargetMetaverseAttributeId,
+                TargetMetaverseAttributeName = m.TargetMetaverseAttribute != null ? m.TargetMetaverseAttribute.Name : null,
+                TargetConnectedSystemAttributeId = m.TargetConnectedSystemAttributeId,
+                TargetConnectedSystemAttributeName = m.TargetConnectedSystemAttribute != null ? m.TargetConnectedSystemAttribute.Name : null,
+                Sources = m.Sources.OrderBy(s => s.Order).Select(s => new DataFlowSource
+                {
+                    Order = s.Order,
+                    MetaverseAttributeId = s.MetaverseAttributeId,
+                    MetaverseAttributeName = s.MetaverseAttribute != null ? s.MetaverseAttribute.Name : null,
+                    ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
+                    ConnectedSystemAttributeName = s.ConnectedSystemAttribute != null ? s.ConnectedSystemAttribute.Name : null,
+                    Expression = s.Expression
+                }).ToList(),
+                // Priority and "Null is a value" are import concerns; leaving them null on an export flow is what
+                // lets the portal and the API render direction-appropriate columns without re-deriving the direction.
+                Priority = m.SyncRule.Direction == SyncRuleDirection.Import ? m.Priority : null,
+                NullIsValue = m.SyncRule.Direction == SyncRuleDirection.Import ? m.NullIsValue : null,
+                EnforceState = m.SyncRule.Direction == SyncRuleDirection.Export ? m.SyncRule.EnforceState : null
+            })
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<(List<CsoChangeHistoryDto> Items, int TotalCount)> GetCsoChangeHistoryAsync(Guid connectedSystemObjectId, int page, int pageSize)
     {
         if (page < 1)
@@ -4694,35 +5544,112 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int page = 1,
         int pageSize = 50)
     {
+        if (page < 1)
+            page = 1;
+
+        var offset = (page - 1) * pageSize;
+        var (items, totalCount) = await QueryDeletedCsoChangesByRangeAsync(
+            connectedSystemId, fromDate, toDate, externalIdSearch, offset, pageSize, includeTotalCount: true);
+
+        // The count was requested above, so it is always present here; paging cannot work without it. Stated as
+        // an invariant rather than dereferenced, so the compiler and CodeQL both see a non-nullable value.
+        return (items, totalCount ?? throw new InvalidOperationException(
+            "The paged deleted Connected System Object change read asked for the total match count and did not receive one."));
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<ConnectedSystemObjectChange>> GetDeletedCsoChangesRangeAsync(
+        int offset,
+        int count,
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the header range reads in this repository; see the constant's own comment for
+        // how 500 was derived.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (items, totalCount) = await QueryDeletedCsoChangesByRangeAsync(
+            connectedSystemId, fromDate, toDate, externalIdSearch, offset, count, includeTotalCount);
+
+        return new RangeResultSet<ConnectedSystemObjectChange>
+        {
+            Results = items,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range deleted Connected System Object change reads: builds the filtered
+    /// window of deletion records for an absolute <paramref name="offset"/>/<paramref name="count"/>, ordered by
+    /// deletion time newest first, and returns it alongside the total match count, or null for that total when
+    /// <paramref name="includeTotalCount"/> is false. Callers own input validation and clamping; this method
+    /// assumes sane values.
+    /// </summary>
+    private async Task<(List<ConnectedSystemObjectChange> Items, int? TotalCount)> QueryDeletedCsoChangesByRangeAsync(
+        int? connectedSystemId,
+        DateTime? fromDate,
+        DateTime? toDate,
+        string? externalIdSearch,
+        int offset,
+        int count,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.ConnectedSystemObjectChanges
             .Where(c => c.ChangeType == ObjectChangeType.Deleted && c.ConnectedSystemObject == null);
 
         // Apply filters
         if (connectedSystemId.HasValue)
-            query = query.Where(c => c.ConnectedSystemId == connectedSystemId.Value);
-
-        if (fromDate.HasValue)
-            query = query.Where(c => c.ChangeTime >= fromDate.Value);
-
-        if (toDate.HasValue)
-            query = query.Where(c => c.ChangeTime <= toDate.Value);
-
-        if (!string.IsNullOrWhiteSpace(externalIdSearch))
         {
-            query = query.Where(c =>
-                c.DeletedObjectExternalIdAttributeValue != null &&
-                c.DeletedObjectExternalIdAttributeValue.StringValue != null &&
-                c.DeletedObjectExternalIdAttributeValue.StringValue.Contains(externalIdSearch));
+            var connectedSystemIdValue = connectedSystemId.Value;
+            query = query.Where(c => c.ConnectedSystemId == connectedSystemIdValue);
         }
 
-        // Get total count before pagination
-        var totalCount = await query.CountAsync();
+        if (fromDate.HasValue)
+        {
+            var fromDateValue = fromDate.Value;
+            query = query.Where(c => c.ChangeTime >= fromDateValue);
+        }
 
-        // Apply ordering and pagination
+        if (toDate.HasValue)
+        {
+            var toDateValue = toDate.Value;
+            query = query.Where(c => c.ChangeTime <= toDateValue);
+        }
+
+        // Search the preserved DeletedObjectExternalId string, which is what the Deleted Objects page renders.
+        // The DeletedObjectExternalIdAttributeValue navigation this used to match is cascade deleted with the
+        // Connected System Object, so it is null for the very records this browser exists to show, and the old
+        // predicate silently matched nothing. Case-insensitive for user convenience, matching the other list
+        // searches.
+        if (!string.IsNullOrWhiteSpace(externalIdSearch))
+        {
+            var searchPattern = $"%{externalIdSearch}%";
+            query = query.Where(c =>
+                c.DeletedObjectExternalId != null &&
+                EF.Functions.ILike(c.DeletedObjectExternalId, searchPattern));
+        }
+
+        // Count query. It scans every matching record rather than a window of them, so it is the expensive half
+        // of this method at scale and is skipped entirely when the caller already holds the total.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
+
+        // Apply the fixed newest-first ordering and the window
         var items = await query
             .OrderByDescending(c => c.ChangeTime)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip(offset)
+            .Take(count)
             .Include(c => c.DeletedObjectType)
             .Include(c => c.DeletedObjectExternalIdAttributeValue)
             .ThenInclude(av => av!.Attribute)
@@ -4784,6 +5711,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemPasswordPolicies
             .AsNoTracking()
             .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)
+    {
+        // Read-only comparison input, so no tracking: attaching it would put a second instance of this row in
+        // the identity map alongside the one hanging off the rule the caller is about to save.
+        return await Repository.Database.SyncRuleInitialPasswords
+            .AsNoTracking()
+            .SingleOrDefaultAsync(ip => ip.SyncRuleId == syncRuleId);
     }
 
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
@@ -4919,6 +5855,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Gets a Synchronisation Rule mapping for modification: tracked, with the sources and the names needed to
+    /// validate and report the change.
+    /// </summary>
+    /// <remarks>
+    /// JIM.Web runs the context NoTracking, so a mapping loaded by <see cref="GetSyncRuleMappingAsync"/> and then
+    /// mutated would save nothing at all while reporting success (see "Mutating Repository Methods Must Assert
+    /// They Got a Tracked Entity" in src/CLAUDE.md). The explicit AsTracking here is what makes the settings
+    /// update actually persist, and identity resolution returns instances already tracked where the caller
+    /// loaded the Synchronisation Rule first, as the API's handler does to answer 404.
+    /// </remarks>
+    public async Task<SyncRuleMapping?> GetSyncRuleMappingForUpdateAsync(int id)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .AsTracking()
+            .AsSplitQuery()
+            .Include(m => m.SyncRule)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+            .Include(m => m.TargetMetaverseAttribute)
+            .Include(m => m.TargetConnectedSystemAttribute)
+            .SingleOrDefaultAsync(m => m.Id == id);
+    }
+
+    /// <summary>
     /// Creates a new Synchronisation Rule mapping.
     /// </summary>
     public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping)
@@ -4937,13 +5899,36 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Deletes a Synchronisation Rule mapping.
+    /// Deletes a Synchronisation Rule mapping and the sources beneath it.
     /// </summary>
+    /// <remarks>
+    /// The mapping is re-loaded here rather than removed as handed over, because a caller cannot know what else
+    /// is already in this context's change tracker. The API's delete handler loads the Synchronisation Rule to
+    /// return a 404 for an unknown one, and <see cref="GetSyncRuleAsync(int)"/> deliberately tracks, pulling
+    /// every one of the rule's mapping sources into the identity map; <see cref="GetSyncRuleMappingAsync"/> then
+    /// runs under the context default of NoTracking and materialises a second, detached copy of the same rows.
+    /// Removing that copy attached duplicate keys and EF threw, so the delete failed for every caller of the
+    /// endpoint and of Remove-JIMSyncRuleMapping.
+    ///
+    /// Re-loading with AsTracking() fixes it at the point that owns the problem: identity resolution returns the
+    /// instances already being tracked where there are any, and materialises them where there are not, so the
+    /// method is correct whatever the caller loaded first. Fixing it by dropping the handler's rule load would
+    /// work today and leave the same trap for the next caller.
+    /// </remarks>
     public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping)
     {
+        var tracked = await Repository.Database.SyncRuleMappings
+            .AsTracking()
+            .Include(m => m.Sources)
+            .SingleOrDefaultAsync(m => m.Id == mapping.Id);
+
+        // Already gone. Deleting the same mapping twice is not an error worth raising: the caller's intent holds.
+        if (tracked == null)
+            return;
+
         // Remove all sources first
-        Repository.Database.RemoveRange(mapping.Sources);
-        Repository.Database.SyncRuleMappings.Remove(mapping);
+        Repository.Database.RemoveRange(tracked.Sources);
+        Repository.Database.SyncRuleMappings.Remove(tracked);
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -4987,6 +5972,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .OrderBy(m => m.Priority)
             .ThenBy(m => m.Id)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
+    /// database, keyed by mapping id (#1199). AsNoTracking with a scalar projection is load-bearing, not an
+    /// optimisation: the caller is mid-save on a tracked, already-mutated rule graph, and this must report what
+    /// the database holds, not what the graph has been changed to.
+    /// </summary>
+    public async Task<Dictionary<int, int>> GetImportMappingTargetMetaverseAttributesAsync(int syncRuleId)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .AsNoTracking()
+            .Where(m => m.SyncRuleId == syncRuleId && m.TargetMetaverseAttributeId != null)
+            .Select(m => new { m.Id, TargetMetaverseAttributeId = m.TargetMetaverseAttributeId!.Value })
+            .ToDictionaryAsync(m => m.Id, m => m.TargetMetaverseAttributeId);
     }
 
     /// <summary>
@@ -5603,12 +6603,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Batch updates PendingExport rows using UPDATE ... FROM (VALUES ...) pattern.
-    /// Updates: Status, ErrorCount, MaxRetries, LastAttemptedAt, NextRetryAt, LastErrorMessage,
-    /// LastErrorStackTrace, HasUnresolvedReferences, ConnectedSystemObjectId.
+    /// Updates: Status, ChangeType, ErrorCount, MaxRetries, LastAttemptedAt, NextRetryAt,
+    /// LastErrorMessage, LastErrorStackTrace, HasUnresolvedReferences, ConnectedSystemObjectId.
     /// </summary>
     private async Task BulkUpdatePendingExportsRawAsync(List<PendingExport> exports)
     {
-        const int columnsPerRow = 10; // Id + 9 mutable columns
+        const int columnsPerRow = 11; // Id + 10 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
@@ -5624,11 +6624,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::integer, {{{offset + 4}}}::timestamp with time zone, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::text, {{{offset + 7}}}::text, {{{offset + 8}}}::boolean, {{{offset + 9}}}::uuid)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::integer, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::timestamp with time zone, {{{offset + 7}}}::text, {{{offset + 8}}}::text, {{{offset + 9}}}::boolean, {{{offset + 10}}}::uuid)");
 
                 var pe = chunk[i];
                 parameters.Add(pe.Id);
                 parameters.Add((int)pe.Status);
+                parameters.Add((int)pe.ChangeType);
                 parameters.Add(pe.ErrorCount);
                 parameters.Add(pe.MaxRetries);
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));

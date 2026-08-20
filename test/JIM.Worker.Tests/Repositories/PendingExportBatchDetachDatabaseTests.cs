@@ -164,7 +164,7 @@ public class PendingExportBatchDetachDatabaseTests
         var trackedPe = await LoadPendingExportAndPoisonTrackerAsync(ctx, csoId);
         trackedPe.Status = PendingExportStatus.Exported;
 
-        Assert.DoesNotThrowAsync(() => repository.Sync.UpdatePendingExportsAsync([trackedPe]),
+        Assert.That(() => repository.Sync.UpdatePendingExportsAsync([trackedPe]), Throws.Nothing,
             "The post-export detach must not trigger change detection over a poisoned tracker");
 
         await using var verify = NewContext();
@@ -188,7 +188,7 @@ public class PendingExportBatchDetachDatabaseTests
         var repository = new PostgresDataRepository(ctx);
         var trackedPe = await LoadPendingExportAndPoisonTrackerAsync(ctx, csoId);
 
-        Assert.DoesNotThrowAsync(() => repository.Sync.DeletePendingExportsAsync([trackedPe]));
+        Assert.That(() => repository.Sync.DeletePendingExportsAsync([trackedPe]), Throws.Nothing);
 
         Assert.That(ctx.Entry(trackedPe).State, Is.EqualTo(EntityState.Detached),
             "The deleted Pending Export must be detached, not left tracked as a stale entry");
@@ -224,11 +224,49 @@ public class PendingExportBatchDetachDatabaseTests
         Assert.That(ctx.Entry(trackedPe.AttributeValueChanges.Single()).State, Is.EqualTo(EntityState.Detached),
             "The updated attribute value changes must be detached after the raw SQL write");
 
-        Assert.DoesNotThrowAsync(() => ctx.SaveChangesAsync());
+        Assert.That(() => ctx.SaveChangesAsync(), Throws.Nothing);
 
         await using var verify = NewContext();
         var persisted = await verify.PendingExports.Where(pe => pe.Id == pendingExportId)
             .Select(pe => pe.Status).SingleAsync();
         Assert.That(persisted, Is.EqualTo(PendingExportStatus.Exported));
+    }
+
+    /// <summary>
+    /// Issue #1398: a Create written in part becomes an Update at execution time, and the export-result
+    /// raw update is the only thing that persists that. Before it carried ChangeType, the flip lived in
+    /// memory only and the next run would have inserted the row a second time.
+    /// </summary>
+    [Test]
+    public async Task UpdatePendingExportsAsync_ChangeTypeFlippedFromCreateToUpdate_PersistsTheFlipAsync()
+    {
+        var (csoId, pendingExportId) = await SeedCsoWithPendingExportAsync();
+
+        await using var ctx = NewContext();
+        await ctx.Database.ExecuteSqlRawAsync(@"UPDATE ""PendingExports"" SET ""ChangeType"" = {0} WHERE ""Id"" = {1}",
+            (int)PendingExportChangeType.Create, pendingExportId);
+        var repository = new PostgresDataRepository(ctx);
+        var pe = await ctx.PendingExports
+            .AsNoTracking()
+            .Include(p => p.AttributeValueChanges)
+            .SingleAsync(p => p.ConnectedSystemObjectId == csoId);
+        Assume.That(pe.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+
+        pe.ChangeType = PendingExportChangeType.Update;
+        pe.Status = PendingExportStatus.Pending;
+        pe.HasUnresolvedReferences = true;
+        pe.NextRetryAt = DateTime.UtcNow.AddMinutes(5);
+        await repository.Sync.UpdatePendingExportsAsync([pe]);
+
+        await using var verify = NewContext();
+        var persisted = await verify.PendingExports.Where(p => p.Id == pendingExportId)
+            .Select(p => new { p.ChangeType, p.Status, p.HasUnresolvedReferences, p.NextRetryAt }).SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(persisted.Status, Is.EqualTo(PendingExportStatus.Pending));
+            Assert.That(persisted.HasUnresolvedReferences, Is.True);
+            Assert.That(persisted.NextRetryAt, Is.Not.Null);
+        }
     }
 }

@@ -58,7 +58,7 @@ public class ScimDiscoveryDeserialisationTests
         var config = JsonSerializer.Deserialize<ScimServiceProviderConfig>(json, ScimJson.Options);
 
         Assert.That(config, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(config!.Patch?.Supported, Is.True);
             Assert.That(config.Bulk?.Supported, Is.True);
@@ -74,7 +74,7 @@ public class ScimDiscoveryDeserialisationTests
             Assert.That(config.AuthenticationSchemes[0].Primary, Is.True);
             Assert.That(config.AuthenticationSchemes[1].Primary, Is.False);
             Assert.That(config.Meta?.Version, Is.EqualTo("W/\"3694e05e9dff594\""));
-        });
+        }
     }
 
     [Test]
@@ -92,14 +92,14 @@ public class ScimDiscoveryDeserialisationTests
         var config = JsonSerializer.Deserialize<ScimServiceProviderConfig>(json, ScimJson.Options);
 
         Assert.That(config, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(config!.Patch?.Supported, Is.True);
             Assert.That(config.Bulk, Is.Null);
             Assert.That(config.Filter, Is.Null);
             Assert.That(config.ETag, Is.Null);
             Assert.That(config.AuthenticationSchemes, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -135,11 +135,11 @@ public class ScimDiscoveryDeserialisationTests
 
         var config = JsonSerializer.Deserialize<ScimServiceProviderConfig>(json, ScimJson.Options);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(config?.Patch?.Supported, Is.True);
             Assert.That(config?.ETag?.Supported, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -180,7 +180,7 @@ public class ScimDiscoveryDeserialisationTests
         var list = JsonSerializer.Deserialize<ScimListResponse<ScimResourceType>>(json, ScimJson.Options);
 
         Assert.That(list, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(list!.TotalResults, Is.EqualTo(2));
             Assert.That(list.Resources, Has.Count.EqualTo(2));
@@ -191,7 +191,7 @@ public class ScimDiscoveryDeserialisationTests
             Assert.That(list.Resources[0].SchemaExtensions[0].Schema, Is.EqualTo(ScimUrns.EnterpriseUser));
             Assert.That(list.Resources[0].SchemaExtensions[0].Required, Is.True);
             Assert.That(list.Resources[1].SchemaExtensions, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -290,7 +290,7 @@ public class ScimDiscoveryDeserialisationTests
         var emails = schema.Attributes.Single(a => a.Name == "emails");
         var groups = schema.Attributes.Single(a => a.Name == "groups");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(schema.Id, Is.EqualTo(ScimUrns.User));
             Assert.That(userName.Type, Is.EqualTo("string"));
@@ -305,7 +305,7 @@ public class ScimDiscoveryDeserialisationTests
             Assert.That(groups.Mutability, Is.EqualTo("readOnly"));
             Assert.That(groups.SubAttributes.Single(s => s.Name == "$ref").ReferenceTypes,
                 Is.EquivalentTo(new[] { "User", "Group" }));
-        });
+        }
     }
 
     [Test]
@@ -321,14 +321,14 @@ public class ScimDiscoveryDeserialisationTests
         var schema = JsonSerializer.Deserialize<ScimSchema>(json, ScimJson.Options);
         var displayName = schema!.Attributes.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(displayName.SubAttributes, Is.Empty);
             Assert.That(displayName.CanonicalValues, Is.Empty);
             Assert.That(displayName.ReferenceTypes, Is.Empty);
             Assert.That(displayName.MultiValued, Is.False);
             Assert.That(displayName.Required, Is.False);
-        });
+        }
     }
 
     [Test]

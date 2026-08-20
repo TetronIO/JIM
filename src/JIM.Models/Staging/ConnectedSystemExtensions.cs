@@ -162,6 +162,181 @@ public static class ConnectedSystemExtensions
     }
 
     /// <summary>
+    /// Returns the partitions a Run Profile execution may read from: the partition the Run Profile targets when it
+    /// targets one, otherwise every selected partition. Either way only selected partitions are returned.
+    /// </summary>
+    /// <remarks>
+    /// A partition's <see cref="ConnectedSystemPartition.Selected"/> flag is the administrator's statement of what
+    /// JIM manages, and it binds regardless of how a Run Profile is pointed. Targeting used to bypass the flag, so
+    /// deselecting a partition was a no-op for a Run Profile that named it and a mass obsoletion for one that did
+    /// not; the same tick meant opposite things depending on which Run Profile ran next. Every caller that decides
+    /// what to read must come through here so that cannot diverge again.
+    /// </remarks>
+    public static IEnumerable<ConnectedSystemPartition> GetTargetPartitions(
+        this ConnectedSystem connectedSystem,
+        ConnectedSystemRunProfile runProfile)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(runProfile);
+
+        if (connectedSystem.Partitions == null)
+            return [];
+
+        if (runProfile.Partition == null)
+            return connectedSystem.Partitions.Where(p => p.Selected);
+
+        // Resolve the targeted partition against the Connected System's own hierarchy rather than trusting the
+        // Run Profile's copy: the hierarchy is what a refresh updates, and the Run Profile may reference a partition
+        // that has since been deselected or removed from the directory.
+        return connectedSystem.Partitions.Where(p => p.Id == runProfile.Partition.Id && p.Selected);
+    }
+
+    /// <summary>
+    /// Determines whether a Run Profile is left inoperable by the current partition selections: it targets a
+    /// partition that is deselected, or one the hierarchy no longer carries.
+    /// </summary>
+    /// <remarks>
+    /// A Run Profile that targets no partition is never inoperable by this measure; it follows whatever is selected.
+    /// </remarks>
+    public static bool TargetsADeselectedPartition(
+        this ConnectedSystem connectedSystem,
+        ConnectedSystemRunProfile runProfile)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(runProfile);
+
+        if (runProfile.Partition == null)
+            return false;
+
+        return !connectedSystem.GetTargetPartitions(runProfile).Any();
+    }
+
+    /// <summary>
+    /// Determines whether a Run Profile targets a partition that is no longer selected, using only the Run Profile
+    /// and its loaded <see cref="ConnectedSystemRunProfile.Partition"/> navigation.
+    /// </summary>
+    /// <remarks>
+    /// This is the form for surfaces that list Run Profiles and hold no Connected System hierarchy: the REST DTO,
+    /// the portal's Run Profiles tab, and PowerShell. It answers the same question as the
+    /// <see cref="TargetsADeselectedPartition(ConnectedSystem, ConnectedSystemRunProfile)"/> overload for the case
+    /// they can see, and it cannot detect a partition dropped from the hierarchy altogether; prefer the overload
+    /// wherever the Connected System is already in hand, as the Run Profile execution gate does.
+    /// Requires the <see cref="ConnectedSystemRunProfile.Partition"/> navigation to have been loaded; callers that
+    /// project Run Profiles without it will always read <c>false</c>.
+    /// </remarks>
+    public static bool TargetsADeselectedPartition(this ConnectedSystemRunProfile runProfile)
+    {
+        ArgumentNullException.ThrowIfNull(runProfile);
+
+        return runProfile.Partition is { Selected: false };
+    }
+
+    /// <summary>
+    /// Collects every container the Connected System manages, walking the whole hierarchy beneath every selected
+    /// partition.
+    /// </summary>
+    /// <remarks>
+    /// This is the scope JIM manages, and it answers questions that must not diverge: where a rights check should
+    /// be run, where an export is permitted to write, and which objects a deselection would take out of scope. The
+    /// containers themselves are returned rather than their identifiers because each carries its own
+    /// <see cref="ConnectedSystemContainer.Scope"/>, and a caller that saw only identifiers would have to assume a
+    /// subtree, which is wrong for every <see cref="ConnectedSystemContainerScope.OneLevel"/> container.
+    /// </remarks>
+    public static List<ConnectedSystemContainer> GetSelectedContainers(this ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        var selected = new List<ConnectedSystemContainer>();
+        if (connectedSystem.Partitions == null)
+            return selected;
+
+        foreach (var container in connectedSystem.Partitions
+                     .Where(p => p.Selected && p.Containers != null)
+                     .SelectMany(p => p.Containers!))
+            CollectSelectedContainers(container, selected);
+
+        return selected;
+    }
+
+    /// <summary>
+    /// The external ids of every container the Connected System manages, for callers that genuinely need only the
+    /// identifiers (a rights check, which asks about the container itself rather than about objects within it).
+    /// </summary>
+    /// <remarks>
+    /// Anything deciding whether an *object* is in scope must use <see cref="GetSelectedContainers"/> instead and
+    /// honour each container's scope; an identifier alone cannot express the difference between a subtree and one
+    /// level.
+    /// </remarks>
+    public static List<string> GetSelectedContainerExternalIds(this ConnectedSystem connectedSystem) =>
+        [.. connectedSystem.GetSelectedContainers()
+            .Where(c => !string.IsNullOrEmpty(c.ExternalId))
+            .Select(c => c.ExternalId)];
+
+    /// <summary>
+    /// Every container stating something about scope beneath every selected partition: the selections and the
+    /// exclusions alike.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="GetSelectedContainers"/>, and the distinction matters (#1255).
+    /// <see cref="GetSelectedContainers"/> answers "where may JIM search, and where may it write?", which only a
+    /// selection can license. This answers "which container decides an object's fate?", which an exclusion decides
+    /// as much as a selection does. Handing the selections alone to a scope decision silently drops every
+    /// exclusion, and an exclusion that decides nothing carves nothing out: every object in the excluded branch
+    /// comes back in scope, imported and exported exactly as though the administrator had never excluded it.
+    ///
+    /// The whole hierarchy is walked rather than stopping at the outermost statement, because an exclusion always
+    /// sits beneath the selection it carves into, and a re-inclusion beneath that.
+    /// </remarks>
+    public static List<ConnectedSystemContainer> GetScopeDecidingContainers(this ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        var deciding = new List<ConnectedSystemContainer>();
+        if (connectedSystem.Partitions == null)
+            return deciding;
+
+        foreach (var container in connectedSystem.Partitions
+                     .Where(p => p.Selected && p.Containers != null)
+                     .SelectMany(p => p.Containers!))
+            CollectScopeDecidingContainers(container, deciding);
+
+        return deciding;
+    }
+
+    /// <summary>
+    /// Every container stating something about scope within one partition, for callers working a partition at a
+    /// time (an import run targeting one). <see cref="GetScopeDecidingContainers(ConnectedSystem)"/> for the rest.
+    /// </summary>
+    public static List<ConnectedSystemContainer> GetScopeDecidingContainers(this ConnectedSystemPartition connectedSystemPartition)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemPartition);
+
+        var deciding = new List<ConnectedSystemContainer>();
+        foreach (var container in connectedSystemPartition.Containers ?? [])
+            CollectScopeDecidingContainers(container, deciding);
+
+        return deciding;
+    }
+
+    private static void CollectSelectedContainers(ConnectedSystemContainer container, List<ConnectedSystemContainer> selected)
+    {
+        if (container.Selected)
+            selected.Add(container);
+
+        foreach (var child in container.ChildContainers)
+            CollectSelectedContainers(child, selected);
+    }
+
+    private static void CollectScopeDecidingContainers(ConnectedSystemContainer container, List<ConnectedSystemContainer> deciding)
+    {
+        if (container.Selected || container.Excluded)
+            deciding.Add(container);
+
+        foreach (var child in container.ChildContainers)
+            CollectScopeDecidingContainers(child, deciding);
+    }
+
+    /// <summary>
     /// Counts every container in the tree rooted at the supplied collection, including nested descendants.
     /// </summary>
     private static int CountContainersRecursively(IEnumerable<ConnectedSystemContainer> containers)

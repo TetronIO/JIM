@@ -44,9 +44,19 @@ public class ExportEvaluationResult
     public HashSet<Guid> InScopeJoinedCsoIds { get; set; } = [];
 
     /// <summary>
-    /// Attribute Flow errors raised during evaluation: a multi-valued Metaverse source attribute held more
-    /// than one value but the target Connected System attribute is single-valued (#435). No Pending Export
-    /// change was generated for those attributes; the worker surfaces each as a MultiValuedToSingleValued RPEI.
+    /// Attribute Flow errors raised during evaluation, each costing the object one attribute rather than the
+    /// whole export: a multi-valued Metaverse source attribute held more than one value but the target Connected
+    /// System attribute is single-valued (#435), or an Expression read an attribute the Metaverse Object has no
+    /// value for while its Missing Input Behaviour is FailMapping (#1361). No Pending Export change was generated
+    /// for those attributes; the worker surfaces each as the RPEI its <see cref="AttributeFlowError.Kind"/> names.
     /// </summary>
     public List<AttributeFlowError> AttributeFlowErrors { get; set; } = [];
+
+    /// <summary>
+    /// Outbound Synchronisation Rules that could not export because the Metaverse Object's one Connected
+    /// System Object in the target Connected System is of a different Connected System Object Type than the
+    /// Rule targets (#1331). No Pending Export was staged for those Rules; the worker surfaces each as a
+    /// CouldNotExportDueToExistingConnectedSystemObject RPEI.
+    /// </summary>
+    public List<ExportObjectTypeConflict> ObjectTypeConflicts { get; set; } = [];
 }

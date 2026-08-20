@@ -211,7 +211,7 @@ public class ConnectorProgressTests
         using var progress = new ConnectorProgress(_ => throw new InvalidOperationException("activity update failed"));
 
         // Progress reporting is cosmetic; a failure to narrate must never fail a synchronisation run.
-        Assert.DoesNotThrowAsync(async () => await progress.ReportAsync("Merging 100 changes into file..."));
+        Assert.That(async () => await progress.ReportAsync("Merging 100 changes into file..."), Throws.Nothing);
     }
 
     [Test]
@@ -221,7 +221,7 @@ public class ConnectorProgressTests
             report: _ => Task.CompletedTask,
             enterPhase: (_, _) => throw new InvalidOperationException("phase write failed"));
 
-        Assert.DoesNotThrowAsync(async () => await progress.EnterPhaseAsync("write"));
+        Assert.That(async () => await progress.EnterPhaseAsync("write"), Throws.Nothing);
     }
 
     [Test]

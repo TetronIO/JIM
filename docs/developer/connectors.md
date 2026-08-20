@@ -10,6 +10,28 @@ title: Writing Connectors
 
 <!-- TODO: Guide for implementing custom connectors: IConnector interface, capability interfaces (IConnectorImportUsingCalls, IConnectorExportUsingCalls), ConnectorCapabilities, registration, and packaging -->
 
+## Respecting the scope an administrator manages
+
+Implement `IConnectorManagedScope` when your Connected System has a containment model your Connector understands. JIM calls `SetManagedScope` before an export, passing the external identifiers of the containers the administrator has selected, and your Connector refuses to write anything outside their subtrees.
+
+Whether a given identifier sits within a container is your Connector's knowledge, not the framework's: JIM does not know that an LDAP Distinguished Name is hierarchical, or how your system spells containment.
+
+Two rules matter:
+
+- **An unstated scope permits everything.** JIM does not call `SetManagedScope` at all when a Connected System has no container selections, so treat an empty or never-set scope as "no restriction", never as "nothing allowed".
+- **A container you create during a run is in scope.** If your Connector provisions containers on demand, objects written into one it has just created must be permitted; JIM selects those containers as soon as the run finishes.
+
+Refuse per object rather than aborting the run, so one misdirected object does not stop the rest, and say in the error where the object would have gone and what an administrator should change.
+
+### Answering where an object sits
+
+Implement `IConnectorContainment` alongside it. `IsWithinContainer` answers whether one of your objects is at or beneath one of your containers, and JIM uses it to tell an administrator what deselecting a container would cost before they save it: how many objects would leave import scope, how many of those would disconnect from their Metaverse Object, and how many Metaverse Objects that would put on course for deletion.
+
+- **Use the same rule your import builds its search scope from, and your export guard enforces.** Copies of containment would let a preview state a count your Connector then contradicts, which is worse than not answering at all.
+- **The container is passed whole, not just its identifier, because its scope is part of the question.** A container the administrator has narrowed to one level covers only what sits directly within it and does not cover its own entry; treating it as a subtree would report objects as managed that no import will ever return.
+- **Never throw, and never open a connection.** JIM asks this about data it already holds, sometimes for a Connected System that is currently unreachable. Answer `false` for an empty or unparseable identifier: that under-counts a preview and refuses a write, which are the safe failures.
+- **Not implementing it is a valid answer.** A Connector with containers that cannot express containment gets a preview that says so, rather than one reporting a zero an administrator would read as "this change is safe".
+
 ## Reporting progress and errors
 
 A Connector is the only thing that knows what is happening inside a Connected System. JIM can count the objects you hand back and time how long you took, but everything else (which container you are reading, why one object could not be exported, that a Delta Import quietly became a Full Import) is invisible unless you report it.

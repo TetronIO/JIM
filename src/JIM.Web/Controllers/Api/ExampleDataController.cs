@@ -7,8 +7,11 @@ using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
+using JIM.Models.Exceptions;
+using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
@@ -62,7 +65,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     /// <param name="id">The unique identifier of the Example Data Set.</param>
     /// <returns>The full Example Data Set, including its values.</returns>
     [HttpGet("example-data-sets/{id:int}", Name = "GetExampleDataSet")]
-    [ProducesResponseType(typeof(ExampleDataSet), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ExampleDataSetDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetExampleDataSetAsync(int id)
@@ -72,7 +75,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         if (dataSet == null)
             return NotFound(ApiErrorResponse.NotFound($"Example Data Set with ID {id} not found."));
 
-        return Ok(dataSet);
+        return Ok(ExampleDataSetDto.FromEntity(dataSet));
     }
 
     /// <summary>
@@ -81,7 +84,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     /// <param name="request">The Example Data Set to create.</param>
     /// <returns>The created Example Data Set.</returns>
     [HttpPost("example-data-sets", Name = "CreateExampleDataSet")]
-    [ProducesResponseType(typeof(ExampleDataSet), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ExampleDataSetDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateExampleDataSetAsync([FromBody] CreateExampleDataSetRequest request)
@@ -105,7 +108,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         _logger.LogInformation("Created Example Data Set {Id} ({Name})", dataSet.Id, LogSanitiser.Sanitise(dataSet.Name));
 
         var created = await _application.ExampleData.GetExampleDataSetAsync(dataSet.Id);
-        return CreatedAtRoute("GetExampleDataSet", new { id = dataSet.Id }, created);
+        return CreatedAtRoute("GetExampleDataSet", new { id = dataSet.Id }, created == null ? null : ExampleDataSetDto.FromEntity(created));
     }
 
     /// <summary>
@@ -115,7 +118,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     /// <param name="request">The properties to update.</param>
     /// <returns>The updated Example Data Set.</returns>
     [HttpPut("example-data-sets/{id:int}", Name = "UpdateExampleDataSet")]
-    [ProducesResponseType(typeof(ExampleDataSet), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ExampleDataSetDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -149,7 +152,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
             await _application.ExampleData.UpdateExampleDataSetAsync(dataSet, await GetCurrentUserAsync(), request.ChangeReason);
         _logger.LogInformation("Updated Example Data Set {Id}", id);
 
-        return Ok(dataSet);
+        return Ok(ExampleDataSetDto.FromEntity(dataSet));
     }
 
     /// <summary>
@@ -211,7 +214,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     /// <param name="id">The unique identifier of the template.</param>
     /// <returns>The full template details including nested Object Type configurations.</returns>
     [HttpGet("templates/{id:int}", Name = "GetExampleDataTemplate")]
-    [ProducesResponseType(typeof(ExampleDataTemplate), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ExampleDataTemplateDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetTemplateAsync(int id)
@@ -221,8 +224,198 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         if (template == null)
             return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
 
-        // Return full entity for detail view - template includes nested ObjectTypes
-        return Ok(template);
+        return Ok(ExampleDataTemplateDto.FromEntity(template));
+    }
+
+    /// <summary>
+    /// Create a Data Generation Template
+    /// </summary>
+    /// <remarks>
+    /// Referenced objects (Metaverse Object Types, Metaverse Attributes, Connected System attributes and
+    /// Example Data Sets) are identified by id; resolve names to ids via their respective GET endpoints first.
+    /// </remarks>
+    /// <param name="request">The template to create.</param>
+    /// <returns>The created template.</returns>
+    /// <response code="201">The template was created.</response>
+    /// <response code="400">The template failed validation.</response>
+    /// <response code="404">A referenced object could not be found.</response>
+    /// <response code="409">A Data Generation Template with that name already exists.</response>
+    /// <response code="401">The initiating principal could not be identified.</response>
+    [HttpPost("templates", Name = "CreateExampleDataTemplate")]
+    [ProducesResponseType(typeof(ExampleDataTemplateDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateTemplateAsync([FromBody] CreateExampleDataTemplateRequest request)
+    {
+        _logger.LogInformation("Creating Data Generation Template: {Name}", LogSanitiser.Sanitise(request.Name));
+
+        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
+        {
+            _logger.LogWarning("Could not identify the initiating principal for Data Generation Template creation");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var (objectTypes, resolutionError) = await BuildTemplateObjectTypesAsync(request.ObjectTypes);
+        if (resolutionError != null)
+            return resolutionError;
+
+        var template = new ExampleDataTemplate
+        {
+            Name = request.Name,
+            BuiltIn = false,
+            Created = DateTime.UtcNow
+        };
+        template.ObjectTypes.AddRange(objectTypes!);
+
+        try
+        {
+            await _application.ExampleData.CreateTemplateAsync(template, initiatorType, initiatorId, initiatorName, request.ChangeReason);
+        }
+        catch (ExampleDataTemplateException ex)
+        {
+            return TemplateRejected("creation", ex);
+        }
+        catch (ExampleDataTemplateAttributeException ex)
+        {
+            return TemplateRejected("creation", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Data Generation Template creation conflicted: {Message}", LogSanitiser.Sanitise(ex.Message));
+            return Conflict(ApiErrorResponse.Conflict(ex.Message));
+        }
+
+        _logger.LogInformation("Created Data Generation Template {Id} ({Name})", template.Id, LogSanitiser.Sanitise(template.Name));
+
+        var created = await _application.ExampleData.GetTemplateAsync(template.Id);
+        return CreatedAtRoute("GetExampleDataTemplate", new { id = template.Id }, created == null ? null : ExampleDataTemplateDto.FromEntity(created));
+    }
+
+    /// <summary>
+    /// Update a Data Generation Template
+    /// </summary>
+    /// <remarks>
+    /// Omitted properties are left unchanged. Supplying ObjectTypes replaces the template's Object Type graph
+    /// entirely; omitting it leaves the existing graph untouched, so a rename needs only the Name property.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the template to update.</param>
+    /// <param name="request">The properties to update.</param>
+    /// <returns>The updated template.</returns>
+    /// <response code="200">The template was updated.</response>
+    /// <response code="400">The template is built in, or the update failed validation.</response>
+    /// <response code="404">The template, or a referenced object, could not be found.</response>
+    /// <response code="409">Another Data Generation Template already has the requested name.</response>
+    /// <response code="401">The initiating principal could not be identified.</response>
+    [HttpPut("templates/{id:int}", Name = "UpdateExampleDataTemplate")]
+    [ProducesResponseType(typeof(ExampleDataTemplateDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateTemplateAsync(int id, [FromBody] UpdateExampleDataTemplateRequest request)
+    {
+        _logger.LogInformation("Updating Data Generation Template: {Id}", id);
+
+        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
+        {
+            _logger.LogWarning("Could not identify the initiating principal for Data Generation Template update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var existing = await _application.ExampleData.GetTemplateAsync(id);
+        if (existing == null)
+            return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
+
+        if (existing.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in Data Generation Templates cannot be updated."));
+
+        // A detached template carrying the existing identity and audit provenance; the server decides whether the
+        // Object Type graph below it replaces the persisted one (see replaceObjectTypes).
+        var template = new ExampleDataTemplate
+        {
+            Id = existing.Id,
+            Name = request.Name ?? existing.Name,
+            BuiltIn = existing.BuiltIn,
+            Created = existing.Created,
+            CreatedByType = existing.CreatedByType,
+            CreatedById = existing.CreatedById,
+            CreatedByName = existing.CreatedByName
+        };
+
+        if (request.ObjectTypes != null)
+        {
+            var (objectTypes, resolutionError) = await BuildTemplateObjectTypesAsync(request.ObjectTypes);
+            if (resolutionError != null)
+                return resolutionError;
+
+            template.ObjectTypes.AddRange(objectTypes!);
+        }
+
+        try
+        {
+            await _application.ExampleData.UpdateTemplateAsync(template, initiatorType, initiatorId, initiatorName, request.ChangeReason, request.ObjectTypes != null);
+        }
+        catch (ExampleDataTemplateException ex)
+        {
+            return TemplateRejected("update", ex);
+        }
+        catch (ExampleDataTemplateAttributeException ex)
+        {
+            return TemplateRejected("update", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Data Generation Template update conflicted: {Message}", LogSanitiser.Sanitise(ex.Message));
+            return Conflict(ApiErrorResponse.Conflict(ex.Message));
+        }
+
+        _logger.LogInformation("Updated Data Generation Template {Id}", id);
+
+        var updated = await _application.ExampleData.GetTemplateAsync(id) ?? template;
+        return Ok(ExampleDataTemplateDto.FromEntity(updated));
+    }
+
+    /// <summary>
+    /// Delete a Data Generation Template
+    /// </summary>
+    /// <param name="id">The unique identifier of the template to delete.</param>
+    /// <param name="changeReason">Optional reason for the deletion, recorded against this template's change history.</param>
+    /// <returns>204 No Content on success.</returns>
+    /// <response code="204">The template was deleted.</response>
+    /// <response code="400">The template is built in and cannot be deleted.</response>
+    /// <response code="404">The template could not be found.</response>
+    /// <response code="401">The initiating principal could not be identified.</response>
+    [HttpDelete("templates/{id:int}", Name = "DeleteExampleDataTemplate")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteTemplateAsync(int id, [FromQuery] string? changeReason = null)
+    {
+        _logger.LogInformation("Deleting Data Generation Template: {Id}", id);
+
+        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
+        {
+            _logger.LogWarning("Could not identify the initiating principal for Data Generation Template deletion");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var template = await _application.ExampleData.GetTemplateAsync(id);
+        if (template == null)
+            return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
+
+        if (template.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in Data Generation Templates cannot be deleted."));
+
+        await _application.ExampleData.DeleteTemplateAsync(id, initiatorType, initiatorId, initiatorName, changeReason);
+        _logger.LogInformation("Deleted Data Generation Template {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>
@@ -422,4 +615,222 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     }
 
     #endregion
+
+    /// <summary>
+    /// Logs and builds the 400 response for a Data Generation Template the server refused as invalid. Shared by the
+    /// create and update endpoints, which catch the same two validation exception types with the same handling.
+    /// </summary>
+    private BadRequestObjectResult TemplateRejected(string operation, OperationalException exception)
+    {
+        _logger.LogWarning("Data Generation Template {Operation} rejected: {Message}", operation, LogSanitiser.Sanitise(exception.Message));
+        return BadRequest(ApiErrorResponse.BadRequest(exception.Message));
+    }
+
+    // ─── Data Generation Template request mapping ───
+
+    /// <summary>
+    /// Builds the Object Type graph a create or update request describes, resolving every referenced id to its
+    /// persisted entity. Each id is resolved once per request and the resolved instance reused wherever the id
+    /// reappears, so the repository attaches one instance per key. Returns (null, error) on the first failure,
+    /// with the offending id named in the error.
+    /// </summary>
+    private async Task<(List<ExampleDataObjectType>? objectTypes, IActionResult? error)> BuildTemplateObjectTypesAsync(List<ExampleDataTemplateObjectTypeRequest> requests)
+    {
+        var metaverseObjectTypes = new Dictionary<int, MetaverseObjectType>();
+        var metaverseAttributes = new Dictionary<int, MetaverseAttribute>();
+        var connectedSystemAttributes = new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
+        var exampleDataSets = new Dictionary<int, ExampleDataSet>();
+
+        var objectTypes = new List<ExampleDataObjectType>();
+        foreach (var request in requests)
+        {
+            var metaverseObjectType = await ResolveMetaverseObjectTypeAsync(request.MetaverseObjectTypeId, metaverseObjectTypes);
+            if (metaverseObjectType == null)
+                return (null, NotFound(ApiErrorResponse.NotFound($"Metaverse Object Type with ID {request.MetaverseObjectTypeId} not found.")));
+
+            var objectType = new ExampleDataObjectType
+            {
+                MetaverseObjectType = metaverseObjectType,
+                ObjectsToCreate = request.ObjectsToCreate
+            };
+
+            foreach (var attributeRequest in request.Attributes)
+            {
+                var (attribute, error) = await BuildTemplateAttributeAsync(attributeRequest, metaverseObjectTypes, metaverseAttributes, connectedSystemAttributes, exampleDataSets);
+                if (error != null)
+                    return (null, error);
+
+                objectType.TemplateAttributes.Add(attribute!);
+            }
+
+            objectTypes.Add(objectType);
+        }
+
+        return (objectTypes, null);
+    }
+
+    /// <summary>
+    /// Builds one template attribute from its request, resolving the attribute being generated, any Example Data
+    /// Sets, reference Object Types and the optional attribute dependency. Returns (null, error) on the first failure.
+    /// </summary>
+    private async Task<(ExampleDataTemplateAttribute? attribute, IActionResult? error)> BuildTemplateAttributeAsync(
+        ExampleDataTemplateAttributeRequest request,
+        Dictionary<int, MetaverseObjectType> metaverseObjectTypes,
+        Dictionary<int, MetaverseAttribute> metaverseAttributes,
+        Dictionary<int, ConnectedSystemObjectTypeAttribute> connectedSystemAttributes,
+        Dictionary<int, ExampleDataSet> exampleDataSets)
+    {
+        var attribute = new ExampleDataTemplateAttribute
+        {
+            PopulatedValuesPercentage = request.PopulatedValuesPercentage,
+            BoolTrueDistribution = request.BoolTrueDistribution,
+            BoolShouldBeRandom = request.BoolShouldBeRandom,
+            MinDate = request.MinDate,
+            MaxDate = request.MaxDate,
+            MinNumber = request.MinNumber,
+            MaxNumber = request.MaxNumber,
+            SequentialNumbers = request.SequentialNumbers,
+            RandomNumbers = request.RandomNumbers,
+            Pattern = request.Pattern,
+            Expression = request.Expression,
+            ManagerDepthPercentage = request.ManagerDepthPercentage,
+            MvaRefMinAssignments = request.MvaRefMinAssignments,
+            MvaRefMaxAssignments = request.MvaRefMaxAssignments
+        };
+
+        if (request.MetaverseAttributeId.HasValue)
+        {
+            var metaverseAttributeId = request.MetaverseAttributeId.Value;
+            var metaverseAttribute = await ResolveMetaverseAttributeAsync(metaverseAttributeId, metaverseAttributes);
+            if (metaverseAttribute == null)
+                return (null, NotFound(ApiErrorResponse.NotFound($"Metaverse Attribute with ID {metaverseAttributeId} not found.")));
+
+            attribute.MetaverseAttribute = metaverseAttribute;
+        }
+
+        if (request.ConnectedSystemObjectTypeAttributeId.HasValue)
+        {
+            var connectedSystemAttributeId = request.ConnectedSystemObjectTypeAttributeId.Value;
+            var connectedSystemAttribute = await ResolveConnectedSystemAttributeAsync(connectedSystemAttributeId, connectedSystemAttributes);
+            if (connectedSystemAttribute == null)
+                return (null, NotFound(ApiErrorResponse.NotFound($"Connected System Object Type attribute with ID {connectedSystemAttributeId} not found.")));
+
+            attribute.ConnectedSystemObjectTypeAttribute = connectedSystemAttribute;
+        }
+
+        foreach (var dataSetRequest in request.ExampleDataSets ?? [])
+        {
+            var exampleDataSet = await ResolveExampleDataSetAsync(dataSetRequest.ExampleDataSetId, exampleDataSets);
+            if (exampleDataSet == null)
+                return (null, NotFound(ApiErrorResponse.NotFound($"Example Data Set with ID {dataSetRequest.ExampleDataSetId} not found.")));
+
+            attribute.ExampleDataSetInstances.Add(new ExampleDataSetInstance
+            {
+                ExampleDataSet = exampleDataSet,
+                Order = dataSetRequest.Order
+            });
+        }
+
+        if (request.WeightedStringValues != null)
+        {
+            attribute.WeightedStringValues = request.WeightedStringValues
+                .Select(weightedValue => new ExampleDataTemplateAttributeWeightedValue { Value = weightedValue.Value, Weight = weightedValue.Weight })
+                .ToList();
+        }
+
+        if (request.ReferenceMetaverseObjectTypeIds != null)
+        {
+            attribute.ReferenceMetaverseObjectTypes = [];
+            foreach (var referenceObjectTypeId in request.ReferenceMetaverseObjectTypeIds)
+            {
+                var referenceObjectType = await ResolveMetaverseObjectTypeAsync(referenceObjectTypeId, metaverseObjectTypes);
+                if (referenceObjectType == null)
+                    return (null, NotFound(ApiErrorResponse.NotFound($"Metaverse Object Type with ID {referenceObjectTypeId} not found.")));
+
+                attribute.ReferenceMetaverseObjectTypes.Add(referenceObjectType);
+            }
+        }
+
+        if (request.AttributeDependency != null)
+        {
+            var (dependency, dependencyError) = await BuildAttributeDependencyAsync(request.AttributeDependency, metaverseAttributes);
+            if (dependencyError != null)
+                return (null, dependencyError);
+
+            attribute.AttributeDependency = dependency;
+        }
+
+        return (attribute, null);
+    }
+
+    /// <summary>
+    /// Builds an attribute's conditional dependency from its request, resolving the depended-on Metaverse Attribute
+    /// and parsing the comparison operator. Returns (null, error) on failure.
+    /// </summary>
+    private async Task<(ExampleDataTemplateAttributeDependency? dependency, IActionResult? error)> BuildAttributeDependencyAsync(
+        ExampleDataTemplateAttributeDependencyRequest request,
+        Dictionary<int, MetaverseAttribute> metaverseAttributes)
+    {
+        var metaverseAttribute = await ResolveMetaverseAttributeAsync(request.MetaverseAttributeId, metaverseAttributes);
+        if (metaverseAttribute == null)
+            return (null, NotFound(ApiErrorResponse.NotFound($"Metaverse Attribute with ID {request.MetaverseAttributeId} not found.")));
+
+        if (!Enum.TryParse<ComparisonType>(request.ComparisonType, ignoreCase: true, out var comparisonType) || !Enum.IsDefined(comparisonType))
+            return (null, BadRequest(ApiErrorResponse.BadRequest($"Invalid comparison type '{request.ComparisonType}'.")));
+
+        return (new ExampleDataTemplateAttributeDependency
+        {
+            MetaverseAttribute = metaverseAttribute,
+            ComparisonType = comparisonType,
+            StringValue = request.StringValue
+        }, null);
+    }
+
+    private async Task<MetaverseObjectType?> ResolveMetaverseObjectTypeAsync(int id, Dictionary<int, MetaverseObjectType> cache)
+    {
+        if (cache.TryGetValue(id, out var cached))
+            return cached;
+
+        var metaverseObjectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(id, false);
+        if (metaverseObjectType != null)
+            cache[id] = metaverseObjectType;
+
+        return metaverseObjectType;
+    }
+
+    private async Task<MetaverseAttribute?> ResolveMetaverseAttributeAsync(int id, Dictionary<int, MetaverseAttribute> cache)
+    {
+        if (cache.TryGetValue(id, out var cached))
+            return cached;
+
+        var metaverseAttribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        if (metaverseAttribute != null)
+            cache[id] = metaverseAttribute;
+
+        return metaverseAttribute;
+    }
+
+    private async Task<ConnectedSystemObjectTypeAttribute?> ResolveConnectedSystemAttributeAsync(int id, Dictionary<int, ConnectedSystemObjectTypeAttribute> cache)
+    {
+        if (cache.TryGetValue(id, out var cached))
+            return cached;
+
+        var connectedSystemAttribute = await _application.ConnectedSystems.GetAttributeAsync(id);
+        if (connectedSystemAttribute != null)
+            cache[id] = connectedSystemAttribute;
+
+        return connectedSystemAttribute;
+    }
+
+    private async Task<ExampleDataSet?> ResolveExampleDataSetAsync(int id, Dictionary<int, ExampleDataSet> cache)
+    {
+        if (cache.TryGetValue(id, out var cached))
+            return cached;
+
+        var exampleDataSet = await _application.ExampleData.GetExampleDataSetAsync(id);
+        if (exampleDataSet != null)
+            cache[id] = exampleDataSet;
+
+        return exampleDataSet;
+    }
 }

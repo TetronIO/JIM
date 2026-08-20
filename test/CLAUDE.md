@@ -32,6 +32,7 @@ JIM requires TDD. The workflow is **Red → Green → Refactor**:
 - Use NUnit with `[Test]` attribute
 - Async tests: `public async Task TestNameAsync()`
 - Use `Assert.That()` syntax
+- Group related assertions with `using (Assert.EnterMultipleScope()) { ... }`, never `Assert.Multiple(...)` (rationale in `src/CLAUDE.md`; note that a `return` inside the scope exits the whole test method, unlike the old lambda)
 - Mock with Moq: `Mock<DbSet<T>>`
 - Test naming: `MethodName_Scenario_ExpectedResult`
 
@@ -256,19 +257,45 @@ These flags are for human developer iteration only. Claude must not use them bec
 
 ### Running the FULL runner in the Claude Code cloud sandbox (when Docker is available)
 
-When the sandbox has a working Docker daemon (the SessionStart hook starts one where the environment supports it; `docker info` confirms), the full `Run-IntegrationTests.ps1` path works, including the Docker image builds, with ONE bridge: `dotnet restore` inside the build stages fails with `NU1301 ... UntrustedRoot` because the egress proxy re-terminates TLS and the build containers do not trust its CA. Fix (verified 2026-08-02: Scenario 4 and Scenario 8 both green this way):
+When the sandbox has a working Docker daemon (the SessionStart hook starts one where the environment supports it; `docker info` confirms), the full `Run-IntegrationTests.ps1` path works, including the Docker image builds, with ONE bridge: `dotnet restore` inside the build stages fails with `NU1301 ... UntrustedRoot` because the egress proxy re-terminates TLS and the build containers do not trust its CA.
 
-1. `cp /root/.ccr/ca-bundle.crt .ccr-ca-bundle.crt` (repo root is the build context) and add `.ccr-ca-bundle.crt` to `.git/info/exclude`.
-2. In each of `src/JIM.Web/Dockerfile`, `src/JIM.Worker/Dockerfile`, `src/JIM.Scheduler/Dockerfile`, insert immediately after the `FROM ... AS build` line:
-   ```dockerfile
-   COPY .ccr-ca-bundle.crt /ccr-ca-bundle.crt
-   ENV SSL_CERT_FILE=/ccr-ca-bundle.crt
-   ```
-   (The bundle includes the system CAs, so pointing OpenSSL's `SSL_CERT_FILE` at it wholesale is safe. The base-image pulls and apt steps need nothing; only in-build `dotnet restore` fails.)
-3. Run the runner normally (e.g. `./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario4-DeletionRules -DirectoryType OpenLDAP`). OpenLDAP is the sensible directory type here; Samba AD images may not be cached.
-4. **Revert the Dockerfile edits and delete the bundle before committing anything.** They are sandbox-only scaffolding and must never land in a commit (`git checkout -- src/*/Dockerfile && rm .ccr-ca-bundle.crt`).
+**Set one environment variable; do not edit the Dockerfiles.** All three build stages already accept an `EXTRA_CA_CERTS_BASE64` build argument for exactly this case (corporate TLS inspection), and `docker-compose.yml` wires it to `JIM_BUILD_EXTRA_CA_BASE64` for `jim.web`, `jim.worker` and `jim.scheduler`. **Do NOT base64 the whole of `/root/.ccr/ca-bundle.crt` into it**: at ~310KB encoded it exceeds the kernel's 128KB per-argument `execve` limit, so every child process in the pipeline dies with "Argument list too long" before Docker is even reached. And `agent-proxy-ca.crt` alone is not enough either: containers cannot reach the local agent proxy on 127.0.0.1, so their traffic is intercepted by the **outer egress gateway**, which signs with a different CA ("Egress Gateway SDS Issuing CA") that only appears inside the big bundle. Capture the gateway's own chain from inside a container and use that (verified 2026-08-18):
+
+```bash
+docker run --rm mcr.microsoft.com/dotnet/sdk:10.0-noble bash -c \
+  'echo | openssl s_client -connect api.nuget.org:443 -servername api.nuget.org -showcerts 2>/dev/null' \
+  | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/' | awk 'BEGIN{c=-1} /BEGIN CERTIFICATE/{c++} c>=1' > /tmp/egress-cas.pem
+cat /root/.ccr/agent-proxy-ca.crt >> /tmp/egress-cas.pem   # ~9KB base64 total; well under the limit
+export JIM_BUILD_EXTRA_CA_BASE64=$(base64 -w0 /tmp/egress-cas.pem)
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario14-AttributePriority -DirectoryType OpenLDAP
+```
+
+OpenLDAP is the sensible directory type here; Samba AD images may not be cached. Because the bridge is an environment variable, there is nothing in the working tree to revert and nothing that can leak into a commit.
+
+(This section previously prescribed copying the CA bundle into the repo root and hand-editing a `COPY`/`ENV SSL_CERT_FILE` pair into each Dockerfile, with a warning to revert it all before committing. That predates the `EXTRA_CA_CERTS_BASE64` argument and is no longer necessary; the build arg installs the CA properly via `update-ca-certificates` instead of overriding `SSL_CERT_FILE` wholesale.)
 
 Mind host resources: a Small-template Scenario 8 run fits in a 15 GB sandbox; the Scale templates do not.
+
+**The proxy's port changes when a session resumes, and `.env` remembers the old one.** A previous session may have written `JIM_BUILD_HTTPS_PROXY=http://127.0.0.1:<port>` (and `JIM_BUILD_NETWORK=host`) into `.env`, which `docker-compose.yml` passes to every build stage. On resume the agent proxy comes back on a **different** port, so the stored value points at nothing and `dotnet restore` fails inside the build with:
+
+```
+error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json.
+error NU1301: Connection refused (127.0.0.1:42447)
+```
+
+Note this is `Connection refused`, **not** the `UntrustedRoot` failure the CA bridge above fixes; reaching for `JIM_BUILD_EXTRA_CA_BASE64` here will not help. Re-point the stored value at the live port before blaming anything else:
+
+```bash
+PORT=$(curl -sS "$HTTPS_PROXY/__agentproxy/status" | grep -o '"port": *[0-9]*' | grep -o '[0-9]*')
+sed -i -E "s#^JIM_BUILD_HTTPS_PROXY=http://127\.0\.0\.1:[0-9]+#JIM_BUILD_HTTPS_PROXY=http://127.0.0.1:$PORT#" .env
+```
+
+`.env` is gitignored, so this never reaches a commit. **Re-run that on every resume, not once per session**: it bit twice within an hour of first being written down, because each resume moves the port again (42447, then 42933, then 44067), and a value corrected earlier in the same session is stale by the next resume. Two further things make the failure hard to recognise:
+
+- **It hides until the build cache goes cold.** The restore layer depends only on the `.csproj`/`packages.lock.json` files, so a cached one is reused and the stale proxy is never contacted; builds keep working for hours. When the disk fills, buildkit's GC evicts that layer, restore runs for real, and the "new" failure looks like something the session just changed.
+- **`JIM_BUILD_NETWORK=host` is required and is already set.** The agent proxy binds loopback only, so a build container cannot reach it via the bridge gateway or `host.docker.internal` (both time out); only host networking works, and `docker-compose.yml` already parameterises `network: ${JIM_BUILD_NETWORK:-default}` for this. Do not add a network override to a compose file.
+
+Related, from the same class of "believe the tooling, not the warning": the SessionStart hook prints `WARNING: Docker daemon failed to start` when its wait expires, and the daemon frequently comes up moments later. **Run `docker info` before accepting that warning** (root `CLAUDE.md` says the same); treating a working sandbox as Docker-less costs an entire session.
 
 ### Running a scenario in the Claude Code cloud sandbox (native stack; no Docker daemon)
 
@@ -281,6 +308,15 @@ When the sandbox has NO working Docker daemon, `Run-IntegrationTests.ps1` cannot
 4. **Make the directory hostname resolve.** `Get-DirectoryConfig` uses Docker-network hostnames (`openldap-primary`, `samba-ad-*`), and the native worker/web resolve via `/etc/hosts`. The integration compose publishes **no** ports for `openldap-primary` ("internal to Docker network only"), so `127.0.0.1` does NOT work; point the hostname at the container's bridge IP instead, which host processes can reach directly: `LDAP_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' openldap-primary)` then add `$LDAP_IP openldap-primary` to `/etc/hosts` (re-derive after any container restart; the IP can change). Only `openldap-primary` runs in the sandbox by default, so pass `-DirectoryConfig (Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Primary)` to the scenario.
 5. **Start from a clean database.** `DROP DATABASE jim; CREATE DATABASE jim OWNER jim;` (terminate connections first), then start the worker: it applies migrations and seeds on first boot. Do this between runs; scenario state (MVOs keyed on the same test attribute values) otherwise contaminates a re-run.
 6. **Invoke the scenario directly**, e.g. `Invoke-Scenario5-MatchingRules.ps1 -Step CaseSensitivity -Template Nano -JIMUrl http://localhost:5200 -ApiKey <key> -DirectoryConfig <openldap>`. This is the sanctioned sandbox exception to "never invoke scenario scripts directly / never `-SkipBuild`" above; those rules assume the Docker path, which is unavailable here. To prove red→green on a fix, revert just the fix files, `dotnet build src/JIM.Worker`, restart the worker, and re-run.
+
+**Corrections to the above, from a full Scenario 14 run on the native stack (2026-08-15).** Every one of these cost a failed run before it was understood:
+
+- **Do not invent an API key; read it from `.env`.** `JIM_INFRASTRUCTURE_API_KEY` is already defined there, and `Start-SandboxStack.ps1` loads `.env` into its own process *after* inheriting the environment, so a key exported before the call is overwritten by the one in the file. Exporting your own value gets you "Authentication failed" on the first scenario call. Pass the `.env` value to the scenario's `-ApiKey`.
+- **Reset the directory, not just the database, between runs.** Scenario steps add users (Scenario 14's Grace), delete entries and withdraw attributes; the populate scripts layer over whatever they find. Without a directory reset the first import sees 7 objects where 6 are expected and the run stops on the isolation check. Remove the container *and its volume* (`docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile openldap rm -sfv openldap-primary` then `docker volume rm -f jim-integration-openldap-primary-data`) and bring it back up; the volume is named `jim-integration-openldap-primary-data`, not the service name.
+- **Re-derive the container IP into `/etc/hosts` on every reset**, since recreating the container changes it (step 4 above says this; it bites again on every iteration, so automate it rather than remembering it).
+- **A scenario that mutates configuration needs `-Force` on destructive cmdlets.** Preference variables such as `$ConfirmPreference` do not flow into module scope, so a `ConfirmImpact = 'High'` cmdlet still prompts, and with no interactive host the prompt fails with "Exception calling ShouldProcess with 2 argument(s): Object reference not set to an instance of an object". If a setup script stops there, that is what it means.
+- **Wrap the whole loop in a script.** Reset database, reset directory, refresh `/etc/hosts`, restart the stack, run the scenario: roughly six minutes per iteration, entirely unattended, and it is what makes iterating on a scenario in the sandbox practical rather than painful.
+- **`dotnet run` on JIM.Web can fail with "You must install or update .NET to run this application"** when the SDK's targeting packs are a patch ahead of the installed shared runtime (10.0.11 versus 10.0.10). The Worker rolls forward and starts; the Web app pins both `Microsoft.NETCore.App` and `Microsoft.AspNetCore.App` to the targeting pack version and cannot roll backwards. Fix with `curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --runtime aspnetcore --install-dir /root/.dotnet`.
 
 See `engineering/SANDBOX_RUNTIME_VERIFICATION.md` for the broader sandbox runtime-verification workflow.
 

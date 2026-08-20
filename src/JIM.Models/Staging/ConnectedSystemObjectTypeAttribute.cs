@@ -22,6 +22,29 @@ public class ConnectedSystemObjectTypeAttribute
 
     public AttributeDataType Type { get; set; }
 
+    /// <summary>
+    /// Whether an administrator chose <see cref="Type"/>, rather than schema discovery inferring it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A schema refresh overwrites what the Connector discovered and preserves what the administrator
+    /// decided. Until an attribute's data type could be overridden it was purely discovered, so it sat
+    /// on the refreshed side; this flag is what moves an overridden one across.
+    /// </para>
+    /// <para>
+    /// Without it the refresh would silently undo an override, and silently is the danger: the mapping
+    /// validator runs when a mapping is created, not continuously, so a Synchronisation Rule validated
+    /// against the chosen type would keep running against the reverted one, and the Attribute Flow, which
+    /// switches on the source type, would write the value into the wrong column of the Metaverse Object.
+    /// It would also be a way around the rule that an override is refused once an attribute holds values.
+    /// </para>
+    /// <para>
+    /// It pins the type alone. Writability, plurality and the description remain the Connector's to state,
+    /// so an override cannot freeze an attribute in the past.
+    /// </para>
+    /// </remarks>
+    public bool TypeSetByAdministrator { get; set; }
+
     public AttributePlurality AttributePlurality { get; set; } = AttributePlurality.SingleValued;
 
     /// <summary>
@@ -54,8 +77,29 @@ public class ConnectedSystemObjectTypeAttribute
     /// <summary>
     /// Indicates whether this attribute can be written to in the Connected System.
     /// Read-only attributes (system-managed, constructed, back-links) can still be imported but cannot be targeted by export Attribute Flows.
+    /// <see cref="AttributeWritability.WritableOnCreate"/> attributes can be targeted, but only ever flow on a Create Pending Export.
     /// </summary>
     public AttributeWritability Writability { get; set; }
+
+    /// <summary>
+    /// For a <see cref="AttributeDataType.Reference"/> attribute, the Object Type this reference points at,
+    /// when the Connected System's schema declares one (the SQL Connector's <c>referencesObjectType</c>).
+    /// Null when the schema does not say; import reference resolution then searches every Object Type and
+    /// requires the value to be unambiguous (#1285). Connector-stated: a schema refresh restates or clears it,
+    /// like <see cref="Writability"/>; administrators cannot set it.
+    /// </summary>
+    public int? ReferencedObjectTypeId { get; set; }
+
+    /// <inheritdoc cref="ReferencedObjectTypeId"/>
+    /// <remarks>
+    /// Never serialised: this navigation exists for EF wiring (the schema merge assigns it so the foreign
+    /// key resolves for Object Types created in the same save), and the API surfaces the target as id and
+    /// name on the DTO instead. It also closes a type cycle (attribute to Object Type to attributes), and
+    /// OpenAPI schema generation inlines nullable navigations rather than referencing them, so without this
+    /// the document generation recurses to death on any endpoint whose response reaches this entity.
+    /// </remarks>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ConnectedSystemObjectType? ReferencedObjectType { get; set; }
 
     public override string ToString()
     {

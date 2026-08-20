@@ -103,8 +103,8 @@ public class ConfigurationSnapshotService
     // -- Synchronisation Rule ------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Builds a scoped snapshot of a Synchronisation Rule. <paramref name="hashKey"/> is the per-instance keyed-hash key;
-    /// Synchronisation Rules carry no secrets, but the signature is kept uniform with the Connected System overload.
+    /// Builds a scoped snapshot of a Synchronisation Rule. <paramref name="hashKey"/> is the per-instance keyed-hash key,
+    /// used for the one secret a rule can carry: the static initial password (#1273).
     /// </summary>
     public ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey)
     {
@@ -123,7 +123,7 @@ public class ConfigurationSnapshotService
         AddReference(children, "connectedSystemId", rule.ConnectedSystemId, rule.ConnectedSystem?.Name, "Connected System");
         AddReference(children, "connectedSystemObjectTypeId", rule.ConnectedSystemObjectTypeId, rule.ConnectedSystemObjectType?.Name, "Connected System Object Type");
         AddReference(children, "metaverseObjectTypeId", rule.MetaverseObjectTypeId, rule.MetaverseObjectType?.Name, "Metaverse Object Type");
-        children.Add(BuildInitialPassword(rule.InitialPassword));
+        children.Add(BuildInitialPassword(rule.InitialPassword, hashKey));
         children.Add(BuildAttributeFlowRules(rule.AttributeFlowRules));
         children.Add(BuildObjectMatchingRules(rule.ObjectMatchingRules));
         children.Add(BuildScopingCriteriaGroups("objectScopingCriteriaGroups", "Scope", rule.ObjectScopingCriteriaGroups));
@@ -141,11 +141,16 @@ public class ConfigurationSnapshotService
     /// Records the initial-password configuration in the change history.
     /// <para>
     /// Deciding that JIM will set a password on every account a rule provisions, and what those passwords look
-    /// like, is exactly the sort of change an auditor asks who made and when. Only the configuration is
-    /// recorded; no password value exists at this point and none ever reaches a snapshot.
+    /// like, is exactly the sort of change an auditor asks who made and when.
+    /// </para>
+    /// <para>
+    /// A rule using one static password for every account is the single place a password value exists to record
+    /// (#1273), and it is recorded as a keyed hash through the same path a Connected System's bind credential
+    /// takes. That is enough for the history to show that the shared password changed and when, which is what an
+    /// auditor needs, without the history carrying the password or the ciphertext.
     /// </para>
     /// </summary>
-    private ConfigurationSnapshotNode BuildInitialPassword(SyncRuleInitialPassword? initialPassword)
+    private ConfigurationSnapshotNode BuildInitialPassword(SyncRuleInitialPassword? initialPassword, byte[] hashKey)
     {
         var children = new List<ConfigurationSnapshotNode>();
         if (initialPassword == null)
@@ -160,6 +165,12 @@ public class ConfigurationSnapshotService
         AddEnum(children, "source", initialPassword.Source, "Password settings source");
         AddEnum(children, "expiryBehaviour", initialPassword.ExpiryBehaviour, "Expiry behaviour");
         Add(children, "enableAccount", Render(initialPassword.EnableAccount), "Enable the account");
+
+        // Always present, even where no static password is set, so that setting one for the first time diffs as a
+        // change from nothing rather than appearing out of nowhere. StaticPasswordSetAt is deliberately not
+        // recorded beside it: it moves only when the password does, which this node already reports.
+        children.Add(ConfigurationSnapshotNode.Secret("staticPassword",
+            ComputeSecretHash(initialPassword.StaticPasswordEncryptedValue, hashKey), "Static password"));
 
         var policy = initialPassword.CustomPolicy;
         AddEnum(children, "style", policy.Style, "Style");
@@ -311,6 +322,7 @@ public class ConfigurationSnapshotService
         // SettingValuesValid is deliberately excluded: it is internal UI-flow state (whether the connector has validated
         // the settings), not configuration, so it does not belong in a configuration change history.
         Add(children, "maxExportParallelism", Render(connectedSystem.MaxExportParallelism), "Max export parallelism");
+        Add(children, "initialPasswordTimeToLive", Render(connectedSystem.InitialPasswordTimeToLive), "Initial password time to live");
         children.Add(BuildSettingValues(connectedSystem.SettingValues, hashKey));
         children.Add(BuildRunProfiles(connectedSystem.RunProfiles));
         children.Add(BuildObjectTypes(connectedSystem.ObjectTypes));
@@ -475,19 +487,41 @@ public class ConfigurationSnapshotService
 
     private ConfigurationSnapshotNode BuildContainers(IEnumerable<ConnectedSystemContainer>? containers)
     {
-        // Capture only selected containers (the admin's topology selection); the full discovered tree is operational.
+        // Capture the containers the administrator has said something about (the topology selection); the rest of
+        // the discovered tree is operational. A container that says nothing itself is still captured when something
+        // beneath it does, because it is the only path to that statement: dropping it would take the whole branch
+        // below with it, losing a selection made on a nested container and every re-inclusion inside an exclusion.
         var items = new List<ConfigurationSnapshotNode>();
-        foreach (var container in (containers ?? []).Where(c => c.Selected).OrderBy(c => c.Id))
+        foreach (var container in (containers ?? []).Where(StatesSomethingOrHoldsAStatement).OrderBy(c => c.Id))
         {
             var children = new List<ConfigurationSnapshotNode>();
             Add(children, "name", container.Name, "Name");
             Add(children, "externalId", container.ExternalId, "External ID");
             Add(children, "hidden", Render(container.Hidden), "Hidden");
+            // Both of these are recorded by presence rather than by value, which is how a container's selection has
+            // always been recorded (by the container's own presence) and is what lets the classifier decide on the
+            // key and how it changed without ever reading a value. A container captured only as the path to a
+            // statement below carries neither, so it states nothing, which is the truth about it. Unlike the
+            // cosmetic scalars above, both decide what gets imported: carving the container out takes objects out of
+            // scope, and so does dropping the selection while the node remains as a path.
+            if (container.Selected)
+                Add(children, "selected", Render(true), "Selected");
+
+            if (container.Excluded)
+                Add(children, "excluded", Render(true), "Excluded");
+            AddEnum(children, "scope", container.Scope, "Scope");
             children.Add(BuildContainers(container.ChildContainers));
             items.Add(ConfigurationSnapshotNode.ObjectNode("container", children, container.Name, container.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("containers", items, "Containers");
     }
+
+    /// <summary>
+    /// Whether a container belongs in the snapshot: it states something about its own import scope, or it is the
+    /// route to a container beneath it that does.
+    /// </summary>
+    private static bool StatesSomethingOrHoldsAStatement(ConnectedSystemContainer container) =>
+        container.Selected || container.Excluded || container.ChildContainers.Any(StatesSomethingOrHoldsAStatement);
 
     // -- Schedule ------------------------------------------------------------------------------------------------------
 

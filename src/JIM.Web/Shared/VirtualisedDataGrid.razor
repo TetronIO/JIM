@@ -1,0 +1,570 @@
+@typeparam T
+@attribute [CascadingTypeParameter(nameof(T))]
+@using JIM.Web.Models
+@implements IVirtualisedSortable
+@implements IAsyncDisposable
+@inject NavigationManager NavManager
+@inject IUserPreferenceService PreferenceService
+@inject IJSRuntime JS
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The virtualised (infinite-scroll) list: grows with its rows up to the available viewport height (a short
+   list reads as an ordinary table; a long one fills to the page footer) and streams windows of rows from
+   the server as the reader scrolls, so there is no page size to choose and no page controls. This component owns
+   everything every virtualised list must get right and got wrong at least once while the pattern lived in a page:
+   the URL round trip for search, sort and scroll position; re-counting only when the filters change; restoring a
+   scroll position that is not yet reachable; re-attaching the scroll listener when SPA navigation reuses the
+   component; and an empty state that must not flash over data in flight. Pages supply the columns, the window
+   loader and the empty-state copy. See JIM.Web/CLAUDE.md "Virtualised lists". *@
+
+@if (_preferencesLoaded)
+{
+    @* The cascade lets VirtualisedSortHeader (rendered inside column HeaderTemplates, anywhere in the grid's own
+       render tree) reach back to this grid without every page threading it through. *@
+    <CascadingValue Value="(IVirtualisedSortable)this" IsFixed="true">
+    @* The id anchors the scroll-position interop: the virtualiser's scroll container is MudBlazor's own element
+       inside the grid, so it is reached as a descendant of something this component names rather than by a global
+       selector that another table on the page could match. *@
+    <div id="@ContainerId" class="jim-virtualised-list" style="@ContainerStyle">
+    @* OverscanCount is well above MudBlazor's default of 3 because every window costs a database read and a
+       SignalR round trip, and the virtualiser renders empty space for rows it has asked for but not yet received.
+       Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,
+       rather than repeatedly out-running the fetch. *@
+    @* Built as a template rather than inline, so a grid whose toolbar would hold nothing but the count can
+       leave the parameter null and have MudDataGrid draw no toolbar at all. See ShowToolBar. *@
+    @{
+        RenderFragment toolBar =
+            @<text>
+        @* The toolbar has two anchored ends and nothing loose in between. Left: how the table is displayed,
+           then the page's own actions. Right: how big the list is, then the box that narrows it. A count in
+           the left slot pushed the primary action into the middle, where the loudest thing on the page was
+           also the only one floating in open space. *@
+        @* An embedded grid is one of many on its page (a value table per multi-valued attribute, a table per
+           event in a timeline), so it drops the density toggle: row density is one saved preference for the
+           whole portal, and a control for it once per attribute is the same switch drawn a dozen times. It
+           keeps its search box, which is per table by nature and is how a member is found among half a
+           million, and its count, which is the one thing each embedded table must say for itself. *@
+        @if (!Embedded)
+        {
+            <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
+        }
+        @if (ToolBarExtras != null)
+        {
+            @if (!Embedded)
+            {
+                <MudText Class="mx-2 mud-text-disabled">|</MudText>
+            }
+            @ToolBarExtras
+        }
+        <MudSpacer />
+        @* The total match count. With no pager this is the only place the list says how big it is, and while a
+           search narrows it the text becomes "x of y" against the unfiltered baseline; it sits against the
+           search box because that is the control the reader just changed it with. *@
+        <TableObjectCount Count="@TotalItems" Total="@UnfilteredTotalItems"
+                          SingularName="@SingularName" PluralName="@PluralName"
+                          Class="mr-3" />
+        @if (ShowSearch)
+        {
+            @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
+               filtered by a term the reader cannot see. *@
+            <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
+        }
+            </text>;
+    }
+    <MudDataGrid @ref="_dataGrid" T="T" VirtualizeServerData="ServerReload" Virtualize="true" OverscanCount="30"
+                 FixedHeader="true" ItemSize="@RowHeight"
+                 Hover="true" Dense="@_dense" Outlined="true" Elevation="0" SortMode="SortMode.Single"
+                 RowClass="@(RowClicked.HasDelegate ? "cursor-pointer" : null)" RowClassFunc="@RowClassFunc"
+                 RowClick="HandleRowClick" Class="@GridClass"
+                 ToolBarContent="@(ShowToolBar ? toolBar : null)">
+        <Columns>
+            @Columns
+        </Columns>
+        <NoRecordsContent>
+            @* Only speak once the match set is known to be empty. MudDataGrid renders this fragment whenever it
+               holds no rows, and a virtualiser holds none between windows, so an unguarded message flashes over
+               data that is merely in flight. TotalItems is null until the first counted window returns and zero
+               only when the filters genuinely matched nothing. *@
+            @if (TotalItems == 0 && EmptyContent != null)
+            {
+                @EmptyContent(this)
+            }
+        </NoRecordsContent>
+    </MudDataGrid>
+    </div>
+    </CascadingValue>
+}
+
+@code {
+    // ─── Parameters ───
+
+    /// <summary>Loads one window of rows. See <see cref="VirtualisedWindowRequest"/> for the contract, in
+    /// particular honouring <see cref="VirtualisedWindowRequest.IncludeTotalCount"/>.</summary>
+    [Parameter, EditorRequired]
+    public Func<VirtualisedWindowRequest, CancellationToken, Task<VirtualisedWindow<T>>> LoadWindow { get; set; } = null!;
+
+    /// <summary>The grid's columns. Use <see cref="VirtualisedSortHeader"/> inside a TemplateColumn's
+    /// HeaderTemplate for server-side sortable headers.</summary>
+    [Parameter, EditorRequired]
+    public RenderFragment Columns { get; set; } = null!;
+
+    /// <summary>The empty state, rendered only once the match set is known to be empty. The context is this grid,
+    /// so the fragment can branch on <see cref="SearchText"/> and wire a button to <see cref="ClearSearchAsync"/>.</summary>
+    [Parameter]
+    public RenderFragment<VirtualisedDataGrid<T>>? EmptyContent { get; set; }
+
+    /// <summary>Extra toolbar content, rendered between the spacer and the search box.</summary>
+    [Parameter]
+    public RenderFragment? ToolBarExtras { get; set; }
+
+    /// <summary>Unique element id for this grid on its page; anchors the scroll interop. Two grids on one page
+    /// need two ids (and two <see cref="UrlParameterPrefix"/>es).</summary>
+    [Parameter, EditorRequired]
+    public string ContainerId { get; set; } = null!;
+
+    /// <summary>The sort key applied when the URL names none.</summary>
+    [Parameter, EditorRequired]
+    public string DefaultSortBy { get; set; } = null!;
+
+    /// <summary>The sort direction applied when the URL names none. Time-ordered lists (Activities, Pending
+    /// Exports) open newest first, so their default is descending; an absent desc parameter in the URL means
+    /// this default, never "ascending".</summary>
+    [Parameter]
+    public bool DefaultSortDescending { get; set; }
+
+    /// <summary>Singular noun for the toolbar count, e.g. "Pending Export".</summary>
+    [Parameter]
+    public string? SingularName { get; set; }
+
+    /// <summary>Plural noun for the toolbar count, e.g. "Pending Exports".</summary>
+    [Parameter]
+    public string? PluralName { get; set; }
+
+    /// <summary>Placeholder for the built-in search box.</summary>
+    [Parameter]
+    public string SearchPlaceholder { get; set; } = "Search...";
+
+    /// <summary>Prefix for the URL parameters this grid owns (q, sort, desc, row), so two grids on one page do
+    /// not overwrite each other's state. Null for a page with a single grid.</summary>
+    [Parameter]
+    public string? UrlParameterPrefix { get; set; }
+
+    /// <summary>
+    /// Identity of the state this grid is showing, typically the page's route parameter. When it changes while
+    /// the component instance is reused (SPA navigation between two lists sharing a route template), the grid
+    /// re-reads the URL and re-attaches its scroll tracking to the new DOM. Pages that unmount the grid between
+    /// navigations can leave it defaulted.
+    /// </summary>
+    [Parameter]
+    public string StateKey { get; set; } = string.Empty;
+
+    /// <summary>Raised when a row is clicked. When unset, rows do not read as clickable.</summary>
+    [Parameter]
+    public EventCallback<T> RowClicked { get; set; }
+
+    /// <summary>Optional per-row CSS class (e.g. dimming a disabled row); composes with the grid's own row
+    /// classes rather than replacing them.</summary>
+    [Parameter]
+    public Func<T, int, string?>? RowClassFunc { get; set; }
+
+    /// <summary>
+    /// Marks a grid that is one of many on its page: a value table per multi-valued attribute, a table per event
+    /// in a timeline. Such a grid drops the density toggle, which is one saved preference for the whole portal
+    /// rather than a per-table choice, and keeps its search, sort and position to itself instead of writing them
+    /// to an address bar every sibling shares, where which instance a parameter belongs to is a rendering
+    /// accident. Its own search box stays: that is per table by nature.
+    /// </summary>
+    [Parameter]
+    public bool Embedded { get; set; }
+
+    /// <summary>
+    /// Whether this grid offers a search box. Set false where the list is small by construction and searching it
+    /// says nothing a glance does not: the queued steps of one Schedule Execution, a handful of Roles. A box that
+    /// narrows four rows is a control asking to be used for no benefit, and repeated per group it is clutter.
+    /// </summary>
+    [Parameter]
+    public bool ShowSearch { get; set; } = true;
+
+    /// <summary>
+    /// Whether the grid draws a toolbar at all. It does unless the toolbar would hold nothing but the count: an
+    /// <see cref="Embedded"/> grid drops the density toggle, and one with <see cref="ShowSearch"/> off has no
+    /// search box either, leaving a full-height bar across the top of the table saying what the rows beneath it
+    /// already say. The count earns its place beside the control that changes it, so it goes when that control
+    /// does. Public so a test can assert the decision rather than infer it from rendered markup.
+    /// </summary>
+    public bool ShowToolBar => !Embedded || ShowSearch || ToolBarExtras != null;
+
+    /// <summary>
+    /// Whether this grid keeps its search, sort and scroll position in the address bar. A grid in a dialog sets
+    /// this false: its state would outlive the dialog that owns it, and a deep link cannot reopen the dialog to
+    /// put it back. <see cref="Embedded"/> implies it, since several siblings cannot share one set of parameters.
+    /// </summary>
+    [Parameter]
+    public bool TrackUrlState { get; set; } = true;
+
+    /// <summary>
+    /// Classes for the grid itself. The default is the standing gap between a grid and whatever page chrome sits
+    /// above it, which is nearly always what a list page wants. A grid that is joined to the block directly above
+    /// it (each Schedule Execution's header in the Operations queue) replaces it, so the two read as one box
+    /// rather than as a header floating over a table.
+    /// </summary>
+    [Parameter]
+    public string GridClass { get; set; } = "mt-5";
+
+    /// <summary>
+    /// An explicit height ceiling (any CSS length, e.g. "400px"), for a grid whose container is not the page: a
+    /// dialog, a cell, an expansion panel. The default ceiling is measured from where the page footer lands, which
+    /// for those grids describes the page behind them rather than the box they are in. Supplying this skips the
+    /// measurement entirely.
+    /// </summary>
+    [Parameter]
+    public string? MaxHeight { get; set; }
+
+    // ─── State the page and empty-state fragment may read ───
+
+    /// <summary>The free-text search currently narrowing the list; empty when the reader has not searched.</summary>
+    public string SearchText { get; private set; } = string.Empty;
+
+    /// <inheritdoc />
+    public string SortBy { get; private set; } = string.Empty;
+
+    /// <inheritdoc />
+    public bool SortDescending { get; private set; }
+
+    /// <summary>The total matching the current filters, or null until the first counted window returns. It exists
+    /// to size the scroll area and feed the toolbar count; counting is a full scan of the match set, so it is
+    /// invalidated only where the filters change (see <see cref="RefreshAsync"/>). Sorting deliberately does not
+    /// reset it: reordering the same match set cannot change its size.</summary>
+    public int? TotalItems { get; private set; }
+
+    /// <summary>The match count with no search text, held so the count can read "12 of 3,868" while a search is
+    /// active. Captured whenever a count returns and no search is narrowing the list.</summary>
+    public int? UnfilteredTotalItems { get; private set; }
+
+    // ─── Internals ───
+
+    private MudDataGrid<T>? _dataGrid;
+    private bool _dense;
+    private bool _preferencesLoaded;
+    private string? _appliedStateKey;
+
+    private string ScrollContainerSelector => $"#{ContainerId} .mud-table-container";
+
+    // Whether this grid's state belongs in the address bar at all; see TrackUrlState and Embedded.
+    private bool KeepsUrlState => TrackUrlState && !Embedded;
+
+    // A stated ceiling is applied as a plain style on the container, so it holds from the first paint and needs no
+    // measurement; the CSS fallback ceiling is scoped to the same element, so this overrides it.
+    private string? ContainerStyle => string.IsNullOrWhiteSpace(MaxHeight) ? null : $"--jim-virtualised-list-max-height: {MaxHeight};";
+
+    // The row height the grid is laid out at, and the divisor that turns a scroll offset into a row index. The two
+    // must agree, so both read this rather than repeating the numbers.
+    private float RowHeight => _dense ? 36f : 50f;
+
+    // The row to restore to, read from the URL on load, then kept current as the reader scrolls. _scrollRestored
+    // stops the restore repeating on every later render, and turns the grid from reading the position to writing it.
+    private int _firstVisibleRow;
+    private bool _scrollRestored;
+    private DotNetObjectReference<VirtualisedDataGrid<T>>? _selfReference;
+    private bool _scrollObserved;
+
+    // Set when a StateKey change lands on a reused instance; consumed in OnAfterRenderAsync, because the reload
+    // must run against the grid the new render produced, and OnParametersSet is too early to await it anyway.
+    private bool _reloadPending;
+
+    // Long enough that a flick through the list settles before the URL is rewritten, short enough that a reader who
+    // stops to read and then copies the address bar gets where they are actually looking.
+    private const int ScrollDebounceMilliseconds = 400;
+
+    // How long a restore waits for its row to become reachable. It is generous because the wait covers the grid
+    // rendering, the first window read and the virtualiser sizing its scroll area, and because the cost of giving up
+    // early (landing at the top of a list the reader was sent into the middle of) is worse than a moment's delay.
+    private const int ScrollRestoreTimeoutMilliseconds = 5000;
+
+    protected override void OnParametersSet()
+    {
+        // First render, or SPA navigation reusing this instance for different content: adopt the search, sort and
+        // scroll position the URL asks for before anything queries the database, and forget the scroll listener,
+        // which is bound to a DOM that either does not exist yet or has just been discarded.
+        if (_appliedStateKey == StateKey)
+            return;
+        var isReusedInstance = _appliedStateKey != null;
+        _appliedStateKey = StateKey;
+
+        // An embedded grid writes no URL state, so there is none of its own to read back; reading anyway would
+        // adopt whatever the page's own list happens to have put there.
+        var urlState = !KeepsUrlState
+            ? new VirtualisedListUrlState { SortBy = DefaultSortBy, SortDescending = DefaultSortDescending }
+            : VirtualisedListUrlState.Read(
+                NavManager.ToAbsoluteUri(NavManager.Uri).Query, DefaultSortBy, UrlParameterPrefix, DefaultSortDescending);
+        SearchText = urlState.SearchText ?? string.Empty;
+        SortBy = urlState.SortBy ?? DefaultSortBy;
+        SortDescending = urlState.SortDescending;
+        _firstVisibleRow = urlState.FirstVisibleRow;
+        _scrollRestored = _firstVisibleRow == 0;
+        _scrollObserved = false;
+        TotalItems = null;
+        UnfilteredTotalItems = null;
+
+        // A reused instance still holds the previous view's rows (the virtualiser caches what it has fetched;
+        // nulling the totals alone reloads nothing) and its DOM keeps the previous view's scroll offset. Reload
+        // the data once the new render is in the DOM, and force the scroll restore even to row zero, so the new
+        // view arrives exactly as a fresh navigation to it would.
+        if (isReusedInstance)
+        {
+            _scrollRestored = false;
+            _reloadPending = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Load the table density preference once, before the grid is revealed, so it paints at the correct density
+        // (and picks the matching virtualisation row height) on first appearance rather than flashing.
+        if (firstRender)
+        {
+            _dense = await PreferenceService.GetTableDenseAsync() == true;
+            _preferencesLoaded = true;
+            StateHasChanged();
+            return;
+        }
+
+        if (!_preferencesLoaded || _scrollObserved)
+            return;
+
+        // Fit the height ceiling before restoring the scroll position: the restore clamps to the scroll area,
+        // and the ceiling decides how tall that area can get. There is no height to pass because there is no
+        // height to know: JavaScript measures where the page footer lands and caps the container so a long list
+        // ends at the same place on every page, while a short one collapses to its content, whatever chrome
+        // sits above the grid (a CSS fallback covers the first paint). A caller that stated its own ceiling has
+        // already answered the question, and its container is not the page anyway.
+        if (string.IsNullOrWhiteSpace(MaxHeight))
+            await InvokeInteropAsync<bool>("jimVirtualList.fit", ScrollContainerSelector);
+
+        if (!KeepsUrlState)
+        {
+            // Nothing to restore and nothing to watch for: this grid holds no URL state, and scroll tracking
+            // exists only to keep that state current. Marked observed so this pass runs once.
+            _scrollRestored = true;
+            _scrollObserved = true;
+        }
+        else
+        {
+            // Restore first, then watch, so the restore's own scrolling is not reported back as the reader's position.
+            // scrollToRow waits for the row to become reachable rather than needing a retry here; this component does
+            // not re-render when the grid loads its data, so there would be no later pass to retry on.
+            if (!_scrollRestored)
+            {
+                await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, _firstVisibleRow, RowHeight, ScrollRestoreTimeoutMilliseconds);
+                _scrollRestored = true;
+            }
+
+            _selfReference ??= DotNetObjectReference.Create(this);
+            _scrollObserved = await InvokeInteropAsync<bool>("jimVirtualList.observe", ScrollContainerSelector, _selfReference, RowHeight, ScrollDebounceMilliseconds);
+        }
+
+        // A StateKey change on a reused instance: the rows the virtualiser holds belong to the previous view,
+        // so fetch the new view's windows (and, with the totals already nulled, its count) underneath the
+        // freshly restored scroll position.
+        if (_reloadPending)
+        {
+            _reloadPending = false;
+            if (_dataGrid != null)
+                await _dataGrid.ReloadServerData();
+        }
+    }
+
+    private async Task<GridData<T>> ServerReload(GridStateVirtualize<T> state, CancellationToken token)
+    {
+        // The virtualiser can momentarily request a zero-width window while measuring; clamp to at least one row.
+        var request = new VirtualisedWindowRequest(
+            state.StartIndex,
+            Math.Max(1, state.Count),
+            string.IsNullOrWhiteSpace(SearchText) ? null : SearchText,
+            SortBy,
+            SortDescending,
+            IncludeTotalCount: TotalItems == null);
+
+        var window = await LoadWindow(request, token);
+
+        // Null means the count was not requested because we already hold it, never that nothing matched; a genuine
+        // zero comes back as zero and is kept.
+        TotalItems = window.TotalItems ?? TotalItems;
+
+        // With no search narrowing the list, the count just taken is the unfiltered baseline.
+        if (string.IsNullOrWhiteSpace(SearchText))
+            UnfilteredTotalItems = TotalItems;
+
+        return new GridData<T>
+        {
+            TotalItems = TotalItems ?? 0,
+            Items = window.Items
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task ToggleSortAsync(string name)
+    {
+        // No TotalItems reset here, deliberately: sorting reorders the match set without changing which objects
+        // are in it, so the total the scroll area is sized from still holds.
+        if (SortBy == name)
+            SortDescending = !SortDescending;
+        else
+        {
+            SortBy = name;
+            SortDescending = false;
+        }
+
+        // Re-sorting puts different objects under the reader's scroll position, so the position it describes is
+        // gone; send them back to the top and say so in the URL, rather than leaving a stale row index behind.
+        await ResetScrollAsync();
+
+        if (_dataGrid != null)
+            await _dataGrid.ReloadServerData();
+    }
+
+    /// <summary>Clears the search box and its filter; offered as the way out by search-matched-nothing empty states.</summary>
+    public Task ClearSearchAsync() => OnSearchAsync(string.Empty);
+
+    /// <summary>
+    /// Reloads the grid's data. Pass <paramref name="invalidateTotals"/> when a page-owned filter has changed:
+    /// the match set is different, so the total (and the unfiltered baseline it anchors) must be re-counted.
+    /// </summary>
+    public async Task RefreshAsync(bool invalidateTotals = false)
+    {
+        if (invalidateTotals)
+        {
+            TotalItems = null;
+            UnfilteredTotalItems = null;
+        }
+
+        if (_dataGrid != null)
+            await _dataGrid.ReloadServerData();
+    }
+
+    /// <summary>Returns the reader to the top and records that in the URL; for page-owned filter changes that
+    /// invalidate a scroll position the same way search and sort changes do.</summary>
+    public async Task ResetScrollAsync()
+    {
+        _firstVisibleRow = 0;
+        await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, 0, RowHeight, ScrollRestoreTimeoutMilliseconds);
+        if (KeepsUrlState)
+            await WriteUrlStateAsync();
+    }
+
+    /// <summary>
+    /// Removes a page-owned query parameter from the URL in place, preserving this grid's own state and every
+    /// other parameter. For chips and filters whose deep-link parameter the page owns but whose removal must not
+    /// cost a navigation (which would re-run the page's whole load).
+    /// </summary>
+    public async Task ClearQueryParameterAsync(string name)
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        query.Remove(name);
+        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", BuildUrlState().Write(query.ToString(), DefaultSortBy, UrlParameterPrefix, DefaultSortDescending));
+    }
+
+    private async Task OnSearchAsync(string text)
+    {
+        SearchText = text;
+        // The search changes which objects match, so the total must be re-counted; the unfiltered baseline is
+        // deliberately kept, because it is the very thing the new filtered count is compared against.
+        TotalItems = null;
+        await ResetScrollAsync();
+
+        if (_dataGrid != null)
+            await _dataGrid.ReloadServerData();
+    }
+
+    /// <summary>
+    /// Records where the reader has scrolled to and puts it in the URL. Called from JavaScript, debounced there,
+    /// so a flick through a long list costs one call rather than one per frame.
+    /// </summary>
+    [JSInvokable]
+    public async Task OnFirstVisibleRowChanged(int row)
+    {
+        if (row == _firstVisibleRow)
+            return;
+
+        _firstVisibleRow = row;
+        await WriteUrlStateAsync();
+    }
+
+    /// <summary>
+    /// Rewrites the URL to match the current search, sort and scroll position, in place and without a navigation.
+    /// NavigationManager is deliberately not used: it would raise a navigation, re-running the page's whole load,
+    /// on every scroll. The trade-off is that the browser's back button does not step through searches and sorts;
+    /// they are view state on one page rather than places to return to.
+    /// </summary>
+    private async Task WriteUrlStateAsync()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", BuildUrlState().Write(uri.Query, DefaultSortBy, UrlParameterPrefix, DefaultSortDescending));
+    }
+
+    private VirtualisedListUrlState BuildUrlState() => new()
+    {
+        SearchText = SearchText,
+        SortBy = SortBy,
+        SortDescending = SortDescending,
+        FirstVisibleRow = _firstVisibleRow
+    };
+
+    /// <summary>
+    /// Re-applies the scroll position after a density change. The row height changes underneath the virtualiser,
+    /// so the same scroll offset in pixels is now a different row; without this the list appears to jump on a
+    /// toggle that was only meant to change spacing.
+    /// </summary>
+    private async Task OnDensityChangedAsync()
+    {
+        if (_firstVisibleRow > 0)
+            await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, _firstVisibleRow, RowHeight, ScrollRestoreTimeoutMilliseconds);
+
+        // The listener was created with the old row height baked in, so it would report the wrong index from here on.
+        await InvokeInteropAsync<object>("jimVirtualList.stop", ScrollContainerSelector);
+        _scrollObserved = false;
+    }
+
+    private async Task HandleRowClick(DataGridRowClickEventArgs<T> args)
+    {
+        if (args.Item != null && RowClicked.HasDelegate)
+            await RowClicked.InvokeAsync(args.Item);
+    }
+
+    /// <summary>
+    /// Calls a JavaScript helper, treating the two failures that mean "there is no browser to talk to" as a plain
+    /// negative result rather than an error: interop before the runtime is ready, and interop after the circuit
+    /// has gone. Both are reachable here, because this component talks to JavaScript from OnAfterRenderAsync, from
+    /// a JavaScript callback, and from disposal.
+    /// </summary>
+    private async Task<TResult?> InvokeInteropAsync<TResult>(string identifier, params object?[] args)
+    {
+        try
+        {
+            return await JS.InvokeAsync<TResult>(identifier, args);
+        }
+        catch (JSDisconnectedException)
+        {
+            return default;
+        }
+        catch (InvalidOperationException)
+        {
+            return default;
+        }
+    }
+
+    /// <summary>
+    /// Releases the scroll listener and the reference JavaScript holds on this component. Both survive the grid
+    /// otherwise: the listener would keep calling into a component that has gone, and the reference would keep the
+    /// component alive for the life of the circuit.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        await InvokeInteropAsync<object>("jimVirtualList.stop", ScrollContainerSelector);
+        await InvokeInteropAsync<object>("jimVirtualList.unfit", ScrollContainerSelector);
+        _selfReference?.Dispose();
+    }
+}

@@ -510,6 +510,302 @@ function Get-DirectoryConfig {
     }
 }
 
+function Add-SambaCertificateToJimStore {
+    <#
+    .SYNOPSIS
+        Trust one Samba AD instance's CA certificate in JIM's certificate store.
+
+    .DESCRIPTION
+        Since LDAPTLS_REQCERT=never no longer disables LDAPS certificate validation for jim.web /
+        jim.worker (#1141), every Samba AD scenario connection is validated for real: OS trust anchors
+        plus whatever is in JIM's certificate store. Samba AD's self-signed certificate doubles as its
+        own CA, so trusting it is what makes the scenario connections succeed.
+
+        This follows the same pattern Setup-Scenario15.ps1 uses for the SCIM test service provider's
+        certificate: copy the certificate off the container, remove any stale certificate of the same
+        name from a previous run, then upload the fresh bytes. Bytes are uploaded rather than a path
+        because -Path is read server-side by jim.web, and the host path this script reads from does not
+        exist inside that container.
+
+        Before uploading, the certificate's SAN list is checked for the name the scenario will actually
+        connect by (normally the Compose service name, e.g. samba-ad-primary). A prebuilt Samba image
+        built before SAN-correct certificates shipped (SAMBA_CERT_EXTRA_NAMES; see
+        test/integration/docker/samba-ad-prebuilt/post-provision.sh and Build-SambaImages.ps1) carries a
+        certificate that can never pass that check, and this function fails hard rather than uploading a
+        certificate that would leave JIM's validation failing downstream with a misleading "server
+        unavailable" symptom, exactly what #1141 exists to stop happening silently.
+
+    .PARAMETER ContainerName
+        The Docker container name of the Samba AD instance to trust, e.g. samba-ad-primary,
+        samba-ad-source, samba-ad-target.
+
+    .PARAMETER ExpectedSanName
+        The DNS name the certificate's Subject Alternative Name list must carry: the Host value the
+        scenario's Connected System will actually connect by. Defaults to $ContainerName, which is
+        correct for every current Samba AD instance (Get-DirectoryConfig's Host equals ContainerName
+        for Primary, Source and Target alike).
+
+    .PARAMETER JIMUrl
+        The URL of the JIM instance to upload the certificate to.
+
+    .PARAMETER ApiKey
+        API key for authenticating to JIM.
+
+    .EXAMPLE
+        Add-SambaCertificateToJimStore -ContainerName "samba-ad-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ExpectedSanName = $ContainerName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$JIMUrl,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ApiKey
+    )
+
+    Write-Host "  Trusting ${ContainerName}'s CA certificate in the JIM certificate store..." -ForegroundColor Gray
+
+    # Guard: a clear message here beats a confusing docker cp failure a few lines down.
+    $running = docker ps --filter "name=^/${ContainerName}$" --format '{{.Names}}' 2>$null
+    if (-not $running) {
+        throw "Add-SambaCertificateToJimStore: container '$ContainerName' is not running. Cannot trust its CA certificate."
+    }
+
+    # Verify the certificate actually carries the SAN the scenario connects by, before trusting it.
+    # Validation would otherwise fail downstream with a misleading "server unavailable" symptom, which
+    # is exactly the failure mode #1141 exists to turn into a fast, actionable error.
+    $sanOutputLines = docker exec $ContainerName openssl x509 -in /usr/local/samba/private/tls/cert.pem -noout -ext subjectAltName 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Add-SambaCertificateToJimStore: could not read the TLS certificate's SAN list from '$ContainerName' (docker exec openssl failed): $sanOutputLines"
+    }
+    # docker exec's output is captured as one string per line, so join before matching: -notmatch against an
+    # array applies element-wise and returns the *non-matching* lines, which is truthy whenever any single
+    # line (e.g. the "X509v3 Subject Alternative Name:" header) fails to match, even though a later line
+    # carries the name. That false positive would fail every real certificate.
+    $sanOutput = $sanOutputLines -join "`n"
+    if ($sanOutput -notmatch [regex]::Escape($ExpectedSanName)) {
+        throw "Add-SambaCertificateToJimStore: ${ContainerName}'s TLS certificate does not carry the required SAN '$ExpectedSanName'. This image predates SAN-correct Samba AD certificates. Rebuild it: pwsh ./test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All. Certificate SANs found: $sanOutput"
+    }
+
+    # Copy the CA off the container. The certificate doubles as its own CA (see post-provision.sh).
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "jim-samba-ca"
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    $localCaPath = Join-Path $tempDir "$ContainerName-ca.pem"
+    if (Test-Path $localCaPath) { Remove-Item $localCaPath -Force }
+
+    docker cp "${ContainerName}:/usr/local/samba/private/tls/ca.pem" $localCaPath 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $localCaPath)) {
+        throw "Add-SambaCertificateToJimStore: 'docker cp' failed to copy the CA certificate from '$ContainerName'. Has the container finished provisioning?"
+    }
+
+    # Import the JIM PowerShell module and connect. Self-contained per call (mirrors
+    # Setup-Scenario15.ps1's own Connect-JIM / Disconnect-JIM bracket) so this function has no
+    # dependency on caller connection state.
+    $modulePath = Join-Path $PSScriptRoot "../../../src/JIM.PowerShell/JIM.psd1"
+    if (-not (Test-Path $modulePath)) {
+        throw "Add-SambaCertificateToJimStore: JIM PowerShell module not found at: $modulePath"
+    }
+
+    Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    Import-Module $modulePath -Force -ErrorAction Stop
+    try {
+        Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
+
+        $certificateName = "$ContainerName CA"
+        $existingCertificates = @(Get-JIMCertificate -ErrorAction SilentlyContinue) | Where-Object { $_.name -eq $certificateName }
+        foreach ($certificate in $existingCertificates) {
+            # Samba AD generates a fresh certificate at every first start (see post-provision.sh's
+            # "if [ ! -f cert.pem ]" guard), so a trusted certificate left over from a previous run's
+            # image build is not merely stale, it is for a key the provider no longer holds.
+            Remove-JIMCertificate -Id $certificate.id -Force | Out-Null
+            Write-Host "    Removed stale trusted certificate from a previous run" -ForegroundColor Gray
+        }
+
+        $certificateBytes = [System.IO.File]::ReadAllBytes($localCaPath)
+        $trusted = Add-JIMCertificate `
+            -Name $certificateName `
+            -CertificateData $certificateBytes `
+            -Notes "Samba AD CA for $ContainerName, trusted automatically by the integration test runner (#1141)." `
+            -PassThru
+
+        if (-not $trusted) {
+            throw "Add-SambaCertificateToJimStore: Add-JIMCertificate returned nothing for '$certificateName'; upload failed."
+        }
+
+        Write-Host "  OK Trusted ${ContainerName}'s CA (ID: $($trusted.id), thumbprint: $($trusted.thumbprint))" -ForegroundColor Green
+    }
+    finally {
+        Disconnect-JIM -ErrorAction SilentlyContinue
+        Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-DatabaseConfig {
+    <#
+    .SYNOPSIS
+        Get provider-specific configuration for the JIM SQL Connector integration tests
+
+    .DESCRIPTION
+        The Get-DirectoryConfig analogue for databases. Returns a hashtable carrying everything a
+        Scenario 16 setup or scenario script needs to talk to one database server: how to reach it from
+        inside the Docker network (which is what JIM uses), how to run SQL against it from the test host
+        (which is what the seeder uses), and the dialect's spellings for the column types the matrix
+        deliberately exercises.
+
+        Parameterising by provider is what lets one scenario implementation run once per supported
+        database server, which is the PRD's Testing Requirements contract: adding a provider extends the
+        matrix rather than duplicating scenario code.
+
+    .PARAMETER Provider
+        Which database server to configure for (SqlServer or Oracle). These are the connector's
+        priority 1 providers; PostgreSQL and MySQL are staged in the compose file but not yet covered.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("SqlServer", "Oracle")]
+        [string]$Provider
+    )
+
+    # The password every integration test container shares. It contains '@' and '!' deliberately: a
+    # credential that survives connect-string parsing and shell history expansion here is one that will
+    # survive a customer's, and the old Oracle healthcheck's failure on exactly this password is why
+    # those characters are worth keeping rather than quietly simplifying away.
+    $password = "Test@123!"
+
+    $configs = @{
+        SqlServer = @{
+            Provider            = "SqlServer"
+            DisplayName         = "Microsoft SQL Server"
+            ContainerName       = "sqlserver-hris-a"
+            ComposeProfiles     = @("phase2")
+
+            # The host JIM connects to, which is the container's name on jim-network. No port is
+            # published to the test host; everything reaches these containers over that network.
+            Host                = "sqlserver-hris-a"
+            Port                = 1433
+
+            # The Database Type drop-down value, matching SqlConnectorConstants.DatabaseTypeSqlServer.
+            DatabaseTypeSetting = "Microsoft SQL Server"
+            DatabaseName        = "JIMTEST"
+            ServiceName         = $null
+            Username            = "sa"
+            Password            = $password
+            Schema              = "hr"
+
+            # How the seeder runs a script inside the container. The 2022 image ships mssql-tools18 only
+            # (the unsuffixed path does not exist and sqlcmd is not on PATH), and tools18 encrypts by
+            # default, so -C is required to accept the server's self-signed certificate. -b makes
+            # sqlcmd exit non-zero on a SQL error, without which a failed seed looks like a success.
+            SqlCommand          = @("/opt/mssql-tools18/bin/sqlcmd", "-C", "-b", "-S", "localhost", "-U", "sa", "-P", $password)
+            ScriptArgument      = "-i"
+
+            # The two providers seed the same row numbers, so without a distinct natural key they would
+            # describe the same people. The Object Matching Rule joins on EMPLOYEE_NUMBER, so identical
+            # values had both Connected Systems joining to one set of Metaverse Objects: whichever
+            # provider's Synchronisation Rule won Attribute Priority decided every shared attribute, and
+            # a row asserting on what the other provider imported read back the wrong system's value.
+            # Only the prefix differs, so every other seeded value stays identical across providers and
+            # comparable between them.
+            EmployeeNumberPrefix = "S"
+
+            # Dialect spellings for the column types the matrix exercises. Kept here so the seeder's
+            # table definitions differ in one place rather than throughout.
+            Types = @{
+                Anchor          = "int IDENTITY(1,1)"
+                NaturalAnchor   = "nvarchar(32)"
+                Text            = "nvarchar(100)"
+                Integer         = "int"
+                BigInteger      = "bigint"
+                Decimal         = "decimal(9,4)"
+                Boolean         = "bit"
+                ZonelessDate    = "datetime2(3)"
+                OffsetDate      = "datetimeoffset(3)"
+                Guid            = "uniqueidentifier"
+                Binary          = "varbinary(64)"
+            }
+
+            # SQL Server has no third date/time shape to test; Oracle does, and it is the one the matrix
+            # cares most about. Null means "this provider has no such column".
+            LocalZoneDateColumn = $null
+            GeneratedKeyStyle   = "Identity"
+        }
+
+        Oracle = @{
+            Provider            = "Oracle"
+            DisplayName         = "Oracle Database"
+            ContainerName       = "oracle-hris-b"
+            ComposeProfiles     = @("phase2")
+
+            Host                = "oracle-hris-b"
+            Port                = 1521
+
+            DatabaseTypeSetting = "Oracle Database"
+            DatabaseName        = $null
+
+            # Free 23ai names its pluggable database FREEPDB1; the container database is FREE. Connect
+            # to the pluggable database: application schemas live there, and a container-database
+            # connection cannot see them.
+            ServiceName         = "FREEPDB1"
+            Username            = "JIMTEST"
+            Password            = $password
+            Schema              = "JIMTEST"
+
+            # The password is double-quoted inside the connect string because it contains '@', which
+            # EZConnect otherwise reads as the separator before the host. Getting this wrong is what
+            # made the original Oracle healthcheck fail on every interval.
+            SqlCommand          = @("sqlplus", "-s", "system/`"$password`"@//localhost:1521/FREEPDB1")
+            ScriptArgument      = "@"
+
+            # See the SQL Server config above for why the providers seed different natural keys.
+            EmployeeNumberPrefix = "O"
+
+            Types = @{
+                Anchor          = "NUMBER(10)"
+                NaturalAnchor   = "VARCHAR2(32)"
+                Text            = "VARCHAR2(100)"
+                Integer         = "NUMBER(10)"
+                BigInteger      = "NUMBER(19)"
+
+                # Precision and scale are stated deliberately. ODP.NET chooses the CLR type it returns
+                # from a NUMBER's declared precision and scale, not from the value, so NUMBER(9,4) and
+                # NUMBER(5,2) come back as genuinely different types.
+                Decimal         = "NUMBER(9,4)"
+
+                # Mapped to Boolean only when the Connected System opts in via "Treat NUMBER(1) Columns
+                # as Boolean"; Decimal otherwise. The matrix sets that option.
+                Boolean         = "NUMBER(1)"
+                ZonelessDate    = "TIMESTAMP(3)"
+                OffsetDate      = "TIMESTAMP(3) WITH TIME ZONE"
+
+                # Mapped to Guid only when the Connected System opts in via "Treat RAW(16) Columns as
+                # Guid"; Binary otherwise. The matrix sets that option.
+                Guid            = "RAW(16)"
+                Binary          = "RAW(64)"
+            }
+
+            # Oracle's third date/time shape, and the one the matrix exists to pin down. Its catalogue
+            # name reads as though it carried an offset, but ODP.NET returns a zoneless DateTime for it,
+            # already converted into the session's time zone. The connector therefore classifies it as
+            # zoneless in both directions and pins the session to the Connected System's Database Time
+            # Zone as each connection opens; those two together are what make a value written here read
+            # back as the same instant, whichever host the Worker happens to run on.
+            LocalZoneDateColumn = "TIMESTAMP(3) WITH LOCAL TIME ZONE"
+            GeneratedKeyStyle   = "Sequence"
+        }
+    }
+
+    if (-not $configs.ContainsKey($Provider)) {
+        throw "Unknown database provider: $Provider. Valid values: SqlServer, Oracle"
+    }
+
+    return $configs[$Provider]
+}
+
 # Script-level cache for name data (loaded once)
 $script:TestNameData = $null
 
@@ -2078,12 +2374,12 @@ function Assert-ScheduleExecutionSuccess {
 
     .DESCRIPTION
         Validates that a JIM Schedule Execution completed without errors by checking:
-        1. The overall execution status is 'Completed'
+        1. The overall execution status is 'Complete'
         2. Every step's activity status is acceptable (Complete, or CompleteWithWarning if allowed)
 
         Uses the execution detail endpoint which returns step-level activity status information.
         This prevents integration tests from silently passing when a schedule execution
-        reports 'Completed' but individual step activities had warnings or errors.
+        reports 'Complete' but individual step activities had warnings or errors.
 
     .PARAMETER ExecutionId
         The Schedule Execution ID (GUID) to validate.
@@ -2121,7 +2417,7 @@ function Assert-ScheduleExecutionSuccess {
 
     # Check overall execution status
     $status = $execution.status
-    $executionFailed = ($status -ne "Completed" -and $status -ne 2)
+    $executionFailed = ($status -ne "Complete" -and $status -ne 2)
 
     if ($executionFailed) {
         Write-Host "  ✗ $Name FAILED (execution status: $status)" -ForegroundColor Red
@@ -2142,7 +2438,7 @@ function Assert-ScheduleExecutionSuccess {
             throw $errorMsg
         }
         # No step detail available - fall back to execution status check only
-        Write-Host "  ✓ $Name completed successfully (Status: Completed)" -ForegroundColor Green
+        Write-Host "  ✓ $Name completed successfully (Status: Complete)" -ForegroundColor Green
         return
     }
 
@@ -2201,7 +2497,7 @@ function Assert-ScheduleExecutionSuccess {
         throw $errorMsg
     }
 
-    Write-Host "  ✓ $Name completed successfully (Status: Completed, $validatedCount step activities OK)" -ForegroundColor Green
+    Write-Host "  ✓ $Name completed successfully (Status: Complete, $validatedCount step activities OK)" -ForegroundColor Green
 }
 
 function Assert-ParallelExecutionTiming {
@@ -2932,6 +3228,52 @@ function Test-JimErrorWatcher {
 
     $info = Get-Item $Handle.SentinelPath
     return ($info.Length -gt 0)
+}
+
+function Clear-JimErrorWatcher {
+    <#
+    .SYNOPSIS
+        Takes whatever the watcher has captured so far and empties the sentinel.
+
+    .DESCRIPTION
+        The sentinel accumulates for the whole run, and Start-JIMRunProfile -Wait aborts whenever it is
+        non-empty. That is right for a scenario that stops at its first failure, and wrong for one that
+        deliberately carries on: a single early error latches the sentinel, so every Run Profile wait
+        afterwards aborts and every remaining step reports a failure it never actually had. Scenario 16
+        lost nineteen Oracle rows and half of SQL Server that way, to four errors raised before any of
+        them ran.
+
+        Draining rather than merely truncating, so the caller can attribute the lines to the step that
+        produced them instead of losing them. A caller that wants the whole run's errors accumulates
+        what this returns.
+
+    .PARAMETER Handle
+        The handle returned by Start-JimErrorWatcher. Optional: a scenario script does not own the
+        watcher, so when this is omitted the sentinel is taken from the JIM_RUNPROFILE_ABORT_SENTINEL
+        environment variable the runner sets, which is the same file Start-JIMRunProfile aborts on.
+
+    .OUTPUTS
+        [string[]] The error lines captured since the last drain. Empty if there were none.
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        [PSCustomObject]$Handle
+    )
+
+    $sentinelPath = if ($Handle) { $Handle.SentinelPath } else { $env:JIM_RUNPROFILE_ABORT_SENTINEL }
+
+    if ([string]::IsNullOrWhiteSpace($sentinelPath) -or -not (Test-Path $sentinelPath)) {
+        return @()
+    }
+
+    $lines = @(Get-Content -Path $sentinelPath -ErrorAction SilentlyContinue | Where-Object { $_ -ne '' })
+
+    # The tailing jobs append to this file continuously, so a line arriving between the read above and
+    # the truncation below is lost rather than double-counted. That is the right way round: a duplicate
+    # would fail a step that had already been reported, which is the very cascade this exists to stop.
+    Set-Content -Path $sentinelPath -Value '' -NoNewline -Encoding UTF8
+
+    return $lines
 }
 
 function Stop-JimErrorWatcher {

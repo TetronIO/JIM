@@ -160,31 +160,237 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
-    /// Tests the Q3 decision: circular sync prevention - exports should not be created back to the source system.
+    /// The uncached overload must evaluate a rule targeting the change-origin system too (#1284).
+    /// This inverts the original Q3 whole-system-skip test: circular sync is prevented at value level
+    /// by no-net-change detection on the production path, not by excluding the system, so the rule is
+    /// evaluated and the writeback staged. The production-path suppression of a genuine echo is pinned
+    /// by EvaluateExportRulesWithNoNetChangeDetectionAsync_EchoOfCurrentValueToSourceSystem_StagesNothingAsync.
     /// </summary>
     [Test]
-    public async Task EvaluateExportRulesAsync_WhenSourceSystemIsTarget_SkipsExportAsync()
+    public async Task EvaluateExportRulesAsync_RuleTargetsChangeOriginSystem_StagesExportAsync()
     {
-        // Arrange
-        var mvo = MetaverseObjectsData[0];
-        var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
+        // Arrange - the same writeback topology the cached tests use, evaluated without a cache
+        var (mvo, _, _, csEmployeeIdAttr, cso, _) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: null);
+        var changedAttributes = mvo.AttributeValues.ToList();
 
-        // Set up export rule pointing back to source system (which should be skipped)
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
+
+        // Assert - the rule was evaluated and the writeback staged onto the joined object
+        Assert.That(result, Has.Count.EqualTo(1),
+            "A rule targeting the system the change originated from must be evaluated (#1284)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(result[0].AttributeValueChanges.Any(avc => avc.AttributeId == csEmployeeIdAttr.Id && avc.StringValue == "EMP001"),
+                Is.True, "The staged change must carry the flowed value");
+        }
+    }
+
+    /// <summary>
+    /// Arranges the writeback-to-source topology (#1284): the seeded user export Synchronisation Rule
+    /// repointed at the Dummy Source System with one direct Employee ID flow, a Metaverse Object
+    /// carrying an Employee ID value the source system itself contributed, and a JOINED Connected
+    /// System Object in that same system, wired into a hand-built evaluation cache. The CSO's stored
+    /// value for the flowed attribute is the knob the tests turn: absent or different means the flow
+    /// is a genuine change; equal means it is an echo.
+    /// </summary>
+    private (MetaverseObject Mvo, ConnectedSystem SourceSystem, SyncRule ExportRule,
+        ConnectedSystemObjectTypeAttribute CsEmployeeIdAttr, ConnectedSystemObject Cso, ExportEvaluationCache Cache)
+        ArrangeWritebackToSourceFixture(string? csoStoredEmployeeId)
+    {
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        // The value was contributed by the very system the export rule targets. That is the ordinary
+        // writeback shape (the source system is where the value came from), and it must not by itself
+        // suppress the export; only the target already holding the value may do that.
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001",
+            ContributedBySystem = sourceSystem,
+            ContributedBySystemId = sourceSystem.Id
+        });
+
         var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
         exportRule.ConnectedSystemId = sourceSystem.Id;
         exportRule.ConnectedSystem = sourceSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>();
 
-        var changedAttributes = new List<MetaverseObjectAttributeValue>
+        exportRule.AttributeFlowRules.Clear();
+        var employeeIdMapping = new SyncRuleMapping
         {
-            mvo.AttributeValues.First()
+            Id = 7001,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = csEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = csEmployeeIdAttr.Id
         };
+        employeeIdMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 7001,
+            Order = 1,
+            MetaverseAttribute = employeeIdAttr,
+            MetaverseAttributeId = employeeIdAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(employeeIdMapping);
 
-        // Act - pass sourceSystem as the source of changes (Q3 circular prevention)
-        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes, sourceSystem);
+        // A JOINED object in the source system, so evaluation takes the Update path (writeback), not
+        // provisioning. Its stored value for the flowed attribute is supplied by the caller.
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = sourceSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined
+        };
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var csoAttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        if (csoStoredEmployeeId != null)
+        {
+            csoAttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemObject = cso,
+                Attribute = csEmployeeIdAttr,
+                AttributeId = csEmployeeIdAttr.Id,
+                StringValue = csoStoredEmployeeId
+            });
+        }
+
+        // Attach the stored values to the CSO entity too: the hand-built cache below serves the cached
+        // evaluation tests, while the preview tests build their own cache through the repository, which
+        // reads the entity's own values.
+        foreach (var av in csoAttributeValues)
+            cso.AttributeValues.Add(av);
+
+        var cache = new ExportEvaluationCache(
+            new Dictionary<int, List<SyncRule>> { { mvUserType.Id, new List<SyncRule> { exportRule } } },
+            new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> { { (mvo.Id, sourceSystem.Id), cso } },
+            csoAttributeValues.ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId)),
+            new List<int> { sourceSystem.Id });
+
+        return (mvo, sourceSystem, exportRule, csEmployeeIdAttr, cso, cache);
+    }
+
+    /// <summary>
+    /// The heart of #1284: an outbound Synchronisation Rule whose target is the very system the
+    /// synchronisation run is reading from must still be evaluated, and a value the target does not
+    /// yet hold must stage a writeback. The whole-system Q3 skip suppressed this unconditionally.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_RuleTargetsSourceSystem_StagesWritebackAsync()
+    {
+        // Arrange - the source system's object does NOT hold the flowed value yet
+        var (mvo, _, _, csEmployeeIdAttr, cso, cache) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: null);
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act - the run's source system is also the rule's target
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, cache);
+
+        // Assert - the writeback is staged as an Update to the joined object
+        Assert.That(result.PendingExports, Has.Count.EqualTo(1),
+            "A writeback into the Connected System being synchronised must be staged when the target does not hold the value (#1284)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(result.PendingExports[0].ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(result.PendingExports[0].AttributeValueChanges.Any(avc => avc.AttributeId == csEmployeeIdAttr.Id && avc.StringValue == "EMP001"),
+                Is.True, "The staged change must carry the flowed value");
+        }
+    }
+
+    /// <summary>
+    /// The loop-prevention half of #1284's fix: an echo (the target already holds exactly the value
+    /// the flow produces) stages nothing, and it must be suppressed by no-net-change detection with
+    /// the rule EVALUATED, not by skipping the rule blind. CsoAlreadyCurrentCount is what tells the
+    /// two apart: a skipped rule counts nothing, an evaluated-and-suppressed flow counts one.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_EchoOfCurrentValueToSourceSystem_StagesNothingAsync()
+    {
+        // Arrange - the source system's object already holds the flowed value
+        var (mvo, _, _, _, _, cache) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: "EMP001");
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, cache);
 
         // Assert
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result.Count, Is.EqualTo(0), "Expected no PendingExports when source system is the target (Q3 decision)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PendingExports, Is.Empty,
+                "Echoing a value back to the system that already holds it must stage nothing (circular sync prevention)");
+            Assert.That(result.CsoAlreadyCurrentCount, Is.EqualTo(1),
+                "The echo must be suppressed by no-net-change detection (rule evaluated, value compared), not by skipping the rule");
+        }
+    }
+
+    /// <summary>
+    /// The deprovisioning face of #1284: a Metaverse Object that falls out of an outbound rule's scope
+    /// must be deprovisioned from the rule's target system even when that system is the one being
+    /// synchronised. The whole-system Q3 skip silently suppressed scope-out deprovisioning too.
+    /// </summary>
+    [Test]
+    public async Task EvaluateOutOfScopeExportsAsync_ScopedOutOfSourceSystem_DeprovisionsAsync()
+    {
+        // Arrange - scope the rule so the Metaverse Object fails it, and make scope-out destructive
+        var (mvo, _, exportRule, _, cso, cache) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: "EMP001");
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    MetaverseAttribute = employeeIdAttr,
+                    MetaverseAttributeId = employeeIdAttr.Id,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "SOMEBODY_ELSE",
+                    CaseSensitive = true
+                }
+            }
+        });
+
+        // Act - the run's source system is also the rule's target
+        var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo, cache);
+
+        // Assert - the out-of-scope object is deprovisioned from its own source system
+        Assert.That(result, Has.Count.EqualTo(1),
+            "Scope-out must deprovision from the rule's target system even when that system is the run's source (#1284)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+            Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+        }
     }
 
     /// <summary>
@@ -792,6 +998,13 @@ public class ExportEvaluationTests
         });
 
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // The Rule must target the same Connected System Object Type as the object it deprovisions, as the
+        // sibling arrange helpers in this fixture already do. A Rule pointed at a different Object Type would
+        // be deprovisioning an object it does not own, which #1331 now detects and refuses.
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+
         var provisionedCso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
@@ -1062,11 +1275,11 @@ public class ExportEvaluationTests
 
         // Assert
         Assert.That(result, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Create));
             Assert.That(result[0].ProvisioningSyncRuleId, Is.EqualTo(exportRule.Id));
-        });
+        }
     }
 
     /// <summary>
@@ -1090,11 +1303,11 @@ public class ExportEvaluationTests
 
         // Assert
         Assert.That(result, Is.Not.Empty, "This test is only meaningful if an export was actually produced.");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
             Assert.That(result.Where(pe => pe.ProvisioningSyncRuleId != null), Is.Empty);
-        });
+        }
     }
 
     /// <summary>
@@ -2378,7 +2591,7 @@ public class ExportEvaluationTests
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem: null, cache);
+            mvo, changedAttributes, cache);
 
         // Assert - export matching joined the seeded CSO instead of creating a new one
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1),
@@ -2456,7 +2669,7 @@ public class ExportEvaluationTests
 
         // Act
         var result = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem: null, cache);
+            mvo, changedAttributes, cache);
 
         // Assert - the claim was lost, so the seeded CSO must remain unclaimed...
         Assert.That(cso.MetaverseObjectId, Is.Null, "The CSO must remain unclaimed when the claim is lost to another Metaverse Object");
@@ -2543,7 +2756,7 @@ public class ExportEvaluationTests
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem: null, cache, deferSave: true);
+            mvo, changedAttributes, cache, deferSave: true);
 
         // Assert
         Assert.That(result.ProvisioningCsosToCreate, Has.Count.EqualTo(1),
@@ -2591,6 +2804,117 @@ public class ExportEvaluationTests
         Assert.That(secondResult, Is.False, "A second claim on an already-claimed CSO must fail");
         Assert.That(cso.MetaverseObjectId, Is.EqualTo(firstMvoId), "The CSO must remain claimed by the first Metaverse Object");
         Assert.That(cso.DateJoined, Is.EqualTo(firstDateJoined), "The first claim's DateJoined must be untouched by the failed second claim");
+    }
+
+    #endregion
+
+    #region Outbound preview evaluation (#288 plan Phase 2)
+
+    [Test]
+    public async Task EvaluateOutboundPreviewAsync_JoinedCsoMissingTheFlowedValue_ReportsAnUpdateWithTheDeltaAndPersistsNothing()
+    {
+        // Arrange - the writeback topology: a joined CSO that does not hold the flowed value
+        var (mvo, sourceSystem, exportRule, csEmployeeIdAttr, cso, _) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: null);
+        SyncRepo.SeedMetaverseObject(mvo);
+        var pendingExportCountBefore = PendingExportsData.Count;
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutboundPreviewAsync([mvo.Id]);
+
+        // Assert - the decision record says an Update would be staged, and nothing was
+        Assert.That(result.Entries, Has.Count.EqualTo(1));
+        var entry = result.Entries[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.Kind, Is.EqualTo(OutboundPreviewEntryKind.Staging));
+            Assert.That(entry.MetaverseObjectId, Is.EqualTo(mvo.Id));
+            Assert.That(entry.ConnectedSystemId, Is.EqualTo(sourceSystem.Id));
+            Assert.That(entry.SyncRuleId, Is.EqualTo(exportRule.Id));
+            Assert.That(entry.StagingOutcome, Is.EqualTo(OutboundStagingOutcome.UpdateExistingCso));
+            Assert.That(entry.EffectiveChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(entry.ExistingTargetCsoId, Is.EqualTo(cso.Id));
+            Assert.That(entry.AttributeChanges.Any(avc => avc.AttributeId == csEmployeeIdAttr.Id && avc.StringValue == "EMP001"),
+                Is.True, "The previewed change must carry the flowed value");
+            Assert.That(PendingExportsData, Has.Count.EqualTo(pendingExportCountBefore), "A preview must persist nothing");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateOutboundPreviewAsync_TargetAlreadyHoldsTheValue_ReportsNoChangesNeeded()
+    {
+        // Arrange - the CSO already holds EMP001, so a real evaluation would stage nothing (no net change)
+        var (mvo, _, _, _, _, _) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: "EMP001");
+        SyncRepo.SeedMetaverseObject(mvo);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutboundPreviewAsync([mvo.Id]);
+
+        // Assert - the entry is still reported (the administrator sees the rule was evaluated), carrying no changes
+        Assert.That(result.Entries, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Entries[0].AttributeChanges, Is.Empty);
+            Assert.That(result.Entries[0].NoNetChangeSkippedCount, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateOutboundPreviewAsync_NoTargetPresenceAndProvisioningEnabled_ReportsACreateWithoutCreatingAnything()
+    {
+        // Arrange - remove the joined CSO so the provisioning path is taken
+        var (mvo, _, _, csEmployeeIdAttr, cso, _) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: null);
+        SyncRepo.SeedMetaverseObject(mvo);
+        SyncRepo.RemoveConnectedSystemObject(cso);
+        var csoCountBefore = SyncRepo.ConnectedSystemObjectCount;
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutboundPreviewAsync([mvo.Id]);
+
+        // Assert - a Create decision record; no pending provisioning CSO and no Pending Export were created
+        Assert.That(result.Entries, Has.Count.EqualTo(1));
+        var entry = result.Entries[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.StagingOutcome, Is.EqualTo(OutboundStagingOutcome.ProvisionNewCso));
+            Assert.That(entry.EffectiveChangeType, Is.EqualTo(PendingExportChangeType.Create));
+            Assert.That(entry.AttributeChanges.Any(avc => avc.AttributeId == csEmployeeIdAttr.Id && avc.StringValue == "EMP001"),
+                Is.True, "A Create preview must carry the mapped attributes");
+            Assert.That(SyncRepo.ConnectedSystemObjectCount, Is.EqualTo(csoCountBefore),
+                "A preview must not create a pending provisioning CSO");
+            Assert.That(PendingExportsData, Is.Empty, "A preview must persist nothing");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateOutboundPreviewAsync_MvoOutOfScopeWithAJoinedCso_ReportsTheDeprovisioningVerdict()
+    {
+        // Arrange - scope the rule so the MVO falls outside it; the joined CSO would be deprovisioned
+        var (mvo, _, exportRule, _, cso, _) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: null);
+        SyncRepo.SeedMetaverseObject(mvo);
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        var scopingGroup = new SyncRuleScopingCriteriaGroup();
+        scopingGroup.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = MetaverseObjectTypesData.Single( t => t.Name == "User").Attributes
+                .Single(a => a.Name == Constants.BuiltInAttributes.DisplayName),
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "a display name this Metaverse Object does not have"
+        });
+        exportRule.ObjectScopingCriteriaGroups.Add(scopingGroup);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutboundPreviewAsync([mvo.Id]);
+
+        // Assert - a deprovisioning decision record; the CSO is untouched
+        Assert.That(result.Entries, Has.Count.EqualTo(1));
+        var entry = result.Entries[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.Kind, Is.EqualTo(OutboundPreviewEntryKind.Deprovisioning));
+            Assert.That(entry.DeprovisioningDecision!.Value.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeleteExport));
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "A preview must not disconnect the CSO");
+            Assert.That(PendingExportsData, Is.Empty, "A preview must persist nothing");
+        }
     }
 
     #endregion

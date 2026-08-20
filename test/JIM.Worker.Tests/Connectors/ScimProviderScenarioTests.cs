@@ -138,12 +138,12 @@ public class ScimProviderScenarioTests
         var original = ScimImportState.Read(ScimImportRunner.PersistedConnectorData(first), Log.Logger)?.Watermark;
 
         Assert.That(original, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(second.SelectMany(r => r.ImportObjects).ToList(), Is.Empty);
             // A quiet run is still evidence that nothing changed before it started, so the window narrows.
             Assert.That(advanced, Is.GreaterThan(original!.Value));
-        });
+        }
     }
 
     [Test]
@@ -162,12 +162,12 @@ public class ScimProviderScenarioTests
         var results = await ScimImportRunner.RunAsync(new StubbedTransportScimConnector(handler), ConnectedSystem(),
             RunProfile(ConnectedSystemRunType.DeltaImport), _logger, persisted);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ImportedIds(results), Is.EqualTo(new[] { "alice", "bob" }));
             Assert.That(results[0].WarningMessage, Is.Not.Null);
             Assert.That(results[0].WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
-        });
+        }
     }
 
     [Test]
@@ -311,11 +311,11 @@ public class ScimProviderScenarioTests
             RunProfile(ConnectedSystemRunType.FullImport, pageSize: 2), _logger);
 
         var imported = ImportedIds(results);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(imported.Distinct().ToList(), Has.Count.EqualTo(4), "every resource was read");
             Assert.That(imported, Has.Count.GreaterThan(4), "and at least one was read twice");
-        });
+        }
     }
     #endregion
 

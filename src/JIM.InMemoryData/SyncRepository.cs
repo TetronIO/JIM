@@ -11,6 +11,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
@@ -132,6 +133,24 @@ public class SyncRepository : ISyncRepository
         _syncRules[syncRule.Id] = syncRule;
     }
 
+    /// <summary>
+    /// Test support: removes a previously seeded CSO, for scenarios that need the object gone again
+    /// (for example previewing provisioning after removing the joined object).
+    /// </summary>
+    public void RemoveConnectedSystemObject(ConnectedSystemObject cso)
+    {
+        _csos.Remove(cso.Id);
+        if (_csosByConnectedSystem.TryGetValue(cso.ConnectedSystemId, out var csSet))
+            csSet.Remove(cso.Id);
+        if (cso.MetaverseObjectId.HasValue && _csosByMvo.TryGetValue(cso.MetaverseObjectId.Value, out var mvoSet))
+            mvoSet.Remove(cso.Id);
+    }
+
+    /// <summary>
+    /// Test support: how many CSOs the repository holds, for zero-side-effect assertions.
+    /// </summary>
+    public int ConnectedSystemObjectCount => _csos.Count;
+
     public void SeedConnectedSystemObject(ConnectedSystemObject cso)
     {
         _csos[cso.Id] = cso;
@@ -242,8 +261,17 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
     }
 
+    /// <summary>
+    /// The Connected System Objects <see cref="GetConnectedSystemObjectAsync"/> has been asked for, in call order.
+    /// Lets a test prove which objects an evaluation actually put to the engine, rather than only what it reported
+    /// (#1437: an Attribute Flow preview skips objects the rule does not manage, and skipping them is the whole
+    /// difference between a preview that runs over a subset and one that evaluates a whole system twice).
+    /// </summary>
+    public List<Guid> RequestedConnectedSystemObjectIds { get; } = [];
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
     {
+        RequestedConnectedSystemObjectIds.Add(csoId);
         _csos.TryGetValue(csoId, out var cso);
         if (cso != null && cso.ConnectedSystemId != connectedSystemId)
             cso = null;
@@ -287,6 +315,16 @@ public class SyncRepository : ISyncRepository
         var cso = GetCsosForSystem(connectedSystemId)
             .FirstOrDefault(c => c.AttributeValues
                 .Any(av => av.AttributeId == attributeId && av.LongValue == attributeValue));
+        return Task.FromResult(cso == null ? null : CloneForHydration(cso));
+    }
+
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
+        int connectedSystemId, int attributeId, decimal attributeValue)
+    {
+        var cso = GetCsosForSystem(connectedSystemId)
+            .FirstOrDefault(c => c.AttributeValues
+                // Numeric equality, so a stored 4200.00 matches a supplied 4200 (#1283).
+                .Any(av => av.AttributeId == attributeId && av.DecimalValue == attributeValue));
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
@@ -475,16 +513,22 @@ public class SyncRepository : ISyncRepository
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
-        var valueSet = new HashSet<string>(attributeValues);
-        var result = new Dictionary<string, ConnectedSystemObject>();
+        // Reference values arrive as strings whatever the anchor's data type, so stored values are rendered
+        // to their canonical strings for comparison, mirroring the Postgres implementation's typed matching
+        // (#1285). Case-insensitive so Guid renderings match however the caller cased them.
+        var valueSet = new HashSet<string>(attributeValues, StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
-            foreach (var av in cso.AttributeValues)
+            foreach (var av in cso.AttributeValues.Where(av => av.AttributeId == attributeId || av.Attribute?.Id == attributeId))
             {
-                if (av.AttributeId == attributeId && av.StringValue != null && valueSet.Contains(av.StringValue))
-                {
-                    result.TryAdd(av.StringValue, cso);
-                }
+                var renderedValue = av.StringValue
+                    ?? av.GuidValue?.ToString()
+                    ?? av.IntValue?.ToString()
+                    ?? av.LongValue?.ToString()
+                    ?? (av.DecimalValue.HasValue ? ExternalIdValue.ToCanonicalString(av.DecimalValue.Value) : null);
+                if (renderedValue != null && valueSet.Contains(renderedValue))
+                    result.TryAdd(renderedValue, cso);
             }
         }
         return Task.FromResult(result);
@@ -554,6 +598,19 @@ public class SyncRepository : ISyncRepository
             .Select(c => c.AttributeValues.FirstOrDefault(av => av.AttributeId == c.ExternalIdAttributeId))
             .Where(av => av?.LongValue != null)
             .Select(av => av!.LongValue!.Value)
+            .ToList();
+        return Task.FromResult(values);
+    }
+
+    public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        if (partitionId != null)
+            csos = csos.Where(c => c.PartitionId == partitionId);
+        var values = csos
+            .Select(c => c.AttributeValues.FirstOrDefault(av => av.AttributeId == c.ExternalIdAttributeId))
+            .Where(av => av?.DecimalValue != null)
+            .Select(av => av!.DecimalValue!.Value)
             .ToList();
         return Task.FromResult(values);
     }
@@ -1114,6 +1171,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids)
+    {
+        var result = ids.Distinct().Where(_mvos.ContainsKey).ToDictionary(id => id, id => _mvos[id].Name);
+        return Task.FromResult(result);
+    }
+
     public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
     {
         foreach (var stored in ids.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
@@ -1424,9 +1487,136 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
+    {
+        var expiring = _pendingInitialPasswords.Values
+            .Where(p => p.ConnectedSystemId == connectedSystemId &&
+                        p.ExpiresAt.HasValue && p.ExpiresAt.Value < asOf &&
+                        p.Status != PendingInitialPasswordStatus.Expired)
+            .ToList();
+
+        foreach (var pending in expiring)
+            pending.Status = PendingInitialPasswordStatus.Expired;
+
+        return Task.FromResult(expiring.Count);
+    }
+
+    public Task<int> DeleteTerminalInitialPasswordsAsync(DateTime olderThan, int maxRecords)
+    {
+        if (maxRecords <= 0)
+            return Task.FromResult(0);
+
+        var trimming = _pendingInitialPasswords.Values
+            .Where(p => p.Status is PendingInitialPasswordStatus.Parked or PendingInitialPasswordStatus.Expired &&
+                        (p.LastAttemptedAt ?? p.CreatedAt) < olderThan)
+            .OrderBy(p => p.LastAttemptedAt ?? p.CreatedAt)
+            .Take(maxRecords)
+            .ToList();
+
+        foreach (var pending in trimming)
+            _pendingInitialPasswords.Remove(pending.Id);
+
+        return Task.FromResult(trimming.Count);
+    }
+
+    public Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
+    {
+        var parked = _pendingInitialPasswords.Values
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .ToList();
+
+        foreach (var pending in parked)
+        {
+            pending.Status = PendingInitialPasswordStatus.Pending;
+            pending.FailureReason = null;
+            pending.TargetMessage = null;
+        }
+
+        return Task.FromResult(parked.Count);
+    }
+
+    public Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var attention = _pendingInitialPasswords.Values
+            .Where(p => p.SyncRuleId.HasValue && syncRuleIds.Contains(p.SyncRuleId.Value))
+            .GroupBy(p => p.SyncRuleId!.Value)
+            .Select(g => new { SyncRuleId = g.Key, Attention = SummariseAttention(g) })
+            .Where(x => x.Attention.NeedsAttention)
+            .ToDictionary(x => x.SyncRuleId, x => x.Attention);
+
+        return Task.FromResult(attention);
+    }
+
+    public Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        var attention = _pendingInitialPasswords.Values
+            .Where(p => connectedSystemIds.Contains(p.ConnectedSystemId))
+            .GroupBy(p => p.ConnectedSystemId)
+            .Select(g => new { ConnectedSystemId = g.Key, Attention = SummariseAttention(g) })
+            .Where(x => x.Attention.NeedsAttention)
+            .ToDictionary(x => x.ConnectedSystemId, x => x.Attention);
+
+        return Task.FromResult(attention);
+    }
+
+    public Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId)
+    {
+        var reasons = _pendingInitialPasswords.Values
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .GroupBy(p => p.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Select(p => p.FailureReason).FirstOrDefault(r => r.HasValue),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(p => p.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToList();
+
+        return Task.FromResult(reasons);
+    }
+
+    private static InitialPasswordAttention SummariseAttention(IEnumerable<PendingInitialPassword> records)
+    {
+        var byStatus = records.ToLookup(p => p.Status);
+        return new InitialPasswordAttention
+        {
+            ParkedCount = byStatus[PendingInitialPasswordStatus.Parked].Count(),
+            ExpiredCount = byStatus[PendingInitialPasswordStatus.Expired].Count()
+        };
+    }
+
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
-        foreach (var pe in pendingExports)
+        var batch = pendingExports.ToList();
+
+        // PostgreSQL's IX_PendingExports_ConnectedSystemObjectId_Unique permits at most one Pending Export
+        // per Connected System Object, and the bulk insert is a single statement, so a batch carrying a
+        // duplicate is refused whole rather than half-applied. Validate before mutating anything so this
+        // double cannot be left holding part of a rejected batch either. Pending Exports with no Connected
+        // System Object are exempt: the index is filtered on "ConnectedSystemObjectId" IS NOT NULL, because
+        // rows awaiting reference resolution must not collide with each other.
+        //
+        // Enforced here because the invariant used to live only in PostgreSQL (#1331): two outbound
+        // Synchronisation Rules resolving to one Connected System Object staged two Pending Exports for it,
+        // this double accepted both, and the entire unit suite passed while the sync run died on a raw 23505.
+        var csoIdsInBatch = new HashSet<Guid>();
+        foreach (var csoId in batch.Where(pe => pe.ConnectedSystemObjectId.HasValue)
+                                   .Select(pe => pe.ConnectedSystemObjectId!.Value))
+        {
+            if (!csoIdsInBatch.Add(csoId))
+                throw new InvalidOperationException(
+                    $"Two Pending Exports in the same batch target Connected System Object {csoId}. " +
+                    "Only one Pending Export may exist per Connected System Object.");
+
+            if (_pendingExportsByCsoId.ContainsKey(csoId))
+                throw new InvalidOperationException(
+                    $"A Pending Export already exists for Connected System Object {csoId}. " +
+                    "Only one Pending Export may exist per Connected System Object.");
+        }
+
+        foreach (var pe in batch)
         {
             if (pe.Id == Guid.Empty)
                 pe.Id = Guid.NewGuid();
@@ -1594,6 +1784,31 @@ public class SyncRepository : ISyncRepository
     /// narrated its steps.
     /// </summary>
     public IReadOnlyCollection<ActivityPhase> ActivityPhases => _activityPhases.Values;
+
+    public Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId)
+    {
+        if (entriesDiscardedByContainerId.Count == 0)
+            return Task.CompletedTask;
+
+        var counts = _exclusionDiscardCounts.TryGetValue(activityId, out var existing)
+            ? existing
+            : _exclusionDiscardCounts[activityId] = new Dictionary<int, long>();
+
+        // Accumulated rather than replaced, matching the real repository's upsert: a caller reporting per page
+        // must reach the same total as one reporting once.
+        foreach (var (containerId, discarded) in entriesDiscardedByContainerId)
+            counts[containerId] = counts.GetValueOrDefault(containerId) + discarded;
+
+        return Task.CompletedTask;
+    }
+
+    private readonly Dictionary<Guid, Dictionary<int, long>> _exclusionDiscardCounts = new();
+
+    /// <summary>
+    /// Entries discarded through an exclusion so far, keyed by Activity then by excluded Container id, for tests
+    /// asserting what a run reported about the cost of its carve-outs (#1255).
+    /// </summary>
+    public IReadOnlyDictionary<Guid, Dictionary<int, long>> ExclusionDiscardCounts => _exclusionDiscardCounts;
 
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
     {
@@ -2494,6 +2709,9 @@ public class SyncRepository : ISyncRepository
         if (av.StringValue != null) return av.StringValue.ToLowerInvariant();
         if (av.IntValue.HasValue) return av.IntValue.Value.ToString();
         if (av.LongValue.HasValue) return av.LongValue.Value.ToString();
+        // Canonical rather than raw: a decimal carries its scale, so 4200.00m and 4200m would
+        // otherwise key differently despite being the same anchor (#1283).
+        if (av.DecimalValue.HasValue) return ExternalIdValue.ToCanonicalString(av.DecimalValue.Value);
         if (av.GuidValue.HasValue) return av.GuidValue.Value.ToString().ToLowerInvariant();
         return null;
     }
@@ -2570,4 +2788,11 @@ public class SyncRepository : ISyncRepository
     }
 
     #endregion
+
+    /// <summary>
+    /// No transaction to hold in memory (#288 preview backstop); the preview's other defence-in-depth
+    /// layers (structural purity, the read-only guard) still apply against this repository.
+    /// </summary>
+    public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
+        => Task.FromResult<IAsyncDisposable?>(null);
 }

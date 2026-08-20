@@ -113,6 +113,38 @@ public class Rfc4512SchemaParserTests
         Assert.That(result.MayAttributes, Is.Empty);
     }
 
+    [Test]
+    public void ParseObjectClass_CapturesTheOid()
+    {
+        // The OID identifies which enterprise defined the class, which is how the connector tells the directory's
+        // own machinery apart from the classes an administrator manages.
+        var definition = "( 1.3.6.1.4.1.4203.1.12.2.4.0.1 NAME 'olcGlobal' SUP olcConfig STRUCTURAL MAY olcConfigFile )";
+        var result = Rfc4512SchemaParser.ParseObjectClassDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Oid, Is.EqualTo("1.3.6.1.4.1.4203.1.12.2.4.0.1"));
+    }
+
+    [Test]
+    public void ParseObjectClass_ObsoleteClass_IsReportedObsolete()
+    {
+        var definition = "( 0.9.2342.19200300.100.4.4 NAME 'pilotPerson' OBSOLETE SUP person STRUCTURAL MAY userid )";
+        var result = Rfc4512SchemaParser.ParseObjectClassDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.IsObsolete, Is.True);
+    }
+
+    [Test]
+    public void ParseObjectClass_ClassWithoutTheObsoleteKeyword_IsNotReportedObsolete()
+    {
+        var definition = "( 2.5.6.6 NAME 'person' SUP top STRUCTURAL MUST ( sn $ cn ) )";
+        var result = Rfc4512SchemaParser.ParseObjectClassDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.IsObsolete, Is.False);
+    }
+
     #endregion
 
     #region ParseAttributeTypeDescription

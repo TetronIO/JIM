@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Scheduling;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -37,11 +38,36 @@ public interface IActivityRepository
     public Task<PagedResultSet<Activity>> GetChildActivitiesAsync(Guid parentActivityId, int page, int pageSize);
 
     /// <summary>
+    /// Gets a window of one Activity's direct child Activities addressed by absolute <paramref name="offset"/>
+    /// and <paramref name="count"/>, for the virtualised (infinite-scroll) child-Activity grid. Ordered by
+    /// creation date ascending, and shares its query core with <see cref="GetChildActivitiesAsync"/> so the two
+    /// reads can never disagree on which Activities are children.
+    /// </summary>
+    /// <param name="parentActivityId">The parent Activity whose direct children are wanted.</param>
+    /// <param name="offset">The zero-based index of the first child wanted; negative values read as zero.</param>
+    /// <param name="count">How many children are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    public Task<RangeResultSet<Activity>> GetChildActivitiesRangeAsync(
+        Guid parentActivityId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Returns a dictionary mapping each activity ID (from the provided set) to its direct child activity count.
     /// IDs with no children are omitted from the result.
     /// </summary>
     public Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds);
 
+    /// <summary>
+    /// Retrieves a page's worth of top-level Activities, i.e. those that do not have a parent Activity.
+    /// Every filter is optional and they combine with AND; the multi-valued ones are additive/OR within
+    /// themselves. Callers that want a subset of Activity kinds (Operations > History wants Worker Task
+    /// Activities) express it through <paramref name="typeFilter"/> and <paramref name="operationFilter"/>.
+    /// </summary>
     public Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page,
         int pageSize,
@@ -56,19 +82,47 @@ public interface IActivityRepository
         bool? hasChildActivities = null,
         IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
         DateTime? createdFrom = null,
-        DateTime? createdTo = null);
-
-    public Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
-        int page,
-        int pageSize,
+        DateTime? createdTo = null,
         IEnumerable<string>? connectedSystemFilter = null,
         IEnumerable<string>? runProfileFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null,
         string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null);
+
+    /// <summary>
+    /// Retrieves a window of top-level Activities addressed by absolute <paramref name="startIndex"/> and
+    /// <paramref name="count"/>, for virtualised (infinite-scroll) list views. Takes the same filters as
+    /// <see cref="GetActivitiesAsync"/> and shares its query core, so the two reads can never disagree on
+    /// which Activities match. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole
+    /// match set when the caller already holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).
+    /// </summary>
+    public Task<RangeResultSet<Activity>> GetActivitiesRangeAsync(
+        int startIndex,
+        int count,
+        string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool? hasChildActivities = null);
+        Guid? initiatedById = null,
+        IEnumerable<ActivityTargetOperationType>? operationFilter = null,
+        IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
+        IEnumerable<ActivityTargetType>? typeFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null,
+        IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null,
+        bool includeTotalCount = true);
 
+    /// <summary>
+    /// The distinct Connected Systems, Run Profiles and Schedules present in the Worker Task Activity
+    /// history, for the Operations > History filter drop-downs.
+    /// </summary>
     public Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync();
 
     public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
@@ -81,6 +135,41 @@ public interface IActivityRepository
         IEnumerable<string>? objectTypeFilter = null,
         IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
         IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null);
+
+    /// <summary>
+    /// Gets a window of one Activity's Run Profile Execution Item headers addressed by absolute
+    /// <paramref name="offset"/> and <paramref name="count"/>, for the virtualised (infinite-scroll)
+    /// execution-item grid. Takes the same search, sort and filters as
+    /// <see cref="GetActivityRunProfileExecutionItemHeadersAsync"/> and shares its query core, so the two reads
+    /// can never disagree on which items match.
+    /// </summary>
+    /// <param name="activityId">The Activity whose execution items are wanted.</param>
+    /// <param name="offset">The zero-based index of the first item wanted; negative values read as zero.</param>
+    /// <param name="count">How many items are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive search over the display name and external ID, live
+    /// or snapshot.</param>
+    /// <param name="sortBy">Optional sort key: "externalid", "displayname"/"name", "type"/"objecttype",
+    /// "errortype", or the item's id (the default).</param>
+    /// <param name="sortDescending">Whether the sort is descending.</param>
+    /// <param name="objectTypeFilter">Optional filter for Connected System Object Type names (additive/OR
+    /// within the filter).</param>
+    /// <param name="errorTypeFilter">Optional filter for error types (additive/OR within the filter).</param>
+    /// <param name="outcomeTypeFilter">Optional filter for sync outcome types (additive/OR within the
+    /// filter).</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    public Task<RangeResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersRangeAsync(
+        Guid activityId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        IEnumerable<string>? objectTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null,
+        bool includeTotalCount = true);
 
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 
@@ -161,11 +250,33 @@ public interface IActivityRepository
     public Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex);
 
     /// <summary>
+    /// What each Schedule Execution's tasks have left behind, keyed by execution (#1162): one
+    /// observation per Activity, carrying the step it belongs to, its name and its status.
+    /// </summary>
+    /// <remarks>
+    /// A projection rather than the Activities themselves, and batched across executions rather than
+    /// queried per execution, because the Operations queue re-reads this on every progress
+    /// notification. Callers that also hold the queue's Worker Tasks must discard the observations
+    /// whose <see cref="ScheduleStepObservation.ActivityId"/> they already have, since a task that has
+    /// started is described by both records at once.
+    /// </remarks>
+    public Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds);
+
+    /// <summary>
     /// Gets the creation time of the most recent HistoryRetentionCleanup activity.
     /// Used by the worker to determine whether the cleanup interval has elapsed since the last run,
     /// preventing immediate re-execution after worker restarts.
     /// </summary>
     public Task<DateTime?> GetLastHistoryCleanupTimeAsync();
+
+    /// <summary>
+    /// Whether any Run Profile has ever been executed, in any state (in progress, complete, failed or cancelled).
+    /// Backs the home page's "Run your first synchronisation" setup step, which asks only whether an administrator
+    /// has run one, never how it turned out. Run Profile configuration changes (create, update, delete) carry the
+    /// same <see cref="ActivityTargetType.ConnectedSystemRunProfile"/> target type as executions, so implementations
+    /// must additionally require <see cref="ActivityTargetOperationType.Execute"/>.
+    /// </summary>
+    public Task<bool> HasAnyRunProfileExecutionAsync();
 
     /// <summary>
     /// Gets the highest configuration-change version recorded for a configuration object, identified by its activity

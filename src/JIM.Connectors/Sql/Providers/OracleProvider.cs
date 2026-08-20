@@ -1,0 +1,504 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Models.Core;
+using JIM.Utilities;
+using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
+using System.Data;
+using System.Data.Common;
+
+namespace JIM.Connectors.Sql.Providers;
+
+/// <summary>
+/// The Oracle Database dialect. Uses the fully managed <c>Oracle.ManagedDataAccess.Core</c> driver, so
+/// no Oracle client installation is required and the Connector stays air-gap deployable.
+/// </summary>
+internal class OracleProvider : SqlProviderBase
+{
+    /// <summary>
+    /// The default listener port for each transport, used when the administrator leaves the port unset.
+    /// </summary>
+    private const int DefaultPort = 1521;
+
+    private const int DefaultTlsPort = 2484;
+
+    /// <summary>
+    /// Sized to Oracle's maximum VARCHAR2 in a PL/SQL context. An output parameter with no size
+    /// silently returns nothing on ODP.NET, so a returned string key must always be sized.
+    /// </summary>
+    private const int TextKeyParameterSize = 4000;
+
+    /// <summary>
+    /// A GUID is exactly 16 bytes when stored in RAW(16).
+    /// </summary>
+    private const int GuidKeyParameterSize = 16;
+
+    public override SqlDatabaseType DatabaseType => SqlDatabaseType.Oracle;
+
+    public override string DisplayName => "Oracle Database";
+
+    public override string ParameterPrefix => ":";
+
+    /// <summary>
+    /// Oracle has no bare SELECT without a FROM clause; DUAL is its one-row system table.
+    /// </summary>
+    public override string ConnectivityTestCommandText => "SELECT 1 FROM DUAL";
+
+    /// <summary>
+    /// TCPS listens on its own port; Native Network Encryption runs over the ordinary listener, so it
+    /// takes the same default port as an unencrypted connection.
+    /// </summary>
+    public override int GetDefaultPort(SqlConnectionEncryption encryption) =>
+        encryption == SqlConnectionEncryption.Tls ? DefaultTlsPort : DefaultPort;
+
+    /// <summary>
+    /// TCPS is what Oracle's own documentation and an Oracle administrator call the encrypted transport,
+    /// so it is the term JIM uses when reporting a refused certificate on one.
+    /// </summary>
+    public override string SecureTransportName => "TCPS";
+
+    /// <summary>
+    /// False for now, pending verification against a real server rather than as a settled conclusion.
+    /// ODP.NET exposes no server certificate validation callback and no per-connection trust anchor; its
+    /// only trust configuration is an Oracle wallet (<c>WalletLocation</c>), or the Microsoft Certificate
+    /// Store on Windows. Whether JIM can supply that wallet from managed code is genuinely open: the
+    /// driver's wallet reader takes a wallet password and has a PEM code path, which points at ordinary
+    /// PKCS#12 rather than only the auto-login wallets Oracle's own native tooling produces, and .NET can
+    /// write both. Settling it needs a live TCPS listener, so it is a question for the integration test
+    /// phase. Until then a TCPS connection validates against the operating system's bundle alone, and JIM
+    /// reports exactly which certificate was refused and why, so an administrator knows what to install.
+    /// Native Network Encryption is unaffected: it uses no certificate at all, which is one reason it is
+    /// the default Oracle encryption mode JIM offers.
+    /// </summary>
+    public override bool SupportsPinnedServerCertificate => false;
+
+    public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => SqlGeneratedKeyRetrieval.OutputParameter;
+
+    protected override char OpenQuote => '"';
+
+    protected override char CloseQuote => '"';
+
+    #region Parameters
+
+    public override DbParameter CreateParameter(string parameterName, object? value)
+    {
+        SqlIdentifier.ValidateParameterName(parameterName, nameof(parameterName));
+
+        // Properties are set explicitly rather than through a constructor overload: ODP.NET's
+        // constructors are heavily overloaded on (string, OracleDbType, object, ...), so an int passed
+        // where a size is meant binds as the value instead, silently and without a compiler complaint.
+        // ODP.NET accepts the bare name and matches it against the ':'-prefixed placeholder.
+        var parameter = new OracleParameter { ParameterName = parameterName };
+        parameter.Value = value ?? DBNull.Value;
+        return parameter;
+    }
+
+    public override DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType)
+    {
+        SqlIdentifier.ValidateParameterName(parameterName, nameof(parameterName));
+
+        var (oracleDbType, size) = keyType switch
+        {
+            AttributeDataType.Number or AttributeDataType.LongNumber or AttributeDataType.Decimal => (OracleDbType.Decimal, 0),
+            AttributeDataType.Text => (OracleDbType.Varchar2, TextKeyParameterSize),
+            AttributeDataType.Guid => (OracleDbType.Raw, GuidKeyParameterSize),
+            _ => throw new NotSupportedException($"An Oracle generated key cannot be returned as a {keyType} value.")
+        };
+
+        var parameter = new OracleParameter
+        {
+            ParameterName = parameterName,
+            OracleDbType = oracleDbType,
+            Direction = ParameterDirection.Output
+        };
+
+        // An output parameter with no size returns nothing at all for the variable-length types, so a
+        // returned string or RAW key must always be sized.
+        if (size > 0)
+            parameter.Size = size;
+
+        return parameter;
+    }
+
+    #endregion
+
+    #region Connections
+
+    public override string BuildConnectionString(SqlConnectionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ValidateHost(settings.Host);
+
+        var builder = new OracleConnectionStringBuilder
+        {
+            DataSource = BuildConnectDescriptor(settings),
+
+            // Off deliberately, matching Microsoft SQL Server. JIM opens one connection per operation
+            // and holds it for that operation's lifetime, rather than one per object, so a pool saves
+            // handshakes JIM was never going to make, while leaving sessions open on a customer's
+            // database long after a run has finished.
+            Pooling = false
+        };
+
+        if (!string.IsNullOrWhiteSpace(settings.Username))
+            builder.UserID = settings.Username;
+
+        if (!string.IsNullOrEmpty(settings.Password))
+            builder.Password = settings.Password;
+
+        if (settings.ConnectionTimeoutSeconds.HasValue)
+            builder.ConnectionTimeout = settings.ConnectionTimeoutSeconds.Value;
+
+        return builder.ConnectionString;
+    }
+
+    /// <summary>
+    /// Turns on Oracle Native Network Encryption for a Connected System configured to use it. It is not a
+    /// connection string keyword, so it is applied here, on the hook the Connector calls once the
+    /// connection is built and before it is opened.
+    /// <para>
+    /// These are the driver's per-connection Oracle Advanced Networking properties, deliberately in
+    /// preference to their equivalents on <c>OracleConfiguration</c>, which are static: setting those
+    /// would let one Connected System's choice decide how every other one connects. Nothing is written
+    /// for the other encryption modes, so TCPS keeps the transport it already has and a system configured
+    /// for no encryption is left alone.
+    /// </para>
+    /// </summary>
+    public override void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (settings.Encryption != SqlConnectionEncryption.OracleNativeNetworkEncryption)
+            return;
+
+        var oracleConnection = (OracleConnection)connection;
+
+        // REQUIRED rather than REQUESTED: a system an administrator has configured for encryption should
+        // fail to connect rather than quietly fall back to plain text against a server that will not.
+        oracleConnection.SqlNetEncryptionClient = "REQUIRED";
+
+        // Naming the AES algorithms explicitly is what keeps DES and RC4 out of the negotiation.
+        oracleConnection.SqlNetEncryptionTypesClient = "AES256, AES192, AES128";
+
+        // Encryption without integrity protection leaves the session malleable, and Oracle negotiates the
+        // two independently, so an estate configuring one configures both.
+        oracleConnection.SqlNetCryptoChecksumClient = "REQUIRED";
+        oracleConnection.SqlNetCryptoChecksumTypesClient = "SHA512, SHA384, SHA256";
+    }
+
+    /// <summary>
+    /// Pins the session's time zone to the Connected System's Database Time Zone, which is what makes a
+    /// <c>TIMESTAMP WITH LOCAL TIME ZONE</c> column mean the same thing on every Worker.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Oracle stores a local-time-zone value normalised to the database time zone and returns it
+    /// converted into the <i>session's</i> time zone. ODP.NET leaves the session at the client host's
+    /// zone, so without this the value JIM reads depends on which machine the run happened on: neither
+    /// UTC nor the zone the administrator declared. Verified against Oracle Database Free 23ai, where
+    /// one stored value read back as 13:45, 14:45 or 08:45 according to the session's zone alone.
+    /// </para>
+    /// <para>
+    /// <b>This is one half of a two-part fix, and neither half works alone.</b> The other half is that
+    /// <c>TIMESTAMP WITH LOCAL TIME ZONE</c> is not in
+    /// <see cref="SqlTypeMapper"/>'s offset-carrying set, so both directions treat it as the zoneless
+    /// wall-clock reading the driver actually hands over. That treatment is only true once the session
+    /// is pinned here: the wall clock has to be in the zone the administrator declared for the zoneless
+    /// path to convert it correctly, and for an export's inverse conversion to write the instant back
+    /// unchanged. Remove the pinning and the classification is wrong; remove the classification and the
+    /// pinning is pointless. Do not delete either as redundant.
+    /// </para>
+    /// <para>
+    /// Applied through the driver's own session API rather than by running an <c>ALTER SESSION</c>: it
+    /// takes the region as a value rather than as SQL text, so a time zone name can never become part of
+    /// a statement. It also leaves the rest of the session's globalisation alone, which was confirmed
+    /// against the live container (<c>NLS_DATE_FORMAT</c> unchanged either side of the call).
+    /// </para>
+    /// <para>
+    /// A zone the database does not recognise fails the connection rather than being quietly downgraded
+    /// to an offset: a fixed offset would be right for half the year and silently an hour out for the
+    /// other half, which is exactly the class of corruption this method exists to prevent.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The connection is not open, or Oracle does not recognise the configured time zone.</exception>
+    public override void ConfigureOpenedConnection(DbConnection connection, SqlConnectionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        // Refused rather than skipped: a connection whose session was never pinned reads local-time-zone
+        // columns in the host's zone, and a silent skip is how that reaches production unnoticed.
+        if (connection.State != ConnectionState.Open)
+            throw new InvalidOperationException("An Oracle session's time zone can only be set once the connection is open.");
+
+        var oracleConnection = (OracleConnection)connection;
+        var region = ResolveSessionTimeZoneName(settings.DatabaseTimeZone);
+
+        // Read-modify-write is Oracle's own pattern for this API: the globalisation object carries the
+        // whole session state, so it is fetched rather than constructed, and only the time zone altered.
+        var globalization = oracleConnection.GetSessionInfo();
+        globalization.TimeZone = region;
+
+        try
+        {
+            oracleConnection.SetSessionInfo(globalization);
+        }
+        catch (OracleException ex)
+        {
+            throw new InvalidOperationException(
+                $"Oracle does not recognise the time zone region '{region}', so this Connected System's {SqlConnectorConstants.SettingDatabaseTimeZone} cannot be applied to the session. " +
+                "Date and time columns would otherwise be read in whichever zone the Worker's host uses, so the connection is refused instead. " +
+                "Choose a time zone the database's own time zone file knows, or have the database's time zone file updated.", ex);
+        }
+    }
+
+    /// <summary>
+    /// The Oracle time zone region name for a .NET time zone.
+    /// </summary>
+    /// <remarks>
+    /// Oracle names its regions exactly as IANA does, and the Database Time Zone setting asks an
+    /// administrator for an IANA name, so the two agree without translation on Linux, where a resolved
+    /// zone already carries its IANA identifier. A Worker on Windows resolves the same zone to a Windows
+    /// identifier Oracle has never heard of ("GMT Standard Time"), which is what the conversion is for.
+    /// Anything neither of those recognises is handed over as it stands: Oracle is the authority on what
+    /// region names it knows, and its refusal is a clearer answer than a guess made here.
+    /// </remarks>
+    internal static string ResolveSessionTimeZoneName(TimeZoneInfo timeZone)
+    {
+        ArgumentNullException.ThrowIfNull(timeZone);
+
+        if (timeZone.HasIanaId)
+            return timeZone.Id;
+
+        return TimeZoneInfo.TryConvertWindowsIdToIanaId(timeZone.Id, out var ianaId) ? ianaId : timeZone.Id;
+    }
+
+    public override DbConnection CreateConnection(string connectionString)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        return new OracleConnection(connectionString);
+    }
+
+    public override DbCommand CreateCommand(DbConnection connection, string commandText)
+    {
+        var command = (OracleCommand)base.CreateCommand(connection, commandText);
+
+        // ODP.NET binds parameters positionally by default, so a statement that names the same bind
+        // variable twice (the composite keyset predicate does exactly that) would otherwise take its
+        // second value from the wrong parameter.
+        command.BindByName = true;
+        return command;
+    }
+
+    /// <summary>
+    /// Builds an Oracle Net connect descriptor. Written out in full rather than as an EZConnect string
+    /// because the descriptor is the only form that expresses the SID variant and the TCPS transport
+    /// unambiguously. Every value inside it is validated first: Oracle Net parses the descriptor
+    /// structurally, so an unbalanced parenthesis in a host or service name would rewrite the address.
+    /// </summary>
+    private string BuildConnectDescriptor(SqlConnectionSettings settings)
+    {
+        var protocol = settings.Encryption == SqlConnectionEncryption.Tls ? "TCPS" : "TCP";
+        var port = settings.Port ?? GetDefaultPort(settings.Encryption);
+
+        string connectData;
+        if (!string.IsNullOrWhiteSpace(settings.ServiceName))
+        {
+            ValidateDatabaseName(settings.ServiceName, nameof(settings.ServiceName));
+            connectData = $"(SERVICE_NAME={settings.ServiceName})";
+        }
+        else if (!string.IsNullOrWhiteSpace(settings.Sid))
+        {
+            ValidateDatabaseName(settings.Sid, nameof(settings.Sid));
+            connectData = $"(SID={settings.Sid})";
+        }
+        else
+        {
+            throw new ArgumentException("An Oracle connection needs either a service name or a SID to identify the database.", nameof(settings));
+        }
+
+        return $"(DESCRIPTION=(ADDRESS=(PROTOCOL={protocol})(HOST={settings.Host})(PORT={port}))(CONNECT_DATA={connectData}))";
+    }
+
+    #endregion
+
+    #region Import
+
+    public override string BuildKeysetPageCommandText(SqlKeysetPageRequest request)
+    {
+        ValidateKeysetPageRequest(request);
+
+        var select = $"SELECT {BuildColumnList(request.SelectColumns)}";
+        var from = $"FROM {BuildFromClause(request)}";
+        var where = BuildKeysetWhereClause(request);
+        var orderBy = BuildAnchorOrderByClause(request.AnchorColumns);
+
+        // The row limiting clause accepts a bind variable, so the page size stays a bound value.
+        var fetch = $"FETCH FIRST {GetParameterPlaceholder(request.PageSizeParameterName)} ROWS ONLY";
+
+        return $"{select} {from}{where} {orderBy} {fetch}";
+    }
+
+    #endregion
+
+    #region Export
+
+    public override string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command)
+    {
+        ValidateInsertReturningGeneratedKeyCommand(command);
+
+        // RETURNING ... INTO writes the generated key into a bound output parameter.
+        return $"INSERT INTO {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
+               $"({BuildInsertColumnList(command.Columns)}) " +
+               $"VALUES ({BuildInsertValueList(command.Columns)}) " +
+               $"RETURNING {QuoteIdentifier(command.GeneratedKeyColumn!)} INTO {GetParameterPlaceholder(command.GeneratedKeyParameterName!)}";
+    }
+
+    #endregion
+
+    #region Values
+
+    /// <summary>
+    /// Unwraps ODP.NET's own value types, which is what a bound parameter answers with.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ODP.NET never answers <see cref="DbParameter.Value"/> with a CLR primitive: a
+    /// <c>RETURNING ... INTO</c> parameter comes back as an <see cref="OracleDecimal"/>, an
+    /// <see cref="OracleBinary"/> or an <see cref="OracleString"/> according to how it was bound. Only
+    /// the last of those survived being read straight through, and only because
+    /// <see cref="Convert.ToString(object?, IFormatProvider?)"/> falls back to a type's own
+    /// <c>ToString</c>; a sequence-backed <c>NUMBER</c> key, which is the ordinary Oracle case, failed
+    /// every create.
+    /// </para>
+    /// <para>
+    /// <b>The null sentinel is the part that has to be right.</b> Each wrapper states "no value" as a
+    /// null instance of itself rather than as <see cref="DBNull"/>, so an
+    /// <see cref="OracleDecimal"/>.<see cref="OracleDecimal.Null"/> read without this is an ordinary
+    /// boxed struct that passes every emptiness test the Connector makes. Answering null instead is what
+    /// keeps "the database returned no key" the clear failure it already was, rather than a wrong
+    /// external ID composed from a wrapper's <c>ToString</c>.
+    /// </para>
+    /// <para>
+    /// A wrapper this Connector never binds a value as is refused rather than passed on, because passing
+    /// it on is exactly the defect this method exists to fix.
+    /// </para>
+    /// <para>
+    /// <b>This is about bound parameters and nothing else.</b> Values that come back as query results do
+    /// not need it: measured against Oracle Database Free 23ai, both
+    /// <see cref="DbDataReader.GetValue"/> and <see cref="DbCommand.ExecuteScalar"/> answer with CLR
+    /// types (<c>String</c>, <c>Byte[]</c>, <c>DateTime</c>, <c>DateTimeOffset</c>, one of the numeric
+    /// primitives for a <c>NUMBER</c>, and <see cref="DBNull"/> for an empty result), never with an
+    /// ODP.NET wrapper. The Delta Import watermark read is the call site that would have suffered
+    /// otherwise, and it is correct as it stands.
+    /// </para>
+    /// <para>
+    /// <b>Which</b> numeric primitive a <c>NUMBER</c> arrives as is a separate problem, and not one this
+    /// method solves: the driver decides it from the column's declared precision and scale, so a
+    /// <c>NUMBER(10,2)</c> arrives as a <c>Double</c> while a <c>NUMBER(18,4)</c> arrives as a
+    /// <c>Decimal</c>. Keeping a Decimal-mapped column exact regardless is
+    /// <see cref="SqlValueReader"/>'s job, on the reader rather than behind this seam, because the
+    /// accessor it uses is ADO.NET's own.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">The driver answered with an ODP.NET type no value this Connector binds is ever returned as.</exception>
+    public override object? ConvertFromDriverValue(object? value)
+    {
+        if (value == null || value == DBNull.Value)
+            return null;
+
+        // Ahead of the type switch, so that every wrapper's null sentinel is answered the same way
+        // whichever type it is an instance of.
+        if (value is INullable { IsNull: true })
+            return null;
+
+        return value switch
+        {
+            OracleDecimal number => number.Value,
+            OracleString text => text.Value,
+            OracleBinary bytes => bytes.Value,
+            INullable => throw new NotSupportedException(
+                $"The Oracle driver returned an {value.GetType().Name}, which the JIM SQL Connector has no CLR value for, so it is refused rather than passed on as a driver type. " +
+                "The Connector binds only exact numerics, character strings and RAW values through a parameter, so this is a defect in JIM rather than anything to correct in the database; report it with the Object Type and the column involved."),
+            _ => value
+        };
+    }
+
+    public override Guid ConvertToGuid(object value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return value switch
+        {
+            // Oracle stores a GUID in RAW(16) big-endian, the RFC 4122 layout. Reading it with the
+            // Microsoft layout transposes the first three components without any error being raised.
+            byte[] bytes => IdentifierParser.FromRfc4122Bytes(bytes),
+            string text => IdentifierParser.FromString(text),
+            Guid guid => guid,
+            _ => throw new ArgumentException($"An Oracle GUID column returned an unexpected value of type {value.GetType().Name}.", nameof(value))
+        };
+    }
+
+    public override object ConvertFromGuid(Guid value)
+    {
+        return IdentifierParser.ToRfc4122Bytes(value);
+    }
+
+    #endregion
+
+    #region Schema catalogue
+
+    // ALL_* rather than DBA_* throughout: least-privilege database accounts are the documented
+    // deployment guidance, and ALL_* shows exactly what the account can actually read.
+    public override string TablesCommandText =>
+        $"SELECT OWNER AS {SqlCatalogueColumns.SchemaName}, TABLE_NAME AS {SqlCatalogueColumns.ObjectName} " +
+        "FROM ALL_TABLES " +
+        "ORDER BY OWNER, TABLE_NAME";
+
+    public override string ViewsCommandText =>
+        $"SELECT OWNER AS {SqlCatalogueColumns.SchemaName}, VIEW_NAME AS {SqlCatalogueColumns.ObjectName} " +
+        "FROM ALL_VIEWS " +
+        "ORDER BY OWNER, VIEW_NAME";
+
+    public override string ColumnsCommandText =>
+        $"SELECT COLUMN_NAME AS {SqlCatalogueColumns.ColumnName}, " +
+        $"DATA_TYPE AS {SqlCatalogueColumns.DataTypeName}, " +
+        $"DATA_LENGTH AS {SqlCatalogueColumns.MaxLength}, " +
+        $"DATA_PRECISION AS {SqlCatalogueColumns.NumericPrecision}, " +
+        $"DATA_SCALE AS {SqlCatalogueColumns.NumericScale}, " +
+        // Normalised to the SQL standard's spelling so the consumer never learns Oracle's 'Y'/'N'.
+        $"CASE WHEN NULLABLE = 'Y' THEN 'YES' ELSE 'NO' END AS {SqlCatalogueColumns.IsNullable}, " +
+        $"COLUMN_ID AS {SqlCatalogueColumns.OrdinalPosition} " +
+        "FROM ALL_TAB_COLUMNS " +
+        $"WHERE OWNER = :{SqlCatalogueParameters.SchemaName} AND TABLE_NAME = :{SqlCatalogueParameters.ObjectName} " +
+        "ORDER BY COLUMN_ID";
+
+    public override string PrimaryKeyColumnsCommandText =>
+        $"SELECT cc.COLUMN_NAME AS {SqlCatalogueColumns.ColumnName}, " +
+        $"cc.POSITION AS {SqlCatalogueColumns.OrdinalPosition}, " +
+        $"c.CONSTRAINT_NAME AS {SqlCatalogueColumns.ConstraintName} " +
+        "FROM ALL_CONSTRAINTS c " +
+        "INNER JOIN ALL_CONS_COLUMNS cc ON cc.OWNER = c.OWNER AND cc.CONSTRAINT_NAME = c.CONSTRAINT_NAME " +
+        "WHERE c.CONSTRAINT_TYPE = 'P' " +
+        $"AND c.OWNER = :{SqlCatalogueParameters.SchemaName} AND c.TABLE_NAME = :{SqlCatalogueParameters.ObjectName} " +
+        "ORDER BY cc.POSITION";
+
+    public override string ForeignKeyColumnsCommandText =>
+        $"SELECT c.CONSTRAINT_NAME AS {SqlCatalogueColumns.ConstraintName}, " +
+        $"cc.COLUMN_NAME AS {SqlCatalogueColumns.ColumnName}, " +
+        $"rc.OWNER AS {SqlCatalogueColumns.ReferencedSchema}, " +
+        $"rc.TABLE_NAME AS {SqlCatalogueColumns.ReferencedTable}, " +
+        $"rcc.COLUMN_NAME AS {SqlCatalogueColumns.ReferencedColumn}, " +
+        $"cc.POSITION AS {SqlCatalogueColumns.OrdinalPosition} " +
+        "FROM ALL_CONSTRAINTS c " +
+        "INNER JOIN ALL_CONS_COLUMNS cc ON cc.OWNER = c.OWNER AND cc.CONSTRAINT_NAME = c.CONSTRAINT_NAME " +
+        "INNER JOIN ALL_CONSTRAINTS rc ON rc.OWNER = c.R_OWNER AND rc.CONSTRAINT_NAME = c.R_CONSTRAINT_NAME " +
+        "INNER JOIN ALL_CONS_COLUMNS rcc ON rcc.OWNER = rc.OWNER AND rcc.CONSTRAINT_NAME = rc.CONSTRAINT_NAME AND rcc.POSITION = cc.POSITION " +
+        "WHERE c.CONSTRAINT_TYPE = 'R' " +
+        $"AND c.OWNER = :{SqlCatalogueParameters.SchemaName} AND c.TABLE_NAME = :{SqlCatalogueParameters.ObjectName} " +
+        "ORDER BY c.CONSTRAINT_NAME, cc.POSITION";
+
+    #endregion
+}

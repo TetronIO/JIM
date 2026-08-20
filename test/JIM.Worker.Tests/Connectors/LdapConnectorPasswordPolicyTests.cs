@@ -56,7 +56,7 @@ public class LdapConnectorPasswordPolicyTests
         Assert.That(long.MinValue, Is.EqualTo(-9223372036854775808), "This test is about the exact sentinel Active Directory writes.");
 
         TimeSpan? result = null;
-        Assert.DoesNotThrow(() => result = LdapConnectorPasswordPolicy.ParseInterval(long.MinValue));
+        Assert.That(() => result = LdapConnectorPasswordPolicy.ParseInterval(long.MinValue), Throws.Nothing);
 
         Assert.That(result, Is.Null);
     }

@@ -95,6 +95,16 @@ public enum ActivityRunProfileExecutionItemErrorType
     ExpressionEvaluationError,
 
     /// <summary>
+    /// An Expression-based Attribute Flow read an attribute the object has no value for, and the mapping's
+    /// Missing Input Behaviour says that is a fault rather than something the Expression handles. The message
+    /// names the Expression, the target attribute, the missing input, and whether the mapping alone was skipped
+    /// (Fail this mapping: the object's other attributes still flowed) or the whole object was left untouched
+    /// (Fail the object). Distinct from <see cref="ExpressionEvaluationError"/>, which is an Expression that
+    /// threw: this one evaluated fine, or would have, and the administrator asked to be told instead.
+    /// </summary>
+    ExpressionMissingInput,
+
+    /// <summary>
     /// During Attribute Flow, a multi-valued source attribute held more than one value but the target
     /// attribute is single-valued. A single-valued target can hold only one value, and JIM will not
     /// select one arbitrarily, so no value was flowed for that attribute (import) or no Pending Export
@@ -140,5 +150,19 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// object was not imported. Unlike most import errors this is not a source-data problem: the fix is
     /// in the Connected System's configuration, not in the Connected System itself.
     /// </summary>
-    ConnectorConfigurationError
+    ConnectorConfigurationError,
+
+    /// <summary>
+    /// An outbound Synchronisation Rule could not export a Metaverse Object because that Object's one
+    /// Connected System Object in the target Connected System is of a different Connected System Object
+    /// Type than the Rule targets. A Metaverse Object holds at most one Connected System Object per
+    /// Connected System, so the slot the Rule needs is already occupied and no Pending Export is staged.
+    /// The export-side counterpart of <see cref="CouldNotJoinDueToExistingJoin"/>.
+    ///
+    /// Two configurations reach this. Two outbound Synchronisation Rules into one Connected System whose
+    /// scopes overlap: narrow them so no Metaverse Object satisfies both. Or a Connected System that both
+    /// imports objects of one Object Type and exports another for the same Metaverse Objects: give the
+    /// exported Object Types their own Connected System over the same target.
+    /// </summary>
+    CouldNotExportDueToExistingConnectedSystemObject
 }

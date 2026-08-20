@@ -25,6 +25,45 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<RunProgressMetrics ObjectsProcessed="@x" ObjectsToProcess="@y" ... />` | A running Activity's progress bar and its count, rate and time remaining | "Live progress figures" below |
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
 | `<NavigableMudTabs>` | Top-level page tabs (syncs the active tab to `?t=slug`) | "Tabs" below |
+| `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
+| `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
+| `<AttributeChip Kind="@k" Name="@n" />` | Any attribute shown as belonging to a side of the Metaverse: the `CS` / `MV` / `Ex` avatar chip | "Attribute chips" below |
+| `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
+| `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
+| `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
+| `<OneLineText Text="@x" Secondary="@y" />` | A cell's text (and the secondary text that would otherwise sit under it) kept to one line | "One line per row" below |
+| `<OverflowList TItem="X" Items="@xs" ItemTemplate="..." Title="Roles" />` | A cell holding a list: the first item, then "+n more" | "One line per row" below |
+
+## Choosing Containers
+
+**A control for picking Containers out of a hierarchy is `<ScopedHierarchyPicker />`.** It renders one partition's Containers with the filter, the selection count, the Clear action, the tick boxes and the Container Scope control, and edits the partition's graph in place, raising `OnChanged` so the host can refresh its summary, its pending-changes state and its stale-preview notice.
+
+Four rules are baked into it rather than left to each call site, because each has a failure mode that is invisible until a customer hits it:
+
+- **The Container's own name leads the row; its Distinguished Name is a tooltip.** Printing the full DN on every row restates the ancestry the indentation already draws and buries the one component that tells two Containers apart. (What made this possible is a Connector fix: discovered Containers used to be *named* after their whole DN on every directory except Active Directory.)
+- **Rows are ~32px and there is a filter.** A directory with a couple of hundred OUs has to be navigable, not merely renderable.
+- **A hierarchy above `AutoExpandThreshold` Containers opens only as far as its selections.** Small hierarchies still open fully, which is what they have always done; expanding a large one on arrival is a wall to scroll. Expansion is seeded once, so a branch the administrator collapses stays collapsed.
+- **A Container that cannot be ticked says why** ("Covered by ou=People") rather than being greyed out with no explanation.
+
+The selection rules themselves are **not** in the component: `ContainerSelectionEditor` (JIM.Utilities) owns the cascade down a branch, the roll-up to a parent, the partition auto-selection, the filter predicate and the coverage recalculation, and is unit-tested there. They decide what a Full Import returns, so they must be testable without rendering anything. Coverage in particular is `ConnectedSystemUtilities.ApplyContainerInclusion`'s, shared with the import's own search-root resolution, so the tree can never show one scope while the import performs another.
+
+## Attribute chips (which side of the Metaverse an attribute is on)
+
+**An attribute rendered anywhere near an Attribute Flow is an `<AttributeChip />`.** It carries the `CS` / `MV` / `Ex` avatar that says whether the attribute belongs to a Connected System, to the Metaverse, or is a computed value.
+
+```razor
+<AttributeChip Kind="AttributeChipKind.ConnectedSystem" Name="@attribute.Name" />
+<AttributeChip Kind="AttributeChipKind.Metaverse" Name="@attribute.Name" Href="@url" />
+<AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
+```
+
+The marker is not decoration. Both sides of a flow are just names, and which side is the source swaps between Inbound and Outbound, so on any surface listing flows the avatar is the only thing distinguishing "reads `department` from the directory" from "writes `department` to it". `Kind` should be derived from the data (does the source carry a Metaverse Attribute id or a Connected System one?) rather than from the flow's direction, so a malformed row cannot be labelled as the side its direction implies.
+
+- `Tooltip` defaults to naming the side; pass a richer one where the call site knows the attribute's data type and plurality.
+- `Href` makes the chip a link. Expressions never take one; they have nowhere to point.
+- Expression chips render the expression itself with syntax highlighting, not the word "Expression": the expression text is the only thing telling two computed sources apart.
+
+**Known duplicate:** `SyncRuleAttributeFlowTab.razor` still hand-rolls this markup in eleven places, in two clusters that disagree with each other (one wraps the whole chip in a rich type/plurality tooltip, the other tooltips only the avatar with generic text). Migrating it to this component is worth doing, and needs the tooltip inconsistency resolved deliberately rather than folded into an unrelated change. Do not add a twelfth copy.
 
 ## Form action gating and input immediacy
 
@@ -57,7 +96,7 @@ Three interaction rules that have repeatedly regressed (multiple times each on a
 
 **Scope: this is about live filtering, not about the word "Search".** A field that is one criterion among several in a form the user submits with a button (Deleted Objects' query forms, the Logs filter behind **Refresh**) is not a search box; nothing filters as it is typed, so `Immediate` there changes nothing and `SearchField` would be the wrong component. Those are ordinary `MudTextField`s and carry a `@* search-convention: exempt - <why> *@` comment directly above, so the reason travels with the markup.
 
-`SearchFieldConventionTests` (in `test/JIM.Web.Components.Tests/`) sweeps every `.razor` file under `src/JIM.Web` and fails the build for a search-shaped `MudTextField` that is neither migrated nor exempted, so a new page cannot quietly reintroduce a blur-only box.
+`SearchFieldConventionTests` (in `test/JIM.Web.Tests/`) sweeps every `.razor` file under `src/JIM.Web` and fails the build for a search-shaped `MudTextField` that is neither migrated nor exempted, so a new page cannot quietly reintroduce a blur-only box.
 
 ## Live progress figures
 
@@ -77,7 +116,7 @@ The rule exists because the alternative shipped: the worker built progress messa
 All data tables should let users switch between normal and compact row spacing, persisted globally so the choice follows the user across every table.
 
 - Put `<TableDensityToggle @bind-Dense="_dense" />` as the **first** item in the table's `ToolBarContent`. If other controls sit to its left, follow it with a `<MudText Class="mx-2 mud-text-disabled">|</MudText>` separator.
-- On the `MudTable` / `MudSimpleTable`: set `Dense="@_dense"` and add the `dense-body-only` class, e.g. `Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")"`. The `dense-body-only` class keeps header rows at normal height while compacting body rows.
+- On the `MudTable` / `MudSimpleTable`: set `Dense="@_dense"`, and nothing else. The toggle only ever changes body-row spacing: `site.css` pins header cells to compact padding unconditionally (`.mud-table-root .mud-table-head .mud-table-cell`), so a header row is the same height in both states and no per-table class is involved. Do not make the `Class` attribute conditional on `_dense`; a ternary that varies the class list is a sign something is being styled that the density rule already owns. (A `dense-body-only` class was carried on fourteen tables for exactly this purpose and was never defined in any stylesheet; it was removed rather than implemented, because the global header rule already gives the intended result.)
 - The page owns a `private bool _dense;` field and loads the saved preference on first render, so the table paints at the correct density immediately:
   ```csharp
   protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -92,6 +131,74 @@ All data tables should let users switch between normal and compact row spacing, 
   Inject `IUserPreferenceService PreferenceService`. No `try`/`catch` is needed here: `GetTableDenseAsync` swallows the "JS interop not ready" `InvalidOperationException` internally. Pages that gate their whole render on a `_preferencesLoaded` flag should load `_dense` alongside their other preferences inside that same gate (so there is no flash of normal-then-dense).
 - `<TableDensityToggle>` owns the toolbar button and persists the toggle; do **not** add an `OnToggleDense` method or build the tooltip/icon button by hand.
 - Default to normal spacing (`_dense = false`).
+
+## Virtualised lists
+
+**An infinite-scroll list is a `<VirtualisedDataGrid T="X">`; never hand-roll one around `MudDataGrid`'s `VirtualizeServerData`.** The component owns everything every virtualised list must get right and got wrong at least once while the pattern lived in a page: the URL round trip for search, sort and scroll position (`q`/`sort`/`desc`/`row`, written in place via `history.replaceState`, never `NavigationManager`); counting the match set once per filter change rather than once per scroll window; restoring a scroll position the virtualiser cannot reach yet; re-attaching the scroll listener when SPA navigation reuses the component; the density-dependent row height; the toolbar count; and the guarded empty-state slot. `Types/Index.razor` is the worked example.
+
+**The grid sizes its own height; there is no height to pass.** `jimVirtualList.fit` measures where the page footer lands and gives the scroll container a height CEILING: a long list fills until the footer sits at the bottom of the viewport with the same breathing room below it as above it, on every list page, while a list of a few rows (or an empty one) collapses to its content like an ordinary table, the footer following it up the page. It re-applies on window resize and as late-loading content moves the footer, and a `site.css` fallback covers the first paint. Never reintroduce a per-page `Height="calc(100vh - Npx)"`: those constants were hand-tuned per page, went stale the moment the chrome above a grid changed, and are exactly what the measurement replaced.
+
+A page supplies:
+
+- **`LoadWindow`**: a `Func<VirtualisedWindowRequest, CancellationToken, Task<VirtualisedWindow<T>>>`. Two tiers, chosen by what the list can grow to:
+  - **Unbounded data lists** (objects, activities, changes, pending deletions) call a repository **range read** (`offset`/`count`, not page/pageSize) that MUST honour `IncludeTotalCount` by skipping its count query and returning a null total when false; counting is the expensive half of a window read at scale. Null means "not counted", never zero. Pattern: `GetMetaverseObjectHeadersRangeAsync`.
+  - **Configuration-sized lists** (Connectors, API Keys, Predefined Searches and friends) load the full list once, then filter and sort in the page and finish with `filtered.ToWindow(request)` (`VirtualisedWindowExtensions`); do not grow a database range read for a list that stays in the dozens. Pattern: `ConnectorList.razor`.
+- **`Columns`**: `TemplateColumn`s, with `<VirtualisedSortHeader Title="..." />` in the `HeaderTemplate` for server-side sortable columns (the grid cascades itself as `IVirtualisedSortable`).
+- **`EmptyContent`**: the context-aware empty states ("Table empty states" below); the fragment's context is the grid, so branch on `context.SearchText` and wire the action to `context.ClearSearchAsync()`.
+- **`ContainerId`** (unique per grid) and, when two grids share one page, a **`UrlParameterPrefix`** each so their URL state cannot collide.
+- **`StateKey`** (the route parameter) so a component instance reused across SPA navigations re-reads the URL and re-attaches its scroll tracking.
+
+Page-owned filters (chips, presence deep links) call `RefreshAsync(invalidateTotals: true)` after changing what matches, plus `ResetScrollAsync()`; the old total describes a match set that no longer exists. Sorting deliberately does not invalidate the total.
+
+**A conditional column is `Hidden`, never wrapped in an `@if`.** `MudDataGrid` orders its columns by the order they *register* with it (each `Column` adds itself on initialisation), not by their position in the markup. A column inside an `@if` whose condition is false on first render therefore registers after every column below it and appears at the far right when the condition later becomes true, however the markup reads. This is not hypothetical: the Connector Space's Secondary External Id column (derived from the first loaded window) and three of the Schema tab's attribute columns (derived from the selected Object Type, which changes under the reader) all rendered last. Write `Hidden="@(!_condition)"` on the column instead, so it registers in markup position and only its visibility changes. An `@if` remains correct where the condition is fixed for the component's lifetime (a Connector capability flag), because every column still registers on the first render.
+
+## One line per row
+
+**Every cell of a virtualised grid must render to exactly one line, in both densities.** The virtualiser positions rows arithmetically from a single fixed `ItemSize` (50px comfortable, 36px dense), so one taller row drifts the scroll position, the row index written to the URL and the reserved scroll space away from what is on screen, for every row below it. This is not a styling preference; it is what makes the grid able to place a row without having drawn the rows above it.
+
+Three shapes break it, and each has one answer:
+
+| Shape | Answer |
+|-------|--------|
+| A chip (or anything) per item from a `@foreach` | `<OverflowList>`: first item inline, "+n more" opens the whole set in a dialog |
+| Two stacked block elements (`MudText` renders a `<p>`) | `<OneLineText Text Secondary>`: the secondary text reads inline after the value, low-lighted |
+| Unbounded free text | `<OneLineText Text>`, or the `.jim-one-line` class where the content is markup |
+
+- **Nothing may become unreachable.** What is clipped stays available on the element's `title`, in the `<OverflowList>` dialog, or on the detail page/panel the row already opens (the service log's Message column relies on all three: clipped, hoverable, and complete and copyable in the entry panel behind a row click).
+- **`.jim-one-line` and `.jim-one-line-list` are the primitives** (`site.css`), and are used directly where a cell's content is markup rather than a string: a linkified description, an icon beside a name, a target chip followed by modifier chips. On `.jim-one-line-list`, only the child carrying `.jim-one-line-list-value` gives way; everything else on the row holds its size, so an affordance or a modifier chip can never be what a long value pushes out.
+- **`<OneLineText>` uses the element's `title`, not a `MudTooltip`, and that is deliberate** rather than an oversight of the Tooltips rule below: a `MudTooltip` wraps its child in an inline-flex box of its own, which is exactly the box the ellipsis needs to be the block container, so the wrapper silently defeats the clipping it was added to explain. Do not "fix" it by migrating it.
+- **Do not solve a too-tall row by raising `ItemSize`, turning virtualisation off, or dropping data.** The height is shared by every grid in the portal, and a cell's content is not the thing that should decide it.
+
+## Object counts in table toolbars
+
+A table toolbar has two anchored ends and nothing loose in between: **left** is how the table is displayed (the density toggle) followed by the page's own actions; **right** is the count followed by the search box. The count is always a `<TableObjectCount />`; the convention exists because two hand-rolled treatments had already diverged (a count baked into a title's parentheses on `PendingExportDetail`, a right-aligned "Showing x of y" on `PendingDeletionList`) before it was extracted.
+
+The count is on the **right, immediately left of the search box**, for two reasons: "12 of 3,868" is feedback from that box, so it answers where the reader just typed; and the left slot then belongs to the primary action, which is what a page's Create button wants. It was briefly in the left slot instead, which pushed the action into the middle of the toolbar, where the loudest thing on the page was also the only one floating in open space. Where a table has a **title** and no search box (the child tables on detail pages), the count follows the title instead, since there is nothing on the right for it to answer to.
+
+```razor
+@* In a toolbar with a search box (every VirtualisedDataGrid): right side, nouns and all *@
+<MudSpacer />
+<TableObjectCount Count="@_totalItems" Total="@_unfilteredTotalItems"
+                  SingularName="@type?.Name" PluralName="@type?.PluralName" Class="mr-3" />
+<SearchField ... />
+
+@* Beside a title: bare number, because the title already names the objects *@
+<MudText Typo="Typo.h6">Attribute Changes</MudText>
+<TableObjectCount Count="@_changeCount" Class="ml-2" />
+```
+
+- Pass the nouns **only when there is no title**; beside one, the bare number avoids restating it.
+- Pass `Total` when the caller holds an unfiltered baseline; the text becomes "12 of 3,868 ..." while a filter narrows the list and collapses to the plain count when nothing is filtered.
+- A null `Count` renders nothing (including its optional `ShowSeparator` separator, which the component owns so it cannot dangle): null is "not counted yet", and a zero in its place would read as an empty list.
+- `<VirtualisedDataGrid>` builds this whole toolbar itself; a page only supplies its actions via `ToolBarExtras` (the grid adds the `|` separator after the density toggle when it has any) and never places the count or the search box by hand.
+
+## Table empty states
+
+A table's no-rows fragment renders a `<TableEmptyState />`, never a bare "No results" string: the message must say **why** the list is empty, because the situations mean different things and have different ways out. The Metaverse Object list (`Types/Index.razor`) is the worked example, distinguishing a search that matched nothing (with a "Clear Search" action button), a presence filter nothing satisfies, and a type with no objects at all.
+
+- Only pass `ActionText` when the caller wires `OnAction`; a button with nothing behind it is a dead affordance.
+- Inside a virtualised `MudDataGrid`, guard the fragment on a known-empty total (see the `NoRecordsContent` comment in `Types/Index.razor`): the grid renders the fragment between windows too, and an unguarded empty state flashes over data in flight.
+- The block's centring and icon treatment live in `site.css` (`jim-table-empty-state`, `jim-table-empty-state-icon`); do not restyle per call site.
 
 ## Empty values
 
@@ -150,6 +257,19 @@ Three failure modes here are invisible to `dotnet build`, invisible to bUnit (wh
 ## Errors and stack traces
 - The **error message is the thing to read**; the stack trace is for the occasions it is not enough. Never render a stack trace unconditionally beside its message: it buries the sentence that actually answers the question, and stack traces routinely run to thousands of characters.
 - Use `<CollapsibleStackTrace StackTrace="@x" />` wherever a trace is available. It renders nothing when there is no trace, shows a "Show stack trace" toggle when there is, and only puts the trace in the DOM once it has been asked for. Do not hand-roll the toggle, and do not wrap it in an expansion panel of its own; that is what it already is.
+
+## Activity Schedule context
+
+An Activity that a Schedule produced carries `ScheduleExecutionId` and `ScheduleStepIndex`; anywhere an Activity is presented, say so and link back to the Schedule Execution that produced it. Use `<ActivityScheduleContext />` rather than hand-rolling it: the duplicated part is the load-and-derive logic (look up the execution, guard the nulls, turn the 0-based step index into the 1-based "step 3 of 6" a person reads, build the href), and the two call sites want different visual treatments.
+
+- It renders **nothing** when `ScheduleExecutionId` is null or the execution has since been pruned, so a call site can place it unconditionally without an `@if` of its own.
+- `Compact="false"` (the default) is a page-width `MudPaper Outlined` panel headed "Part of a Schedule", built to match the detail page's own panels (`Typo.h5` heading, `pa-4`); `Compact="true"` is a panel section matching the sibling `MudPaper` sections of the Operations History side panel. It is deliberately **not** an alert: the context is another section of the page, not a notice interrupting it.
+- **The page-width panel is a labelled multi-line field block, not one line of chips and links.** It uses the same `MudGrid Spacing="4"` / `MudItem xs="12" sm="6" md="4"` layout, uppercase `Typo.button` + `mud-text-secondary` labels and plain values as the Summary panel it sits directly beneath on `ActivityDetail`, so the two read as siblings rather than as two unrelated designs stacked on each other. The fields are **Schedule** (the name, linked to the Schedule Execution), **Step** ("3 of 6", 1-based, omitted entirely when the Activity carries no step index rather than rendered empty) and **Schedule Execution** (the run's status chip beside the "View Schedule Execution" link).
+- **The status chip must stay labelled.** The Activity page shows two chips: the Summary panel's `ActivityStatus` and this panel's `ScheduleExecutionStatus`. They describe different objects, and unlabelled a reader cannot tell which is which; the "Schedule Execution:" label is the only thing telling a reader that this one is the whole run's outcome, not this Activity's. The two enums used to disagree on the word for success ("Complete" beside "Completed"), which read as an outright contradiction; the Schedule Execution vocabulary was aligned onto `Complete` in #1196 as a deliberate breaking API change (the REST API serialises enums by name, `JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)` in `ApiJsonConfiguration.cs`, so the member name is the wire value). `ScheduleExecutionStatusWireContractTests` pins those names now; do not rename one again without the same deliberate decision, changelog entry and documentation sweep.
+- The compact treatment keeps the single-sentence form ("Part of &lt;Schedule&gt;, step 3 of 6"); it has no heading of its own and sits in a narrow side panel, so a field grid would not fit.
+- `Class` is the call site's to set, because only it knows the surrounding geometry. On `ActivityDetail` it sits directly below the Summary panel, so that is `mt-6` per the Panel spacing rules; inside the History panel's `gap-4` flex column it is nothing at all.
+- The component guards its own lookup on the loaded execution id. Anything that polls (the History tab does) would otherwise query the database on every tick.
+- Do **not** add it to `ActivityRunProfileExecutionItemDetail`: its subject is one object's per-item outcome, it is only ever reached from the Activity page whose panel already carries the context, and Schedule context two levels down is noise.
 
 ## Date and time display
 - **Relative** ("2 hours ago"): `dateTime.ToRelativeTime()`, e.g. as the primary text under a tooltip

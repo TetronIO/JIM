@@ -5,6 +5,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Tasking
 @using JIM.Models.Tasking.DTOs
+@using JIM.Web.Models
 @using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
@@ -29,142 +30,81 @@
     <NavigableMudTabs Class="mt-2" TabPanelsClass="pa-0">
 
         <MudTabPanel Text="Details">
+    @* One virtualised grid per Metaverse Object Type in the template. The object type's name is the heading above
+       its grid rather than a toolbar title, because the grid's toolbar belongs to the density toggle, the count and
+       the search box. Each grid's URL parameters are prefixed with its own object type id, so several grids on this
+       page cannot overwrite each other's search, sort and scroll state. The attributes are already loaded with the
+       template, so the window is sliced from memory. *@
     @foreach (var objectType in _template.ObjectTypes)
     {
-        <MudTable Items="@objectType.TemplateAttributes" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-3 mb-5" SortLabel="Sort By" Outlined="true" Elevation="0">
-            <ToolBarContent>
-                <MudText Typo="Typo.h6">@objectType.MetaverseObjectType.Name</MudText>
-            </ToolBarContent>
-            <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateAttribute, object>(x => x.MetaverseAttribute!.Name)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateAttribute, object>(x => x.MetaverseAttribute!.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
-                <MudTh Style="white-space: nowrap;"><MudTableSortLabel SortBy="new Func<ExampleDataTemplateAttribute, object>(x => x.PopulatedValuesPercentage!)"><MudText Typo="Typo.button">Population %</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudText Typo="Typo.button">Rules</MudText></MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Attribute">@context.MetaverseAttribute?.Name</MudTd>
-                <MudTd DataLabel="Type">@context.MetaverseAttribute?.Type</MudTd>
-                <MudTd DataLabel="Population &">@context.PopulatedValuesPercentage</MudTd>
-                <MudTd DataLabel="Rules">
-                    @if (context.MetaverseAttribute?.Type == AttributeDataType.Text)
-                    {
-                        if (!string.IsNullOrEmpty(context.Pattern))
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Pattern:</b>&nbsp;@context.Pattern</MudChip>
-                        }
-
-                        if (!string.IsNullOrEmpty(context.Expression))
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Expression:</b>&nbsp;@context.Expression</MudChip>
-                        }
-
-                        if (context.ExampleDataSetInstances is { Count: > 0 })
-                        {
-                            var setValues = context.ExampleDataSetInstances.Aggregate("", (current, set) => current + set.ExampleDataSet.Name + ", ");
-                            if (setValues.EndsWith(", "))
-                            {
-                                setValues = setValues.Substring(0, setValues.Length - 2);
-                            }
-
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Data set(s):</b>&nbsp;@setValues</MudChip>
-                        }
-
-                        if (context.MinNumber.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Min:</b>&nbsp;@context.MinNumber.Value.ToString("N0")</MudChip>
-                        }
-
-                        if (context.MaxNumber.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Max:</b>&nbsp;@context.MaxNumber.Value.ToString("N0")</MudChip>
-                        }
-
-                        var weightedStringValues = "";
-                        if (context.WeightedStringValues != null && context.WeightedStringValues.Count > 0)
-                        {
-                            weightedStringValues = context.WeightedStringValues.Aggregate(weightedStringValues, (current, wsv) => current + $"{wsv.Value}: {wsv.Weight}, ");
-                            weightedStringValues = weightedStringValues.Substring(0, weightedStringValues.Length - 2);
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Weighted Values:</b>&nbsp;@weightedStringValues</MudChip>
-                        }
-                    }
-                    else if (context.MetaverseAttribute?.Type == AttributeDataType.Number || context.MetaverseAttribute?.Type == AttributeDataType.LongNumber || context.MetaverseAttribute?.Type == AttributeDataType.Decimal)
-                    {
-                        if (context.MinNumber.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Min:</b>&nbsp;@context.MinNumber.Value.ToString("N0")</MudChip>
-                        }
-
-                        if (context.MaxNumber.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Max:</b>&nbsp;@context.MaxNumber.Value.ToString("N0")</MudChip>
-                        }
-
-                        if (context.SequentialNumbers.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Sequential:</b>&nbsp;@context.SequentialNumbers.Value.ToString()</MudChip>
-                        }
-
-                        if (context.RandomNumbers.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Random numbers:</b>&nbsp;@context.RandomNumbers.Value.ToString()</MudChip>
-                        }
-                    }
-                    else if (context.MetaverseAttribute?.Type == AttributeDataType.Boolean)
-                    {
-                        if (context.BoolShouldBeRandom.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Random:</b>&nbsp;@context.BoolShouldBeRandom.Value.ToString()</MudChip>
-                        }
-
-                        if (context.BoolTrueDistribution.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>True distribution:</b>&nbsp;@context.BoolTrueDistribution.Value.ToString("N0")</MudChip>
-                        }
-                    }
-                    else if (context.MetaverseAttribute?.Type == AttributeDataType.DateTime && (context.MinDate.HasValue || context.MaxDate.HasValue))
-                    {
-                        if (context.MinDate.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Min:</b>&nbsp;@context.MinDate.Value.ToShortDateString()</MudChip>
-                        }
-
-                        if (context.MaxDate.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Min:</b>&nbsp;@context.MaxDate.Value.ToShortDateString()</MudChip>
-                        }
-                    }
-                    else if (context.MetaverseAttribute?.Type == AttributeDataType.Reference)
-                    {
-                        if (context.MvaRefMinAssignments.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>MVA min assignments:</b>&nbsp;@context.MvaRefMinAssignments.Value.ToString("N0")</MudChip>
-                        }
-
-                        if (context.MvaRefMaxAssignments.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>MVA max assignments:</b>&nbsp;@context.MvaRefMaxAssignments.Value.ToString("N0")</MudChip>
-                        }
-
-                        if (context.ReferenceMetaverseObjectTypes is { Count: > 0 })
-                        {
-                            var refTypes = context.ReferenceMetaverseObjectTypes.Aggregate("", (current, refType) => current + (refType.Name + ", "));
-                            if (refTypes.EndsWith(", "))
-                                refTypes = refTypes.Substring(0, refTypes.Length - 2);
-
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Reference type(s):</b>&nbsp;@refTypes</MudChip>
-                        }
-
-                        if (context.ManagerDepthPercentage.HasValue)
-                        {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Manager depth:</b>&nbsp;@(context.ManagerDepthPercentage + "%")</MudChip>
-                        }
-                    }
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                No template attributes
-            </NoRecordsContent>
-        </MudTable>
+        <MudText Typo="Typo.h6" Class="mt-5">@objectType.MetaverseObjectType.Name</MudText>
+        <VirtualisedDataGrid @key="objectType.Id" T="ExampleDataTemplateAttribute"
+                             ContainerId="@($"template-attributes-{objectType.Id}")"
+                             UrlParameterPrefix="@($"ot{objectType.Id}-")"
+                             DefaultSortBy="attribute"
+                             LoadWindow="@((request, token) => LoadTemplateAttributeWindowAsync(objectType, request, token))"
+                             SingularName="Template Attribute"
+                             PluralName="Template Attributes"
+                             SearchPlaceholder="Search attributes">
+            <Columns>
+                <TemplateColumn Title="Attribute" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @context.Item.MetaverseAttribute?.Name
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Type" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Type" Name="type" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @context.Item.MetaverseAttribute?.Type
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Population %" Sortable="false" CellClass="jim-nowrap">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Population %" Name="population" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @context.Item.PopulatedValuesPercentage
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Rules" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Rules</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @* A row in a virtualised grid is one line, and an attribute can carry half a dozen
+                           generation rules, so the first is shown and the rest open in a dialog. Which rules an
+                           attribute has is decided in GetGenerationRules rather than here, so the cell and the
+                           dialog cannot draw two different sets. *@
+                        <OverflowList TItem="KeyValuePair<string, string>" Items="@GetGenerationRules(context.Item)" Title="Rules">
+                            <ItemTemplate Context="rule">
+                                <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>@rule.Key:</b>&nbsp;@rule.Value</MudChip>
+                            </ItemTemplate>
+                        </OverflowList>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <EmptyContent Context="grid">
+                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No Template Attributes match \"{grid.SearchText}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.Science"
+                                     PrimaryText="No Template Attributes are configured for this Metaverse Object Type"
+                                     SecondaryText="Nothing will be generated for this type until the Data Generation Template gives it at least one attribute." />
+                }
+            </EmptyContent>
+        </VirtualisedDataGrid>
     }
 
     <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
@@ -239,6 +179,95 @@
 }
 
 @code {
+    /// <summary>
+    /// The generation rules configured on one Template Attribute, as label/value pairs, in the order they read
+    /// in: which rules apply depends on the Metaverse Attribute's data type, and only those actually set are
+    /// returned. Built here rather than in the markup so the cell and the dialog behind its "+n more" affordance
+    /// cannot draw two different sets.
+    /// </summary>
+    private static List<KeyValuePair<string, string>> GetGenerationRules(ExampleDataTemplateAttribute attribute)
+    {
+        var rules = new List<KeyValuePair<string, string>>();
+
+        void Add(string label, string value) => rules.Add(new KeyValuePair<string, string>(label, value));
+
+        switch (attribute.MetaverseAttribute?.Type)
+        {
+            case AttributeDataType.Text:
+                if (!string.IsNullOrEmpty(attribute.Pattern))
+                    Add("Pattern", attribute.Pattern);
+
+                if (!string.IsNullOrEmpty(attribute.Expression))
+                    Add("Expression", attribute.Expression);
+
+                if (attribute.ExampleDataSetInstances is { Count: > 0 })
+                    Add("Data set(s)", string.Join(", ", attribute.ExampleDataSetInstances.Select(set => set.ExampleDataSet.Name)));
+
+                if (attribute.MinNumber.HasValue)
+                    Add("Min", attribute.MinNumber.Value.ToString("N0"));
+
+                if (attribute.MaxNumber.HasValue)
+                    Add("Max", attribute.MaxNumber.Value.ToString("N0"));
+
+                if (attribute.WeightedStringValues is { Count: > 0 })
+                    Add("Weighted Values", string.Join(", ", attribute.WeightedStringValues.Select(wsv => $"{wsv.Value}: {wsv.Weight}")));
+
+                break;
+
+            case AttributeDataType.Number:
+            case AttributeDataType.LongNumber:
+            case AttributeDataType.Decimal:
+                if (attribute.MinNumber.HasValue)
+                    Add("Min", attribute.MinNumber.Value.ToString("N0"));
+
+                if (attribute.MaxNumber.HasValue)
+                    Add("Max", attribute.MaxNumber.Value.ToString("N0"));
+
+                if (attribute.SequentialNumbers.HasValue)
+                    Add("Sequential", attribute.SequentialNumbers.Value.ToString());
+
+                if (attribute.RandomNumbers.HasValue)
+                    Add("Random numbers", attribute.RandomNumbers.Value.ToString());
+
+                break;
+
+            case AttributeDataType.Boolean:
+                if (attribute.BoolShouldBeRandom.HasValue)
+                    Add("Random", attribute.BoolShouldBeRandom.Value.ToString());
+
+                if (attribute.BoolTrueDistribution.HasValue)
+                    Add("True distribution", attribute.BoolTrueDistribution.Value.ToString("N0"));
+
+                break;
+
+            case AttributeDataType.DateTime:
+                if (attribute.MinDate.HasValue)
+                    Add("Min", attribute.MinDate.Value.ToShortDateString());
+
+                if (attribute.MaxDate.HasValue)
+                    Add("Max", attribute.MaxDate.Value.ToShortDateString());
+
+                break;
+
+            case AttributeDataType.Reference:
+                if (attribute.MvaRefMinAssignments.HasValue)
+                    Add("MVA min assignments", attribute.MvaRefMinAssignments.Value.ToString("N0"));
+
+                if (attribute.MvaRefMaxAssignments.HasValue)
+                    Add("MVA max assignments", attribute.MvaRefMaxAssignments.Value.ToString("N0"));
+
+                if (attribute.ReferenceMetaverseObjectTypes is { Count: > 0 })
+                    Add("Reference type(s)", string.Join(", ", attribute.ReferenceMetaverseObjectTypes.Select(refType => refType.Name)));
+
+                if (attribute.ManagerDepthPercentage.HasValue)
+                    Add("Manager depth", $"{attribute.ManagerDepthPercentage.Value}%");
+
+                break;
+        }
+
+        return rules;
+    }
+
     [Parameter]
     public int Id { get; set; }
     [CascadingParameter]
@@ -257,6 +286,37 @@
     private int _changeCount;
     private Timer? _statusPollTimer;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+
+    /// <summary>
+    /// Slices one window of a Metaverse Object Type's Template Attributes, applying the grid's search (attribute
+    /// name) and sort. The template is loaded whole with its attributes, so there is no database range read; an
+    /// attribute with no Metaverse Attribute reads as an empty name for both search and sort rather than being
+    /// dropped, so a malformed row stays visible to whoever has to fix it.
+    /// </summary>
+    private Task<VirtualisedWindow<ExampleDataTemplateAttribute>> LoadTemplateAttributeWindowAsync(
+        ExampleDataObjectType objectType, VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<ExampleDataTemplateAttribute> attributes = objectType.TemplateAttributes;
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            attributes = attributes.Where(a =>
+                a.MetaverseAttribute?.Name.Contains(search, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        IOrderedEnumerable<ExampleDataTemplateAttribute> Order<TKey>(Func<ExampleDataTemplateAttribute, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? attributes.OrderByDescending(key, comparer) : attributes.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "type" => Order(a => a.MetaverseAttribute?.Type ?? AttributeDataType.NotSet),
+            "population" => Order(a => a.PopulatedValuesPercentage ?? 0),
+            _ => Order(a => a.MetaverseAttribute?.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
 
     protected override async Task OnInitializedAsync()
     {

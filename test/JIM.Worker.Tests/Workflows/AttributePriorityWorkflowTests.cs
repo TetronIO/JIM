@@ -135,6 +135,69 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
             "the NoContributor outcome should count exactly the cleared DisplayName attribute");
     }
 
+    [Test]
+    public async Task FullSync_HigherPriorityContributesIdenticalValue_TakesOverProvenanceAsync()
+    {
+        // Two contributors holding the same value is ordinary, and it is where provenance goes stale (#1292): the
+        // higher-priority contribution diffs to nothing, so nothing carries its stamp onto the surviving row. The
+        // stamp is what the priority gate reads as the incumbent, and the gate always lets a rule overwrite its own
+        // value, so leaving it stale would let the loser change the attribute out from under the winner.
+        var ctx = await SetUpTwoSourcesAsync(
+            directoryDisplayNamePriority: 2,
+            hrDisplayNamePriority: 1,
+            hrDisplayName: DirectoryDisplayName);
+
+        await RunFullSyncAsync(ctx.Directory); // projects the MVO and owns DisplayName
+        await RunFullSyncAsync(ctx.Hr);         // contributes the identical value and must take the row over
+
+        var displayNameValue = DisplayNameValue(ctx);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(displayNameValue?.StringValue, Is.EqualTo(DirectoryDisplayName), "the value itself does not change");
+            Assert.That(displayNameValue?.ContributedBySyncRuleId, Is.EqualTo(ctx.HrImportRuleId),
+                "the higher-priority rule must own the value it contributed, even though it wrote nothing");
+            Assert.That(displayNameValue?.ContributedBySystemId, Is.EqualTo(ctx.Hr.Id), "the contributing system follows the rule");
+        }
+    }
+
+    [Test]
+    public async Task FullSync_ValueLeftWithNoContributingRule_IsTakenOverBySurvivingContributorAsync()
+    {
+        // Deleting a Synchronisation Rule nulls the ContributedBySyncRuleId of every value it contributed (the
+        // foreign key is ON DELETE SET NULL), which is indistinguishable from a value JIM manages internally: the
+        // priority gate treats it as unowned and lets any contribution through. The surviving contributor supplies
+        // the identical value, so the diff is empty and only an explicit takeover repairs it. The cascade is applied
+        // here directly, because the in-memory provider enforces no foreign-key actions of its own.
+        var ctx = await SetUpTwoSourcesAsync(directoryDisplayNamePriority: 1, hrDisplayNamePriority: 2);
+
+        await RunFullSyncAsync(ctx.Directory);
+
+        var orphaned = DisplayNameValue(ctx);
+        Assert.That(orphaned?.ContributedBySyncRuleId, Is.Not.Null, "precondition: the value starts with provenance");
+        orphaned!.ContributedBySyncRuleId = null;
+        orphaned!.ContributedBySystemId = null;
+
+        await RunFullSyncAsync(ctx.Directory);
+
+        var repaired = DisplayNameValue(ctx);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(repaired?.StringValue, Is.EqualTo(DirectoryDisplayName), "the value itself is untouched");
+            Assert.That(repaired?.ContributedBySyncRuleId, Is.Not.Null, "the surviving contributor takes the orphaned value over");
+            Assert.That(repaired?.ContributedBySystemId, Is.EqualTo(ctx.Directory.Id), "the contributing system is restored with it");
+        }
+    }
+
+    /// <summary>
+    /// Reads the single resolved DisplayName value row from the one Person MVO (excluding asserted-null markers),
+    /// for tests that assert on its provenance rather than only its value.
+    /// </summary>
+    private MetaverseObjectAttributeValue? DisplayNameValue(TwoSourceContext ctx)
+    {
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        return mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDisplayNameAttributeId && !av.NullValue);
+    }
+
     /// <summary>
     /// Asserts the one Person MVO holds exactly one asserted-null DisplayName marker (carrying HR's provenance) and no
     /// real DisplayName value.
@@ -170,7 +233,8 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
         int directoryDisplayNamePriority,
         int hrDisplayNamePriority,
         bool hrNullIsValue = false,
-        bool hrContributesDisplayName = true)
+        bool hrContributesDisplayName = true,
+        string hrDisplayName = HrDisplayName)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -257,7 +321,7 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
 
         // Both source CSOs share an EmployeeId so the HR CSO joins the Directory-projected MVO.
         await CreateCsoAsync(directorySystem.Id, directoryType, DirectoryDisplayName, SharedEmployeeId);
-        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, HrDisplayName, SharedEmployeeId);
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, hrDisplayName, SharedEmployeeId);
 
         if (!hrContributesDisplayName)
         {

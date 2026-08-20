@@ -17,6 +17,19 @@ public class ConnectorContainer
     public string Name { get; set; }
 
     /// <summary>
+    /// The Connected System's own immutable identifier for this container, where it has one: objectGUID on Active
+    /// Directory, entryUUID on OpenLDAP. Null when the Connector cannot supply one.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Id"/> is the container's address, not its identity: for a directory it is the Distinguished Name,
+    /// which every rename and every move rewrites. A hierarchy refresh that matched on it alone therefore read a
+    /// renamed container as one removed and another added, dropping the administrator's selection and silently
+    /// narrowing import scope. Supply this wherever the system offers a stable identifier; the merge prefers it and
+    /// falls back to <see cref="Id"/> when it is absent.
+    /// </remarks>
+    public string? StableId { get; set; }
+
+    /// <summary>
     /// An optional description for the container
     /// </summary>
     public string? Description { get; set; }

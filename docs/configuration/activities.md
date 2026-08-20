@@ -105,7 +105,15 @@ The activity's detail page shows the batch like a Run Profile execution: summary
 
 ## Parent and child activities
 
-A schedule execution typically appears as a parent activity with one child activity per step. Use the children listing to walk down a schedule's execution tree from the top-level run into the individual operations it triggered.
+A Schedule Execution typically appears as a parent activity with one child activity per step. Use the children listing to walk down a schedule's execution tree from the top-level run into the individual operations it triggered.
+
+## Schedule context
+
+An Activity that a [Schedule](schedules.md) produced says so, naming the Schedule and which of its steps this was ("step 3 of 6") and linking back to the Schedule Execution it belonged to. It appears on the Activity's detail page and in the Operations History side panel, and is absent for work nobody scheduled.
+
+The attribution is recorded on the Activity itself rather than looked up through the execution, so it survives the Schedule later being renamed or deleted. Activities are a permanent audit record; deleting a Schedule does not rewrite the history of what it did.
+
+The same attribution reaches automation: `Get-JIMActivity` and the Activities REST endpoints carry `ScheduledByScheduleName`, `ScheduledByScheduleId`, `ScheduleExecutionId` and `ScheduleStepIndex` on each Activity, and leave them empty for work nobody scheduled. See the [Activity cmdlets](../powershell/activities.md#get-jimactivity).
 
 ## Target links
 
@@ -117,7 +125,10 @@ The Activity page in the admin portal filters a busy list down to what you are r
 
 - **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity** (Metaverse Objects), **Synchronisation** (Run Profile executions), **System** (housekeeping, resets, data generation), or **Security** ([interactive sign-in and API key authentication events](../administration/security-audit-events.md)). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
 - **Detail filters**<br /> Operation, outcome, type, status, initiator (user, API key, or system), a created date range, and a target/initiator search.
+- **Schedule filters**<br /> On the Operations > History tab, **Scheduled only** narrows the list to work a [Schedule](schedules.md) produced, and the Schedule filter narrows it to particular ones. Combined with the outcome filter, this answers whether a step has been failing repeatedly or only once: filter to the Schedule, set the outcome to the failure you saw, and read down the dates.
 - **Shareable URLs**<br /> The filter state is reflected in the page URL, so a filtered view can be bookmarked or shared; opening the link reproduces the same view. For example, reviewing user-made configuration changes over the last week is one URL an auditor can return to each review cycle.
+
+Automation gets the same filters, not a subset of them. `GET /api/v1/activities` accepts `search`, `targetType`, `initiatorType`, `operation`, `outcome`, `status`, `initiatedById`, `initiatedBy`, `hasChildActivities`, `createdFrom`, `createdTo`, `connectedSystem`, `runProfile`, `scheduledOnly` and `scheduleId`; repeat a query parameter to pass several values, which combine with OR within that filter, while separate filters narrow each other. `Get-JIMActivity` exposes the same set as parameters (see the [Activity cmdlets](../powershell/activities.md#get-jimactivity)). The portal, the REST API and PowerShell all run the same query, so the same filters return the same Activities on every surface.
 
 ## Configuration change history
 
@@ -173,6 +184,19 @@ Some of a run's wall-clock time is spent inside the Connector, on work JIM canno
 A Connector can report how many objects it has read while it is still working, and both built-in Connectors do, so the counts move during these steps rather than standing still until the Connector returns. A Connector that reports nothing leaves the steps and messages to do that job on their own: something that keeps changing is how you tell a healthy long-running phase from a stuck one. A Connector's steps finish the moment its call returns, so nothing is shown as running once JIM has taken over.
 
 The steps are also available to automation: the Activity progress endpoint reports the current step and its position in the run, and `Start-JIMRunProfile -Wait` and `Get-JIMActivity -Follow` display it as "Step 3 of 7: Saving changes".
+
+### The run's steps in the queue
+
+**Admin > Operations > Queue** shows the same run in miniature, so an administrator watching several at once does not have to open each in turn. Each row's Progress cell carries two things, one above the other:
+
+- **The run's steps**, as a row of segments, one per step, coloured by what happened to each: done, running, skipped, failed, or not reached yet.
+- **The running step's own progress bar**, with a caption naming the step the figures belong to ("Step 3 of 7: Saving changes - 12,480 / 40,000").
+
+The two measure different things on purpose: the segments say *where* in the run you are, the bar says *how much* of the step is done. The caption is what keeps them apart, which is why it names the step rather than just counting.
+
+A task that is not a Run Profile execution records no steps (clearing Connected System Objects, generating example data, a factory reset), and shows the bar and its message alone, as it always has.
+
+The full picture, with step names, durations and the messages beneath them, is on the Activity itself; the row's name links straight to it.
 
 ## Common workflows
 

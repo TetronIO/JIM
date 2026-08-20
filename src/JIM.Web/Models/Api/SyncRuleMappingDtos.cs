@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 
 namespace JIM.Web.Models.Api;
@@ -76,6 +77,67 @@ public class SyncRuleMappingDto
 }
 
 /// <summary>
+/// Request to change the settings on an existing Attribute Flow.
+/// </summary>
+/// <remarks>
+/// Every field is optional and an omitted one leaves the mapping's current value alone; a request naming no
+/// field at all is rejected rather than answered as a successful no-op. What the mapping targets, and whether
+/// its source is an attribute or an Expression, cannot be changed here: those revalidate against attribute types
+/// and reopen an import mapping's Attribute Priority position, so they remain a delete and a create.
+/// </remarks>
+public class UpdateSyncRuleMappingRequest
+{
+    /// <summary>
+    /// Replaces the mapping's Expression. Expression mappings only; rejected for an attribute mapping, and for a
+    /// mapping carrying more than one Expression source.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>
+    /// What the Expression does when an attribute it reads has no value on the object being synchronised.
+    /// Expression mappings only.
+    /// </summary>
+    public MissingInputBehaviour? MissingInputBehaviour { get; set; }
+
+    /// <summary>
+    /// Whether a contribution of no value from this mapping is authoritative ("Null is a value"). Import
+    /// mappings only.
+    /// </summary>
+    public bool? NullIsValue { get; set; }
+
+    /// <summary>
+    /// Text value-processing transforms applied as the value flows to the Metaverse. Import mappings only.
+    /// </summary>
+    public InboundValueProcessing? InboundValueProcessing { get; set; }
+
+    /// <summary>
+    /// Case normalisation applied as the value flows to the Metaverse. Import mappings only.
+    /// </summary>
+    public InboundCaseNormalisation? CaseNormalisation { get; set; }
+
+    /// <summary>
+    /// Whether the mapping flows only during the initial provisioning export. Export mappings only.
+    /// </summary>
+    public bool? InitialExportOnly { get; set; }
+
+    /// <summary>
+    /// Converts the request into the settings change the application layer understands.
+    /// </summary>
+    public SyncRuleMappingSettingsUpdate ToSettingsUpdate()
+    {
+        return new SyncRuleMappingSettingsUpdate
+        {
+            Expression = Expression,
+            MissingInputBehaviour = MissingInputBehaviour,
+            NullIsValue = NullIsValue,
+            InboundValueProcessing = InboundValueProcessing,
+            CaseNormalisation = CaseNormalisation,
+            InitialExportOnly = InitialExportOnly
+        };
+    }
+}
+
+/// <summary>
 /// API representation of a SyncRuleMappingSource.
 /// </summary>
 public class SyncRuleMappingSourceDto
@@ -93,6 +155,14 @@ public class SyncRuleMappingSourceDto
     /// </summary>
     public string? Expression { get; set; }
 
+    /// <summary>
+    /// For expression sources: what happens when an attribute the expression reads has no value on the object
+    /// being synchronised. EvaluateAnyway (the default) runs the expression regardless, ContributeNoValue skips it
+    /// without reporting anything, FailMapping skips it and records an error, and FailObject leaves the whole
+    /// object untouched.
+    /// </summary>
+    public MissingInputBehaviour MissingInputBehaviour { get; set; }
+
     public static SyncRuleMappingSourceDto FromEntity(SyncRuleMappingSource entity)
     {
         return new SyncRuleMappingSourceDto
@@ -103,7 +173,8 @@ public class SyncRuleMappingSourceDto
             MetaverseAttributeName = entity.MetaverseAttribute?.Name,
             ConnectedSystemAttributeId = entity.ConnectedSystemAttributeId,
             ConnectedSystemAttributeName = entity.ConnectedSystemAttribute?.Name,
-            Expression = entity.Expression
+            Expression = entity.Expression,
+            MissingInputBehaviour = entity.MissingInputBehaviour
         };
     }
 }
@@ -186,6 +257,15 @@ public class CreateSyncRuleMappingSourceRequest
     /// Example: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"
     /// </summary>
     public string? Expression { get; set; }
+
+    /// <summary>
+    /// For expression sources: what to do when an attribute the expression reads has no value on the object being
+    /// synchronised. Omit for EvaluateAnyway, which runs the expression regardless and is what JIM has always
+    /// done. ContributeNoValue skips the mapping and resolves by Attribute Priority without reporting anything;
+    /// FailMapping skips it and records an ExpressionMissingInput error while the object's other attributes still
+    /// flow; FailObject leaves the whole object untouched. Ignored for attribute sources.
+    /// </summary>
+    public MissingInputBehaviour? MissingInputBehaviour { get; set; }
 }
 
 /// <summary>

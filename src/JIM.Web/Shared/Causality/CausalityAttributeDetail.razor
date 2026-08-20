@@ -1,81 +1,112 @@
 @using JIM.Web.Causality
+@using JIM.Web.Models
+@using System.Globalization
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* The causality attribute change detail: a toolbar with a search box, count-annotated operation
-   filter chips (All/Set/Add/Remove) and an "n of m" indicator, above a standard MudTable of
-   attribute rows (operation badge, name with demoted type and plurality, value with the previous
-   value struck through where applicable). Filtering is pure C# over the supplied rows; the filter
-   state lives in this component and resets whenever it is recreated (e.g. a Timeline expander
-   reopening). No <TableDensityToggle> here deliberately: this component can render several
-   instances at once in the Timeline view, and a per-instance toggle (each triggering its own
-   preference load) would repeat visually and functionally; Dense="true" mirrors the "Attribute
-   Changes" table on ActivityRunProfileExecutionItemDetail without the toggle.
+@* The causality attribute change detail: count-annotated operation filter chips (All/Set/Add/Remove) in the
+   toolbar of a virtualised grid of attribute rows (operation badge, name with demoted type and plurality, value
+   with the previous value struck through where applicable). Filtering is pure C# over the supplied rows; the
+   filter state lives in this component and resets whenever it is recreated (e.g. a Timeline expander reopening).
 
-   The filter box is a plain input rather than the shared <SearchField />, deliberately: it is a
-   knowingly-kept point of contrast against MudBlazor's much taller field, pending a wider review of
-   those. SearchFieldConventionTests does not flag it (it sweeps MudTextField), so this note is the
-   only record of the choice; migrate it when that review happens rather than treating it as an
-   oversight. *@
+   The rows are handed to this component whole, so a window is sliced from them in memory rather than read from
+   the database. The search box, the count and the density toggle are the shared grid's; the bespoke filter input
+   and "n of m" indicator this component used to carry are gone with them, so that every table in the portal
+   narrows and counts itself the same way. *@
 
-<div class="attr-toolbar">
-    <label class="attr-search">
-        <MudIcon Icon="@Icons.Material.Filled.Search" aria-hidden="true" />
-        <input type="text" placeholder="Filter attributes…" aria-label="Filter attributes"
-               @bind="_search" @bind:event="oninput" />
-    </label>
-    @if (ShowOperations)
-    {
-        <div class="filter-chips" role="group" aria-label="Filter by operation">
-            <button type="button" class="@(_operationFilter == null ? "on" : null)"
-                    aria-pressed="@(_operationFilter == null ? "true" : "false")"
-                    @onclick="() => _operationFilter = null">All</button>
-            @foreach (var (operation, count) in GetOperationCounts())
-            {
-                <button type="button" class="@(_operationFilter == operation ? "on" : null)"
-                        aria-pressed="@(_operationFilter == operation ? "true" : "false")"
-                        @onclick="() => _operationFilter = operation">@operation · @count</button>
-            }
-        </div>
-    }
-    <span class="attr-meta-count">@GetFilteredRows().Count of @Rows.Count</span>
-</div>
-
-<MudTable Items="@GetFilteredRows()" Hover="true" Dense="true" Outlined="true" Elevation="0">
-    <HeaderContent>
+<VirtualisedDataGrid @ref="_grid" T="CausalityAttributeRow"
+                     ContainerId="@($"causality-attributes-{_instanceId}")"
+                     Embedded="true"
+                     DefaultSortBy="@SourceOrderSort"
+                     LoadWindow="LoadRowWindowAsync"
+                     SearchPlaceholder="Filter attributes..."
+                     SingularName="Attribute"
+                     PluralName="Attributes">
+    <ToolBarExtras>
         @if (ShowOperations)
         {
-            <MudTh Class="attr-col-shrink"><MudText Typo="Typo.button">Change</MudText></MudTh>
+            <div class="filter-chips" role="group" aria-label="Filter by operation">
+                <button type="button" class="@(_operationFilter == null ? "on" : null)"
+                        aria-pressed="@(_operationFilter == null ? "true" : "false")"
+                        @onclick="() => SetOperationFilterAsync(null)">All</button>
+                @foreach (var (operation, count) in GetOperationCounts())
+                {
+                    <button type="button" class="@(_operationFilter == operation ? "on" : null)"
+                            aria-pressed="@(_operationFilter == operation ? "true" : "false")"
+                            @onclick="() => SetOperationFilterAsync(operation)">@operation · @count</button>
+                }
+            </div>
         }
-        <MudTh Class="attr-col-shrink"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
-        <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
-    </HeaderContent>
-    <RowTemplate>
+    </ToolBarExtras>
+    <Columns>
         @if (ShowOperations)
         {
-            <MudTd DataLabel="Change" Class="attr-col-shrink">
-                <MudChip T="string" Variant="Variant.Text" Color="@GetOperationColor(context.Operation)" Class="ml-0">
-                    @context.Operation
-                </MudChip>
-            </MudTd>
+            <TemplateColumn Title="Change" Sortable="false" HeaderClass="attr-col-shrink" CellClass="attr-col-shrink">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Change" Name="change" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    <MudChip T="string" Variant="Variant.Text" Color="@GetOperationColor(context.Item.Operation)" Class="ml-0">
+                        @context.Item.Operation
+                    </MudChip>
+                </CellTemplate>
+            </TemplateColumn>
         }
-        <MudTd DataLabel="Attribute" Class="attr-col-shrink">
-            @context.Name
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.TypeAndPlurality</MudText>
-        </MudTd>
-        <MudTd DataLabel="Value">
-            @if (!string.IsNullOrEmpty(context.PreviousValue))
-            {
-                <span class="mud-text-secondary attr-previous-value">@context.PreviousValue</span>
-            }
-            <TextValueDisplay Value="@context.Value" />
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText Class="pa-4">No attributes match the current filter.</MudText>
-    </NoRecordsContent>
-</MudTable>
+        <TemplateColumn Title="Attribute" Sortable="false" HeaderClass="attr-col-shrink" CellClass="attr-col-shrink">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @* A row in a virtualised grid is one line, and a MudText renders a paragraph, so the type and
+                   plurality under the name made every row two lines (worst in dense mode, where the fixed row
+                   height is smallest). They read inline after the name instead. *@
+                <OneLineText Text="@context.Item.Name" Secondary="@context.Item.TypeAndPlurality" />
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Value" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Value" Name="value" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @* Same one-line rule: an attribute value is unbounded text, and a struck-through previous value
+                   beside it doubles what has to fit, so the pair is clipped rather than wrapped. *@
+                <span class="jim-one-line" title="@(string.IsNullOrEmpty(context.Item.PreviousValue) ? context.Item.Value : $"{context.Item.PreviousValue} -> {context.Item.Value}")">
+                    @if (!string.IsNullOrEmpty(context.Item.PreviousValue))
+                    {
+                        <span class="mud-text-secondary attr-previous-value">@context.Item.PreviousValue</span>
+                    }
+                    <TextValueDisplay Value="@context.Item.Value" />
+                </span>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No attributes match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the filters."
+                             ActionText="Clear Filters"
+                             OnAction="@(() => ClearFiltersAsync(grid))" />
+        }
+        else if (_operationFilter.HasValue)
+        {
+            var operation = _operationFilter.Value;
+            <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                             PrimaryText="@($"No attributes were {operation.ToString().ToLowerInvariant()}")"
+                             SecondaryText="Choose All to see every attribute this event touched."
+                             ActionText="Clear Filters"
+                             OnAction="@(() => ClearFiltersAsync(grid))" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.List"
+                             PrimaryText="This event carries no attribute values"
+                             SecondaryText="Attribute values appear here when a change writes them, or when a Pending Export carries the values identifying its target." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @code {
     /// <summary>
@@ -94,9 +125,64 @@
     [Parameter]
     public bool ShowOperations { get; set; } = true;
 
-    private string _search = string.Empty;
+    /// <summary>
+    /// The sort key standing for "the order the rows were built in", which is the order that tells the story of
+    /// the change; no header claims it, so the grid opens showing no sort arrow and reorders only when asked.
+    /// </summary>
+    private const string SourceOrderSort = "order";
+
+    /// <summary>
+    /// Distinguishes this instance's grid from its siblings'. The Timeline view renders one of these per event,
+    /// so the grid's element id and URL parameters cannot be a constant without every instance sharing them.
+    /// </summary>
+    private static int _instanceCounter;
+
+    private readonly string _instanceId =
+        Interlocked.Increment(ref _instanceCounter).ToString(CultureInfo.InvariantCulture);
+
+    private VirtualisedDataGrid<CausalityAttributeRow>? _grid;
     private CausalityAttributeOperation? _operationFilter;
 
+    /// <summary>
+    /// Slices one window from the rows this component was handed, applying the operation chip, the grid's search
+    /// (attribute name or value) and the grid's sort. Nothing is read from the database: the whole set is already
+    /// here, and it is one event's worth of attributes.
+    /// </summary>
+    private Task<VirtualisedWindow<CausalityAttributeRow>> LoadRowWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<CausalityAttributeRow> rows = Rows;
+
+        if (_operationFilter is { } operation)
+            rows = rows.Where(r => r.Operation == operation);
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText.Trim();
+            rows = rows.Where(r =>
+                r.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || (r.Value?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        IOrderedEnumerable<CausalityAttributeRow> Order<TKey>(Func<CausalityAttributeRow, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? rows.OrderByDescending(key, comparer) : rows.OrderBy(key, comparer);
+
+        IEnumerable<CausalityAttributeRow> sorted = request.SortBy switch
+        {
+            "change" => Order(r => r.Operation).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase),
+            "attribute" => Order(r => r.Name, StringComparer.OrdinalIgnoreCase),
+            "value" => Order(r => r.Value ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            // The order the rows were built in: the sequence that reads as the story of the change.
+            _ => rows
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    /// <summary>
+    /// The operations present in the rows, with how many rows each accounts for. Counted over every row rather
+    /// than the filtered set, so the chips keep saying what choosing them would show.
+    /// </summary>
     private List<(CausalityAttributeOperation Operation, int Count)> GetOperationCounts()
     {
         return new[] { CausalityAttributeOperation.Set, CausalityAttributeOperation.Add, CausalityAttributeOperation.Remove }
@@ -105,22 +191,30 @@
             .ToList();
     }
 
-    private List<CausalityAttributeRow> GetFilteredRows()
+    /// <summary>
+    /// Applies an operation chip. The chip changes which rows match, so the grid must re-count as well as reload,
+    /// and the reader's scroll position describes a set that no longer exists.
+    /// </summary>
+    private async Task SetOperationFilterAsync(CausalityAttributeOperation? operation)
     {
-        IEnumerable<CausalityAttributeRow> rows = Rows;
+        _operationFilter = operation;
 
-        if (_operationFilter is { } operation)
-            rows = rows.Where(r => r.Operation == operation);
+        if (_grid == null)
+            return;
 
-        if (!string.IsNullOrWhiteSpace(_search))
-        {
-            var search = _search.Trim();
-            rows = rows.Where(r =>
-                r.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
-                || (r.Value?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
-        }
+        await _grid.ResetScrollAsync();
+        await _grid.RefreshAsync(invalidateTotals: true);
+    }
 
-        return rows.ToList();
+    /// <summary>
+    /// The way out offered by the empty states: drops the operation chip and the search together, since either
+    /// can be what emptied the table and the reader should not have to work out which.
+    /// </summary>
+    private async Task ClearFiltersAsync(VirtualisedDataGrid<CausalityAttributeRow> grid)
+    {
+        _operationFilter = null;
+        await grid.ClearSearchAsync();
+        await grid.RefreshAsync(invalidateTotals: true);
     }
 
     /// <summary>

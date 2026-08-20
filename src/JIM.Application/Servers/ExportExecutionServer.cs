@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Diagnostics;
 using JIM.Application.Services;
 using JIM.Data;
@@ -550,14 +551,14 @@ public class ExportExecutionServer
                                 .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
                                 .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
                             {
-                                exportResults = await connector.ExportAsync(immediateExports, cancellationToken, connectorProgress);
+                                exportResults = await connector.ExportAsync(immediateExports.Select(ForConnector).ToList(), cancellationToken, connectorProgress);
                             }
 
                             // Process results
                             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
                                 .SetTag("batchSize", immediateExports.Count))
                             {
-                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo);
+                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive);
                             }
                         }
                         catch (OperationCanceledException)
@@ -785,8 +786,11 @@ public class ExportExecutionServer
                 : new Dictionary<Guid, ConnectedSystemObject>();
         }
 
-        // Separate resolved from still-unresolved exports
+        // Separate resolved from still-unresolved exports. A still-unresolved export that has something
+        // it can write now (issue #1398) is written now alongside the resolved ones and stays pending only
+        // for the references it still owes; one with nothing writable is deferred whole, as before.
         var resolvedExports = new List<PendingExport>();
+        var writeInPartExports = new List<PendingExport>();
         var stillUnresolvedExports = new List<PendingExport>();
         var resolveProcessedCount = 0;
 
@@ -803,6 +807,8 @@ public class ExportExecutionServer
             else
             {
                 stillUnresolvedExports.Add(export);
+                if (CanWriteInPart(export))
+                    writeInPartExports.Add(export);
             }
 
             resolveProcessedCount++;
@@ -827,8 +833,15 @@ public class ExportExecutionServer
             }
         }
 
-        // Batch-export resolved deferred exports
-        if (resolvedExports.Count > 0)
+        // What each still-unresolved export owes, and why (issue #1398): a reference whose target object
+        // exists but has no anchor yet is merely waiting; one whose target has no object in this system
+        // at all cannot resolve as things stand, and is reported per the Connected System's Unresolved
+        // Reference Handling. Built before anything is written so the write's own item can carry it.
+        var unresolvedReferenceNotes = await BuildUnresolvedReferenceNotesAsync(connectedSystem, stillUnresolvedExports, csoLookup, result);
+
+        // Batch-export resolved deferred exports, and the partial writes alongside them
+        var exportsToWrite = resolvedExports.Concat(writeInPartExports).ToList();
+        if (exportsToWrite.Count > 0)
         {
             // Persist the in-memory reference resolutions BEFORE executing the deferred batches.
             // The parallel path (ProcessBatchesInParallelAsync) re-loads each batch by ID on a
@@ -842,9 +855,9 @@ public class ExportExecutionServer
             // UpdatePendingExportsAsync persists both the parent rows and the attribute value
             // change rows (StringValue/UnresolvedReferenceValue) via raw SQL.
             using (Diagnostics.Diagnostics.Database.StartSpan("PersistResolvedDeferredExports")
-                .SetTag("count", resolvedExports.Count))
+                .SetTag("count", exportsToWrite.Count))
             {
-                await SyncRepo.UpdatePendingExportsAsync(resolvedExports);
+                await SyncRepo.UpdatePendingExportsAsync(exportsToWrite);
             }
 
             // Clear the change tracker before exporting deferred batches.
@@ -853,7 +866,7 @@ public class ExportExecutionServer
             // try to attach/update the original PE instances.
             SyncRepo.ClearChangeTracker();
 
-            var deferredBatches = resolvedExports
+            var deferredBatches = exportsToWrite
                 .Select((export, index) => new { export, index })
                 .GroupBy(x => x.index / options.BatchSize)
                 .Select(g => g.Select(x => x.export).ToList())
@@ -868,34 +881,41 @@ public class ExportExecutionServer
                 var immediateProcessedCount = result.SuccessCount + result.FailedCount;
                 await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
                     cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
-                    processedExportsOffset: immediateProcessedCount, passTotal: passTotal);
+                    processedExportsOffset: immediateProcessedCount, passTotal: passTotal,
+                    unresolvedReferenceNotes: unresolvedReferenceNotes);
             }
             else
             {
-                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback, passTotal);
+                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback, passTotal,
+                    connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes);
             }
         }
 
-        // Mark still-unresolved exports as deferred in batch
+        // Mark the exports that wrote nothing as deferred in batch. Those written in part were left
+        // pending by ProcessBatchSuccessAsync with the same cadence, and counted as written.
+        var deferredWholeExports = stillUnresolvedExports.Except(writeInPartExports).ToList();
         if (stillUnresolvedExports.Count > 0)
         {
             var unresolvedMvoIds = CollectUnresolvedMvoIds(stillUnresolvedExports);
             var resolvedMvoIds = csoLookup.Keys.ToHashSet();
             var missingMvoIds = unresolvedMvoIds.Except(resolvedMvoIds).ToList();
 
-            var markedDeferredCount = 0;
-
-            Log.Information("ProcessDeferredExportsAsync: {StillUnresolved} export(s) have unresolved references and will be deferred. " +
-                "{Resolved} resolved, {TotalDeferred} total deferred this cycle. " +
-                "{MissingCount} referenced MVO(s) have no CSO in the target system yet: [{MissingIds}]",
-                stillUnresolvedExports.Count, resolvedExports.Count, stillUnresolvedExports.Count,
+            Log.Information("ProcessDeferredExportsAsync: {StillUnresolved} export(s) have unresolved references: " +
+                "{WrittenInPart} written in part and pending for their references, {DeferredWhole} deferred whole. " +
+                "{Resolved} resolved this cycle. " +
+                "{MissingCount} referenced MVO(s) have no CSO in the target system: [{MissingIds}]",
+                stillUnresolvedExports.Count, writeInPartExports.Count, deferredWholeExports.Count, resolvedExports.Count,
                 missingMvoIds.Count,
                 string.Join(", ", missingMvoIds.Take(10).Select(id => id.ToString())));
+        }
 
-            foreach (var export in stillUnresolvedExports)
+        if (deferredWholeExports.Count > 0)
+        {
+            var markedDeferredCount = 0;
+
+            foreach (var export in deferredWholeExports)
             {
-                var exportUnresolvedCount = export.AttributeValueChanges
-                    .Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
+                var exportUnresolvedCount = export.AttributeValueChanges.Count(IsUnresolvedReference);
                 var exportTotalChanges = export.AttributeValueChanges.Count;
                 Log.Debug("ProcessDeferredExportsAsync: Deferring export {ExportId} for CSO {CsoId} - " +
                     "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references",
@@ -904,11 +924,27 @@ public class ExportExecutionServer
                 await MarkExportDeferredAsync(export);
                 result.DeferredCount++;
 
+                // Nothing was written, so there is no write to report; but a reference that can never
+                // resolve as things stand is reported on its own item under Error handling (issue #1398),
+                // otherwise the export would sit deferred for ever with nothing to say why.
+                if (unresolvedReferenceNotes.TryGetValue(export.Id, out var note))
+                {
+                    result.ProcessedExportItems.Add(new ProcessedExportItem
+                    {
+                        ChangeType = export.ChangeType,
+                        ConnectedSystemObject = export.ConnectedSystemObject,
+                        PendingExportId = export.Id,
+                        Deferred = true,
+                        Succeeded = false,
+                        UnresolvedReferenceMessage = note
+                    }.WithCauseFrom(export));
+                }
+
                 // Confirming an export still cannot be written finishes with it as surely as
                 // writing it does, so it counts towards this pass's own work. Throttled to keep the
                 // progress writes off the per-export path.
                 markedDeferredCount++;
-                if (markedDeferredCount % 50 == 0 || markedDeferredCount == stillUnresolvedExports.Count)
+                if (markedDeferredCount % 50 == 0 || markedDeferredCount == deferredWholeExports.Count)
                 {
                     await ReportProgressAsync(progressCallback, new ExportProgressInfo
                     {
@@ -916,12 +952,109 @@ public class ExportExecutionServer
                         TotalExports = result.TotalPendingExports,
                         ProcessedExports = result.SuccessCount + result.FailedCount,
                         PassTotal = passTotal,
-                        PassProcessed = resolvedExports.Count + markedDeferredCount,
+                        PassProcessed = exportsToWrite.Count + markedDeferredCount,
                         Message = "Recording exports that are still waiting on their references"
                     });
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Sorts what each still-unresolved export owes into references that are merely waiting (the
+    /// referenced Metaverse Object has a Connected System Object in the target, but no anchor yet) and
+    /// references that cannot resolve as things stand (no Connected System Object in the target at all:
+    /// out of scope for every rule into this system, or not yet provisioned), counting the latter on the
+    /// result and, under Error handling, composing the message the referrer's Run Profile Execution Item
+    /// will carry (issue #1398). Mirrors the import side's treatment of its own unresolved references:
+    /// Error marks the object, Warn leaves the count for the Activity's summary, Ignore logs only.
+    /// </summary>
+    /// <returns>Per Pending Export id, the message for its item; empty unless handling is Error.</returns>
+    private async Task<Dictionary<Guid, string>> BuildUnresolvedReferenceNotesAsync(
+        ConnectedSystem connectedSystem,
+        List<PendingExport> stillUnresolvedExports,
+        Dictionary<Guid, ConnectedSystemObject> csoLookup,
+        ExportExecutionResult result)
+    {
+        var notes = new Dictionary<Guid, string>();
+        if (stillUnresolvedExports.Count == 0)
+            return notes;
+
+        // (export, change, referenced MVO) for every reference whose target has no object in this system.
+        // A reference whose target IS in the lookup is waiting on its anchor, and the deferred pass gets it.
+        var unresolvable = stillUnresolvedExports
+            .SelectMany(export => export.AttributeValueChanges
+                .Where(IsUnresolvedReference)
+                .Select(change => (Export: export, Change: change, MvoId: Guid.TryParse(change.UnresolvedReferenceValue, out var mvoId) ? mvoId : (Guid?)null)))
+            .Where(u => u.MvoId.HasValue && !csoLookup.ContainsKey(u.MvoId.Value))
+            .Select(u => (u.Export, u.Change, MvoId: u.MvoId!.Value))
+            .ToList();
+
+        if (unresolvable.Count == 0)
+            return notes;
+
+        result.UnresolvableReferenceCount += unresolvable.Count;
+        var handling = connectedSystem.UnresolvedReferenceHandling;
+
+        Log.Information("BuildUnresolvedReferenceNotesAsync: {Count} reference value(s) across {ExportCount} export(s) refer to Metaverse Objects with no " +
+            "Connected System Object in {SystemName} and cannot be written as things stand (handling: {Handling}).",
+            unresolvable.Count, unresolvable.Select(u => u.Export.Id).Distinct().Count(), connectedSystem.Name, handling);
+
+        if (handling == UnresolvedReferenceHandling.Ignore)
+        {
+            foreach (var (export, change, mvoId) in unresolvable)
+                Log.Debug("BuildUnresolvedReferenceNotesAsync: Export {ExportId} attribute {AttrName} refers to MVO {MvoId}, which has no CSO in the target. Ignored per Connected System setting.",
+                    export.Id, change.Attribute?.Name ?? $"AttrId={change.AttributeId}", mvoId);
+            return notes;
+        }
+
+        // Named, not just numbered: an administrator reading "Manager could not be written: 'Ada Ashcroft'
+        // has no object in this system" knows what to do; a bare identifier sends them on a search.
+        Dictionary<Guid, string?> names;
+        using (Diagnostics.Diagnostics.Database.StartSpan("GetReferencedMetaverseObjectNames")
+            .SetTag("count", unresolvable.Count))
+        {
+            names = await SyncRepo.GetMetaverseObjectDisplayNamesAsync(unresolvable.Select(u => u.MvoId).Distinct().ToList());
+        }
+
+        foreach (var group in unresolvable.GroupBy(u => u.Export.Id))
+        {
+            var export = group.First().Export;
+            var described = group.Select(u =>
+            {
+                var attrName = u.Change.Attribute?.Name ?? $"attribute {u.Change.AttributeId}";
+                var name = names.TryGetValue(u.MvoId, out var n) && !string.IsNullOrEmpty(n) ? $"'{n}' ({u.MvoId})" : u.MvoId.ToString();
+                return $"{attrName} -> {name}";
+            }).ToList();
+
+            const int shown = 3;
+            var summary = string.Join("; ", described.Take(shown));
+            if (described.Count > shown)
+                summary += $"; and {described.Count - shown} more";
+
+            var message = $"{described.Count} reference value(s) could not be written because the referenced Metaverse Object has no " +
+                          $"Connected System Object in this Connected System: {summary}. The referenced object is out of scope for every " +
+                          "Synchronisation Rule into this system, or has not been provisioned yet. Everything else on this export was written; " +
+                          "the reference is retried on the deferred cadence and written when the object appears.";
+
+            switch (handling)
+            {
+                case UnresolvedReferenceHandling.Error:
+                    notes[export.Id] = message;
+                    Log.Debug("BuildUnresolvedReferenceNotesAsync: Export {ExportId} for CSO {CsoId}: {Message}",
+                        export.Id, export.ConnectedSystemObjectId, message);
+                    break;
+
+                case UnresolvedReferenceHandling.Warn:
+                default:
+                    // The item is deliberately left unmarked; the Activity carries a summary count instead.
+                    Log.Warning("BuildUnresolvedReferenceNotesAsync: Export {ExportId} for CSO {CsoId}: {Message}",
+                        export.Id, export.ConnectedSystemObjectId, message);
+                    break;
+            }
+        }
+
+        return notes;
     }
 
     // ProcessBatchesSequentiallyAsync removed — sequential batch processing is now
@@ -940,7 +1073,9 @@ public class ExportExecutionServer
         ExportExecutionResult result,
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
-        int passTotal)
+        int passTotal,
+        TimeSpan initialPasswordTimeToLive,
+        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
     {
         // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
         // increments result.SuccessCount/FailedCount for deferred batches too, so using
@@ -985,13 +1120,13 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                 .SetTag("batchSize", batch.Count))
             {
-                exportResults = await connector.ExportAsync(batch, cancellationToken, connectorProgress);
+                exportResults = await connector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress);
             }
 
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
                 .SetTag("batchSize", batch.Count))
             {
-                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo);
+                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo, initialPasswordTimeToLive, unresolvedReferenceNotes);
             }
 
             processedCount += batch.Count;
@@ -1018,7 +1153,8 @@ public class ExportExecutionServer
         string spanName,
         int processedExportsOffset = 0,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
-        int? passTotal = null)
+        int? passTotal = null,
+        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
     {
         Log.Information("ProcessBatchesInParallelAsync: Processing {BatchCount} batches with MaxParallelism={MaxParallelism}",
             batches.Count, options.MaxParallelism);
@@ -1103,12 +1239,14 @@ public class ExportExecutionServer
                     // Mark batch as executing (raw SQL - context-independent)
                     await batchRepo.MarkPendingExportsAsExecutingAsync(batch);
 
-                    // Execute batch via connector
-                    var exportResults = await batchConnector.ExportAsync(batch, cancellationToken, connectorProgress);
+                    // Execute batch via connector. The batch was re-loaded from persisted state above,
+                    // which is why the reference resolutions and the writable/unresolved split (issue
+                    // #1398) are persisted before this path runs: ForConnector decides from what it reads.
+                    var exportResults = await batchConnector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress);
 
                     // Process results using the batch's own repository
                     var batchResult = new ExportExecutionResult();
-                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo);
+                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes);
 
                     // Capture created containers from this batch's connector
                     List<string>? batchContainerIds = null;
@@ -1125,6 +1263,7 @@ public class ExportExecutionServer
                         result.SuccessCount += batchResult.SuccessCount;
                         result.FailedCount += batchResult.FailedCount;
                         result.DeferredCount += batchResult.DeferredCount;
+                        result.PartiallyExportedCount += batchResult.PartiallyExportedCount;
                         result.OptimisticApplyAppliedCount += batchResult.OptimisticApplyAppliedCount;
                         result.OptimisticApplySkippedCount += batchResult.OptimisticApplySkippedCount;
                         result.OptimisticApplyFailedCount += batchResult.OptimisticApplyFailedCount;
@@ -1262,11 +1401,20 @@ public class ExportExecutionServer
     /// a single SaveChanges for all CSO updates.
     /// Accepts an explicit repository parameter to support both sequential (shared) and parallel (per-batch) paths.
     /// </summary>
+    /// <param name="unresolvedReferenceNotes">
+    /// Per Pending Export id, the message describing the references it could not write this run because
+    /// the referenced object has no Connected System Object in the target (issue #1398), built by
+    /// <see cref="BuildUnresolvedReferenceNotesAsync"/> under Error handling only. Carried onto the
+    /// export's processed item so the Run Profile Execution Item reports the write and the outstanding
+    /// reference together, as the import side does. Null when nothing was noted.
+    /// </param>
     private async Task ProcessBatchSuccessAsync(
         List<PendingExport> batch,
         List<ConnectedSystemExportResult> exportResults,
         ExportExecutionResult result,
-        ISyncRepository repository)
+        ISyncRepository repository,
+        TimeSpan initialPasswordTimeToLive,
+        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
     {
         var exportsToUpdate = new List<PendingExport>();
         var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
@@ -1277,6 +1425,12 @@ public class ExportExecutionServer
         {
             var export = batch[i];
             var exportResult = i < exportResults.Count ? exportResults[i] : ConnectedSystemExportResult.Succeeded();
+
+            // What the connector was actually handed (see ForConnector), and what it was not: reference
+            // changes still awaiting resolution stay behind on a partial write (issue #1398).
+            var writtenChanges = WritableChanges(export);
+            var stillUnresolvedCount = export.AttributeValueChanges.Count(IsUnresolvedReference);
+            var wasCreate = export.ChangeType == PendingExportChangeType.Create;
 
             if (!exportResult.Success)
             {
@@ -1290,8 +1444,9 @@ public class ExportExecutionServer
                 {
                     ChangeType = export.ChangeType,
                     ConnectedSystemObject = export.ConnectedSystemObject,
-                    AttributeChangeCount = export.AttributeValueChanges.Count,
-                    AttributeValueChanges = export.AttributeValueChanges.ToList(),
+                    PendingExportId = export.Id,
+                    AttributeChangeCount = writtenChanges.Count,
+                    AttributeValueChanges = writtenChanges,
                     Succeeded = false,
                     ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                     ErrorCount = export.ErrorCount,
@@ -1305,24 +1460,44 @@ public class ExportExecutionServer
             {
                 ChangeType = export.ChangeType,
                 ConnectedSystemObject = export.ConnectedSystemObject,
-                AttributeChangeCount = export.AttributeValueChanges.Count,
-                AttributeValueChanges = export.AttributeValueChanges.ToList(),
-                Succeeded = true
+                PendingExportId = export.Id,
+                AttributeChangeCount = writtenChanges.Count,
+                AttributeValueChanges = writtenChanges,
+                Succeeded = true,
+                UnresolvedReferenceMessage = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null
             }.WithCauseFrom(export));
 
-            export.Status = PendingExportStatus.Exported;
+            if (stillUnresolvedCount > 0)
+            {
+                // Written in part (issue #1398): everything that could go has gone, and the export stays
+                // pending for the references it still owes, on the deferred cadence. The row now exists,
+                // so from here on it is an Update: sending it as a Create again would insert a second row.
+                export.Status = PendingExportStatus.Pending;
+                export.HasUnresolvedReferences = true;
+                export.LastAttemptedAt = DateTime.UtcNow;
+                export.NextRetryAt = DateTime.UtcNow.AddMinutes(5);
+                if (wasCreate)
+                    export.ChangeType = PendingExportChangeType.Update;
+                result.PartiallyExportedCount++;
+                Log.Information("ProcessBatchSuccessAsync: Exported {ExportId} for CSO {CsoId} in part: {Written} change(s) written, " +
+                    "{Unresolved} reference change(s) still awaiting resolution. Next retry at {NextRetry}",
+                    export.Id, export.ConnectedSystemObjectId, writtenChanges.Count, stillUnresolvedCount, export.NextRetryAt);
+            }
+            else
+            {
+                export.Status = PendingExportStatus.Exported;
+            }
 
             // For Create exports, update the CSO with the system-assigned external ID and status
             // For Update exports with SecondaryExternalId (e.g., LDAP renames), update the CSO's secondary ID
             if (export.ConnectedSystemObject != null &&
-                (export.ChangeType == PendingExportChangeType.Create ||
-                 !string.IsNullOrEmpty(exportResult.SecondaryExternalId)))
+                (wasCreate || !string.IsNullOrEmpty(exportResult.SecondaryExternalId)))
             {
                 csosToUpdate.Add((export.ConnectedSystemObject, exportResult));
             }
 
             // Update attribute change statuses to ExportedPendingConfirmation
-            UpdateAttributeChangeStatusesAfterExport(export);
+            UpdateAttributeChangeStatusesAfterExport(writtenChanges);
 
             exportsToUpdate.Add(export);
             result.SuccessCount++;
@@ -1339,7 +1514,7 @@ public class ExportExecutionServer
             // #1121: an account that has just come into existence may be owed an initial password. Only a
             // Create can be: an Update changes an account that already has one, and resetting that would be a
             // password reset nobody asked for.
-            if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null && export.ProvisioningSyncRuleId.HasValue)
+            if (wasCreate && export.ConnectedSystemObject != null && export.ProvisioningSyncRuleId.HasValue)
                 provisionedAccounts.Add(export);
         }
 
@@ -1364,7 +1539,7 @@ public class ExportExecutionServer
         // record work against an account JIM could not yet address.
         if (provisionedAccounts.Count > 0)
         {
-            await StageInitialPasswordsForBatchAsync(provisionedAccounts, result, repository);
+            await StageInitialPasswordsForBatchAsync(provisionedAccounts, result, repository, initialPasswordTimeToLive);
         }
 
         // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
@@ -1400,7 +1575,8 @@ public class ExportExecutionServer
     private static async Task StageInitialPasswordsForBatchAsync(
         List<PendingExport> provisionedAccounts,
         ExportExecutionResult result,
-        ISyncRepository repository)
+        ISyncRepository repository,
+        TimeSpan initialPasswordTimeToLive)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("StageInitialPasswords")
             .SetTag("count", provisionedAccounts.Count);
@@ -1428,7 +1604,8 @@ public class ExportExecutionServer
                     ConnectedSystemId = pe.ConnectedSystemId,
                     SyncRuleId = pe.ProvisioningSyncRuleId!.Value,
                     Status = PendingInitialPasswordStatus.Pending,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    ExpiresAt = DateTime.UtcNow.Add(initialPasswordTimeToLive)
                 })
                 .ToList();
 
@@ -1478,7 +1655,10 @@ public class ExportExecutionServer
             // Reference changes resolve entirely from the persisted ResolvedReferenceCsoId column
             // (SPEC-1079B); no database lookup is needed here (the run-scoped D5 fallback this
             // replaced is gone).
-            var delta = OptimisticExportApplyCalculator.CalculateDelta(successfulNonDeleteExports);
+            // Issue #1398: a reference change left behind on a partial write was not written, so it
+            // must not be applied as though it had been; the calculator sees the export without it.
+            var delta = OptimisticExportApplyCalculator.CalculateDelta(
+                successfulNonDeleteExports.Select(WithoutUnresolvedReferences).ToList());
 
             // SPEC-1082 D9: any CSO whose attribute values this optimistic apply is about to mutate
             // outside the Full Import stamp path (D6/D7) must have its stored ImportStateHash and
@@ -1550,6 +1730,60 @@ public class ExportExecutionServer
     /// and saves all CSO updates together.
     /// Accepts an explicit repository parameter to support both sequential (shared) and parallel (per-batch) paths.
     /// </summary>
+    /// <summary>
+    /// Stores a connector-returned external ID on an attribute value, in the typed slot the anchor
+    /// attribute declares.
+    /// </summary>
+    /// <remarks>
+    /// The typed slot matters more than it looks (#1386): the confirming import's attribute diff is
+    /// typed, so a Number anchor it expects in IntValue but finds stored as a string is invisible to
+    /// it, and the diff stages a typed duplicate alongside. The object then holds two values for its
+    /// External ID attribute, which kills the change-record read on the confirming import; nothing is
+    /// ever confirmed, and every subsequent synchronisation cycle exports the same objects again,
+    /// duplicating rows in the customer's target database.
+    /// <para>
+    /// A value that does not parse into its declared type is preserved as text and logged as an error
+    /// rather than dropped: it means the connector returned a key of the wrong shape, and the value is
+    /// the evidence. The confirming import cannot match it, which it reports per object.
+    /// </para>
+    /// </remarks>
+    internal static void ApplyExternalIdToAttributeValue(
+        ConnectedSystemObjectAttributeValue attributeValue,
+        AttributeDataType? declaredType,
+        string externalId,
+        Guid csoId)
+    {
+        // Clear every slot first: this instance may be reused from an earlier export, and a stale
+        // value left in another slot would make the anchor ambiguous.
+        attributeValue.StringValue = null;
+        attributeValue.GuidValue = null;
+        attributeValue.IntValue = null;
+        attributeValue.LongValue = null;
+
+        switch (declaredType)
+        {
+            case AttributeDataType.Number when int.TryParse(externalId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue):
+                attributeValue.IntValue = intValue;
+                return;
+            case AttributeDataType.LongNumber when long.TryParse(externalId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue):
+                attributeValue.LongValue = longValue;
+                return;
+            case AttributeDataType.Guid when Guid.TryParse(externalId, out var guidValue):
+                attributeValue.GuidValue = guidValue;
+                return;
+        }
+
+        if (declaredType is AttributeDataType.Number or AttributeDataType.LongNumber or AttributeDataType.Guid)
+        {
+            Log.Error("ApplyExternalIdToAttributeValue: the Connector returned '{ExternalId}' as the external ID for " +
+                "Connected System Object {CsoId}, but the anchor attribute is declared {DeclaredType} and the value does not " +
+                "parse into it. Stored as text; the confirming import will not be able to match this object by its anchor.",
+                LogSanitiser.Sanitise(externalId), csoId, declaredType);
+        }
+
+        attributeValue.StringValue = externalId;
+    }
+
     private async Task BatchUpdateCsosAfterSuccessfulExportAsync(
         List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)> csosToUpdate,
         ISyncRepository repository)
@@ -1593,7 +1827,10 @@ public class ExportExecutionServer
                     .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
 
                 // Capture old primary external ID value before overwriting for cache invalidation
-                var oldPrimaryIdValue = externalIdAttrValue?.StringValue ?? externalIdAttrValue?.GuidValue?.ToString();
+                var oldPrimaryIdValue = externalIdAttrValue?.StringValue
+                    ?? externalIdAttrValue?.GuidValue?.ToString()
+                    ?? externalIdAttrValue?.IntValue?.ToString(CultureInfo.InvariantCulture)
+                    ?? externalIdAttrValue?.LongValue?.ToString(CultureInfo.InvariantCulture);
 
                 if (externalIdAttrValue == null)
                 {
@@ -1606,16 +1843,7 @@ public class ExportExecutionServer
                     newAttributeValues.Add(externalIdAttrValue);
                 }
 
-                if (externalIdAttribute?.Type == AttributeDataType.Guid && Guid.TryParse(exportResult.ExternalId, out var guidValue))
-                {
-                    externalIdAttrValue.GuidValue = guidValue;
-                    externalIdAttrValue.StringValue = null;
-                }
-                else
-                {
-                    externalIdAttrValue.StringValue = exportResult.ExternalId;
-                    externalIdAttrValue.GuidValue = null;
-                }
+                ApplyExternalIdToAttributeValue(externalIdAttrValue, externalIdAttribute?.Type, exportResult.ExternalId, cso.Id);
 
                 // Track cache invalidation: evict old value if it differs from the new one
                 if (oldPrimaryIdValue != null && !oldPrimaryIdValue.Equals(exportResult.ExternalId, StringComparison.OrdinalIgnoreCase))
@@ -1806,11 +2034,19 @@ public class ExportExecutionServer
     /// Updates the status of attribute changes after a successful export.
     /// Changes with Pending or ExportedNotConfirmed status are transitioned to ExportedPendingConfirmation.
     /// </summary>
-    private static void UpdateAttributeChangeStatusesAfterExport(PendingExport export)
+    private static void UpdateAttributeChangeStatusesAfterExport(PendingExport export) =>
+        UpdateAttributeChangeStatusesAfterExport(export.AttributeValueChanges);
+
+    /// <summary>
+    /// Marks the changes that were actually handed to the connector as awaiting confirmation. Passed the
+    /// written subset explicitly (issue #1398) so a reference change left behind on a partial write is
+    /// not marked as sent when it was not.
+    /// </summary>
+    private static void UpdateAttributeChangeStatusesAfterExport(IEnumerable<PendingExportAttributeValueChange> writtenChanges)
     {
         var now = DateTime.UtcNow;
 
-        foreach (var attrChange in export.AttributeValueChanges)
+        foreach (var attrChange in writtenChanges)
         {
             // Only update changes that were pending or being retried
             if (attrChange.Status == PendingExportAttributeChangeStatus.Pending ||
@@ -2020,6 +2256,88 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Whether an attribute change still carries a reference that has not been resolved to a value the
+    /// Connected System understands.
+    /// </summary>
+    internal static bool IsUnresolvedReference(PendingExportAttributeValueChange change) =>
+        !string.IsNullOrEmpty(change.UnresolvedReferenceValue);
+
+    /// <summary>
+    /// Whether an attribute change is one the connector should be handed on this run: not a reference
+    /// still awaiting resolution (issue #1398), and not a value already sent and awaiting the confirming
+    /// import (re-sending an awaiting value is at best a no-op and, for a multi-valued LDAP add, an
+    /// error). Everything else, a failed change included, is sent exactly as it always was.
+    /// </summary>
+    internal static bool IsWritableNow(PendingExportAttributeValueChange change) =>
+        !IsUnresolvedReference(change) &&
+        change.Status != PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+
+    /// <summary>
+    /// The attribute changes a connector is handed for a Pending Export on this run. See
+    /// <see cref="IsWritableNow"/>.
+    /// </summary>
+    internal static List<PendingExportAttributeValueChange> WritableChanges(PendingExport pendingExport) =>
+        pendingExport.AttributeValueChanges.Where(IsWritableNow).ToList();
+
+    /// <summary>
+    /// The view of a Pending Export handed to a connector: the export as it stands, carrying only the
+    /// changes that can be written now (issue #1398). Returns the instance itself when every change is
+    /// writable, which is the ordinary case, and a shallow copy sharing the Connected System Object and
+    /// everything else otherwise. Connectors read the export and never mutate it, and every result is
+    /// processed against the original instance, so the copy never has to be reconciled back.
+    /// </summary>
+    internal static PendingExport ForConnector(PendingExport pendingExport) =>
+        pendingExport.AttributeValueChanges.All(IsWritableNow)
+            ? pendingExport
+            : WithChanges(pendingExport, WritableChanges(pendingExport));
+
+    /// <summary>
+    /// A shallow copy of a Pending Export carrying a different set of attribute changes and sharing
+    /// everything else (the Connected System Object included) with the original.
+    /// </summary>
+    private static PendingExport WithChanges(PendingExport pendingExport, List<PendingExportAttributeValueChange> changes) => new()
+    {
+        Id = pendingExport.Id,
+        ConnectedSystem = pendingExport.ConnectedSystem,
+        ConnectedSystemId = pendingExport.ConnectedSystemId,
+        ConnectedSystemObject = pendingExport.ConnectedSystemObject,
+        ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId,
+        ChangeType = pendingExport.ChangeType,
+        Status = pendingExport.Status,
+        ErrorCount = pendingExport.ErrorCount,
+        MaxRetries = pendingExport.MaxRetries,
+        LastAttemptedAt = pendingExport.LastAttemptedAt,
+        NextRetryAt = pendingExport.NextRetryAt,
+        LastErrorMessage = pendingExport.LastErrorMessage,
+        LastErrorStackTrace = pendingExport.LastErrorStackTrace,
+        SourceMetaverseObject = pendingExport.SourceMetaverseObject,
+        SourceMetaverseObjectId = pendingExport.SourceMetaverseObjectId,
+        HasUnresolvedReferences = pendingExport.HasUnresolvedReferences,
+        ProvisioningSyncRule = pendingExport.ProvisioningSyncRule,
+        ProvisioningSyncRuleId = pendingExport.ProvisioningSyncRuleId,
+        CreatedAt = pendingExport.CreatedAt,
+        AttributeValueChanges = changes
+    };
+
+    /// <summary>
+    /// The export as optimistic apply should see it (issue #1398): without the reference changes it
+    /// still owes. Values sent on an earlier partial write and now awaiting confirmation are kept, since
+    /// re-applying them is a no-op by construction (add-if-absent, set-if-different).
+    /// </summary>
+    private static PendingExport WithoutUnresolvedReferences(PendingExport pendingExport) =>
+        pendingExport.AttributeValueChanges.Any(IsUnresolvedReference)
+            ? WithChanges(pendingExport, pendingExport.AttributeValueChanges.Where(c => !IsUnresolvedReference(c)).ToList())
+            : pendingExport;
+
+    /// <summary>
+    /// Whether a Pending Export that could not be fully resolved still has something worth sending
+    /// now (issue #1398): a Create inserts its row without the reference columns, an Update writes the
+    /// members it can. One with nothing writable stays deferred whole, exactly as before.
+    /// </summary>
+    internal static bool CanWriteInPart(PendingExport pendingExport) =>
+        pendingExport.AttributeValueChanges.Any(IsWritableNow);
+
+    /// <summary>
     /// Collects all unresolved MVO IDs from a list of Pending Exports.
     /// Used to pre-fetch CSO mappings in bulk before resolving references.
     /// </summary>
@@ -2045,7 +2363,7 @@ public class ExportExecutionServer
     /// For LDAP systems, references like 'member' need to be resolved to Distinguished Names (DN),
     /// not the primary external ID (objectGUID). We use the secondary external ID when available.
     /// </summary>
-    private static bool TryResolveReferencesFromLookup(PendingExport pendingExport, Dictionary<Guid, ConnectedSystemObject> csoLookup)
+    internal static bool TryResolveReferencesFromLookup(PendingExport pendingExport, Dictionary<Guid, ConnectedSystemObject> csoLookup)
     {
         var allResolved = true;
 
@@ -2072,12 +2390,11 @@ public class ExportExecutionServer
 
                 // Use secondary external ID (DN) if available, otherwise fall back to primary
                 var resolvedAttr = secondaryExternalIdAttr ?? externalIdAttr;
+                var resolvedValue = resolvedAttr?.ToReferenceValueString();
 
-                if (resolvedAttr != null)
+                if (resolvedValue != null)
                 {
-                    attrChange.StringValue = resolvedAttr.StringValue ??
-                                             resolvedAttr.GuidValue?.ToString() ??
-                                             resolvedAttr.IntValue?.ToString();
+                    attrChange.StringValue = resolvedValue;
                     attrChange.UnresolvedReferenceValue = null;
 
                     // Issue #1079 (optimistic export apply, persisted per SPEC-1079B): the
@@ -2094,8 +2411,13 @@ public class ExportExecutionServer
                 }
                 else
                 {
-                    Log.Warning("Could not resolve reference for MVO {MvoId}: CSO {CsoId} has no external ID attribute",
-                        referencedMvoId, referencedCso.Id);
+                    // The referenced object exists but its anchor is not yet known: typically a
+                    // database-generated anchor whose own export has not been confirmed. Stamping
+                    // the change resolved here would send a null anchor to the connector (#1398);
+                    // leaving it unresolved keeps the export deferred until the anchor arrives.
+                    Log.Debug("TryResolveReferencesFromLookup: Cannot resolve reference for PE {PeId}: " +
+                        "CSO {CsoId} (MVO {MvoId}) does not hold an anchor value yet. Export stays deferred.",
+                        pendingExport.Id, referencedCso.Id, referencedMvoId);
                     allResolved = false;
                 }
             }

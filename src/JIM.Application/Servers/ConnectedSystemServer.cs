@@ -2,11 +2,13 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using JIM.Connectors;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -367,7 +369,18 @@ public class ConnectedSystemServer
 
     public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id, withChangeTracking);
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id, withChangeTracking);
+        if (connectedSystem == null)
+            return null;
+
+        // Each Container's own object count is stored; its subtree total is derived, so it has to be rebuilt on
+        // load (#1276). Doing it here rather than at each call site is what stops the portal, the REST API and
+        // PowerShell disagreeing about what a Subtree Container holds; a surface that forgot would silently report
+        // the Container's own count and understate its branch.
+        foreach (var partition in connectedSystem.Partitions ?? [])
+            ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        return connectedSystem;
     }
 
     /// <summary>
@@ -513,7 +526,12 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy,
+        string? changeReason = null, Guid? previewActivityId = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -523,8 +541,7 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem}");
 
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
 
@@ -534,7 +551,8 @@ public class ConnectedSystemServer
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
-            ConnectedSystemId = connectedSystem.Id
+            ConnectedSystemId = connectedSystem.Id,
+            PreviewActivityId = previewActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -558,8 +576,7 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem} (API key initiated)");
 
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
 
@@ -601,8 +618,11 @@ public class ConnectedSystemServer
         // caller sent, which closes any route that sets Selected outside the validated per-attribute endpoints.
         QuarantineCredentialAttributes(connectedSystem);
 
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        // the selection is what this save changes, and some Connectors can only serve their settings for some
+        // selections (#1424); refused here, before an Activity is opened for a save that will not happen.
+        ThrowIfObjectTypeSelectionInvalid(connectedSystem, connectedSystem.ObjectTypes ?? []);
+
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
 
@@ -631,8 +651,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
@@ -645,8 +664,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
@@ -659,8 +677,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatorType, initiatorId, initiatorName);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
@@ -672,8 +689,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemSchemaUpdateAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
@@ -685,8 +701,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemSchemaUpdateAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
@@ -1336,6 +1351,30 @@ public class ConnectedSystemServer
     /// Checks that all setting values are valid, according to business rules.
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    /// <summary>
+    /// Whether a Connected System's settings are complete and well-formed: every required setting has a value, and
+    /// every required-group and required-when constraint declared in the setting metadata is satisfied. Asked of the
+    /// values alone, and never of the target system.
+    /// </summary>
+    /// <remarks>
+    /// This is what <see cref="ConnectedSystem.SettingValuesValid"/> carries, and it is deliberately narrower than
+    /// <see cref="ValidateConnectedSystemSettings"/>. That method also asks the Connector, whose own validation is a
+    /// live probe: the LDAP Connector binds to the directory, the File Connector looks for the file. Persisting the
+    /// answer to a live probe as a property of the configuration means an unreachable target marks stored settings
+    /// invalid, and the portal gates the Schema, Partitions &amp; Containers and Matching tabs on this flag, so saving
+    /// anything at all during a directory outage locked an administrator out of three tabs until somebody re-saved
+    /// the Settings tab. It also put a network round trip on the path of every unrelated save.
+    ///
+    /// Whether the target answers is still reported, where it is actionable: the Settings tab and the settings-writing
+    /// REST endpoint both call <see cref="ValidateConnectedSystemSettings"/> and surface what it finds.
+    /// </remarks>
+    public static bool AreSettingValuesComplete(ConnectedSystem connectedSystem)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        return ConnectorSettingValidator.Validate(connectedSystem.SettingValues).All(r => r.IsValid);
+    }
+
     public IList<ConnectorSettingValueValidationResult> ValidateConnectedSystemSettings(ConnectedSystem connectedSystem)
     {
         ValidateConnectedSystemParameter(connectedSystem);
@@ -1353,6 +1392,12 @@ public class ConnectedSystemServer
         {
             if (connector is IConnectorSettings settingsConnector)
                 results.AddRange(settingsConnector.ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
+
+            // some of what the settings say is about the Object Types selected for synchronisation (the SQL Connector's
+            // Delta Import Mode, for one), so a connector that can judge that is shown the schema as it stands. no schema
+            // yet is nothing selected, which is a valid answer, not a reason to skip the question.
+            if (connector is IConnectorObjectTypeSelectionValidation selectionValidation)
+                results.AddRange(selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, connectedSystem.ObjectTypes ?? [], Log.Logger));
         }
         finally
         {
@@ -1360,6 +1405,61 @@ public class ConnectedSystemServer
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Refuses a schema selection the Connector says the settings cannot serve (#1424): selecting an Object Type
+    /// that lacks what the configured Delta Import Mode needs, for example. Asked of the values and the schema
+    /// alone, never of the target system, so it is safe on every save path. Connected Systems whose Connector
+    /// cannot judge the selection, or that carry no settings to judge it against, are left alone.
+    /// </summary>
+    /// <param name="connectedSystem">Carries the Connector Definition and the setting values.</param>
+    /// <param name="objectTypes">The schema as it will stand once the change is persisted.</param>
+    /// <exception cref="InvalidSettingValuesException">The Connector refused the selection; the message is the Connector's own.</exception>
+    private void ThrowIfObjectTypeSelectionInvalid(ConnectedSystem connectedSystem, IReadOnlyCollection<ConnectedSystemObjectType> objectTypes)
+    {
+        if (connectedSystem.ConnectorDefinition == null || connectedSystem.SettingValues is not { Count: > 0 })
+            return;
+
+        // connectors that hold connections or temporary files are disposable; the rest are not, and a null here is fine.
+        var connector = CreateConnector(connectedSystem);
+        using var disposableConnector = connector as IDisposable;
+
+        if (connector is not IConnectorObjectTypeSelectionValidation selectionValidation)
+            return;
+
+        var problems = selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, objectTypes, Log.Logger)
+            .Where(result => !result.IsValid)
+            .Select(result => result.ErrorMessage)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .ToList();
+
+        if (problems.Count > 0)
+            throw new InvalidSettingValuesException(string.Join(" ", problems));
+    }
+
+    /// <summary>
+    /// As <see cref="ThrowIfObjectTypeSelectionInvalid"/>, for a single Object Type being updated on its own (the
+    /// REST API and PowerShell path). Only a selection can newly violate the settings, so a deselection is not
+    /// judged; for a selection the persisted schema is loaded and this Object Type's pending state stands in for
+    /// its persisted one, so the Connector judges the selection as it will be after the update.
+    /// </summary>
+    private async Task ThrowIfObjectTypeSelectionInvalidAsync(ConnectedSystemObjectType objectType)
+    {
+        if (!objectType.Selected)
+            return;
+
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(objectType.ConnectedSystemId);
+        if (connectedSystem?.ConnectorDefinition == null || connectedSystem.SettingValues is not { Count: > 0 })
+            return;
+
+        var persisted = await Application.Repository.ConnectedSystems.GetObjectTypesAsync(objectType.ConnectedSystemId) ?? [];
+        var objectTypes = persisted
+            .Where(candidate => candidate.Id != objectType.Id)
+            .Append(objectType)
+            .ToList();
+
+        ThrowIfObjectTypeSelectionInvalid(connectedSystem, objectTypes);
     }
 
     private static void ValidateConnectedSystemParameter(ConnectedSystem connectedSystem)
@@ -1378,8 +1478,11 @@ public class ConnectedSystemServer
 
     #region Connected System Schema
     /// <summary>
-    /// Causes the associated Connector to be instantiated and the schema imported from the Connected System.
-    /// Changes will be persisted, even if they are destructive, i.e. an attribute is removed.
+    /// Causes the associated Connector to be instantiated and the schema imported from the Connected System, in
+    /// one call: retrieve, merge and persist. Additions and definition updates are persisted; removals are
+    /// reported but deliberately retained (see issue #782), so nothing is deleted by a refresh. For a
+    /// preview-then-decide flow, use <see cref="PreviewConnectedSystemSchemaRefreshAsync"/> followed by
+    /// <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>.
     /// </summary>
     /// <returns>A result object containing details about what changed during the schema refresh.</returns>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
@@ -1491,6 +1594,106 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Retrieves the Connected System's schema and merges it into the supplied instance <b>in memory only</b>,
+    /// reporting what a refresh would change. Nothing is persisted and no Activity is recorded: a preview is a
+    /// read, and the administrator decides what happens next. To persist exactly what this call merged, pass the
+    /// same instance and result to
+    /// <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>;
+    /// to discard, drop the instance and reload the Connected System.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System to preview a schema refresh for. Mutated in memory by
+    /// the merge; callers who must keep an untouched instance should pass a freshly loaded one.</param>
+    /// <returns>A result object describing what the refresh would change, including removals (which an apply
+    /// would retain, not delete) and attribute definition changes.</returns>
+    public async Task<SchemaRefreshResult> PreviewConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorSchema schemaConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
+
+        var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+        var result = MergeSchemaIntoConnectedSystem(connectedSystem, schema);
+
+        // Read while connected, exactly as the one-call import does, so an apply persists the same graph the
+        // one-call path would have. Mutates the in-memory instance only.
+        await DiscoverPasswordPolicyAsync(connector, connectedSystem, result);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Persists a schema refresh previously retrieved and merged by
+    /// <see cref="PreviewConnectedSystemSchemaRefreshAsync"/>, under an ImportSchema Activity. The pair is
+    /// equivalent to <see cref="ImportConnectedSystemSchemaAsync(ConnectedSystem, MetaverseObject?)"/> with a
+    /// decision point in the middle; the preview result completes the Activity so discovery warnings still reach
+    /// the other surfaces.
+    /// </summary>
+    /// <param name="connectedSystem">The instance the preview merged into. Persisted as-is.</param>
+    /// <param name="previewResult">The preview's result, used to complete the Activity.</param>
+    /// <param name="initiatedBy">The user the change is attributed to.</param>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, MetaverseObject? initiatedBy)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.ImportSchema,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        try
+        {
+            await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+            await CompleteSchemaImportActivityAsync(activity, previewResult);
+        }
+        catch (Exception ex)
+        {
+            // Discard staged schema changes before recording the failure: see the one-call import overloads.
+            Application.Repository.ClearChangeTracker();
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// As <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>,
+    /// attributed to an API key (the REST API and PowerShell path).
+    /// </summary>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, ApiKey initiatedByApiKey)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.ImportSchema,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        try
+        {
+            await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+            await CompleteSchemaImportActivityAsync(activity, previewResult);
+        }
+        catch (Exception ex)
+        {
+            // Discard staged schema changes before recording the failure: see the one-call import overloads.
+            Application.Repository.ClearChangeTracker();
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Completes a schema import's Activity, downgraded to complete-with-warning when discovery reported
     /// shortfalls, so an import that discovered less than it should have never presents as an unqualified success.
     /// </summary>
@@ -1541,6 +1744,10 @@ public class ConnectedSystemServer
 
         connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
 
+        // Declared reference targets are wired in a second pass after this loop, once every Object Type
+        // instance exists in the graph: a reference may point at an Object Type declared after it (#1285).
+        var declaredReferenceTargets = new List<(ConnectedSystemObjectTypeAttribute Attribute, string TargetName)>();
+
         // Track removed object types
         foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
         {
@@ -1583,10 +1790,48 @@ public class ConnectedSystemServer
 
                     if (existingAttribute != null)
                     {
-                        // Update existing attribute properties but preserve the ID
+                        // Update existing attribute properties but preserve the ID. Definition changes (plurality
+                        // and data type) are recorded on the result before being applied: they were applied
+                        // silently for years, and a restated definition can invalidate an Attribute Flow mapping
+                        // that was validated against the old one, so the administrator must get to see them.
                         existingAttribute.Description = schemaAttribute.Description;
+
+                        if (existingAttribute.AttributePlurality != schemaAttribute.AttributePlurality)
+                        {
+                            result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                            {
+                                AttributeName = existingAttribute.Name,
+                                Aspect = SchemaAttributeChangeAspect.Plurality,
+                                OldValue = existingAttribute.AttributePlurality.ToString(),
+                                NewValue = schemaAttribute.AttributePlurality.ToString()
+                            });
+                        }
                         existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
-                        existingAttribute.Type = schemaAttribute.Type;
+
+                        // A refresh restates what the Connector discovered and leaves what the administrator
+                        // decided, which is why Selected and IsExternalId are absent from this block. A data
+                        // type is normally discovered, so it belongs here; one an administrator chose does
+                        // not, and overwriting it would silently undo the override. That matters more than it
+                        // sounds: the mapping validator runs when a mapping is created rather than
+                        // continuously, so a Synchronisation Rule validated against the chosen type would go
+                        // on running against the reverted one, and the Attribute Flow, which switches on the
+                        // source type, would write the value into the wrong column of the Metaverse Object.
+                        // It would also sidestep the rule that an override is refused once values exist (#1354).
+                        if (!existingAttribute.TypeSetByAdministrator)
+                        {
+                            if (existingAttribute.Type != schemaAttribute.Type)
+                            {
+                                result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                                {
+                                    AttributeName = existingAttribute.Name,
+                                    Aspect = SchemaAttributeChangeAspect.DataType,
+                                    OldValue = existingAttribute.Type.ToString(),
+                                    NewValue = schemaAttribute.Type.ToString()
+                                });
+                            }
+                            existingAttribute.Type = schemaAttribute.Type;
+                        }
+
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
@@ -1634,6 +1879,23 @@ public class ConnectedSystemServer
                 result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
             }
 
+            // Restate the declared reference target (connector-stated, like Writability): cleared here so a
+            // withdrawn declaration cannot leave a stale target behind, and re-wired in the second pass below
+            // when the schema still declares one (#1285).
+            foreach (var schemaAttribute in schemaObjectType.Attributes)
+            {
+                var mergedAttribute = connectedSystemObjectType.Attributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
+                if (mergedAttribute == null)
+                    continue;
+
+                mergedAttribute.ReferencedObjectType = null;
+                mergedAttribute.ReferencedObjectTypeId = null;
+                if (!string.IsNullOrWhiteSpace(schemaAttribute.ReferencesObjectTypeName))
+                    declaredReferenceTargets.Add((mergedAttribute, schemaAttribute.ReferencesObjectTypeName.Trim()));
+            }
+
+            MergeObjectTypeTags(connectedSystemObjectType, schemaObjectType);
+
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
             // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
             var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
@@ -1662,6 +1924,25 @@ public class ConnectedSystemServer
             connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
         }
 
+        // Second pass: wire each declared reference target to the merged Object Type instance it names. The
+        // navigation carries the link because a brand-new target has no id until it is saved; EF assigns the
+        // foreign key from the navigation for those, and the id is set directly where one already exists.
+        // Case-insensitive to match the SQL Connector's own name handling. A declared target the schema does
+        // not contain is a connector defect: reported as a discovery warning, never wired (#1285).
+        foreach (var (attribute, targetName) in declaredReferenceTargets)
+        {
+            var target = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Name.Equals(targetName, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            {
+                result.DiscoveryWarnings.Add(
+                    $"Attribute '{attribute.Name}' declares reference target Object Type '{targetName}', which the schema does not contain. The target was not recorded.");
+                continue;
+            }
+
+            attribute.ReferencedObjectType = target;
+            attribute.ReferencedObjectTypeId = target.Id > 0 ? target.Id : null;
+        }
+
         // Any credential attribute that survived the merge is one that was already persisted; force it into a
         // state where JIM neither manages it nor lets an administrator turn it back on.
         QuarantineCredentialAttributes(connectedSystem);
@@ -1677,6 +1958,32 @@ public class ConnectedSystemServer
             connectedSystem.ObjectTypes[0].Selected = true;
 
         return result;
+    }
+
+    /// <summary>
+    /// Applies the classification a Connector reported for an Object Type (structural, auxiliary, internal, and
+    /// whatever else it defines) to the persisted Object Type.
+    /// </summary>
+    /// <remarks>
+    /// Tags are connector-owned, so what the Connector reports now is the complete classification for this type:
+    /// the persisted set is replaced rather than added to, which is what makes a reclassification at the Connected
+    /// System (or a Connector that stops classifying) show up instead of accumulating contradictory tags. Rows whose
+    /// key and value are unchanged are reused so that a refresh does not churn the table, and repeated tags are
+    /// collapsed because the persisted tags are uniquely indexed per object type, key and value.
+    /// </remarks>
+    private static void MergeObjectTypeTags(ConnectedSystemObjectType connectedSystemObjectType, ConnectorSchemaObjectType schemaObjectType)
+    {
+        var existingTagsByClassification = connectedSystemObjectType.Tags
+            .GroupBy(t => (t.Key, t.Value))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        connectedSystemObjectType.Tags = schemaObjectType.Tags
+            .Select(t => (t.Key, t.Value))
+            .Distinct()
+            .Select(classification => existingTagsByClassification.TryGetValue(classification, out var existingTag)
+                ? existingTag
+                : new ConnectedSystemObjectTypeTag { Key = classification.Key, Value = classification.Value })
+            .ToList();
     }
 
     /// <summary>
@@ -1854,7 +2161,7 @@ public class ConnectedSystemServer
         if (connector is not IConnectorPasswordManagement passwordConnector)
             throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support setting passwords, so there is no password channel to check.");
 
-        var containerExternalIds = GetSelectedContainerExternalIds(connectedSystem);
+        var containerExternalIds = connectedSystem.GetSelectedContainerExternalIds();
         Log.Debug("RunPasswordPreflightAsync: Checking the password channel for Connected System {ConnectedSystemId} against {ContainerCount} selected container(s).",
             connectedSystem.Id, containerExternalIds.Count);
 
@@ -2284,36 +2591,6 @@ public class ConnectedSystemServer
             : null;
     }
 
-    /// <summary>
-    /// Collects the external ids of every container the Connected System manages, walking the whole hierarchy.
-    /// <para>
-    /// These are where JIM would be provisioning, and so where rights actually need to hold. Permissions are
-    /// commonly granted on one part of a target and not another, so a rights check run anywhere else answers a
-    /// question nobody asked.
-    /// </para>
-    /// </summary>
-    private static List<string> GetSelectedContainerExternalIds(ConnectedSystem connectedSystem)
-    {
-        var selected = new List<string>();
-        if (connectedSystem.Partitions == null)
-            return selected;
-
-        foreach (var container in connectedSystem.Partitions
-                     .Where(p => p.Selected && p.Containers != null)
-                     .SelectMany(p => p.Containers!))
-            CollectSelectedContainers(container, selected);
-
-        return selected;
-    }
-
-    private static void CollectSelectedContainers(ConnectedSystemContainer container, List<string> selected)
-    {
-        if (container.Selected && !string.IsNullOrEmpty(container.ExternalId))
-            selected.Add(container.ExternalId);
-
-        foreach (var child in container.ChildContainers)
-            CollectSelectedContainers(child, selected);
-    }
     #endregion
 
     #region Connected System Directory Servers
@@ -2551,16 +2828,11 @@ public class ConnectedSystemServer
                     ? FindContainerByExternalId(partition.Containers, parentExternalId)
                     : null;
 
-                // Determine if any ancestor container is already selected.
-                // If so, this new container is already implicitly included via the ancestor's subtree search,
-                // so we should NOT select it separately (that would cause duplicate imports).
-                var hasSelectedAncestor = IsAnyAncestorSelected(parentContainer);
-
-                // Only auto-select if:
-                // 1. It's a top-level container in a selected partition, OR
-                // 2. No ancestor is selected (meaning this branch wasn't previously covered)
-                // In practice, if parent is selected, we do NOT select the child - it's already covered by subtree.
-                var shouldSelect = !hasSelectedAncestor && (parentContainer == null && partition.Selected);
+                // Whether the new container needs selecting turns on Container Scope: a selected Subtree ancestor's
+                // search already covers it (selecting it too would import the same objects twice), whereas a selected
+                // OneLevel ancestor stops short of it (leaving it unselected would mean the objects just provisioned
+                // into it are never imported). ConnectedSystemUtilities owns that rule for every caller.
+                var shouldSelect = ConnectedSystemUtilities.NewContainerNeedsSelecting(parentContainer, partition.Selected);
 
                 // Create the new container using connector's method to extract display name
                 var containerName = containerCreator.GetContainerDisplayName(containerExternalId);
@@ -2584,16 +2856,8 @@ public class ConnectedSystemServer
                 }
 
                 containersAdded++;
-                if (hasSelectedAncestor)
-                {
-                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: False (ancestor already selected, implicitly included via subtree)",
-                        containerExternalId);
-                }
-                else
-                {
-                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: {Selected}",
-                        containerExternalId, shouldSelect);
-                }
+                Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: {Selected}",
+                    containerExternalId, shouldSelect);
             }
             catch (Exception ex)
             {
@@ -2682,12 +2946,8 @@ public class ConnectedSystemServer
                     ? FindContainerByExternalId(partition.Containers, parentExternalId)
                     : null;
 
-                // Determine if any ancestor container is already selected.
-                // If so, this new container is already implicitly included via the ancestor's subtree search.
-                var hasSelectedAncestor = IsAnyAncestorSelected(parentContainer);
-
-                // Only auto-select if no ancestor is selected and it's a top-level container in a selected partition
-                var shouldSelect = !hasSelectedAncestor && (parentContainer == null && partition.Selected);
+                // Scope-aware coverage; see the sibling overload above for why a OneLevel ancestor does not cover this.
+                var shouldSelect = ConnectedSystemUtilities.NewContainerNeedsSelecting(parentContainer, partition.Selected);
 
                 // Create the new container using connector's method to extract display name
                 var containerName = containerCreator.GetContainerDisplayName(containerExternalId);
@@ -2711,16 +2971,8 @@ public class ConnectedSystemServer
                 }
 
                 containersAdded++;
-                if (hasSelectedAncestor)
-                {
-                    Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: False (ancestor already selected)",
-                        containerExternalId);
-                }
-                else
-                {
-                    Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: {Selected}",
-                        containerExternalId, shouldSelect);
-                }
+                Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: {Selected}",
+                    containerExternalId, shouldSelect);
             }
             catch (Exception ex)
             {
@@ -2795,9 +3047,16 @@ public class ConnectedSystemServer
         var existingPartitionLookup = (connectedSystem.Partitions ?? new List<ConnectedSystemPartition>())
             .ToDictionary(p => p.ExternalId, StringComparer.OrdinalIgnoreCase);
         var existingContainerLookup = BuildContainerLookup(connectedSystem.Partitions);
+        var existingContainerStableIdLookup = BuildContainerStableIdLookup(connectedSystem.Partitions);
 
         // Track which existing partitions we've matched
         var matchedPartitionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Container identity is global rather than per level, because a container can be matched at a level it did
+        // not previously sit at: that is what a move is. Both of these are therefore collected across the whole
+        // refresh and applied afterwards (#1318).
+        var matchedContainers = new HashSet<ConnectedSystemContainer>();
+        var containersToReparent = new List<(ConnectedSystemContainer Container, ConnectedSystemPartition Partition, ConnectedSystemContainer? NewParent)>();
 
         // Ensure Partitions list exists
         connectedSystem.Partitions ??= new List<ConnectedSystemPartition>();
@@ -2822,14 +3081,19 @@ public class ConnectedSystemServer
                     existing.Name = discovered.Name;
                 }
 
-                // Merge containers recursively within this partition
+                // Match containers recursively within this partition. Reparenting and removals are deliberately
+                // deferred to passes of their own, once every partition has been matched; see the comment on
+                // MatchContainersRecursive.
                 existing.Containers ??= new HashSet<ConnectedSystemContainer>();
-                MergeContainersRecursive(
-                    existing.Containers,
+                MatchContainersRecursive(
+                    existing,
+                    parentContainer: null,
                     discovered.Containers,
-                    null, // parent ExternalId for root containers
                     result,
-                    existingContainerLookup);
+                    existingContainerLookup,
+                    existingContainerStableIdLookup,
+                    matchedContainers,
+                    containersToReparent);
             }
             else
             {
@@ -2856,10 +3120,29 @@ public class ConnectedSystemServer
                     ItemType = HierarchyItemType.Partition
                 });
 
+                // Record every container in the new partition as matched, for the same reason a new container
+                // under an existing partition is (see MatchContainersRecursive): the removal pass below walks
+                // every partition, this one included, and deletes anything it does not find in matchedContainers.
+                // A container the directory has just reported is matched by definition. Without this, the first
+                // retrieval on a Connected System discovered the whole hierarchy, reported it as added, and then
+                // threw it away before the save, so nothing appeared until the button was pressed again (#1369).
+                foreach (var newContainer in newPartition.Containers)
+                    MarkContainerTreeMatched(newContainer, matchedContainers);
+
                 // Count all new containers within the new partition
                 CountAddedContainersRecursive(newPartition.Containers, result.AddedContainers);
             }
         }
+
+        // Apply the moves now that every partition has been matched, so that a container is only ever detached from
+        // its old home after everything that might claim it has had its say.
+        foreach (var (container, partition, newParent) in containersToReparent)
+            ReparentContainer(container, connectedSystem, partition, newParent);
+
+        // Only now remove what the directory no longer holds. Running this last is what keeps a moved container:
+        // by this point it sits under its new parent, so the pass walking its old parent no longer sees it.
+        foreach (var partition in connectedSystem.Partitions.Where(p => p.Containers != null))
+            RemoveUnmatchedContainers(partition.Containers!, matchedContainers, result);
 
         // Remove unmatched partitions (they no longer exist in the external system)
         var toRemove = connectedSystem.Partitions
@@ -2908,6 +3191,44 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Builds a lookup of existing containers keyed on the Connected System's own immutable identifier, for those
+    /// that carry one.
+    /// </summary>
+    /// <remarks>
+    /// This is what lets a rename or a move be recognised as such. Keying identity on the Distinguished Name alone
+    /// meant either operation presented as a removal plus an addition, and the re-added container arrived
+    /// unselected: import scope narrowed because somebody tidied an OU name, and the next Full Import obsoleted
+    /// everything beneath it. Containers enumerated before stable identifiers were recorded have none until their
+    /// next hierarchy refresh, so the Distinguished Name lookup remains the fallback.
+    /// </remarks>
+    private static Dictionary<string, ConnectedSystemContainer> BuildContainerStableIdLookup(IEnumerable<ConnectedSystemPartition>? partitions)
+    {
+        var lookup = new Dictionary<string, ConnectedSystemContainer>(StringComparer.OrdinalIgnoreCase);
+        if (partitions == null) return lookup;
+
+        foreach (var partition in partitions.Where(p => p.Containers != null))
+            FlattenContainersIntoStableIdLookup(partition.Containers!, lookup);
+
+        return lookup;
+    }
+
+    /// <summary>
+    /// Recursively flattens the container hierarchy into a lookup keyed on stable identifier, skipping containers
+    /// that do not have one.
+    /// </summary>
+    private static void FlattenContainersIntoStableIdLookup(IEnumerable<ConnectedSystemContainer> containers, Dictionary<string, ConnectedSystemContainer> lookup)
+    {
+        foreach (var container in containers)
+        {
+            if (!string.IsNullOrEmpty(container.StableId))
+                lookup.TryAdd(container.StableId, container);
+
+            if (container.ChildContainers.Count > 0)
+                FlattenContainersIntoStableIdLookup(container.ChildContainers, lookup);
+        }
+    }
+
+    /// <summary>
     /// Recursively flattens container hierarchy into a lookup dictionary.
     /// </summary>
     private static void FlattenContainersIntoLookup(IEnumerable<ConnectedSystemContainer> containers, Dictionary<string, ConnectedSystemContainer> lookup)
@@ -2923,22 +3244,63 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Recursively merges discovered containers with existing ones.
+    /// Resolves a discovered container to the stored container it is, preferring the Connected System's own
+    /// immutable identifier and falling back to the Distinguished Name.
     /// </summary>
-    private static void MergeContainersRecursive(
-        HashSet<ConnectedSystemContainer> existingContainers,
-        List<ConnectorContainer> discoveredContainers,
-        string? parentExternalId,
-        HierarchyRefreshResult result,
-        Dictionary<string, ConnectedSystemContainer> globalLookup)
+    /// <remarks>
+    /// Order matters and is the whole point: the Distinguished Name changes on rename and move, the stable
+    /// identifier does not. Falling back keeps containers stored before stable identifiers existed, and Connectors
+    /// that cannot supply one, working exactly as before.
+    /// </remarks>
+    private static bool TryResolveExistingContainer(
+        ConnectorContainer discovered,
+        Dictionary<string, ConnectedSystemContainer> globalLookup,
+        Dictionary<string, ConnectedSystemContainer> globalStableIdLookup,
+        [NotNullWhen(true)] out ConnectedSystemContainer? existing)
     {
-        var matchedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(discovered.StableId) && globalStableIdLookup.TryGetValue(discovered.StableId, out existing))
+            return true;
 
+        return globalLookup.TryGetValue(discovered.Id, out existing);
+    }
+
+    /// <summary>
+    /// Recursively matches discovered containers against stored ones, adding those the directory has gained and
+    /// noting those it has moved. Removes nothing and reparents nothing.
+    /// </summary>
+    /// <remarks>
+    /// Matching, reparenting and removal are three passes rather than one because container identity is global
+    /// while the hierarchy is walked level by level. A container resolves by its stable identifier wherever it now
+    /// sits, so a moved one is matched at a level it did not previously belong to; a single pass that also removed
+    /// per level therefore deleted it from its old parent, either before or after the level that claimed it
+    /// depending only on the order the Connector happened to return its containers in. Splitting the passes is what
+    /// makes the outcome independent of that order (#1318).
+    /// </remarks>
+    private static void MatchContainersRecursive(
+        ConnectedSystemPartition partition,
+        ConnectedSystemContainer? parentContainer,
+        List<ConnectorContainer> discoveredContainers,
+        HierarchyRefreshResult result,
+        Dictionary<string, ConnectedSystemContainer> globalLookup,
+        Dictionary<string, ConnectedSystemContainer> globalStableIdLookup,
+        HashSet<ConnectedSystemContainer> matchedContainers,
+        List<(ConnectedSystemContainer Container, ConnectedSystemPartition Partition, ConnectedSystemContainer? NewParent)> containersToReparent)
+    {
         foreach (var discovered in discoveredContainers)
         {
-            if (globalLookup.TryGetValue(discovered.Id, out var existing))
+            if (TryResolveExistingContainer(discovered, globalLookup, globalStableIdLookup, out var existing))
             {
-                matchedIds.Add(discovered.Id);
+                matchedContainers.Add(existing);
+
+                // Record the identifier the first time the Connector supplies one, so a container selected before
+                // stable identifiers existed survives its next rename.
+                if (string.IsNullOrEmpty(existing.StableId) && !string.IsNullOrEmpty(discovered.StableId))
+                    existing.StableId = discovered.StableId;
+
+                // Adopt the current Distinguished Name. This is only ever different when the container was matched
+                // on its stable identifier, which is precisely the rename or move that used to read as a removal.
+                if (!string.Equals(existing.ExternalId, discovered.Id, StringComparison.OrdinalIgnoreCase))
+                    existing.ExternalId = discovered.Id;
 
                 // Check for rename
                 if (!string.Equals(existing.Name, discovered.Name, StringComparison.Ordinal))
@@ -2953,34 +3315,52 @@ public class ConnectedSystemServer
                     existing.Name = discovered.Name;
                 }
 
-                // Check for move (different parent)
-                var existingParentId = existing.ParentContainer?.ExternalId;
-                if (!string.Equals(existingParentId, parentExternalId, StringComparison.OrdinalIgnoreCase))
+                // Check for move (a different parent, or none where there was one). Compared by reference rather
+                // than by Distinguished Name: the parent's own name may be being rewritten in this same refresh.
+                if (!ReferenceEquals(existing.ParentContainer, parentContainer))
                 {
                     result.MovedContainers.Add(new HierarchyMoveItem
                     {
                         ExternalId = discovered.Id,
                         Name = discovered.Name,
-                        OldParentExternalId = existingParentId,
-                        NewParentExternalId = parentExternalId
+                        OldParentExternalId = existing.ParentContainer?.ExternalId,
+                        NewParentExternalId = parentContainer?.ExternalId
                     });
-                    // Note: The actual parent relationship will be corrected by rebuilding the tree structure
-                    // while preserving the Selected flag. For now we just track the move.
+
+                    containersToReparent.Add((existing, partition, parentContainer));
                 }
 
                 // Recurse into children
-                MergeContainersRecursive(
-                    existing.ChildContainers,
+                MatchContainersRecursive(
+                    partition,
+                    existing,
                     discovered.ChildContainers,
-                    discovered.Id,
                     result,
-                    globalLookup);
+                    globalLookup,
+                    globalStableIdLookup,
+                    matchedContainers,
+                    containersToReparent);
             }
             else
             {
-                // NEW container - add it
+                // NEW container: build it and put it where the directory says it belongs.
                 var newContainer = BuildConnectedSystemContainerTree(discovered);
-                existingContainers.Add(newContainer);
+                if (parentContainer != null)
+                {
+                    parentContainer.AddChildContainer(newContainer);
+                }
+                else
+                {
+                    newContainer.Partition = partition;
+                    partition.Containers ??= [];
+                    partition.Containers.Add(newContainer);
+                }
+
+                // Record it and its whole subtree as matched, or the removal pass deletes it again in this same
+                // refresh: "not matched" is how that pass recognises a container that has left the directory. A
+                // container created since the last refresh was once reported as added and then silently dropped, so
+                // it never appeared on the Partitions and Containers tab to be selected.
+                MarkContainerTreeMatched(newContainer, matchedContainers);
 
                 result.AddedContainers.Add(new HierarchyChangeItem
                 {
@@ -2993,16 +3373,115 @@ public class ConnectedSystemServer
                 CountAddedContainersRecursive(newContainer.ChildContainers, result.AddedContainers);
             }
         }
+    }
 
-        // Remove unmatched containers (they no longer exist in the external system)
-        var toRemove = existingContainers
-            .Where(c => !matchedIds.Contains(c.ExternalId))
-            .ToList();
+    /// <summary>
+    /// Marks a container and everything beneath it as present in the directory.
+    /// </summary>
+    private static void MarkContainerTreeMatched(ConnectedSystemContainer container, HashSet<ConnectedSystemContainer> matchedContainers)
+    {
+        matchedContainers.Add(container);
 
-        foreach (var container in toRemove)
+        foreach (var childContainer in container.ChildContainers)
+            MarkContainerTreeMatched(childContainer, matchedContainers);
+    }
+
+    /// <summary>
+    /// Moves a stored container to the parent the directory now reports for it, preserving everything the container
+    /// carries: its selection, its exclusion, its scope and its own descendants.
+    /// </summary>
+    /// <remarks>
+    /// Both sides of the relationship are maintained explicitly, navigation and foreign key alike. Only top-level
+    /// containers carry a partition and only nested ones carry a parent container, so a move between those two
+    /// shapes has to clear one pair as it sets the other; leaving a stale foreign key behind would have the row
+    /// claim two homes. The detach searches the whole Connected System rather than the partition being merged,
+    /// because a container's old home is wherever it was, not wherever it is going.
+    /// </remarks>
+    private static void ReparentContainer(
+        ConnectedSystemContainer container,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemPartition partition,
+        ConnectedSystemContainer? newParent)
+    {
+        DetachContainerFromItsCurrentHome(container, connectedSystem);
+
+        if (newParent != null)
         {
-            CollectRemovedContainerRecursive(container, result);
-            existingContainers.Remove(container);
+            newParent.AddChildContainer(container);
+            container.ParentContainerId = newParent.Id;
+            container.Partition = null;
+            container.PartitionId = null;
+        }
+        else
+        {
+            container.ParentContainer = null;
+            container.ParentContainerId = null;
+            container.Partition = partition;
+            container.PartitionId = partition.Id;
+            partition.Containers ??= [];
+            partition.Containers.Add(container);
+        }
+    }
+
+    /// <summary>
+    /// Removes a container from whichever collection currently holds it.
+    /// </summary>
+    /// <remarks>
+    /// The parent navigation answers this on a graph EF Core has fixed up, but it is not relied on alone: the portal
+    /// loads the Connected System in one scope and saves it in another, and a navigation that was never included
+    /// reads as null. Falling back to a search of the stored hierarchy costs one walk per moved container, which is
+    /// nothing against the cost of leaving a container in two collections at once.
+    /// </remarks>
+    private static void DetachContainerFromItsCurrentHome(ConnectedSystemContainer container, ConnectedSystem connectedSystem)
+    {
+        if (container.ParentContainer != null && container.ParentContainer.ChildContainers.Remove(container))
+            return;
+
+        foreach (var partition in connectedSystem.Partitions ?? [])
+        {
+            if (partition.Containers?.Remove(container) == true)
+                return;
+
+            if (partition.Containers != null && RemoveFromDescendants(partition.Containers, container))
+                return;
+        }
+    }
+
+    private static bool RemoveFromDescendants(IEnumerable<ConnectedSystemContainer> containers, ConnectedSystemContainer container)
+    {
+        foreach (var candidate in containers)
+        {
+            if (candidate.ChildContainers.Remove(container))
+                return true;
+
+            if (RemoveFromDescendants(candidate.ChildContainers, container))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Removes every container the directory no longer holds, walking the hierarchy after the moves have settled.
+    /// </summary>
+    private static void RemoveUnmatchedContainers(
+        HashSet<ConnectedSystemContainer> containers,
+        HashSet<ConnectedSystemContainer> matchedContainers,
+        HierarchyRefreshResult result)
+    {
+        foreach (var container in containers.ToList())
+        {
+            if (matchedContainers.Contains(container))
+            {
+                RemoveUnmatchedContainers(container.ChildContainers, matchedContainers, result);
+            }
+            else
+            {
+                // Anything still beneath this container is genuinely gone too: a descendant that moved elsewhere
+                // has already been detached from it by the reparenting pass.
+                CollectRemovedContainerRecursive(container, result);
+                containers.Remove(container);
+            }
         }
     }
 
@@ -3098,16 +3577,40 @@ public class ConnectedSystemServer
     private static async Task<HierarchyRefreshResult> RetrieveAndMergeHierarchyAsync(ConnectedSystem connectedSystem, IConnectorPartitions partitionsConnector, Activity activity)
     {
         var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+
+        // Each of the things below that can go partly right writes a warning here rather than straight onto the
+        // Activity, which only has room for one message: a hierarchy that both failed to enumerate and failed to
+        // count used to report whichever happened to run last.
+        var warnings = new List<string>();
+
+        // Counted against the same directory state that produced the hierarchy, and before the merge, because the
+        // Connector answers in terms of its own partitions. Applied after the merge, when JIM's own Containers
+        // exist to hang the figures on.
+        var objectCounts = await CountContainerObjectsAsync(connectedSystem, partitionsConnector, partitions, warnings);
         if (partitions.Count == 0)
         {
             // Zero partitions almost always means the connector could not enumerate them (connection,
             // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
             // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-            activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
+            warnings.Add("The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.");
         }
+
+        // A partition whose count was cut short has its figures discarded, so say so. Blank counts otherwise look
+        // exactly like a Connected System that cannot count at all, and only one of those is worth acting on.
+        var incompleteCounts = ContainerObjectCounts.DescribeIncompleteCounts(partitions
+            .Where(partition => objectCounts.ContainsKey(partition.Id))
+            .Select(partition => (partition.Name, objectCounts[partition.Id])));
+
+        if (incompleteCounts != null)
+            warnings.Add(incompleteCounts);
+
+        if (warnings.Count > 0)
+            activity.WarningMessage = string.Join(" ", warnings);
 
         // Merge discovered partitions with existing ones, preserving user selections
         var result = MergeHierarchy(connectedSystem, partitions);
+
+        ApplyContainerObjectCounts(connectedSystem, objectCounts);
 
         // Log the changes
         if (result.HasChanges)
@@ -3125,29 +3628,98 @@ public class ConnectedSystemServer
 
         return result;
     }
-    #endregion
 
     /// <summary>
-    /// Checks if any ancestor container in the hierarchy is selected.
-    /// Used to determine if a new child container is already implicitly included via a parent's subtree search.
+    /// What an administrator is told when the count threw rather than merely stopping short. Held as a constant so
+    /// that a Connected System whose every partition fails says it once instead of once per partition.
     /// </summary>
-    private static bool IsAnyAncestorSelected(ConnectedSystemContainer? container)
+    private const string CountFailedWarning =
+        "The hierarchy was retrieved, but the objects in each Container could not be counted. The Containers are correct; their object counts are not shown.";
+
+    /// <summary>
+    /// Asks the Connector how many objects each Container holds, one partition at a time (#1276).
+    /// </summary>
+    /// <remarks>
+    /// Folded into the hierarchy retrieval rather than offered as a second action, so the Containers and their
+    /// figures always describe the same moment. A Connector that cannot answer returns nothing and the tab simply
+    /// shows no counts.
+    ///
+    /// A failure here must not fail the refresh. The hierarchy is what an administrator asked for and it has
+    /// already been retrieved; losing it because a supplementary count timed out would be a poor trade. The
+    /// Activity carries the warning instead.
+    /// </remarks>
+    /// <returns>Direct counts per Container identifier, keyed by partition external id. Empty when nothing counted.</returns>
+    private static async Task<Dictionary<string, ConnectorContainerObjectCountResult>> CountContainerObjectsAsync(
+        ConnectedSystem connectedSystem,
+        IConnectorPartitions partitionsConnector,
+        List<ConnectorPartition> partitions,
+        List<string> warnings)
     {
-        var current = container;
-        while (current != null)
+        var countsByPartition = new Dictionary<string, ConnectorContainerObjectCountResult>(StringComparer.OrdinalIgnoreCase);
+        if (partitionsConnector is not IConnectorContainerObjectCounts countingConnector)
+            return countsByPartition;
+
+        // A count across Object Types JIM will never import is not a number anyone can act on, so nothing is
+        // counted until the administrator has said what they are managing. The Schema tab sits before Partitions
+        // and Containers, so by the time anyone is choosing Containers this is normally already answered.
+        var objectTypeNames = (connectedSystem.ObjectTypes ?? [])
+            .Where(objectType => objectType.Selected)
+            .Select(objectType => objectType.Name)
+            .ToList();
+
+        if (objectTypeNames.Count == 0)
+            return countsByPartition;
+
+        foreach (var partition in partitions)
         {
-            if (current.Selected)
-                return true;
-            current = current.ParentContainer;
+            try
+            {
+                countsByPartition[partition.Id] = await countingConnector.GetContainerObjectCountsAsync(
+                    connectedSystem.SettingValues, partition, objectTypeNames, Log.Logger, CancellationToken.None);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Warning(ex, "CountContainerObjectsAsync: could not count objects in partition {Partition} of {ConnectedSystem}",
+                    LogSanitiser.Sanitise(partition.Name), connectedSystem.Id);
+
+                if (!warnings.Contains(CountFailedWarning))
+                    warnings.Add(CountFailedWarning);
+            }
         }
-        return false;
+
+        return countsByPartition;
     }
+
+    /// <summary>
+    /// Hangs the Connector's direct counts on JIM's own Containers, and rolls up each one's subtree total.
+    /// </summary>
+    /// <remarks>
+    /// A partition the Connector reported no counts for is left uncounted rather than zeroed: "not counted" and
+    /// "counted, and empty" are different statements, and only one of them says a Container holds nothing. An
+    /// incomplete count is discarded entirely for the same reason, because figures short of the truth read as whole
+    /// and understate what deselecting a Container costs.
+    /// </remarks>
+    private static void ApplyContainerObjectCounts(
+        ConnectedSystem connectedSystem,
+        Dictionary<string, ConnectorContainerObjectCountResult> countsByPartition)
+    {
+        foreach (var partition in connectedSystem.Partitions ?? [])
+        {
+            var counted = countsByPartition.TryGetValue(partition.ExternalId, out var result) && result.Complete
+                ? result.DirectCountsByContainerIdentifier
+                : null;
+
+            ContainerObjectCounts.Apply(partition, counted);
+        }
+    }
+    #endregion
 
     private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
     {
         var connectedSystemContainer = new ConnectedSystemContainer
         {
             ExternalId = connectorContainer.Id,
+            StableId = connectorContainer.StableId,
             Name = connectorContainer.Name,
             Description = connectorContainer.Description,
             Hidden = connectorContainer.Hidden
@@ -3177,6 +3749,16 @@ public class ConnectedSystemServer
     /// Gets a Connected System Object Type by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the object type.</param>
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a lightweight projection for resolving
+    /// a Reference attribute's declared target name (#1285) without loading a navigation into an entity
+    /// graph a mutating path might attach.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId);
+    }
+
     public async Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id)
     {
         return await Application.Repository.ConnectedSystems.GetObjectTypeAsync(id);
@@ -3193,6 +3775,8 @@ public class ConnectedSystemServer
             throw new ArgumentNullException(nameof(objectType));
 
         Log.Debug("UpdateObjectTypeAsync() called for {ObjectType}", objectType.Name);
+
+        await ThrowIfObjectTypeSelectionInvalidAsync(objectType);
 
         var activity = new Activity
         {
@@ -3258,6 +3842,8 @@ public class ConnectedSystemServer
             throw new ArgumentNullException(nameof(objectType));
 
         Log.Debug("UpdateObjectTypeAsync() called for {ObjectType} (API key initiated)", objectType.Name);
+
+        await ThrowIfObjectTypeSelectionInvalidAsync(objectType);
 
         var activity = new Activity
         {
@@ -3730,6 +4316,33 @@ public class ConnectedSystemServer
             connectedSystemObjectId, attributeName, page, pageSize, searchText);
     }
 
+    /// <summary>
+    /// Gets a window of one attribute's values on a Connected System Object addressed by absolute offset and
+    /// count, for a virtualised (infinite-scroll) multi-valued attribute on the object's detail page. Ordered by
+    /// value id, and shares its query core with <see cref="GetAttributeValuesPagedAsync"/>. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The Connected System Object whose values are wanted.</param>
+    /// <param name="attributeName">The attribute whose values are wanted.</param>
+    /// <param name="offset">The zero-based index of the first value wanted; negative values read as zero.</param>
+    /// <param name="count">How many values are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value, the unresolved
+    /// reference and the referenced object's own values.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetAttributeValuesRangeAsync(
+            connectedSystemObjectId, attributeName, offset, count, searchText, includeTotalCount);
+    }
+
     public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
         int connectedSystemId,
         int page = 1,
@@ -3754,7 +4367,38 @@ public class ConnectedSystemServer
             connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter,
             objectTypeFilter, joinTypeFilter);
     }
-    
+
+    /// <summary>
+    /// Gets a window of Connected System Object headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetConnectedSystemObjectHeadersAsync"/>. Pass <paramref name="includeTotalCount"/> as false to
+    /// skip counting the whole match set when the caller already knows the total; the returned total is then null
+    /// rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool includeTotalCount = true)
+    {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetHeadersRange")
+            .SetTag("connectedSystemId", connectedSystemId)
+            .SetTag("offset", offset)
+            .SetTag("count", count)
+            .SetTag("hasSearch", !string.IsNullOrWhiteSpace(searchQuery))
+            .SetTag("sortBy", sortBy ?? "default")
+            .SetTag("includeTotalCount", includeTotalCount);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
+            connectedSystemId, offset, count, searchQuery, sortBy, sortDescending, statusFilter,
+            objectTypeFilter, joinTypeFilter, includeTotalCount);
+    }
+
     /// <summary>
     /// Retrieves a page's worth of Connected System Objects for a specific system.
     /// </summary>
@@ -4052,6 +4696,132 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Streams every Connected System Object in a Connected System, reduced to where it sits and what it is joined
+    /// to, for evaluating what a change to the partition and container selection would take out of import scope
+    /// (#1251).
+    /// </summary>
+    public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId)
+    {
+        return Application.Repository.ConnectedSystems.StreamConnectedSystemObjectScopeCandidates(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Streams the joined Connected System Objects of one type in a Connected System, with the attribute values
+    /// and type loaded that Synchronisation Rule scope evaluation reads, for previewing what a destructive
+    /// Synchronisation Rule toggle would do to the objects the rule stands over (#1115).
+    /// </summary>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return Application.Repository.ConnectedSystems.StreamJoinedConnectedSystemObjects(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Streams every Connected System Object of one type in a Connected System, joined or not, with the attribute
+    /// values and type loaded that Scoping Criteria evaluation reads, for previewing what a change to a
+    /// Synchronisation Rule's scope would do (#1436). The unjoined objects are what a widened scope would newly
+    /// project, so unlike the destructive-toggle walk this one cannot be reduced to the joined population.
+    /// </summary>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return Application.Repository.ConnectedSystems.StreamConnectedSystemObjectsOfType(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects of one type in a Connected System, joined or not: the
+    /// population a Scoping Criteria change preview walks, counted set-based for the dispatch decision (#1436).
+    /// </summary>
+    public async Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's live, unjoined objects of one type: the population a
+    /// synchronisation would put to Object Matching on its next run, and therefore the only population an Object
+    /// Matching change can move (#1457).
+    /// </summary>
+    public async Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// How many live, unjoined objects of one type a Connected System holds; the set-based count behind an Object
+    /// Matching preview's cost estimate.
+    /// </summary>
+    public async Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnjoinedConnectedSystemObjectCountOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type, joined or not: the population that stops
+    /// being imported when the type is deselected (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectIdsOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type that hold a value for one attribute: the
+    /// population whose values freeze when that attribute is deselected (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(
+            connectedSystemId, connectedSystemObjectTypeId, attributeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's obsolete objects of one type that are still joined: the population
+    /// whose fate changes when Remove Contributed Attributes On Obsoletion is toggled (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(
+            connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Connected System Objects by identifier, without change tracking: the batched read behind a population that
+    /// was resolved to identifiers first.
+    /// </summary>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, connectedSystemObjectIds);
+    }
+
+    /// <summary>
+    /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
+    /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
+    /// </summary>
+    public async Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetJoinedConnectedSystemObjectCountAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The Connector's containment rule, for a Connected System whose Connector can express one; null otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Creating the Connector opens no connection to the Connected System, which matters here: a preview asks where
+    /// objects sit using data JIM already holds, and must not reach out to a directory that may be unreachable to
+    /// answer a question about a tick box.
+    /// </remarks>
+    public IConnectorContainment? GetConnectorContainment(ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        if (connectedSystem.ConnectorDefinition == null)
+            return null;
+
+        return CreateConnector(connectedSystem) as IConnectorContainment;
+    }
+
+    /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>
@@ -4273,12 +5043,78 @@ public class ConnectedSystemServer
         foreach (var cso in connectedSystemObjects)
         {
             rpeisByCsoId.TryGetValue(cso.Id, out var rpei);
-            if (rpei != null)
+            if (rpei == null)
+                continue;
+
+            rpei.ConnectedSystemObjectId = cso.Id;
+            try
             {
-                rpei.ConnectedSystemObjectId = cso.Id;
                 ProcessConnectedSystemObjectAttributeValueChanges(cso, rpei, changeTrackingEnabled);
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Synchronisation integrity boundary (#1386): a change record that cannot be built for
+                // one object is that object's error, reported on its Run Profile Execution Item; letting
+                // it escape would fail the whole Activity and abandon every object still to be processed,
+                // with nothing recorded against the object at fault. Cancellation still propagates: an
+                // aborting run must not grind on through this path.
+                RecordChangeRecordFailureOnRpei(cso, rpei, ex, nameof(LinkUpdateChangeRecords));
+
+                // Mirror the normal completion: the caller snapshotted these lists for persistence before
+                // this ran, and leaving them populated would make the object look like it still holds
+                // unapplied work.
+                cso.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();
+                cso.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
+            }
         }
+    }
+
+    /// <summary>
+    /// Records a change-record construction failure on the object's Run Profile Execution Item, so the
+    /// error is visible against the object it belongs to and the run continues (#1386).
+    /// </summary>
+    private static void RecordChangeRecordFailureOnRpei(
+        ConnectedSystemObject cso,
+        ActivityRunProfileExecutionItem rpei,
+        Exception ex,
+        string callerName)
+    {
+        Log.Error(ex, "{Caller}: could not build the change record for Connected System Object {CsoId}; " +
+            "the object is errored on its Run Profile Execution Item and the run continues.", callerName, cso.Id);
+        rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
+        rpei.ErrorMessage = ex.Message;
+        rpei.ErrorStackTrace = ex.ToString();
+    }
+
+    /// <summary>
+    /// Finds the single attribute value holding a Connected System Object's External ID, throwing a
+    /// diagnostic exception when the object holds more than one.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="ConnectedSystemObject.ExternalIdAttributeValue"/> property answers the same
+    /// question via SingleOrDefault, whose duplicate failure names neither the object nor the values
+    /// (#1386: "Sequence contains more than one matching element", with the whole run dead behind it).
+    /// The change-record paths use this instead so the per-object error the caller records is
+    /// actionable. The property itself stays strict; it is the read on the sync path that must name
+    /// what it found.
+    /// </remarks>
+    private static ConnectedSystemObjectAttributeValue? GetSingleExternalIdAttributeValue(ConnectedSystemObject cso)
+    {
+        var externalIdValues = cso.AttributeValues
+            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == cso.ExternalIdAttributeId)
+            .ToList();
+
+        if (externalIdValues.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"Connected System Object {cso.Id} holds {externalIdValues.Count} values for its External ID attribute " +
+                $"(attribute id {cso.ExternalIdAttributeId}): {string.Join(", ", externalIdValues.Select(v => v.ToStringNoName() ?? "(empty)"))}. " +
+                "An object must hold exactly one External ID value; a duplicate means an earlier write stored the anchor " +
+                "in a slot a later one did not recognise. The object needs its duplicate value removed before its change " +
+                "history can be recorded.");
+        }
+
+        return externalIdValues.Count == 1 ? externalIdValues[0] : null;
     }
 
     /// <summary>
@@ -4294,42 +5130,50 @@ public class ConnectedSystemServer
         if (connectedSystemObjects.Count != rpeis.Count)
             throw new ArgumentException("CSO count must match execution item count");
 
-        // Name only, never NameOrId: the external id is captured separately alongside it.
-        var deletedObjectInfo = connectedSystemObjects
-            .Select(cso => (
-                ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
-                DisplayName: cso.Name,
-                FinalAttributeValues: cso.AttributeValues
-                    .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
-                    .ToList()))
-            .ToList();
-
         if (changeTrackingEnabled)
         {
             for (int i = 0; i < connectedSystemObjects.Count; i++)
             {
                 var cso = connectedSystemObjects[i];
                 var executionItem = rpeis[i];
-                var (externalId, displayName, finalAttributeValues) = deletedObjectInfo[i];
 
-                var change = new ConnectedSystemObjectChange
+                try
                 {
-                    ConnectedSystemId = cso.ConnectedSystemId,
-                    ChangeType = ObjectChangeType.Deleted,
-                    ChangeTime = DateTime.UtcNow,
-                    DeletedObjectType = cso.Type,
-                    DeletedObjectExternalId = externalId,
-                    DeletedObjectDisplayName = displayName,
-                    DeletedConnectedSystemObjectId = cso.Id,
-                    ActivityRunProfileExecutionItem = executionItem,
-                    InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
-                    InitiatedById = executionItem.Activity?.InitiatedById,
-                    InitiatedByName = executionItem.Activity?.InitiatedByName
-                };
-                executionItem.ConnectedSystemObjectChange = change;
+                    // Name only, never NameOrId: the external id is captured separately alongside it.
+                    // The guarded read throws a diagnostic error on a duplicated anchor, recorded per
+                    // object below rather than escaping the run (#1386).
+                    var externalId = GetSingleExternalIdAttributeValue(cso)?.ToStringNoName();
+                    var finalAttributeValues = cso.AttributeValues
+                        .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
+                        .ToList();
 
-                foreach (var av in finalAttributeValues)
-                    AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
+                    var change = new ConnectedSystemObjectChange
+                    {
+                        ConnectedSystemId = cso.ConnectedSystemId,
+                        ChangeType = ObjectChangeType.Deleted,
+                        ChangeTime = DateTime.UtcNow,
+                        DeletedObjectType = cso.Type,
+                        DeletedObjectExternalId = externalId,
+                        DeletedObjectDisplayName = cso.Name,
+                        DeletedConnectedSystemObjectId = cso.Id,
+                        ActivityRunProfileExecutionItem = executionItem,
+                        InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+                        InitiatedById = executionItem.Activity?.InitiatedById,
+                        InitiatedByName = executionItem.Activity?.InitiatedByName
+                    };
+                    executionItem.ConnectedSystemObjectChange = change;
+
+                    foreach (var av in finalAttributeValues)
+                        AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Same synchronisation integrity boundary as LinkUpdateChangeRecords (#1386): one
+                    // object's failed deletion change record must not abandon the rest of the batch.
+                    // The FK-nulling loop below still runs for this RPEI; the CSOs are about to be
+                    // deleted, and a live FK would violate the constraint at persistence.
+                    RecordChangeRecordFailureOnRpei(cso, executionItem, ex, nameof(LinkDeleteChangeRecords));
+                }
             }
         }
 
@@ -4455,8 +5299,9 @@ public class ConnectedSystemServer
                 InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
                 InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName,
                 // Store external ID as string to enable linking change history even after CSO deletion
-                // Use ToStringNoName() to match the format used in deletion changes
-                DeletedObjectExternalId = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName()
+                // Use ToStringNoName() to match the format used in deletion changes. The guarded read
+                // throws a diagnostic error on a duplicated anchor, which the caller records per object (#1386).
+                DeletedObjectExternalId = GetSingleExternalIdAttributeValue(connectedSystemObject)?.ToStringNoName()
             };
 
             // the change object will be persisted with the activity Run Profile execution item further up the stack.
@@ -4674,12 +5519,21 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
+        var partitions = await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
+
+        foreach (var partition in partitions)
+            ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        return partitions;
     }
 
     public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id, withChangeTracking);
+        var partition = await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id, withChangeTracking);
+        if (partition != null)
+            ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        return partition;
     }
 
     /// <summary>
@@ -4763,6 +5617,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Names the given Containers, for a surface holding their ids and needing to render them. Ids that no longer
+    /// resolve are absent from the result rather than faked, so a caller can say plainly that a Container has
+    /// gone rather than inventing a name for it.
+    /// </summary>
+    public async Task<List<ConnectedSystemContainerSummary>> GetConnectedSystemContainerSummariesAsync(IReadOnlyCollection<int> containerIds)
+    {
+        ArgumentNullException.ThrowIfNull(containerIds);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemContainerSummariesAsync(containerIds);
+    }
+
+    /// <summary>
     /// Updates a Connected System Container (e.g. its import-scope selection), recording the change with an Activity
     /// and a versioned configuration snapshot of the owning Connected System.
     /// </summary>
@@ -4792,6 +5657,70 @@ public class ConnectedSystemServer
             $"Update container: {container.Name}",
             () => Application.Repository.ConnectedSystems.UpdateConnectedSystemContainerAsync(container),
             activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    /// <summary>
+    /// A Connected System's Container Scope as canonical Advanced Mode text, or null where the Connected System
+    /// does not exist.
+    /// </summary>
+    public async Task<string?> GetContainerScopeTextAsync(int connectedSystemId)
+    {
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+
+        return connectedSystem == null
+            ? null
+            : ContainerScopeText.Project(connectedSystem.Partitions ?? []);
+    }
+
+    /// <summary>
+    /// Replaces a Connected System's whole Container Scope with the statements in a piece of text, recording the
+    /// change with an Activity and a versioned configuration snapshot.
+    /// </summary>
+    /// <remarks>
+    /// The whole scope is one configuration change and is saved as one, exactly as the portal's tree is: an
+    /// administrator restating a hierarchy has made a single decision about what JIM manages, and recording it as
+    /// a Container's worth of separate changes would leave a change history nobody can read a decision out of.
+    /// </remarks>
+    /// <returns>Null where the Connected System does not exist.</returns>
+    public async Task<ContainerScopeTextApplyResult?> ApplyContainerScopeTextAsync(
+        int connectedSystemId,
+        string? text,
+        MetaverseObject? initiatedBy) =>
+        await ApplyContainerScopeTextAsync(connectedSystemId, text,
+            connectedSystem => UpdateConnectedSystemAsync(connectedSystem, initiatedBy));
+
+    /// <summary>
+    /// Replaces a Connected System's whole Container Scope with the statements in a piece of text (initiated by API
+    /// key), recording the change with an Activity and a versioned configuration snapshot.
+    /// </summary>
+    /// <returns>Null where the Connected System does not exist.</returns>
+    public async Task<ContainerScopeTextApplyResult?> ApplyContainerScopeTextAsync(
+        int connectedSystemId,
+        string? text,
+        ApiKey initiatedByApiKey) =>
+        await ApplyContainerScopeTextAsync(connectedSystemId, text,
+            connectedSystem => UpdateConnectedSystemAsync(connectedSystem, initiatedByApiKey));
+
+    private async Task<ContainerScopeTextApplyResult?> ApplyContainerScopeTextAsync(
+        int connectedSystemId,
+        string? text,
+        Func<ConnectedSystem, Task> persistAsync)
+    {
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(
+            connectedSystemId, withChangeTracking: true);
+
+        if (connectedSystem == null)
+            return null;
+
+        var partitions = connectedSystem.Partitions ?? [];
+        var errors = ContainerScopeText.Apply(text, partitions);
+
+        if (errors.Count > 0)
+            return new ContainerScopeTextApplyResult { Errors = errors, Text = ContainerScopeText.Project(partitions) };
+
+        await persistAsync(connectedSystem);
+
+        return new ContainerScopeTextApplyResult { Errors = [], Text = ContainerScopeText.Project(partitions) };
     }
 
     /// <summary>
@@ -4933,6 +5862,12 @@ public class ConnectedSystemServer
     /// Validates that export Attribute Flow mappings do not target read-only attributes.
     /// Read-only attributes (system-managed, constructed, back-links) cannot be written to
     /// and will cause export failures at runtime.
+    /// <para>
+    /// <see cref="AttributeWritability.WritableOnCreate"/> is deliberately permitted: the value has to
+    /// flow during provisioning or the object can never be created. Keeping it out of Update Pending
+    /// Exports is enforced on the export path by <see cref="SyncRuleMapping.FlowsOnUpdateExport"/>,
+    /// not here.
+    /// </para>
     /// </summary>
     /// <param name="mapping">The mapping to validate.</param>
     /// <exception cref="ArgumentException">Thrown when the target attribute is read-only.</exception>
@@ -5061,6 +5996,135 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone.
+    /// </summary>
+    /// <param name="mappingId">The mapping to change.</param>
+    /// <param name="settings">The settings to change; anything not named is left as it is.</param>
+    /// <param name="initiatedBy">The user who initiated the change.</param>
+    /// <returns>The updated mapping, or null when no mapping has that id.</returns>
+    /// <exception cref="ArgumentException">The update names a setting that does not apply to this mapping.</exception>
+    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy)
+    {
+        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, initiatedBy, null);
+    }
+
+    /// <summary>
+    /// Changes the settings on an existing Attribute Flow (initiated by API key).
+    /// </summary>
+    /// <param name="mappingId">The mapping to change.</param>
+    /// <param name="settings">The settings to change; anything not named is left as it is.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the change.</param>
+    /// <returns>The updated mapping, or null when no mapping has that id.</returns>
+    /// <exception cref="ArgumentException">The update names a setting that does not apply to this mapping.</exception>
+    public async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsAsync(int mappingId, SyncRuleMappingSettingsUpdate settings, ApiKey initiatedByApiKey)
+    {
+        return await UpdateSyncRuleMappingSettingsCoreAsync(mappingId, settings, null, initiatedByApiKey);
+    }
+
+    /// <summary>
+    /// Loads the mapping tracked, applies the settings, and records the change as an audited Update Activity.
+    /// </summary>
+    /// <remarks>
+    /// The mapping is loaded here rather than accepted from the caller, because it must be tracked for the save
+    /// to do anything at all: JIM.Web runs the context NoTracking, so a mapping the caller loaded and mutated
+    /// would save nothing while reporting success.
+    /// </remarks>
+    private async Task<SyncRuleMapping?> UpdateSyncRuleMappingSettingsCoreAsync(
+        int mappingId, SyncRuleMappingSettingsUpdate settings, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (!settings.HasChanges)
+            throw new ArgumentException("No settings were supplied to change.", nameof(settings));
+
+        var mapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingForUpdateAsync(mappingId);
+        if (mapping == null)
+            return null;
+
+        // Validation before the Activity, so a rejected update leaves no trace of an Update that never happened.
+        ApplySyncRuleMappingSettings(mapping, settings);
+        ValidateMappingTypeCompatibility(mapping);
+        ValidateMappingWritability(mapping);
+
+        Log.Debug("UpdateSyncRuleMappingSettingsAsync() called for mapping {Id}", mapping.Id);
+
+        var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+        var activity = new Activity
+        {
+            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetContext = mapping.SyncRule?.Name,
+            TargetType = ActivityTargetType.SynchronisationRule,
+            SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+
+        if (initiatedByApiKey != null)
+        {
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+            AuditHelper.SetUpdated(mapping, initiatedByApiKey);
+        }
+        else
+        {
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+            AuditHelper.SetUpdated(mapping, initiatedBy);
+        }
+
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
+
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
+        await Application.Activities.CompleteActivityAsync(activity);
+
+        return mapping;
+    }
+
+    /// <summary>
+    /// Applies a settings update to a mapping, refusing any setting that does not apply to it.
+    /// </summary>
+    /// <remarks>
+    /// A setting that cannot apply is refused rather than ignored. Silently dropping "Null is a value" on an
+    /// export mapping would leave an administrator believing an authoritative-null contribution had been
+    /// configured, and it is exactly the kind of misconfiguration that only shows up as missing data later.
+    /// </remarks>
+    private static void ApplySyncRuleMappingSettings(SyncRuleMapping mapping, SyncRuleMappingSettingsUpdate settings)
+    {
+        var isImport = mapping.TargetMetaverseAttributeId.HasValue;
+        var expressionSources = mapping.Sources.Where(s => !string.IsNullOrWhiteSpace(s.Expression)).ToList();
+
+        if ((settings.Expression != null || settings.MissingInputBehaviour.HasValue) && expressionSources.Count == 0)
+            throw new ArgumentException("This Attribute Flow has no Expression source, so Expression settings do not apply to it. " +
+                "Delete the mapping and create it with an Expression source instead.");
+
+        if (settings.Expression != null && expressionSources.Count > 1)
+            throw new ArgumentException("This Attribute Flow has more than one Expression source, so it is ambiguous which Expression to replace.");
+
+        if (!isImport && (settings.NullIsValue.HasValue || settings.InboundValueProcessing.HasValue || settings.CaseNormalisation.HasValue))
+            throw new ArgumentException("Null is a value, inbound value processing and case normalisation apply to import mappings only.");
+
+        if (isImport && settings.InitialExportOnly.HasValue)
+            throw new ArgumentException("Initial Export Only applies to export mappings only.");
+
+        if (settings.Expression != null)
+            expressionSources[0].Expression = settings.Expression;
+
+        if (settings.MissingInputBehaviour.HasValue)
+            foreach (var source in expressionSources)
+                source.MissingInputBehaviour = settings.MissingInputBehaviour.Value;
+
+        if (settings.NullIsValue.HasValue)
+            mapping.NullIsValue = settings.NullIsValue.Value;
+
+        if (settings.InboundValueProcessing.HasValue)
+            mapping.InboundValueProcessing = settings.InboundValueProcessing.Value;
+
+        if (settings.CaseNormalisation.HasValue)
+            mapping.CaseNormalisation = settings.CaseNormalisation.Value;
+
+        if (settings.InitialExportOnly.HasValue)
+            mapping.InitialExportOnly = settings.InitialExportOnly.Value;
+    }
+
+    /// <summary>
     /// Deletes a Synchronisation Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
@@ -5091,7 +6155,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
 
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
-            await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
+            await ReconcileAttributePriorityAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -5128,7 +6192,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
 
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
-            await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
+            await ReconcileAttributePriorityAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -5161,6 +6225,45 @@ public class ConnectedSystemServer
             .Where(m => m.TargetMetaverseAttributeId.HasValue)
             .GroupBy(m => m.TargetMetaverseAttributeId!.Value)
             .ToDictionary(g => g.Key, g => g.Count());
+    }
+
+    /// <summary>
+    /// Gets every attribute data flow, in both directions, for the system-wide Data Flow view (#1199): one flow per
+    /// Synchronisation Rule mapping, filtered by the supplied query. Import flows are stamped with how many
+    /// contributors their target Metaverse Attribute has, so the caller can tell a shared attribute from a
+    /// single-source one without asking again per row.
+    /// </summary>
+    /// <param name="query">The filters to apply. All are optional and combine with AND.</param>
+    public async Task<IList<DataFlowHeader>> GetDataFlowsAsync(DataFlowQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var flows = await Application.Repository.ConnectedSystems.GetDataFlowHeadersAsync(query);
+
+        // Contributor counts are taken across the WHOLE configuration, not the filtered set: filtering the view to
+        // one Connected System must not make an attribute that system shares with another look like a sole
+        // contributor, which would invert what the count is for. Counted per Metaverse Object Type present in the
+        // results, which is a handful of queries at configuration scale.
+        var importFlows = flows
+            .Where(f => f.Direction == SyncRuleDirection.Import && f.TargetMetaverseAttributeId.HasValue)
+            .ToList();
+
+        var countsByObjectType = new Dictionary<int, Dictionary<int, int>>();
+        foreach (var objectTypeId in importFlows.Select(f => f.MetaverseObjectTypeId).Distinct())
+            countsByObjectType[objectTypeId] = await GetAttributeContributorCountsAsync(objectTypeId);
+
+        foreach (var flow in importFlows)
+        {
+            flow.ContributorCount = countsByObjectType[flow.MetaverseObjectTypeId]
+                .TryGetValue(flow.TargetMetaverseAttributeId!.Value, out var count) ? count : 0;
+        }
+
+        // Applied here rather than in the query because it depends on the counts above, which the query cannot see:
+        // it reads one flow at a time and the count spans every rule contributing to the same attribute.
+        if (query.MultipleContributorsOnly)
+            flows = flows.Where(f => f.HasMultipleContributors).ToList();
+
+        return flows;
     }
 
     /// <summary>
@@ -5228,23 +6331,35 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// After an import mapping (or its rule) is removed, re-densifies the target Metaverse attribute's remaining
-    /// contributor list to a dense 1..N (#91), so deleting a contributor never leaves a gap in the priority numbers.
-    /// Mirrors the safe-addition densify on creation, keeping the contributor list dense across add, reorder, and
-    /// delete. A sole remaining contributor is reset to the int.MaxValue sentinel (priority is meaningless with one
-    /// source, matching the invariant that explicit priorities exist only when an attribute has more than one
-    /// contributor); zero remaining contributors is a no-op. Order-preserving, so no resolution outcome changes.
-    /// Must be called after the removal is persisted, so the query returns only the surviving contributors.
+    /// Reconciles a Metaverse attribute's contributor list to a dense 1..N after its contributor set changes (#91),
+    /// so no gap or stale number is ever left behind. Called whenever a contribution is added, removed or retargeted,
+    /// by both the granular mapping methods and the whole-rule save path (#1199), which is what keeps the list dense
+    /// across every route an administrator can take. A sole remaining contributor is reset to the int.MaxValue
+    /// sentinel (priority is meaningless with one source, matching the invariant that explicit priorities exist only
+    /// when an attribute has more than one contributor); zero contributors is a no-op. Order-preserving, so no
+    /// resolution outcome changes. Must be called after the change is persisted, so the query returns the resulting
+    /// contributor set.
     /// </summary>
     /// <param name="metaverseObjectTypeId">The object type that scopes the attribute's priority list.</param>
-    /// <param name="metaverseAttributeId">The target Metaverse attribute whose contributor list was reduced.</param>
-    private async Task RedensifyAttributePriorityAfterRemovalAsync(int metaverseObjectTypeId, int metaverseAttributeId)
+    /// <param name="metaverseAttributeId">The target Metaverse attribute whose contributor list changed.</param>
+    /// <param name="arrivingMappingIds">Mappings joining this attribute's list from elsewhere (a retargeted mapping),
+    /// which must land at the bottom. Omit where nothing is arriving, such as a deletion.</param>
+    private async Task ReconcileAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlySet<int>? arrivingMappingIds = null)
     {
         var contributors = await Application.Repository.ConnectedSystems
             .GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
 
         if (contributors.Count == 0)
             return;
+
+        // An arriving contribution must land last, and its stored priority cannot put it there. The query orders by
+        // (Priority asc, Id asc), so while every contributor is still at the sentinel the tie-break is the mapping id,
+        // and a retargeted mapping is by definition older than at least some incumbents: it would take the top of its
+        // new attribute's list and silently start winning resolution. Ordering arrivals last is what makes the
+        // safe-addition promise hold for a retarget as well as for a genuine insert (whose id happens to be highest
+        // anyway). OrderBy is stable, so the existing contributors keep their relative order.
+        if (arrivingMappingIds is { Count: > 0 })
+            contributors = contributors.OrderBy(m => arrivingMappingIds.Contains(m.Id) ? 1 : 0).ToList();
 
         if (contributors.Count == 1)
         {
@@ -5971,6 +7086,27 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets a window of Pending Export headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetPendingExportHeadersAsync"/>. Pass <paramref name="includeTotalCount"/> as false to skip
+    /// counting the whole match set when the caller already knows the total; the returned total is then null
+    /// rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        IEnumerable<PendingExportStatus>? statusFilters = null,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportHeadersRangeAsync(
+            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount);
+    }
+
+    /// <summary>
     /// Retrieves a single Pending Export by ID with all related data.
     /// </summary>
     /// <param name="id">The unique identifier of the Pending Export.</param>
@@ -5999,7 +7135,62 @@ public class ConnectedSystemServer
     /// total change counts, or null if not found.</returns>
     public async Task<PendingExportDetailResult?> GetPendingExportDetailAsync(Guid id)
     {
-        return await Application.Repository.ConnectedSystems.GetPendingExportDetailAsync(id);
+        var result = await Application.Repository.ConnectedSystems.GetPendingExportDetailAsync(id);
+        if (result == null)
+            return null;
+
+        result.UnresolvedReferences = await DescribeUnresolvedReferencesAsync(result.PendingExport);
+        return result;
+    }
+
+    /// <summary>
+    /// Explains each reference change on a Pending Export that has not been written yet (issue #1398), against
+    /// the target's current state rather than anything recorded at export time, so the explanation is always
+    /// current: the referenced Metaverse Object has a Connected System Object in the target with an anchor
+    /// (resolvable on the next export run), one without an anchor (waiting on its own export), or none at all
+    /// (cannot resolve as things stand). Costs nothing when the export has no unresolved references.
+    /// </summary>
+    private async Task<List<PendingExportUnresolvedReference>> DescribeUnresolvedReferencesAsync(PendingExport pendingExport)
+    {
+        var unresolved = pendingExport.AttributeValueChanges
+            .Where(c => !string.IsNullOrEmpty(c.UnresolvedReferenceValue) && Guid.TryParse(c.UnresolvedReferenceValue, out _))
+            .Select(c => (Change: c, MvoId: Guid.Parse(c.UnresolvedReferenceValue!)))
+            .ToList();
+
+        if (unresolved.Count == 0)
+            return [];
+
+        var mvoIds = unresolved.Select(u => u.MvoId).Distinct().ToList();
+        var csosByMvo = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, pendingExport.ConnectedSystemId);
+        var names = await Application.Repository.Metaverse.GetMetaverseObjectDisplayNamesAsync(mvoIds);
+
+        return unresolved.Select(u => new PendingExportUnresolvedReference
+        {
+            AttributeChangeId = u.Change.Id,
+            AttributeName = u.Change.Attribute?.Name ?? $"attribute {u.Change.AttributeId}",
+            ReferencedMetaverseObjectId = u.MvoId,
+            ReferencedMetaverseObjectDisplayName = names.TryGetValue(u.MvoId, out var name) ? name : null,
+            Reason = ClassifyUnresolvedReference(csosByMvo.TryGetValue(u.MvoId, out var cso) ? cso : null)
+        }).ToList();
+    }
+
+    /// <summary>
+    /// The one classification the export's deferred pass and this detail share (issue #1398): no object in the
+    /// target means the reference cannot resolve as things stand; an object without an anchor is waiting; an
+    /// object with an anchor resolves on the next run. The anchor is read the way export resolution reads it,
+    /// preferring the secondary external id (a DN) over the primary.
+    /// </summary>
+    internal static UnresolvedReferenceReason ClassifyUnresolvedReference(ConnectedSystemObject? referencedCso)
+    {
+        if (referencedCso == null)
+            return UnresolvedReferenceReason.NotInTargetSystem;
+
+        var anchor = referencedCso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsSecondaryExternalId == true)
+                     ?? referencedCso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsExternalId == true);
+
+        return anchor?.ToReferenceValueString() != null
+            ? UnresolvedReferenceReason.Resolvable
+            : UnresolvedReferenceReason.AwaitingAnchor;
     }
 
     /// <summary>
@@ -6024,6 +7215,33 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets a window of one attribute's changes on a Pending Export addressed by absolute offset and count, for
+    /// a virtualised (infinite-scroll) multi-valued attribute. Ordered by change id, and shares its query core
+    /// with <see cref="GetPendingExportAttributeChangesPagedAsync"/>. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="attributeName">The name of the attribute to retrieve changes for.</param>
+    /// <param name="offset">The zero-based index of the first change wanted; negative values read as zero.</param>
+    /// <param name="count">How many changes are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value and the unresolved
+    /// reference.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesRangeAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportAttributeChangesRangeAsync(
+            pendingExportId, attributeName, offset, count, searchText, includeTotalCount);
+    }
+
+    /// <summary>
     /// Retrieves a paged list of all attribute value changes across all attributes for a Pending Export.
     /// Used by the CSO detail page for server-side pagination of the Pending Exports table.
     /// </summary>
@@ -6040,6 +7258,31 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetAllPendingExportChangesPagedAsync(
             pendingExportId, page, pageSize, searchText);
+    }
+
+    /// <summary>
+    /// Gets a window of a Pending Export's attribute value changes addressed by absolute offset and count, for
+    /// the virtualised (infinite-scroll) Pending Export grid on the Connected System Object detail page. Ordered
+    /// by attribute name, and shares its query core with
+    /// <see cref="GetAllPendingExportChangesPagedAsync"/>. Pass <paramref name="includeTotalCount"/> as false to
+    /// skip counting the whole match set when the caller already knows the total; the returned total is then
+    /// null rather than zero.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="offset">The zero-based index of the first change wanted; negative values read as zero.</param>
+    /// <param name="count">How many changes are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional search text to filter changes by value or attribute name.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<PendingExportAttributeValueChange>> GetAllPendingExportChangesRangeAsync(
+        Guid pendingExportId,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetAllPendingExportChangesRangeAsync(
+            pendingExportId, offset, count, searchText, includeTotalCount);
     }
 
     /// <summary>
@@ -6125,6 +7368,26 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets a window of deleted Connected System Object changes addressed by absolute offset and count, for the
+    /// virtualised (infinite-scroll) Deleted Objects list. Shares its filters with
+    /// <see cref="GetDeletedCsoChangesAsync"/>, ordered by deletion time newest first. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<ConnectedSystemObjectChange>> GetDeletedCsoChangesRangeAsync(
+        int offset,
+        int count,
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangesRangeAsync(
+            offset, count, connectedSystemId, fromDate, toDate, externalIdSearch, includeTotalCount);
+    }
+
+    /// <summary>
     /// Gets the full change history for a deleted CSO by its change ID.
     /// </summary>
     /// <param name="changeId">The ID of the CSO change record.</param>
@@ -6179,7 +7442,11 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
     }
 
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null)
     {
         // validate the Synchronisation Rule
         if (syncRule == null)
@@ -6229,6 +7496,30 @@ public class ConnectedSystemServer
             syncRule.ProjectToMetaverse = null;
         }
 
+        // Only a newly created account has never had a password, so a rule that creates none cannot deliver an
+        // initial password. Switching the setting off with the provisioning it depended on keeps the stored
+        // configuration honest, rather than leaving one that reads as on and can never run.
+        //
+        // The REST API states the same rule by refusing an enabled initial-password configuration on such a
+        // Synchronisation Rule outright. That is right for a request whose whole subject is the initial
+        // password, and wrong here: this path saves a whole rule, and an administrator turning provisioning off
+        // has not asked about passwords at all. The portal removes the Initial Password tab the moment
+        // provisioning goes off, so refusing would also leave nothing on screen to correct.
+        //
+        // Left above the parked-account comparison below on purpose: the comparison must see the settings as
+        // they will be stored, so that switching the feature off releases the accounts parked against it.
+        if (syncRule.InitialPassword is { Enabled: true } &&
+            !(syncRule.Direction == SyncRuleDirection.Export && syncRule.ProvisionToConnectedSystem == true))
+        {
+            Log.Information("CreateOrUpdateSyncRuleAsync: Switching the initial password off for Synchronisation Rule {Id}, " +
+                "which no longer provisions to its Connected System and so creates no account to give one to", syncRule.Id);
+            syncRule.InitialPassword.Enabled = false;
+        }
+
+
+        // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
+        // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
+        var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
@@ -6240,7 +7531,8 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            ParentActivityId = parentActivity?.Id
+            ParentActivityId = parentActivity?.Id,
+            PreviewActivityId = previewActivityId
         };
 
         if (syncRule.Id == 0)
@@ -6259,8 +7551,18 @@ public class ConnectedSystemServer
             activity.TargetOperationType = ActivityTargetOperationType.Update;
             AuditHelper.SetUpdated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+            // Read before the write, or there is nothing left to compare the new configuration against.
+            var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
+
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+            await ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(syncRule, previousInitialPassword);
         }
+
+        // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
+        // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
+        // so the snapshot records the priorities as they end up (#1199).
+        await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -6268,9 +7570,36 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Sets a Synchronisation Rule's parked initial passwords retrying, when the save changed what would be
+    /// delivered (#1221).
+    /// <para>
+    /// A policy rejection parks an account because the same configuration produces another password the target
+    /// refuses for the same reason. The administrator correcting that configuration is the only event that makes
+    /// another attempt worth making, and this is where it reaches the parked work: without it, parking is a
+    /// one-way door and the account never gets a password.
+    /// </para>
+    /// <para>
+    /// Gated on the configuration actually changing rather than firing on every save. An unrelated edit to the
+    /// rule would otherwise set those accounts retrying against settings the target has already answered, which
+    /// fails identically and inflates an attempt count that is supposed to count distinct configurations tried.
+    /// </para>
+    /// </summary>
+    private async Task ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(SyncRule syncRule, SyncRuleInitialPassword? previous)
+    {
+        if (SyncRuleInitialPassword.WouldDeliverTheSameAs(previous, syncRule.InitialPassword))
+            return;
+
+        await Application.InitialPasswords.ReleaseParkedForSyncRuleAsync(syncRule.Id);
+    }
+
+    /// <summary>
     /// Creates or updates a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null)
     {
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
@@ -6313,6 +7642,10 @@ public class ConnectedSystemServer
             syncRule.ProjectToMetaverse = null;
         }
 
+        // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
+        // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
+        var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
+
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
             (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
@@ -6322,7 +7655,8 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            ParentActivityId = parentActivity?.Id
+            ParentActivityId = parentActivity?.Id,
+            PreviewActivityId = previewActivityId
         };
 
         if (syncRule.Id == 0)
@@ -6341,6 +7675,11 @@ public class ConnectedSystemServer
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
+
+        // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
+        // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
+        // so the snapshot records the priorities as they end up (#1199).
+        await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -6376,7 +7715,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
 
         foreach (var attributeId in affectedAttributeIds)
-            await RedensifyAttributePriorityAfterRemovalAsync(syncRule.MetaverseObjectTypeId, attributeId);
+            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -6409,9 +7748,103 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
 
         foreach (var attributeId in affectedAttributeIds)
-            await RedensifyAttributePriorityAfterRemovalAsync(syncRule.MetaverseObjectTypeId, attributeId);
+            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId);
 
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// The Metaverse attribute a mapping targets, read from the navigation property in preference to the scalar FK.
+    /// A whole-rule save arrives straight from the portal's editor, which binds the target to the navigation
+    /// (<see cref="SyncRuleMapping.TargetMetaverseAttribute"/>); EF only fixes the FK up at SaveChanges, so before
+    /// the write the scalar is still null on a new mapping and stale on a retargeted one. Null for export mappings.
+    /// </summary>
+    private static int? GetTargetMetaverseAttributeId(SyncRuleMapping mapping) =>
+        mapping.TargetMetaverseAttribute?.Id ?? mapping.TargetMetaverseAttributeId;
+
+    /// <summary>
+    /// Captures, before a whole-rule save, which Metaverse attribute each of the rule's import mappings targets in
+    /// the database, and resets any retargeted mapping to the safe-addition sentinel (#1199).
+    /// <para>
+    /// The portal never calls the granular create/delete mapping methods: its Attribute Flow editor mutates
+    /// <see cref="SyncRule.AttributeFlowRules"/> in memory and saves the whole rule, so without this the
+    /// safe-addition default and the dense-list invariant applied only to API callers.
+    /// </para>
+    /// <para>
+    /// The sentinel reset is the subtle half. Retargeting moves a mapping between two attributes' priority lists,
+    /// and priority numbers are only meaningful within one list: a mapping sitting at priority 1 for its old
+    /// attribute would be renumbered straight to the top of its new attribute's list and silently start winning
+    /// resolution there. Resetting it makes it arrive last, like any other newly-added contribution. It happens
+    /// before the write so the new value rides the same SaveChanges rather than costing a second one.
+    /// </para>
+    /// </summary>
+    /// <param name="syncRule">The rule about to be saved.</param>
+    /// <returns>Target Metaverse attribute id keyed by mapping id, as the database holds it. Empty for an export
+    /// rule or a rule being created, neither of which has import priority state to compare against.</returns>
+    private async Task<Dictionary<int, int>> CaptureImportPriorityStateBeforeSaveAsync(SyncRule syncRule)
+    {
+        if (syncRule.Direction != SyncRuleDirection.Import || syncRule.Id == 0)
+            return [];
+
+        var previousTargets = await Application.Repository.ConnectedSystems
+            .GetImportMappingTargetMetaverseAttributesAsync(syncRule.Id);
+
+        foreach (var mapping in syncRule.AttributeFlowRules
+                     .Where(m => GetTargetMetaverseAttributeId(m) is int target &&
+                                 previousTargets.TryGetValue(m.Id, out var previous) &&
+                                 previous != target))
+            mapping.Priority = int.MaxValue;
+
+        return previousTargets;
+    }
+
+    /// <summary>
+    /// After a whole-rule save, reconciles the priority list of every Metaverse attribute whose contributor set this
+    /// save changed (#1199), so adding, removing or retargeting an Attribute Flow in the portal maintains the same
+    /// dense 1..N invariant the granular API paths maintain.
+    /// <para>
+    /// Only genuinely affected attributes are reconciled: an unrelated edit (renaming the rule, changing a scoping
+    /// criterion) touches no contributor set and issues no queries at all. An attribute is affected when a mapping
+    /// now targets it that did not before, or no longer targets it and did.
+    /// </para>
+    /// </summary>
+    /// <param name="syncRule">The just-saved rule. Its mappings now carry database-assigned ids.</param>
+    /// <param name="previousTargets">The pre-save state from <see cref="CaptureImportPriorityStateBeforeSaveAsync"/>.</param>
+    private async Task ReconcileAttributePriorityAfterRuleSaveAsync(SyncRule syncRule, Dictionary<int, int> previousTargets)
+    {
+        if (syncRule.Direction != SyncRuleDirection.Import)
+            return;
+
+        var currentTargets = syncRule.AttributeFlowRules
+            .Where(m => GetTargetMetaverseAttributeId(m).HasValue)
+            .ToDictionary(m => m.Id, m => GetTargetMetaverseAttributeId(m)!.Value);
+
+        var affectedAttributeIds = new HashSet<int>();
+        var arrivalsByAttribute = new Dictionary<int, HashSet<int>>();
+
+        // Attributes that gained a contribution: a mapping targeting something it did not target before. These are the
+        // arrivals, which have to land at the bottom of the attribute's list.
+        foreach (var current in currentTargets
+                     .Where(c => !previousTargets.TryGetValue(c.Key, out var previous) || previous != c.Value))
+        {
+            affectedAttributeIds.Add(current.Value);
+            if (!arrivalsByAttribute.TryGetValue(current.Value, out var arrivals))
+            {
+                arrivals = [];
+                arrivalsByAttribute[current.Value] = arrivals;
+            }
+
+            arrivals.Add(current.Key);
+        }
+
+        // Attributes that lost one: a mapping deleted outright, or retargeted away.
+        foreach (var previous in previousTargets
+                     .Where(p => !currentTargets.TryGetValue(p.Key, out var current) || current != p.Value))
+            affectedAttributeIds.Add(previous.Value);
+
+        foreach (var attributeId in affectedAttributeIds)
+            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId,
+                arrivalsByAttribute.GetValueOrDefault(attributeId));
     }
 
     /// <summary>
@@ -6466,10 +7899,33 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Refuses an Object Matching Rule that could never match anything, before it is stored.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ObjectMatchingRule.IsValid"/> described what a workable rule looks like and nothing called it,
+    /// so the portal was able to store Simple mode rules with no Metaverse Object Type (#1458). The matching engine
+    /// skips such a rule and moves to the next one, so a Connected System whose only rules are malformed matches
+    /// nothing at all: every account that should have joined an existing identity projects a new one instead, and
+    /// nothing reports it. A hard refusal here is what the Synchronisation Integrity rules ask for; the alternative
+    /// is discovering the duplicate identities by hand, months later.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The rule cannot work, with the reason.</exception>
+    private static void EnsureObjectMatchingRuleIsWorkable(ObjectMatchingRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        var invalidity = rule.DescribeInvalidity();
+        if (invalidity != null)
+            throw new InvalidDataException(invalidity);
+    }
+
+    /// <summary>
     /// Creates a new Object Matching Rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -6489,6 +7945,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -6508,6 +7966,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -6527,6 +7987,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",

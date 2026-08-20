@@ -164,8 +164,8 @@ public class SyncRepositoryActivityRpeiTests
     public void DetachRpeisFromChangeTracker_IsNoOp()
     {
         var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
-        Assert.DoesNotThrow(() => _repo.DetachRpeisFromChangeTracker(
-            new List<ActivityRunProfileExecutionItem> { rpei }));
+        Assert.That(() => _repo.DetachRpeisFromChangeTracker(
+            new List<ActivityRunProfileExecutionItem> { rpei }), Throws.Nothing);
     }
 
     [Test]

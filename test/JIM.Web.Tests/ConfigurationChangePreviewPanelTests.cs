@@ -85,13 +85,13 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("the evaluation query timed out"),
                 "the administrator needs to know why, not just that");
             Assert.That(panel.Markup, Does.Not.Contain("4,812"),
                 "a count drawn from a partial evaluation must not be presented as what the change would do");
-        });
+        }
     }
 
     [Test]
@@ -111,12 +111,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("Evaluating what the change would do"));
             Assert.That(panel.Markup, Does.Not.Contain("would not change anything"),
                 "an evaluation in progress has not concluded that nothing would change");
-        });
+        }
     }
 
     [Test]
@@ -147,11 +147,11 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("4,812"), "the counts it did produce are the answer it has");
             Assert.That(panel.Markup, Does.Not.Contain("would not change anything"));
-        });
+        }
     }
 
     [Test]
@@ -166,12 +166,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("40,000"), "the count is exact whether or not the rows were capped");
             Assert.That(panel.Markup, Does.Contain("sample").IgnoreCase,
                 "an unlabelled sample read as a complete list is the failure this label exists to prevent");
-        });
+        }
     }
 
     [Test]
@@ -187,6 +187,26 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void Panel_SummaryRow_SaysItCoversObjectsOfTheType()
+    {
+        // A summary row is about many objects, so "User in Yellowstone Verify" described one of them. The type name
+        // itself stays exactly as its system spells it, because it is a schema identifier and not JIM's to inflect;
+        // "objects" after it is what carries the plurality (#1275).
+        GivenPreview(Complete);
+        GivenGroups(Group(4_812));
+
+        var panel = RenderPanel();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(panel.Markup, Does.Contain("User"));
+            Assert.That(panel.Markup, Does.Contain("objects"));
+            Assert.That(panel.Markup, Does.Not.Contain("Users"),
+                "pluralising the type name would have JIM inventing a name the system it came from does not use");
+        }
+    }
+
+    [Test]
     public void Panel_GroupNamingAValuePair_ShowsBothValues()
     {
         GivenPreview(Complete);
@@ -194,14 +214,14 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // "38,900 would have Email changed" is a summary of the wrong thing; the values are what makes it
             // reviewable without opening the drill-down at all.
             Assert.That(panel.Markup, Does.Contain("@contoso.com"));
             Assert.That(panel.Markup, Does.Contain("@fabrikam.com"));
             Assert.That(panel.Markup, Does.Contain("Email"));
-        });
+        }
     }
 
     [Test]
@@ -218,6 +238,43 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void Panel_GroupWithADetectedPattern_SaysWhatKindOfChangeItIs()
+    {
+        GivenPreview(Complete);
+        GivenGroups(Group(38_900, attributeName: "Email", patternKey: PreviewPatternKeys.EmailDomainChanged));
+
+        var panel = RenderPanel();
+
+        // The point of Phase 4b: a collapsed group covering thousands of distinct value pairs is unreadable as
+        // values, and entirely readable as "they are all domain changes".
+        Assert.That(panel.Markup, Does.Contain("Email or UPN domain changed"));
+    }
+
+    [Test]
+    public void Panel_GroupWithNoDetectedPattern_ShowsNothingInItsPlace()
+    {
+        GivenPreview(Complete);
+        GivenGroups(Group(38_900, attributeName: "Email"));
+
+        var panel = RenderPanel();
+
+        Assert.That(panel.Markup, Does.Not.Contain("domain changed"),
+            "no detector recognised this change, and a blank is the honest rendering of that");
+    }
+
+    [Test]
+    public void Panel_GroupWithAPatternThisBuildDoesNotKnow_ShowsNothingRatherThanTheRawKey()
+    {
+        GivenPreview(Complete);
+        GivenGroups(Group(12, attributeName: "Email", patternKey: "SomethingElseEntirely"));
+
+        var panel = RenderPanel();
+
+        Assert.That(panel.Markup, Does.Not.Contain("SomethingElseEntirely"),
+            "an internal identifier is not something to put in front of an administrator");
+    }
+
+    [Test]
     public void Panel_DrillDownOnOneOfSeveralValuePairGroups_NamesWhichOneIsOpen()
     {
         // Value-pair grouping puts several rows on screen that share a transition and a population and differ only
@@ -228,15 +285,74 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             Group(1_650, attributeName: "Email", oldValue: "@contoso.co.uk", newValue: "@fabrikam.co.uk"));
 
         var panel = RenderPanel();
-        panel.FindAll("tbody tr").Last().Click();
+        OpenSummaryRowContaining(panel, "@contoso.co.uk");
 
         var heading = panel.Find("[data-testid='jim-preview-drilldown-heading']").TextContent;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(heading, Does.Contain("@contoso.co.uk"));
             Assert.That(heading, Does.Contain("@fabrikam.co.uk"));
             Assert.That(heading, Does.Contain("Email"));
-        });
+        }
+    }
+
+    [Test]
+    public void Panel_DrillDownRowsWithDifferentPatterns_LabelsEachOne()
+    {
+        // A group that collapsed past the value-pair guard carries rows of more than one kind, so the group itself
+        // is unlabelled and the rows are where the distinction survives.
+        GivenPreview(Complete);
+        GivenGroups(Group(2, attributeName: "Email"));
+        GivenDeltas(
+            Delta("bob@contoso.com", "bob@fabrikam.com", PreviewPatternKeys.EmailDomainChanged),
+            Delta("bsmith", "svc-bsmith", PreviewPatternKeys.PrefixAdded));
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Email");
+        panel.WaitForState(() => panel.Markup.Contains("Prefix added"), TimeSpan.FromSeconds(2));
+
+        Assert.That(panel.Markup, Does.Contain("Email or UPN domain changed"));
+    }
+
+    [Test]
+    public void Panel_DrillDown_ReadsTheStoredDeltasFromTheFirstPageNotPageZero()
+    {
+        // The object-level rows are stored behind a page-based read while the grid asks for arbitrary windows, so the
+        // panel serves a window from the whole pages that cover it. That conversion is 1-based on the way out: a
+        // page zero is silently accepted by the repository and comes back holding the wrong rows, which is a defect
+        // no rendering assertion would catch, because the panel would still show a full and plausible list.
+        GivenPreview(Complete);
+        GivenGroups(Group(2, attributeName: "Email"));
+        GivenDeltas(Delta("bob@contoso.com", "bob@fabrikam.com", PreviewPatternKeys.EmailDomainChanged));
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Email");
+        panel.WaitForState(() => panel.Markup.Contains("bob@fabrikam.com"), TimeSpan.FromSeconds(2));
+
+        _previewRepository.Verify(
+            r => r.GetPreviewDeltasAsync(ActivityId, It.IsAny<Guid?>(), It.Is<int>(page => page >= 1), It.IsAny<int>(), It.IsAny<string?>()),
+            Times.AtLeastOnce);
+        _previewRepository.Verify(
+            r => r.GetPreviewDeltasAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.Is<int>(page => page < 1), It.IsAny<int>(), It.IsAny<string?>()),
+            Times.Never, "the stored read is 1-based; a page below one reads the wrong rows without failing");
+    }
+
+    [Test]
+    public void Panel_DrillDownWithNoStoredDetail_SaysDetailWasNotKeptRatherThanBlamingASearch()
+    {
+        // The two reasons a drill-down is empty mean opposite things: a search that matched nothing is the reader's
+        // to undo, while a preview that kept no object-level detail is a property of how the preview was run and has
+        // no way out. Showing the search message when nothing was searched sends the reader looking for a filter.
+        GivenPreview(Complete);
+        GivenGroups(Group(2, attributeName: "Email"));
+        GivenDeltas();
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Email");
+        panel.WaitForState(() => panel.Markup.Contains("No object-level detail was kept"), TimeSpan.FromSeconds(2));
+
+        Assert.That(panel.Markup, Does.Not.Contain("match that search"),
+            "nothing was searched, so the empty state must not offer clearing a search as the way out");
     }
 
     [Test]
@@ -253,12 +369,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("No deletion triggers are selected."));
             Assert.That(panel.Markup, Does.Contain("cannot be applied"),
                 "a blocking finding stops the change, and the panel has to say that rather than only listing it");
-        });
+        }
     }
 
     [Test]
@@ -348,12 +464,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             .Add(x => x.ShowProgress, false));
         panel.WaitForState(() => !panel.Markup.Contains("jim-preview-loading"), TimeSpan.FromSeconds(2));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Not.Contain("Evaluating what the change would do"));
             Assert.That(panel.FindAll("[data-testid='jim-preview-cancel']"), Is.Not.Empty);
             Assert.That(panel.Markup, Does.Contain("Summary"), "the stages are the panel's own and stay either way");
-        });
+        }
     }
 
     [Test]
@@ -365,11 +481,45 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("no longer available").IgnoreCase);
             Assert.That(panel.Markup, Does.Not.Contain("would not change anything"));
-        });
+        }
+    }
+
+    [Test]
+    public void Panel_HostReRendersWithTheSamePreview_DoesNotReRead()
+    {
+        // Found by driving the portal (#1114): a host that binds OnPreviewChanged re-renders when the callback
+        // fires, because that is what an EventCallback does. A panel that re-read on every parameter set turned
+        // that into a loop, and the loop cancelled and restarted the reconciliation poll on each pass, so the
+        // poll's delay never elapsed. The panel sat on stage 1 for ever while the preview finished behind it.
+        GivenPreview(p => p.ValidationStatus = ConfigurationChangePreviewStageStatus.Complete,
+            a => a.Status = ActivityStatus.InProgress);
+        var panel = RenderPanel();
+        var readsAfterFirstLoad = ReadCount();
+
+        panel.Render();
+        panel.Render();
+
+        Assert.That(ReadCount(), Is.EqualTo(readsAfterFirstLoad),
+            "a parent re-render is not new information about the preview; the notification handler and the poll are what refresh it");
+    }
+
+    [Test]
+    public void Panel_PointedAtADifferentPreview_LoadsIt()
+    {
+        GivenPreview();
+        var panel = RenderPanel();
+        var otherActivityId = Guid.CreateVersion7();
+        _previewRepository.Setup(r => r.GetPreviewAsync(otherActivityId)).ReturnsAsync((ConfigurationChangePreview?)null);
+        var readsAfterFirstLoad = ReadCount();
+
+        panel.Render(p => p.Add(x => x.ActivityId, otherActivityId));
+
+        Assert.That(ReadCount(), Is.GreaterThan(readsAfterFirstLoad),
+            "the guard is about the same preview, not about never reading again; re-previewing must load the new one");
     }
 
     #region Helpers
@@ -382,6 +532,22 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     private int ReadCount() => _previewRepository.Invocations.Count(i => i.Method.Name == nameof(IConfigurationChangePreviewRepository.GetPreviewAsync));
+
+    /// <summary>
+    /// Opens the drill-down for the summary row whose text contains <paramref name="text"/>.
+    /// <para>
+    /// Rows are picked by what they say rather than by position, because the summary is a virtualised grid: its
+    /// tbody carries the virtualiser's two zero-height spacer rows around the real ones, and those have no click
+    /// handler, so the first and last positions are not rows at all. Clicking a cell is enough; the row's own
+    /// handler catches the bubbled event.
+    /// </para>
+    /// </summary>
+    private static void OpenSummaryRowContaining(IRenderedComponent<ConfigurationChangePreviewPanel> panel, string text)
+    {
+        var cell = panel.FindAll("tbody td").FirstOrDefault(td => td.TextContent.Contains(text, StringComparison.Ordinal));
+        Assert.That(cell, Is.Not.Null, $"no summary row containing \"{text}\" was rendered");
+        cell!.Click();
+    }
 
     private static void Complete(ConfigurationChangePreview preview)
     {
@@ -414,11 +580,36 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         _activityRepository.Setup(r => r.GetActivityAsync(ActivityId)).ReturnsAsync(activity);
     }
 
+    private void GivenDeltas(params ConfigurationChangePreviewDelta[] deltas) =>
+        _previewRepository
+            .Setup(r => r.GetPreviewDeltasAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>()))
+            .ReturnsAsync(new PagedResultSet<ConfigurationChangePreviewDelta>
+            {
+                Results = [.. deltas],
+                TotalResults = deltas.Length,
+                CurrentPage = 1,
+                PageSize = 25
+            });
+
+    private static ConfigurationChangePreviewDelta Delta(string oldValue, string newValue, string? patternKey) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        ActivityId = ActivityId,
+        TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+        ObjectDisplayName = "Bob Smith",
+        ObjectTypeName = "User",
+        AttributeName = "Email",
+        OldValue = oldValue,
+        NewValue = newValue,
+        PatternKey = patternKey
+    };
+
     private void GivenGroups(params ConfigurationChangePreviewGroup[] groups) =>
         _previewRepository.Setup(r => r.GetPreviewGroupsAsync(ActivityId)).ReturnsAsync([.. groups]);
 
     private static ConfigurationChangePreviewGroup Group(int objectCount, bool sampled = false,
-        string? attributeName = null, string? oldValue = null, string? newValue = null) => new()
+        string? attributeName = null, string? oldValue = null, string? newValue = null,
+        string? patternKey = null) => new()
     {
         Id = Guid.CreateVersion7(),
         ActivityId = ActivityId,
@@ -428,6 +619,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         AttributeName = attributeName,
         OldValue = oldValue,
         NewValue = newValue,
+        PatternKey = patternKey,
         ObjectCount = objectCount,
         DeltasSampled = sampled
     };

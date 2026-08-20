@@ -7,6 +7,7 @@ using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
+using System.Text;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
@@ -498,6 +499,148 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
+    /// Translates a Container's scope into the LDAP search scope to use when searching from it as a base.
+    /// </summary>
+    internal static SearchScope GetSearchScope(ConnectedSystemContainer connectedSystemContainer) =>
+        connectedSystemContainer.Scope == ConnectedSystemContainerScope.OneLevel
+            ? SearchScope.OneLevel
+            : SearchScope.Subtree;
+
+    /// <summary>
+    /// Whether a distinguished name would be returned by a search based on the given Container, using that
+    /// Container's scope. Answers in code what the directory answers server-side during a full import, for the
+    /// delta paths that read a directory-wide change log rather than searching per Container.
+    /// </summary>
+    internal static bool IsDnWithinContainerScope(string? distinguishedName, ConnectedSystemContainer connectedSystemContainer)
+    {
+        if (string.IsNullOrWhiteSpace(distinguishedName) || string.IsNullOrWhiteSpace(connectedSystemContainer.ExternalId))
+            return false;
+
+        var dn = NormaliseDn(distinguishedName);
+        var baseDn = NormaliseDn(connectedSystemContainer.ExternalId);
+
+        if (dn.Equals(baseDn, StringComparison.OrdinalIgnoreCase))
+        {
+            // A subtree search returns its base entry; a one-level search does not.
+            return connectedSystemContainer.Scope != ConnectedSystemContainerScope.OneLevel;
+        }
+
+        // Compare on the ",<base>" boundary so that OU=NotCorp,DC=x is not mistaken for a descendant of OU=Corp,DC=x.
+        var suffix = "," + baseDn;
+        if (!dn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (connectedSystemContainer.Scope != ConnectedSystemContainerScope.OneLevel)
+            return true;
+
+        // One level: what remains once the base is removed must be a single RDN, i.e. hold no further
+        // unescaped separator. An escaped comma is part of an RDN's value rather than a separator.
+        var relative = dn[..^suffix.Length];
+        return !ContainsUnescapedComma(relative);
+    }
+
+    /// <summary>
+    /// The name to show for a container whose only identifier is its Distinguished Name: the unescaped value of the
+    /// leaf RDN's first component, so "OU=Sales,OU=Corp,DC=example,DC=com" reads as "Sales".
+    /// </summary>
+    /// <remarks>
+    /// Used both when a directory publishes no name of its own for a discovered container (everything except Active
+    /// Directory) and when the Connector creates a container during an export. Answering it in one place is what
+    /// stops a container acquiring a different name depending on how JIM first met it. An identifier that will not
+    /// parse as a Distinguished Name is returned unchanged: showing something is better than showing an empty row.
+    /// </remarks>
+    internal static string GetContainerDisplayNameFromDn(string? distinguishedName)
+    {
+        if (string.IsNullOrEmpty(distinguishedName))
+            return string.Empty;
+
+        return LdapDistinguishedName.TryParse(distinguishedName, out var parsedDn) && parsedDn.LeafRdn.Components.Count > 0
+            ? parsedDn.LeafRdn.Components[0].Value
+            : distinguishedName;
+    }
+
+    /// <summary>
+    /// Whether a distinguished name is within the scope the supplied Containers describe: the Container with the
+    /// final say over it admits it rather than carving it out. An empty collection means the caller has no
+    /// Container-level opinion to apply, and every name is admitted.
+    /// </summary>
+    /// <remarks>
+    /// Callers must supply every Container stating something about scope, exclusions included; the selections alone
+    /// answer a different question (see <c>ConnectedSystemExtensions.GetScopeDecidingContainers</c>). Supplying only
+    /// the selections is not a partial answer but a wrong one: an exclusion that is not present cannot carve
+    /// anything out.
+    /// </remarks>
+    internal static bool IsDnInScope(string? distinguishedName, IReadOnlyCollection<ConnectedSystemContainer> connectedSystemContainers)
+    {
+        if (connectedSystemContainers.Count == 0)
+            return true;
+
+        return ContainerSpecificity.IsInScope(distinguishedName, connectedSystemContainers, IsDnWithinContainerScope);
+    }
+
+    /// <summary>
+    /// Which of the supplied Containers has the final say over a distinguished name, or null where none covers it.
+    /// </summary>
+    /// <remarks>
+    /// The Containers handed to the import and export scope checks are a flat collection with no hierarchy to walk,
+    /// so specificity is asked in the only terms available here and the only ones that are the Connector's own: a
+    /// Container holding another matching Container is the more general of the two. Deciding this way rather than by
+    /// taking the first match is what will let a Container beneath a selected one overrule it (#1255); until then
+    /// the two agree on every selection, because every Container in a selection says the same thing.
+    /// </remarks>
+    internal static ConnectedSystemContainer? ResolveMostSpecificContainerScope(
+        string? distinguishedName,
+        IReadOnlyCollection<ConnectedSystemContainer> connectedSystemContainers) =>
+        ContainerSpecificity.ResolveMostSpecific(distinguishedName, connectedSystemContainers, IsDnWithinContainerScope);
+
+    /// <summary>
+    /// Removes the optional whitespace some directories emit after each DN separator, leaving a form that can
+    /// be compared component by component. Escaped separators are left alone.
+    /// </summary>
+    private static string NormaliseDn(string distinguishedName)
+    {
+        var normalised = new StringBuilder(distinguishedName.Length);
+        for (var i = 0; i < distinguishedName.Length; i++)
+        {
+            var character = distinguishedName[i];
+            normalised.Append(character);
+
+            if (character != ',' || IsEscaped(distinguishedName, i))
+                continue;
+
+            // Skip the whitespace that follows this separator.
+            while (i + 1 < distinguishedName.Length && distinguishedName[i + 1] == ' ')
+                i++;
+        }
+
+        return normalised.ToString().Trim();
+    }
+
+    private static bool ContainsUnescapedComma(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (value[i] == ',' && !IsEscaped(value, i))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether the character at the given index is escaped, counting the run of backslashes before it: an odd
+    /// run escapes the character, an even run is itself a run of escaped backslashes.
+    /// </summary>
+    private static bool IsEscaped(string value, int index)
+    {
+        var backslashes = 0;
+        for (var i = index - 1; i >= 0 && value[i] == '\\'; i--)
+            backslashes++;
+
+        return backslashes % 2 == 1;
+    }
+
+    /// <summary>
     /// Determines whether an attribute's plurality should be overridden from multi-valued to single-valued
     /// based on Active Directory SAM layer enforcement rules.
     /// </summary>
@@ -726,6 +869,36 @@ internal static class LdapConnectorUtilities
             "does not host would otherwise silently return zero objects. A domain's objects must be managed through a " +
             "Connected System whose Host targets that domain's own domain controllers (one Connected System per domain " +
             "today).");
+    }
+
+    /// <summary>
+    /// Stops the platform LDAP client following referrals on JIM's behalf.
+    /// <para>
+    /// A referral names another server, and the platform follows it on a brand new connection that carries
+    /// none of the credentials JIM bound with. Active Directory refuses anonymous reads by default, so every
+    /// chased referral fails, and it fails against the search that triggered it rather than against the
+    /// referral: partition discovery reports an access denial on a connection that is authenticated and
+    /// perfectly healthy. Declining the chase turns that into the referral simply being ignored, which is
+    /// both truthful and recoverable.
+    /// </para>
+    /// <para>
+    /// This is deliberately unconditional rather than a setting. JIM chasing referrals itself, with its own
+    /// credentials and a record of which servers it followed, is a feature in its own right (issue #1352);
+    /// until that exists there is no configuration an administrator could usefully choose between.
+    /// </para>
+    /// </summary>
+    internal static void DisableReferralChasing(LdapConnection connection, ILogger logger)
+    {
+        try
+        {
+            connection.SessionOptions.ReferralChasing = ReferralChasingOptions.None;
+        }
+        catch (Exception ex) when (ex is LdapException or DirectoryOperationException or PlatformNotSupportedException or ObjectDisposedException)
+        {
+            // Hardening a connection must never be what fails a run. The worst case if this is refused is the
+            // platform default, which is what every release before this one used.
+            logger.Warning(ex, "DisableReferralChasing: The platform would not let referral chasing be turned off for this connection. Referrals returned by the directory may be followed anonymously, and any that are will fail against directories that refuse anonymous reads.");
+        }
     }
 
     /// <summary>

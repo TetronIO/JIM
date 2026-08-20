@@ -4,6 +4,7 @@
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Web.Models;
 using JIM.Web.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
@@ -22,13 +23,15 @@ public class ConfigurationChangeAcknowledgementDialogTests : JimComponentTestCon
 {
     private const string ConfirmButtonMarker = "jim-consequence-confirm";
 
-    private IRenderedComponent<MudDialogProvider> ShowDialog(ConfigurationChangePreflight preflight)
+    private IRenderedComponent<MudDialogProvider> ShowDialog(ConfigurationChangePreflight preflight,
+        IReadOnlyList<ImpactCount>? counts = null)
     {
         var parameters = new DialogParameters<ConfigurationChangeAcknowledgementDialog>
         {
             { x => x.Preflight, preflight },
             { x => x.ObjectTypeLabel, "Synchronisation Rule" },
-            { x => x.ObjectName, "HR Inbound" }
+            { x => x.ObjectName, "HR Inbound" },
+            { x => x.Counts, counts ?? [] }
         };
 
         var provider = Render<MudDialogProvider>();
@@ -59,13 +62,13 @@ public class ConfigurationChangeAcknowledgementDialogTests : JimComponentTestCon
             "Inbound out-of-scope action", ConfigurationChangeClass.Destructive,
             consequence: "Objects that fall out of this rule's scope will stay joined to their Metaverse Objects.")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Markup, Does.Contain("decides whether objects are removed"),
                 "the headline should name what the property governs, not assert a direction");
             Assert.That(provider.Markup, Does.Not.Contain("can remove data"),
                 "claiming data loss over a change that prevents it is how a dialog earns reflex dismissal");
-        });
+        }
     }
 
     [Test]
@@ -114,12 +117,12 @@ public class ConfigurationChangeAcknowledgementDialogTests : JimComponentTestCon
         var provider = ShowDialog(Preflight(ConfigurationChangeClass.SyncAffecting,
             Item("Enabled", ConfigurationChangeClass.SyncAffecting, oldValue: "Yes", newValue: "No")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Markup, Does.Contain("Enabled"));
             Assert.That(provider.Markup, Does.Contain("Yes"));
             Assert.That(provider.Markup, Does.Contain("No"));
-        });
+        }
     }
 
     [Test]
@@ -143,6 +146,33 @@ public class ConfigurationChangeAcknowledgementDialogTests : JimComponentTestCon
 
         Assert.That(provider.Markup, Does.Contain("8 more"),
             "a wall of rows is a dialog nobody reads; the tail should be counted rather than listed");
+    }
+
+    [Test]
+    public void AcknowledgementDialog_PreviewCounts_StatesHowManyObjectsTheChangeWouldAffect()
+    {
+        // The difference between "you are changing the Deletion Rule" and "you are changing the Deletion Rule, and
+        // 4,812 Metaverse Objects become eligible for deletion when you do". Only the second can be consented to.
+        var provider = ShowDialog(
+            Preflight(ConfigurationChangeClass.Destructive, Item("Deletion Rule", ConfigurationChangeClass.Destructive)),
+            [new ImpactCount { Label = "Would become eligible for deletion", Count = 4812 }]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.Markup, Does.Contain("Would become eligible for deletion"));
+            Assert.That(provider.Markup, Does.Contain("4,812"), "counts are read at a glance; thousands separators are not decoration");
+        }
+    }
+
+    [Test]
+    public void AcknowledgementDialog_NoPreviewCounts_LooksExactlyAsItDidBefore()
+    {
+        // Every surface without a preview adapter passes nothing, and must be unaffected by the counts section
+        // existing at all.
+        var provider = ShowDialog(Preflight(ConfigurationChangeClass.SyncAffecting,
+            Item("Enabled", ConfigurationChangeClass.SyncAffecting)));
+
+        Assert.That(provider.Markup, Does.Not.Contain("from the preview"));
     }
 
     private static ConfigurationChangePreflight Preflight(ConfigurationChangeClass highest,

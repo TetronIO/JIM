@@ -10,7 +10,7 @@ JIM implements an enterprise identity management system using the metaverse patt
 
 --8<-- "assets/diagrams/system-context.svg"
 
-<p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems. Dashed elements indicate planned connectivity.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
+<p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ## Layered Architecture
 
@@ -77,7 +77,7 @@ The component views use the docs site's hand-authored diagram system and are sim
 
 --8<-- "assets/diagrams/connector-components.svg"
 
-<p class="jim-diagram-caption">The Worker's import and export processors invoke the connectors, which carry data to and from the external systems. Dashed elements indicate planned connectors.<span class="jimdg-caption-motion"> Moving dots trace data in flight.</span></p>
+<p class="jim-diagram-caption">The Worker's import and export processors invoke the connectors, which carry data to and from the external systems.<span class="jimdg-caption-motion"> Moving dots trace data in flight.</span></p>
 
 ### Scheduler Service
 

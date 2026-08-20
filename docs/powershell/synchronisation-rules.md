@@ -199,7 +199,7 @@ Modifies an existing Synchronisation Rule. Supports renaming, toggling enabled s
 Set-JIMSyncRule -Id <int> [-Name <string>] [-Description <string>]
     [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
     [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
-    [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
+    [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 
 # Enable shortcut
 Set-JIMSyncRule -Id <int> -Enable [-ChangeReason <string>] [-PassThru]
@@ -211,7 +211,7 @@ Set-JIMSyncRule -Id <int> -Disable [-ChangeReason <string>] [-PassThru]
 Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <string>]
     [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
     [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
-    [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
+    [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 ```
 
 ### Parameters
@@ -230,6 +230,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 | `OutboundDeprovisionAction` | `string` | No | | Export rules: action when an MVO falls out of the rule's scope or is deleted. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
 | `EnforceState` | `bool` | No | | Enables drift detection: re-asserts the rule's expected attribute values when the target system has drifted from them |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
+| `PreviewActivityId` | `guid` | No | | The [Configuration Change Preview](previews.md) this change was made after reading, as returned by `New-JIMConfigurationChangePreview -SyncRuleId`. Recorded on the change's Activity so "previewed, then applied" is auditable. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Synchronisation Rule object |
 
 ### Output
@@ -268,8 +269,9 @@ Get-JIMSyncRule -ConnectedSystemName "HR System" | Set-JIMSyncRule -Disable
 Set-JIMSyncRule -Id 5 -ProjectToMetaverse $true -PassThru
 ```
 
-```powershell title="Set out-of-scope handling and drift detection on an export rule"
-Set-JIMSyncRule -Id 5 -OutboundDeprovisionAction Delete -EnforceState $true
+```powershell title="Preview, then set, the Deprovisioning Action on an export rule"
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 5 -OutboundDeprovisionAction Delete -Wait
+Set-JIMSyncRule -Id 5 -OutboundDeprovisionAction Delete -EnforceState $true -PreviewActivityId $preview.ActivityId
 ```
 
 ```powershell title="Disable a rule and record why (shown in the change history)"
@@ -411,6 +413,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `SourceConnectedSystemAttributeId` | `int[]` | Yes (ImportAttribute set) | | One or more Connected System attribute IDs to read from |
 | `SourceMetaverseAttributeId` | `int[]` | Yes (ExportAttribute set) | | One or more metaverse attribute IDs to read from |
 | `Expression` | `string` | Yes (ImportExpression, ExportExpression sets) | | A DynamicExpresso expression. Use `mv["Name"]` for metaverse attributes and `cs["Name"]` for Connected System attributes. |
+| `MissingInputBehaviour` | `string` | No (ImportExpression, ExportExpression sets) | `EvaluateAnyway` | What to do when an attribute the expression reads has no value on the object: `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess). |
 
 ### Output
 
@@ -422,6 +425,7 @@ Returns the created mapping object.
 
 - When multiple source attributes are provided, they are automatically ordered by position (0, 1, 2, and so on).
 - Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` accessors.
+- `MissingInputBehaviour` applies to expression mappings only; a direct Attribute Flow has no inputs to be missing. Omit it to leave the mapping on `EvaluateAnyway`, which is how every mapping created before this parameter existed behaves.
 
 ### Examples
 
@@ -437,6 +441,13 @@ New-JIMSyncRuleMapping -SyncRuleId 5 `
     -TargetMetaverseAttributeId 7
 ```
 
+```powershell title="Expression export: refuse to build a Distinguished Name from a missing value"
+New-JIMSyncRuleMapping -SyncRuleId 8 `
+    -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=company,DC=local"' `
+    -TargetConnectedSystemAttributeId 30 `
+    -MissingInputBehaviour FailObject
+```
+
 ```powershell title="Direct export: map MV 'email' to CS 'mail'"
 New-JIMSyncRuleMapping -SyncRuleId 8 `
     -SourceMetaverseAttributeId 15 `
@@ -447,6 +458,74 @@ New-JIMSyncRuleMapping -SyncRuleId 8 `
 New-JIMSyncRuleMapping -SyncRuleId 5 `
     -SourceConnectedSystemAttributeId 10, 11 `
     -TargetMetaverseAttributeId 7
+```
+
+---
+
+## Set-JIMSyncRuleMapping
+
+Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone. Only the parameters you supply are changed.
+
+### Syntax
+
+```powershell
+# By IDs
+Set-JIMSyncRuleMapping -SyncRuleId <int>
+    -MappingId <int>
+    [-Expression <string>]
+    [-MissingInputBehaviour <string>]
+    [-NullIsValue <bool>]
+    [-InboundValueProcessing <string>]
+    [-CaseNormalisation <string>]
+    [-InitialExportOnly <bool>]
+    [-PassThru]
+
+# From the pipeline
+Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <int> [-MissingInputBehaviour <string>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule the mapping belongs to |
+| `MappingId` | `int` | Yes (ById set) | | The ID of the mapping to update. Accepts pipeline input by property name. Alias: `Id` |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A mapping object from the pipeline |
+| `Expression` | `string` | No | | Replaces the mapping's expression. Expression mappings only |
+| `MissingInputBehaviour` | `string` | No | | `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. Expression mappings only. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess) |
+| `NullIsValue` | `bool` | No | | Whether a contribution of no value is authoritative. Import mappings only |
+| `InboundValueProcessing` | `string` | No | | Comma-separated flag names, e.g. `'TreatWhitespaceAsNoValue, TrimWhitespace'`. Import mappings only |
+| `CaseNormalisation` | `string` | No | | `None`, `Upper`, `Lower` or `Title`. Import mappings only |
+| `InitialExportOnly` | `bool` | No | | Whether the mapping flows only during the initial provisioning export. Export mappings only |
+| `PassThru` | `switch` | No | `$false` | Returns the updated mapping |
+
+### Output
+
+Nothing by default; the updated mapping when `-PassThru` is supplied.
+
+**ShouldProcess impact level:** Medium.
+
+### Notes
+
+- What a mapping **targets**, and whether its source is an attribute or an expression, cannot be changed here. Those revalidate against attribute types and plurality, and for an import mapping they reopen its place in the [Attribute Priority](../concepts/attribute-priority.md) order, so they remain a `Remove-JIMSyncRuleMapping` followed by a `New-JIMSyncRuleMapping`.
+- A setting that does not apply to the mapping is refused rather than ignored: `-NullIsValue` on an export mapping, `-InitialExportOnly` on an import mapping, or any expression setting on a direct Attribute Flow all return an error.
+- A call naming no setting is refused too, rather than reported as a successful update.
+- Attribute Priority is ordered through its own endpoint and is not settable here.
+
+### Examples
+
+```powershell title="Refuse to export a Distinguished Name built around a missing value"
+Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -MissingInputBehaviour FailObject
+```
+
+```powershell title="Rewrite an import mapping's expression"
+Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Expression 'Lower(cs["mail"])' -PassThru
+```
+
+```powershell title="Report every expression mapping on a Rule that meets a missing input"
+Get-JIMSyncRuleMapping -SyncRuleId 1 |
+    Where-Object { $_.sourceType -eq 'ExpressionMapping' } |
+    Set-JIMSyncRuleMapping -SyncRuleId 1 -MissingInputBehaviour FailMapping
 ```
 
 ---
@@ -1220,6 +1299,100 @@ Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Force
 ```
 
 ---
+
+## Initial Password
+
+### Get-JIMSyncRuleInitialPassword
+
+Gets whether JIM sets an initial password on the accounts a Synchronisation Rule provisions, how it generates one,
+and which accounts are waiting on a person.
+
+No password value is ever returned. A generated password is produced at the moment it is set and stored nowhere;
+where the rule uses one password for every account, that password is stored encrypted and is write-only, so all
+that comes back is that one is set and when it last changed.
+
+#### Syntax
+
+```powershell
+Get-JIMSyncRuleInitialPassword -Id <int>
+Get-JIMSyncRule -Id <int> | Get-JIMSyncRuleInitialPassword
+```
+
+#### Output
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `enabled` | `bool` | Whether JIM sets an initial password on accounts this rule provisions |
+| `source` | `string` | `Discovered` (follow the Connected System's policy), `Custom`, or `Static` (one password for every account) |
+| `customPolicy` | `object` | The generator settings used when `source` is `Custom` |
+| `expiryBehaviour` | `string` | What happens to the password once it is set |
+| `enableAccount` | `bool` | Whether the account is enabled once the password is set |
+| `staticPasswordSet` | `bool` | Whether one password is stored for every account this rule provisions |
+| `staticPasswordSetAt` | `datetime` | When that password last changed, or null where none is set |
+| `parkedAccountCount` | `int` | Accounts waiting on a change to these settings |
+| `expiredAccountCount` | `int` | Accounts never given an initial password within its time to live |
+| `parkedReasons` | `array` | One entry per distinct refusal, biggest group first |
+
+Each entry in `parkedReasons` carries `targetMessage` (what the target said, unaltered), `failureReason`,
+`accountCount` and `firstSeenAt`.
+
+The two counts are never summed. Correcting these settings and saving releases the parked accounts, and does
+nothing at all for the expired ones; those need a password set by other means.
+
+#### Examples
+
+```powershell title="See what a target objected to"
+(Get-JIMSyncRuleInitialPassword -Id 5).parkedReasons |
+    Format-Table accountCount, targetMessage -AutoSize
+```
+
+```powershell title="Find every rule with initial password work waiting"
+Get-JIMSyncRule -All | ForEach-Object {
+    $p = Get-JIMSyncRuleInitialPassword -Id $_.id
+    if ($p.parkedAccountCount -or $p.expiredAccountCount) {
+        [PSCustomObject]@{ Rule = $_.name; Parked = $p.parkedAccountCount; Expired = $p.expiredAccountCount }
+    }
+}
+```
+
+```powershell title="Find shared initial passwords nobody has changed for 90 days"
+Get-JIMSyncRule -All | ForEach-Object {
+    $p = Get-JIMSyncRuleInitialPassword -Id $_.id
+    if ($p.staticPasswordSet -and $p.staticPasswordSetAt -lt (Get-Date).AddDays(-90)) {
+        [PSCustomObject]@{ Rule = $_.name; LastChanged = $p.staticPasswordSetAt }
+    }
+}
+```
+
+### Set-JIMSyncRuleInitialPassword
+
+Replaces the configuration above. Saving a change that alters what would be delivered releases every account
+parked against the rule, and they are attempted again on the Connected System's next export run; saving a change
+that would deliver the same password in the same way releases nothing.
+
+Only what you supply changes, with one exception: the generator settings travel as a set, so supplying any one of
+them sends the whole policy.
+
+#### One password for every account
+
+`-Source Static` with `-StaticPassword` sets one password you choose on every account the rule provisions, so you
+can tell a new starter what it is. **This option is not recommended**: every account the rule provisions shares
+that password until each person changes it. See
+[Passwords](../concepts/passwords.md#one-password-for-every-account) before using it.
+
+`-StaticPassword` takes a `SecureString`, so the password does not sit in your session's command history in clear
+text. It is write-only: JIM encrypts it and never returns it. Omit it to leave the stored password as it is, which
+is what makes changing another setting safe.
+
+```powershell title="Set one password for every account this rule provisions"
+$password = Read-Host -AsSecureString "Initial password for every new account"
+Set-JIMSyncRuleInitialPassword -Id 5 -Enable -Source Static -StaticPassword $password
+```
+
+```powershell title="Rotate the shared password after a leaver"
+$password = Read-Host -AsSecureString "New shared initial password"
+Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Rotated after a leaver (CHG0043)"
+```
 
 ## See also
 

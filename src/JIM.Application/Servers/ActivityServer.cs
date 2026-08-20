@@ -6,6 +6,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
+using JIM.Models.Scheduling;
 using JIM.Models.Security;
 using JIM.Models.Utility;
 using Serilog;
@@ -403,6 +404,28 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Gets a window of one Activity's direct child Activities addressed by absolute offset and count, for the
+    /// virtualised (infinite-scroll) child-Activity grid. Ordered by creation date ascending, and shares its
+    /// query core with <see cref="GetChildActivitiesAsync"/>. Pass <paramref name="includeTotalCount"/> as false
+    /// to skip counting the whole match set when the caller already knows the total; the returned total is then
+    /// null rather than zero.
+    /// </summary>
+    /// <param name="parentActivityId">The parent Activity whose direct children are wanted.</param>
+    /// <param name="offset">The zero-based index of the first child wanted; negative values read as zero.</param>
+    /// <param name="count">How many children are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    public async Task<RangeResultSet<Activity>> GetChildActivitiesRangeAsync(
+        Guid parentActivityId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Activity.GetChildActivitiesRangeAsync(
+            parentActivityId, offset, count, searchQuery, includeTotalCount);
+    }
+
+    /// <summary>
     /// Returns a dictionary mapping each activity ID to its direct child activity count.
     /// IDs with no children are omitted from the result.
     /// </summary>
@@ -418,6 +441,16 @@ public class ActivityServer
     public async Task<List<Activity>> GetActivitiesByScheduleExecutionAsync(Guid scheduleExecutionId)
     {
         return await Application.Repository.Activity.GetActivitiesByScheduleExecutionAsync(scheduleExecutionId);
+    }
+
+    /// <summary>
+    /// What each Schedule Execution's tasks have left behind, keyed by execution (#1162), for views
+    /// that show a Schedule mid-flight. A step's Worker Task is deleted the moment it finishes, so its
+    /// Activity is the only remaining evidence that the step ran and how it ended.
+    /// </summary>
+    public async Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds)
+    {
+        return await Application.Repository.Activity.GetScheduleStepOutcomesAsync(scheduleExecutionIds);
     }
 
     /// <summary>
@@ -437,6 +470,11 @@ public class ActivityServer
     /// <param name="initiatorTypeFilter">Optional filter for initiator types (user / API key / system; additive/OR within filter).</param>
     /// <param name="createdFrom">Optional inclusive lower bound on the activity's Created time (UTC).</param>
     /// <param name="createdTo">Optional inclusive upper bound on the activity's Created time (UTC).</param>
+    /// <param name="connectedSystemFilter">Optional filter for Connected System names, matched against the activity's target context (additive/OR within filter).</param>
+    /// <param name="runProfileFilter">Optional filter for Run Profile names, matched against the activity's target name (additive/OR within filter).</param>
+    /// <param name="initiatedByFilter">Optional case-insensitive partial match on the initiator's name; distinct from <paramref name="initiatedById"/>, which matches an exact principal.</param>
+    /// <param name="initiatedBySchedule">Optional filter: true = only activities a Schedule produced, false = only those no Schedule produced, null = all.</param>
+    /// <param name="scheduleFilter">Optional filter for the ids of the Schedules that produced the activities (additive/OR within filter).</param>
     public async Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page = 1,
         int pageSize = 20,
@@ -451,39 +489,75 @@ public class ActivityServer
         bool? hasChildActivities = null,
         IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
         DateTime? createdFrom = null,
-        DateTime? createdTo = null)
+        DateTime? createdTo = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null)
     {
         return await Application.Repository.Activity.GetActivitiesAsync(
             page, pageSize, searchQuery, sortBy, sortDescending, initiatedById,
             operationFilter, outcomeFilter, typeFilter, statusFilter, hasChildActivities,
-            initiatorTypeFilter, createdFrom, createdTo);
+            initiatorTypeFilter, createdFrom, createdTo,
+            connectedSystemFilter, runProfileFilter, initiatedByFilter, initiatedBySchedule, scheduleFilter);
     }
 
     /// <summary>
-    /// Retrieves a page's worth of worker task activities (Run Profile executions, data generation, system operations).
-    /// Filtered to show only activities related to worker tasks for the Operations page History tab.
+    /// Retrieves a window of top-level Activities addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Takes the same filters as <see cref="GetActivitiesAsync"/> and shares its
+    /// query core. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match set when
+    /// the caller already knows the total; the returned total is then null rather than zero.
     /// </summary>
-    /// <param name="page">The page number (1-based).</param>
-    /// <param name="pageSize">The number of items per page.</param>
-    /// <param name="connectedSystemFilter">Optional filter for Connected System names (additive/OR within filter).</param>
-    /// <param name="runProfileFilter">Optional filter for Run Profile names (additive/OR within filter).</param>
-    /// <param name="statusFilter">Optional filter for activity statuses (additive/OR within filter).</param>
-    /// <param name="initiatedByFilter">Optional text search on initiator name.</param>
-    /// <param name="sortBy">Optional column to sort by.</param>
+    /// <param name="startIndex">The zero-based index of the first Activity wanted; negative values read as zero.</param>
+    /// <param name="count">How many Activities are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional search query to filter by target name, target context or initiator name.</param>
+    /// <param name="sortBy">Optional column to sort by (e.g., "type", "target", "created", "status").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
-    public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
-        int page = 1,
-        int pageSize = 20,
-        IEnumerable<string>? connectedSystemFilter = null,
-        IEnumerable<string>? runProfileFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null,
-        string? initiatedByFilter = null,
+    /// <param name="initiatedById">Optional filter to only show activities initiated by a specific user.</param>
+    /// <param name="operationFilter">Optional filter for operation types (additive/OR within filter).</param>
+    /// <param name="outcomeFilter">Optional filter for outcome stat types (additive/OR within filter).</param>
+    /// <param name="typeFilter">Optional filter for target types (additive/OR within filter).</param>
+    /// <param name="statusFilter">Optional filter for activity statuses (additive/OR within filter).</param>
+    /// <param name="hasChildActivities">Optional filter: true = only activities with children, false = only without, null = all.</param>
+    /// <param name="initiatorTypeFilter">Optional filter for initiator types (user / API key / system; additive/OR within filter).</param>
+    /// <param name="createdFrom">Optional inclusive lower bound on the activity's Created time (UTC).</param>
+    /// <param name="createdTo">Optional inclusive upper bound on the activity's Created time (UTC).</param>
+    /// <param name="connectedSystemFilter">Optional filter for Connected System names, matched against the activity's target context (additive/OR within filter).</param>
+    /// <param name="runProfileFilter">Optional filter for Run Profile names, matched against the activity's target name (additive/OR within filter).</param>
+    /// <param name="initiatedByFilter">Optional case-insensitive partial match on the initiator's name; distinct from <paramref name="initiatedById"/>, which matches an exact principal.</param>
+    /// <param name="initiatedBySchedule">Optional filter: true = only activities a Schedule produced, false = only those no Schedule produced, null = all.</param>
+    /// <param name="scheduleFilter">Optional filter for the ids of the Schedules that produced the activities (additive/OR within filter).</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<Activity>> GetActivitiesRangeAsync(
+        int startIndex,
+        int count,
+        string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool? hasChildActivities = null)
+        Guid? initiatedById = null,
+        IEnumerable<ActivityTargetOperationType>? operationFilter = null,
+        IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
+        IEnumerable<ActivityTargetType>? typeFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null,
+        IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null,
+        bool includeTotalCount = true)
     {
-        return await Application.Repository.Activity.GetWorkerTaskActivitiesAsync(
-            page, pageSize, connectedSystemFilter, runProfileFilter, statusFilter, initiatedByFilter, sortBy, sortDescending, hasChildActivities);
+        return await Application.Repository.Activity.GetActivitiesRangeAsync(
+            startIndex, count, searchQuery, sortBy, sortDescending, initiatedById,
+            operationFilter, outcomeFilter, typeFilter, statusFilter, hasChildActivities,
+            initiatorTypeFilter, createdFrom, createdTo,
+            connectedSystemFilter, runProfileFilter, initiatedByFilter, initiatedBySchedule, scheduleFilter,
+            includeTotalCount);
     }
 
     /// <summary>
@@ -492,6 +566,16 @@ public class ActivityServer
     public async Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync()
     {
         return await Application.Repository.Activity.GetWorkerTaskActivityFilterOptionsAsync();
+    }
+
+    /// <summary>
+    /// Whether any Run Profile has ever been executed, in any state. Backs the home page's "Run your first
+    /// synchronisation" setup step: an administrator who ran a Run Profile by hand has run their first
+    /// synchronisation, whether or not a Schedule has ever fired.
+    /// </summary>
+    public async Task<bool> HasAnyRunProfileExecutionAsync()
+    {
+        return await Application.Repository.Activity.HasAnyRunProfileExecutionAsync();
     }
 
     #region synchronisation related
@@ -512,6 +596,42 @@ public class ActivityServer
     {
         return await Application.Repository.Activity.GetActivityRunProfileExecutionItemHeadersAsync(
             activityId, page, pageSize, searchQuery, sortBy, sortDescending, objectTypeFilter, errorTypeFilter, outcomeTypeFilter);
+    }
+
+    /// <summary>
+    /// Retrieves a window of one Activity's Run Profile Execution Item headers addressed by absolute offset and
+    /// count, for the virtualised (infinite-scroll) execution-item grid. Takes the same search, sort and filters
+    /// as <see cref="GetActivityRunProfileExecutionItemHeadersAsync"/> and shares its query core. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="activityId">The Activity whose execution items are wanted.</param>
+    /// <param name="offset">The zero-based index of the first item wanted; negative values read as zero.</param>
+    /// <param name="count">How many items are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive search over the display name and external ID.</param>
+    /// <param name="sortBy">Optional sort key: "externalid", "displayname"/"name", "type"/"objecttype",
+    /// "errortype", or the item's id (the default).</param>
+    /// <param name="sortDescending">Whether the sort is descending.</param>
+    /// <param name="objectTypeFilter">Optional filter for Connected System Object Type names (additive/OR).</param>
+    /// <param name="errorTypeFilter">Optional filter for error types (additive/OR).</param>
+    /// <param name="outcomeTypeFilter">Optional filter for sync outcome types (additive/OR).</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersRangeAsync(
+        Guid activityId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        IEnumerable<string>? objectTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Activity.GetActivityRunProfileExecutionItemHeadersRangeAsync(
+            activityId, offset, count, searchQuery, sortBy, sortDescending,
+            objectTypeFilter, errorTypeFilter, outcomeTypeFilter, includeTotalCount);
     }
 
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)

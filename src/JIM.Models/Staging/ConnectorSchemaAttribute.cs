@@ -35,8 +35,18 @@ public class ConnectorSchemaAttribute
     /// <summary>
     /// Indicates whether this attribute can be written to in the Connected System.
     /// Read-only attributes (system-managed, constructed, back-links) can still be imported but cannot be targeted by export Attribute Flows.
+    /// <see cref="AttributeWritability.WritableOnCreate"/> attributes can be targeted, but only ever flow on a Create Pending Export.
     /// </summary>
     public AttributeWritability Writability { get; set; }
+
+    /// <summary>
+    /// For a <see cref="AttributeDataType.Reference"/> attribute, the name of the Object Type in this schema
+    /// that the reference points at, when the Connected System's schema states one (the SQL Connector's
+    /// <c>referencesObjectType</c>). Null when the schema cannot or does not say, which is the norm for
+    /// LDAP (a DN attribute's target class is unconstrained by directory schemas) and for connectors without
+    /// reference metadata; resolution then falls back to searching every Object Type (#1285).
+    /// </summary>
+    public string? ReferencesObjectTypeName { get; set; }
 
     public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null, AttributeWritability writability = AttributeWritability.Writable)
     {

@@ -68,7 +68,22 @@ public enum AttributeWritability
     /// The attribute is read-only and cannot be written to.
     /// It may still be useful for import (e.g. whenCreated, objectSid).
     /// </summary>
-    ReadOnly = 1
+    ReadOnly = 1,
+
+    /// <summary>
+    /// The attribute may be written only as part of creating the object, and must never be written by a
+    /// subsequent update. An export Attribute Flow may target it: the value is included in a Create
+    /// Pending Export, and is excluded from every Update Pending Export even when the source value has
+    /// since changed.
+    /// <para>
+    /// This state exists for attributes that identify the object to the Connected System, where rewriting
+    /// the value would sever the link between the Connected System Object and the thing it represents. A
+    /// relational table's primary key is the canonical case: JIM must supply it when it inserts the row,
+    /// and must never update it afterwards. A directory's relative distinguished name is the same shape,
+    /// being changed by a rename operation rather than by an ordinary attribute write.
+    /// </para>
+    /// </summary>
+    WritableOnCreate = 2
 }
 
 public enum MetaverseObjectStatus
