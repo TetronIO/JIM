@@ -373,9 +373,8 @@ public class SeedingIdempotencyTests
 
         // BuiltInMetaverseSchema is the catalogue the startup schema sync converges towards; SeedAsync prepares a
         // handful of attributes that predate it, so add any it asks for that the catalogue does not carry.
-        foreach (var name in SeedAsyncAttributeNames())
-            if (!_persistedAttributes.ContainsKey(name))
-                _persistedAttributes[name] = new MetaverseAttribute { Id = nextId++, Name = name, BuiltIn = true };
+        foreach (var name in SeedAsyncAttributeNames().Where(name => !_persistedAttributes.ContainsKey(name)))
+            _persistedAttributes[name] = new MetaverseAttribute { Id = nextId++, Name = name, BuiltIn = true };
 
         foreach (var name in new[] { Constants.BuiltInObjectTypes.User, Constants.BuiltInObjectTypes.Group })
             _persistedObjectTypes[name] = new MetaverseObjectType { Id = nextId++, Name = name, BuiltIn = true };
@@ -399,13 +398,10 @@ public class SeedingIdempotencyTests
     /// The built-in Metaverse Attribute names SeedAsync prepares that the BuiltInMetaverseSchema catalogue does
     /// not carry, so a "fully seeded" database in these tests really is fully seeded.
     /// </summary>
-    private static IEnumerable<string> SeedAsyncAttributeNames()
-    {
-        var constants = typeof(Constants.BuiltInAttributes).GetProperties();
-        foreach (var constant in constants)
-            if (constant.GetValue(null) is string name)
-                yield return name;
-    }
+    private static IEnumerable<string> SeedAsyncAttributeNames() =>
+        typeof(Constants.BuiltInAttributes).GetProperties()
+            .Select(constant => constant.GetValue(null))
+            .OfType<string>();
 
     private void SetupTrackingSetting(bool enabled) =>
         _settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled))

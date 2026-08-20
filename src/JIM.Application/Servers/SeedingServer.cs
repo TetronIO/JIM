@@ -1669,16 +1669,13 @@ internal class SeedingServer
     /// </summary>
     internal static List<string> NormaliseExampleDataSetValues(string resourceValues)
     {
-        var values = new List<string>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var line in resourceValues.TrimStart('\uFEFF').Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var value = line.Trim();
-            if (value.Length > 0 && seen.Add(value))
-                values.Add(value);
-        }
-
-        return values;
+        return resourceValues
+            .TrimStart('\uFEFF')
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(value => value.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>
