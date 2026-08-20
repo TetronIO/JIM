@@ -2715,6 +2715,73 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Preview a Synchronisation Rule behaviour change
+    /// </summary>
+    /// <remarks>
+    /// Answers what changing the rule's behaviour toggles would do before anything is saved: how many objects
+    /// would stop having an identity created for them, how many would stop having an account created, and how many
+    /// would be left free to drift from what JIM holds, along with each of their inverses.
+    ///
+    /// These are the settings whose consequences are hardest to picture, because none of them names a population.
+    /// Disabling a rule reads like pausing it and is closer to withdrawing every value it owns; turning
+    /// `provisionToConnectedSystem` on reads like granting a capability and is account creation at scale.
+    ///
+    /// Every omitted toggle is taken from the stored rule, exactly as the update endpoint does, so a caller
+    /// proposing one change never silently proposes a second.
+    ///
+    /// `direction` is accepted and refused with a blocking finding rather than evaluated: a saved rule's Attribute
+    /// Flow mappings and Object Matching Rules are written for the direction it has, and would all address the
+    /// wrong side after a flip. Create a rule in the direction you need instead.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from `GET /previews/{activityId}`, drill-down rows from
+    /// `GET /previews/{activityId}/deltas`, and abandon a running preview with `DELETE /previews/{activityId}`.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed behaviour toggles.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/behaviour/preview", Name = "StartSyncRuleBehaviourPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleBehaviourPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleBehaviourPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var proposal = request.ToProposal(syncRule);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleBehaviour,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started behaviour-toggle preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
     /// Preview what changing a Synchronisation Rule's destructive toggles would do
     /// </summary>
     /// <remarks>

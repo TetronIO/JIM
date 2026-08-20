@@ -467,6 +467,55 @@ Describe 'New-JIMConfigurationChangePreview' {
         }
     }
 
+    Context 'Synchronisation Rule behaviour previews' {
+        It 'Posts the proposed toggles to the behaviour preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -RuleState Disabled | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/42/behaviour/preview'
+                $script:capturedBody.enabled | Should -BeFalse
+            }
+        }
+
+        It 'Sends only the toggles the caller stated, so silence never proposes switching one off' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -RuleState Enabled -EnforceState $false | Out-Null
+
+                # The boolean trap: an unstated toggle must be absent from the body so the API merges it with the
+                # stored rule, rather than present as $false and read as a proposal to turn it off.
+                $script:capturedBody.enabled | Should -BeTrue
+                $script:capturedBody.enforceState | Should -BeFalse
+                $script:capturedBody.ContainsKey('projectToMetaverse') | Should -BeFalse
+                $script:capturedBody.ContainsKey('provisionToConnectedSystem') | Should -BeFalse
+            }
+        }
+
+        It 'Requires the rule state to be stated rather than inferred from silence' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['RuleState']
+            $mandatory = $parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'SyncRuleBehaviour'
+            }
+            $mandatory.Mandatory | Should -BeTrue
+        }
+    }
+
     Context 'Waiting' {
         It 'Returns the start result without polling when the proposal is blocked' {
             InModuleScope JIM {

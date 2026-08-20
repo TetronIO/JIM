@@ -410,7 +410,7 @@ classes that alter outcomes are counted:
 | Class | Examples | How it shows |
 |-------|----------|--------------|
 | Sync-affecting | Scoping criteria, Attribute Flow, Object Matching Rules, schema selection | Amber, with the number of changes |
-| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
+| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning, or leave objects joined and contributing values that never refresh |
 
 **Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose
 Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises

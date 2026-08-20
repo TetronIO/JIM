@@ -141,6 +141,10 @@ public static class CausalityModelBuilder
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned
+                // Preview-only (#1462): an account that would not be created, and an object that would be left to
+                // diverge, are both statements about the target system rather than about the Metaverse.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift
                 => CausalityLane.Downstream,
 
             // Metaverse-side events: what JIM did

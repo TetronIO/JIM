@@ -75,7 +75,12 @@ public class SyncOutcomeTypeOrdinalTests
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] = 31,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] = 32,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] = 33,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = 34
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = 34,
+
+        // Synchronisation Rule behaviour toggle preview (#1462): what a rule stops doing.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] = 35,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] = 36,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = 37
     };
 
     [Test]

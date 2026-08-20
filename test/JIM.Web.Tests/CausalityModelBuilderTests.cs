@@ -106,7 +106,12 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] = CausalityLane.Identity,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = CausalityLane.Identity
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = CausalityLane.Identity,
+            // Projecting decides whether an identity exists at all, so it is Metaverse-side; the other two are
+            // about what reaches, or stops reaching, the target system.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = CausalityLane.Downstream
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
