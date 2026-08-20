@@ -21,7 +21,7 @@ public interface IMetaverseRepository
 
     public Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(int id, bool includeChildObjects);
 
-    public Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects);
+    public Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects, bool withChangeTracking = false);
 
     public Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects);
 
@@ -541,7 +541,7 @@ public interface IMetaverseRepository
     #endregion
 
     #region attributes
-    public Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync();
+    public Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync(bool withChangeTracking = false);
 
     /// <summary>
     /// Retrieves all Metaverse Attributes with their Standard Mappings, change-tracked, for the built-in schema

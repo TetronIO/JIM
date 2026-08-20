@@ -21,9 +21,13 @@ public class ExampleDataRepository : IExampleDataRepository
     }
 
     #region ExampleDataSets
-    public async Task<List<ExampleDataSet>> GetExampleDataSetsAsync()
+    public async Task<List<ExampleDataSet>> GetExampleDataSetsAsync(bool withChangeTracking = false)
     {
-        return await Repository.Database.ExampleDataSets.Include(q => q.Values).OrderBy(q => q.Name).ToListAsync();
+        IQueryable<ExampleDataSet> query = Repository.Database.ExampleDataSets.Include(q => q.Values);
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.OrderBy(q => q.Name).ToListAsync();
     }
 
     public async Task<List<ExampleDataSetHeader>> GetExampleDataSetHeadersAsync()

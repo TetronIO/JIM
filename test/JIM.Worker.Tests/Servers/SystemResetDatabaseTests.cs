@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.ExampleData;
@@ -394,5 +395,133 @@ public class SystemResetDatabaseTests
         await using (var ctx = NewContext())
             Assert.That(await ctx.ExampleDataTemplateAttributes.CountAsync(), Is.EqualTo(seededAttributeCount),
                 "a second EnsureBuiltIn call on a complete template must be a no-op");
+    }
+
+    /// <summary>
+    /// The factory reset restores JIM's built-in configuration by re-running the whole built-in configuration
+    /// pipeline, rather than repairing the specific things previous resets were observed to lose (issue #916).
+    /// This proves the pipeline's two jobs against real PostgreSQL at once: it restores a built-in the wipe removed
+    /// (the Schedules it truncates), and creates a built-in the database has never held, which is what a Connector
+    /// or Predefined Search introduced in a later release looks like from an existing deployment.
+    /// </summary>
+    [Test]
+    public async Task ResetSystemAsync_BuiltInsMissingOrNeverSeeded_AreRestoredByThePipelineAsync()
+    {
+        TestUtilities.SetEnvironmentVariables();
+
+        // Arrange: apply the built-in configuration exactly as worker startup does.
+        await using (var ctx = NewContext())
+        {
+            using var jim = new JimApplication(new PostgresDataRepository(ctx));
+            await jim.Seeding.ApplyBuiltInConfigurationAsync();
+        }
+
+        var seeded = await CountBuiltInsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(seeded.ObjectTypes, Is.GreaterThan(0), "precondition: the built-in Metaverse Object Types are seeded");
+            Assert.That(seeded.Attributes, Is.GreaterThan(0));
+            Assert.That(seeded.PredefinedSearches, Is.GreaterThan(0));
+            Assert.That(seeded.ExampleDataSets, Is.GreaterThan(0));
+            Assert.That(seeded.ExampleDataTemplateAttributes, Is.GreaterThan(0));
+            Assert.That(seeded.ConnectorDefinitions, Is.GreaterThan(0));
+            Assert.That(seeded.Schedules, Is.GreaterThan(0));
+            Assert.That(seeded.Roles, Is.GreaterThan(0));
+            Assert.That(seeded.ServiceSettings, Is.GreaterThan(0));
+        }
+
+        // Remove built-ins the pipeline owns but the wipe does NOT remove, so the reset has to create them rather
+        // than merely leave them alone: a Predefined Search (owned by SeedAsync, which used to run once and never
+        // again) and every built-in Connector Definition (owned by the startup sync). The wipe truncates the
+        // Schedules and Activities tables by itself, so those categories are covered without help.
+        await using (var ctx = NewContext())
+        {
+            // Criteria and criteria groups do not cascade from PredefinedSearches (both foreign keys are NO
+            // ACTION), so unwind the chain by hand. This simulates the search never having been seeded; it is not
+            // a supported delete path (see the reset's own inability to delete such a search, issue filed).
+            await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""PredefinedSearchCriteria"" WHERE ""PredefinedSearchCriteriaGroupId"" IN (SELECT g.""Id"" FROM ""PredefinedSearchCriteriaGroups"" g INNER JOIN ""PredefinedSearches"" s ON s.""Id"" = g.""PredefinedSearchId"" WHERE s.""Uri"" = 'distribution-groups');");
+            await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""PredefinedSearchCriteriaGroups"" WHERE ""PredefinedSearchId"" IN (SELECT ""Id"" FROM ""PredefinedSearches"" WHERE ""Uri"" = 'distribution-groups');");
+            await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""PredefinedSearches"" WHERE ""Uri"" = 'distribution-groups';");
+            await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""ConnectorDefinitionSettings"" WHERE ""ConnectorDefinitionId"" IN (SELECT ""Id"" FROM ""ConnectorDefinitions"" WHERE ""BuiltIn"");");
+            await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""ConnectorDefinitions"" WHERE ""BuiltIn"";");
+        }
+
+        // Act: the reset, through the application server so the pipeline runs, not just the repository's wipe.
+        await using (var ctx = NewContext())
+        {
+            using var jim = new JimApplication(new PostgresDataRepository(ctx));
+            await jim.System.ResetSystemAsync(
+                ActivityInitiatorType.ApiKey, Guid.NewGuid(), "Infrastructure Key", includeAdministrators: false);
+        }
+
+        // Assert: every built-in category is back at its seeded count. Equality, not mere presence, is what proves
+        // the pipeline neither missed a category nor duplicated one it should have left alone.
+        var afterReset = await CountBuiltInsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(afterReset.ObjectTypes, Is.EqualTo(seeded.ObjectTypes));
+            Assert.That(afterReset.Attributes, Is.EqualTo(seeded.Attributes));
+            Assert.That(afterReset.PredefinedSearches, Is.EqualTo(seeded.PredefinedSearches),
+                "the deleted built-in Predefined Search must be re-created, and the others left alone");
+            Assert.That(afterReset.PredefinedSearchCriteriaGroups, Is.EqualTo(seeded.PredefinedSearchCriteriaGroups),
+                "a re-created Predefined Search must come back whole, criteria groups included");
+            Assert.That(afterReset.ExampleDataSets, Is.EqualTo(seeded.ExampleDataSets));
+            Assert.That(afterReset.ExampleDataTemplateAttributes, Is.EqualTo(seeded.ExampleDataTemplateAttributes),
+                "the built-in Example Data Template's attributes are truncate collateral and must be restored");
+            Assert.That(afterReset.ConnectorDefinitions, Is.EqualTo(seeded.ConnectorDefinitions),
+                "built-in Connector Definitions the database has never held must be created by the reset");
+            Assert.That(afterReset.Schedules, Is.EqualTo(seeded.Schedules),
+                "the wipe truncates Schedules; the built-in ones must be back before the reset returns");
+            Assert.That(afterReset.Roles, Is.EqualTo(seeded.Roles));
+            Assert.That(afterReset.ServiceSettings, Is.EqualTo(seeded.ServiceSettings));
+        }
+
+        await using (var verify = NewContext())
+        {
+            var schedule = await verify.Schedules.SingleAsync(sc => sc.BuiltIn);
+            Assert.That(schedule.IsEnabled, Is.True, "the restored built-in Schedule must be enabled");
+            Assert.That(schedule.CreatedByType, Is.EqualTo(ActivityInitiatorType.System),
+                "built-in Schedules are created through the audited path, attributed to System");
+
+            // Provenance: the wipe truncated the Activities table, so every built-in that survived it needs its
+            // version-1 baseline re-recorded, and every built-in the pipeline created needs its Create Activity.
+            Assert.That(await verify.Activities.AnyAsync(a => a.TargetType == ActivityTargetType.SystemInitialisation), Is.True,
+                "the restore must be grouped under a System Initialisation Activity");
+            Assert.That(await verify.Activities.AnyAsync(a =>
+                    a.TargetType == ActivityTargetType.SystemInitialisation && a.Status != ActivityStatus.Complete), Is.False,
+                "leaving the parent InProgress would block any subsequent reset via the in-progress guard");
+        }
+    }
+
+    /// <summary>
+    /// A count per built-in configuration category. Counted straight from the tables rather than through repository
+    /// queries so no assertion depends on which navigations a given retrieval method eager-loads.
+    /// </summary>
+    private sealed record BuiltInCounts(
+        int ObjectTypes,
+        int Attributes,
+        int PredefinedSearches,
+        int PredefinedSearchCriteriaGroups,
+        int ExampleDataSets,
+        int ExampleDataTemplateAttributes,
+        int ConnectorDefinitions,
+        int Schedules,
+        int Roles,
+        int ServiceSettings);
+
+    private async Task<BuiltInCounts> CountBuiltInsAsync()
+    {
+        await using var ctx = NewContext();
+        return new BuiltInCounts(
+            await ctx.MetaverseObjectTypes.CountAsync(t => t.BuiltIn),
+            await ctx.MetaverseAttributes.CountAsync(a => a.BuiltIn),
+            await ctx.PredefinedSearches.CountAsync(s => s.BuiltIn),
+            await ctx.PredefinedSearchCriteriaGroups.CountAsync(),
+            await ctx.ExampleDataSets.CountAsync(s => s.BuiltIn),
+            await ctx.ExampleDataTemplateAttributes.CountAsync(),
+            await ctx.ConnectorDefinitions.CountAsync(d => d.BuiltIn),
+            await ctx.Schedules.CountAsync(s => s.BuiltIn),
+            await ctx.Roles.CountAsync(r => r.BuiltIn),
+            await ctx.ServiceSettingItems.CountAsync());
     }
 }

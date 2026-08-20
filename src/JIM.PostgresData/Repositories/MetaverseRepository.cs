@@ -80,7 +80,7 @@ public class MetaverseRepository : IMetaverseRepository
         return await Repository.Database.MetaverseObjectTypes.SingleOrDefaultAsync(x => x.Id == id);
     }
 
-    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects)
+    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects, bool withChangeTracking = false)
     {
         // Include returns a new query rather than mutating the one it is called on, so its result has to be assigned.
         // Discarding it silently returned the object type with an empty Attributes collection to a caller that had
@@ -89,6 +89,8 @@ public class MetaverseRepository : IMetaverseRepository
         IQueryable<MetaverseObjectType> query = Repository.Database.MetaverseObjectTypes;
         if (includeChildObjects)
             query = query.Include(q => q.Attributes);
+        if (withChangeTracking)
+            query = query.AsTracking();
 
         return await query.SingleOrDefaultAsync(q => EF.Functions.ILike(q.Name, name));
     }
@@ -222,9 +224,13 @@ public class MetaverseRepository : IMetaverseRepository
     #endregion
 
     #region metaverse attributes
-    public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync()
+    public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync(bool withChangeTracking = false)
     {
-        return await Repository.Database.MetaverseAttributes.OrderBy(x => x.Name).ToListAsync();
+        IQueryable<MetaverseAttribute> query = Repository.Database.MetaverseAttributes;
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.OrderBy(x => x.Name).ToListAsync();
     }
 
     public async Task<List<MetaverseAttribute>> GetMetaverseAttributesForSchemaSyncAsync()
