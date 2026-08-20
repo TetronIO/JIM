@@ -55,7 +55,11 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, "Removed from the target system", "Would Stage Delete Export", CausalityTone.Error, Icons.Material.Filled.AutoDelete),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined, "Keeps its Metaverse Object join", "Would Remain Joined", CausalityTone.Success, Icons.Material.Filled.Link),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction, "Scope-exit action changes", "Would Change Deprovision Action", CausalityTone.Warning, Icons.Material.Filled.SwapHoriz),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow, "Attribute Flow does not evaluate", "Would Fail Attribute Flow", CausalityTone.Error, Icons.Material.Filled.RuleFolder)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow, "Attribute Flow does not evaluate", "Would Fail Attribute Flow", CausalityTone.Error, Icons.Material.Filled.RuleFolder),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject, "Joins a different Metaverse Object", "Would Join Different Metaverse Object", CausalityTone.Error, Icons.Material.Filled.SwapHoriz),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject, "Joins instead of projecting", "Would Join Instead Of Project", CausalityTone.Success, Icons.Material.Filled.Link),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin, "Projects instead of joining", "Would Project Instead Of Join", CausalityTone.Error, Icons.Material.Filled.CallSplit),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously, "Matches more than one Metaverse Object", "Would Match Ambiguously", CausalityTone.Warning, Icons.Material.Filled.QuestionMark)
     ];
 
     /// <summary>
@@ -75,7 +79,11 @@ public class OutcomeDisplayMapTests
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction,
-        ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously
     ];
 
     [Test]

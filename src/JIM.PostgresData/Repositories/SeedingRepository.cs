@@ -6,7 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Search;
 using JIM.Models.Security;
-using JIM.Models.Staging;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 namespace JIM.PostgresData.Repositories;
 
@@ -23,15 +23,15 @@ public class SeedingRepository : ISeedingRepository
     /// Creates all seed data in a single transaction.
     /// ServiceSettings is created LAST to ensure atomicity - if the process crashes during seeding,
     /// the absence of ServiceSettings will trigger a fresh seeding attempt on restart.
-    /// Does not perform existence checks, you need to do this before calling this method.
+    /// Every list must hold only objects that do not exist yet; the caller performs those existence checks. The one
+    /// exception is ServiceSettings, which is guarded here so a re-run of the whole seed cannot create a second one.
     /// </summary>
     public async Task SeedDataAsync(
         List<MetaverseAttribute> metaverseAttributes,
         List<MetaverseObjectType> metaverseObjectTypes,
         List<PredefinedSearch> predefinedSearches,
         List<ExampleDataSet> exampleDataSets,
-        List<ExampleDataTemplate> dataGenerationTemplates,
-        List<ConnectorDefinition> connectorDefinitions)
+        List<ExampleDataTemplate> dataGenerationTemplates)
     {
         if (metaverseAttributes.Count > 0)
         {
@@ -63,19 +63,17 @@ public class SeedingRepository : ISeedingRepository
             Log.Information($"SeedDataAsync: Created {dataGenerationTemplates.Count} ExampleDataTemplates");
         }
 
-        if (connectorDefinitions.Count > 0)
-        {
-            Repository.Database.ConnectorDefinitions.AddRange(connectorDefinitions);
-            Log.Information($"SeedDataAsync: Created {connectorDefinitions.Count} ConnectorDefinitions");
-        }
-
         // CRITICAL: ServiceSettings is created LAST in the same transaction.
         // This ensures that if the process crashes during seeding, ServiceSettings won't exist,
         // and the next startup will retry seeding from scratch.
         // This prevents a race condition where JIM.Web sees ServiceSettings exists but MetaverseAttributes don't.
-        var serviceSettings = new ServiceSettings();
-        Repository.Database.ServiceSettings.Add(serviceSettings);
-        Log.Information("SeedDataAsync: Created ServiceSettings");
+        // Guarded rather than unconditional so this method is safe to re-run against a database that already holds
+        // it, keeping the whole seed idempotent (issue #1287) rather than relying on the caller's short-circuit.
+        if (!await Repository.Database.ServiceSettings.AnyAsync())
+        {
+            Repository.Database.ServiceSettings.Add(new ServiceSettings());
+            Log.Information("SeedDataAsync: Created ServiceSettings");
+        }
 
         await Repository.Database.SaveChangesAsync();
         Log.Information("SeedDataAsync: All seed data committed successfully");

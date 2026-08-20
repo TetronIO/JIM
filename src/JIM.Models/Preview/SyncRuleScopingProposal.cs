@@ -151,9 +151,13 @@ public record SyncRuleScopingCriterionProposal(
     {
         ArgumentNullException.ThrowIfNull(criterion);
 
+        // Each attribute id falls back to its navigation property's id: the Scope editor builds an UNSAVED criterion
+        // when an administrator adds one, so the navigation is set and the foreign key stays unassigned until the
+        // rule is saved. Reading the key alone made a criterion the editor plainly shows read as naming no
+        // attribute, which the preview reports as a blocking finding (#1450).
         return new SyncRuleScopingCriterionProposal(
-            criterion.MetaverseAttributeId,
-            criterion.ConnectedSystemAttributeId,
+            criterion.MetaverseAttributeId ?? criterion.MetaverseAttribute?.Id,
+            criterion.ConnectedSystemAttributeId ?? criterion.ConnectedSystemAttribute?.Id,
             criterion.ComparisonType,
             criterion.StringValue,
             criterion.IntValue,

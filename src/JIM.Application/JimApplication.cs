@@ -125,7 +125,8 @@ public class JimApplication : IDisposable
                 new ConnectedSystemScopeSelectionPreviewAdapter(this, new SyncEngine()),
                 new SyncRuleDestructiveTogglePreviewAdapter(this, new SyncEngine()),
                 new SyncRuleScopingPreviewAdapter(this, new SyncEngine()),
-                new SyncRuleAttributeFlowPreviewAdapter(this, new SyncEngine())
+                new SyncRuleAttributeFlowPreviewAdapter(this, new SyncEngine()),
+                new ObjectMatchingPreviewAdapter(this)
             ]));
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationDrift = new ConfigurationDriftService(this);
@@ -181,6 +182,9 @@ public class JimApplication : IDisposable
             await Seeding.SyncBuiltInMetaverseSchemaAsync();
             await Seeding.SeedBuiltInSchedulesAsync();
             await Seeding.SeedBuiltInRolesAsync();
+            // creates any built-in Connector Definition the database does not hold yet, and reconciles the ones it
+            // does with the connector code. SeedAsync does not seed them: it short-circuits on an already-seeded
+            // database, so a Connector added in a later release would never reach an upgraded deployment.
             await Seeding.SyncBuiltInConnectorDefinitionsAsync();
             await Seeding.SyncServiceSettingsAsync();
             // Repair the built-in example data template if a previous factory reset stripped its attributes (its rows are

@@ -1,4 +1,4 @@
-﻿Atm
+Atm
 Cd
 Suv
 Tv
@@ -3233,7 +3233,7 @@ Jade
 Jaguar
 Jail
 Jailhouse
-Jalapeã±O
+Jalapeño
 Jam
 Jar
 Jasmine

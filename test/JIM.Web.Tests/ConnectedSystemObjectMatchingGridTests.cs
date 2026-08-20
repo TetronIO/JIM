@@ -5,6 +5,7 @@ using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Models.Core;
+using JIM.Models.Preview;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Web.Pages.Admin.Components;
@@ -30,6 +31,17 @@ public class ConnectedSystemObjectMatchingGridTests : JimComponentTestContext
     {
         Services.AddSingleton<IJimApplicationFactory>(new UnusedJimApplicationFactory());
         Services.AddSingleton<IUserPreferenceService>(new FakeUserPreferenceService());
+        Services.AddSingleton<IConfigurationChangePreviewStarter>(new UnusedPreviewStarter());
+    }
+
+    /// <summary>
+    /// Likewise for the preview: the tab starts one only when an administrator asks for it (#1457), so merely
+    /// rendering must not.
+    /// </summary>
+    private sealed class UnusedPreviewStarter : IConfigurationChangePreviewStarter
+    {
+        public Task<Guid?> StartAsync(ConfigurationChangePreviewRequest request) =>
+            throw new InvalidOperationException("The Object Matching tab started a preview while merely rendering, which it should not do.");
     }
 
     /// <summary>
@@ -72,7 +84,8 @@ public class ConnectedSystemObjectMatchingGridTests : JimComponentTestContext
     {
         return Render<ConnectedSystemObjectMatchingTab>(parameters => parameters
             .Add(p => p.ConnectedSystem, connectedSystem)
-            .Add(p => p.MetaverseAttributes, new List<MetaverseAttribute>()));
+            .Add(p => p.MetaverseAttributes, new List<MetaverseAttribute>())
+            .Add(p => p.MetaverseObjectTypes, new List<MetaverseObjectType>()));
     }
 
     /// <summary>

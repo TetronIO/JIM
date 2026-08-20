@@ -23,7 +23,7 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class SystemController(ILogger<SystemController> logger, JimApplication application) : ControllerBase
+public class SystemController(ILogger<SystemController> logger, JimApplication application) : ApiControllerBase(application, logger)
 {
     private readonly ILogger<SystemController> _logger = logger;
     private readonly JimApplication _application = application;
@@ -83,27 +83,5 @@ public class SystemController(ILogger<SystemController> logger, JimApplication a
         {
             return Conflict(ApiErrorResponse.Conflict(ex.Message));
         }
-    }
-
-    /// <summary>
-    /// Resolves the initiating security principal from the current request context.
-    /// </summary>
-    private async Task<(ActivityInitiatorType Type, Guid? Id, string? Name)> GetInitiatorInfoAsync()
-    {
-        // API key authentication: the middleware stashes the key id in HttpContext.Items.
-        if (HttpContext.Items.TryGetValue("ApiKeyId", out var apiKeyIdObj) && apiKeyIdObj is Guid apiKeyId)
-        {
-            var apiKey = await _application.Security.GetApiKeyAsync(apiKeyId);
-            return (ActivityInitiatorType.ApiKey, apiKeyId, apiKey?.Name ?? "API Key");
-        }
-
-        // User authentication: resolve the principal id and display name from claims.
-        var userIdClaim = User.FindFirst("sub") ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-        var nameClaim = User.FindFirst("name") ?? User.FindFirst(System.Security.Claims.ClaimTypes.Name);
-
-        if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
-            return (ActivityInitiatorType.User, userId, nameClaim?.Value ?? User.Identity?.Name);
-
-        return (ActivityInitiatorType.User, null, User.Identity?.Name);
     }
 }

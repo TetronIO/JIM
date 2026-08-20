@@ -188,12 +188,16 @@
         'Remove-JIMRoleMember',
 
         # Data Generation
+        'Add-JIMExampleDataTemplateAttribute',
         'Get-JIMExampleDataSet',
         'Get-JIMExampleDataTemplate',
         'Invoke-JIMExampleDataTemplate',
         'New-JIMExampleDataSet',
+        'New-JIMExampleDataTemplate',
         'Remove-JIMExampleDataSet',
+        'Remove-JIMExampleDataTemplate',
         'Set-JIMExampleDataSet',
+        'Set-JIMExampleDataTemplate',
 
         # Expressions
         'Test-JIMExpression',
