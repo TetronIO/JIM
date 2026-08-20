@@ -13,9 +13,8 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 | **Microsoft Active Directory (AD DS)** | Full support including USN-based delta import, userAccountControl, FILETIME dates, and binary attributes (objectGUID, objectSid) |
 | **Active Directory Lightweight Directory Services (AD LDS)** | Full support with AD-specific features |
 | **OpenLDAP** | Full support including parallel import, changelog-based delta import, and RFC 4512 schema discovery |
-| **389 Directory Server** | Full support including changelog-based delta import |
 | **Samba AD** | Full support with Active Directory compatibility |
-| **Other RFC 4512-compliant directories** | Supported via generic LDAP mode with automatic directory type detection |
+| **Other RFC 4512-compliant directories** (for example 389 Directory Server) | Supported via generic LDAP mode with automatic directory type detection |
 
 JIM automatically detects the directory type during schema discovery by inspecting the Root DSE and adjusts its behaviour accordingly. No manual directory type configuration is required.
 
@@ -26,7 +25,8 @@ JIM automatically detects the directory type during schema discovery by inspecti
 - **Full Import**<br /> Reads all objects from selected partitions and object types.
 - **Delta Import**<br /> Imports only changes since the last import run.
     - **Active Directory**<br /> Uses USN (Update Sequence Number) change tracking. USNs are only meaningful when read back against the same domain controller that issued them, so JIM also records the domain controller's identity (its invocationId, falling back to its hostname where an invocationId is not available for comparison) and verifies it on every Delta Import before querying for changes. If the pinned domain controller changed since the last run, or was restored from backup, the Delta Import fails fast with an error naming what changed rather than silently skipping or re-importing changes. See [Domain Controller Discovery and Pinning](#domain-controller-discovery-and-pinning) and [Delta import fails with a domain controller mismatch error](#delta-import-fails-with-a-domain-controller-mismatch-error) below.
-    - **OpenLDAP / 389 DS**<br /> Uses the changelog overlay (accesslog).
+    - **OpenLDAP**<br /> Uses the accesslog overlay.
+    - **Generic directories**<br /> Uses a standard changelog (`cn=changelog`), where the directory provides one.
 - **Parallel imports**<br /> Configurable concurrency for OpenLDAP and generic directories, allowing multiple containers and object types to be imported simultaneously.
 - **Paged results**<br /> Automatic RFC 2696 Simple Paged Results support for large directories.
 - **Configurable search timeout**<br /> Control how long to wait for LDAP search results.
