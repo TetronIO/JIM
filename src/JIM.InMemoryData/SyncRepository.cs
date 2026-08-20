@@ -1419,11 +1419,8 @@ public class SyncRepository : ISyncRepository
     public virtual Task SetPendingExportQueueingItemsAsync(
         IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
     {
-        foreach (var (pendingExportId, queueingItemId) in stamps)
-        {
-            if (_pendingExports.TryGetValue(pendingExportId, out var pendingExport))
-                pendingExport.QueuedByRunProfileExecutionItemId = queueingItemId;
-        }
+        foreach (var stamp in stamps.Where(s => _pendingExports.ContainsKey(s.PendingExportId)))
+            _pendingExports[stamp.PendingExportId].QueuedByRunProfileExecutionItemId = stamp.QueuedByRunProfileExecutionItemId;
         return Task.CompletedTask;
     }
 
