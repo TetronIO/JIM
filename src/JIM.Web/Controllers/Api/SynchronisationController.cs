@@ -1932,6 +1932,59 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Preview a schema refresh for a Connected System
+    /// </summary>
+    /// <remarks>
+    /// Connects to the external system, retrieves its schema and reports what a refresh would change, without
+    /// persisting anything or recording an Activity. Removals and attribute definition changes are flagged via
+    /// <c>hasRemovalsOrDefinitionChanges</c>; a refresh never deletes retained entries. To commit, call the
+    /// import-schema endpoint after reviewing this result.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>A result object describing what a schema refresh would change.</returns>
+    /// <response code="200">Schema retrieved and compared successfully.</response>
+    /// <response code="400">Schema retrieval failed (e.g., connection error, invalid settings).</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/import-schema/preview", Name = "PreviewConnectedSystemSchemaImport")]
+    [ProducesResponseType(typeof(SchemaRefreshResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> PreviewConnectedSystemSchemaImportAsync(int connectedSystemId)
+    {
+        _logger.LogInformation("Schema refresh preview requested for Connected System: {Id}", connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for schema refresh preview");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // No change tracking: the merge mutates the loaded instance in memory only, and this request discards it
+        // after building the response.
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        try
+        {
+            var result = await _application.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+            return Ok(SchemaRefreshResultDto.FromModel(result));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Deliberately broad, with the cancellation exclusion the fallback-dispatcher rule requires: schema
+            // retrieval fails in as many concrete types as there are connectors (file IO, LDAP, SQL, HTTP), and
+            // every one of them is a fact about the Connected System's configuration or reachability that the
+            // caller must see as a 400 with the reason, not a 500. A cancelled request still propagates.
+            _logger.LogError(ex, "Failed to preview schema refresh for Connected System: {Id}", connectedSystemId);
+            return BadRequest(ApiErrorResponse.BadRequest($"Schema refresh preview failed: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
     /// Import hierarchy from a Connected System
     /// </summary>
     /// <remarks>

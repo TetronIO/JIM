@@ -915,5 +915,69 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<WorkerTask>()
             .HasIndex(wt => wt.ScheduleExecutionId)
             .HasDatabaseName("IX_WorkerTasks_ScheduleExecutionId");
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Configuration ownership (issue #1477)
+        // ---------------------------------------------------------------------------------------------------------
+        // Each relationship below is containment: the child has no meaning once its owner is gone. They were all
+        // left to convention, and because every one of these foreign keys is optional, the convention is
+        // ClientSetNull, which becomes NO ACTION in the database. That is wrong twice over. It orphans child rows
+        // whenever the owner is deleted outside a change-tracked graph, and it makes the factory reset's
+        // "DELETE ... WHERE ""BuiltIn"" = false" statements fail with 23503 for any custom object holding the child
+        // rows it ordinarily holds; since the whole wipe is one transaction, the reset then rolls back entirely.
+        // SystemResetForeignKeyCoverageTests asserts this property across the whole schema, so a child table added
+        // later cannot silently reintroduce the fault.
+
+        // A Predefined Search owns its top-level criteria groups; a group is how the search filters.
+        modelBuilder.Entity<PredefinedSearch>()
+            .HasMany(ps => ps.CriteriaGroups)
+            .WithOne()
+            .HasForeignKey(g => g.PredefinedSearchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A criteria group owns its nested groups. Without this the cascade above stops at the top level and a
+        // nested group holds the whole delete up.
+        modelBuilder.Entity<PredefinedSearchCriteriaGroup>()
+            .HasMany(g => g.ChildGroups)
+            .WithOne(g => g.ParentGroup)
+            .HasForeignKey(g => g.ParentGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A criteria group owns its criteria.
+        modelBuilder.Entity<PredefinedSearchCriteriaGroup>()
+            .HasMany(g => g.Criteria)
+            .WithOne()
+            .HasForeignKey(c => c.PredefinedSearchCriteriaGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A Connector Definition owns the settings it declares.
+        modelBuilder.Entity<ConnectorDefinition>()
+            .HasMany(cd => cd.Settings)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // An Example Data Set owns its values; the set is nothing but its values.
+        modelBuilder.Entity<ExampleDataSet>()
+            .HasMany(ds => ds.Values)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // An Example Data Template owns the Object Types it covers, each of which owns the attributes it
+        // generates, each of which owns its weighted values. The whole chain has to cascade: stopping part way
+        // down leaves the delete blocked one level deeper instead of at the top.
+        modelBuilder.Entity<ExampleDataTemplate>()
+            .HasMany(t => t.ObjectTypes)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ExampleDataObjectType>()
+            .HasMany(ot => ot.TemplateAttributes)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ExampleDataTemplateAttribute>()
+            .HasMany(ta => ta.WeightedStringValues)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

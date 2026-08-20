@@ -1478,8 +1478,11 @@ public class ConnectedSystemServer
 
     #region Connected System Schema
     /// <summary>
-    /// Causes the associated Connector to be instantiated and the schema imported from the Connected System.
-    /// Changes will be persisted, even if they are destructive, i.e. an attribute is removed.
+    /// Causes the associated Connector to be instantiated and the schema imported from the Connected System, in
+    /// one call: retrieve, merge and persist. Additions and definition updates are persisted; removals are
+    /// reported but deliberately retained (see issue #782), so nothing is deleted by a refresh. For a
+    /// preview-then-decide flow, use <see cref="PreviewConnectedSystemSchemaRefreshAsync"/> followed by
+    /// <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>.
     /// </summary>
     /// <returns>A result object containing details about what changed during the schema refresh.</returns>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
@@ -1591,6 +1594,106 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Retrieves the Connected System's schema and merges it into the supplied instance <b>in memory only</b>,
+    /// reporting what a refresh would change. Nothing is persisted and no Activity is recorded: a preview is a
+    /// read, and the administrator decides what happens next. To persist exactly what this call merged, pass the
+    /// same instance and result to
+    /// <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>;
+    /// to discard, drop the instance and reload the Connected System.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System to preview a schema refresh for. Mutated in memory by
+    /// the merge; callers who must keep an untouched instance should pass a freshly loaded one.</param>
+    /// <returns>A result object describing what the refresh would change, including removals (which an apply
+    /// would retain, not delete) and attribute definition changes.</returns>
+    public async Task<SchemaRefreshResult> PreviewConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorSchema schemaConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
+
+        var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+        var result = MergeSchemaIntoConnectedSystem(connectedSystem, schema);
+
+        // Read while connected, exactly as the one-call import does, so an apply persists the same graph the
+        // one-call path would have. Mutates the in-memory instance only.
+        await DiscoverPasswordPolicyAsync(connector, connectedSystem, result);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Persists a schema refresh previously retrieved and merged by
+    /// <see cref="PreviewConnectedSystemSchemaRefreshAsync"/>, under an ImportSchema Activity. The pair is
+    /// equivalent to <see cref="ImportConnectedSystemSchemaAsync(ConnectedSystem, MetaverseObject?)"/> with a
+    /// decision point in the middle; the preview result completes the Activity so discovery warnings still reach
+    /// the other surfaces.
+    /// </summary>
+    /// <param name="connectedSystem">The instance the preview merged into. Persisted as-is.</param>
+    /// <param name="previewResult">The preview's result, used to complete the Activity.</param>
+    /// <param name="initiatedBy">The user the change is attributed to.</param>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, MetaverseObject? initiatedBy)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.ImportSchema,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        try
+        {
+            await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+            await CompleteSchemaImportActivityAsync(activity, previewResult);
+        }
+        catch (Exception ex)
+        {
+            // Discard staged schema changes before recording the failure: see the one-call import overloads.
+            Application.Repository.ClearChangeTracker();
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// As <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>,
+    /// attributed to an API key (the REST API and PowerShell path).
+    /// </summary>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, ApiKey initiatedByApiKey)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.ImportSchema,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        try
+        {
+            await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+            await CompleteSchemaImportActivityAsync(activity, previewResult);
+        }
+        catch (Exception ex)
+        {
+            // Discard staged schema changes before recording the failure: see the one-call import overloads.
+            Application.Repository.ClearChangeTracker();
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Completes a schema import's Activity, downgraded to complete-with-warning when discovery reported
     /// shortfalls, so an import that discovered less than it should have never presents as an unqualified success.
     /// </summary>
@@ -1687,8 +1790,22 @@ public class ConnectedSystemServer
 
                     if (existingAttribute != null)
                     {
-                        // Update existing attribute properties but preserve the ID
+                        // Update existing attribute properties but preserve the ID. Definition changes (plurality
+                        // and data type) are recorded on the result before being applied: they were applied
+                        // silently for years, and a restated definition can invalidate an Attribute Flow mapping
+                        // that was validated against the old one, so the administrator must get to see them.
                         existingAttribute.Description = schemaAttribute.Description;
+
+                        if (existingAttribute.AttributePlurality != schemaAttribute.AttributePlurality)
+                        {
+                            result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                            {
+                                AttributeName = existingAttribute.Name,
+                                Aspect = SchemaAttributeChangeAspect.Plurality,
+                                OldValue = existingAttribute.AttributePlurality.ToString(),
+                                NewValue = schemaAttribute.AttributePlurality.ToString()
+                            });
+                        }
                         existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
 
                         // A refresh restates what the Connector discovered and leaves what the administrator
@@ -1701,7 +1818,19 @@ public class ConnectedSystemServer
                         // source type, would write the value into the wrong column of the Metaverse Object.
                         // It would also sidestep the rule that an override is refused once values exist (#1354).
                         if (!existingAttribute.TypeSetByAdministrator)
+                        {
+                            if (existingAttribute.Type != schemaAttribute.Type)
+                            {
+                                result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                                {
+                                    AttributeName = existingAttribute.Name,
+                                    Aspect = SchemaAttributeChangeAspect.DataType,
+                                    OldValue = existingAttribute.Type.ToString(),
+                                    NewValue = schemaAttribute.Type.ToString()
+                                });
+                            }
                             existingAttribute.Type = schemaAttribute.Type;
+                        }
 
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
