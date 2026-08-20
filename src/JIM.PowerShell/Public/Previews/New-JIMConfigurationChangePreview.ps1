@@ -28,6 +28,11 @@ function New-JIMConfigurationChangePreview {
           objects it would manage at all, and what each movement in or out of scope would cost.
         - -SyncRuleId with -AttributeFlowMapping previews a change to that rule's Attribute Flow: what
           value every object it manages would end up with, per attribute.
+        - -SyncRuleId with -RuleState previews a change to that rule's behaviour toggles: how many objects
+          would stop having an identity or an account created for them, and how many would be left free to
+          drift. -ProjectToMetaverse, -ProvisionToConnectedSystem and -EnforceState are optional and merge
+          with the stored rule. Direction cannot be previewed: a saved rule's mappings are written for the
+          direction it has, so a flip comes back with a blocking finding.
         - -ConnectedSystemId with -MatchingRule previews a change to that system's Object Matching Rules:
           which of its unjoined objects would join a different Metaverse Object, join instead of projecting
           a new identity, project instead of joining, or match ambiguously and fail. Add
@@ -285,6 +290,18 @@ function New-JIMConfigurationChangePreview {
         Previews removing every Object Matching Rule: nothing would join, and every unjoined object would
         project a new identity instead.
 
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -RuleState Disabled -Wait
+        $preview.ImpactCounts
+
+        Previews disabling a Synchronisation Rule and reports what stops happening: the identities and accounts
+        that would no longer be created, which is the count that says whether "just pausing it" is what it does.
+
+    .EXAMPLE
+        New-JIMConfigurationChangePreview -SyncRuleId 42 -RuleState Enabled -ProvisionToConnectedSystem $true -Wait
+
+        Previews enabling a rule and turning provisioning on together, which is account creation at scale.
+
     .LINK
         Get-JIMConfigurationChangePreview
         Get-JIMConfigurationChangePreviewDelta
@@ -332,6 +349,7 @@ function New-JIMConfigurationChangePreview {
         [Parameter(Mandatory, ParameterSetName = 'SyncRuleDestructiveToggles', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'SyncRuleScopingCriteria', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'SyncRuleAttributeFlow', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleBehaviour', ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,
 
         [Parameter(ParameterSetName = 'SyncRuleDestructiveToggles')]
@@ -357,6 +375,19 @@ function New-JIMConfigurationChangePreview {
         [Parameter(ParameterSetName = 'ObjectMatching')]
         [ValidateSet('ConnectedSystem', 'SyncRule')]
         [string]$ObjectMatchingRuleMode,
+
+        [Parameter(Mandatory, ParameterSetName = 'SyncRuleBehaviour')]
+        [ValidateSet('Enabled', 'Disabled')]
+        [string]$RuleState,
+
+        [Parameter(ParameterSetName = 'SyncRuleBehaviour')]
+        [bool]$ProjectToMetaverse,
+
+        [Parameter(ParameterSetName = 'SyncRuleBehaviour')]
+        [bool]$ProvisionToConnectedSystem,
+
+        [Parameter(ParameterSetName = 'SyncRuleBehaviour')]
+        [bool]$EnforceState,
 
         [Parameter()]
         [switch]$FullDataSet,
@@ -438,6 +469,20 @@ function New-JIMConfigurationChangePreview {
             $body.mappings = @($AttributeFlowMapping)
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'SyncRuleBehaviour') {
+            # -RuleState is mandatory because the toggle it sets is a boolean: were it optional, a caller who left
+            # it out could not be told apart from one proposing to switch the rule off, and those are opposite
+            # questions. The other three are optional and merge with the stored rule, so silence never proposes a
+            # change nobody asked for.
+            $body.enabled = ($RuleState -eq 'Enabled')
+
+            foreach ($toggle in 'ProjectToMetaverse', 'ProvisionToConnectedSystem', 'EnforceState') {
+                if ($PSBoundParameters.ContainsKey($toggle)) {
+                    $body[[System.Char]::ToLowerInvariant($toggle[0]) + $toggle.Substring(1)] = $PSBoundParameters[$toggle]
+                }
+            }
+        }
+
         if ($PSCmdlet.ParameterSetName -eq 'ObjectMatching') {
             # Always sent, including as an empty array, for the same reason as the mappings above: omitting the
             # field previews the Connected System's stored rules, while an empty array proposes removing every one
@@ -475,6 +520,10 @@ function New-JIMConfigurationChangePreview {
         elseif ($PSCmdlet.ParameterSetName -eq 'ObjectMatching') {
             $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/matching-rules/preview"
             $subject = "Connected System $ConnectedSystemId"
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'SyncRuleBehaviour') {
+            $endpoint = "/api/v1/synchronisation/sync-rules/$SyncRuleId/behaviour/preview"
+            $subject = "Synchronisation Rule $SyncRuleId"
         }
         else {
             $endpoint = "/api/v1/metaverse/object-types/$MetaverseObjectTypeId/deletion-settings/preview"
