@@ -31,6 +31,14 @@ function Set-JIMConnectedSystem {
         Only applicable when the connector supports parallel export.
         Default is 1 (sequential processing).
 
+    .PARAMETER RequireSecureTransport
+        Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted.
+        Governs every password JIM sends here: the first password on an account it provisions, one set by hand,
+        and a synchronised password change. Off by default, because a signed and sealed bind is a legitimate
+        encrypted alternative that cannot be detected from the Connected System's settings alone. Pass
+        -RequireSecureTransport to turn it on and -RequireSecureTransport:$false to turn it off. Nothing is
+        discarded when JIM refuses: queued password changes wait, and accounts stay owed their first password.
+
     .PARAMETER InitialPasswordTimeToLive
         How long an account provisioned into this Connected System stays owed an initial password before JIM
         records an expiry and stops trying. Accepts a TimeSpan, e.g. (New-TimeSpan -Days 30). JIM's default when
@@ -84,6 +92,12 @@ function Set-JIMConnectedSystem {
         Enables parallel export batch processing with up to 4 concurrent batches.
 
     .EXAMPLE
+        Set-JIMConnectedSystem -Id 1 -RequireSecureTransport
+
+        Stops JIM sending any password to this Connected System unless it can confirm the connection is
+        encrypted. Turn it back off with -RequireSecureTransport:$false.
+
+    .EXAMPLE
         Set-JIMConnectedSystem -Id 1 -InitialPasswordTimeToLive (New-TimeSpan -Days 30)
 
         Gives accounts provisioned into this Connected System thirty days to receive their initial password,
@@ -122,6 +136,9 @@ function Set-JIMConnectedSystem {
         [Parameter()]
         [ValidateRange(1, 16)]
         [int]$MaxExportParallelism,
+
+        [Parameter()]
+        [switch]$RequireSecureTransport,
 
         [Parameter()]
         [timespan]$InitialPasswordTimeToLive,
@@ -169,6 +186,11 @@ function Set-JIMConnectedSystem {
 
         if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
             $body.maxExportParallelism = $MaxExportParallelism
+        }
+
+        if ($PSBoundParameters.ContainsKey('RequireSecureTransport')) {
+            # A switch, so -RequireSecureTransport:$false is how it is turned off; the bound value carries which.
+            $body.requireSecureTransport = [bool]$RequireSecureTransport
         }
 
         if ($PSBoundParameters.ContainsKey('InitialPasswordTimeToLive')) {

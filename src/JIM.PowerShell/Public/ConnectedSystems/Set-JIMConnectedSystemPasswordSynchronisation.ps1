@@ -43,11 +43,6 @@ function Set-JIMConnectedSystemPasswordSynchronisation {
         The first retry interval; each subsequent attempt waits twice as long, capped at the change's time to
         live. Use 0 for JIM's default.
 
-    .PARAMETER RequireSecureTransport
-        Refuse to transmit a password to this system over a connection JIM cannot confirm is encrypted. Off by
-        default, because a signed and sealed bind is a legitimate encrypted alternative that cannot be detected
-        from the Connected System's settings alone.
-
     .PARAMETER ChangeReason
         An optional reason recorded against the Connected System's configuration change history.
 
@@ -66,7 +61,7 @@ function Set-JIMConnectedSystemPasswordSynchronisation {
         Switches Password Synchronisation on, delivering everything queued while it was off.
 
     .EXAMPLE
-        Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -RequireSecureTransport -MaxRetries 10 -PassThru
+        Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
 
         Requires an encrypted connection for password delivery to this system, and allows ten attempts before
         a change is parked.
@@ -98,9 +93,6 @@ function Set-JIMConnectedSystemPasswordSynchronisation {
         [timespan]$RetryBackoffBase,
 
         [Parameter()]
-        [switch]$RequireSecureTransport,
-
-        [Parameter()]
         [string]$ChangeReason,
 
         [Parameter()]
@@ -122,7 +114,6 @@ function Set-JIMConnectedSystemPasswordSynchronisation {
         if ($PSBoundParameters.ContainsKey('TargetObjectType')) { $body.targetObjectTypeId = $TargetObjectType }
         if ($PSBoundParameters.ContainsKey('MaxRetries')) { $body.maxRetries = $MaxRetries }
         if ($PSBoundParameters.ContainsKey('RetryBackoffBase')) { $body.retryBackoffBase = $RetryBackoffBase.ToString() }
-        if ($PSBoundParameters.ContainsKey('RequireSecureTransport')) { $body.requireSecureTransport = [bool]$RequireSecureTransport }
         if ($PSBoundParameters.ContainsKey('ChangeReason')) { $body.changeReason = $ChangeReason }
 
         if ($body.Count -eq 0) {

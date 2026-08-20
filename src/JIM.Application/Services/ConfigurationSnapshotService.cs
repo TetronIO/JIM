@@ -331,6 +331,7 @@ public class ConfigurationSnapshotService
         // the settings), not configuration, so it does not belong in a configuration change history.
         Add(children, "maxExportParallelism", Render(connectedSystem.MaxExportParallelism), "Max export parallelism");
         Add(children, "initialPasswordTimeToLive", Render(connectedSystem.InitialPasswordTimeToLive), "Initial password time to live");
+        Add(children, "requireSecureTransport", Render(connectedSystem.RequireSecureTransport), "Require secure transport");
         AddPasswordSynchronisation(children, connectedSystem);
         children.Add(BuildSettingValues(connectedSystem.SettingValues, hashKey));
         children.Add(BuildRunProfiles(connectedSystem.RunProfiles));
@@ -503,9 +504,6 @@ public class ConfigurationSnapshotService
             "Target Connected System Object Type");
         Add(children, "maxRetries", Render(passwordSynchronisation.MaxRetries), "Maximum retries");
         Add(children, "retryBackoffBase", Render(passwordSynchronisation.RetryBackoffBase), "Retry backoff base");
-        Add(children, "requireSecureTransport", Render(passwordSynchronisation.RequireSecureTransport),
-            "Require secure transport");
-
         nodes.Add(ConfigurationSnapshotNode.ObjectNode("passwordSynchronisation", children,
             "Password Synchronisation", passwordSynchronisation.Id));
     }

@@ -71,9 +71,18 @@ public class InitialPasswordRunResult
     public string? PasswordConnectionErrorMessage { get; set; }
 
     /// <summary>
+    /// True when the Connected System requires a secure transport for passwords and the Connector's password
+    /// channel is not encrypted (#1119), so nothing was sent. Reported once for the pass rather than as a failure
+    /// per account, for the same reason as a connection that could not be opened: the problem belongs to the
+    /// channel, and counting it against every account would inflate an attempt count that is supposed to mean
+    /// distinct attempts at giving that account a password. The accounts stay owed one.
+    /// </summary>
+    public bool PasswordChannelNotSecure { get; set; }
+
+    /// <summary>
     /// True when anything at all happened, which is what decides whether a run is worth narrating.
     /// </summary>
     public bool HasSomethingToReport =>
         AttemptedCount > 0 || NoLongerApplicableCount > 0 || ExpiredCount > 0 ||
-        CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords;
+        CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure;
 }

@@ -268,11 +268,11 @@ public class PasswordSynchronisationServer
         }
 
         // The administrator's declaration that passwords must not leave JIM in the clear for this system,
-        // applied to the channel the Connector actually opened. Checked here rather than inside the Connector
-        // because it is a policy JIM holds per Connected System, not something a Connector can decide: some
-        // deployments genuinely cannot offer TLS on their directory, which is why the setting exists at all.
-        // Nothing is attempted and no attempt is counted: the changes wait for a secure channel.
-        if (configuration.RequireSecureTransport && !passwordConnector.IsPasswordChannelSecure)
+        // applied to the channel the Connector actually opened. The rule is shared with the other two paths that
+        // write a password here, so all three refuse on identical grounds. Nothing is attempted and no attempt is
+        // counted: the changes stay Pending and due, so no release is needed when the setting is turned off
+        // again; the worker's idle housekeeping finds them within the minute and raises a pass.
+        if (PasswordChannelSecurity.RefusesChannel(connectedSystem, passwordConnector))
         {
             passwordConnector.ClosePasswordConnection();
             result.PasswordChannelNotSecure = true;

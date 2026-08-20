@@ -98,19 +98,6 @@ public class ConnectedSystemPasswordSynchronisation
     public TimeSpan RetryBackoffBase { get; set; } = DefaultRetryBackoffBase;
 
     /// <summary>
-    /// Whether JIM must refuse to transmit a password to this system over a connection it cannot confirm is
-    /// encrypted.
-    /// <para>
-    /// Off by default, and that default is a considered position rather than laxity. The LDAP Connector warns on
-    /// an unencrypted connection instead of blocking, because a signed and sealed bind is a legitimate encrypted
-    /// alternative that JIM cannot detect from the Connected System's settings alone, so blocking on the settings
-    /// would refuse a valid configuration. This setting is how an administrator who knows their deployment closes
-    /// that gap: turning it on makes the refusal the Connector's behaviour for this system.
-    /// </para>
-    /// </summary>
-    public bool RequireSecureTransport { get; set; }
-
-    /// <summary>
     /// The retry ceiling actually applied. A value of zero or less is treated as unconfigured rather than obeyed,
     /// because "deliver once and then park" is a state the queue can already reach by exhausting its retries, and
     /// obeying a zero here would make a row nobody had thought about behave as though somebody had chosen it.
@@ -221,8 +208,7 @@ public class ConnectedSystemPasswordSynchronisation
             Enabled = Enabled,
             TargetObjectTypeId = TargetObjectTypeId,
             MaxRetries = MaxRetries,
-            RetryBackoffBase = RetryBackoffBase,
-            RequireSecureTransport = RequireSecureTransport
+            RetryBackoffBase = RetryBackoffBase
         };
     }
 
@@ -253,8 +239,7 @@ public class ConnectedSystemPasswordSynchronisation
         return left.Enabled == right.Enabled &&
                left.TargetObjectTypeId == right.TargetObjectTypeId &&
                left.MaxRetries == right.MaxRetries &&
-               left.RetryBackoffBase == right.RetryBackoffBase &&
-               left.RequireSecureTransport == right.RequireSecureTransport;
+               left.RetryBackoffBase == right.RetryBackoffBase;
     }
 
     public override string ToString()

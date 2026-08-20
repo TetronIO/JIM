@@ -173,16 +173,33 @@
         @* Only meaningful where the Connector can set a password at all; without that no account is ever owed one. *@
         @if (ConnectedSystem.ConnectorDefinition is { SupportsPasswordSet: true })
         {
-            <MudExpansionPanel Expanded="@GetCategoryExpanded("Initial Passwords")"
-                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Initial Passwords", expanded))">
+            <MudExpansionPanel Expanded="@GetCategoryExpanded("Passwords")"
+                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Passwords", expanded))">
                 <TitleContent>
-                    <MudText Typo="Typo.h5">Initial Passwords</MudText>
+                    <MudText Typo="Typo.h5">Passwords</MudText>
                 </TitleContent>
                 <ChildContent>
+                    @* Both settings here govern every password JIM sends to this system: the initial password on
+                       an account it provisions, one an administrator sets by hand, and a synchronised password
+                       change. That is why they live on the Connected System rather than on any one feature's
+                       configuration, and why this panel is not named after one of them. *@
                     <MudText Class="mud-text-secondary mb-5">
-                        How long JIM keeps trying to give an account provisioned into this Connected System its first
-                        password. It applies to every Synchronisation Rule that provisions here.
+                        These apply to every password JIM sends to this Connected System, whether it is the first
+                        password on an account JIM creates, one you set by hand, or a password change synchronised
+                        from elsewhere.
                     </MudText>
+
+                    <MudSwitch T="bool" @bind-Value="ConnectedSystem.RequireSecureTransport" Color="Color.Primary"
+                               Label="Only send passwords over an encrypted connection" />
+
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary ml-12 mb-6" Style="margin-top: -8px;">
+                        JIM cannot always tell an encrypted connection from an unencrypted one; a signed and sealed
+                        bind is encrypted but does not look it from this system's settings, which is why JIM warns
+                        rather than refusing by default. Turn this on, once you know this system's connection is
+                        encrypted, to have JIM refuse to send instead. Nothing is discarded when it refuses: queued
+                        password changes wait, and accounts stay owed their first password.
+                    </MudText>
+
                     <MudNumericField T="int?"
                                      Label="Give up after"
                                      Value="@InitialPasswordTimeToLiveDays"
@@ -192,7 +209,7 @@
                                      Max="365"
                                      Adornment="Adornment.End"
                                      AdornmentText="days"
-                                     HelperText="Leave empty to use JIM's default of 7 days. Raise it before taking this system out of service for longer than the current window; accounts provisioned meanwhile would otherwise expire without a password, and need one set by hand."
+                                     HelperText="How long JIM keeps trying to deliver a password to this system before it gives up on it: the first password owed to an account it provisions, and a queued password change alike. Leave empty to use JIM's default of 7 days. Raise it before taking this system out of service for longer than the current window, or work waiting meanwhile expires undelivered."
                                      Variant="Variant.Outlined" />
                 </ChildContent>
             </MudExpansionPanel>
