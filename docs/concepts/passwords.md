@@ -169,10 +169,8 @@ That is also why there is no way to remove a configuration, only to disable it. 
 
 How long a change waits before JIM gives up on it is the Connected System's **initial password time to live** setting, shared with initial password provisioning: the question both are asking is how long that system may be unavailable before JIM stops trying, and the answer is a property of the system.
 
-!!! warning "Delivery is not available yet"
-    The configuration above can be saved today and will be used the moment delivery ships, but no password change is queued or delivered yet. Setting a password directly on an account, and initial passwords on provisioning, are unaffected and work as described on this page.
-
-    Capturing a password change made **in** another system, such as a user changing their own password in Active Directory, and replaying it into the others is a later stage again; it needs a capture agent running on the domain controllers, because no directory will disclose a password when JIM reads from it.
+!!! note "Capturing a password changed in another system is a separate capability"
+    Everything here concerns a password change JIM knows about: one an administrator makes, or one sent to JIM's API. Capturing a change made **in** another system, such as a user changing their own password in Active Directory, and replaying it into the others needs a capture agent running on the domain controllers, because no directory will disclose a password when JIM reads from it.
 
 ## Where to go next
 

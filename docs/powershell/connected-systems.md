@@ -182,10 +182,6 @@ Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -RequireSecureTransport -Max
     Removing a configuration would discard every password change queued against it. Disabling it keeps them,
     and is reversible, so `-Enabled $false` is the supported way to stop delivery.
 
-!!! warning "Delivery is not available yet"
-    These settings can be saved today and will be used the moment delivery ships, but no password change is
-    queued or delivered yet.
-
 #### Initial password attention (ById only)
 
 How many accounts in the Connected System are waiting on a person over their initial password.

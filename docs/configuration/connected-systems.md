@@ -403,9 +403,6 @@ How long a queued change waits before JIM expires it rather than delivering a pa
 
 Every change to these settings reaches the Connected System's configuration change history, so switching Password Synchronisation on or off is attributable afterwards.
 
-!!! warning "Delivery is not available yet"
-    These settings can be saved today and will be used the moment delivery ships, but no password change is queued or delivered yet. Setting a password on an account, and initial passwords on provisioning, are unaffected.
-
 For automation, `Get-JIMConnectedSystemPasswordSynchronisation` and `Set-JIMConnectedSystemPasswordSynchronisation` do the same over the REST API; `ConnectorSupportsPasswordSet` on the response tells you whether a system can be configured at all.
 
 ## Directory Capabilities
