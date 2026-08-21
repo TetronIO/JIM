@@ -260,10 +260,13 @@ The preview reports, per object type:
 | Object types or attributes **no longer reported** | **Retained** in JIM; nothing is deleted by a refresh. Their values stop refreshing from that point, and any Synchronisation Rule or Attribute Flow reading them works from stale data, so the preview flags them for your attention. |
 | Attribute **definitions changed** (data type or plurality) | The new definition is recorded. A mapping validated against the old definition may no longer behave as intended, so these are flagged too. A data type you [overrode yourself](#overriding-an-inferred-type) is never overwritten, and never appears here. |
 
+Where the diff carries destructive changes, the review also names the configuration that depends on them: Synchronisation Rules bound to a removed object type, Attribute Flow mappings reading a removed or redefined attribute (including attributes consumed inside an expression), and Object Matching Rules that match on a removed attribute, each deep-linking to its page so you can inspect a dependent without losing the review.
+
 You then choose:
 
-- **Apply Schema Changes** records the refresh, exactly as previewed, under an ImportSchema [Activity](activities.md).
-- **Discard** drops it; JIM's schema stays exactly as it was. Where the preview found removals or definition changes, discarding means JIM's configuration no longer matches the Connected System, and the next synchronisation runs against that mismatch; you are asked to confirm that you understand. Discarding additions alone needs no confirmation, because the next refresh simply finds them again.
+- **Cancel** applies nothing, with the honest warning: cancelling does not preserve the status quo. The next Full Import finds no objects of a removed object type and obsoletes them regardless, and the source now sends redefined attributes in their new form. Cancelling an additions-only diff needs no confirmation, because the next refresh simply finds them again.
+- **Apply Schema Changes** records the refresh exactly as previewed, under an ImportSchema [Activity](activities.md); removed entries are retained and their dependents keep running over frozen data.
+- **Apply &amp; Disable Dependents** records the refresh and then disables everything it invalidated: each named Synchronisation Rule and [mapping](synchronisation-rules.md#disabling-a-single-mapping) is disabled with the refresh recorded as the reason, under child Activities of the refresh, so nothing runs against entries the source no longer reports while you rework the configuration. No objects or values are touched, and re-enabling is a manual choice per rule or mapping. Object Matching Rules have no disabled state, so the review lists any needing your attention separately.
 
 Watch the preview's **discovery warnings** before applying: a Connected System identity without permission to read the full schema produces a partial read, which can make object types or attributes appear removed when they are not.
 

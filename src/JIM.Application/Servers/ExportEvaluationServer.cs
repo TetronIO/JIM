@@ -1476,7 +1476,10 @@ public class ExportEvaluationServer
 
             foreach (var rule in rules)
             {
-                foreach (var mapping in rule.AttributeFlowRules)
+                // A disabled mapping (#1485) does not run, so it neither carries a direct recall flow nor
+                // routes its Object Type to the fallback path; a disabled expression mapping left in here
+                // would force whole-type fallbacks for a flow that never executes.
+                foreach (var mapping in rule.AttributeFlowRules.Where(m => m.Enabled))
                 {
                     var singleSource = mapping.Sources.Count == 1 ? mapping.Sources[0] : null;
                     var isDirectCandidateFlow =

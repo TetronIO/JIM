@@ -71,7 +71,8 @@ internal static class SyncRuleAttributeFlowProposalMaterialiser
             CaseNormalisation = proposal.CaseNormalisation,
             Priority = proposal.Priority,
             NullIsValue = proposal.NullIsValue,
-            InitialExportOnly = proposal.InitialExportOnly
+            InitialExportOnly = proposal.InitialExportOnly,
+            Enabled = proposal.Enabled
         };
 
         if (proposal.TargetMetaverseAttributeId is { } targetMetaverseAttributeId)

@@ -499,6 +499,12 @@ public class JimDbContext : DbContext
             .Property(srm => srm.InitialExportOnly)
             .HasDefaultValue(false);
 
+        // Per-mapping enable/disable (#1485). Defaults to true so every mapping persisted before this field
+        // existed keeps flowing exactly as it always has; the store-level default backfills existing rows.
+        modelBuilder.Entity<SyncRuleMapping>()
+            .Property(srm => srm.Enabled)
+            .HasDefaultValue(true);
+
         // SPEC-1082 D10: Run Profile Verification Mode defaults to false (no behavioural change for
         // existing Run Profiles); the store-level default backfills existing rows on migration.
         modelBuilder.Entity<ConnectedSystemRunProfile>()

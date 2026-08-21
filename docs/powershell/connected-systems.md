@@ -381,10 +381,10 @@ Imports (or re-imports) the schema from the connected data source. This discover
 
 ```powershell
 # ById (default)
-Import-JIMConnectedSystemSchema -Id <int> [-Preview] [-PassThru]
+Import-JIMConnectedSystemSchema -Id <int> [-Preview] [-DisableDependents] [-PassThru]
 
 # ByInputObject
-Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-PassThru]
+Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-DisableDependents] [-PassThru]
 ```
 
 ### Parameters
@@ -394,11 +394,12 @@ Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-PassT
 | `Id` | `int` | Yes (ById) | | Connected System identifier |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
 | `Preview` | `switch` | No | `$false` | Retrieves the schema and returns what a refresh would change, without persisting anything |
+| `DisableDependents` | `switch` | No | `$false` | Applies the refresh and disables everything it invalidated: Synchronisation Rules bound to a removed object type and mappings reading a removed or redefined attribute, each with a recorded reason. Preview first; the preview's `Dependents` property names what this disables |
 | `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after schema import (not needed with `-Preview`, which always returns its result) |
 
 ### Output
 
-With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output.
+With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `Dependents` (what the destructive changes invalidate: `InvalidatedSyncRules`, `InvalidatedMappings` and `ReferencedObjectMatchingRules`, each entry carrying its `Reason`), `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output.
 
 ### Examples
 
@@ -411,6 +412,12 @@ $preview = Import-JIMConnectedSystemSchema -Id 3 -Preview
 if (-not $preview.HasRemovalsOrDefinitionChanges) {
     Import-JIMConnectedSystemSchema -Id 3 -Confirm:$false
 }
+```
+
+```powershell title="Apply a destructive refresh with its dependents disabled"
+$preview = Import-JIMConnectedSystemSchema -Id 3 -Preview
+$preview.Dependents.InvalidatedSyncRules | Select-Object SyncRuleName, Reason
+Import-JIMConnectedSystemSchema -Id 3 -DisableDependents -Confirm:$false
 ```
 
 ```powershell title="Pipeline: create a system, then import its schema"

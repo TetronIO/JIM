@@ -2001,6 +2001,7 @@ public class SynchronisationController(
     /// Connects to the external system and retrieves its Object Types and Attributes. This is required before creating Synchronisation Rules. Existing schema configuration will be replaced; Synchronisation Rules referencing removed Object Types or Attributes will need to be updated.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">Optional. Set <c>disableDependents</c> to apply the refresh with its dependents disabled (#1485).</param>
     /// <returns>The updated Connected System with imported schema.</returns>
     /// <response code="200">Schema imported successfully.</response>
     /// <response code="400">Schema import failed (e.g., connection error, invalid settings).</response>
@@ -2011,7 +2012,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ImportConnectedSystemSchemaAsync(int connectedSystemId)
+    public async Task<IActionResult> ImportConnectedSystemSchemaAsync(int connectedSystemId, [FromBody] ImportConnectedSystemSchemaRequest? request = null)
     {
         _logger.LogInformation("Schema import requested for Connected System: {Id}", connectedSystemId);
 
@@ -2032,7 +2033,23 @@ public class SynchronisationController(
         {
             // Get the current API key for Activity attribution if authenticated via API key
             var apiKey = await GetCurrentApiKeyAsync();
-            if (apiKey != null)
+
+            if (request is { DisableDependents: true })
+            {
+                // The Apply and Disable Dependents flavour (#1485): retrieve and merge in memory, detect what
+                // the destructive changes invalidate, then apply the schema and disable exactly that, each rule
+                // and mapping recording its reason. Stateless by design: the plan is recomputed here rather
+                // than carried over from a preview call, so the disables always match the schema being applied.
+                var previewResult = await _application.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+                var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules: true);
+                var dependents = SchemaRefreshDependentDetector.Detect(previewResult, syncRules, DateTime.UtcNow);
+
+                if (apiKey != null)
+                    await _application.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, dependents, apiKey);
+                else
+                    await _application.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, dependents, initiatedBy);
+            }
+            else if (apiKey != null)
                 await _application.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, apiKey);
             else
                 await _application.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, initiatedBy);
@@ -2091,7 +2108,17 @@ public class SynchronisationController(
         try
         {
             var result = await _application.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
-            return Ok(SchemaRefreshResultDto.FromModel(result));
+            var dto = SchemaRefreshResultDto.FromModel(result);
+
+            // A destructive diff names its dependents (#1485): what committing with disableDependents would
+            // disable, so a caller reviews the whole decision from this one response.
+            if (result.HasRemovalsOrDefinitionChanges)
+            {
+                var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules: true);
+                dto.Dependents = SchemaRefreshDependentDetector.Detect(result, syncRules, DateTime.UtcNow);
+            }
+
+            return Ok(dto);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

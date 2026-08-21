@@ -440,6 +440,48 @@ public class DriftDetectionTests
         Assert.That(result.DriftedAttributes, Is.Empty);
     }
 
+    [Test]
+    public void EvaluateDrift_DisabledMapping_DivergedValueIsNotDrift()
+    {
+        // A disabled mapping (#1485) does not run at all, so a diverged value on its target attribute is not
+        // drift: re-asserting it would be exactly the flow the administrator switched off.
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe"
+        });
+
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "Jane Doe" // Diverged from the MVO, but the mapping is disabled
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var exportRule = CreateExportRule(enforceState: true);
+        exportRule.AttributeFlowRules[0].Enabled = false;
+
+        var result = Jim.DriftDetection.EvaluateDrift(
+            cso,
+            mvo,
+            new List<SyncRule> { exportRule },
+            null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False,
+                "A diverged value on a disabled mapping's target attribute must not be treated as drift");
+            Assert.That(result.DriftedAttributes, Is.Empty);
+        }
+    }
+
     /// <summary>
     /// Drift Correction stages Update exports, so it must not re-assert a Writable On Create attribute:
     /// rewriting the Connected System's identifier for the object is exactly the corruption that

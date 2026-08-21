@@ -54,7 +54,9 @@ public partial class SyncEngine : ISyncEngine
             return errors;
         }
 
-        foreach (var syncRuleMapping in syncRule.AttributeFlowRules)
+        // A disabled mapping is skipped without an error: disabling is a deliberate choice (an administrator's,
+        // or the schema refresh decision's), so nothing flows and nothing is reported against the object (#1485).
+        foreach (var syncRuleMapping in syncRule.AttributeFlowRules.Where(m => m.Enabled))
         {
             if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");

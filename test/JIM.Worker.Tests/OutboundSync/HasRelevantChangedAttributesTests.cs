@@ -149,6 +149,40 @@ public class HasRelevantChangedAttributesTests
 
     #region Test Helpers
 
+    [Test]
+    public void HasRelevantChangedAttributes_DisabledDirectMappingMatches_ReturnsFalse()
+    {
+        // A disabled mapping (#1485) must not make its source's changes relevant: nothing downstream will
+        // evaluate it, so treating the change as relevant only forces pointless export evaluation.
+        var exportRule = CreateExportRuleWithDirectMappings(_firstNameAttr);
+        exportRule.AttributeFlowRules[0].Enabled = false;
+        var changedAttributes = new List<MetaverseObjectAttributeValue>
+        {
+            new() { AttributeId = _firstNameAttr.Id, Attribute = _firstNameAttr, StringValue = "John" }
+        };
+
+        var result = ExportEvaluationServer.HasRelevantChangedAttributes(changedAttributes, exportRule);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void HasRelevantChangedAttributes_DisabledExpressionMapping_ReturnsFalse()
+    {
+        // The conservative "an expression can read anything" answer must not apply to a disabled expression
+        // mapping: disabled means it reads nothing at all.
+        var exportRule = CreateExportRuleWithExpressionMapping("mv[\"First Name\"] + \" \" + mv[\"Last Name\"]");
+        exportRule.AttributeFlowRules[0].Enabled = false;
+        var changedAttributes = new List<MetaverseObjectAttributeValue>
+        {
+            new() { AttributeId = _emailAttr.Id, Attribute = _emailAttr, StringValue = "j@example.com" }
+        };
+
+        var result = ExportEvaluationServer.HasRelevantChangedAttributes(changedAttributes, exportRule);
+
+        Assert.That(result, Is.False);
+    }
+
     private static SyncRule CreateExportRuleWithDirectMappings(params MetaverseAttribute[] sourceAttributes)
     {
         var rule = new SyncRule

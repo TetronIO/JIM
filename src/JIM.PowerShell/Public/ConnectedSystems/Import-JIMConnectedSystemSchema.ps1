@@ -25,6 +25,13 @@ function Import-JIMConnectedSystemSchema {
         The result's HasRemovalsOrDefinitionChanges property flags removals and attribute definition changes,
         which are the changes that can affect existing configuration; additions alone cannot.
 
+    .PARAMETER DisableDependents
+        If specified, the refresh is applied with its dependents disabled: Synchronisation Rules bound to a
+        removed object type and attribute mappings reading a removed or redefined attribute (directly or as an
+        expression input) are disabled with a recorded reason, so nothing runs against entries the Connected
+        System no longer reports. Preview first with -Preview, whose result's Dependents property names what
+        this option would disable. Re-enabling is a manual choice per rule or mapping.
+
     .PARAMETER PassThru
         If specified, returns the updated Connected System object with imported schema. Not needed with -Preview,
         which always returns the preview result.
@@ -77,6 +84,8 @@ function Import-JIMConnectedSystemSchema {
 
         [switch]$Preview,
 
+        [switch]$DisableDependents,
+
         [switch]$PassThru
     )
 
@@ -106,7 +115,9 @@ function Import-JIMConnectedSystemSchema {
             Write-Verbose "Importing schema for Connected System: $systemId"
 
             try {
-                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$systemId/import-schema" -Method 'POST'
+                $invokeParams = @{ Endpoint = "/api/v1/synchronisation/connected-systems/$systemId/import-schema"; Method = 'POST' }
+                if ($DisableDependents) { $invokeParams.Body = @{ disableDependents = $true } }
+                $result = Invoke-JIMApi @invokeParams
 
                 $objectTypeCount = if ($result.objectTypes) { $result.objectTypes.Count } else { 0 }
                 Write-Verbose "Schema imported for Connected System: $systemId ($objectTypeCount object types)"

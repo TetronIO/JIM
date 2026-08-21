@@ -51,6 +51,12 @@ public class SyncRuleMappingSettingsUpdate
     public bool? InitialExportOnly { get; set; }
 
     /// <summary>
+    /// Enables or disables the mapping (#1485). Applies to import and export mappings alike; re-enabling
+    /// clears any recorded disabled reason.
+    /// </summary>
+    public bool? Enabled { get; set; }
+
+    /// <summary>
     /// True when the update names at least one setting. A request naming none changes nothing, and is rejected
     /// rather than reported as a successful update.
     /// </summary>
@@ -60,5 +66,6 @@ public class SyncRuleMappingSettingsUpdate
         NullIsValue.HasValue ||
         InboundValueProcessing.HasValue ||
         CaseNormalisation.HasValue ||
-        InitialExportOnly.HasValue;
+        InitialExportOnly.HasValue ||
+        Enabled.HasValue;
 }

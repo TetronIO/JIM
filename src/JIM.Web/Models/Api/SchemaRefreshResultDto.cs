@@ -97,6 +97,13 @@ public class SchemaRefreshResultDto
     public bool HasRemovalsOrDefinitionChanges { get; set; }
 
     /// <summary>
+    /// What the destructive changes invalidate (#1485): the Synchronisation Rules and Attribute Flow mappings
+    /// that would be disabled by committing with <c>disableDependents</c>, each with its reason, plus Object
+    /// Matching Rules needing attention. Null when the refresh carries no destructive changes.
+    /// </summary>
+    public SchemaRefreshDependents? Dependents { get; set; }
+
+    /// <summary>
     /// Maps a schema refresh result to its API representation.
     /// </summary>
     public static SchemaRefreshResultDto FromModel(SchemaRefreshResult result)
