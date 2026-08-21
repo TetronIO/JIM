@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20260821104839_AddCausalProvenance")]
+    [Migration("20260821112304_AddCausalProvenance")]
     partial class AddCausalProvenance
     {
         /// <inheritdoc />
@@ -2704,6 +2704,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("PersistedConnectorData")
                         .HasColumnType("text");
 
+                    b.Property<bool>("RequireSecureTransport")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("SettingValuesValid")
                         .HasColumnType("boolean");
 
@@ -3266,9 +3269,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("MaxRetries")
                         .HasColumnType("integer");
-
-                    b.Property<bool>("RequireSecureTransport")
-                        .HasColumnType("boolean");
 
                     b.Property<TimeSpan>("RetryBackoffBase")
                         .HasColumnType("interval");
