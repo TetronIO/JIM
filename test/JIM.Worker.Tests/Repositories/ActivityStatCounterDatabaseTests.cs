@@ -201,8 +201,13 @@ public class ActivityStatCounterDatabaseTests
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
 
-        // Force the parallel COPY path: it engages at parallelism * 50 items.
-        var count = ParallelBatchWriter.GetWriteParallelism() * 50;
+        // Force the parallel COPY path, and prove it engaged rather than assuming it: without the JIM_DB_*
+        // variables this scope sets, the repository cannot build its own connection string and falls back to
+        // the single-connection path, leaving this test passing without ever running the path it names.
+        using var parallelPath = ParallelWritePathScope.Enter();
+        var count = ParallelWritePathScope.Threshold;
+        ParallelWritePathScope.AssertEngaged(count);
+
         var rpeis = new List<ActivityRunProfileExecutionItem>(count);
         for (var i = 0; i < count; i++)
             rpeis.Add(NewRpei(activity.Id, ObjectChangeType.Added, outcomeTypes: ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded));

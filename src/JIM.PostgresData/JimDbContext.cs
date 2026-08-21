@@ -21,6 +21,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<Activity> Activities { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItemSyncOutcome> ActivityRunProfileExecutionItemSyncOutcomes { get; set; } = null!;
+    public virtual DbSet<CausalEdge> CausalEdges { get; set; } = null!;
     public virtual DbSet<ActivityStatCounter> ActivityStatCounters { get; set; } = null!;
     public virtual DbSet<ActivityPhase> ActivityPhases { get; set; } = null!;
     public virtual DbSet<ClearConnectedSystemObjectsWorkerTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
@@ -871,6 +872,30 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
             .HasIndex(o => new { o.ActivityRunProfileExecutionItemId, o.OutcomeType })
             .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_RpeiId_OutcomeType");
+
+        // Causal provenance (#1223). The effect side cascades from the Run Profile Execution Item, so purging an
+        // Activity takes its edges with it; the cause side is deliberately unconstrained scalars so purging a cause
+        // leaves intact the edge that records it was once the cause. See the CausalEdge type remarks.
+        modelBuilder.Entity<CausalEdge>()
+            .HasOne(e => e.EffectRunProfileExecutionItem)
+            .WithMany()
+            .HasForeignKey(e => e.EffectRunProfileExecutionItemId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("FK_CausalEdges_ActivityRunProfileExecutionItems");
+
+        // Traversal runs in both directions (upward in Phase 1, downward in Phase 2), so both ends are indexed;
+        // an index that serves one direction and table-scans the other fails half of what this feature is for.
+        modelBuilder.Entity<CausalEdge>()
+            .HasIndex(e => e.EffectRunProfileExecutionItemId)
+            .HasDatabaseName("IX_CausalEdges_EffectRunProfileExecutionItemId");
+
+        modelBuilder.Entity<CausalEdge>()
+            .HasIndex(e => e.CauseRunProfileExecutionItemId)
+            .HasDatabaseName("IX_CausalEdges_CauseRunProfileExecutionItemId");
+
+        modelBuilder.Entity<CausalEdge>()
+            .HasIndex(e => e.CauseMetaverseObjectId)
+            .HasDatabaseName("IX_CausalEdges_CauseMetaverseObjectId");
 
         // Configuration change preview (#827). All three tables hang off the preview's Activity and cascade from it,
         // so the existing history-retention housekeeping removes preview results with the Activity that owns them;

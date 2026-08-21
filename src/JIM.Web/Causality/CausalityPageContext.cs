@@ -70,8 +70,8 @@ public sealed record CausalityPageContext(
     {
         get
         {
-            var name = string.IsNullOrWhiteSpace(CsoDisplayName) ? null : CsoDisplayName;
-            var externalId = string.IsNullOrWhiteSpace(CsoExternalId) ? null : CsoExternalId;
+            var name = Present(CsoDisplayName);
+            var externalId = Present(CsoExternalId);
 
             if (name != null && externalId != null)
             {
@@ -82,5 +82,26 @@ public sealed record CausalityPageContext(
 
             return name ?? externalId;
         }
+    }
+
+    /// <summary>
+    /// The record's name alone, falling back to its external id where it has no name, and null when it has
+    /// neither. The short form for places where the external id is more than the reader asked for.
+    /// </summary>
+    /// <remarks>
+    /// The summary sentence, the Flow view's source card and the Graph's source node all name the record in
+    /// running prose or inside a fixed-width chip, where a trailing "(8586e100-235d-1041-89b0-4b2f2bd7a787)"
+    /// is noise at best and pushes the name out of the chip at worst. The Timeline has room to be precise and
+    /// keeps <see cref="RecordLabel"/>; the external id is one click away on the record itself everywhere else.
+    /// </remarks>
+    public string? RecordName => Present(CsoDisplayName) ?? Present(CsoExternalId);
+
+    /// <summary>
+    /// Treats a whitespace-only value as absent: a connected system that supplies "   " has supplied nothing,
+    /// and rendering it produces a label that looks empty but is not.
+    /// </summary>
+    private static string? Present(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 }

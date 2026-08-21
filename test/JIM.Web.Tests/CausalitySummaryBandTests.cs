@@ -42,7 +42,7 @@ public class CausalitySummaryBandTests
 
         var sentence = cut.Find(".summary-sentence").TextContent;
         Assert.That(sentence, Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen (S8-287551): " +
+            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: " +
             "a new Identity was created, 11 attributes flowed to it, and an export of 11 changes is now queued for Glitterband EMEA."));
     }
 
@@ -57,7 +57,7 @@ public class CausalitySummaryBandTests
         Assert.That(linkedTokens.Select(a => (a.TextContent, a.GetAttribute("href"))), Is.EqualTo(new[]
         {
             ("Yellowstone APAC", "/admin/connected-systems/1"),
-            ("Liam Allen (S8-287551)", $"/admin/connected-systems/1/connector-space/{CausalityTestData.CsoId}"),
+            ("Liam Allen", $"/admin/connected-systems/1/connector-space/{CausalityTestData.CsoId}"),
             ("Glitterband EMEA", "/admin/connected-systems/2")
         }));
 
@@ -119,5 +119,43 @@ public class CausalitySummaryBandTests
         Assert.That(runChip.TextContent, Does.Contain("Yellowstone APAC"));
         Assert.That(runChip.TextContent, Does.Contain("Full Synchronisation"));
         Assert.That(cut.FindAll(".summary-time"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Render_TechnicalNamesOn_SwapsThePlainLanguageVocabularyInTheSentenceAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        var cut = context.Render<CausalitySummaryBand>(ps => ps
+            .Add(c => c.Summary, CausalitySummaryBuilder.Build(model))
+            .Add(c => c.Context, CausalityTestData.NewJoinerContext())
+            .Add(c => c.TechnicalNames, true));
+
+        // "record" and "Identity" are plain-language stand-ins for Connected System Object and Metaverse
+        // Object; leaving them unchanged made the toggle look broken on the one sentence read first.
+        var sentence = cut.Find(".summary-sentence").TextContent;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sentence, Does.Contain("processed the Connected System Object"));
+            Assert.That(sentence, Does.Contain("a new Metaverse Object was projected"));
+            Assert.That(sentence, Does.Not.Contain("the record"));
+            Assert.That(sentence, Does.Not.Contain("Identity"));
+        }
+    }
+
+    [Test]
+    public async Task Render_TechnicalNamesOff_KeepsThePlainLanguageWordingAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+
+        var cut = RenderBand(context, CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var sentence = cut.Find(".summary-sentence").TextContent;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sentence, Does.Contain("processed the record for"));
+            Assert.That(sentence, Does.Contain("a new Identity was created"));
+        }
     }
 }

@@ -97,6 +97,36 @@ public class SyncRepositoryActivityRpeiTests
         Assert.That(rpei.Id, Is.Not.EqualTo(Guid.Empty));
     }
 
+    /// <summary>
+    /// Edges buffered on an RPEI must be recorded by the flush, with the transient outcome reference resolved
+    /// to the id the flush assigned (#1223). Worker seam tests assert what a cascade attributed to what by
+    /// reading this store, so a flush that quietly ignored the buffer would leave every one of them asserting
+    /// against an empty collection and passing for the wrong reason.
+    /// </summary>
+    [Test]
+    public async Task BulkInsertRpeisAsync_RpeiCarryingAnEdge_RecordsItAndResolvesTheOutcomeIdAsync()
+    {
+        var outcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+        };
+        var rpei = new ActivityRunProfileExecutionItem { ActivityId = Guid.NewGuid() };
+        rpei.SyncOutcomes.Add(outcome);
+        rpei.CausalEdges.Add(new CausalEdge
+        {
+            EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
+            ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
+            EffectSyncOutcome = outcome
+        });
+
+        await _repo.BulkInsertRpeisAsync([rpei]);
+
+        var recorded = _repo.CausalEdges.Single();
+        Assert.That(recorded.EffectRunProfileExecutionItemId, Is.EqualTo(rpei.Id));
+        Assert.That(recorded.EffectSyncOutcomeId, Is.EqualTo(outcome.Id));
+        Assert.That(rpei.CausalEdges, Is.Empty, "the buffer is handed to the flush, so it must be emptied by it");
+    }
+
     [Test]
     public async Task GetActivityRpeiErrorCountsAsync_CountsCorrectlyAsync()
     {

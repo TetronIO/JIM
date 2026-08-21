@@ -421,6 +421,13 @@ public partial class SyncRepository : ISyncRepository
             .Select(cs => new { cs.Id, cs.Name })
             .ToDictionaryAsync(cs => cs.Id, cs => cs.Name);
 
+    public Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync()
+        // Same rationale as the Connected System names above: a tiny table, read at most once per run.
+        => _context.MetaverseAttributes
+            .AsNoTracking()
+            .Select(a => new { a.Id, a.Name })
+            .ToDictionaryAsync(a => a.Id, a => a.Name);
+
     #endregion
 
     #region Change Tracker Management

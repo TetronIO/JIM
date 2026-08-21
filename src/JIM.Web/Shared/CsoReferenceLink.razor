@@ -1,0 +1,29 @@
+@using JIM.Models.Staging
+@using JIM.Utilities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Renders a reference to a Connected System Object: its object type, a link to it, and its
+   Secondary External ID (the DN, for LDAP systems) where the Connected System supplies one.
+   Shared by every surface that displays reference attribute values, so they stay identical.
+   The Secondary External ID is an identifier, so it renders in the code font like every other
+   identifier on these pages, low-lighted and hyphen-separated rather than bracketed. *@
+
+<span class="jim-attr-reference">
+    <MudChip T="string" Color="Color.Default" Class="mr-1">
+        @ReferenceValue.Type.Name
+    </MudChip>
+    <MudLink Href="@Utilities.GetConnectedSystemObjectHref(ReferenceValue)">
+        @ReferenceValue.NameOrId
+    </MudLink>
+    @if (ReferenceValue.SecondaryExternalIdAttributeValue != null)
+    {
+        <span class="jim-attr-secondary-id mud-text-secondary jim-text-code ml-1">- @ReferenceValue.SecondaryExternalIdAttributeValue.ToStringNoName()</span>
+    }
+</span>
+
+@code {
+    [Parameter]
+    public ConnectedSystemObject ReferenceValue { get; set; } = null!;
+}

@@ -152,6 +152,22 @@ public class CausalityFlowViewTests
     }
 
     [Test]
+    public async Task Render_TechnicalNames_RenamesTheSourceCardTooAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var plain = RenderFlow(context, model);
+        Assert.That(plain.Find(".evt-title").TextContent, Does.Contain("Source record"));
+
+        // The source card is synthetic and carried no technical label at all, so it was the one row the
+        // toggle left alone: "record" is the plain word for a Connected System Object.
+        await using var technicalContext = CausalityBunitContext.Create();
+        var technical = RenderFlow(technicalContext, model, technicalNames: true);
+        Assert.That(technical.Find(".evt-title").TextContent, Is.EqualTo("Connected System Object"));
+    }
+
+    [Test]
     public async Task Render_TechnicalNames_SwapsEmphasisOnCardsAsync()
     {
         await using var context = CausalityBunitContext.Create();
@@ -222,7 +238,10 @@ public class CausalityFlowViewTests
         cut.WaitForAssertion(() =>
         {
             Assert.That(cut.FindAll(".flow-svg path"), Has.Count.EqualTo(2));
-            Assert.That(cut.FindAll(".flow-svg circle"), Has.Count.EqualTo(2));
+            Assert.That(cut.FindAll(".flow-svg circle.flow-dot"), Has.Count.EqualTo(2));
+            // Each dot is masked by an opaque disc so it can be painted in the connector's own colour
+            // without the path showing through it; the two are drawn concentrically.
+            Assert.That(cut.FindAll(".flow-svg circle.flow-dot-mask"), Has.Count.EqualTo(2));
         });
         // No viewBox: the overlay is CSS-sized to the canvas and draws in CSS pixel coordinates.
         // A viewBox frozen at measure-time size would uniformly scale and centre every connector
