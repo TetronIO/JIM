@@ -169,6 +169,32 @@ That is also why there is no way to remove a configuration, only to disable it. 
 
 How long a change waits before JIM gives up on it is the Connected System's **initial password time to live** setting, shared with initial password provisioning: the question both are asking is how long that system may be unavailable before JIM stops trying, and the answer is a property of the system.
 
+### ▶️ Starting a synchronised password change
+
+JIM has two ways to give somebody a password, and they answer different questions.
+
+| | **Set Password** | **Synchronise Password** |
+|---|---|---|
+| Answers | "Change this person's password in the systems I choose" | "This person's password changed; every system should hold it" |
+| Reaches | The accounts you tick | Every Connected System enabled for Password Synchronisation |
+| When | Immediately, while you wait | Recorded now, delivered on its own clock |
+| If a system is down | That account fails, and you are told | Queued and retried until it works or the window closes |
+| Told to you | Success or failure per account | Which systems it was queued for |
+
+Use **Set Password** when you are choosing the password yourself and applying it to systems you name: onboarding somebody, or putting right an account whose password was refused or forgotten. Use **Synchronise Password** when they have already changed their own password somewhere and the rest should catch up.
+
+Both are on the Metaverse Object's Actions tab, and both are available to automation:
+
+```powershell
+# Change the password on chosen accounts, now
+Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId 3 -Password $password
+
+# Propagate a password change everywhere it belongs
+Sync-JIMMetaverseObjectPassword -Id $id -Password $password
+```
+
+Over REST, that is `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password` and `POST /api/v1/metaverse/objects/{id}/password` respectively. Every endpoint that accepts a password refuses the request unless JIM can confirm the connection is encrypted; if TLS terminates at a reverse proxy, set `JIM_TRUSTED_PROXIES` so JIM reads the forwarded scheme rather than the hop it can see.
+
 ### 📬 How a password change reaches a system
 
 A password change is recorded first and delivered afterwards, never in the same breath. The person changing their password must not be held waiting on a directory, and their new password must not fail to take because one of the systems they have an account in happens to be down. So JIM writes one queued change per target system, encrypted, and returns; delivery runs on its own.

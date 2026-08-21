@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
@@ -35,7 +36,7 @@ public class PasswordSynchronisationServer
     private readonly Func<IConnectedSystemRepository> _connectedSystemRepo;
     private readonly Func<IPasswordProtectionService> _passwordProtection;
     private readonly Func<ConnectedSystem, IConnector> _createConnector;
-    private readonly Func<Activity, MetaverseObject?, Task> _createActivity;
+    private readonly Func<Activity, MetaverseObject?, ApiKey?, Task> _createActivity;
     private readonly Func<Activity, Task> _completeActivity;
     private readonly Func<int?, Task> _requestDelivery;
 
@@ -54,7 +55,12 @@ public class PasswordSynchronisationServer
     /// validation. A delegate rather than the factory itself, so this server never needs to know how a Connector
     /// is built or what has to be injected into it before it can decrypt a bind credential.
     /// </param>
-    /// <param name="createActivity">Creates an Activity, attributed to the initiator passed with it.</param>
+    /// <param name="createActivity">
+    /// Creates an Activity, attributed to whichever initiator is passed with it. Exactly one of the two is set:
+    /// an administrator at a screen, or the API key an automation authenticated with. An Activity with neither
+    /// is refused by the Activity server, and rightly: a password change nobody can be shown to have made is not
+    /// an audit record.
+    /// </param>
     /// <param name="requestDelivery">
     /// Asks for a delivery pass over the given Connected System, or over every system with work due where null.
     /// Queueing and delivering stay separate (a password change must not wait on a directory), so this is how the
@@ -66,7 +72,7 @@ public class PasswordSynchronisationServer
         Func<IConnectedSystemRepository> connectedSystemRepository,
         Func<IPasswordProtectionService> passwordProtection,
         Func<ConnectedSystem, IConnector> createConnector,
-        Func<Activity, MetaverseObject?, Task> createActivity,
+        Func<Activity, MetaverseObject?, ApiKey?, Task> createActivity,
         Func<Activity, Task> completeActivity,
         Func<int?, Task> requestDelivery)
     {
@@ -104,6 +110,41 @@ public class PasswordSynchronisationServer
         MetaverseObject? initiatedBy,
         CancellationToken cancellationToken)
     {
+        return await QueuePasswordChangeAsync(metaverseObjectId, displayName, password, expiryBehaviour,
+            initiatedBy, initiatedByApiKey: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Queues a password change initiated by an API key rather than by a person (#1119).
+    /// <para>
+    /// Automation is the expected caller for a synchronised password change: a self-service portal or a service
+    /// desk tool tells JIM that somebody's password has changed. An Activity must still name who did it, and an
+    /// API key is a security principal exactly as an administrator is.
+    /// </para>
+    /// </summary>
+    public async Task<PasswordQueueResult> QueuePasswordChangeAsync(
+        Guid metaverseObjectId,
+        string displayName,
+        string password,
+        PasswordExpiryBehaviour expiryBehaviour,
+        ApiKey initiatedByApiKey,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
+
+        return await QueuePasswordChangeAsync(metaverseObjectId, displayName, password, expiryBehaviour,
+            initiatedBy: null, initiatedByApiKey, cancellationToken);
+    }
+
+    private async Task<PasswordQueueResult> QueuePasswordChangeAsync(
+        Guid metaverseObjectId,
+        string displayName,
+        string password,
+        PasswordExpiryBehaviour expiryBehaviour,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey,
+        CancellationToken cancellationToken)
+    {
         if (string.IsNullOrEmpty(password))
             throw new ArgumentException("A password is required.", nameof(password));
 
@@ -120,7 +161,7 @@ public class PasswordSynchronisationServer
             TargetOperationType = ActivityTargetOperationType.SetPassword,
             MetaverseObjectId = metaverseObjectId
         };
-        await _createActivity(activity, initiatedBy);
+        await _createActivity(activity, initiatedBy, initiatedByApiKey);
 
         var outcomes = new List<PasswordQueueTargetOutcome>(targets.Count);
         var now = DateTime.UtcNow;
@@ -441,7 +482,7 @@ public class PasswordSynchronisationServer
                 : DescribeFailure(connectedSystem, change)
         };
 
-        await _createActivity(activity, null);
+        await _createActivity(activity, null, null);
     }
 
     private static string DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
@@ -455,6 +496,19 @@ public class PasswordSynchronisationServer
             : change.TargetMessage;
 
         return $"Password not set on {connectedSystem.Name}: {reason}. {disposition}.";
+    }
+
+    /// <summary>
+    /// How many Connected Systems are configured and enabled to receive synchronised passwords (#1119).
+    /// <para>
+    /// Read by the portal so the Synchronise Password action is offered or not, rather than appearing and then
+    /// turning out to reach nothing once somebody has typed a password into it.
+    /// </para>
+    /// </summary>
+    public async Task<int> GetEnabledTargetCountAsync()
+    {
+        var targets = await _connectedSystemRepo().GetEnabledPasswordSynchronisationTargetsAsync();
+        return targets.Count;
     }
 
     /// <summary>
