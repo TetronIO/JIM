@@ -31,7 +31,8 @@ This split fails the administrator in three ways, all observed in real use:
 
 - One canvas answers "what happened and why": the object graph behind the outcome (each record involved,
   the Identity, and the relationships between them), with every causally relevant event placed on the
-  object it happened to.
+  object it happened to. The spine replaces both the Flow and Graph views; Timeline remains for strict
+  chronological reading.
 - This run's work is unmistakable at a glance; earlier runs' work is present but visibly older, each
   event carrying its run and a link to the item that recorded it.
 - The **Caused by** section is retired, with none of its content lost: hops, cohort collapse, snapshot
@@ -94,7 +95,9 @@ This split fails the administrator in three ways, all observed in real use:
    record deleted, from the change data already on the item.
 7. The canvas serves every ObjectChangeType the panel serves today, lighting the column where this run's
    events land; no item type loses causality display in the migration.
-8. The **Caused by** section is removed from the page in the same release the canvas ships.
+8. The **Caused by** section, the **Flow** view and the **Graph** view are removed in the same release
+   the canvas ships; the view switcher offers Spine and Timeline, with Spine the default. A stored view
+   preference for a retired view falls back to Spine without being overwritten.
 9. The Technical names toggle continues to work across the canvas (plain language by default, technical
    vocabulary on demand), and the summary sentence band above the canvas is unchanged.
 10. Stories wider than the viewport scroll horizontally within the canvas; the page body never scrolls
@@ -155,7 +158,7 @@ the chain records (typically nothing yet), and the layout is the same shape as e
 
 | Area | Impact |
 |------|--------|
-| UI | New spine canvas component set replacing the Flow view as the panel's default; `CausalityCausedBy*` retired; `CausalityModelBuilder` extended to project outcomes and chain hops onto object columns |
+| UI | New spine canvas component set replacing the Flow and Graph views, with Spine the panel's default; `CausalityCausedBy*`, `CausalityFlowView` and `CausalityGraphView` (and their layout calculators) retired; `CausalityModelBuilder` extended to project outcomes and chain hops onto object columns |
 | Application | None expected: `GetCausalChainAsync` and the item load already supply the data |
 | Database / API / Worker | None |
 | Tests | New bUnit + model-builder suites in `test/JIM.Web.Tests/`; retirement of Caused By rendering tests; migration of Flow view tests |
@@ -172,15 +175,13 @@ the chain records (typically nothing yet), and the layout is the same shape as e
 - #1223 (causal provenance) merged: the chain, its snapshots and the export queueing seam are what the
   canvas renders. The `feature/causal-provenance` branch must land first.
 
-## Open Questions
+## Decisions
 
-1. **Does the spine replace the Graph view as well as the Flow view?** Recommendation: yes. The Graph
-   view's node-link rendering of same-run events is subsumed by the spine, and keeping it means
-   maintaining two graph-shaped views; Timeline stays for strict chronological reading. Decide before
-   planning.
-2. **Column cap for wide stories**: when a chain touches more systems than fit comfortably (say more than
-   four record columns), collapse the excess behind a "+n more systems" affordance, or rely on horizontal
-   scroll alone? Recommendation: scroll alone until real data shows otherwise.
+1. **The spine replaces the Graph view as well as the Flow view** (decided 2026-08-21). The Graph view's
+   node-link rendering of same-run events is subsumed by the spine, and keeping it would mean maintaining
+   two graph-shaped views; Timeline stays for strict chronological reading.
+2. **Wide stories rely on horizontal scroll alone** until real data shows a "+n more systems" collapse is
+   needed.
 
 ## Acceptance Criteria
 
