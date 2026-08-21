@@ -73,6 +73,11 @@ public class JimApplication : IDisposable
     public InitialPasswordDeliveryServer InitialPasswords { get; }
 
     /// <summary>
+    /// Fan-out and the queue behind Password Synchronisation (#1119).
+    /// </summary>
+    public PasswordSynchronisationServer PasswordSynchronisation { get; }
+
+    /// <summary>
     /// Generates initial passwords, and tells an administrator in advance what a configuration would produce.
     /// Exposed on the facade because the Synchronisation Rule editor assesses a configuration as it is typed,
     /// and the administrator's set-password dialog generates on demand.
@@ -148,6 +153,21 @@ public class JimApplication : IDisposable
         // never had one set still decrypts what the portal encrypted.
         InitialPasswords = new InitialPasswordDeliveryServer(SyncRepo, PasswordGenerator,
             () => CredentialProtection ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider()));
+
+        // Password protection resolves the same way and for the same reason as credential protection above: the
+        // hosts assign CredentialProtection after this constructor runs, and the concrete service implements
+        // both interfaces. The Activity callbacks are passed rather than the facade so the server can be
+        // constructed with test doubles for what it actually uses.
+        PasswordSynchronisation = new PasswordSynchronisationServer(
+            SyncRepo,
+            // Null-forgiving because the compiler analyses this lambda as though it ran here, inside the
+            // constructor, where Repository is not yet definitely assigned. It never does: the delegate exists
+            // precisely so the repository is resolved when a password change is queued.
+            () => Repository!.ConnectedSystems,
+            () => (CredentialProtection as IPasswordProtectionService)
+                  ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider()),
+            (activity, initiatedBy) => Activities.CreateActivityAsync(activity, initiatedBy),
+            activity => Activities.CompleteActivityAsync(activity));
         ScopingEvaluation = new ScopingEvaluationServer();
         ScopeReconciliation = new ScopeReconciliationServer(this);
         FileSystem = new FileSystemServer(this);

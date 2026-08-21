@@ -5734,6 +5734,39 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(ps => ps.ConnectedSystemId == connectedSystemId);
     }
 
+    public async Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync()
+    {
+        // Joined and projected in the database rather than loading the Connected Systems: fan-out asks this on
+        // every password change, and it needs three fields per system.
+        var targets = await Repository.Database.ConnectedSystemPasswordSynchronisations
+            .AsNoTracking()
+            .Where(ps => ps.Enabled)
+            .Join(Repository.Database.ConnectedSystems.AsNoTracking(),
+                ps => ps.ConnectedSystemId,
+                cs => cs.Id,
+                (ps, cs) => new
+                {
+                    ps.ConnectedSystemId,
+                    cs.Name,
+                    ps.TargetObjectTypeId,
+                    cs.InitialPasswordTimeToLive
+                })
+            .ToListAsync();
+
+        // The effective time to live is resolved here rather than in the query, because the fallback lives on the
+        // entity (EffectiveInitialPasswordTimeToLive) and must not be restated in SQL where the two could drift.
+        return targets
+            .Select(t => new PasswordSynchronisationTarget
+            {
+                ConnectedSystemId = t.ConnectedSystemId,
+                ConnectedSystemName = t.Name,
+                TargetObjectTypeId = t.TargetObjectTypeId,
+                TimeToLive = new ConnectedSystem { InitialPasswordTimeToLive = t.InitialPasswordTimeToLive }
+                    .EffectiveInitialPasswordTimeToLive
+            })
+            .ToList();
+    }
+
     public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)
     {
         // Read-only comparison input, so no tracking: attaching it would put a second instance of this row in

@@ -1027,6 +1027,16 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId);
 
     /// <summary>
+    /// Every Connected System configured and enabled to receive synchronised passwords (#1119), flattened to what
+    /// fan-out needs.
+    /// <para>
+    /// Asked on every password change, so it is a projection rather than a graph load: the alternative would
+    /// materialise every configured Connected System to read three fields off each.
+    /// </para>
+    /// </summary>
+    public Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync();
+
+    /// <summary>
     /// Returns the count of all Connected System Objects across all Connected Systems.
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountAsync();

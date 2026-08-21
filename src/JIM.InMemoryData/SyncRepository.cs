@@ -35,6 +35,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, MetaverseObject> _mvos = new();
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
     private readonly Dictionary<Guid, PendingInitialPassword> _pendingInitialPasswords = new();
+    private readonly Dictionary<Guid, PendingPasswordChange> _pendingPasswordChanges = new();
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
 
@@ -94,6 +95,7 @@ public class SyncRepository : ISyncRepository
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
     public IReadOnlyDictionary<Guid, PendingInitialPassword> PendingInitialPasswords => _pendingInitialPasswords;
+    public IReadOnlyDictionary<Guid, PendingPasswordChange> PendingPasswordChanges => _pendingPasswordChanges;
 
     /// <summary>All activities, keyed by activity ID.</summary>
     public IReadOnlyDictionary<Guid, Activity> Activities => _activities;
@@ -2714,4 +2716,135 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => Task.FromResult<IAsyncDisposable?>(null);
+
+    #region Password Synchronisation queue (#1119)
+
+    public Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
+    {
+        foreach (var change in changes)
+        {
+            // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema.
+            // Looked up per iteration rather than snapshotted, so two changes for the same target inside one
+            // batch coalesce against each other exactly as ON CONFLICT DO UPDATE does.
+            var existing = _pendingPasswordChanges.Values.SingleOrDefault(c =>
+                c.MetaverseObjectId == change.MetaverseObjectId && c.ConnectedSystemId == change.ConnectedSystemId);
+
+            if (existing != null)
+            {
+                existing.ConnectedSystemObjectId = change.ConnectedSystemObjectId;
+                existing.Supersede(change.EncryptedPassword, change.ExpiryBehaviour, change.ActivityId,
+                    change.ExpiresAt - change.CreatedAt, change.CreatedAt);
+                continue;
+            }
+
+            if (change.Id == Guid.Empty)
+                change.Id = Guid.NewGuid();
+
+            _pendingPasswordChanges[change.Id] = change;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<List<PendingPasswordChange>> GetDuePasswordChangesAsync(int connectedSystemId, DateTime asOf, int maximum)
+    {
+        var due = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.IsDue(asOf))
+            .OrderBy(c => c.CreatedAt)
+            .Take(maximum)
+            .ToList();
+
+        return Task.FromResult(due);
+    }
+
+    public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf)
+    {
+        var systems = _pendingPasswordChanges.Values
+            .Where(c => c.IsDue(asOf))
+            .Select(c => c.ConnectedSystemId)
+            .Distinct()
+            .ToList();
+
+        return Task.FromResult(systems);
+    }
+
+    public Task RecordPasswordChangeAttemptsAsync(IEnumerable<PendingPasswordChange> changes)
+    {
+        foreach (var change in changes.Where(c => _pendingPasswordChanges.ContainsKey(c.Id)))
+        {
+            var stored = _pendingPasswordChanges[change.Id];
+            stored.ConnectedSystemObjectId = change.ConnectedSystemObjectId;
+            stored.Status = change.Status;
+            stored.FailureReason = change.FailureReason;
+            stored.TargetMessage = change.TargetMessage;
+            stored.AttemptCount = change.AttemptCount;
+            stored.NextRetryAt = change.NextRetryAt;
+            stored.LastAttemptedAt = change.LastAttemptedAt;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
+    {
+        foreach (var id in ids)
+            _pendingPasswordChanges.Remove(id);
+
+        return Task.CompletedTask;
+    }
+
+    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf)
+    {
+        var expiring = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.HasExpired(asOf))
+            .ToList();
+
+        foreach (var change in expiring)
+            change.Expire();
+
+        return Task.FromResult(expiring.Count);
+    }
+
+    public Task<int> ReleasePasswordChangesForDeliveryAsync(int connectedSystemId)
+    {
+        var releasing = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.Status == PendingPasswordChangeStatus.Parked)
+            .ToList();
+
+        foreach (var change in releasing)
+            change.Retry();
+
+        return Task.FromResult(releasing.Count);
+    }
+
+    public Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        var attention = _pendingPasswordChanges.Values
+            .Where(c => connectedSystemIds.Contains(c.ConnectedSystemId) && c.Status != PendingPasswordChangeStatus.Pending)
+            .GroupBy(c => c.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => new PasswordQueueAttention
+            {
+                ParkedCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Parked),
+                ExpiredCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Expired)
+            });
+
+        return Task.FromResult(attention);
+    }
+
+    public Task<int> DeleteTerminalPasswordChangesAsync(DateTime olderThan, int maxRecords)
+    {
+        var removing = _pendingPasswordChanges.Values
+            .Where(c => c.Status != PendingPasswordChangeStatus.Pending && (c.LastAttemptedAt ?? c.CreatedAt) < olderThan)
+            .OrderBy(c => c.LastAttemptedAt ?? c.CreatedAt)
+            .Take(maxRecords)
+            .Select(c => c.Id)
+            .ToList();
+
+        foreach (var id in removing)
+            _pendingPasswordChanges.Remove(id);
+
+        return Task.FromResult(removing.Count);
+    }
+
+    #endregion
 }

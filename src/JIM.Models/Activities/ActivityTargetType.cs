@@ -115,5 +115,18 @@ public enum ActivityTargetType
     /// pollute.
     /// </para>
     /// </summary>
-    ConnectedSystemObject = 24
+    ConnectedSystemObject = 24,
+
+    /// <summary>
+    /// A password change fanning out to the Connected Systems an identity has accounts in (#1119). Guid-keyed via
+    /// <see cref="Activity.MetaverseObjectId"/> on the parent, with a child Activity per target Connected System
+    /// carrying that system's outcome.
+    /// <para>
+    /// Its own target type, and its own category, so the Activities list can isolate password events with the
+    /// quick-filter it already has. Deliberately not <see cref="MetaverseObject"/>, which is categorised as
+    /// Identity Data and carries an identity's attribute change history: a password reaches no attribute and must
+    /// not appear among the changes to them.
+    /// </para>
+    /// </summary>
+    PasswordSynchronisation = 25
 }
