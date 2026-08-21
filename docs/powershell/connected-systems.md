@@ -139,7 +139,7 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordSynchronisation
 | `effectiveMaxRetries` | `int` | The retry count actually applied |
 | `retryBackoffBase` | `timespan` | The first retry interval; `0` means use JIM's default |
 | `effectiveRetryBackoffBase` | `timespan` | The backoff base actually applied |
-| `requireSecureTransport` | `bool` | Whether an unconfirmed-encryption connection is refused |
+| `requireSecureTransport` | `bool` | Whether an unconfirmed-encryption connection is refused. Reported here, set on the Connected System with `Set-JIMConnectedSystem` |
 | `effectiveTimeToLive` | `timespan` | How long a queued change waits before JIM expires it |
 
 Auditing which systems are switched on:
@@ -163,8 +163,8 @@ Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -TargetObjectType 7 -Enabled
 # Switch it on during the change window, delivering everything queued while it was off
 Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -Enabled $true -ChangeReason 'CHG0041288'
 
-# Require an encrypted connection, and allow ten attempts before a change is parked
-Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -RequireSecureTransport -MaxRetries 10 -PassThru
+# Allow ten attempts before a change is parked
+Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
 ```
 
 | Parameter | Type | Description |
@@ -174,9 +174,13 @@ Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -RequireSecureTransport -Max
 | `-TargetObjectType` | `int` | The Object Type holding user accounts; must be selected for synchronisation. Alias: `-TargetObjectTypeId` |
 | `-MaxRetries` | `int` | Attempts before parking a change; `0` uses JIM's default |
 | `-RetryBackoffBase` | `timespan` | The first retry interval; `0` uses JIM's default |
-| `-RequireSecureTransport` | `switch` | Refuse to transmit over a connection JIM cannot confirm is encrypted |
 | `-ChangeReason` | `string` | Recorded against the Connected System's configuration change history |
 | `-PassThru` | `switch` | Return the updated configuration |
+
+!!! note "Require Secure Transport is set on the Connected System"
+    It governs every password JIM sends to the system, not only synchronised ones, so it is set with
+    `Set-JIMConnectedSystem -Id 3 -RequireSecureTransport` and turned off with
+    `-RequireSecureTransport:$false`. It is reported here as well, because it governs this feature too.
 
 !!! note "There is no Remove cmdlet, and that is deliberate"
     Removing a configuration would discard every password change queued against it. Disabling it keeps them,
@@ -265,14 +269,14 @@ Updates the configuration of an existing Connected System.
 # ById (default)
 Set-JIMConnectedSystem -Id <int> [-Name <string>] [-Description <string>]
     [-SettingValues <hashtable>] [-MaxExportParallelism <int>]
-    [-InitialPasswordTimeToLive <timespan>]
+    [-RequireSecureTransport] [-InitialPasswordTimeToLive <timespan>]
     [-UnresolvedReferenceHandling <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
     [-Description <string>] [-SettingValues <hashtable>]
-    [-MaxExportParallelism <int>] [-InitialPasswordTimeToLive <timespan>]
-    [-UnresolvedReferenceHandling <string>]
+    [-MaxExportParallelism <int>] [-RequireSecureTransport]
+    [-InitialPasswordTimeToLive <timespan>] [-UnresolvedReferenceHandling <string>]
     [-ChangeReason <string>] [-PassThru]
 ```
 
@@ -286,6 +290,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
 | `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16). Leave unset to let the connector recommend a conservative value (the LDAP Connector recommends 2 for capable directories, those tuned to a high Export Concurrency); JIM stays sequential (1) if the connector offers no recommendation. An explicitly set value always takes precedence. |
+| `RequireSecureTransport` | `switch` | No | `$false` | Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted. Governs every password JIM sends here: the first password on an account it provisions, one set by hand, and a synchronised password change. Nothing is discarded when JIM refuses; queued changes wait and accounts stay owed their first password. Turn it off with `-RequireSecureTransport:$false`. See [Passwords](../concepts/passwords.md#password-synchronisation). |
 | `InitialPasswordTimeToLive` | `timespan` | No | 7 days | How long an account provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Raise it ahead of a planned outage longer than the current window; accounts provisioned meanwhile otherwise expire without a password. See [Passwords](../concepts/passwords.md#how-long-jim-keeps-trying). |
 | `UnresolvedReferenceHandling` | `string` | No | `Error` | How import-time reference values that cannot be resolved to a Connected System Object are treated: `Error`, `Warn`, or `Ignore`. See [Unresolved reference handling](../configuration/connected-systems.md#unresolved-reference-handling). |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |

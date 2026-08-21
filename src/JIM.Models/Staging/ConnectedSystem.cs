@@ -150,6 +150,32 @@ public class ConnectedSystem : IAuditable
     public TimeSpan? InitialPasswordTimeToLive { get; set; }
 
     /// <summary>
+    /// Whether JIM must refuse to send a password to this Connected System over a connection it cannot confirm
+    /// is encrypted. Off by default.
+    /// <para>
+    /// Held on the Connected System rather than on any one feature's configuration, because it governs every
+    /// password JIM sends here: the initial password on an account it provisions, a password an administrator
+    /// sets by hand, and a synchronised password change (#1119). A switch that guarded only one of those would
+    /// leave an administrator who turned it on still sending passwords in the clear down the other two, which is
+    /// worse than not offering it. It also has to be settable on a system that provisions accounts but receives
+    /// no synchronised passwords, and such a system has no Password Synchronisation configuration to hold it.
+    /// </para>
+    /// <para>
+    /// Off by default is a considered position rather than laxity. The LDAP Connector warns on an unencrypted
+    /// connection instead of blocking, because a signed and sealed bind is a legitimate encrypted alternative
+    /// that JIM cannot detect from the Connected System's settings alone, so refusing on the settings would
+    /// refuse a valid configuration. This is how an administrator who knows their deployment closes that gap.
+    /// </para>
+    /// <para>
+    /// The Connector reports whether its channel is encrypted
+    /// (<see cref="JIM.Models.Interfaces.IConnectorPasswordManagement.IsPasswordChannelSecure"/>); the refusal is
+    /// JIM's, applied here, because a Connector cannot know whether a given deployment is an isolated network
+    /// with a directory that cannot serve TLS.
+    /// </para>
+    /// </summary>
+    public bool RequireSecureTransport { get; set; }
+
+    /// <summary>
     /// The time to live actually applied to a new <see cref="PendingInitialPassword"/> for this Connected System.
     /// A value of zero or less is treated as unconfigured rather than obeyed, because it would expire every
     /// account the instant it was provisioned, which is the one outcome nobody setting this can be asking for.

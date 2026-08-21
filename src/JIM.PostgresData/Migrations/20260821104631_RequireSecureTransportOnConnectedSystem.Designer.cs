@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260821104631_RequireSecureTransportOnConnectedSystem")]
+    partial class RequireSecureTransportOnConnectedSystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -4048,30 +4051,6 @@ namespace JIM.PostgresData.Migrations
                         });
 
                     b.HasDiscriminator().HasValue("PasswordDeliveryWorkerTask");
-                });
-
-            modelBuilder.Entity("JIM.Models.Tasking.SchemaRefreshRemovalWorkerTask", b =>
-                {
-                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
-
-                    b.Property<int>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.PrimitiveCollection<List<int>>("RemovedAttributeIds")
-                        .IsRequired()
-                        .HasColumnType("integer[]");
-
-                    b.PrimitiveCollection<List<int>>("RemovedObjectTypeIds")
-                        .IsRequired()
-                        .HasColumnType("integer[]");
-
-                    b.ToTable("WorkerTasks", t =>
-                        {
-                            t.Property("ConnectedSystemId")
-                                .HasColumnName("SchemaRefreshRemovalWorkerTask_ConnectedSystemId");
-                        });
-
-                    b.HasDiscriminator().HasValue("SchemaRefreshRemovalWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.SynchronisationWorkerTask", b =>

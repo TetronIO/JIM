@@ -184,8 +184,12 @@ A change for someone who changes their password again before the first one is de
 
 Delivery is a Password Delivery task in the Operations queue, so a pass is visible while it runs and its outcome is recorded as an Activity like any other work. A pass is raised when a password change is queued, when you enable Password Synchronisation on a system (to deliver what accumulated), and by JIM itself when a retry falls due.
 
-!!! warning "Requiring a secure transport means refusing to send"
-    A Connected System with **Require Secure Transport** on will not have passwords sent to it over a connection JIM cannot confirm is encrypted. The queued changes wait, and the pass says so; nothing is attempted and no attempt is counted against them. Leave it off only where the target genuinely cannot offer an encrypted connection, and understand that a password sent over an unencrypted one is readable by anyone on the network path.
+!!! warning "Requiring an encrypted connection means refusing to send"
+    A Connected System with **Only send passwords over an encrypted connection** on will not have passwords sent to it over a connection JIM cannot confirm is encrypted. It is on the Connected System's Settings tab, under Passwords, and it governs **every** password JIM sends to that system: the first password on an account JIM provisions, one you set by hand, and a synchronised password change alike.
+
+    Nothing is discarded when JIM refuses. Queued password changes wait and are delivered once the connection is encrypted or the setting is turned off; accounts stay owed their first password and get one on the next export; an administrator setting a password by hand is told outright, at the time, rather than having it go out in the clear.
+
+    Leave it off only where the target genuinely cannot offer an encrypted connection, and understand what that costs: a password sent over an unencrypted one is readable by anyone on the network path.
 
 !!! note "Capturing a password changed in another system is a separate capability"
     Everything here concerns a password change JIM knows about: one an administrator makes, or one sent to JIM's API. Capturing a change made **in** another system, such as a user changing their own password in Active Directory, and replaying it into the others needs a capture agent running on the domain controllers, because no directory will disclose a password when JIM reads from it.
