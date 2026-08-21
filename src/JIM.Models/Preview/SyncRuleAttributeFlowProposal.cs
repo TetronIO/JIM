@@ -68,6 +68,7 @@ public record SyncRuleAttributeFlowProposal(IReadOnlyList<SyncRuleMappingProposa
 /// </param>
 /// <param name="NullIsValue">Whether a null contribution stops resolution rather than falling through.</param>
 /// <param name="InitialExportOnly">Whether an export mapping flows only on the provisioning export.</param>
+/// <param name="Enabled">Whether the mapping is evaluated at all (#1485); a disabled mapping flows nothing.</param>
 public record SyncRuleMappingProposal(
     int? TargetMetaverseAttributeId,
     int? TargetConnectedSystemAttributeId,
@@ -76,7 +77,8 @@ public record SyncRuleMappingProposal(
     InboundCaseNormalisation CaseNormalisation = InboundCaseNormalisation.None,
     int Priority = int.MaxValue,
     bool NullIsValue = false,
-    bool InitialExportOnly = false)
+    bool InitialExportOnly = false,
+    bool Enabled = true)
 {
     /// <summary>
     /// This mapping as it currently stands on a Synchronisation Rule.
@@ -100,7 +102,8 @@ public record SyncRuleMappingProposal(
             mapping.CaseNormalisation,
             mapping.Priority,
             mapping.NullIsValue,
-            mapping.InitialExportOnly);
+            mapping.InitialExportOnly,
+            mapping.Enabled);
     }
 
     internal string CanonicalKey()
@@ -108,7 +111,7 @@ public record SyncRuleMappingProposal(
         var sources = string.Join(">", Sources.OrderBy(source => source.Order).Select(source => source.CanonicalKey()));
         return string.Create(CultureInfo.InvariantCulture,
             $"mv={TargetMetaverseAttributeId};cs={TargetConnectedSystemAttributeId};ivp={InboundValueProcessing};" +
-            $"case={CaseNormalisation};pri={Priority};niv={NullIsValue};ieo={InitialExportOnly};src=[{sources}]");
+            $"case={CaseNormalisation};pri={Priority};niv={NullIsValue};ieo={InitialExportOnly};en={Enabled};src=[{sources}]");
     }
 }
 

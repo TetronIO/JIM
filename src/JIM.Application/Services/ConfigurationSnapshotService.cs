@@ -212,6 +212,11 @@ public class ConfigurationSnapshotService
             // so a toggle must appear in the configuration change history.
             Add(children, "initialExportOnly", Render(mapping.InitialExportOnly), "Initial Export Only");
 
+            // A disabled mapping (#1485) stops flowing entirely, so the toggle and the recorded reason are
+            // configuration and must appear in the change history; without them a disable diffs as "no change".
+            Add(children, "enabled", Render(mapping.Enabled), "Enabled");
+            Add(children, "disabledReason", mapping.DisabledReason, "Disabled reason");
+
             children.Add(BuildMappingSources(mapping.Sources));
             items.Add(ConfigurationSnapshotNode.ObjectNode("attributeFlowRule", children, "Attribute Flow", mapping.Id));
         }

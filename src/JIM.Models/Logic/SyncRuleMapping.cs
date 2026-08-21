@@ -132,6 +132,24 @@ public class SyncRuleMapping : IAuditable
     public bool InitialExportOnly { get; set; }
 
     /// <summary>
+    /// Whether this mapping is evaluated at all. A disabled mapping is skipped by synchronisation in both
+    /// directions, on provisioning (Create) exports as much as Updates: unlike <see cref="InitialExportOnly"/>,
+    /// disabled means the mapping does not run until an administrator re-enables it. Defaults to true so every
+    /// mapping persisted before this field existed behaves exactly as it always has. Disabling one mapping is
+    /// the smallest safe response to a single removed or redefined source attribute; disabling the whole
+    /// Synchronisation Rule (its own <see cref="SyncRule.Enabled"/>) stops every flow it carries (#1485).
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Why this mapping is disabled, when something disabled it on the administrator's behalf (the schema
+    /// refresh decision's "Apply and Disable Dependents" option names the refresh and the schema change here).
+    /// Null when the mapping is enabled, and null when an administrator disabled it themselves; the presence of
+    /// a reason is what distinguishes the two. Cleared when the mapping is re-enabled.
+    /// </summary>
+    public string? DisabledReason { get; set; }
+
+    /// <summary>
     /// Whether this export mapping contributes to an Update export to the Connected System. The export
     /// evaluation and Drift Correction paths both consult this before evaluating a mapping, so a mapping
     /// that does not flow on update is never turned into a Pending Export attribute value change.

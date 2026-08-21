@@ -152,6 +152,32 @@ public class ConfigurationSnapshotServiceTests
         Assert.That(Child(flow, "initialExportOnly")!.Label, Is.EqualTo("Initial Export Only"));
     }
 
+    [Test]
+    public void CreateSnapshot_SyncRule_CapturesMappingEnabledAndDisabledReason()
+    {
+        // A disabled mapping (#1485) stops flowing entirely, so the toggle and the recorded reason are
+        // configuration and must be snapshotted; without them a disable would diff as "no change".
+        var mapping = new SyncRuleMapping
+        {
+            Id = 100,
+            TargetMetaverseAttributeId = 5,
+            Enabled = false,
+            DisabledReason = "Attribute 'faxNumber' is no longer reported by the Connected System (schema refresh, 21 Aug 2026)."
+        };
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(flow, "enabled")!.Value, Is.EqualTo("false"));
+            Assert.That(Child(flow, "enabled")!.Label, Is.EqualTo("Enabled"));
+            Assert.That(Child(flow, "disabledReason")!.Value, Does.Contain("faxNumber"));
+        }
+    }
+
     /// <summary>
     /// A Synchronisation Rule now carries a secret: the one password an administrator chose for every account it
     /// provisions (#1273). Change history has to record that it changed, and only that; the ciphertext must not

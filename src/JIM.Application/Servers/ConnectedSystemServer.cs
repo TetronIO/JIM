@@ -6122,6 +6122,16 @@ public class ConnectedSystemServer
 
         if (settings.InitialExportOnly.HasValue)
             mapping.InitialExportOnly = settings.InitialExportOnly.Value;
+
+        // Enabled applies to both directions (#1485), which is why it is absent from the direction guards
+        // above. Re-enabling clears the recorded reason: it describes why the mapping is off, and re-enabled
+        // it would be a stale claim about a state that no longer holds.
+        if (settings.Enabled.HasValue)
+        {
+            mapping.Enabled = settings.Enabled.Value;
+            if (mapping.Enabled)
+                mapping.DisabledReason = null;
+        }
     }
 
     /// <summary>

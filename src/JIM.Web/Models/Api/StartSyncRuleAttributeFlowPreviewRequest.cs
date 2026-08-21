@@ -84,6 +84,9 @@ public class SyncRuleMappingRequest
     /// <summary>Whether an export mapping flows only on the provisioning export.</summary>
     public bool InitialExportOnly { get; set; }
 
+    /// <summary>Whether the mapping is evaluated at all (#1485); a disabled mapping flows nothing.</summary>
+    public bool Enabled { get; set; } = true;
+
     internal SyncRuleMappingProposal ToProposal() =>
         new(TargetMetaverseAttributeId,
             TargetConnectedSystemAttributeId,
@@ -92,7 +95,8 @@ public class SyncRuleMappingRequest
             CaseNormalisation,
             Priority,
             NullIsValue,
-            InitialExportOnly);
+            InitialExportOnly,
+            Enabled);
 }
 
 /// <summary>
