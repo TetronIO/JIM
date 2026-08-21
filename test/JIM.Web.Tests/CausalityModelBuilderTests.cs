@@ -720,13 +720,13 @@ public class CausalityModelBuilderTests
         var synthetic = model.AllEvents().SingleOrDefault(e => e.IsSynthetic);
 
         Assert.That(synthetic, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(synthetic!.Lane, Is.EqualTo(CausalityLane.Identity));
             Assert.That(synthetic!.OutcomeType, Is.Null, "nothing was recorded, so there is no outcome to name");
             Assert.That(synthetic!.PlainLabel, Is.EqualTo("Identity not deleted"));
             Assert.That(synthetic!.TechnicalLabel, Is.EqualTo("Metaverse Object not deleted"));
-        });
+        }
     }
 
     [Test]

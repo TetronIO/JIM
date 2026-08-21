@@ -139,12 +139,12 @@ public class DeletionCascadeExportReportingTests
 
         var deletePendingExport = SyncRepo.PendingExports.Values
             .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(deletionRpei.Id, Is.Not.EqualTo(Guid.Empty),
                 "the deletion item must be given its id at stamp time; the RPEI flush runs too late for this");
             Assert.That(deletePendingExport.QueuedByRunProfileExecutionItemId, Is.EqualTo(deletionRpei.Id));
-        });
+        }
     }
 
     /// <summary>
@@ -288,7 +288,7 @@ public class DeletionCascadeExportReportingTests
 
         Assert.That(edge, Is.Not.Null,
             "with no deletion outcome to nest under, the edge is the only thing that can say why this account is being deprovisioned");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(edge!.EdgeType, Is.EqualTo(CausalEdgeType.MetaverseObjectDeletionCausedDeprovision));
             Assert.That(edge!.CauseMetaverseObjectId, Is.EqualTo(mvo.Id));
@@ -296,7 +296,7 @@ public class DeletionCascadeExportReportingTests
             Assert.That(edge!.ConnectedSystemId, Is.EqualTo(9),
                 "cohorts group on the system whose disconnection triggered the deletion");
             Assert.That(edge!.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
-        });
+        }
     }
 
     /// <summary>

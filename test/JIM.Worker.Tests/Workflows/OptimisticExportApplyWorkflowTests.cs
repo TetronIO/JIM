@@ -369,7 +369,7 @@ public class OptimisticExportApplyWorkflowTests
         Assert.That(edge, Is.Not.Null,
             "reconciliation correlates by Connected System Object id alone, so the export that caused this confirmation " +
             "can only be identified while the Pending Export is still known");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(edge!.EdgeType, Is.EqualTo(CausalEdgeType.ExportCausedImportConfirmation));
             Assert.That(edge!.CausePendingExportId, Is.EqualTo(pendingExport.Id),
@@ -380,7 +380,7 @@ public class OptimisticExportApplyWorkflowTests
             Assert.That(edge!.EffectSyncOutcome!.OutcomeType,
                 Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed),
                 "the edge must name the confirmation outcome it explains, so a run confirming many exports keeps them apart");
-        });
+        }
     }
 
     /// <summary>

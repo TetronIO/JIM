@@ -191,11 +191,11 @@ public class PendingExportQueueingProvenanceDatabaseTests
 
         await using var verify = NewContext();
         var stored = await verify.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == exportId);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.ErrorCount, Is.EqualTo(1), "the update itself must have taken");
             Assert.That(stored.QueuedByRunProfileExecutionItemId, Is.EqualTo(queueingItemId));
-        });
+        }
     }
 
     /// <summary>
@@ -239,11 +239,11 @@ public class PendingExportQueueingProvenanceDatabaseTests
         await using var verify = NewContext();
         var stamped = await verify.PendingExports.AsNoTracking()
             .ToDictionaryAsync(pe => pe.Id, pe => pe.QueuedByRunProfileExecutionItemId);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stamped[firstExportId], Is.EqualTo(firstItemId));
             Assert.That(stamped[secondExportId], Is.EqualTo(secondItemId));
-        });
+        }
     }
 
     private async Task<int> SeedSystemAsync()

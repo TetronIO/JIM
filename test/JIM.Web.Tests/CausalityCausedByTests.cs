@@ -81,12 +81,12 @@ public class CausalityCausedByTests : JimComponentTestContext
 
         var cut = RenderChain(chain);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Find(".cb-sentence").TextContent.Trim(), Is.EqualTo(
                 "Tina Adams was deleted, so they were removed from Project Diamond's Static Members"));
             Assert.That(cut.Find(".cb-attr").TextContent, Is.EqualTo("Static Members"));
-        });
+        }
     }
 
     [Test]
@@ -116,11 +116,11 @@ public class CausalityCausedByTests : JimComponentTestContext
         var cut = RenderChain(chain);
 
         var toggle = cut.Find(".cb-members-toggle");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(toggle.TextContent.Trim(), Is.EqualTo("Show the 10 Users"));
             Assert.That(cut.FindAll(".cb-member"), Is.Empty);
-        });
+        }
 
         toggle.Click();
 
@@ -228,12 +228,12 @@ public class CausalityCausedByTests : JimComponentTestContext
 
         // The link is an action, not part of the claim; leaving it on the reason row put a third register on
         // one baseline and broke the sentence the chip and reason now form.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindAll(".cb-meta a.cb-link"), Is.Empty);
             Assert.That(cut.Find(".cb-actions a.cb-link").GetAttribute("href"),
                 Is.EqualTo($"/activity/item/{CauseItemId}"));
-        });
+        }
     }
 
     /// <summary>
@@ -317,14 +317,14 @@ public class CausalityCausedByTests : JimComponentTestContext
         var cut = RenderChain(chain);
 
         var sentences = cut.FindAll(".cb-sentence").Select(e => e.TextContent.Trim()).ToList();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sentences, Has.Count.EqualTo(2));
             Assert.That(sentences[1], Is.EqualTo(
                 "Upstream HR record was deleted, so this deprovisioning was queued"));
             // Only the leaf ends the chain; a resolved cause states its own causes instead of an ending
             Assert.That(cut.FindAll(".cb-end"), Has.Count.EqualTo(1));
-        });
+        }
     }
 
     [Test]

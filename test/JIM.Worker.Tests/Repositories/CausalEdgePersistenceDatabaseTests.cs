@@ -122,7 +122,7 @@ public class CausalEdgePersistenceDatabaseTests
         await using var verifyCtx = NewContext();
         var persisted = await verifyCtx.CausalEdges.AsNoTracking().SingleAsync(e => e.Id == edge.Id);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.EffectRunProfileExecutionItemId, Is.EqualTo(effectRpeiId));
             Assert.That(persisted.EffectSyncOutcomeId, Is.EqualTo(effectOutcomeId));
@@ -146,7 +146,7 @@ public class CausalEdgePersistenceDatabaseTests
             Assert.That(persisted.SyncRuleId, Is.EqualTo(12));
             Assert.That(persisted.SyncRuleName, Is.EqualTo("APAC Identities Inbound"));
             Assert.That(persisted.Created, Is.EqualTo(created));
-        });
+        }
     }
 
     /// <summary>
@@ -177,7 +177,7 @@ public class CausalEdgePersistenceDatabaseTests
         await using var verifyCtx = NewContext();
         var persisted = await verifyCtx.CausalEdges.AsNoTracking().SingleAsync(e => e.Id == edge.Id);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.EffectSyncOutcomeId, Is.Null);
             Assert.That(persisted.CauseRunProfileExecutionItemId, Is.Null);
@@ -193,7 +193,7 @@ public class CausalEdgePersistenceDatabaseTests
             Assert.That(persisted.ConnectedSystemName, Is.Null);
             Assert.That(persisted.SyncRuleId, Is.Null);
             Assert.That(persisted.SyncRuleName, Is.Null);
-        });
+        }
     }
 
     /// <summary>

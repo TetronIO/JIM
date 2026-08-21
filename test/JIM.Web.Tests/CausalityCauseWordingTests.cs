@@ -107,12 +107,12 @@ public class CausalityCauseWordingTests
 
         var sentence = CausalityCauseWording.Sentence(cohort, "Project Diamond");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(Read(sentence), Is.EqualTo(
                 "3 Users were deleted, so the references to them were removed from Project Diamond"));
             Assert.That(sentence.Any(p => p.IsAttributeName), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -226,14 +226,14 @@ public class CausalityCauseWordingTests
         var continuing = CausalityCauseWording.Reason(ReasonCohort(code, withConnectedSystem: true))!;
         var standalone = CausalityCauseWording.Reason(ReasonCohort(code, withConnectedSystem: false))!;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(char.IsLower(continuing[0]), Is.True, "a phrase following the chip continues its sentence");
             Assert.That(char.IsUpper(standalone[0]), Is.True, "a phrase standing alone opens its own sentence");
             Assert.That(continuing, Does.Contain("the Deletion Rule deleted them"),
                 "the row's relevance is that it explains the deletion, so it has to say so");
             Assert.That(standalone, Does.Contain("the Deletion Rule deleted them"));
-        });
+        }
     }
 
     [TestCase(CausalChainResolution.Resolved, null)]
@@ -248,12 +248,12 @@ public class CausalityCauseWordingTests
     [Test]
     public void MembersLabel_CountsTheCohortWithItsOwnNoun()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(CausalityCauseWording.MembersLabel(ReferenceRemovalCohort(10)), Is.EqualTo("Show the 10 Users"));
             Assert.That(CausalityCauseWording.MembersLabel(ReferenceRemovalCohort(2)), Is.EqualTo("Show the 2 Users"));
             Assert.That(CausalityCauseWording.HideMembersLabel(ReferenceRemovalCohort(10)), Is.EqualTo("Hide the 10 Users"));
-        });
+        }
     }
 
     #region the synchronisation that queued an export (#1223)
@@ -375,7 +375,7 @@ public class CausalityCauseWordingTests
     [Test]
     public void ShowConnectedSystemChip_QueueingCohort_SuppressesTheChip()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(CausalityCauseWording.ShowConnectedSystemChip(QueueingCohort()), Is.False);
             Assert.That(CausalityCauseWording.ShowConnectedSystemChip(new CausalChainCohort
@@ -384,7 +384,7 @@ public class CausalityCauseWordingTests
                 ConnectedSystemId = 1,
                 ConnectedSystemName = "Yellowstone APAC"
             }), Is.True);
-        });
+        }
     }
 
     #region the source-import hop (#1223, complete export chain)

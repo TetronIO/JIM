@@ -226,7 +226,7 @@ public class CausalEdgeFlushDatabaseTests
 
         Assert.That(persisted, Is.Not.Null,
             "the EF path must drain the edge buffer too; the buffer is unmapped, so AddRange cannot reach it");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted!.EffectRunProfileExecutionItemId, Is.EqualTo(effectItem.Id));
             Assert.That(persisted!.EffectSyncOutcomeId, Is.EqualTo(effectOutcome.Id));
@@ -236,7 +236,7 @@ public class CausalEdgeFlushDatabaseTests
                 "an implementation resolving the cause eagerly would have stored null here and named no cause");
             Assert.That(persisted!.CauseDisplayName, Is.EqualTo("Lena Leaver"));
             Assert.That(persisted!.ReasonCode, Is.EqualTo(CausalReasonCode.AuthoritativeSourceDisconnected));
-        });
+        }
         Assert.That(effectItem.CausalEdges, Is.Empty, "the buffer is emptied once written on this path too");
     }
 

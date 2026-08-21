@@ -85,11 +85,11 @@ public class ActivityItemPendingExportPanelTests : JimComponentTestContext
         var cut = RenderPanel(Export(PendingExportChangeType.Delete),
             ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Not.Contain("staged for deletion in the Connected System"));
             Assert.That(cut.Markup, Does.Contain("may require manual"));
-        });
+        }
     }
 
     [Test]
@@ -134,11 +134,11 @@ public class ActivityItemPendingExportPanelTests : JimComponentTestContext
 
         var cut = RenderPanel(export);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("Pending Attribute Changes (1)"));
             Assert.That(cut.Markup, Does.Contain("CN=Tina Adams"));
-        });
+        }
     }
 
     [Test]

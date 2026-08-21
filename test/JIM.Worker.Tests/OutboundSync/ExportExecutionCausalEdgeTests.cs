@@ -45,7 +45,7 @@ public class ExportExecutionCausalEdgeTests
 
         Assert.That(executionItem.CausalEdges, Has.Count.EqualTo(1));
         var edge = executionItem.CausalEdges[0];
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(edge.EdgeType, Is.EqualTo(CausalEdgeType.PendingExportQueueingCausedExportExecution));
             Assert.That(edge.CauseRunProfileExecutionItemId, Is.EqualTo(QueueingItemId));
@@ -57,7 +57,7 @@ public class ExportExecutionCausalEdgeTests
             Assert.That(edge.ConnectedSystemName, Is.EqualTo("Glitterband EMEA"));
             Assert.That(edge.EffectSyncOutcome, Is.SameAs(outcome),
                 "the edge must name the outcome it explains, or an item carrying several outcomes groups its causes under the wrong one");
-        });
+        }
     }
 
     /// <summary>
@@ -93,11 +93,11 @@ public class ExportExecutionCausalEdgeTests
         ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
 
         Assert.That(executionItem.CausalEdges, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(executionItem.CausalEdges[0].CauseRunProfileExecutionItemId, Is.Null);
             Assert.That(executionItem.CausalEdges[0].CauseMetaverseObjectId, Is.EqualTo(SourceMvoId));
-        });
+        }
     }
 
     /// <summary>
@@ -182,12 +182,12 @@ public class ExportExecutionCausalEdgeTests
             provisioningSyncRuleName: "EMEA LDAP Export Users");
 
         var edge = executionItem.CausalEdges[0];
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(edge.ReasonCode, Is.EqualTo(CausalReasonCode.ExportCreateStaged));
             Assert.That(edge.SyncRuleId, Is.EqualTo(12));
             Assert.That(edge.SyncRuleName, Is.EqualTo("EMEA LDAP Export Users"));
-        });
+        }
     }
 
     /// <summary>
@@ -204,11 +204,11 @@ public class ExportExecutionCausalEdgeTests
         ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
 
         var edge = executionItem.CausalEdges[0];
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(edge.ReasonCode, Is.EqualTo(CausalReasonCode.ExportDeleteStaged));
             Assert.That(edge.SyncRuleId, Is.Null);
-        });
+        }
     }
 
     #endregion

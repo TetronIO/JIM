@@ -447,7 +447,7 @@ public class CausalChainWalkTests
         Assert.That(syncMember.Resolution, Is.EqualTo(CausalChainResolution.Resolved),
             "a synchronisation whose record has a retained import must resolve rather than end the chain");
         var sourceHop = syncMember.Causes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sourceHop.SourceImportChangeType, Is.EqualTo(ObjectChangeType.Added));
             Assert.That(sourceHop.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
@@ -456,7 +456,7 @@ public class CausalChainWalkTests
             Assert.That(sourceHop.Members.Single().DisplayName, Is.EqualTo("Mia Young (S8-352)"));
             Assert.That(sourceHop.Members.Single().Resolution, Is.EqualTo(CausalChainResolution.NoFurtherCauses),
                 "an import with no edges of its own is the true root: data arrived from the source system");
-        });
+        }
     }
 
     /// <summary>

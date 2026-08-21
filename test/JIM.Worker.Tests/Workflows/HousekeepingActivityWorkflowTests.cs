@@ -230,7 +230,7 @@ public class HousekeepingActivityWorkflowTests
         var edge = recallRpei.CausalEdges.SingleOrDefault();
         Assert.That(edge, Is.Not.Null,
             "the group's removal item is the only record of the change and nothing on it says why; the edge is what supplies the cause");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(edge!.EdgeType, Is.EqualTo(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval));
             Assert.That(edge!.CauseMetaverseObjectId, Is.EqualTo(memberMvo.Id));
@@ -242,7 +242,7 @@ public class HousekeepingActivityWorkflowTests
             Assert.That(edge!.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
             Assert.That(edge!.CauseSyncOutcome, Is.Not.Null,
                 "the cause must point at the deletion outcome recorded in this same batch, not just at the object");
-        });
+        }
     }
 
     /// <summary>

@@ -26,14 +26,14 @@ public class NavigableMudTabsTests : JimComponentTestContext
             .Add(c => c.ChildContent, Panels("Overview", "Detail")));
 
         var tabs = cut.FindComponent<MudTabs>().Instance;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(tabs.Outlined, Is.True, "the bar must carry a border");
             Assert.That(tabs.Rounded, Is.True, "the bar must be rounded like every other tab bar in JIM");
             Assert.That(tabs.Elevation, Is.EqualTo(0), "JIM's tab bars are flat, not raised");
             Assert.That(tabs.ApplyEffectsToContainer, Is.False,
                 "the border and rounding belong to the bar, not to the panel container beneath it");
-        });
+        }
     }
 
     [Test]
@@ -45,11 +45,11 @@ public class NavigableMudTabsTests : JimComponentTestContext
             .Add(c => c.ChildContent, Panels("Overview", "Detail")));
 
         var tabs = cut.FindComponent<MudTabs>().Instance;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(tabs.Outlined, Is.False);
             Assert.That(tabs.Rounded, Is.False);
-        });
+        }
     }
 
     /// <summary>
@@ -100,11 +100,11 @@ public class NavigableMudTabsTests : JimComponentTestContext
             .Add(c => c.ChildContent, Panels("Overview")));
 
         var cls = cut.FindComponent<MudTabs>().Instance.Class;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cls, Does.Contain("mt-2"));
             Assert.That(cls, Does.Contain("jim-tabs-single"));
-        });
+        }
     }
 
     [Test]
@@ -125,12 +125,12 @@ public class NavigableMudTabsTests : JimComponentTestContext
         // there is no general sweep for that, so the one class this component invents checks itself.
         var css = File.ReadAllText(Path.Combine(FindWebProjectRoot(), "wwwroot", "css", "site.css"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(css, Does.Contain(".jim-tabs-single .mud-tabs-tabbar"), "the bar is not hidden");
             Assert.That(css, Does.Contain(".jim-tabs-single .mud-tabs-panels"),
                 "the panel padding that cleared the bar is not reclaimed");
-        });
+        }
     }
 
     private static RenderFragment Panels(params string[] titles)

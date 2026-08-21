@@ -305,11 +305,11 @@ public class CausalityPanelTests
         // The toggle governs the whole panel, not just the views: the summary is the first sentence
         // read, and leaving "record" and "Identity" in it made the toggle look like it had not worked.
         var sentence = cut.Find(".summary-sentence").TextContent;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sentence, Does.Contain("processed the Connected System Object"));
             Assert.That(sentence, Does.Not.Contain("the record"));
-        });
+        }
     }
 
     [Test]

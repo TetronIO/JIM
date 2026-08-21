@@ -79,7 +79,7 @@ public class ReferenceRecallCausalEdgeTests
         await processor.CallFlushDeferredRecallRpeisAsync();
 
         var edge = SyncRepo.CausalEdges.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(edge.EdgeType, Is.EqualTo(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval));
             Assert.That(edge.CauseDisplayName, Is.EqualTo("Tina Adams (S8-99)"),
@@ -89,7 +89,7 @@ public class ReferenceRecallCausalEdgeTests
             Assert.That(edge.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
             Assert.That(edge.EffectSyncOutcomeId, Is.Not.Null,
                 "the edge must name the Pending Export outcome it explains, not just the item");
-        });
+        }
     }
 
     /// <summary>
@@ -199,14 +199,14 @@ public class ReferenceRecallCausalEdgeTests
         await processor.CallFlushDeferredRecallRpeisAsync();
 
         var edge = SyncRepo.CausalEdges.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(edge.CauseObjectTypeName, Is.EqualTo("User"));
             Assert.That(edge.CauseObjectTypePluralName, Is.EqualTo("Users"),
                 "the plural is curated on the Metaverse Object Type and copied; deriving it by rule would be wrong on non-English, already-plural and uncountable type names");
             Assert.That(edge.EffectAttributeName, Is.EqualTo("Static Members"),
                 "the relationship noun comes from the schema, so the chain can say which reference was lost");
-        });
+        }
     }
 
     /// <summary>

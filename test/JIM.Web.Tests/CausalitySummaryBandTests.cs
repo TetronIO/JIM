@@ -135,13 +135,13 @@ public class CausalitySummaryBandTests
         // "record" and "Identity" are plain-language stand-ins for Connected System Object and Metaverse
         // Object; leaving them unchanged made the toggle look broken on the one sentence read first.
         var sentence = cut.Find(".summary-sentence").TextContent;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sentence, Does.Contain("processed the Connected System Object"));
             Assert.That(sentence, Does.Contain("a new Metaverse Object was projected"));
             Assert.That(sentence, Does.Not.Contain("the record"));
             Assert.That(sentence, Does.Not.Contain("Identity"));
-        });
+        }
     }
 
     [Test]
@@ -152,10 +152,10 @@ public class CausalitySummaryBandTests
         var cut = RenderBand(context, CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         var sentence = cut.Find(".summary-sentence").TextContent;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sentence, Does.Contain("processed the record for"));
             Assert.That(sentence, Does.Contain("a new Identity was created"));
-        });
+        }
     }
 }

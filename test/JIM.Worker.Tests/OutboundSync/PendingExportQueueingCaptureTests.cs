@@ -81,11 +81,11 @@ public class PendingExportQueueingCaptureTests
 
         processor.CallStampQueueingItemOnPendingExports(mvoId, exports);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(rpei.Id, Is.Not.EqualTo(Guid.Empty), "the item must be given its id here, since the flush runs too late for this");
             Assert.That(exports[0].QueuedByRunProfileExecutionItemId, Is.EqualTo(rpei.Id));
-        });
+        }
     }
 
     /// <summary>
