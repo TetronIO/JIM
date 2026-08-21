@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20260821103254_AddCausalProvenance")]
+    [Migration("20260821104839_AddCausalProvenance")]
     partial class AddCausalProvenance
     {
         /// <inheritdoc />
@@ -4112,6 +4112,22 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasDiscriminator().HasValue("ExampleDataTemplateWorkerTask");
+                });
+
+            modelBuilder.Entity("JIM.Models.Tasking.PasswordDeliveryWorkerTask", b =>
+                {
+                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
+
+                    b.Property<int?>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.ToTable("WorkerTasks", t =>
+                        {
+                            t.Property("ConnectedSystemId")
+                                .HasColumnName("PasswordDeliveryWorkerTask_ConnectedSystemId");
+                        });
+
+                    b.HasDiscriminator().HasValue("PasswordDeliveryWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.SynchronisationWorkerTask", b =>
