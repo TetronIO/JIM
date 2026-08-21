@@ -116,6 +116,72 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordPolicy
     `CouldNotDetermine`, the figures are a floor rather than a guarantee, because some accounts may be governed
     by a stricter policy.
 
+### Get-JIMConnectedSystemPasswordSynchronisation
+
+Reports whether a Connected System receives synchronised passwords, and the settings governing how hard JIM
+tries to deliver them. A system that has never been configured is reported with `configured` set to `$false`
+and JIM's defaults in the remaining fields, so a script comparing systems does not have to special-case the
+untouched ones.
+
+```powershell
+Get-JIMConnectedSystemPasswordSynchronisation -Id 3
+Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordSynchronisation
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `configured` | `bool` | Whether Password Synchronisation has been configured here at all |
+| `connectorSupportsPasswordSet` | `bool` | Whether this Connector can set passwords; `$false` means it cannot be configured |
+| `enabled` | `bool` | Whether queued password changes are delivered |
+| `targetObjectTypeId` | `int` | The Connected System Object Type that receives passwords |
+| `targetObjectTypeName` | `string` | Its name |
+| `maxRetries` | `int` | Attempts before a change is parked; `0` means use JIM's default |
+| `effectiveMaxRetries` | `int` | The retry count actually applied |
+| `retryBackoffBase` | `timespan` | The first retry interval; `0` means use JIM's default |
+| `effectiveRetryBackoffBase` | `timespan` | The backoff base actually applied |
+| `requireSecureTransport` | `bool` | Whether an unconfirmed-encryption connection is refused |
+| `effectiveTimeToLive` | `timespan` | How long a queued change waits before JIM expires it |
+
+Auditing which systems are switched on:
+
+```powershell
+Get-JIMConnectedSystem -All | ForEach-Object {
+    $p = Get-JIMConnectedSystemPasswordSynchronisation -Id $_.Id
+    [PSCustomObject]@{ System = $_.Name; Configured = $p.configured; Enabled = $p.enabled }
+}
+```
+
+### Set-JIMConnectedSystemPasswordSynchronisation
+
+Creates or updates the configuration. Omitted parameters leave the stored value unchanged; `-TargetObjectType`
+is required when creating one.
+
+```powershell
+# Stage the configuration without switching it on
+Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -TargetObjectType 7 -Enabled $false
+
+# Switch it on during the change window, delivering everything queued while it was off
+Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -Enabled $true -ChangeReason 'CHG0041288'
+
+# Require an encrypted connection, and allow ten attempts before a change is parked
+Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -RequireSecureTransport -MaxRetries 10 -PassThru
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `-Id` | `int` | The Connected System (required; also accepts a Connected System from the pipeline as `-InputObject`) |
+| `-Enabled` | `bool` | Whether to deliver queued password changes. Enabling delivers what accumulated while it was off |
+| `-TargetObjectType` | `int` | The Object Type holding user accounts; must be selected for synchronisation. Alias: `-TargetObjectTypeId` |
+| `-MaxRetries` | `int` | Attempts before parking a change; `0` uses JIM's default |
+| `-RetryBackoffBase` | `timespan` | The first retry interval; `0` uses JIM's default |
+| `-RequireSecureTransport` | `switch` | Refuse to transmit over a connection JIM cannot confirm is encrypted |
+| `-ChangeReason` | `string` | Recorded against the Connected System's configuration change history |
+| `-PassThru` | `switch` | Return the updated configuration |
+
+!!! note "There is no Remove cmdlet, and that is deliberate"
+    Removing a configuration would discard every password change queued against it. Disabling it keeps them,
+    and is reversible, so `-Enabled $false` is the supported way to stop delivery.
+
 #### Initial password attention (ById only)
 
 How many accounts in the Connected System are waiting on a person over their initial password.
