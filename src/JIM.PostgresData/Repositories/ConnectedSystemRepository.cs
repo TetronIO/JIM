@@ -5843,6 +5843,53 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(ps => ps.ConnectedSystemId == connectedSystemId);
     }
 
+    public async Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync()
+    {
+        // Joined and projected in the database rather than loading the Connected Systems: fan-out asks this on
+        // every password change, and it needs three fields per system.
+        var targets = await Repository.Database.ConnectedSystemPasswordSynchronisations
+            .AsNoTracking()
+            .Where(ps => ps.Enabled)
+            .Join(Repository.Database.ConnectedSystems.AsNoTracking(),
+                ps => ps.ConnectedSystemId,
+                cs => cs.Id,
+                (ps, cs) => new
+                {
+                    ps.ConnectedSystemId,
+                    cs.Name,
+                    ps.TargetObjectTypeId,
+                    cs.InitialPasswordTimeToLive
+                })
+            .ToListAsync();
+
+        // The effective time to live is resolved here rather than in the query, because the fallback lives on the
+        // entity (EffectiveInitialPasswordTimeToLive) and must not be restated in SQL where the two could drift.
+        return targets
+            .Select(t => new PasswordSynchronisationTarget
+            {
+                ConnectedSystemId = t.ConnectedSystemId,
+                ConnectedSystemName = t.Name,
+                TargetObjectTypeId = t.TargetObjectTypeId,
+                TimeToLive = new ConnectedSystem { InitialPasswordTimeToLive = t.InitialPasswordTimeToLive }
+                    .EffectiveInitialPasswordTimeToLive
+            })
+            .ToList();
+    }
+
+    public async Task<ConnectedSystem?> GetConnectedSystemForPasswordDeliveryAsync(int connectedSystemId)
+    {
+        // No tracking: the pass reads the configuration and the settings, and writes only to the queue, which it
+        // does through raw SQL of its own. Tracking the graph here would put a second instance of every setting
+        // value in the identity map for the length of the pass and buy nothing.
+        return await Repository.Database.ConnectedSystems
+            .AsNoTracking()
+            .Include(cs => cs.ConnectorDefinition)
+            .Include(cs => cs.PasswordSynchronisation)
+            .Include(cs => cs.SettingValues)
+                .ThenInclude(sv => sv.Setting)
+            .SingleOrDefaultAsync(cs => cs.Id == connectedSystemId);
+    }
+
     public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)
     {
         // Read-only comparison input, so no tracking: attaching it would put a second instance of this row in

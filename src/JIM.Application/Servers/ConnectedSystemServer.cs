@@ -55,7 +55,7 @@ public class ConnectedSystemServer
     /// credential protection and certificate validation when it supports them.
     /// </summary>
     /// <exception cref="NotSupportedException">Thrown when the Connector Definition is not recognised.</exception>
-    private IConnector CreateConnector(ConnectedSystem connectedSystem)
+    internal IConnector CreateConnector(ConnectedSystem connectedSystem)
     {
         return ConnectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
     }
@@ -542,6 +542,10 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem}");
 
+        // Read before the write, so what parked password work is compared against is what was stored rather than
+        // what is about to replace it.
+        var passwordSynchronisationAsStored = await Application.Repository.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystem.Id);
+
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
@@ -561,7 +565,37 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
         await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
+        await ReleaseParkedPasswordChangesIfDeliveryChangedAsync(connectedSystem, passwordSynchronisationAsStored);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Sets a Connected System's parked password changes retrying, when the save changed what would be delivered
+    /// to it (#1119, requirement 3).
+    /// <para>
+    /// A change parks because the target refused it and the same configuration would produce the same refusal, so
+    /// the administrator correcting that configuration is the only event that makes another attempt worth making.
+    /// Without this, parking is a one-way door and a queued password never reaches the account it belongs to.
+    /// </para>
+    /// <para>
+    /// Gated on delivery actually changing rather than firing on every save, matching the Synchronisation Rule
+    /// precedent: an unrelated edit would otherwise retry against settings the target has already answered on,
+    /// failing identically and inflating an attempt count that is supposed to count distinct configurations tried.
+    /// </para>
+    /// </summary>
+    private async Task ReleaseParkedPasswordChangesIfDeliveryChangedAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemPasswordSynchronisation? asStored)
+    {
+        // A system that is not taking passwords has nothing to drain onto: requirement 2 has it accumulate while
+        // it is off, and releasing work a disabled system will not deliver would only churn the queue.
+        if (connectedSystem.PasswordSynchronisation is not { Enabled: true })
+            return;
+
+        if (ConnectedSystemPasswordSynchronisation.WouldDeliverTheSameAs(asStored, connectedSystem.PasswordSynchronisation))
+            return;
+
+        await Application.PasswordSynchronisation.ReleaseForDeliveryAsync(connectedSystem.Id);
     }
 
     /// <summary>
@@ -576,6 +610,9 @@ public class ConnectedSystemServer
             throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem} (API key initiated)");
+
+        // Read before the write, for the same reason as the user-initiated overload above.
+        var passwordSynchronisationAsStored = await Application.Repository.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystem.Id);
 
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
@@ -595,6 +632,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
         await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
+        await ReleaseParkedPasswordChangesIfDeliveryChangedAsync(connectedSystem, passwordSynchronisationAsStored);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 

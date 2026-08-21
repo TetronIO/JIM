@@ -34,6 +34,7 @@ public static class ActivityTargetTypeCategories
         // An administrator setting an account's password changes that account, not JIM's configuration, so it
         // belongs beside the Metaverse Object rather than in the Configuration filter.
         { ActivityTargetType.ConnectedSystemObject, ActivityTargetCategory.IdentityData },
+        { ActivityTargetType.PasswordSynchronisation, ActivityTargetCategory.PasswordSynchronisation },
         { ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.TemporalScopeReconciliation, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.MetaverseObjectHousekeeping, ActivityTargetCategory.SyncRuns },

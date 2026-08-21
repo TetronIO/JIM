@@ -1027,6 +1027,29 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId);
 
     /// <summary>
+    /// Every Connected System configured and enabled to receive synchronised passwords (#1119), flattened to what
+    /// fan-out needs.
+    /// <para>
+    /// Asked on every password change, so it is a projection rather than a graph load: the alternative would
+    /// materialise every configured Connected System to read three fields off each.
+    /// </para>
+    /// </summary>
+    public Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync();
+
+    /// <summary>
+    /// Loads a Connected System with exactly what a Password Synchronisation delivery pass needs (#1119): its
+    /// Connector Definition, its settings, and its Password Synchronisation configuration.
+    /// <para>
+    /// Purpose-built rather than one of the named weights, because neither fits. Core omits the Password
+    /// Synchronisation configuration, which delivery always needs, and loads Run Profiles, which delivery never
+    /// reads; Full adds the partition and container tree on top of that. A delivery pass runs whenever somebody
+    /// changes a password, so it materialises what it uses and nothing else.
+    /// </para>
+    /// </summary>
+    /// <returns>The Connected System, or null where it no longer exists.</returns>
+    public Task<ConnectedSystem?> GetConnectedSystemForPasswordDeliveryAsync(int connectedSystemId);
+
+    /// <summary>
     /// Returns the count of all Connected System Objects across all Connected Systems.
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountAsync();

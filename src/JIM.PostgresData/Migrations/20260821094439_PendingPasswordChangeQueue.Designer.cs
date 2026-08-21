@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20260821094551_AddSchemaRefreshRemovalWorkerTask")]
-    partial class AddSchemaRefreshRemovalWorkerTask
+    [Migration("20260821094439_PendingPasswordChangeQueue")]
+    partial class PendingPasswordChangeQueue
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -3864,6 +3864,72 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("PendingInitialPasswords");
                 });
 
+            modelBuilder.Entity("JIM.Models.Transactional.PendingPasswordChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptedPassword")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ExpiryBehaviour")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FailureReason")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastAttemptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MetaverseObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("NextRetryAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetMessage")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemObjectId");
+
+                    b.HasIndex("MetaverseObjectId")
+                        .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId");
+
+                    b.HasIndex("MetaverseObjectId", "ConnectedSystemId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId_ConnectedSystemId_Unique");
+
+                    b.HasIndex("ConnectedSystemId", "Status", "NextRetryAt")
+                        .HasDatabaseName("IX_PendingPasswordChanges_ConnectedSystemId_Status_NextRetryAt");
+
+                    b.ToTable("PendingPasswordChanges");
+                });
+
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>
                 {
                     b.Property<int>("AttributesId")
@@ -3969,30 +4035,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasDiscriminator().HasValue("ExampleDataTemplateWorkerTask");
-                });
-
-            modelBuilder.Entity("JIM.Models.Tasking.SchemaRefreshRemovalWorkerTask", b =>
-                {
-                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
-
-                    b.Property<int>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.PrimitiveCollection<List<int>>("RemovedAttributeIds")
-                        .IsRequired()
-                        .HasColumnType("integer[]");
-
-                    b.PrimitiveCollection<List<int>>("RemovedObjectTypeIds")
-                        .IsRequired()
-                        .HasColumnType("integer[]");
-
-                    b.ToTable("WorkerTasks", t =>
-                        {
-                            t.Property("ConnectedSystemId")
-                                .HasColumnName("SchemaRefreshRemovalWorkerTask_ConnectedSystemId");
-                        });
-
-                    b.HasDiscriminator().HasValue("SchemaRefreshRemovalWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.SynchronisationWorkerTask", b =>
@@ -5091,6 +5133,26 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObject");
 
                     b.Navigation("SyncRule");
+                });
+
+            modelBuilder.Entity("JIM.Models.Transactional.PendingPasswordChange", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("JIM.Models.Core.MetaverseObject", null)
+                        .WithMany()
+                        .HasForeignKey("MetaverseObjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>
