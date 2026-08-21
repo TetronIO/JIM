@@ -70,7 +70,7 @@ public class PasswordDeliveryPassTests
             () => _connectedSystemRepository.Object,
             () => _protection,
             cs => _createConnector(cs),
-            (_, _) => Task.CompletedTask,
+            (_, _, _) => Task.CompletedTask,
             _ => Task.CompletedTask,
             _ => Task.CompletedTask);
     }

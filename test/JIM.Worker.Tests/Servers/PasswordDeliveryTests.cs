@@ -79,7 +79,7 @@ public class PasswordDeliveryTests
             // These fixtures never reach a Connector: they exercise queueing and one-change delivery with a
             // Connector handed in directly. Resolving one here would be answering a question they do not ask.
             _ => throw new NotSupportedException("This fixture does not resolve Connectors."),
-            (activity, _) =>
+            (activity, _, _) =>
             {
                 _createdActivities.Add(activity);
                 return Task.CompletedTask;
