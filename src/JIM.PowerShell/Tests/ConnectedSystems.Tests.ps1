@@ -483,6 +483,10 @@ Describe 'Import-JIMConnectedSystemSchema' {
         It 'Should have a Preview switch parameter' {
             $command.Parameters['Preview'].SwitchParameter | Should -BeTrue
         }
+
+        It 'Should have a DisableDependents switch parameter' {
+            $command.Parameters['DisableDependents'].SwitchParameter | Should -BeTrue
+        }
     }
 
     Context 'Preview behaviour' {
@@ -518,6 +522,22 @@ Describe 'Import-JIMConnectedSystemSchema' {
                 $result = Import-JIMConnectedSystemSchema -Id 5 -Preview
 
                 $result | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It 'Sends disableDependents in the body when -DisableDependents is specified' {
+            # The Apply and Disable Dependents flavour (#1485): the schema is applied and everything the
+            # removals invalidate is disabled with a recorded reason.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ objectTypes = @() } }
+
+                Import-JIMConnectedSystemSchema -Id 5 -DisableDependents -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/5/import-schema' -and
+                    $Body.disableDependents -eq $true
+                }
             }
         }
 
