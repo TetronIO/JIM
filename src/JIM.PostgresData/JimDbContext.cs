@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data;
@@ -191,6 +191,30 @@ public class JimDbContext : DbContext
             // CreateExecutionStrategy().ExecuteAsync() before retry can be enabled.
             // See issue #408 for the tracking item.
             // Transient failures are handled at the API level by GlobalExceptionHandler (HTTP 503).
+            // Both suppressions below are load-bearing; neither is a leftover. Removing either
+            // one has a specific, immediate consequence.
+            //
+            // PendingModelChangesWarning: JIM's runtime model permanently disagrees with its own
+            // migrations, by exactly the 99 DateTime columns in the schema. PostgresDataRepository's
+            // constructor sets the Npgsql.EnableLegacyTimestampBehavior AppContext switch, under
+            // which DateTime maps to "timestamp without time zone". The EF tooling never constructs
+            // that repository, so every migration and JimDbContextModelSnapshot.cs was scaffolded
+            // with the switch off and declares "timestamp with time zone", which is also what the
+            // database actually holds. Every service process therefore starts up carrying 99
+            // AlterColumn differences, and MigrateAsync() throws on the first boot without this
+            // line (verified by removing it: JIM.Worker fails InitialiseDatabaseAsync immediately).
+            // The cost is that a genuine model change is invisible here too, so the checks that do
+            // still bite are the design-time ones, which run with the switch off: the
+            // 'dotnet ef migrations has-pending-model-changes' command, and
+            // MigrationDesignerChainTests in JIM.Worker.Tests. Retiring this suppression means
+            // retiring the legacy switch and normalising DateTime.Kind to Utc at every write; the
+            // schema itself already needs no change.
+            //
+            // MultipleCollectionIncludeWarning: AsSplitQuery() was deliberately removed from the
+            // sync paths because of the EF Core materialisation bug (dotnet/efcore#33826) that
+            // silently drops navigation properties during concurrent writes. The remaining
+            // single-query includes are intentional; the warning is the price of not reintroducing
+            // a data integrity risk.
             optionsBuilder.UseNpgsql(_connectionString)
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
                 .ConfigureWarnings(warnings => warnings.Ignore(
