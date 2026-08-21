@@ -1,6 +1,6 @@
 # Schema Refresh Decision
 
-- **Status:** Planned
+- **Status:** Doing (option 2, the per-mapping enabled state and the disable path, starting first; option 3 follows)
 - **Created:** 2026-08-20 (reworked 2026-08-20 after review; the original draft centred on a rare misread scenario and scattered controls across the application, both rejected)
 - **Author:** Claude (from requirements stated by the project owner on #421 and in review)
 - **Issue:** [#1485](https://github.com/TetronIO/JIM/issues/1485)
