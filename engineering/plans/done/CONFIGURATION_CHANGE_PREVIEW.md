@@ -1,9 +1,10 @@
 # Configuration Change Preview Framework - Implementation Plan
 
-- **Status:** Doing (Phases 0 to 4 complete; the framework is proven end-to-end by five shipped adapters, and the #288 engine core (Phase 1) delivered Aug 2026. Phase 5 is the remaining work: Waves 1 (G5 and G3), 2 (G4) and 3 (G1 and G2) are delivered, and Wave 4 is unfiled)
+- **Status:** Done
+- **Note:** All phases and Phase 5 waves delivered (G5, G3 destructive and behaviour toggles, G4, G1, G2 and G6, plus the schema refresh decision #1485 which deliberately sits beside the framework rather than on it). Deferred, tracked on their own issues: #91 mode 2 (Attribute Priority as an adapter) and #134/#809 (Connected System deletion re-platformed onto the framework).
 - **Created:** 2026-07-20
 - **Issue:** [#827](https://github.com/TetronIO/JIM/issues/827)
-- **PRD:** [PRD_CONFIGURATION_CHANGE_PREVIEW.md](../../prd/doing/PRD_CONFIGURATION_CHANGE_PREVIEW.md)
+- **PRD:** [PRD_CONFIGURATION_CHANGE_PREVIEW.md](../../prd/done/PRD_CONFIGURATION_CHANGE_PREVIEW.md)
 
 ## Overview
 
@@ -187,7 +188,7 @@ Consequence for this plan: no preview-specific notifier is built (see Progress n
 
 ### Phase 1: #288 engine core (separate issue) ✅
 
-The other true build dependency. Scope belongs to #288; this plan defines only what the framework consumes. **Delivered (Aug 2026):** the work planned in [SYNC_PREVIEW_ENGINE.md](../done/SYNC_PREVIEW_ENGINE.md) landed across PRs #1416 to #1419, #1422, #1423 and #1425; the zero-side-effect design is written up in [SYNC_PREVIEW_ZERO_SIDE_EFFECTS.md](../../SYNC_PREVIEW_ZERO_SIDE_EFFECTS.md). Wave 3 (G1/G2) was filed as #1436 and #1437.
+The other true build dependency. Scope belongs to #288; this plan defines only what the framework consumes. **Delivered (Aug 2026):** the work planned in [SYNC_PREVIEW_ENGINE.md](SYNC_PREVIEW_ENGINE.md) landed across PRs #1416 to #1419, #1422, #1423 and #1425; the zero-side-effect design is written up in [SYNC_PREVIEW_ZERO_SIDE_EFFECTS.md](../../SYNC_PREVIEW_ZERO_SIDE_EFFECTS.md). Wave 3 (G1/G2) was filed as #1436 and #1437.
 
 - [x] Inbound: `SyncEngine` is already a pure decision engine; expose an orchestration path that evaluates projection, join, and Attribute Flow decisions for a given CSO/MVO population **without persisting**, returning decision records. **Delivered:** `JimApplication.SyncPreview.PreviewSyncForCsoAsync` / `PreviewSyncForMvoAsync` evaluate the full chain read-only under a write-throwing repository guard and a rollback-only transaction, returning `SyncPreviewResult` with the speculative `SyncOutcomeNode` tree and programmatic Errors/Warnings; fidelity to real sync is pinned by release-blocking paired tests.
 - [x] Outbound: extract an evaluation-only path from `ExportEvaluationServer` (today it stages Pending Exports as it evaluates); generalise `SyncRunMode.PreviewOnly` beyond export execution so the mode means "evaluate, never persist" across the pipeline. **Delivered:** the outbound braid was extracted into pure `SyncEngine` partials (#288 plan Phase 1), and `ExportEvaluationServer.EvaluateOutboundPreviewAsync` is the evaluation-only path #1115 consumes; the "mode" landed structurally rather than flag-gated (the preview path IS evaluate-never-persist), which is what D1 = C's shared-core shape makes possible.
