@@ -2863,6 +2863,115 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<int> GetLiveConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await LiveOfType(connectedSystemId, connectedSystemObjectTypeId).CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetConnectedSystemAttributeValueCountAsync(int connectedSystemId, int attributeId)
+    {
+        return await Repository.Database.ConnectedSystemObjectAttributeValues
+            .AsNoTracking()
+            .Where(av => av.AttributeId == attributeId &&
+                         av.ConnectedSystemObject != null &&
+                         av.ConnectedSystemObject.ConnectedSystemId == connectedSystemId)
+            .CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> ObsoleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return 0;
+
+        var ids = connectedSystemObjectIds.ToArray();
+
+        // A narrow status-mark update (exempt from the bulk column-list rule): only Normal-status rows flip, so
+        // re-running an interrupted removal never touches objects the sync pipeline is already draining.
+        var updated = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects""
+              SET ""Status"" = {0}, ""LastUpdated"" = {1}
+              WHERE ""Id"" = ANY({2}) AND ""Status"" = {3}",
+            (int)ConnectedSystemObjectStatus.Obsolete,
+            DateTime.UtcNow,
+            ids,
+            (int)ConnectedSystemObjectStatus.Normal);
+
+        // Fix up any tracked instances so a later SaveChangesAsync cannot write the stale status back.
+        var idSet = ids.ToHashSet();
+        var previousAutoDetect = Repository.Database.ChangeTracker.AutoDetectChangesEnabled;
+        Repository.Database.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            foreach (var entry in Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
+                         .Where(e => idSet.Contains(e.Entity.Id)))
+            {
+                entry.Entity.Status = ConnectedSystemObjectStatus.Obsolete;
+            }
+        }
+        finally
+        {
+            Repository.Database.ChangeTracker.AutoDetectChangesEnabled = previousAutoDetect;
+        }
+
+        return updated;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeletePendingExportsForConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return 0;
+
+        var ids = connectedSystemObjectIds.ToArray();
+
+        // Children first: the attribute value changes do not cascade from their Pending Export.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExportAttributeValueChanges""
+              WHERE ""PendingExportId"" IN (
+                  SELECT pe.""Id"" FROM ""PendingExports"" pe
+                  WHERE pe.""ConnectedSystemObjectId"" = ANY({0})
+              )",
+            ids);
+
+        return await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" WHERE ""ConnectedSystemObjectId"" = ANY({0})",
+            ids);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds)
+    {
+        if (attributeIds.Count == 0)
+            return 0;
+
+        var ids = attributeIds.ToArray();
+
+        // Change history rows may reference a value row as a deleted object's external id snapshot holder; the
+        // FK does not cascade, so clear those references first (mirrors DeleteAllConnectedSystemObjectsAndDependenciesAsync).
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjectChanges""
+              SET ""DeletedObjectExternalIdAttributeValueId"" = NULL
+              WHERE ""DeletedObjectExternalIdAttributeValueId"" IN (
+                  SELECT av.""Id"" FROM ""ConnectedSystemObjectAttributeValues"" av
+                  JOIN ""ConnectedSystemObjects"" cso ON cso.""Id"" = av.""ConnectedSystemObjectId""
+                  WHERE av.""AttributeId"" = ANY({0}) AND cso.""ConnectedSystemId"" = {1}
+              )",
+            ids,
+            connectedSystemId);
+
+        return await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemObjectAttributeValues"" av
+              USING ""ConnectedSystemObjects"" cso
+              WHERE cso.""Id"" = av.""ConnectedSystemObjectId""
+                AND av.""AttributeId"" = ANY({0})
+                AND cso.""ConnectedSystemId"" = {1}",
+            ids,
+            connectedSystemId);
+    }
+
+    /// <inheritdoc />
     public async Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
         int connectedSystemObjectTypeId)
     {

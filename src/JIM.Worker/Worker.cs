@@ -465,6 +465,36 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
+                                case SchemaRefreshRemovalWorkerTask schemaRefreshRemovalTask:
+                                {
+                                    Log.Information("ExecuteAsync: SchemaRefreshRemovalWorkerTask received for Connected System id: {ConnectedSystemId} ({TypeCount} removed Object Type(s), {AttributeCount} removed attribute(s))",
+                                        schemaRefreshRemovalTask.ConnectedSystemId, schemaRefreshRemovalTask.RemovedObjectTypeIds.Count, schemaRefreshRemovalTask.RemovedAttributeIds.Count);
+                                    if (schemaRefreshRemovalTask.InitiatedByType == ActivityInitiatorType.NotSet)
+                                    {
+                                        Log.Error($"ExecuteAsync: SchemaRefreshRemovalWorkerTask {schemaRefreshRemovalTask.Id} is missing initiator information. Cannot continue processing worker task.");
+                                    }
+                                    else
+                                    {
+                                        try
+                                        {
+                                            // the server owns the removal itself (obsoletion, Pending Export and value
+                                            // deletion, per-object results); this boundary owns the Activity's fate.
+                                            await taskJim.ConnectedSystems.ExecuteSchemaRefreshRemovalAsync(schemaRefreshRemovalTask);
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                            Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing schema refresh removal task.");
+                                        }
+                                        finally
+                                        {
+                                            Log.Information($"ExecuteAsync: Completed the schema refresh removal for Connected System ({schemaRefreshRemovalTask.ConnectedSystemId}) in {newWorkerTask.Activity.ExecutionTime}.");
+                                        }
+                                    }
+
+                                    break;
+                                }
                                 case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
                                 {
                                     Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for Connected System id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}, DeleteChangeHistory: {DeleteHistory}",

@@ -177,6 +177,24 @@ namespace JIM.Application.Servers
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
             }
+            else if (workerTask is SchemaRefreshRemovalWorkerTask schemaRefreshRemovalTask)
+            {
+                // The data-removal half of the schema refresh decision's Apply and Remove option (#1485) is
+                // tracked with its own Activity so the queue and history carry the removal distinctly from the
+                // refresh's ImportSchema Activity. Core: only .Name is read for activity context.
+                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(schemaRefreshRemovalTask.ConnectedSystemId);
+                var activity = new Activity
+                {
+                    TargetName = connectedSystem?.Name,
+                    TargetType = ActivityTargetType.ConnectedSystem,
+                    TargetOperationType = ActivityTargetOperationType.SchemaRefreshRemoval,
+                    ConnectedSystemId = schemaRefreshRemovalTask.ConnectedSystemId,
+                };
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
+
+                // associate the activity with the worker task so the worker task processor can complete the activity when done.
+                workerTask.Activity = activity;
+            }
             else if (workerTask is ConfigurationChangePreviewWorkerTask)
             {
                 // The only task type that does NOT create its Activity. A preview's Activity already exists,
