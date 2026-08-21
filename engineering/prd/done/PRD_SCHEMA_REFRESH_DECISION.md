@@ -1,6 +1,7 @@
 # Schema Refresh Decision
 
-- **Status:** Doing (option 2, the per-mapping enabled state and the disable path, starting first; option 3 follows)
+- **Status:** Done
+- **Note:** Delivered across PRs #1488 (this PRD), #1489 (per-mapping enabled state), #1491 (the decision surface with Apply and Disable Dependents) and the Apply and Remove PR. The open questions resolved in delivery: option 2 shipped as "Apply & Disable Dependents", the posture is one per refresh (not per change kind), and options 2 and 3 landed as separate PRs.
 - **Created:** 2026-08-20 (reworked 2026-08-20 after review; the original draft centred on a rare misread scenario and scattered controls across the application, both rejected)
 - **Author:** Claude (from requirements stated by the project owner on #421 and in review)
 - **Issue:** [#1485](https://github.com/TetronIO/JIM/issues/1485)
@@ -80,13 +81,13 @@ The administrator can see the problem and has no tool to respond to it. This PRD
 
 ## Acceptance Criteria
 
-- [ ] A refresh with destructive changes pauses on a review separating green from red and offering the three options; additions-only refreshes keep #421's behaviour.
-- [ ] Cancel over a destructive diff warns with the concrete next-sync consequences.
-- [ ] Option 2 applies the schema and disables every detected dependent (rules, mappings, expression-input mappings), each recording the refresh as the reason; disabled mappings are skipped-and-reported by synchronisation.
-- [ ] Per-mapping enabled/disabled state exists with portal, REST and PowerShell parity.
-- [ ] Option 3 applies the schema, removes the previewed configuration and cascades data removal through the existing obsoletion/recall/deletion-rule pipeline as an audited worker task.
-- [ ] Both option 2 and option 3 show an accurate preview before anything is committed.
-- [ ] Nothing is ever applied, disabled or removed without the administrator choosing it on that refresh.
+- [x] A refresh with destructive changes pauses on a review separating green from red and offering the three options; additions-only refreshes keep #421's behaviour.
+- [x] Cancel over a destructive diff warns with the concrete next-sync consequences.
+- [x] Option 2 applies the schema and disables every detected dependent (rules, mappings, expression-input mappings), each recording the refresh as the reason; disabled mappings are skipped-and-reported by synchronisation.
+- [x] Per-mapping enabled/disabled state exists with portal, REST and PowerShell parity.
+- [x] Option 3 applies the schema, removes the previewed configuration and cascades data removal through the existing obsoletion/recall/deletion-rule pipeline as an audited worker task.
+- [x] Both option 2 and option 3 show an accurate preview before anything is committed.
+- [x] Nothing is ever applied, disabled or removed without the administrator choosing it on that refresh.
 
 ## Dependencies
 
