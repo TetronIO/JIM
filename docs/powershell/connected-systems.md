@@ -386,10 +386,10 @@ Imports (or re-imports) the schema from the connected data source. This discover
 
 ```powershell
 # ById (default)
-Import-JIMConnectedSystemSchema -Id <int> [-Preview] [-DisableDependents] [-PassThru]
+Import-JIMConnectedSystemSchema -Id <int> [-Preview] [-DisableDependents] [-RemoveDependents] [-PassThru]
 
 # ByInputObject
-Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-DisableDependents] [-PassThru]
+Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-DisableDependents] [-RemoveDependents] [-PassThru]
 ```
 
 ### Parameters
@@ -399,12 +399,13 @@ Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-Disab
 | `Id` | `int` | Yes (ById) | | Connected System identifier |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
 | `Preview` | `switch` | No | `$false` | Retrieves the schema and returns what a refresh would change, without persisting anything |
-| `DisableDependents` | `switch` | No | `$false` | Applies the refresh and disables everything it invalidated: Synchronisation Rules bound to a removed object type and mappings reading a removed or redefined attribute, each with a recorded reason. Preview first; the preview's `Dependents` property names what this disables |
+| `DisableDependents` | `switch` | No | `$false` | Applies the refresh and disables everything it invalidated: Synchronisation Rules bound to a removed object type and mappings reading a removed or redefined attribute, each with a recorded reason. Preview first; the preview's `Dependents` property names what this disables. Cannot be combined with `RemoveDependents` |
+| `RemoveDependents` | `switch` | No | `$false` | Applies the refresh and removes everything it invalidated. This deletes configuration and identity data: the named Synchronisation Rules and mappings are deleted, and a background worker task marks every Connected System Object of a removed object type Obsolete (deprovisioning through the standard pipeline) and deletes every stored value of a removed attribute. Always preview first; the preview's `Dependents` and `RemovalImpact` properties show exactly what this takes. Cannot be combined with `DisableDependents` |
 | `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after schema import (not needed with `-Preview`, which always returns its result) |
 
 ### Output
 
-With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `Dependents` (what the destructive changes invalidate: `InvalidatedSyncRules`, `InvalidatedMappings` and `ReferencedObjectMatchingRules`, each entry carrying its `Reason`), `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output.
+With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `Dependents` (what the destructive changes invalidate: `InvalidatedSyncRules`, `InvalidatedMappings` and `ReferencedObjectMatchingRules`, each entry carrying its `Reason`), `RemovalImpact` (what committing with `RemoveDependents` would take: `RemovedObjectTypes` with a `ConnectedSystemObjectCount` each, and `RemovedAttributes` with a `StoredValueCount` each), `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output.
 
 ### Examples
 
@@ -425,6 +426,18 @@ $preview.Dependents.InvalidatedSyncRules | Select-Object SyncRuleName, Reason
 Import-JIMConnectedSystemSchema -Id 3 -DisableDependents -Confirm:$false
 ```
 
+```powershell title="Apply a destructive refresh with its dependents removed, deleting the previewed configuration and data"
+# Inspect what the removal would delete before committing: every named rule and mapping is deleted,
+# every counted object is obsoleted and deprovisioned, and every counted stored value is deleted.
+$preview = Import-JIMConnectedSystemSchema -Id 3 -Preview
+$preview.Dependents.InvalidatedSyncRules | Select-Object SyncRuleName, Reason
+$preview.RemovalImpact.RemovedObjectTypes | Select-Object ObjectTypeName, ConnectedSystemObjectCount
+$preview.RemovalImpact.RemovedAttributes | Select-Object AttributeName, StoredValueCount
+
+Import-JIMConnectedSystemSchema -Id 3 -RemoveDependents
+Get-JIMWorkerTask   # the data removal runs as a background worker task
+```
+
 ```powershell title="Pipeline: create a system, then import its schema"
 New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
     Import-JIMConnectedSystemSchema -PassThru
@@ -432,7 +445,7 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 
 ### Notes
 
-- A refresh never deletes: additions and attribute definition updates are applied, while object types and attributes the Connected System no longer reports are retained in JIM and flagged in the result. See [Refreshing the schema](../configuration/connected-systems.md#refreshing-the-schema).
+- A refresh never deletes on its own: additions and attribute definition updates are applied, while object types and attributes the Connected System no longer reports are retained in JIM and flagged in the result. Deletion only happens when you explicitly choose `-RemoveDependents`, and only across what the preview listed. See [Refreshing the schema](../configuration/connected-systems.md#refreshing-the-schema).
 - Check the preview's `DiscoveryWarnings` before applying: a partial schema read (for example, missing permissions) can make entries appear removed when they are not.
 - Schema import is required before creating Synchronisation Rules for a Connected System.
 - Supports `ShouldProcess` (Medium impact). `-Preview` bypasses it; a preview changes nothing, so there is nothing to confirm.

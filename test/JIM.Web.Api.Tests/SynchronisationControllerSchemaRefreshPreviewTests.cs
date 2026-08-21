@@ -248,6 +248,116 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
     }
 
     [Test]
+    public async Task PreviewSchemaImport_WithDestructiveChanges_CountsTheRemovalImpactAsync()
+    {
+        // The Apply and Remove decision needs its numbers on the wire (#1485): how many objects and stored
+        // values committing with removeDependents would take, per removed Object Type and attribute.
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        SeedDestructiveSchema(connectedSystem);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+        _connectedSystemRepo.Setup(r => r.GetLiveConnectedSystemObjectCountOfTypeAsync(ConnectedSystemId, 8)).ReturnsAsync(1204);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAttributeValueCountAsync(ConnectedSystemId, 3)).ReturnsAsync(87);
+
+        var result = await _controller.PreviewConnectedSystemSchemaImportAsync(ConnectedSystemId);
+
+        var dto = (result as OkObjectResult)!.Value as SchemaRefreshResultDto;
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.RemovalImpact, Is.Not.Null, "A destructive diff carries what a removal would take.");
+            Assert.That(dto!.RemovalImpact!.RemovedObjectTypes.Single().ConnectedSystemObjectCount, Is.EqualTo(1204));
+            Assert.That(dto!.RemovalImpact!.RemovedObjectTypes.Single().ObjectTypeName, Is.EqualTo("computer"));
+            Assert.That(dto!.RemovalImpact!.RemovedAttributes.Single().StoredValueCount, Is.EqualTo(87));
+            Assert.That(dto!.RemovalImpact!.RemovedAttributes.Single().AttributeName, Is.EqualTo("department"));
+        }
+    }
+
+    [Test]
+    public async Task ImportSchema_WithBothDisableAndRemove_ReturnsBadRequestAsync()
+    {
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId, true)).ReturnsAsync(connectedSystem);
+
+        var result = await _controller.ImportConnectedSystemSchemaAsync(ConnectedSystemId,
+            new ImportConnectedSystemSchemaRequest { DisableDependents = true, RemoveDependents = true });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>(),
+            "Disabling and removing are mutually exclusive postures for one refresh.");
+    }
+
+    [Test]
+    public async Task ImportSchema_WithRemoveDependents_AppliesDeletesAndQueuesTheDataRemovalAsync()
+    {
+        // The commit flavour of the full decision: POST import-schema with removeDependents applies the schema,
+        // deletes what the removals invalidate and queues the data removal task, matching the portal.
+        var taskingRepo = new Mock<ITaskingRepository>();
+        _repository.Setup(r => r.Tasking).Returns(taskingRepo.Object);
+        var queuedTasks = new List<JIM.Models.Tasking.WorkerTask>();
+        taskingRepo.Setup(r => r.CreateWorkerTaskAsync(It.IsAny<JIM.Models.Tasking.WorkerTask>()))
+            .Callback<JIM.Models.Tasking.WorkerTask>(t => queuedTasks.Add(t))
+            .Returns(Task.CompletedTask);
+
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        var departmentAttr = SeedDestructiveSchema(connectedSystem);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId, true)).ReturnsAsync(connectedSystem);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
+
+        var rule = new SyncRule { Id = 20, Name = "HR Users Inbound", Direction = SyncRuleDirection.Import, Enabled = true, ConnectedSystemId = ConnectedSystemId, ConnectedSystemObjectTypeId = 7 };
+        var mapping = new SyncRuleMapping { Id = 200, SyncRuleId = 20, TargetMetaverseAttribute = new MetaverseAttribute { Id = 900, Name = "Department", Type = AttributeDataType.Text } };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = departmentAttr, ConnectedSystemAttributeId = departmentAttr.Id });
+        rule.AttributeFlowRules.Add(mapping);
+        _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(ConnectedSystemId, true)).ReturnsAsync([rule]);
+        _connectedSystemRepo.Setup(r => r.DeleteSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
+
+        var result = await _controller.ImportConnectedSystemSchemaAsync(ConnectedSystemId,
+            new ImportConnectedSystemSchemaRequest { RemoveDependents = true });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<OkObjectResult>());
+            _connectedSystemRepo.Verify(r => r.UpdateConnectedSystemSchemaAsync(It.IsAny<ConnectedSystem>()), Times.Once);
+            _connectedSystemRepo.Verify(r => r.DeleteSyncRuleMappingAsync(It.Is<SyncRuleMapping>(m => m.Id == 200)), Times.Once,
+                "The invalidated mapping must be deleted, not disabled.");
+            var removalTask = queuedTasks.OfType<JIM.Models.Tasking.SchemaRefreshRemovalWorkerTask>().Single();
+            Assert.That(removalTask.RemovedObjectTypeIds, Is.EquivalentTo(new[] { 8 }));
+            Assert.That(removalTask.RemovedAttributeIds, Is.EquivalentTo(new[] { 3 }));
+        }
+    }
+
+    /// <summary>
+    /// Seeds a stored schema holding more than the CSV reports: the 'computer' Object Type (id 8) and the
+    /// 'department' attribute (id 3) on 'user' both vanish on refresh. Returns the removed attribute.
+    /// </summary>
+    private static ConnectedSystemObjectTypeAttribute SeedDestructiveSchema(ConnectedSystem connectedSystem)
+    {
+        var departmentAttr = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "department", Type = AttributeDataType.Text };
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType
+            {
+                Id = 7,
+                Name = "user",
+                Selected = true,
+                Attributes =
+                [
+                    new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number },
+                    new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "displayName", Type = AttributeDataType.Text },
+                    departmentAttr
+                ]
+            },
+            new ConnectedSystemObjectType
+            {
+                Id = 8,
+                Name = "computer",
+                Selected = true,
+                Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 4, Name = "id", Type = AttributeDataType.Number }]
+            }
+        ];
+        return departmentAttr;
+    }
+
+    [Test]
     public async Task PreviewSchemaImport_WhenTheConnectorCannotRead_ReturnsBadRequestAsync()
     {
         var connectedSystem = CreateFileConnectorConnectedSystem();

@@ -496,6 +496,10 @@ Describe 'Import-JIMConnectedSystemSchema' {
         It 'Should have a DisableDependents switch parameter' {
             $command.Parameters['DisableDependents'].SwitchParameter | Should -BeTrue
         }
+
+        It 'Should have a RemoveDependents switch parameter' {
+            $command.Parameters['RemoveDependents'].SwitchParameter | Should -BeTrue
+        }
     }
 
     Context 'Preview behaviour' {
@@ -547,6 +551,34 @@ Describe 'Import-JIMConnectedSystemSchema' {
                     $Endpoint -eq '/api/v1/synchronisation/connected-systems/5/import-schema' -and
                     $Body.disableDependents -eq $true
                 }
+            }
+        }
+
+        It 'Sends removeDependents in the body when -RemoveDependents is specified' {
+            # The Apply and Remove flavour (#1485): the schema is applied, the invalidated configuration is
+            # deleted and the data removal is queued as a worker task.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ objectTypes = @() } }
+
+                Import-JIMConnectedSystemSchema -Id 5 -RemoveDependents -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/5/import-schema' -and
+                    $Body.removeDependents -eq $true
+                }
+            }
+        }
+
+        It 'Refuses -DisableDependents together with -RemoveDependents without calling the API' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ objectTypes = @() } }
+
+                { Import-JIMConnectedSystemSchema -Id 5 -DisableDependents -RemoveDependents -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*mutually exclusive*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
             }
         }
 

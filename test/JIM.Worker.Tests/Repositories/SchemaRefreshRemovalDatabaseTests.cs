@@ -1,8 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -11,20 +14,12 @@ using NUnit.Framework;
 namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
-/// What a schema refresh actually does to Object Types and attributes the Connected System no longer reports.
-///
-/// The answer is nothing: <c>ReconcileObjectTypesAsync</c> and <c>ReconcileAttributes</c> update and insert only,
-/// deliberately, because deleting schema entries that Synchronisation Rules may reference needs reference-aware
-/// handling (#782). So a refresh REPORTS a removal in <c>SchemaRefreshResult</c> and then retains the entry.
-///
-/// That gap is what the schema refresh preview (#421) has to describe honestly. An administrator reading
-/// "3 attributes removed" reasonably believes JIM's schema now matches the Connected System; it does not, and the
-/// retained entries stay selectable, stay mappable, and (per #1475) hold values that never refresh again.
+/// Real-PostgreSQL verification of the schema refresh removal's raw SQL writes (#1485): the set-based
+/// obsoletion of Connected System Objects, the Pending Export cleanup that rides with it, and the deletion of
+/// stored attribute values by attribute id (the first attribute-id-keyed deletion in the codebase, which must
+/// clear change-history references its FK does not cascade). The in-memory provider cannot see a wrong column,
+/// a wrong predicate or a violated FK in hand-written SQL. Opt-in via JIM_TEST_RESET_*; ignored when absent.
 /// </summary>
-/// <remarks>
-/// Opt-in via the same <c>JIM_TEST_RESET_*</c> environment variables as the other database-backed tests;
-/// ignored when <c>JIM_TEST_RESET_DB</c> is absent.
-/// </remarks>
 [TestFixture]
 [Category("RequiresPostgres")]
 public class SchemaRefreshRemovalDatabaseTests
@@ -57,125 +52,193 @@ public class SchemaRefreshRemovalDatabaseTests
         ctx.Database.Migrate();
     }
 
-    [SetUp]
-    public async Task SetUp()
+    /// <summary>
+    /// Seeds the FK graph the removal operates over: a Connected System with one Object Type carrying an
+    /// external id attribute and one removable attribute.
+    /// </summary>
+    private async Task<(int SystemId, int TypeId, int ExternalIdAttributeId, int RemovableAttributeId)> SeedConnectedSystemGraphAsync()
     {
-        await using var ctx = NewContext();
-        await ctx.Database.ExecuteSqlRawAsync(@"
-            DO $$
-            DECLARE r RECORD;
-            BEGIN
-                FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '__EFMigrationsHistory') LOOP
-                    EXECUTE 'TRUNCATE TABLE ""' || r.tablename || '"" RESTART IDENTITY CASCADE';
-                END LOOP;
-            END $$;");
-    }
-
-    [Test]
-    public async Task UpdateConnectedSystemSchema_AnAttributeTheSchemaNoLongerCarries_IsRetainedNotDeletedAsync()
-    {
-        var connectedSystemId = await SeedAsync();
-
-        // The shape a schema refresh produces for an attribute the Connected System has stopped reporting: the
-        // merge rebuilds the Object Type's attribute collection from what the Connector returned, so the departed
-        // attribute is simply absent from the graph that reaches the repository.
-        ConnectedSystem connectedSystem;
-        await using (var loadCtx = NewContext())
+        await using var seed = NewContext();
+        var connectorDefinition = new ConnectorDefinition { Name = $"Test Connector {Guid.NewGuid():N}", BuiltIn = true };
+        var system = new ConnectedSystem { Name = $"Test System {Guid.NewGuid():N}", ConnectorDefinition = connectorDefinition };
+        var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
+        var idAttribute = new ConnectedSystemObjectTypeAttribute
         {
-            // Loaded in its own scope and saved in another, which is the shape the portal produces: the tab holds
-            // a Connected System from one JimApplication instance and the schema import runs on a second. Mutating
-            // a TRACKED collection instead would make EF cascade the removal itself, which is a different
-            // mechanism and would prove nothing about the reconciliation under test.
-            var loadRepo = new PostgresDataRepository(loadCtx);
-            connectedSystem = (await loadRepo.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId))!;
-        }
-
-        var objectType = connectedSystem.ObjectTypes!.Single();
-        objectType.Attributes = objectType.Attributes.Where(a => a.Name != "department").ToList();
-
-        await using (var saveCtx = NewContext())
-        {
-            var repo = new PostgresDataRepository(saveCtx);
-            await repo.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
-        }
-
-        await using var verifyCtx = NewContext();
-        var attributes = await verifyCtx.ConnectedSystemAttributes
-            .Where(a => a.ConnectedSystemObjectType!.ConnectedSystemId == connectedSystemId)
-            .Select(a => a.Name)
-            .ToListAsync();
-
-        Assert.That(attributes, Does.Contain("department"),
-            "removals are deliberately not persisted (#782), so an attribute the Connected System no longer " +
-            "reports is retained. A refresh that reports it as removed is therefore describing something that " +
-            "did not happen, which is what the schema refresh preview has to say honestly (#421).");
-    }
-
-    [Test]
-    public async Task UpdateConnectedSystemSchema_AnObjectTypeTheSchemaNoLongerCarries_IsRetainedNotDeletedAsync()
-    {
-        var connectedSystemId = await SeedAsync(includeSecondObjectType: true);
-
-        ConnectedSystem connectedSystem;
-        await using (var loadCtx = NewContext())
-        {
-            var loadRepo = new PostgresDataRepository(loadCtx);
-            connectedSystem = (await loadRepo.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId))!;
-        }
-
-        connectedSystem.ObjectTypes = connectedSystem.ObjectTypes!.Where(ot => ot.Name != "Group").ToList();
-
-        await using (var saveCtx = NewContext())
-        {
-            var repo = new PostgresDataRepository(saveCtx);
-            await repo.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
-        }
-
-        await using var verifyCtx = NewContext();
-        var objectTypes = await verifyCtx.ConnectedSystemObjectTypes
-            .Where(ot => ot.ConnectedSystemId == connectedSystemId)
-            .Select(ot => ot.Name)
-            .ToListAsync();
-
-        Assert.That(objectTypes, Does.Contain("Group"),
-            "the same holds one level up: an Object Type the Connected System no longer reports is retained");
-    }
-
-    private async Task<int> SeedAsync(bool includeSecondObjectType = false)
-    {
-        await using var ctx = NewContext();
-
-        var connectorDefinition = new ConnectorDefinition { Name = "Schema Refresh Test Connector", BuiltIn = false };
-        var connectedSystem = new ConnectedSystem { Name = "Schema Refresh Source", ConnectorDefinition = connectorDefinition };
-        ctx.ConnectorDefinitions.Add(connectorDefinition);
-        ctx.ConnectedSystems.Add(connectedSystem);
-        await ctx.SaveChangesAsync();
-
-        var userType = new ConnectedSystemObjectType
-        {
-            ConnectedSystemId = connectedSystem.Id,
-            Name = "User",
-            Selected = true,
-            Attributes =
-            [
-                new ConnectedSystemObjectTypeAttribute { Name = "objectGuid", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
-                new ConnectedSystemObjectTypeAttribute { Name = "department", Type = AttributeDataType.Text, Selected = true }
-            ]
+            Name = "objectGUID", ConnectedSystemObjectType = csType, Type = AttributeDataType.Guid,
+            IsExternalId = true, Selected = true
         };
-        ctx.ConnectedSystemObjectTypes.Add(userType);
-
-        if (includeSecondObjectType)
+        var faxAttribute = new ConnectedSystemObjectTypeAttribute
         {
-            ctx.ConnectedSystemObjectTypes.Add(new ConnectedSystemObjectType
-            {
-                ConnectedSystemId = connectedSystem.Id,
-                Name = "Group",
-                Selected = true,
-                Attributes = [new ConnectedSystemObjectTypeAttribute { Name = "objectGuid", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true }]
-            });
+            Name = "faxNumber", ConnectedSystemObjectType = csType, Type = AttributeDataType.Text, Selected = true
+        };
+        csType.Attributes.Add(idAttribute);
+        csType.Attributes.Add(faxAttribute);
+        seed.AddRange(connectorDefinition, system, csType);
+        await seed.SaveChangesAsync();
+        return (system.Id, csType.Id, idAttribute.Id, faxAttribute.Id);
+    }
+
+    private async Task<ConnectedSystemObject> SeedCsoAsync(int systemId, int typeId, int externalIdAttributeId, ConnectedSystemObjectStatus status)
+    {
+        await using var seed = NewContext();
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = systemId,
+            TypeId = typeId,
+            ExternalIdAttributeId = externalIdAttributeId,
+            Status = status,
+            JoinType = ConnectedSystemObjectJoinType.NotJoined,
+            Created = DateTime.UtcNow
+        };
+        seed.ConnectedSystemObjects.Add(cso);
+        await seed.SaveChangesAsync();
+        return cso;
+    }
+
+    [Test]
+    public async Task ObsoleteConnectedSystemObjectsByIds_NormalAndAlreadyObsolete_FlipsOnlyTheNormalOneAsync()
+    {
+        var (systemId, typeId, externalIdAttributeId, _) = await SeedConnectedSystemGraphAsync();
+        var normalCso = await SeedCsoAsync(systemId, typeId, externalIdAttributeId, ConnectedSystemObjectStatus.Normal);
+        var alreadyObsoleteCso = await SeedCsoAsync(systemId, typeId, externalIdAttributeId, ConnectedSystemObjectStatus.Obsolete);
+        var untouchedCso = await SeedCsoAsync(systemId, typeId, externalIdAttributeId, ConnectedSystemObjectStatus.Normal);
+
+        int updated;
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            updated = await repository.ConnectedSystems.ObsoleteConnectedSystemObjectsByIdsAsync([normalCso.Id, alreadyObsoleteCso.Id]);
         }
 
-        await ctx.SaveChangesAsync();
-        return connectedSystem.Id;
+        await using var readContext = NewContext();
+        var statusesById = await readContext.ConnectedSystemObjects.AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == systemId)
+            .ToDictionaryAsync(cso => cso.Id, cso => cso.Status);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated, Is.EqualTo(1), "Only the Normal-status object is flipped; a re-run must not touch objects already draining.");
+            Assert.That(statusesById[normalCso.Id], Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+            Assert.That(statusesById[alreadyObsoleteCso.Id], Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+            Assert.That(statusesById[untouchedCso.Id], Is.EqualTo(ConnectedSystemObjectStatus.Normal), "An object outside the id set must be left alone.");
+        }
+    }
+
+    [Test]
+    public async Task DeletePendingExportsForConnectedSystemObjects_ExportWithValueChanges_DeletesBothLevelsAsync()
+    {
+        var (systemId, typeId, externalIdAttributeId, removableAttributeId) = await SeedConnectedSystemGraphAsync();
+        var cso = await SeedCsoAsync(systemId, typeId, externalIdAttributeId, ConnectedSystemObjectStatus.Normal);
+
+        Guid pendingExportId;
+        await using (var seed = NewContext())
+        {
+            var pendingExport = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = systemId,
+                ConnectedSystemObjectId = cso.Id,
+                ChangeType = PendingExportChangeType.Update
+            };
+            pendingExport.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = removableAttributeId,
+                ChangeType = PendingExportAttributeChangeType.Add,
+                StringValue = "555-0100"
+            });
+            seed.PendingExports.Add(pendingExport);
+            await seed.SaveChangesAsync();
+            pendingExportId = pendingExport.Id;
+        }
+
+        int deleted;
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            deleted = await repository.ConnectedSystems.DeletePendingExportsForConnectedSystemObjectsAsync([cso.Id]);
+        }
+
+        await using var readContext = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.EqualTo(1));
+            Assert.That(await readContext.PendingExports.AsNoTracking().AnyAsync(pe => pe.Id == pendingExportId), Is.False);
+            Assert.That(await readContext.PendingExportAttributeValueChanges.AsNoTracking().AnyAsync(c => c.PendingExportId == pendingExportId), Is.False,
+                "The attribute value changes do not cascade from their Pending Export, so the delete must clear them itself.");
+        }
+    }
+
+    [Test]
+    public async Task DeleteConnectedSystemAttributeValuesByAttributeIds_ValuesAndAChangeHistoryReference_DeletesValuesAndClearsTheReferenceAsync()
+    {
+        var (systemId, typeId, externalIdAttributeId, removableAttributeId) = await SeedConnectedSystemGraphAsync();
+        var cso = await SeedCsoAsync(systemId, typeId, externalIdAttributeId, ConnectedSystemObjectStatus.Normal);
+
+        Guid removableValueId;
+        Guid survivingValueId;
+        Guid changeId;
+        await using (var seed = NewContext())
+        {
+            // The value's CSO foreign key is shadow state, so the association goes through the navigation, on
+            // an instance tracked by this context so Add() cannot walk into a duplicate insert.
+            var trackedCso = await seed.ConnectedSystemObjects.AsTracking().SingleAsync(o => o.Id == cso.Id);
+            var removableValue = new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemObject = trackedCso,
+                AttributeId = removableAttributeId,
+                StringValue = "555-0100"
+            };
+            var survivingValue = new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemObject = trackedCso,
+                AttributeId = externalIdAttributeId,
+                GuidValue = Guid.NewGuid()
+            };
+            seed.ConnectedSystemObjectAttributeValues.AddRange(removableValue, survivingValue);
+
+            // A change-history row referencing the removable value through the non-cascading FK: the delete
+            // must clear this reference or the whole statement fails on the constraint.
+            var change = new ConnectedSystemObjectChange
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = systemId,
+                ConnectedSystemObjectId = cso.Id,
+                ChangeTime = DateTime.UtcNow,
+                ChangeType = ObjectChangeType.Deleted,
+                InitiatedByType = ActivityInitiatorType.System,
+                DeletedObjectExternalIdAttributeValue = removableValue
+            };
+            seed.Add(change);
+            await seed.SaveChangesAsync();
+            removableValueId = removableValue.Id;
+            survivingValueId = survivingValue.Id;
+            changeId = change.Id;
+        }
+
+        int deleted;
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            deleted = await repository.ConnectedSystems.DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(systemId, [removableAttributeId]);
+        }
+
+        await using var readContext = NewContext();
+        // The change's reference to the value is shadow state, so it is read via EF.Property.
+        var changeReferenceValueId = await readContext.Set<ConnectedSystemObjectChange>().AsNoTracking()
+            .Where(c => c.Id == changeId)
+            .Select(c => EF.Property<Guid?>(c, "DeletedObjectExternalIdAttributeValueId"))
+            .SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.EqualTo(1));
+            Assert.That(await readContext.ConnectedSystemObjectAttributeValues.AsNoTracking().AnyAsync(av => av.Id == removableValueId), Is.False);
+            Assert.That(await readContext.ConnectedSystemObjectAttributeValues.AsNoTracking().AnyAsync(av => av.Id == survivingValueId), Is.True,
+                "Values of attributes outside the removal must be left alone.");
+            Assert.That(changeReferenceValueId, Is.Null,
+                "The change-history reference to the deleted value must be cleared, not left to fail the delete.");
+        }
     }
 }

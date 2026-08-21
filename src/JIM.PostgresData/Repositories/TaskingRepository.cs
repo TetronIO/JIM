@@ -58,6 +58,10 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.DeleteConnectedSystemWorkerTasks.Add(deleteConnectedSystemTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
+            case SchemaRefreshRemovalWorkerTask schemaRefreshRemovalTask:
+                Repository.Database.SchemaRefreshRemovalWorkerTasks.Add(schemaRefreshRemovalTask);
+                await Repository.Database.SaveChangesAsync();
+                break;
             default:
                 throw new ArgumentException("workerTask was of an unexpected type: " + workerTask.GetType());
         }
@@ -464,6 +468,13 @@ public class TaskingRepository : ITaskingRepository
             case TemporalScopeReconciliationWorkerTask:
                 // the sweep carries no per-instance configuration, so the feature name is the display name
                 return "Temporal Scope Reconciliation";
+            case SchemaRefreshRemovalWorkerTask schemaRefreshRemovalTask:
+            {
+                // The Connected System survives a schema refresh removal, but tolerate its deletion the way the
+                // clear and delete tasks above do: an orphaned queue row must never take the list out.
+                var refreshedSystem = await db.ConnectedSystems.SingleOrDefaultAsync(q => q.Id == schemaRefreshRemovalTask.ConnectedSystemId);
+                return refreshedSystem?.Name ?? $"Connected System {schemaRefreshRemovalTask.ConnectedSystemId}";
+            }
             default:
                 return "Unknown WorkerTask type";
         }
@@ -479,6 +490,7 @@ public class TaskingRepository : ITaskingRepository
             DeleteConnectedSystemWorkerTask => nameof(DeleteConnectedSystemWorkerTask).SplitOnCapitalLetters(),
             PasswordDeliveryWorkerTask => nameof(PasswordDeliveryWorkerTask).SplitOnCapitalLetters(),
             TemporalScopeReconciliationWorkerTask => nameof(TemporalScopeReconciliationWorkerTask).SplitOnCapitalLetters(),
+            SchemaRefreshRemovalWorkerTask => nameof(SchemaRefreshRemovalWorkerTask).SplitOnCapitalLetters(),
             _ => "Unknown Worker Task Type"
         };
     }

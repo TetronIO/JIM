@@ -110,21 +110,36 @@
                        Disabled="@Busy"
                        OnClick="HandleDiscardAsync">Cancel</MudButton>
             <MudSpacer />
-            @if (Dependents is { HasAny: true })
+            @if (Result.HasRemovalsOrDefinitionChanges)
             {
-                <MudButton data-testid="jim-apply-disable-schema-refresh"
-                           Variant="Variant.Outlined"
-                           Color="Color.Warning"
+                @* A destructive diff pauses on the three-way decision (#1485): Cancel, Apply & Disable
+                   Dependents, or Apply & Remove. A plain apply that leaves invalidated configuration running
+                   is deliberately not one of the choices. *@
+                @if (Dependents is { HasAny: true })
+                {
+                    <MudButton data-testid="jim-apply-disable-schema-refresh"
+                               Variant="Variant.Outlined"
+                               Color="Color.Warning"
+                               DropShadow="false"
+                               Disabled="@Busy"
+                               OnClick="@(() => _disablePlanDialogVisible = true)">Apply &amp; Disable Dependents…</MudButton>
+                }
+                <MudButton data-testid="jim-apply-remove-schema-refresh"
+                           Variant="Variant.Filled"
+                           Color="Color.Error"
                            DropShadow="false"
                            Disabled="@Busy"
-                           OnClick="@(() => _disablePlanDialogVisible = true)">Apply &amp; Disable Dependents…</MudButton>
+                           OnClick="@(() => _removePlanDialogVisible = true)">Apply &amp; Remove…</MudButton>
             }
-            <MudButton data-testid="jim-apply-schema-refresh"
-                       Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       DropShadow="false"
-                       Disabled="@Busy"
-                       OnClick="@(() => OnApply.InvokeAsync())">Apply Schema Changes</MudButton>
+            else
+            {
+                <MudButton data-testid="jim-apply-schema-refresh"
+                           Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           DropShadow="false"
+                           Disabled="@Busy"
+                           OnClick="@(() => OnApply.InvokeAsync())">Apply Schema Changes</MudButton>
+            }
         </div>
     }
 </MudAlert>
@@ -184,9 +199,87 @@
     </DialogActions>
 </MudDialog>
 
+@* ─── Apply & Remove plan (#1485) ─── *@
+<MudDialog @bind-Visible="_removePlanDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.DeleteForever" Class="mr-3" /> Apply schema and remove dependents?
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3">
+            <strong>This deletes configuration and identity data.</strong> The configuration below is deleted, and the data removal runs as a background task you can follow from the Operations queue.
+        </MudAlert>
+        @if (Dependents is { HasAny: true })
+        {
+            <MudText Typo="Typo.body1" Style="font-weight:600">Configuration deleted</MudText>
+            <ul class="mt-1 mb-3">
+                @foreach (var rule in Dependents.InvalidatedSyncRules)
+                {
+                    <li class="mb-1">
+                        Synchronisation Rule <strong><MudLink Href="@SyncRuleUrl(rule.SyncRuleId)" Target="_blank">@rule.SyncRuleName</MudLink></strong> deleted, with its @rule.MappingCount mapping(s).
+                        <br /><span class="mud-text-secondary">@rule.Reason</span>
+                    </li>
+                }
+                @foreach (var mapping in Dependents.InvalidatedMappings)
+                {
+                    <li class="mb-1">
+                        Mapping <span class="jim-text-code">@mapping.Description</span> on <MudLink Href="@SyncRuleUrl(mapping.SyncRuleId)" Target="_blank">@mapping.SyncRuleName</MudLink> deleted.
+                        <br /><span class="mud-text-secondary">@mapping.Reason</span>
+                    </li>
+                }
+            </ul>
+        }
+        @if (RemovalImpact != null && (RemovalImpact.RemovedObjectTypes.Count > 0 || RemovalImpact.RemovedAttributes.Count > 0))
+        {
+            <MudText Typo="Typo.body1" Style="font-weight:600">Data removed</MudText>
+            <ul class="mt-1 mb-2">
+                @foreach (var type in RemovalImpact.RemovedObjectTypes)
+                {
+                    <li class="mb-1">
+                        <strong>@type.ConnectedSystemObjectCount.ToString("N0")</strong> Connected System Object(s) of Object Type <span class="jim-text-code">@type.ObjectTypeName</span> marked Obsolete.
+                    </li>
+                }
+                @foreach (var attributeImpact in RemovalImpact.RemovedAttributes)
+                {
+                    <li class="mb-1">
+                        <strong>@attributeImpact.StoredValueCount.ToString("N0")</strong> stored value(s) of attribute <span class="jim-text-code">@attributeImpact.AttributeName</span> on <span class="jim-text-code">@attributeImpact.ObjectTypeName</span> deleted.
+                    </li>
+                }
+            </ul>
+            <MudText Class="mb-2 mud-text-secondary">
+                Obsoleted objects flow through the standard deprovisioning pipeline on the next synchronisation run: disconnection, attribute recall, grace periods and Metaverse Deletion Rules all apply as configured.
+            </MudText>
+        }
+        @if (Dependents is { ReferencedObjectMatchingRules.Count: > 0 })
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+                Object Matching Rules are not deleted by this option, so these need your attention separately:
+                <ul class="mt-1 mb-0">
+                    @foreach (var matchingRule in Dependents.ReferencedObjectMatchingRules)
+                    {
+                        <li>@matchingRule.Context: @matchingRule.Reason</li>
+                    }
+                </ul>
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton DropShadow="false" Variant="Variant.Text" OnClick="@(() => _removePlanDialogVisible = false)" Class="ma-4">Back</MudButton>
+        <MudButton data-testid="jim-confirm-apply-remove"
+                   DropShadow="false"
+                   Variant="Variant.Filled"
+                   Color="Color.Error"
+                   Disabled="@Busy"
+                   OnClick="HandleConfirmApplyWithRemovalsAsync"
+                   Class="ma-4">Apply &amp; Remove</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
     private bool _disablePlanDialogVisible;
+    private bool _removePlanDialogVisible;
 
     /// <summary>
     /// The refresh being previewed. Nothing it describes has been persisted.
@@ -214,6 +307,20 @@
     public EventCallback OnApplyWithDisables { get; set; }
 
     /// <summary>
+    /// What the "Apply and Remove" option would remove, counted before anything is committed (#1485). Shown in
+    /// that option's plan dialog beside the configuration deletions.
+    /// </summary>
+    [Parameter]
+    public SchemaRefreshRemovalImpact? RemovalImpact { get; set; }
+
+    /// <summary>
+    /// Raised when the administrator confirms applying the refresh with the dependents removed: configuration
+    /// deleted and the data removal queued.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnApplyWithRemovals { get; set; }
+
+    /// <summary>
     /// Raised when the administrator discards the previewed refresh (after confirmation, where discarding leaves
     /// JIM's schema adrift of the Connected System's).
     /// </summary>
@@ -239,6 +346,12 @@
     {
         _disablePlanDialogVisible = false;
         await OnApplyWithDisables.InvokeAsync();
+    }
+
+    private async Task HandleConfirmApplyWithRemovalsAsync()
+    {
+        _removePlanDialogVisible = false;
+        await OnApplyWithRemovals.InvokeAsync();
     }
 
     /// <summary>

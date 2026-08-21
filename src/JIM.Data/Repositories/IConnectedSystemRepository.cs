@@ -1176,6 +1176,44 @@ public interface IConnectedSystemRepository
     public Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId);
 
     /// <summary>
+    /// How many live (Normal-status) Connected System Objects of one type a Connected System holds: the count
+    /// behind <see cref="GetLiveConnectedSystemObjectIdsOfTypeAsync"/>, and the "would be marked Obsolete"
+    /// figure on the schema refresh removal preview (#1485).
+    /// </summary>
+    public Task<int> GetLiveConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many stored attribute value rows a Connected System holds for one attribute, across all of its
+    /// objects: the "stored values that would be deleted" figure on the schema refresh removal preview (#1485).
+    /// </summary>
+    public Task<int> GetConnectedSystemAttributeValueCountAsync(int connectedSystemId, int attributeId);
+
+    /// <summary>
+    /// Marks the given Connected System Objects Obsolete (set-based; only Normal-status rows are touched) so
+    /// they flow through disconnection, attribute recall, grace periods and Metaverse Deletion Rules on the
+    /// next synchronisation run. The schema refresh removal task's bulk sibling of the per-object obsoletion
+    /// an import performs when an object disappears from the feed (#1485).
+    /// </summary>
+    /// <returns>How many objects were marked Obsolete.</returns>
+    public Task<int> ObsoleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Deletes the Pending Exports (and their attribute value changes) targeting the given Connected System
+    /// Objects, exactly as import-detected deletions delete them: an export against an object the source no
+    /// longer holds must never run (#1485).
+    /// </summary>
+    /// <returns>How many Pending Exports were deleted.</returns>
+    public Task<int> DeletePendingExportsForConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Deletes every stored attribute value of the given attributes across a Connected System's objects: the
+    /// schema refresh removal task's disposal of values whose attribute the Connected System no longer reports
+    /// (#1485). References from change history to the deleted values are cleared first.
+    /// </summary>
+    /// <returns>How many attribute value rows were deleted.</returns>
+    public Task<int> DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds);
+
+    /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>

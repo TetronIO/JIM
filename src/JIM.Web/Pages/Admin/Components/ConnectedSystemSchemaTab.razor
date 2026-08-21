@@ -134,9 +134,11 @@
 {
     <SchemaRefreshPreviewPanel Result="_schemaRefreshPreview"
                                Dependents="_schemaRefreshDependents"
+                               RemovalImpact="_schemaRefreshRemovalImpact"
                                Busy="_schemaRefreshApplying"
                                OnApply="HandleApplySchemaRefreshAsync"
                                OnApplyWithDisables="HandleApplySchemaRefreshWithDisablesAsync"
+                               OnApplyWithRemovals="HandleApplySchemaRefreshWithRemovalsAsync"
                                OnDiscard="HandleDiscardSchemaRefresh" />
 }
 
@@ -768,6 +770,7 @@
     // the Apply & Disable Dependents plan (#1485).
     private SchemaRefreshResult? _schemaRefreshPreview;
     private SchemaRefreshDependents? _schemaRefreshDependents;
+    private SchemaRefreshRemovalImpact? _schemaRefreshRemovalImpact;
     private ConnectedSystem? _pendingSchemaRefreshSystem;
     private bool _schemaRefreshApplying;
     private ConnectedSystemObjectType? _selectedObjectType;
@@ -1001,13 +1004,21 @@
                 _schemaRefreshPreview = await jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(pending);
                 _pendingSchemaRefreshSystem = pending;
 
-                // A destructive diff names what depends on it, which is also the Apply & Disable plan (#1485).
-                _schemaRefreshDependents = _schemaRefreshPreview.HasRemovalsOrDefinitionChanges
-                    ? SchemaRefreshDependentDetector.Detect(
+                // A destructive diff names what depends on it, which is also the Apply & Disable plan, and
+                // counts what Apply & Remove would take with it (#1485).
+                if (_schemaRefreshPreview.HasRemovalsOrDefinitionChanges)
+                {
+                    _schemaRefreshDependents = SchemaRefreshDependentDetector.Detect(
                         _schemaRefreshPreview,
                         await jim.ConnectedSystems.GetSyncRulesAsync(ConnectedSystem.Id, includeDisabledSyncRules: true),
-                        DateTime.UtcNow)
-                    : null;
+                        DateTime.UtcNow);
+                    _schemaRefreshRemovalImpact = await jim.ConnectedSystems.ComputeSchemaRefreshRemovalImpactAsync(ConnectedSystem.Id, _schemaRefreshPreview);
+                }
+                else
+                {
+                    _schemaRefreshDependents = null;
+                    _schemaRefreshRemovalImpact = null;
+                }
             }
         }
         catch (CsvParsingException ex)
@@ -1050,6 +1061,7 @@
             _schemaRefreshResult = _schemaRefreshPreview;
             _schemaRefreshPreview = null;
             _schemaRefreshDependents = null;
+            _schemaRefreshRemovalImpact = null;
             _pendingSchemaRefreshSystem = null;
             await OnConnectedSystemChanged.InvokeAsync();
         }
@@ -1091,6 +1103,7 @@
             _schemaRefreshResult = _schemaRefreshPreview;
             _schemaRefreshPreview = null;
             _schemaRefreshDependents = null;
+            _schemaRefreshRemovalImpact = null;
             _pendingSchemaRefreshSystem = null;
             await OnConnectedSystemChanged.InvokeAsync();
         }
@@ -1108,6 +1121,55 @@
     }
 
     /// <summary>
+    /// The Apply &amp; Remove option (#1485): records the new schema, deletes the invalidated rules and mappings
+    /// under child Activities of the refresh, and queues the data removal as a worker task so the request path
+    /// never pays for a large connector space.
+    /// </summary>
+    private async Task HandleApplySchemaRefreshWithRemovalsAsync()
+    {
+        if (_schemaRefreshPreview == null || _pendingSchemaRefreshSystem == null)
+            return;
+
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+
+        _schemaRefreshApplying = true;
+        StateHasChanged();
+        await Task.Delay(1);
+
+        try
+        {
+            var creationResult = await jim.ConnectedSystems.ApplyConnectedSystemSchemaRefreshWithRemovalAsync(
+                _pendingSchemaRefreshSystem, _schemaRefreshPreview, _schemaRefreshDependents ?? new SchemaRefreshDependents(), user);
+
+            if (creationResult == null)
+                Snackbar.Add("Schema applied; the dependent configuration has been removed.", Severity.Success);
+            else if (creationResult.Success)
+                Snackbar.Add("Schema applied; the dependent configuration has been removed and the data removal queued. Follow it from the Operations tab.", Severity.Success);
+            else
+                Snackbar.Add($"Schema applied and configuration removed, but the data removal could not be queued: {creationResult.ErrorMessage}", Severity.Error, options => options.RequireInteraction = true);
+
+            _schemaRefreshResult = _schemaRefreshPreview;
+            _schemaRefreshPreview = null;
+            _schemaRefreshDependents = null;
+            _schemaRefreshRemovalImpact = null;
+            _pendingSchemaRefreshSystem = null;
+            await OnConnectedSystemChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Same boundary as the plain apply: any failure reaches the administrator, never the circuit.
+            Log.Error(ex, "Failed to apply schema refresh with removals for Connected System {SystemId}", ConnectedSystem.Id);
+            Snackbar.Add($"Failed to apply the schema changes: {ex.Message}", Severity.Error, options => options.RequireInteraction = true);
+        }
+        finally
+        {
+            _schemaRefreshApplying = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
     /// Drops the previewed refresh. The preview merged into its own instance, so the schema JIM holds was never
     /// touched; the panel has already confirmed the decision where the discard leaves JIM adrift of the source.
     /// </summary>
@@ -1115,6 +1177,7 @@
     {
         _schemaRefreshPreview = null;
         _schemaRefreshDependents = null;
+        _schemaRefreshRemovalImpact = null;
         _pendingSchemaRefreshSystem = null;
     }
 

@@ -45,7 +45,10 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
             Assert.That(cut.Markup, Does.Contain("department"));
             Assert.That(cut.Markup, Does.Contain("displayName: data type Reference"), "A definition change must be shown, not applied silently.");
             Assert.That(cut.Markup, Does.Contain("retained"), "The panel must say removals are kept, not deleted; the old warning claimed the opposite.");
-            Assert.That(cut.FindAll("[data-testid=jim-apply-schema-refresh]"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll("[data-testid=jim-apply-schema-refresh]"), Is.Empty,
+                "On a destructive diff the administrator decides between the three options; a plain apply is no longer one of them (#1485).");
+            Assert.That(cut.FindAll("[data-testid=jim-apply-remove-schema-refresh]"), Has.Count.EqualTo(1),
+                "Apply and Remove is the full-commitment choice on a destructive diff.");
             Assert.That(cut.FindAll("[data-testid=jim-discard-schema-refresh]"), Has.Count.EqualTo(1));
         }
     }
@@ -68,6 +71,8 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
             Assert.That(cut.Markup, Does.Contain("mobile"));
             Assert.That(cut.Markup, Does.Not.Contain("retained"), "Additions cannot break anything; no drift warning applies.");
             Assert.That(cut.FindAll("[data-testid=jim-apply-schema-refresh]"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll("[data-testid=jim-apply-remove-schema-refresh]"), Is.Empty,
+                "Additions have nothing to remove; the plain apply stands (#421 behaviour).");
         }
     }
 
@@ -189,6 +194,52 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
         }
 
         provider.Find("[data-testid=jim-confirm-apply-disable]").Click();
+        Assert.That(applied, Is.True);
+    }
+
+    [Test]
+    public void ApplyAndRemove_ShowsTheImpactAndTheExactWarningThenConfirmsThroughIt()
+    {
+        var result = new SchemaRefreshResult
+        {
+            Success = true,
+            RemovedObjectTypes = ["computer"],
+            RemovedAttributes = new Dictionary<string, List<string>> { ["user"] = ["faxNumber"] }
+        };
+        var dependents = new SchemaRefreshDependents();
+        dependents.InvalidatedSyncRules.Add(new SchemaRefreshDependentRule
+        {
+            SyncRuleId = 10,
+            SyncRuleName = "Directory Computers Inbound",
+            ObjectTypeName = "computer",
+            MappingCount = 4,
+            Reason = "Object Type 'computer' is no longer reported by the Connected System (schema refresh of 21 Aug 2026)."
+        });
+        var impact = new SchemaRefreshRemovalImpact();
+        impact.RemovedObjectTypes.Add(new SchemaRefreshRemovalTypeImpact { ObjectTypeId = 2, ObjectTypeName = "computer", ConnectedSystemObjectCount = 1204 });
+        impact.RemovedAttributes.Add(new SchemaRefreshRemovalAttributeImpact { AttributeId = 13, AttributeName = "faxNumber", ObjectTypeName = "user", StoredValueCount = 87 });
+        var applied = false;
+
+        var provider = Render<MudDialogProvider>();
+        var cut = Render<SchemaRefreshPreviewPanel>(p => p
+            .Add(c => c.Result, result)
+            .Add(c => c.Dependents, dependents)
+            .Add(c => c.RemovalImpact, impact)
+            .Add(c => c.OnApplyWithRemovals, () => applied = true));
+
+        cut.Find("[data-testid=jim-apply-remove-schema-refresh]").Click();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.Markup, Does.Contain("This deletes configuration and identity data."),
+                "The dialog leads with the exact consequence, in the words the design fixed.");
+            Assert.That(provider.Markup, Does.Contain("1,204"), "The Connected System Object count is part of the decision.");
+            Assert.That(provider.Markup, Does.Contain("87"), "The stored value count is part of the decision.");
+            Assert.That(provider.Markup, Does.Contain("Directory Computers Inbound"));
+            Assert.That(applied, Is.False, "Opening the plan must not apply it.");
+        }
+
+        provider.Find("[data-testid=jim-confirm-apply-remove]").Click();
         Assert.That(applied, Is.True);
     }
 

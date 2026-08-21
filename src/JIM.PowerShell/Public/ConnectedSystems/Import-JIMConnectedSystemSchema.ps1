@@ -30,7 +30,17 @@ function Import-JIMConnectedSystemSchema {
         removed object type and attribute mappings reading a removed or redefined attribute (directly or as an
         expression input) are disabled with a recorded reason, so nothing runs against entries the Connected
         System no longer reports. Preview first with -Preview, whose result's Dependents property names what
-        this option would disable. Re-enabling is a manual choice per rule or mapping.
+        this option would disable. Re-enabling is a manual choice per rule or mapping. Cannot be combined with
+        -RemoveDependents.
+
+    .PARAMETER RemoveDependents
+        If specified, the refresh is applied with its dependents removed. This deletes configuration and
+        identity data: the invalidated Synchronisation Rules and attribute mappings are deleted, and a
+        background worker task marks every Connected System Object of a removed object type Obsolete (they
+        deprovision through the standard pipeline, grace periods and Metaverse Deletion Rules included) and
+        deletes every stored value of a removed attribute. Always preview first with -Preview, whose result's
+        Dependents and RemovalImpact properties show exactly what this option would take. Follow the queued
+        removal with Get-JIMWorkerTask. Cannot be combined with -DisableDependents.
 
     .PARAMETER PassThru
         If specified, returns the updated Connected System object with imported schema. Not needed with -Preview,
@@ -50,6 +60,16 @@ function Import-JIMConnectedSystemSchema {
         if (-not $preview.HasRemovalsOrDefinitionChanges) { Import-JIMConnectedSystemSchema -Id 1 -Confirm:$false }
 
         Previews the refresh and only applies it when nothing was removed or redefined at the Connected System.
+
+    .EXAMPLE
+        $preview = Import-JIMConnectedSystemSchema -Id 1 -Preview
+        $preview.Dependents; $preview.RemovalImpact
+        Import-JIMConnectedSystemSchema -Id 1 -RemoveDependents
+
+        Reviews exactly which Synchronisation Rules and mappings a destructive refresh would delete and how many
+        objects and stored values the data removal would take, then applies the refresh with its dependents
+        removed. This deletes configuration and identity data across everything the preview listed; the data
+        removal runs as a background worker task.
 
     .EXAMPLE
         Import-JIMConnectedSystemSchema -Id 1 -PassThru
@@ -86,6 +106,8 @@ function Import-JIMConnectedSystemSchema {
 
         [switch]$DisableDependents,
 
+        [switch]$RemoveDependents,
+
         [switch]$PassThru
     )
 
@@ -93,6 +115,11 @@ function Import-JIMConnectedSystemSchema {
         # Check connection first
         if (-not $script:JIMConnection) {
             Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+            return
+        }
+
+        if ($DisableDependents -and $RemoveDependents) {
+            Write-Error "-DisableDependents and -RemoveDependents are mutually exclusive; a refresh takes one posture."
             return
         }
 
@@ -111,12 +138,14 @@ function Import-JIMConnectedSystemSchema {
             return
         }
 
-        if ($PSCmdlet.ShouldProcess("Connected System $systemId", "Import Schema")) {
+        $action = if ($RemoveDependents) { "Import Schema and remove dependent configuration and data" } else { "Import Schema" }
+        if ($PSCmdlet.ShouldProcess("Connected System $systemId", $action)) {
             Write-Verbose "Importing schema for Connected System: $systemId"
 
             try {
                 $invokeParams = @{ Endpoint = "/api/v1/synchronisation/connected-systems/$systemId/import-schema"; Method = 'POST' }
                 if ($DisableDependents) { $invokeParams.Body = @{ disableDependents = $true } }
+                if ($RemoveDependents) { $invokeParams.Body = @{ removeDependents = $true } }
                 $result = Invoke-JIMApi @invokeParams
 
                 $objectTypeCount = if ($result.objectTypes) { $result.objectTypes.Count } else { 0 }

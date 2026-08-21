@@ -16,6 +16,7 @@ using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Tasking;
+using JIM.Models.Tasking.DTOs;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -1693,30 +1694,7 @@ public class ConnectedSystemServer
     /// <param name="initiatedBy">The user the change is attributed to.</param>
     public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents? disableDependents, MetaverseObject? initiatedBy)
     {
-        ValidateConnectedSystemParameter(connectedSystem);
-
-        var activity = new Activity
-        {
-            TargetName = connectedSystem.Name,
-            TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.ImportSchema,
-            ConnectedSystemId = connectedSystem.Id
-        };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
-
-        try
-        {
-            await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
-            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
-            await CompleteSchemaImportActivityAsync(activity, previewResult);
-        }
-        catch (Exception ex)
-        {
-            // Discard staged schema changes before recording the failure: see the one-call import overloads.
-            Application.Repository.ClearChangeTracker();
-            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
-            throw;
-        }
+        var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy, initiatedByApiKey: null);
 
         if (disableDependents is { HasAny: true })
             await DisableSchemaRefreshDependentsAsync(connectedSystem, disableDependents, activity, initiatedBy, initiatedByApiKey: null);
@@ -1728,6 +1706,56 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents? disableDependents, ApiKey initiatedByApiKey)
     {
+        var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy: null, initiatedByApiKey);
+
+        if (disableDependents is { HasAny: true })
+            await DisableSchemaRefreshDependentsAsync(connectedSystem, disableDependents, activity, initiatedBy: null, initiatedByApiKey);
+    }
+
+    /// <summary>
+    /// Applies a previewed schema refresh and then removes its dependents: the "Apply and Remove" option of the
+    /// schema refresh decision (#1485). The schema is recorded exactly as the plain apply records it; the
+    /// Synchronisation Rules and mappings the plan names are deleted under child Activities of the refresh; and
+    /// the dependent data is removed by a queued worker task, so a Connected System holding hundreds of
+    /// thousands of objects never does that work in the request path. The task's ids are resolved from the
+    /// preview's pre-refresh snapshot, because removed entries are no longer on the merged schema graph.
+    /// </summary>
+    /// <param name="connectedSystem">The instance the preview merged into. Persisted as-is.</param>
+    /// <param name="previewResult">The preview's result: completes the refresh Activity and resolves the
+    /// removed Object Type and attribute ids the data removal targets.</param>
+    /// <param name="removeDependents">The configuration to delete, as previewed and confirmed.</param>
+    /// <param name="initiatedBy">The user the change is attributed to.</param>
+    /// <returns>The queued data-removal task's creation result, or null when the refresh removed no Object
+    /// Types or attributes and there is therefore no data to remove.</returns>
+    public async Task<WorkerTaskCreationResult?> ApplyConnectedSystemSchemaRefreshWithRemovalAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents removeDependents, MetaverseObject? initiatedBy)
+    {
+        ArgumentNullException.ThrowIfNull(removeDependents);
+
+        var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy, initiatedByApiKey: null);
+        await RemoveSchemaRefreshDependentConfigurationAsync(connectedSystem, removeDependents, activity, initiatedBy, initiatedByApiKey: null);
+        return await QueueSchemaRefreshRemovalTaskAsync(connectedSystem, previewResult, initiatedBy, initiatedByApiKey: null);
+    }
+
+    /// <summary>
+    /// As <see cref="ApplyConnectedSystemSchemaRefreshWithRemovalAsync(ConnectedSystem, SchemaRefreshResult, SchemaRefreshDependents, MetaverseObject?)"/>,
+    /// attributed to an API key (the REST API and PowerShell path).
+    /// </summary>
+    public async Task<WorkerTaskCreationResult?> ApplyConnectedSystemSchemaRefreshWithRemovalAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents removeDependents, ApiKey initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(removeDependents);
+
+        var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy: null, initiatedByApiKey);
+        await RemoveSchemaRefreshDependentConfigurationAsync(connectedSystem, removeDependents, activity, initiatedBy: null, initiatedByApiKey);
+        return await QueueSchemaRefreshRemovalTaskAsync(connectedSystem, previewResult, initiatedBy: null, initiatedByApiKey);
+    }
+
+    /// <summary>
+    /// The shared middle of every schema refresh apply: records the refresh under an ImportSchema Activity and
+    /// returns that Activity so the decision's follow-on work (disables, deletions) can parent itself under it.
+    /// A failure discards the staged schema changes before recording it, exactly as the one-call import does.
+    /// </summary>
+    private async Task<Activity> PersistSchemaRefreshUnderActivityAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+    {
         ValidateConnectedSystemParameter(connectedSystem);
 
         var activity = new Activity
@@ -1737,11 +1765,17 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.ImportSchema,
             ConnectedSystemId = connectedSystem.Id
         };
-        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        if (initiatedByApiKey != null)
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        else
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         try
         {
-            await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
+            if (initiatedByApiKey != null)
+                await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
+            else
+                await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
             await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
             await CompleteSchemaImportActivityAsync(activity, previewResult);
         }
@@ -1753,8 +1787,243 @@ public class ConnectedSystemServer
             throw;
         }
 
-        if (disableDependents is { HasAny: true })
-            await DisableSchemaRefreshDependentsAsync(connectedSystem, disableDependents, activity, initiatedBy: null, initiatedByApiKey);
+        return activity;
+    }
+
+    /// <summary>
+    /// Deletes the rules and mappings a destructive schema refresh invalidated, as the administrator chose on
+    /// the refresh review (#1485). Deletion goes through the same audited paths a standalone delete uses
+    /// (tombstone snapshot, attribute priority reconciliation), with each delete Activity parented under the
+    /// refresh so the history reads as one decision. Mappings named by the plan that belong to a rule the plan
+    /// also deletes are skipped: the database cascades them with their rule.
+    /// </summary>
+    private async Task RemoveSchemaRefreshDependentConfigurationAsync(
+        ConnectedSystem connectedSystem,
+        SchemaRefreshDependents dependents,
+        Activity refreshActivity,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        if (!dependents.HasAny)
+            return;
+
+        var rules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+        var rulesById = rules.ToDictionary(rule => rule.Id);
+        var ruleIdsBeingDeleted = dependents.InvalidatedSyncRules.Select(entry => entry.SyncRuleId).ToHashSet();
+
+        foreach (var entry in dependents.InvalidatedSyncRules.Where(e => rulesById.ContainsKey(e.SyncRuleId)))
+        {
+            var rule = rulesById[entry.SyncRuleId];
+            if (initiatedByApiKey != null)
+                await DeleteSyncRuleAsync(rule, initiatedByApiKey, entry.Reason, refreshActivity.Id);
+            else
+                await DeleteSyncRuleAsync(rule, initiatedBy, entry.Reason, refreshActivity.Id);
+        }
+
+        foreach (var group in dependents.InvalidatedMappings
+                     .Where(m => !ruleIdsBeingDeleted.Contains(m.SyncRuleId))
+                     .GroupBy(m => m.SyncRuleId)
+                     .Where(g => rulesById.ContainsKey(g.Key)))
+        {
+            var rule = rulesById[group.Key];
+            var mappingsById = rule.AttributeFlowRules.ToDictionary(m => m.Id);
+            foreach (var mapping in group.Where(e => mappingsById.ContainsKey(e.MappingId)).Select(e => mappingsById[e.MappingId]))
+            {
+                // The rule navigation gives the delete Activity its context (the rule's name) and the
+                // post-delete configuration capture its id.
+                mapping.SyncRule ??= rule;
+                if (initiatedByApiKey != null)
+                    await DeleteSyncRuleMappingAsync(mapping, initiatedByApiKey, refreshActivity.Id);
+                else
+                    await DeleteSyncRuleMappingAsync(mapping, initiatedBy, refreshActivity.Id);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Queues the data-removal half of "Apply and Remove" (#1485): a worker task carrying the pre-refresh ids
+    /// of the Object Types and attributes the Connected System no longer reports. Returns null when the refresh
+    /// removed neither, because there is then no data to remove and a queued no-op would only confuse the queue.
+    /// </summary>
+    private async Task<WorkerTaskCreationResult?> QueueSchemaRefreshRemovalTaskAsync(
+        ConnectedSystem connectedSystem,
+        SchemaRefreshResult previewResult,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        var (removedObjectTypeIds, removedAttributeIds) = ResolveRemovedSchemaIds(previewResult);
+        if (removedObjectTypeIds.Count == 0 && removedAttributeIds.Count == 0)
+            return null;
+
+        var task = initiatedByApiKey != null
+            ? SchemaRefreshRemovalWorkerTask.ForApiKey(connectedSystem.Id, removedObjectTypeIds, removedAttributeIds, initiatedByApiKey.Id, initiatedByApiKey.Name)
+            : SchemaRefreshRemovalWorkerTask.ForUser(connectedSystem.Id, removedObjectTypeIds, removedAttributeIds,
+                initiatedBy?.Id ?? Guid.Empty, initiatedBy?.CachedDisplayName ?? "Unknown");
+
+        return await Application.Tasking.CreateWorkerTaskAsync(task);
+    }
+
+    /// <summary>
+    /// Resolves what a refresh removed into the ids configuration and data reference, using the pre-refresh
+    /// snapshot the merge captured: removed entries are no longer on the merged graph, and the schema rows
+    /// themselves are retained on apply (see issue #782), so the pre-refresh ids remain valid to act on.
+    /// Attributes of a wholly removed Object Type are deliberately not resolved; their values leave with their
+    /// objects through the obsoletion pipeline.
+    /// </summary>
+    private static (List<int> RemovedObjectTypeIds, List<int> RemovedAttributeIds) ResolveRemovedSchemaIds(SchemaRefreshResult previewResult)
+    {
+        var preRefreshTypesByName = previewResult.PreRefreshSchema.ToDictionary(type => type.Name);
+
+        var removedObjectTypeIds = previewResult.RemovedObjectTypes
+            .Where(preRefreshTypesByName.ContainsKey)
+            .Select(name => preRefreshTypesByName[name].Id)
+            .ToList();
+
+        var removedAttributeIds = previewResult.RemovedAttributes
+            .Where(kvp => preRefreshTypesByName.ContainsKey(kvp.Key))
+            .SelectMany(kvp =>
+            {
+                var attributeNames = kvp.Value.ToHashSet();
+                return preRefreshTypesByName[kvp.Key].Attributes
+                    .Where(attribute => attributeNames.Contains(attribute.Name))
+                    .Select(attribute => attribute.Id);
+            })
+            .ToList();
+
+        return (removedObjectTypeIds, removedAttributeIds);
+    }
+
+    /// <summary>
+    /// Counts what the schema refresh decision's "Apply and Remove" option (#1485) would remove, so the
+    /// administrator confirms with the numbers in front of them: Connected System Objects per removed Object
+    /// Type (each would be marked Obsolete and flow through the standard deprovisioning pipeline) and stored
+    /// values per removed attribute (each would be deleted). Uses the preview's pre-refresh snapshot to resolve
+    /// ids, exactly as the removal itself does, so the preview and the action can never disagree on scope.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the refresh was previewed against.</param>
+    /// <param name="previewResult">The refresh preview whose removals are being counted.</param>
+    public async Task<SchemaRefreshRemovalImpact> ComputeSchemaRefreshRemovalImpactAsync(int connectedSystemId, SchemaRefreshResult previewResult)
+    {
+        ArgumentNullException.ThrowIfNull(previewResult);
+
+        var impact = new SchemaRefreshRemovalImpact();
+        var preRefreshTypesByName = previewResult.PreRefreshSchema.ToDictionary(type => type.Name);
+
+        foreach (var type in previewResult.RemovedObjectTypes.Where(preRefreshTypesByName.ContainsKey).Select(name => preRefreshTypesByName[name]))
+        {
+            impact.RemovedObjectTypes.Add(new SchemaRefreshRemovalTypeImpact
+            {
+                ObjectTypeId = type.Id,
+                ObjectTypeName = type.Name,
+                ConnectedSystemObjectCount = await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectCountOfTypeAsync(connectedSystemId, type.Id)
+            });
+        }
+
+        foreach (var kvp in previewResult.RemovedAttributes.Where(kvp => preRefreshTypesByName.ContainsKey(kvp.Key)))
+        {
+            var type = preRefreshTypesByName[kvp.Key];
+            var attributeNames = kvp.Value.ToHashSet();
+            foreach (var attribute in type.Attributes.Where(attribute => attributeNames.Contains(attribute.Name)))
+            {
+                impact.RemovedAttributes.Add(new SchemaRefreshRemovalAttributeImpact
+                {
+                    AttributeId = attribute.Id,
+                    AttributeName = attribute.Name,
+                    ObjectTypeName = type.Name,
+                    StoredValueCount = await Application.Repository.ConnectedSystems.GetConnectedSystemAttributeValueCountAsync(connectedSystemId, attribute.Id)
+                });
+            }
+        }
+
+        return impact;
+    }
+
+    /// <summary>
+    /// Executes a queued schema refresh removal (#1485), on the worker: marks every live Connected System
+    /// Object of the removed Object Types Obsolete (they flow through disconnection, attribute recall, grace
+    /// periods and Metaverse Deletion Rules on the next synchronisation run), deletes their Pending Exports
+    /// exactly as import-detected deletions do, deletes every stored value of the removed attributes, and
+    /// records one Run Profile Execution Item per obsoleted object on the task's Activity so the decision's
+    /// history names every object it touched.
+    /// </summary>
+    /// <param name="task">The queued task, carrying the pre-refresh ids to act on and the Activity to report to.</param>
+    public async Task<SchemaRefreshRemovalResult> ExecuteSchemaRefreshRemovalAsync(SchemaRefreshRemovalWorkerTask task)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        if (task.Activity == null)
+            throw new InvalidDataException("ExecuteSchemaRefreshRemovalAsync: the task must carry the Activity it was queued under.");
+
+        const int batchSize = 500;
+        var result = new SchemaRefreshRemovalResult();
+        var activity = task.Activity;
+
+        // The schema rows of removed Object Types are retained on apply (issue #782), so their names resolve
+        // from the persisted system; tolerate their absence rather than fail the whole removal over a label.
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(task.ConnectedSystemId);
+        var typeNamesById = (connectedSystem?.ObjectTypes ?? []).ToDictionary(type => type.Id, type => type.Name);
+
+        var idsByType = new Dictionary<int, List<Guid>>();
+        foreach (var objectTypeId in task.RemovedObjectTypeIds)
+            idsByType[objectTypeId] = await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectIdsOfTypeAsync(task.ConnectedSystemId, objectTypeId);
+
+        activity.ObjectsToProcess = idsByType.Values.Sum(ids => ids.Count);
+        activity.ObjectsProcessed = 0;
+        await Application.Repository.Activity.UpdateActivityAsync(activity);
+
+        foreach (var (objectTypeId, csoIds) in idsByType)
+        {
+            var typeName = typeNamesById.GetValueOrDefault(objectTypeId, $"Removed Object Type {objectTypeId}");
+            foreach (var batch in csoIds.Chunk(batchSize))
+            {
+                // Load before flipping the status: the display snapshots have to reflect the object as it was,
+                // and the live-of-type query would no longer return it afterwards.
+                var csos = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(task.ConnectedSystemId, batch);
+
+                result.ConnectedSystemObjectsObsoleted += await Application.Repository.ConnectedSystems.ObsoleteConnectedSystemObjectsByIdsAsync(batch);
+                result.PendingExportsRemoved += await Application.Repository.ConnectedSystems.DeletePendingExportsForConnectedSystemObjectsAsync(batch);
+
+                var executionItems = csos.Select(cso =>
+                {
+                    var item = new ActivityRunProfileExecutionItem
+                    {
+                        Id = Guid.NewGuid(),
+                        ObjectChangeType = ObjectChangeType.Deleted,
+                        ConnectedSystemObjectId = cso.Id
+                    };
+                    item.SnapshotCsoDisplayFields(cso);
+                    // The by-ids load does not include the Type navigation; the removed type's name is resolved above.
+                    item.ObjectTypeSnapshot = typeName;
+                    item.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome
+                    {
+                        OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected,
+                        TargetEntityId = cso.Id,
+                        TargetEntityDescription = cso.Name,
+                        DetailMessage = $"Object Type '{typeName}' is no longer reported by the Connected System; marked Obsolete by the schema refresh removal.",
+                        Ordinal = 0
+                    });
+                    item.OutcomeSummary = $"{ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected}:1";
+                    return item;
+                }).ToList();
+
+                await Application.Activities.AddRunProfileExecutionItemsAsync(activity, executionItems);
+
+                activity.ObjectsProcessed += batch.Length;
+                await Application.Repository.Activity.UpdateActivityAsync(activity);
+            }
+        }
+
+        if (task.RemovedAttributeIds.Count > 0)
+            result.AttributeValuesRemoved = await Application.Repository.ConnectedSystems.DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(task.ConnectedSystemId, task.RemovedAttributeIds);
+
+        activity.TotalDeleted = result.ConnectedSystemObjectsObsoleted;
+        activity.Message = $"Marked {result.ConnectedSystemObjectsObsoleted:N0} Connected System Object(s) Obsolete, removed {result.PendingExportsRemoved:N0} Pending Export(s) and deleted {result.AttributeValuesRemoved:N0} stored attribute value(s).";
+
+        Log.Information(
+            "ExecuteSchemaRefreshRemovalAsync: Connected System {ConnectedSystemId}: {ObsoletedCount} Connected System Object(s) marked Obsolete across {TypeCount} removed Object Type(s), {PendingExportCount} Pending Export(s) removed, {ValueCount} stored value(s) deleted across {AttributeCount} removed attribute(s).",
+            task.ConnectedSystemId, result.ConnectedSystemObjectsObsoleted, task.RemovedObjectTypeIds.Count,
+            result.PendingExportsRemoved, result.AttributeValuesRemoved, task.RemovedAttributeIds.Count);
+
+        return result;
     }
 
     /// <summary>
@@ -6338,7 +6607,7 @@ public class ConnectedSystemServer
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
-    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy)
+    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy, Guid? parentActivityId = null)
     {
         if (mapping == null)
             throw new ArgumentNullException(nameof(mapping));
@@ -6352,7 +6621,10 @@ public class ConnectedSystemServer
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // A deletion performed as part of a larger decision (a schema refresh's Apply and Remove, #1485)
+            // parents itself under that decision's Activity so the history reads as one action.
+            ParentActivityId = parentActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -6375,7 +6647,7 @@ public class ConnectedSystemServer
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the deletion.</param>
-    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, ApiKey initiatedByApiKey)
+    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, ApiKey initiatedByApiKey, Guid? parentActivityId = null)
     {
         if (mapping == null)
             throw new ArgumentNullException(nameof(mapping));
@@ -6389,7 +6661,9 @@ public class ConnectedSystemServer
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // See the MetaverseObject-initiated overload above.
+            ParentActivityId = parentActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -7905,7 +8179,7 @@ public class ConnectedSystemServer
         return true;
     }
 
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, string? changeReason = null)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, string? changeReason = null, Guid? parentActivityId = null)
     {
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
@@ -7923,7 +8197,10 @@ public class ConnectedSystemServer
             // since last Full Synchronisation" indicator: a false negative on one of the most consequential changes
             // there is. The Connected System survives the deletion, so its id is the durable link. This does not
             // pollute the system's own configuration history, which additionally requires a captured version.
-            ConnectedSystemId = syncRule.ConnectedSystemId
+            ConnectedSystemId = syncRule.ConnectedSystemId,
+            // A deletion performed as part of a larger decision (a schema refresh's Apply and Remove, #1485)
+            // parents itself under that decision's Activity so the history reads as one action.
+            ParentActivityId = parentActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -7942,7 +8219,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Deletes a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, string? changeReason = null)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, string? changeReason = null, Guid? parentActivityId = null)
     {
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
@@ -7956,7 +8233,9 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Delete,
             // See the MetaverseObject-initiated overload above: the Connected System id is what keeps a rule deletion
             // attributable once the rule itself is gone.
-            ConnectedSystemId = syncRule.ConnectedSystemId
+            ConnectedSystemId = syncRule.ConnectedSystemId,
+            // See the MetaverseObject-initiated overload above.
+            ParentActivityId = parentActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
