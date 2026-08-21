@@ -104,6 +104,15 @@ public class SyncRule : IAuditable, IValidated
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// Why this Synchronisation Rule is disabled, when something disabled it on the administrator's behalf
+    /// (the schema refresh decision's "Apply and Disable Dependents" option names the refresh and the schema
+    /// change here, #1485). Null when the rule is enabled, and null when an administrator disabled it
+    /// themselves; the presence of a reason is what distinguishes the two. Cleared whenever an enabled rule
+    /// is saved.
+    /// </summary>
+    public string? DisabledReason { get; set; }
+
+    /// <summary>
     /// For Export rules: Action to take when an MVO falls out of scope.
     /// Only applies when Direction = Export.
     /// </summary>

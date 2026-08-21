@@ -127,6 +127,46 @@ public class SyncRuleMappingUpdateTests : WorkflowTestBase
         }
     }
 
+    [Test]
+    public async Task UpdateSyncRuleMappings_DisabledStateAndReason_PersistAsync()
+    {
+        // The per-mapping enabled state (#1485) rides the same detached update path as every other mapping
+        // scalar; this pins that both new columns actually persist and read back.
+        var system = await CreateConnectedSystemAsync("HR");
+        var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var displayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
+        var csoType = await CreateCsoTypeAsync(system.Id, "User",
+            new List<ConnectedSystemObjectTypeAttribute> { externalIdAttr, displayNameAttr });
+
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
+
+        var rule = await CreateImportSyncRuleAsync(system.Id, csoType, mvType, "Rule A");
+        var mapping = new SyncRuleMapping
+        {
+            SyncRule = rule,
+            SyncRuleId = rule.Id,
+            TargetMetaverseAttribute = mvDisplayNameAttr,
+            TargetMetaverseAttributeId = mvDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = displayNameAttr, ConnectedSystemAttributeId = displayNameAttr.Id } }
+        };
+        rule.AttributeFlowRules.Add(mapping);
+        await DbContext.SaveChangesAsync();
+
+        var detached = BuildDetachedMapping(mapping, priority: 1, mvDisplayNameAttr.Id);
+        detached.Enabled = false;
+        detached.DisabledReason = "Attribute 'DisplayName' is no longer reported by the Connected System.";
+
+        await Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(new[] { detached });
+
+        var persisted = await DbContext.SyncRuleMappings.AsNoTracking().SingleAsync(m => m.Id == mapping.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.Enabled, Is.False, "the disabled state must persist");
+            Assert.That(persisted.DisabledReason, Does.Contain("DisplayName"), "the recorded reason must persist");
+        }
+    }
+
     private static SyncRuleMapping BuildDetachedMapping(SyncRuleMapping persisted, int priority, int targetAttributeId)
     {
         return new SyncRuleMapping

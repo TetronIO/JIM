@@ -10,8 +10,9 @@ function Import-JIMConnectedSystemSchema {
         Connects to the external system and retrieves its schema (object types and attributes).
         This is required before creating Synchronisation Rules, as Synchronisation Rules reference object type IDs.
 
-        Note: This operation is destructive - it will replace any existing schema configuration.
-        Any Synchronisation Rules referencing removed object types/attributes will need to be updated.
+        A refresh never deletes: additions and attribute definition updates are applied, while object types and
+        attributes the Connected System no longer reports are retained in JIM and flagged. Use -Preview first to
+        see what a refresh would change without applying anything, then run again without -Preview to apply.
 
     .PARAMETER Id
         The unique identifier of the Connected System to import schema for.
@@ -19,16 +20,36 @@ function Import-JIMConnectedSystemSchema {
     .PARAMETER InputObject
         Connected System object to import schema for (from pipeline).
 
+    .PARAMETER Preview
+        If specified, retrieves the schema and returns what a refresh would change without persisting anything.
+        The result's HasRemovalsOrDefinitionChanges property flags removals and attribute definition changes,
+        which are the changes that can affect existing configuration; additions alone cannot.
+
+    .PARAMETER DisableDependents
+        If specified, the refresh is applied with its dependents disabled: Synchronisation Rules bound to a
+        removed object type and attribute mappings reading a removed or redefined attribute (directly or as an
+        expression input) are disabled with a recorded reason, so nothing runs against entries the Connected
+        System no longer reports. Preview first with -Preview, whose result's Dependents property names what
+        this option would disable. Re-enabling is a manual choice per rule or mapping.
+
     .PARAMETER PassThru
-        If specified, returns the updated Connected System object with imported schema.
+        If specified, returns the updated Connected System object with imported schema. Not needed with -Preview,
+        which always returns the preview result.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Connected System object.
+        With -Preview, returns the schema refresh preview result. Otherwise, if -PassThru is specified, returns
+        the updated Connected System object.
 
     .EXAMPLE
         Import-JIMConnectedSystemSchema -Id 1
 
         Imports the schema for Connected System with ID 1.
+
+    .EXAMPLE
+        $preview = Import-JIMConnectedSystemSchema -Id 1 -Preview
+        if (-not $preview.HasRemovalsOrDefinitionChanges) { Import-JIMConnectedSystemSchema -Id 1 -Confirm:$false }
+
+        Previews the refresh and only applies it when nothing was removed or redefined at the Connected System.
 
     .EXAMPLE
         Import-JIMConnectedSystemSchema -Id 1 -PassThru
@@ -61,6 +82,10 @@ function Import-JIMConnectedSystemSchema {
         [Parameter(Mandatory, ParameterSetName = 'ByInputObject', ValueFromPipeline)]
         [PSCustomObject]$InputObject,
 
+        [switch]$Preview,
+
+        [switch]$DisableDependents,
+
         [switch]$PassThru
     )
 
@@ -73,11 +98,26 @@ function Import-JIMConnectedSystemSchema {
 
         $systemId = if ($InputObject) { $InputObject.id } else { $Id }
 
+        if ($Preview) {
+            # A preview persists nothing and records nothing, so it bypasses ShouldProcess: there is no action to
+            # confirm, and the result is the whole point, so it is returned without -PassThru.
+            Write-Verbose "Previewing schema refresh for Connected System: $systemId"
+            try {
+                Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$systemId/import-schema/preview" -Method 'POST'
+            }
+            catch {
+                Write-Error "Failed to preview schema refresh: $_"
+            }
+            return
+        }
+
         if ($PSCmdlet.ShouldProcess("Connected System $systemId", "Import Schema")) {
             Write-Verbose "Importing schema for Connected System: $systemId"
 
             try {
-                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$systemId/import-schema" -Method 'POST'
+                $invokeParams = @{ Endpoint = "/api/v1/synchronisation/connected-systems/$systemId/import-schema"; Method = 'POST' }
+                if ($DisableDependents) { $invokeParams.Body = @{ disableDependents = $true } }
+                $result = Invoke-JIMApi @invokeParams
 
                 $objectTypeCount = if ($result.objectTypes) { $result.objectTypes.Count } else { 0 }
                 Write-Verbose "Schema imported for Connected System: $systemId ($objectTypeCount object types)"

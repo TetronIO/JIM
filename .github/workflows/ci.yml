@@ -153,6 +153,63 @@ jobs:
     - name: Run database-backed tests (RequiresPostgres)
       run: dotnet test JIM.sln --no-build --filter "Category=RequiresPostgres" --verbosity normal
 
+  ldaps-tests:
+    # Runs the RequiresLdaps NUnit tier against real directory servers over TLS:
+    # three OpenLDAP variants (system-trusted CA, JIM-store-only CA, expired
+    # certificate) and a Samba AD Domain Controller. These fixtures self-skip in
+    # build-and-test (JIM_TEST_LDAPS_HOST unset); here the fixture script stands
+    # the servers up and exports the environment variables that flip them from
+    # Assert.Ignore to run. This is the regression net for LDAPS certificate
+    # validation (#1132): connections must be refused for untrusted issuers, name
+    # mismatches and expired certificates, with the reason reported, and must
+    # succeed when the CA is in the JIM certificate store. See issue #1141.
+    # Runs on every PR so a failure blocks the merge.
+    #
+    # LDAPTLS_REQCERT must never be set here: it would disable libldap certificate
+    # validation for the whole process and turn every refusal case into a false pass,
+    # which is the exact defect class this job exists to catch. A guard step asserts it.
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+    - name: Setup .NET
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+      with:
+        dotnet-version: 10.0.x
+    - name: Restore dependencies
+      run: dotnet restore JIM.sln --locked-mode
+    - name: Build
+      run: dotnet build test/JIM.Worker.Tests/ --no-restore
+    - name: Assert LDAPTLS_REQCERT is not in scope
+      run: |
+        if [ -n "${LDAPTLS_REQCERT}" ]; then
+          echo "LDAPTLS_REQCERT is set; it would disable certificate validation and void this job."
+          exit 1
+        fi
+    # Docker Hub rate-limits anonymous pulls (429s observed in testing), so pull the
+    # fixture images up front with a retry rather than letting the fixture script's
+    # docker run fail on a transient refusal.
+    - name: Pull directory server images
+      run: |
+        for image in bitnamilegacy/openldap:latest diegogslomp/samba-ad-dc:latest; do
+          for attempt in 1 2 3; do
+            docker pull "$image" && break
+            if [ "$attempt" = "3" ]; then
+              echo "Failed to pull $image after 3 attempts."
+              exit 1
+            fi
+            sleep 30
+          done
+        done
+    # The script needs root: it writes /etc/hosts entries for the certificate names
+    # and installs one test CA into the machine trust store. sudo -E preserves
+    # GITHUB_ENV so the script can export the connection details to later steps.
+    # Teardown is skipped: the runner is ephemeral.
+    - name: Start LDAPS certificate test servers
+      run: sudo -E pwsh -File ./test/scripts/Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd
+    - name: Run LDAPS certificate validation tests (RequiresLdaps)
+      run: dotnet test test/JIM.Worker.Tests/ --no-build --filter "Category=RequiresLdaps" --verbosity normal
+
   discover-base-images:
     # Discover production Dockerfiles and enforce the digest-pinning policy.
     # Production Dockerfiles are identified by the "# jim-compliance: production-image"

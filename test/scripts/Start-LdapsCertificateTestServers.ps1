@@ -11,18 +11,26 @@
     three OpenLDAP containers with TLS enabled:
 
       * A server whose issuing CA is added to this machine's trust store, so it validates without JIM's help. Used to
-        prove that adding certificates to the JIM certificate store never weakens what already worked.
+        prove that adding certificates to the JIM certificate store never weakens what already worked. This server
+        also publishes its unencrypted LDAP port, for the unencrypted-connection tests.
       * A server whose issuing CA is trusted by nobody, standing in for a customer's internal PKI. Used to prove the
         JIM certificate store is honoured, and that an unknown issuer is rejected without it.
       * A server presenting an expired certificate issued by that same CA. Used to prove trusting an issuer does not
         amount to waiving the validity period.
 
-    It then prints the environment variables that LdapsCertificateValidationTests reads.
+    It then prints the environment variables that LdapsCertificateValidationTests, ServerCertificateProbeTests and
+    the Samba AD / unencrypted-connection fixture read.
 
     Requires Docker, OpenSSL, and root (it writes hosts entries and adds a CA to the machine trust store).
 
 .PARAMETER Stop
-    Removes the containers, hosts entries and trusted CA, and deletes the working directory.
+    Removes the containers, hosts entries and trusted CA, and deletes the working directory. Always cleans up the
+    Samba AD container and its hosts entry too, whether or not -IncludeSambaAd was passed on the run being stopped,
+    so a stale Samba AD container from an earlier run is never left behind.
+
+.PARAMETER IncludeSambaAd
+    Also stands up a Samba AD domain controller, covering the AD-family directory type alongside OpenLDAP. First
+    boot provisions a domain from scratch, which takes several minutes; the script waits and prints progress.
 
 .PARAMETER WorkingDirectory
     Where certificates are generated. Defaults to a jim-ldaps-test directory under the system temporary path.
@@ -31,11 +39,15 @@
     sudo pwsh ./test/scripts/Start-LdapsCertificateTestServers.ps1
 
 .EXAMPLE
+    sudo pwsh ./test/scripts/Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd
+
+.EXAMPLE
     sudo pwsh ./test/scripts/Start-LdapsCertificateTestServers.ps1 -Stop
 #>
 [CmdletBinding()]
 param(
     [switch]$Stop,
+    [switch]$IncludeSambaAd,
     [string]$WorkingDirectory = (Join-Path ([System.IO.Path]::GetTempPath()) 'jim-ldaps-test')
 )
 
@@ -55,6 +67,24 @@ $hostsFile = '/etc/hosts'
 $bindDn = 'cn=admin,dc=example,dc=org'
 $bindPassword = 'adminpassword'
 
+# The system-trusted OpenLDAP server also carries the unencrypted-connection coverage: bitnami's openldap image
+# serves plain LDAP on container port 1389 alongside LDAPS on 1636, so no extra container is needed for it.
+$plainLdapHostPort = 3389
+$plainLdapContainerPort = 1389
+
+# Samba AD, added by -IncludeSambaAd, covers the AD-family directory type alongside OpenLDAP.
+$sambaImage = 'diegogslomp/samba-ad-dc:latest'
+$sambaContainerName = 'jim-ldaps-samba-ad'
+$sambaHostname = 'dc1.ldapstest.local'
+$sambaShortName = 'dc1'
+$sambaRealm = 'LDAPSTEST.LOCAL'
+$sambaDomain = 'LDAPSTEST'
+$sambaAdminPassword = 'Test@123!JIM'
+$sambaAdminDn = 'CN=Administrator,CN=Users,DC=ldapstest,DC=local'
+$sambaLdapsPort = 6636
+$sambaLdapPort = 6389
+$sambaCaPath = Join-Path $WorkingDirectory 'samba-ca.pem'
+
 function Assert-Prerequisites {
     foreach ($tool in @('docker', 'openssl')) {
         if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
@@ -72,13 +102,17 @@ function Remove-TestServers {
         docker rm -f $server.Name 2>$null | Out-Null
     }
 
+    # Always removed, whether or not -IncludeSambaAd was passed on this run: a stale Samba AD container from an
+    # earlier -IncludeSambaAd run must never survive a plain -Stop.
+    docker rm -f $sambaContainerName 2>$null | Out-Null
+
     if (Test-Path $systemTrustPath) {
         Remove-Item $systemTrustPath -Force
         & update-ca-certificates --fresh 2>$null | Out-Null
         Write-Host 'Removed the test CA from the machine trust store.'
     }
 
-    $hostnames = $servers.Hostname
+    $hostnames = $servers.Hostname + $sambaHostname
     $retainedLines = Get-Content $hostsFile | Where-Object {
         $line = $_
         -not ($hostnames | Where-Object { $line -match [regex]::Escape($_) })
@@ -172,8 +206,15 @@ function Start-TestServers {
         }
 
         docker rm -f $server.Name 2>$null | Out-Null
-        docker run -d --name $server.Name `
-            -p "$($server.Port):1636" `
+
+        # Only the system-trusted server also publishes its unencrypted LDAP port, for the plain-connection tests;
+        # the other two servers exist solely to exercise LDAPS certificate validation.
+        $portArguments = @('-p', "$($server.Port):1636")
+        if ($server.Name -eq 'jim-ldaps-system-trusted') {
+            $portArguments += @('-p', "${plainLdapHostPort}:${plainLdapContainerPort}")
+        }
+
+        docker run -d --name $server.Name @portArguments `
             -e LDAP_ADMIN_USERNAME=admin `
             -e LDAP_ADMIN_PASSWORD=$bindPassword `
             -e LDAP_ROOT=dc=example,dc=org `
@@ -185,6 +226,143 @@ function Start-TestServers {
             $image | Out-Null
 
         Write-Host "Started $($server.Name) on port $($server.Port) as $($server.Hostname)."
+    }
+}
+
+function Wait-ForSmbReady {
+    <#
+    .SYNOPSIS
+        Polls a Samba AD container until its SMB listener answers, which is how the container's own healthcheck
+        determines readiness. LDAP/LDAPS come up alongside SMB, so this doubles as "the directory is ready".
+    #>
+    param(
+        [string]$ContainerName,
+        [int]$TimeoutSeconds,
+        [string]$Description
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastReport = Get-Date
+    while ((Get-Date) -lt $deadline) {
+        docker exec $ContainerName smbclient -L localhost -U% -N 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
+
+        if (((Get-Date) - $lastReport).TotalSeconds -ge 30) {
+            Write-Host "  Still waiting for $Description... ($([int]($deadline - (Get-Date)).TotalSeconds)s remaining)"
+            $lastReport = Get-Date
+        }
+
+        Start-Sleep -Seconds 5
+    }
+
+    return $false
+}
+
+function Repair-SambaInterfaceBinding {
+    <#
+    .SYNOPSIS
+        Fixes the "interfaces = lo eth0@ifNN" binding that Samba AD writes at provisioning time.
+    .DESCRIPTION
+        The veth peer index in that string is captured once, at provisioning, and stops matching reality on the
+        very next container start in this kind of environment (the index is a host-wide, ever-incrementing
+        counter). When it stops matching, TCP connections to the LDAPS listener are accepted and then reset during
+        the TLS handshake, while plain LDAP and SMB continue to work, because only the TLS-serving listener enforces
+        it strictly. Stripping the "@ifNN" suffix, leaving a plain interface name, avoids the mismatch entirely; see
+        "Running Samba AD in the cloud sandbox" in test/CLAUDE.md.
+    #>
+    param([string]$ContainerName)
+
+    docker exec $ContainerName sed -i 's/interfaces = lo eth0@if[0-9]*/interfaces = lo eth0/' /usr/local/samba/etc/smb.conf | Out-Null
+}
+
+function Start-SambaAdServer {
+    Write-Host ''
+    Write-Host "Starting Samba AD ($sambaContainerName)..."
+    docker rm -f $sambaContainerName 2>$null | Out-Null
+
+    docker run -d --privileged --name $sambaContainerName --hostname $sambaShortName `
+        -e REALM=$sambaRealm `
+        -e DOMAIN=$sambaDomain `
+        -e ADMIN_PASS=$sambaAdminPassword `
+        -e DNS_FORWARDER=8.8.8.8 `
+        -p "${sambaLdapsPort}:636" `
+        -p "${sambaLdapPort}:389" `
+        $sambaImage | Out-Null
+
+    # First boot provisions a full AD forest from scratch, which routinely takes several minutes. The container's
+    # own healthcheck probes SMB (see the Dockerfile this image is modelled on), which comes up once provisioning
+    # has finished, so polling for it doubles as a provisioning-complete signal; do not trust "docker ps" health
+    # status alone, since a container can report unhealthy for a while before the first successful probe lands.
+    Write-Host '  Waiting for domain provisioning to complete (can take several minutes on first boot)...'
+    if (-not (Wait-ForSmbReady -ContainerName $sambaContainerName -TimeoutSeconds 900 -Description 'Samba AD provisioning')) {
+        throw "Samba AD ($sambaContainerName) did not become ready within 900 seconds. Check 'docker logs $sambaContainerName'."
+    }
+    Write-Host '  Domain provisioned.'
+
+    # The interfaces mismatch can already be present on first boot in this kind of environment, so fix it before
+    # relying on LDAPS at all, not only after the restart below.
+    Repair-SambaInterfaceBinding -ContainerName $sambaContainerName
+
+    # Regenerate the TLS certificate with deterministic, explicit SANs. Samba autogenerates its own certificate at
+    # first boot, but it only names the domain, not the host names JIM connects by (mirrors
+    # test/integration/docker/samba-ad-prebuilt/post-provision.sh).
+    Write-Host '  Regenerating the TLS certificate with explicit SANs...'
+    $certificateScript = @"
+set -e
+cd /usr/local/samba/private/tls
+openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout key.pem -out cert.pem -subj '/CN=$sambaHostname/O=JIM LDAPS Test' -addext 'subjectAltName=DNS:$sambaHostname,DNS:$sambaShortName' 2>/dev/null
+cp cert.pem ca.pem
+chmod 600 key.pem
+"@
+    # .ps1 files check out with CRLF endings (.gitattributes), and bash chokes on the carriage returns, so strip
+    # them before handing the script over (same treatment as the runner's own docker exec bash blocks).
+    docker exec $sambaContainerName bash -c ($certificateScript -replace "`r", '')
+
+    # Wire the regenerated certificate into smb.conf and disable the strong-auth requirement that otherwise refuses
+    # every simple bind over unencrypted LDAP (mirrors post-provision.sh's TLS configuration block).
+    $smbConfScript = @'
+set -e
+if ! grep -q "tls enabled" /usr/local/samba/etc/smb.conf; then
+    sed -i "/\[global\]/a \\
+tls enabled = yes\\n\\
+tls keyfile = /usr/local/samba/private/tls/key.pem\\n\\
+tls certfile = /usr/local/samba/private/tls/cert.pem\\n\\
+tls cafile = /usr/local/samba/private/tls/ca.pem\\
+" /usr/local/samba/etc/smb.conf
+fi
+if grep -qi "^\s*ldap server require strong auth" /usr/local/samba/etc/smb.conf; then
+    sed -i "s/^\(\s*\)ldap server require strong auth.*/\1ldap server require strong auth = no/" /usr/local/samba/etc/smb.conf
+else
+    sed -i "/\[global\]/a ldap server require strong auth = no" /usr/local/samba/etc/smb.conf
+fi
+'@
+    docker exec $sambaContainerName bash -c ($smbConfScript -replace "`r", '')
+
+    Write-Host '  Restarting to pick up the certificate and smb.conf changes...'
+    docker restart $sambaContainerName | Out-Null
+
+    if (-not (Wait-ForSmbReady -ContainerName $sambaContainerName -TimeoutSeconds 180 -Description 'Samba AD restart')) {
+        throw "Samba AD ($sambaContainerName) did not become ready again after restart. Check 'docker logs $sambaContainerName'."
+    }
+
+    # The veth peer index can change again across the restart, so re-check the binding rather than assuming the
+    # first fix still holds.
+    Repair-SambaInterfaceBinding -ContainerName $sambaContainerName
+
+    docker cp "${sambaContainerName}:/usr/local/samba/private/tls/ca.pem" $sambaCaPath | Out-Null
+    if (-not (Test-Path $sambaCaPath)) {
+        throw "Failed to copy the Samba AD CA certificate out of $sambaContainerName."
+    }
+
+    Write-Host "Started $sambaContainerName (LDAPS on $sambaLdapsPort, LDAP on $sambaLdapPort) as $sambaHostname."
+}
+
+function Set-SambaHostEntry {
+    $hosts = Get-Content $hostsFile
+    if (-not ($hosts | Where-Object { $_ -match [regex]::Escape($sambaHostname) })) {
+        Add-Content -Path $hostsFile -Value "127.0.0.1 $sambaHostname"
     }
 }
 
@@ -219,6 +397,11 @@ Start-TestServers
 Set-HostEntries
 Add-CaToMachineTrustStore
 
+if ($IncludeSambaAd) {
+    Start-SambaAdServer
+    Set-SambaHostEntry
+}
+
 Write-Host ''
 Write-Host 'Waiting for the directory servers to accept connections...'
 Start-Sleep -Seconds 16
@@ -237,8 +420,29 @@ $environmentVariables = [ordered]@{
     JIM_TEST_LDAPS_EXPIRED_PORT         = '5636'
     JIM_TEST_LDAPS_SYSTEM_TRUSTED_HOST  = 'ldap-sys.local'
     JIM_TEST_LDAPS_SYSTEM_TRUSTED_PORT  = '3636'
+    JIM_TEST_LDAP_PLAIN_HOST            = 'ldap-sys.local'
+    JIM_TEST_LDAP_PLAIN_PORT            = "$plainLdapHostPort"
+}
+
+if ($IncludeSambaAd) {
+    $environmentVariables['JIM_TEST_LDAPS_SAMBA_HOST']         = $sambaHostname
+    $environmentVariables['JIM_TEST_LDAPS_SAMBA_PORT']         = "$sambaLdapsPort"
+    $environmentVariables['JIM_TEST_LDAPS_SAMBA_PLAIN_PORT']   = "$sambaLdapPort"
+    $environmentVariables['JIM_TEST_LDAPS_SAMBA_USERNAME']     = $sambaAdminDn
+    $environmentVariables['JIM_TEST_LDAPS_SAMBA_PASSWORD']     = $sambaAdminPassword
+    $environmentVariables['JIM_TEST_LDAPS_SAMBA_CA_PATH']      = $sambaCaPath
+    $environmentVariables['JIM_TEST_LDAPS_SAMBA_MISMATCH_HOST'] = '127.0.0.1'
 }
 
 foreach ($variable in $environmentVariables.GetEnumerator()) {
     Write-Host "export $($variable.Key)=$($variable.Value)"
+}
+
+# Lets a CI workflow step consume these without a human copying and pasting the printout above.
+if ($env:GITHUB_ENV) {
+    foreach ($variable in $environmentVariables.GetEnumerator()) {
+        Add-Content -Path $env:GITHUB_ENV -Value "$($variable.Key)=$($variable.Value)"
+    }
+    Write-Host ''
+    Write-Host "Also appended to `$env:GITHUB_ENV ($($env:GITHUB_ENV))."
 }

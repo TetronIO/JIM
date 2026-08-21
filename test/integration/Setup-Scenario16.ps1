@@ -146,19 +146,13 @@ $schema = $config.Schema
 # requirements apply to the Object Types selected for synchronisation on the Connected System that has
 # it set (#1424). The one document serves all three Connected Systems.
 #
-# TWO ANCHOR CHOICES BELOW ARE WORKAROUNDS, NOT PREFERENCES. PersonView is anchored on EMAIL rather
-# than the view's own EMPLOYEE_ID, and the seeder starts APP_USERS' generated key at 1,000,000 rather
-# than 1. Both exist for the same reason: JIM resolves references against one flat per-Connected-System
-# lookup keyed only by the external ID value, with no Object Type dimension
-# (SyncImportTaskProcessor.BuildExternalIdLookups). Two Object Types whose anchors share a value space
-# therefore collide the moment either declares a reference, and the Full Import fails outright with
-# "Duplicate primary external ID int value '1' found for CSO ...". A view over a table shares its
-# table's keys by construction, and independent IDENTITY columns both start at 1, so this Connected
-# System hit it twice. Anchoring the view on a text column puts it in a different lookup dictionary,
-# and moving the generated keys out of the seeded employees' range separates the other pair.
-#
-# Both should be reverted once reference resolution is scoped by Object Type; until then the matrix
-# cannot prove that a table and a view over the same rows coexist in one Connected System.
+# PersonView is deliberately anchored on the view's own EMPLOYEE_ID, the same integer key space as
+# Person: a view over a table has the table's keys by construction, and reference resolution is scoped
+# by Object Type (#1285), so the shared value space is exactly what this pair of Object Types exists to
+# prove. Person's MANAGER_EMPLOYEE_ID declares its target (referencesObjectType), so its references
+# resolve within Person alone, whatever PersonView's partition holds. Before #1285 the view was
+# anchored on EMAIL and APP_USERS' generated keys started at 1,000,000, both as workarounds for the
+# flat, value-keyed lookup that made any overlap fatal.
 $objectTypesJson = @"
 {
   "objectTypes": [
@@ -196,12 +190,12 @@ $objectTypesJson = @"
       "name": "PersonView",
       "schema": "$schema",
       "table": "V_EMPLOYEES",
-      "anchorColumns": [ "EMAIL" ],
+      "anchorColumns": [ "EMPLOYEE_ID" ],
       "watermarkColumn": "LAST_MODIFIED",
       "changeLog": {
         "schema": "$schema",
         "table": "V_EMPLOYEES_CHANGE_LOG",
-        "anchorColumns": [ "EMAIL" ],
+        "anchorColumns": [ "EMPLOYEE_ID" ],
         "sequenceColumn": "CHANGE_ID",
         "changeTypeColumn": "CHANGE_TYPE",
         "createValues": [ "I" ],
@@ -340,8 +334,8 @@ Write-TestStep "Step 9" "Selecting Object Types and their attributes"
 # quietly anchoring on something else.
 $anchorColumns = @{
     Person            = "EMPLOYEE_ID"
-    # EMAIL, not EMPLOYEE_ID; see the Object Types document above for why.
-    PersonView        = "EMAIL"
+    # The same integer key space as Person, deliberately: see the Object Types document above (#1285).
+    PersonView        = "EMPLOYEE_ID"
     AppUser           = "ID"
     NaturalKeyAccount = "ACCOUNT_CODE"
     GuidKeyedPerson   = "PERSON_ID"

@@ -648,6 +648,13 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
 
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a lightweight projection for resolving
+    /// a Reference attribute's declared target name (#1285) without loading the ReferencedObjectType
+    /// navigation into an entity graph a mutating path might attach.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId);
+
     public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
@@ -1078,6 +1085,74 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The Connected System whose objects to stream.</param>
     /// <param name="connectedSystemObjectTypeId">The Connected System Object Type the rule targets.</param>
     public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// Streams every Connected System Object of one type in a Connected System, joined or not, with the attribute
+    /// values a Scoping Criteria evaluation reads.
+    /// </summary>
+    /// <remarks>
+    /// The unjoined objects are the point of this over
+    /// <see cref="StreamJoinedConnectedSystemObjects"/>: a scope change decides which objects a rule manages at
+    /// all, so the objects a widened scope would newly project are exactly the ones that have no Metaverse Object
+    /// yet. Streamed and untracked for the same reason as the other scope reads.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System to stream from.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type to stream.</param>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many Connected System Objects of one type a Connected System holds, joined or not. The cheap cost
+    /// estimate behind a scope-change preview.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to count in.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type to count.</param>
+    public Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's live, unjoined objects of one type: the population a
+    /// synchronisation would put to Object Matching on its next run.
+    /// </summary>
+    /// <remarks>
+    /// Identifiers rather than objects, and a list rather than a stream, because the caller queries the database
+    /// per object it evaluates. Holding a result-set reader open across those queries is what Npgsql refuses (one
+    /// command per connection), so the population is read once and the objects are fetched in batches behind it.
+    /// </remarks>
+    public Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many live, unjoined objects of one type a Connected System holds. The count behind
+    /// <see cref="GetUnjoinedConnectedSystemObjectIdsOfTypeAsync"/>, for callers that need the size before
+    /// deciding whether to read the population at all.
+    /// </summary>
+    public Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type, joined or not: the population that stops
+    /// being imported when the type is deselected (#1475).
+    /// </summary>
+    /// <remarks>
+    /// Identifiers rather than objects, for the reason
+    /// <see cref="GetUnjoinedConnectedSystemObjectIdsOfTypeAsync"/> gives: the caller fetches in batches behind the
+    /// population read, because Npgsql allows one command per connection.
+    /// </remarks>
+    public Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type that hold at least one value for a given
+    /// attribute: the population whose values freeze when that attribute is deselected (#1475). Objects holding no
+    /// value for it have nothing to freeze, so reporting them would inflate the count with objects the change does
+    /// not touch.
+    /// </summary>
+    public Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's obsolete objects of one type that are still joined to a Metaverse
+    /// Object: the objects awaiting the synchronisation that will disconnect them, and therefore the population
+    /// whose fate changes when Remove Contributed Attributes On Obsoletion is toggled (#1475).
+    /// </summary>
+    public Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId);
 
     /// <summary>
     /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a

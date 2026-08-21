@@ -262,8 +262,17 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
     }
 
+    /// <summary>
+    /// The Connected System Objects <see cref="GetConnectedSystemObjectAsync"/> has been asked for, in call order.
+    /// Lets a test prove which objects an evaluation actually put to the engine, rather than only what it reported
+    /// (#1437: an Attribute Flow preview skips objects the rule does not manage, and skipping them is the whole
+    /// difference between a preview that runs over a subset and one that evaluates a whole system twice).
+    /// </summary>
+    public List<Guid> RequestedConnectedSystemObjectIds { get; } = [];
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
     {
+        RequestedConnectedSystemObjectIds.Add(csoId);
         _csos.TryGetValue(csoId, out var cso);
         if (cso != null && cso.ConnectedSystemId != connectedSystemId)
             cso = null;
@@ -505,16 +514,22 @@ public class SyncRepository : ISyncRepository
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
-        var valueSet = new HashSet<string>(attributeValues);
-        var result = new Dictionary<string, ConnectedSystemObject>();
+        // Reference values arrive as strings whatever the anchor's data type, so stored values are rendered
+        // to their canonical strings for comparison, mirroring the Postgres implementation's typed matching
+        // (#1285). Case-insensitive so Guid renderings match however the caller cased them.
+        var valueSet = new HashSet<string>(attributeValues, StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
-            foreach (var av in cso.AttributeValues)
+            foreach (var av in cso.AttributeValues.Where(av => av.AttributeId == attributeId || av.Attribute?.Id == attributeId))
             {
-                if (av.AttributeId == attributeId && av.StringValue != null && valueSet.Contains(av.StringValue))
-                {
-                    result.TryAdd(av.StringValue, cso);
-                }
+                var renderedValue = av.StringValue
+                    ?? av.GuidValue?.ToString()
+                    ?? av.IntValue?.ToString()
+                    ?? av.LongValue?.ToString()
+                    ?? (av.DecimalValue.HasValue ? ExternalIdValue.ToCanonicalString(av.DecimalValue.Value) : null);
+                if (renderedValue != null && valueSet.Contains(renderedValue))
+                    result.TryAdd(renderedValue, cso);
             }
         }
         return Task.FromResult(result);

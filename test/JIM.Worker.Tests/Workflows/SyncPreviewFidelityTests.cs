@@ -208,36 +208,5 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
         return string.Join(Environment.NewLine, lines);
     }
 
-    /// <summary>
-    /// Creates an export Synchronisation Rule (local twin of the DeletionRuleWorkflowTests helper; the
-    /// shared base does not carry one).
-    /// </summary>
-    private async Task<SyncRule> CreateExportSyncRuleAsync(
-        int connectedSystemId,
-        ConnectedSystemObjectType csoType,
-        MetaverseObjectType mvType,
-        string name)
-    {
-        var syncRule = new SyncRule
-        {
-            ConnectedSystemId = connectedSystemId,
-            Name = name,
-            Direction = SyncRuleDirection.Export,
-            Enabled = true,
-            ConnectedSystemObjectTypeId = csoType.Id,
-            ConnectedSystemObjectType = csoType,
-            MetaverseObjectTypeId = mvType.Id,
-            MetaverseObjectType = mvType,
-            ProvisionToConnectedSystem = true
-        };
-
-        DbContext.SyncRules.Add(syncRule);
-        await DbContext.SaveChangesAsync();
-
-        SyncRepo.SeedSyncRule(syncRule);
-
-        return syncRule;
-    }
-
     #endregion
 }

@@ -80,22 +80,28 @@ public class MetaverseRepository : IMetaverseRepository
         return await Repository.Database.MetaverseObjectTypes.SingleOrDefaultAsync(x => x.Id == id);
     }
 
-    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects)
+    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string name, bool includeChildObjects, bool withChangeTracking = false)
     {
-        var result = Repository.Database.MetaverseObjectTypes;
+        // Include returns a new query rather than mutating the one it is called on, so its result has to be assigned.
+        // Discarding it silently returned the object type with an empty Attributes collection to a caller that had
+        // asked for its attributes: seeding then re-added every binding it could not see, and a retry of a partial
+        // seed died on the join table's primary key (issue #1287).
+        IQueryable<MetaverseObjectType> query = Repository.Database.MetaverseObjectTypes;
         if (includeChildObjects)
-            result.Include(q => q.Attributes);
+            query = query.Include(q => q.Attributes);
+        if (withChangeTracking)
+            query = query.AsTracking();
 
-        return await result.SingleOrDefaultAsync(q => EF.Functions.ILike(q.Name, name));
+        return await query.SingleOrDefaultAsync(q => EF.Functions.ILike(q.Name, name));
     }
 
     public async Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects)
     {
-        var result = Repository.Database.MetaverseObjectTypes;
+        IQueryable<MetaverseObjectType> query = Repository.Database.MetaverseObjectTypes;
         if (includeChildObjects)
-            result.Include(q => q.Attributes);
+            query = query.Include(q => q.Attributes);
 
-        return await result.SingleOrDefaultAsync(q => EF.Functions.ILike(q.PluralName, pluralName));
+        return await query.SingleOrDefaultAsync(q => EF.Functions.ILike(q.PluralName, pluralName));
     }
 
     public async Task CreateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType)
@@ -218,9 +224,13 @@ public class MetaverseRepository : IMetaverseRepository
     #endregion
 
     #region metaverse attributes
-    public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync()
+    public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync(bool withChangeTracking = false)
     {
-        return await Repository.Database.MetaverseAttributes.OrderBy(x => x.Name).ToListAsync();
+        IQueryable<MetaverseAttribute> query = Repository.Database.MetaverseAttributes;
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.OrderBy(x => x.Name).ToListAsync();
     }
 
     public async Task<List<MetaverseAttribute>> GetMetaverseAttributesForSchemaSyncAsync()
@@ -2815,6 +2825,17 @@ public class MetaverseRepository : IMetaverseRepository
                 mvo.CachedDisplayName,
                 mvo.LastConnectorDisconnectedDate!.Value,
                 mvo.ConnectedSystemObjects.Any()))
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<MetaverseObject> StreamMetaverseObjectsOfType(int metaverseObjectTypeId) =>
+        Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.AttributeValues)
+            .Include(mvo => mvo.ConnectedSystemObjects)
+            .Where(mvo => mvo.Type.Id == metaverseObjectTypeId)
+            .OrderBy(mvo => mvo.Id)
             .AsAsyncEnumerable();
 
     /// <inheritdoc />

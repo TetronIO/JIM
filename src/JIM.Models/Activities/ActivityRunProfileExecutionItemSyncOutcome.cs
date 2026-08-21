@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Staging;
 
 namespace JIM.Models.Activities;
@@ -29,6 +30,21 @@ public class ActivityRunProfileExecutionItemSyncOutcome
     public Guid? ParentSyncOutcomeId { get; set; }
     public ActivityRunProfileExecutionItemSyncOutcome? ParentSyncOutcome { get; set; }
     public List<ActivityRunProfileExecutionItemSyncOutcome> Children { get; set; } = [];
+
+    /// <summary>
+    /// Whether this outcome hangs off another outcome, rather than being a root of its RPEI's tree.
+    /// </summary>
+    /// <remarks>
+    /// The two parent links are populated at different times and never together, so neither one alone
+    /// answers this question. While a tree is being built in memory the builder sets the navigation and
+    /// the FK is still null (it is only resolved at bulk-insert flattening); once a tree is read back
+    /// from the database the FK is set and the navigation is not loaded (outcomes are fetched as a flat
+    /// list per RPEI). Testing the FK alone therefore silently classifies every freshly-built child as a
+    /// root, which is what flattened the export outcomes onto the root of the causality tree (#1428).
+    /// Ask this property rather than either link, unless a caller genuinely means one specific link.
+    /// </remarks>
+    [NotMapped]
+    public bool IsChildOutcome => ParentSyncOutcomeId.HasValue || ParentSyncOutcome != null;
 
     /// <summary>
     /// The type of outcome that occurred (e.g., Projected, AttributeFlow, PendingExportCreated).

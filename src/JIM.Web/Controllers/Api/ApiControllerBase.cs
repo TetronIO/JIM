@@ -3,6 +3,7 @@
 
 using System.Security.Claims;
 using JIM.Application;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Utilities;
@@ -63,6 +64,30 @@ public abstract class ApiControllerBase(JimApplication application, ILogger logg
             return null;
 
         return await Application.Security.GetApiKeyAsync(apiKeyId);
+    }
+
+    /// <summary>
+    /// Resolves the initiating security principal from the current request context as an Activity initiator
+    /// triad: API key authentication (the middleware stashes the key id in HttpContext.Items) takes precedence,
+    /// otherwise the user's id and display name are read from JWT claims.
+    /// </summary>
+    protected async Task<(ActivityInitiatorType Type, Guid? Id, string? Name)> GetInitiatorInfoAsync()
+    {
+        // API key authentication: the middleware stashes the key id in HttpContext.Items.
+        if (HttpContext.Items.TryGetValue("ApiKeyId", out var apiKeyIdObj) && apiKeyIdObj is Guid apiKeyId)
+        {
+            var apiKey = await Application.Security.GetApiKeyAsync(apiKeyId);
+            return (ActivityInitiatorType.ApiKey, apiKeyId, apiKey?.Name ?? "API Key");
+        }
+
+        // User authentication: resolve the principal id and display name from claims.
+        var userIdClaim = User.FindFirst("sub") ?? User.FindFirst(ClaimTypes.NameIdentifier);
+        var nameClaim = User.FindFirst("name") ?? User.FindFirst(ClaimTypes.Name);
+
+        if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
+            return (ActivityInitiatorType.User, userId, nameClaim?.Value ?? User.Identity?.Name);
+
+        return (ActivityInitiatorType.User, null, User.Identity?.Name);
     }
 
     /// <summary>

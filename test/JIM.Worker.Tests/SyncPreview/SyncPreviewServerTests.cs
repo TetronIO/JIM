@@ -6,6 +6,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
+using JIM.Models.Preview;
 using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
@@ -26,6 +27,9 @@ namespace JIM.Worker.Tests.SyncPreview;
 /// </summary>
 public class SyncPreviewServerTests
 {
+    private const int IncumbentRuleId = 101;
+    private const string IncumbentEmployeeId = "EMP-HR";
+
     #region accessors
     private Mock<JimDbContext> MockJimDbContext { get; set; } = null!;
     private List<Activity> ActivitiesData { get; set; } = null!;
@@ -445,6 +449,52 @@ public class SyncPreviewServerTests
     }
 
     [Test]
+    public async Task PreviewSyncForCsoAsync_ProposedRuleSetRemovesTheOnlyImportRule_ReportsNothingWouldProcessTheObjectAsync()
+    {
+        // What disabling a Synchronisation Rule means, put to the engine (#1462). A disabled stand-in SUBSTITUTED
+        // in would not achieve it: nothing downstream of the load re-checks Enabled, so the rule would go on being
+        // evaluated and the preview would report that disabling it changes nothing.
+        var (cso, importRule, _) = ArrangeInboundFixture();
+        importRule.ProjectToMetaverse = true;
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id,
+            proposedRuleSet: ProposedSyncRuleSet.Removing(importRule.Id));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Warnings.Any(w => w.Code == SyncPreviewMessageCode.NoApplicableSyncRule), Is.True,
+                "with its only import rule out of the set, nothing would process the object inbound");
+            Assert.That(result.Inbound!.WouldProject, Is.False);
+            Assert.That(cso.MetaverseObjectId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ProposedRuleSetAddsARuleThatIsNotLoaded_EvaluatesItAsync()
+    {
+        // What enabling a disabled rule means. A substitution cannot express it: the rule is absent from the
+        // loaded set, so there is nothing of that id to replace, and the preview would report no change.
+        var (cso, importRule, mvEmployeeIdAttr) = ArrangeInboundFixture();
+        importRule.ProjectToMetaverse = true;
+
+        // Disable it, which is precisely how a rule leaves the loaded set: the repository reads with
+        // includeDisabled false, so there is no rule of that id for a substitution to find.
+        importRule.Enabled = false;
+
+        var withoutTheRule = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+        var withTheRule = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id,
+            proposedRuleSet: ProposedSyncRuleSet.Adding(importRule));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withoutTheRule.Inbound!.WouldProject, Is.False, "nothing evaluates the object while the rule is out of the set");
+            Assert.That(withTheRule.Inbound!.WouldProject, Is.True, "the added rule is evaluated, so the object would project");
+            Assert.That(withTheRule.Inbound!.AttributeFlowChanges.Any(c => c.AttributeId == mvEmployeeIdAttr.Id), Is.True);
+            Assert.That(cso.MetaverseObjectId, Is.Null, "and the preview still writes nothing");
+        }
+    }
+
+    [Test]
     public async Task PreviewSyncForCsoAsync_CsoOutOfScopeOfAllImportRules_ReportsOutOfScopeAndStopsTheChainAsync()
     {
         // Arrange - a scoping criterion the CSO does not satisfy
@@ -528,6 +578,147 @@ public class SyncPreviewServerTests
             Assert.That(result.Errors.Single().Code, Is.EqualTo(SyncPreviewMessageCode.ObjectNotFound));
             Assert.That(result.OutcomeTree, Is.Empty);
         }
+    }
+
+    #endregion
+
+    #region Attribute Priority
+
+    /// <summary>
+    /// Arranges the Attribute Priority topology a preview has to answer for: the Metaverse Object's Employee ID is
+    /// owned by an authoritative import Synchronisation Rule on ANOTHER Connected System, and the rule being
+    /// previewed contributes to the same attribute from this one.
+    /// </summary>
+    /// <param name="previewedRulePriority">The previewed rule's mapping priority (1 = highest).</param>
+    /// <param name="incumbentRulePriority">The owning rule's mapping priority.</param>
+    /// <param name="csoEmployeeId">The previewed object's source value, or null to contribute no value.</param>
+    private (ConnectedSystemObject Cso, MetaverseObject Mvo, MetaverseAttribute MvEmployeeIdAttr)
+        ArrangeAttributePriorityFixture(int previewedRulePriority, int incumbentRulePriority, string? csoEmployeeId)
+    {
+        var (cso, importRule, mvEmployeeIdAttr) = ArrangeInboundFixture();
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+
+        // The previewed rule's mapping, carrying its persisted rule id: the gate reads it to identify the
+        // contributor, and a mapping without one takes nothing over.
+        var previewedMapping = importRule.AttributeFlowRules.Single();
+        previewedMapping.SyncRuleId = importRule.Id;
+        previewedMapping.Priority = previewedRulePriority;
+
+        // The authoritative rule on another Connected System. Never evaluated by this preview (the context loads
+        // only this system's rules), but a contributor to the same attribute, which is what makes the attribute
+        // contested and the gate live.
+        var incumbentRule = new SyncRule
+        {
+            Id = IncumbentRuleId,
+            Name = "HR Import Synchronisation Rule",
+            ConnectedSystemId = 2,
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            MetaverseObjectTypeId = mvUserType.Id,
+            MetaverseObjectType = mvUserType
+        };
+        incumbentRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 7301,
+            SyncRule = incumbentRule,
+            SyncRuleId = incumbentRule.Id,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Priority = incumbentRulePriority
+        });
+        SyncRulesData.Add(incumbentRule);
+        SyncRepo.SeedSyncRule(incumbentRule);
+
+        // The Metaverse Object the previewed object is joined to, holding the incumbent's value with its
+        // provenance stamped: what the gate compares an incoming contribution against.
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = mvEmployeeIdAttr,
+            AttributeId = mvEmployeeIdAttr.Id,
+            StringValue = IncumbentEmployeeId,
+            ContributedBySystemId = 2,
+            ContributedBySyncRuleId = incumbentRule.Id
+        });
+        SyncRepo.SeedMetaverseObject(mvo);
+
+        cso.MetaverseObjectId = mvo.Id;
+        cso.MetaverseObject = mvo;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+
+        var csEmployeeIdAttr = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+            .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID);
+        cso.AttributeValues.RemoveAll(av => av.AttributeId == csEmployeeIdAttr.Id);
+        if (csoEmployeeId != null)
+        {
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemObject = cso,
+                Attribute = csEmployeeIdAttr,
+                AttributeId = csEmployeeIdAttr.Id,
+                StringValue = csoEmployeeId
+            });
+        }
+
+        return (cso, mvo, mvEmployeeIdAttr);
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ContributionLosesAttributePriority_ReportsNoFlowForThatAttributeAsync()
+    {
+        // The preview's whole promise is that it answers what the next synchronisation would do. A contribution
+        // that loses priority resolution is refused by a real run, so reporting it as a flow tells an
+        // administrator their edit takes effect when it does not, and hides that the attribute has an owner.
+        var (cso, _, mvEmployeeIdAttr) = ArrangeAttributePriorityFixture(
+            previewedRulePriority: 5, incumbentRulePriority: 1, csoEmployeeId: "EMP-LOSER");
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Inbound, Is.Not.Null);
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c => c.AttributeId == mvEmployeeIdAttr.Id), Is.False,
+                "A losing contribution must not be reported as a flow: a real synchronisation refuses it");
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_WinningContributionHasNoValueBesideAnotherContributor_ReportsNoWithdrawalAsync()
+    {
+        // The other half of the gate, and the more alarming one to get wrong: without a priority context the
+        // engine falls back to its historic clear, so the preview reports the identity LOSING its authoritative
+        // Employee ID. A real run abstains and leaves the incumbent in place.
+        var (cso, _, mvEmployeeIdAttr) = ArrangeAttributePriorityFixture(
+            previewedRulePriority: 1, incumbentRulePriority: 5, csoEmployeeId: null);
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Inbound, Is.Not.Null);
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
+                c.AttributeId == mvEmployeeIdAttr.Id && !c.IsAddition), Is.False,
+                "A contribution with no value must abstain beside another contributor, not clear the attribute");
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ContributionWinsAttributePriority_StillReportsTheFlowAsync()
+    {
+        // The gate must not be a blanket suppression: a winning contribution flows, and the preview says so.
+        var (cso, _, mvEmployeeIdAttr) = ArrangeAttributePriorityFixture(
+            previewedRulePriority: 1, incumbentRulePriority: 5, csoEmployeeId: "EMP-WINNER");
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
+            c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "EMP-WINNER"), Is.True,
+            "The winning contribution is what the next synchronisation would write");
     }
 
     #endregion

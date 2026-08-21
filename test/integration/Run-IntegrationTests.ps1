@@ -2825,6 +2825,31 @@ if (-not $jimApiReady) {
 
 $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 
+# Step 4a: Trust Samba AD certificates in the JIM certificate store (#1141)
+# LDAPTLS_REQCERT=never no longer disables LDAPS certificate validation for jim.web / jim.worker, so
+# every Samba AD scenario connection from here on is validated for real. Trust each running instance's
+# self-signed CA (it doubles as its own CA) before any scenario setup script connects to it, so the
+# very first LDAPS connection succeeds instead of failing with a validation error that reads exactly
+# like "server unavailable". Skipped entirely for OpenLDAP-only runs, which connect unencrypted and
+# have no certificate to trust.
+if ($DirectoryType -eq "SambaAD") {
+    Write-Section "Step 4a: Trusting Samba AD Certificates"
+
+    Add-SambaCertificateToJimStore -ContainerName "samba-ad-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+
+    # samba-ad-source / samba-ad-target only run under the scenario2 / scenario8 Compose profiles, and
+    # may be left running across scenarios in -Scenario All mode (see Get-DirectoryConfig and
+    # Clear-ConnectorFilesVolume's remarks on containers kept alive between scenarios). Detect with
+    # docker ps rather than the scenario name, so a container kept alive from an earlier scenario in
+    # this run is trusted too.
+    foreach ($otherSambaContainer in @("samba-ad-source", "samba-ad-target")) {
+        $otherSambaRunning = docker ps --filter "name=^/${otherSambaContainer}$" --format '{{.Names}}' 2>$null
+        if ($otherSambaRunning) {
+            Add-SambaCertificateToJimStore -ContainerName $otherSambaContainer -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+        }
+    }
+}
+
 # Step 4b: Prepare Samba AD for testing
 # For Scenario 1, we need a clean Corp OU - delete if exists and recreate
 # Scenario 2 uses TestUsers OU which is handled by the scenario setup script

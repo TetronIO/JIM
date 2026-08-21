@@ -165,7 +165,7 @@ public class ConfigurationChangePreflightService
         // section within it, so it belongs to no property's path.
         var items = new List<ConfigurationChangePreflightItem>();
         foreach (var child in diff.Root.Children ?? [])
-            CollectItems(child, [], proposed.ObjectType, proposed.ObjectKey, items);
+            CollectItems(child, [], parentKey: null, proposed.ObjectType, proposed.ObjectKey, items);
 
         return new ConfigurationChangePreflight
         {
@@ -189,15 +189,17 @@ public class ConfigurationChangePreflightService
 
     /// <summary>
     /// Walks the diff tree collecting every changed scalar, carrying the ancestor labels down so a nested property
-    /// can be named in terms an administrator recognises ("Attribute Flow &gt; Source &gt; Order", not "Order").
+    /// can be named in terms an administrator recognises ("Attribute Flow &gt; Source &gt; Order", not "Order"), and
+    /// the immediate parent's KEY so consequence copy can tell apart properties that share a key across kinds of
+    /// item (an Object Type's "selected" and a Partition's are the same key and opposite consequences).
     /// </summary>
     private static void CollectItems(ConfigurationDiffNode node, IReadOnlyList<string> ancestorLabels,
-        string objectType, string? objectKey, List<ConfigurationChangePreflightItem> items)
+        string? parentKey, string objectType, string? objectKey, List<ConfigurationChangePreflightItem> items)
     {
         if (node.NodeType == ConfigurationSnapshotNodeType.Scalar)
         {
             if (node.ChangeType != ConfigurationDiffChangeType.Unchanged)
-                items.Add(BuildItem(node, ancestorLabels, objectType, objectKey));
+                items.Add(BuildItem(node, ancestorLabels, parentKey, objectType, objectKey));
             return;
         }
 
@@ -207,7 +209,7 @@ public class ConfigurationChangePreflightService
         if (node.NodeType == ConfigurationSnapshotNodeType.Object &&
             node.ChangeType is ConfigurationDiffChangeType.Added or ConfigurationDiffChangeType.Removed)
         {
-            items.Add(BuildCollectionItemChange(node, ancestorLabels, objectType, objectKey));
+            items.Add(BuildCollectionItemChange(node, ancestorLabels, parentKey, objectType, objectKey));
             return;
         }
 
@@ -216,7 +218,7 @@ public class ConfigurationChangePreflightService
         // classified.
         var childAncestors = new List<string>(ancestorLabels) { DescribeNode(node) };
         foreach (var child in node.Children ?? [])
-            CollectItems(child, childAncestors, objectType, objectKey, items);
+            CollectItems(child, childAncestors, node.Key, objectType, objectKey, items);
     }
 
     /// <summary>
@@ -239,7 +241,7 @@ public class ConfigurationChangePreflightService
     }
 
     private static ConfigurationChangePreflightItem BuildItem(ConfigurationDiffNode node,
-        IReadOnlyList<string> ancestorLabels, string objectType, string? objectKey)
+        IReadOnlyList<string> ancestorLabels, string? parentKey, string objectType, string? objectKey)
     {
         var name = node.Label ?? node.Key;
         var label = ancestorLabels.Count == 0 ? name : string.Join(" > ", ancestorLabels.Append(name));
@@ -252,7 +254,7 @@ public class ConfigurationChangePreflightService
             ChangeType = node.ChangeType,
             OldDisplayValue = ForDisplay(node.OldDisplayValue, node.OldValue),
             NewDisplayValue = ForDisplay(node.NewDisplayValue, node.NewValue),
-            Consequence = ConfigurationChangeConsequences.For(objectType, node.Key, node.OldValue, node.NewValue)
+            Consequence = ConfigurationChangeConsequences.For(objectType, parentKey, node.Key, node.OldValue, node.NewValue)
         };
     }
 
@@ -262,7 +264,7 @@ public class ConfigurationChangePreflightService
     /// which way it went.
     /// </summary>
     private static ConfigurationChangePreflightItem BuildCollectionItemChange(ConfigurationDiffNode node,
-        IReadOnlyList<string> ancestorLabels, string objectType, string? objectKey)
+        IReadOnlyList<string> ancestorLabels, string? parentKey, string objectType, string? objectKey)
     {
         var name = DescribeNode(node);
         var label = ancestorLabels.Count == 0 ? name : string.Join(" > ", ancestorLabels.Append(name));
@@ -287,8 +289,8 @@ public class ConfigurationChangePreflightService
             // the flag it states) stands in for the value on whichever side it exists: present before and gone after
             // is a removal, and the reverse an addition.
             Consequence = carvesOut
-                ? ConfigurationChangeConsequences.For(objectType, key, added ? null : TrueValue, added ? TrueValue : null)
-                : ConfigurationChangeConsequences.For(objectType, node.Key, added ? null : name, added ? name : null)
+                ? ConfigurationChangeConsequences.For(objectType, parentKey, key, added ? null : TrueValue, added ? TrueValue : null)
+                : ConfigurationChangeConsequences.For(objectType, parentKey, node.Key, added ? null : name, added ? name : null)
         };
     }
 

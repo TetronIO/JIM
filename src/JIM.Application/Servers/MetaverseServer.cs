@@ -47,9 +47,9 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(id, includeChildObjects);
     }
 
-    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string objectTypeName, bool includeChildObjects)
+    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string objectTypeName, bool includeChildObjects, bool withChangeTracking = false)
     {
-        return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeName, includeChildObjects);
+        return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeName, includeChildObjects, withChangeTracking);
     }
 
     public async Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects)
@@ -256,9 +256,9 @@ public class MetaverseServer
     #endregion
 
     #region metaverse attributes
-    public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync()
+    public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync(bool withChangeTracking = false)
     {
-        return await Application.Repository.Metaverse.GetMetaverseAttributesAsync();
+        return await Application.Repository.Metaverse.GetMetaverseAttributesAsync(withChangeTracking);
     }
 
     public async Task<IList<MetaverseAttributeHeader>?> GetMetaverseAttributeHeadersAsync()
@@ -1864,6 +1864,15 @@ public class MetaverseServer
     public IAsyncEnumerable<MetaverseObjectDeletionCandidate> StreamMetaverseObjectDeletionCandidates(int metaverseObjectTypeId)
     {
         return Application.Repository.Metaverse.StreamMetaverseObjectDeletionCandidates(metaverseObjectTypeId);
+    }
+
+    /// <summary>
+    /// Streams every Metaverse Object of a type with the attribute values and Connected System Object joins an
+    /// export rule's Scoping Criteria evaluation reads, for previewing a change to that rule's scope (#1436).
+    /// </summary>
+    public IAsyncEnumerable<MetaverseObject> StreamMetaverseObjectsOfType(int metaverseObjectTypeId)
+    {
+        return Application.Repository.Metaverse.StreamMetaverseObjectsOfType(metaverseObjectTypeId);
     }
 
     /// <summary>

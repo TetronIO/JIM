@@ -65,7 +65,29 @@ public class SyncOutcomeTypeOrdinalTests
         // Synchronisation Rule destructive-toggle preview (#1115): the fates the two Class A toggles decide.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] = 27,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] = 28,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = 29
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = 29,
+
+        // Synchronisation Rule Attribute Flow preview (#1437): the proposed mapping that would not evaluate at all,
+        // so the attribute it targets is not written.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = 30,
+
+        // Object Matching preview (#1457): how a matching rule change moves an unjoined object's join.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] = 31,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] = 32,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] = 33,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = 34,
+
+        // Synchronisation Rule behaviour toggle preview (#1462): what a rule stops doing.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] = 35,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] = 36,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = 37,
+
+        // Connected System schema selection preview (#1475): what deselecting stops, and what the obsoletion recall
+        // toggle does to the values already contributed.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] = 38,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] = 39,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = 40,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = 41
     };
 
     [Test]

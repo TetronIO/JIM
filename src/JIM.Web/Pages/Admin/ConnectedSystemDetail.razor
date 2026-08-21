@@ -119,7 +119,8 @@ else if (_drift is { TrackingDisabled: true })
 
         <MudTabPanel Text="Matching" Disabled="@IsObjectMatchingTabDisabled()">
             <ConnectedSystemObjectMatchingTab ConnectedSystem="_connectedSystem"
-                                              MetaverseAttributes="_metaverseAttributes!" />
+                                              MetaverseAttributes="_metaverseAttributes!"
+                                              MetaverseObjectTypes="_metaverseObjectTypes!" />
         </MudTabPanel>
 
         <MudTabPanel Text="Run Profiles" Disabled="@IsRunProfilesTabDisabled()">
@@ -164,6 +165,10 @@ else if (_drift is { TrackingDisabled: true })
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
     private IList<MetaverseAttribute>? _metaverseAttributes;
+
+    // A Simple mode Object Matching Rule has to name the Metaverse Object Type it searches, so the Matching tab
+    // needs the list to offer (#1458).
+    private IList<MetaverseObjectType>? _metaverseObjectTypes;
 
 
     protected override async Task OnInitializedAsync()
@@ -212,6 +217,7 @@ else if (_drift is { TrackingDisabled: true })
         _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(Id);
         _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, Id, 1, 1)).TotalResults;
         _metaverseAttributes ??= await jim.Metaverse.GetMetaverseAttributesAsync();
+        _metaverseObjectTypes ??= await jim.Metaverse.GetMetaverseObjectTypesAsync(false);
     }
 
     private async Task ReloadConnectedSystemAsync()

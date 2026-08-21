@@ -1561,6 +1561,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Direction")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DisabledReason")
+                        .HasColumnType("text");
+
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
@@ -1668,6 +1671,14 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("CreatedByType")
                         .HasColumnType("integer");
+
+                    b.Property<string>("DisabledReason")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Enabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("InboundValueProcessing")
                         .ValueGeneratedOnAdd()
@@ -3031,6 +3042,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("ReferencedObjectTypeId")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("Selected")
                         .HasColumnType("boolean");
 
@@ -3049,6 +3063,8 @@ namespace JIM.PostgresData.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectedSystemObjectTypeId");
+
+                    b.HasIndex("ReferencedObjectTypeId");
 
                     b.ToTable("ConnectedSystemAttributes");
                 });
@@ -4288,7 +4304,8 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasOne("JIM.Models.ExampleData.ExampleDataTemplate", null)
                         .WithMany("ObjectTypes")
-                        .HasForeignKey("ExampleDataTemplateId");
+                        .HasForeignKey("ExampleDataTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("JIM.Models.Core.MetaverseObjectType", "MetaverseObjectType")
                         .WithMany()
@@ -4322,7 +4339,8 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasOne("JIM.Models.ExampleData.ExampleDataSet", null)
                         .WithMany("Values")
-                        .HasForeignKey("ExampleDataSetId");
+                        .HasForeignKey("ExampleDataSetId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplateAttribute", b =>
@@ -4337,7 +4355,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.ExampleData.ExampleDataObjectType", null)
                         .WithMany("TemplateAttributes")
-                        .HasForeignKey("ExampleDataObjectTypeId");
+                        .HasForeignKey("ExampleDataObjectTypeId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
                         .WithMany()
@@ -4365,7 +4384,8 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasOne("JIM.Models.ExampleData.ExampleDataTemplateAttribute", null)
                         .WithMany("WeightedStringValues")
-                        .HasForeignKey("ExampleDataTemplateAttributeId");
+                        .HasForeignKey("ExampleDataTemplateAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.ObjectMatchingRule", b =>
@@ -4683,7 +4703,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.Search.PredefinedSearchCriteriaGroup", null)
                         .WithMany("Criteria")
-                        .HasForeignKey("PredefinedSearchCriteriaGroupId");
+                        .HasForeignKey("PredefinedSearchCriteriaGroupId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("MetaverseAttribute");
                 });
@@ -4692,11 +4713,13 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasOne("JIM.Models.Search.PredefinedSearchCriteriaGroup", "ParentGroup")
                         .WithMany("ChildGroups")
-                        .HasForeignKey("ParentGroupId");
+                        .HasForeignKey("ParentGroupId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("JIM.Models.Search.PredefinedSearch", null)
                         .WithMany("CriteriaGroups")
-                        .HasForeignKey("PredefinedSearchId");
+                        .HasForeignKey("PredefinedSearchId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("ParentGroup");
                 });
@@ -4875,7 +4898,14 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", "ReferencedObjectType")
+                        .WithMany()
+                        .HasForeignKey("ReferencedObjectTypeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("ConnectedSystemObjectType");
+
+                    b.Navigation("ReferencedObjectType");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectTypeTag", b =>
@@ -4988,7 +5018,8 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasOne("JIM.Models.Staging.ConnectorDefinition", null)
                         .WithMany("Settings")
-                        .HasForeignKey("ConnectorDefinitionId");
+                        .HasForeignKey("ConnectorDefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.WorkerTask", b =>

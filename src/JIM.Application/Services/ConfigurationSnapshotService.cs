@@ -115,6 +115,9 @@ public class ConfigurationSnapshotService
         Add(children, "description", rule.Description, "Description");
         AddEnum(children, "direction", rule.Direction, "Direction");
         Add(children, "enabled", Render(rule.Enabled), "Enabled");
+        // A rule disabled on the administrator's behalf records why (#1485); the reason is configuration and
+        // sits beside the toggle it explains.
+        Add(children, "disabledReason", rule.DisabledReason, "Disabled reason");
         Add(children, "provisionToConnectedSystem", Render(rule.ProvisionToConnectedSystem), "Provision to Connected System");
         Add(children, "projectToMetaverse", Render(rule.ProjectToMetaverse), "Project to Metaverse");
         AddEnum(children, "outboundDeprovisionAction", rule.OutboundDeprovisionAction, "Outbound deprovision action");
@@ -211,6 +214,11 @@ public class ConfigurationSnapshotService
             // Initial Export Only (#223) governs whether the attribute keeps being exported after provisioning,
             // so a toggle must appear in the configuration change history.
             Add(children, "initialExportOnly", Render(mapping.InitialExportOnly), "Initial Export Only");
+
+            // A disabled mapping (#1485) stops flowing entirely, so the toggle and the recorded reason are
+            // configuration and must appear in the change history; without them a disable diffs as "no change".
+            Add(children, "enabled", Render(mapping.Enabled), "Enabled");
+            Add(children, "disabledReason", mapping.DisabledReason, "Disabled reason");
 
             children.Add(BuildMappingSources(mapping.Sources));
             items.Add(ConfigurationSnapshotNode.ObjectNode("attributeFlowRule", children, "Attribute Flow", mapping.Id));

@@ -510,6 +510,141 @@ function Get-DirectoryConfig {
     }
 }
 
+function Add-SambaCertificateToJimStore {
+    <#
+    .SYNOPSIS
+        Trust one Samba AD instance's CA certificate in JIM's certificate store.
+
+    .DESCRIPTION
+        Since LDAPTLS_REQCERT=never no longer disables LDAPS certificate validation for jim.web /
+        jim.worker (#1141), every Samba AD scenario connection is validated for real: OS trust anchors
+        plus whatever is in JIM's certificate store. Samba AD's self-signed certificate doubles as its
+        own CA, so trusting it is what makes the scenario connections succeed.
+
+        This follows the same pattern Setup-Scenario15.ps1 uses for the SCIM test service provider's
+        certificate: copy the certificate off the container, remove any stale certificate of the same
+        name from a previous run, then upload the fresh bytes. Bytes are uploaded rather than a path
+        because -Path is read server-side by jim.web, and the host path this script reads from does not
+        exist inside that container.
+
+        Before uploading, the certificate's SAN list is checked for the name the scenario will actually
+        connect by (normally the Compose service name, e.g. samba-ad-primary). A prebuilt Samba image
+        built before SAN-correct certificates shipped (SAMBA_CERT_EXTRA_NAMES; see
+        test/integration/docker/samba-ad-prebuilt/post-provision.sh and Build-SambaImages.ps1) carries a
+        certificate that can never pass that check, and this function fails hard rather than uploading a
+        certificate that would leave JIM's validation failing downstream with a misleading "server
+        unavailable" symptom, exactly what #1141 exists to stop happening silently.
+
+    .PARAMETER ContainerName
+        The Docker container name of the Samba AD instance to trust, e.g. samba-ad-primary,
+        samba-ad-source, samba-ad-target.
+
+    .PARAMETER ExpectedSanName
+        The DNS name the certificate's Subject Alternative Name list must carry: the Host value the
+        scenario's Connected System will actually connect by. Defaults to $ContainerName, which is
+        correct for every current Samba AD instance (Get-DirectoryConfig's Host equals ContainerName
+        for Primary, Source and Target alike).
+
+    .PARAMETER JIMUrl
+        The URL of the JIM instance to upload the certificate to.
+
+    .PARAMETER ApiKey
+        API key for authenticating to JIM.
+
+    .EXAMPLE
+        Add-SambaCertificateToJimStore -ContainerName "samba-ad-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ExpectedSanName = $ContainerName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$JIMUrl,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ApiKey
+    )
+
+    Write-Host "  Trusting ${ContainerName}'s CA certificate in the JIM certificate store..." -ForegroundColor Gray
+
+    # Guard: a clear message here beats a confusing docker cp failure a few lines down.
+    $running = docker ps --filter "name=^/${ContainerName}$" --format '{{.Names}}' 2>$null
+    if (-not $running) {
+        throw "Add-SambaCertificateToJimStore: container '$ContainerName' is not running. Cannot trust its CA certificate."
+    }
+
+    # Verify the certificate actually carries the SAN the scenario connects by, before trusting it.
+    # Validation would otherwise fail downstream with a misleading "server unavailable" symptom, which
+    # is exactly the failure mode #1141 exists to turn into a fast, actionable error.
+    $sanOutputLines = docker exec $ContainerName openssl x509 -in /usr/local/samba/private/tls/cert.pem -noout -ext subjectAltName 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Add-SambaCertificateToJimStore: could not read the TLS certificate's SAN list from '$ContainerName' (docker exec openssl failed): $sanOutputLines"
+    }
+    # docker exec's output is captured as one string per line, so join before matching: -notmatch against an
+    # array applies element-wise and returns the *non-matching* lines, which is truthy whenever any single
+    # line (e.g. the "X509v3 Subject Alternative Name:" header) fails to match, even though a later line
+    # carries the name. That false positive would fail every real certificate.
+    $sanOutput = $sanOutputLines -join "`n"
+    if ($sanOutput -notmatch [regex]::Escape($ExpectedSanName)) {
+        throw "Add-SambaCertificateToJimStore: ${ContainerName}'s TLS certificate does not carry the required SAN '$ExpectedSanName'. This image predates SAN-correct Samba AD certificates. Rebuild it: pwsh ./test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All. Certificate SANs found: $sanOutput"
+    }
+
+    # Copy the CA off the container. The certificate doubles as its own CA (see post-provision.sh).
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "jim-samba-ca"
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    $localCaPath = Join-Path $tempDir "$ContainerName-ca.pem"
+    if (Test-Path $localCaPath) { Remove-Item $localCaPath -Force }
+
+    docker cp "${ContainerName}:/usr/local/samba/private/tls/ca.pem" $localCaPath 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $localCaPath)) {
+        throw "Add-SambaCertificateToJimStore: 'docker cp' failed to copy the CA certificate from '$ContainerName'. Has the container finished provisioning?"
+    }
+
+    # Import the JIM PowerShell module and connect. Self-contained per call (mirrors
+    # Setup-Scenario15.ps1's own Connect-JIM / Disconnect-JIM bracket) so this function has no
+    # dependency on caller connection state.
+    $modulePath = Join-Path $PSScriptRoot "../../../src/JIM.PowerShell/JIM.psd1"
+    if (-not (Test-Path $modulePath)) {
+        throw "Add-SambaCertificateToJimStore: JIM PowerShell module not found at: $modulePath"
+    }
+
+    Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    Import-Module $modulePath -Force -ErrorAction Stop
+    try {
+        Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
+
+        $certificateName = "$ContainerName CA"
+        $existingCertificates = @(Get-JIMCertificate -ErrorAction SilentlyContinue) | Where-Object { $_.name -eq $certificateName }
+        foreach ($certificate in $existingCertificates) {
+            # Samba AD generates a fresh certificate at every first start (see post-provision.sh's
+            # "if [ ! -f cert.pem ]" guard), so a trusted certificate left over from a previous run's
+            # image build is not merely stale, it is for a key the provider no longer holds.
+            Remove-JIMCertificate -Id $certificate.id -Force | Out-Null
+            Write-Host "    Removed stale trusted certificate from a previous run" -ForegroundColor Gray
+        }
+
+        $certificateBytes = [System.IO.File]::ReadAllBytes($localCaPath)
+        $trusted = Add-JIMCertificate `
+            -Name $certificateName `
+            -CertificateData $certificateBytes `
+            -Notes "Samba AD CA for $ContainerName, trusted automatically by the integration test runner (#1141)." `
+            -PassThru
+
+        if (-not $trusted) {
+            throw "Add-SambaCertificateToJimStore: Add-JIMCertificate returned nothing for '$certificateName'; upload failed."
+        }
+
+        Write-Host "  OK Trusted ${ContainerName}'s CA (ID: $($trusted.id), thumbprint: $($trusted.thumbprint))" -ForegroundColor Green
+    }
+    finally {
+        Disconnect-JIM -ErrorAction SilentlyContinue
+        Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Get-DatabaseConfig {
     <#
     .SYNOPSIS

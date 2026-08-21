@@ -342,6 +342,39 @@ public abstract class WorkflowTestBase
         return syncRule;
     }
 
+    /// <summary>
+    /// Creates an export Synchronisation Rule that provisions and flows attributes out to a Connected System.
+    /// </summary>
+    protected async Task<SyncRule> CreateExportSyncRuleAsync(
+        int connectedSystemId,
+        ConnectedSystemObjectType csoType,
+        MetaverseObjectType mvType,
+        string name,
+        bool enableProvisioning = true,
+        OutboundDeprovisionAction deprovisionAction = OutboundDeprovisionAction.Disconnect)
+    {
+        var syncRule = new SyncRule
+        {
+            ConnectedSystemId = connectedSystemId,
+            Name = name,
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            ConnectedSystemObjectTypeId = csoType.Id,
+            ConnectedSystemObjectType = csoType,
+            MetaverseObjectTypeId = mvType.Id,
+            MetaverseObjectType = mvType,
+            ProvisionToConnectedSystem = enableProvisioning,
+            OutboundDeprovisionAction = deprovisionAction
+        };
+
+        DbContext.SyncRules.Add(syncRule);
+        await DbContext.SaveChangesAsync();
+
+        SyncRepo.SeedSyncRule(syncRule);
+
+        return syncRule;
+    }
+
     #endregion
 
     #region Helper Methods - Run Profiles

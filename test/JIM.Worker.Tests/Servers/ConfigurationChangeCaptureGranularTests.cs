@@ -122,6 +122,8 @@ public class ConfigurationChangeCaptureGranularTests
         // these previously captured nothing at all).
         _csRepo.Setup(r => r.GetConnectedSystemAsync(3, It.IsAny<bool>())).ReturnsAsync(BuildConnectedSystem);
         _csRepo.Setup(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>())).Returns(Task.CompletedTask);
+        // A workable rule: creation refuses one that could never match (#1458), and this fixture is about what the
+        // change capture records rather than about validity.
         var rule = new ObjectMatchingRule
         {
             Id = 9,
@@ -129,7 +131,10 @@ public class ConfigurationChangeCaptureGranularTests
             ConnectedSystemObjectType = new ConnectedSystemObjectType
             {
                 Id = 7, Name = "user", ConnectedSystemId = 3, ConnectedSystem = new ConnectedSystem { Id = 3, Name = "AD" }
-            }
+            },
+            MetaverseObjectTypeId = 11,
+            TargetMetaverseAttributeId = 201,
+            Sources = [new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttributeId = 101 }]
         };
 
         await _jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, NewApiKey());

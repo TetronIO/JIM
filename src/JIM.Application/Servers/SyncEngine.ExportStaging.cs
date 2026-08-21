@@ -179,7 +179,9 @@ public partial class SyncEngine
 
         var changedAttributeIds = new HashSet<int>(changedAttributes.Select(av => av.AttributeId));
 
-        foreach (var source in exportRule.AttributeFlowRules.SelectMany(mapping => mapping.Sources))
+        // A disabled mapping (#1485) reads nothing at all, so it must not make changes relevant; left in,
+        // a disabled expression mapping would keep forcing evaluation of every change.
+        foreach (var source in exportRule.AttributeFlowRules.Where(mapping => mapping.Enabled).SelectMany(mapping => mapping.Sources))
         {
             // Expression-based mappings may depend on any MVO attribute, so conservatively
             // treat them as relevant when any attribute has changed.
@@ -285,6 +287,12 @@ public partial class SyncEngine
     /// target value for this export rule's Connected System (reference recall, #908). When a reference points
     /// at an object in this map, the change is staged with the resolved value instead of an unresolved
     /// Metaverse Object ID, because export-time resolution cannot resolve a deleted object.</param>
+    /// <param name="noNetChangeSkipped">Optional collector for the changes skipped because the Connected System
+    /// Object already holds the value (#1443). The value a change was skipped for IS the target's current state for
+    /// that attribute, and it is the only thing that can put an old-to-new pair on a configuration change preview:
+    /// a preview diffs what two configurations would stage, and where the stored one stages nothing because the
+    /// target is already correct, the pair would otherwise have no old side. Opt-in like <paramref name="flowErrors"/>
+    /// beside it, so the export hot path allocates nothing and behaves identically when no caller asks.</param>
     /// <returns>List of attribute value changes to export.</returns>
     public List<PendingExportAttributeValueChange> ComputeAttributeValueChanges(
         MetaverseObject mvo,
@@ -298,7 +306,8 @@ public partial class SyncEngine
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
         IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
-        List<AttributeFlowError>? flowErrors = null)
+        List<AttributeFlowError>? flowErrors = null,
+        List<PendingExportAttributeValueChange>? noNetChangeSkipped = null)
     {
         var changes = new List<PendingExportAttributeValueChange>();
         var isCreateOperation = changeType == PendingExportChangeType.Create;
@@ -346,8 +355,9 @@ public partial class SyncEngine
         // unmanaged by JIM once the object is past provisioning, and mappings whose target attribute is
         // WritableOnCreate, which the Connected System accepts only as part of creating the object.
         // FlowsOnUpdateExport() carries both rules; see its documentation for why the second one is a
-        // synchronisation integrity guard rather than an optimisation.
-        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => isCreateOperation || m.FlowsOnUpdateExport()))
+        // synchronisation integrity guard rather than an optimisation. A disabled mapping (#1485) is skipped
+        // on Create as much as Update, which is why Enabled sits outside the isCreateOperation escape.
+        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => m.Enabled && (isCreateOperation || m.FlowsOnUpdateExport())))
         {
             // For export rules, the target is the CSO attribute
             if (mapping.TargetConnectedSystemAttribute == null)
@@ -479,6 +489,7 @@ public partial class SyncEngine
                                 Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
                                     change.AttributeId, existingCso.Id);
                                 csoAlreadyCurrentCount++;
+                                noNetChangeSkipped?.Add(change);
                                 continue;
                             }
                         }
@@ -712,6 +723,7 @@ public partial class SyncEngine
                             Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (direct)",
                                 attributeChange.AttributeId, existingCso.Id);
                             csoAlreadyCurrentCount++;
+                            noNetChangeSkipped?.Add(attributeChange);
                             continue;
                         }
                     }
