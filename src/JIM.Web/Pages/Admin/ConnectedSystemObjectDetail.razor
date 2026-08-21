@@ -764,9 +764,11 @@
             .SelectMany(sr => sr.AttributeFlowRules)
             .Where(m => m.TargetConnectedSystemAttributeId.HasValue);
 
+        // A disabled mapping (#1485) manages nothing, so an attribute whose every mapping is Initial Export
+        // Only or disabled is unmanaged on this object.
         result.UnionWith(exportMappings
             .GroupBy(m => m.TargetConnectedSystemAttributeId!.Value)
-            .Where(g => g.All(m => m.InitialExportOnly))
+            .Where(g => g.All(m => m.InitialExportOnly || !m.Enabled))
             .Select(g => g.Key));
 
         return result;

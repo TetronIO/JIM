@@ -48,7 +48,10 @@ public sealed class AttributePriorityContext
 
         foreach (var rule in allSyncRules.Where(r => r.Enabled && r.Direction == SyncRuleDirection.Import))
         {
-            foreach (var mapping in rule.AttributeFlowRules.Where(m => m.TargetMetaverseAttribute != null && m.SyncRuleId.HasValue))
+            // A disabled mapping (#1485) contributes nothing: counted, it would inflate the contributor count
+            // (forcing the slow multi-contributor path) and could be elected as a surviving contributor whose
+            // values never actually flow.
+            foreach (var mapping in rule.AttributeFlowRules.Where(m => m.Enabled && m.TargetMetaverseAttribute != null && m.SyncRuleId.HasValue))
             {
                 var attributeId = mapping.TargetMetaverseAttribute!.Id;
                 var listKey = (rule.MetaverseObjectTypeId, attributeId);

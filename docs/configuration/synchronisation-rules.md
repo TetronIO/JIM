@@ -341,7 +341,13 @@ JIM derives the inputs from the `mv["..."]` and `cs["..."]` accessors in the exp
 
 #### Changing a mapping after it is created
 
-A mapping's **settings**, meaning how it behaves rather than what it reads and writes, can be changed at any time: Missing Input Behaviour and the expression itself, "Null is a value" and [inbound value processing](#value-processing-inbound) on an import mapping, and Initial Export Only on an export mapping. Use the portal, `PATCH /sync-rules/{id}/mappings/{mappingId}`, or `Set-JIMSyncRuleMapping`.
+A mapping's **settings**, meaning how it behaves rather than what it reads and writes, can be changed at any time: Missing Input Behaviour and the expression itself, "Null is a value" and [inbound value processing](#value-processing-inbound) on an import mapping, Initial Export Only on an export mapping, and whether the mapping is enabled at all. Use the portal, `PATCH /sync-rules/{id}/mappings/{mappingId}`, or `Set-JIMSyncRuleMapping`.
+
+#### Disabling a single mapping
+
+Every Attribute Flow mapping can be **disabled** individually, without touching the rest of its Synchronisation Rule. A disabled mapping is skipped by synchronisation in both directions: it contributes nothing inbound (and drops out of the attribute's [Attribute Priority](../concepts/attribute-priority.md) contention), flows nothing on export, at provisioning as much as on updates, and Drift Correction leaves its target attribute alone. Each run whose rules carry disabled mappings notes how many it skipped in the service log.
+
+Disabling one mapping is the smallest safe response to a single source attribute that has been removed or redefined at the Connected System; disabling the whole rule stops every flow it carries. Where JIM disables a mapping on your behalf (the schema refresh decision, #1485), the mapping records why, and the reason is shown on the Attribute Flow tab; re-enabling clears it. Re-enabling is always a manual choice.
 
 What a mapping **targets**, and whether its source is an attribute or an expression, is not editable. Retargeting revalidates against attribute types and plurality, and for an import mapping it reopens the mapping's place in the [Attribute Priority](../concepts/attribute-priority.md) order, so it is a delete and a create rather than an edit. That is deliberate: the priority position is lost either way, and an interface that hid it would lose it silently.
 

@@ -6010,6 +6010,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             var source = changesById[mapping.Id];
             mapping.Priority = source.Priority;
             mapping.NullIsValue = source.NullIsValue;
+            // Enabled and its reason ride the same bulk path (#1485): the schema refresh decision disables a
+            // set of mappings in one pass, and a scalar omitted here is silently lost for every caller.
+            mapping.Enabled = source.Enabled;
+            mapping.DisabledReason = source.DisabledReason;
             // The caller stamps AuditHelper.SetUpdated on the detached source before persisting; the stamp is
             // the mapping's configuration change trail and feeds the Full Synchronisation configuration
             // watermark (GetLatestSyncRuleConfigurationChangeAsync), so it must be copied across too.

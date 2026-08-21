@@ -478,6 +478,7 @@ Set-JIMSyncRuleMapping -SyncRuleId <int>
     [-InboundValueProcessing <string>]
     [-CaseNormalisation <string>]
     [-InitialExportOnly <bool>]
+    [-Enabled <bool>]
     [-PassThru]
 
 # From the pipeline
@@ -497,6 +498,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 | `InboundValueProcessing` | `string` | No | | Comma-separated flag names, e.g. `'TreatWhitespaceAsNoValue, TrimWhitespace'`. Import mappings only |
 | `CaseNormalisation` | `string` | No | | `None`, `Upper`, `Lower` or `Title`. Import mappings only |
 | `InitialExportOnly` | `bool` | No | | Whether the mapping flows only during the initial provisioning export. Export mappings only |
+| `Enabled` | `bool` | No | | Enables or disables the mapping. A disabled mapping is skipped by synchronisation in both directions; re-enabling clears any recorded disabled reason. Import and export mappings alike |
 | `PassThru` | `switch` | No | `$false` | Returns the updated mapping |
 
 ### Output
@@ -520,6 +522,10 @@ Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -MissingInputBehaviour FailOb
 
 ```powershell title="Rewrite an import mapping's expression"
 Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Expression 'Lower(cs["mail"])' -PassThru
+```
+
+```powershell title="Disable one Attribute Flow without touching the Synchronisation Rule"
+Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Enabled $false
 ```
 
 ```powershell title="Report every expression mapping on a Rule that meets a missing input"

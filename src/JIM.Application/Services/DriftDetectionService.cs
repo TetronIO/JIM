@@ -119,8 +119,9 @@ public class DriftDetectionService
             // Export Only mappings (#223), whose target attribute is unmanaged by JIM once the Connected
             // System Object is past provisioning, so a diverged value is external ownership rather than
             // drift; and mappings targeting a WritableOnCreate attribute, where re-asserting the value
-            // would rewrite the Connected System's identifier for the object.
-            foreach (var mapping in exportRule.AttributeFlowRules.Where(m => m.FlowsOnUpdateExport()))
+            // would rewrite the Connected System's identifier for the object. A disabled mapping (#1485) does
+            // not run at all, so a diverged value on its target is not drift either.
+            foreach (var mapping in exportRule.AttributeFlowRules.Where(m => m.Enabled && m.FlowsOnUpdateExport()))
             {
                 if (mapping.TargetConnectedSystemAttribute == null)
                 {
@@ -347,7 +348,9 @@ public class DriftDetectionService
 
         foreach (var importRule in importRules)
         {
-            foreach (var mapping in importRule.AttributeFlowRules)
+            // A disabled mapping (#1485) contributes nothing, so it does not make its system a legitimate
+            // contributor for drift purposes.
+            foreach (var mapping in importRule.AttributeFlowRules.Where(m => m.Enabled))
             {
                 // For import rules, the target is the MVO attribute
                 if (mapping.TargetMetaverseAttribute == null)

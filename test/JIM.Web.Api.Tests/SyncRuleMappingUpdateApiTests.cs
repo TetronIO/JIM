@@ -250,6 +250,59 @@ public class SyncRuleMappingUpdateApiTests
     }
 
     [Test]
+    public async Task UpdateSyncRuleMappingAsync_EnabledFalse_DisablesAnImportMappingAsync()
+    {
+        // Enabled applies to both directions (#1485), unlike every other per-mapping setting, so no
+        // direction guard may refuse it.
+        var result = await _controller.UpdateSyncRuleMappingAsync(ImportRuleId, AttributeMappingId,
+            new UpdateSyncRuleMappingRequest { Enabled = false });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(_attributeMapping.Enabled, Is.False);
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_EnabledFalse_DisablesAnExportMappingAsync()
+    {
+        var result = await _controller.UpdateSyncRuleMappingAsync(ExportRuleId, ExportMappingId,
+            new UpdateSyncRuleMappingRequest { Enabled = false });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(_exportMapping.Enabled, Is.False);
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_ReEnabling_ClearsTheDisabledReasonAsync()
+    {
+        // The reason describes why the mapping is off; re-enabled, it would be a stale claim about a state
+        // that no longer holds, so enabling clears it.
+        _attributeMapping.Enabled = false;
+        _attributeMapping.DisabledReason = "Attribute 'mail' is no longer reported by the Connected System.";
+
+        var result = await _controller.UpdateSyncRuleMappingAsync(ImportRuleId, AttributeMappingId,
+            new UpdateSyncRuleMappingRequest { Enabled = true });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_attributeMapping.Enabled, Is.True);
+            Assert.That(_attributeMapping.DisabledReason, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_OnlyEnabledSupplied_CountsAsAChangeAsync()
+    {
+        // Enabled alone must satisfy the "names at least one setting" gate, or a disable-only PATCH would be
+        // refused as an empty request.
+        var result = await _controller.UpdateSyncRuleMappingAsync(ImportRuleId, AttributeMappingId,
+            new UpdateSyncRuleMappingRequest { Enabled = false });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Once);
+    }
+
+    [Test]
     public async Task UpdateSyncRuleMappingAsync_NothingSupplied_ReturnsBadRequestAsync()
     {
         // A request naming no setting is far more likely to be a misspelled field than a deliberate no-op, and
