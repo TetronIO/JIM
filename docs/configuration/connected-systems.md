@@ -454,6 +454,31 @@ Every account gets its own Activity, grouped under one parent so the whole actio
 
 For automation, `Set-JIMMetaverseObjectPassword` does the same thing over the per-account REST endpoint. You must name the Connected Systems, or pass `-AllAccounts`; there is no default, for the same reason the portal preselects nothing.
 
+## Password Synchronisation
+
+Setting a password, above, is something you ask for one account at a time. Password Synchronisation is the standing arrangement: one password change for a person reaching every system they have an account in.
+
+It is configured on the Connected System's **Passwords** tab, which appears only where the connector can set passwords at all. Systems whose connector has no password channel do not show the tab, because there is nothing to configure rather than something to switch on later.
+
+| Setting | What it does |
+|---|---|
+| **Deliver password changes to this Connected System** | Whether queued password changes are delivered. Separate from the configuration existing, so a system can be set up ahead of a change window and switched on during one. |
+| **Object Type holding user accounts** | Which Connected System Object Type receives passwords. Only Object Types you have selected for synchronisation are offered: an unselected one holds no objects, so choosing it would queue passwords for accounts that never appear. |
+| **Maximum attempts** | How many delivery attempts JIM makes before it stops and asks you to look. Leave it at 0 to use JIM's default of five. |
+| **First retry after** | How long to wait before the first retry. Each further attempt waits twice as long as the one before. |
+| **Only send passwords over an encrypted connection** | Whether JIM refuses to transmit rather than warning, where it cannot confirm the connection is encrypted. |
+
+Two things follow from the enable toggle being separate from the configuration:
+
+- **Switching a system off does not discard anything.** Password changes for identities with an account there accumulate, and switching it back on delivers what accumulated. That is what makes it safe to switch off for a maintenance window.
+- **There is no way to remove a configuration, only to disable it.** Removing one would throw away everything queued against it, so JIM does not offer that. This is true of the REST API and PowerShell too.
+
+How long a queued change waits before JIM expires it rather than delivering a password that has since been superseded is the Connected System's **initial password time to live**, on the Settings tab. It is shared with initial password provisioning deliberately: the question both are asking is how long this system may be unavailable before JIM stops trying, and the answer is a property of the system rather than of the deployment.
+
+Every change to these settings reaches the Connected System's configuration change history, so switching Password Synchronisation on or off is attributable afterwards.
+
+For automation, `Get-JIMConnectedSystemPasswordSynchronisation` and `Set-JIMConnectedSystemPasswordSynchronisation` do the same over the REST API; `ConnectorSupportsPasswordSet` on the response tells you whether a system can be configured at all.
+
 ## Directory Capabilities
 
 The Details tab carries a Directory Capabilities card: read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing the card never opens a new connection. Before the first successful connection, the card shows a hint rather than an error.

@@ -77,6 +77,17 @@ public class ConnectedSystem : IAuditable
     public ConnectedSystemPasswordPolicy? PasswordPolicy { get; set; }
 
     /// <summary>
+    /// Whether, and how, this Connected System receives synchronised passwords (#1119). Null means Password
+    /// Synchronisation has never been configured here, which is where every system starts and stays until an
+    /// administrator decides otherwise.
+    /// <para>
+    /// Distinct from <see cref="PasswordPolicy"/>, which is what JIM discovered about the target's own rules.
+    /// This is what JIM has been told to do.
+    /// </para>
+    /// </summary>
+    public ConnectedSystemPasswordSynchronisation? PasswordSynchronisation { get; set; }
+
+    /// <summary>
     /// Determines where Object Matching Rules are configured for this Connected System.
     /// ConnectedSystem (default): Rules are defined per object type and shared across Synchronisation Rules.
     /// SyncRule: Rules are defined per Synchronisation Rule for advanced scenarios.
@@ -128,6 +139,12 @@ public class ConnectedSystem : IAuditable
     /// long that lasts is a property of the system rather than of the deployment. A directory taken out of
     /// service for a fortnight expires every account provisioned against it under the default; raising the value
     /// here beforehand is what prevents that, and it should not raise it for every other system too.
+    /// </para>
+    /// <para>
+    /// Password Synchronisation (#1119) reads the same value for its queued password changes rather than adding a
+    /// second window beside it. The question both are asking is identical, "how long can this system be
+    /// unavailable before JIM stops trying", and the answer is a property of the system either way. The name
+    /// predates the second use.
     /// </para>
     /// </summary>
     public TimeSpan? InitialPasswordTimeToLive { get; set; }
