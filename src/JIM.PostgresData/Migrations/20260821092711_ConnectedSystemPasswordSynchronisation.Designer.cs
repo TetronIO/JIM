@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20260821090255_ConnectedSystemPasswordSynchronisation")]
+    [Migration("20260821092711_ConnectedSystemPasswordSynchronisation")]
     partial class ConnectedSystemPasswordSynchronisation
     {
         /// <inheritdoc />
@@ -1564,6 +1564,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Direction")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DisabledReason")
+                        .HasColumnType("text");
+
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
@@ -1671,6 +1674,14 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("CreatedByType")
                         .HasColumnType("integer");
+
+                    b.Property<string>("DisabledReason")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Enabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("InboundValueProcessing")
                         .ValueGeneratedOnAdd()
