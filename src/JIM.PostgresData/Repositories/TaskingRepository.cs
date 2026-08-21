@@ -226,9 +226,13 @@ public class TaskingRepository : ITaskingRepository
 
         // A queued pass over every system covers a request for any one of them; a pass aimed at one system covers
         // only that system, and covers no request for every system.
-        return connectedSystemId.HasValue
-            ? await queued.AnyAsync(t => t.ConnectedSystemId == null || t.ConnectedSystemId == connectedSystemId.Value)
-            : await queued.AnyAsync(t => t.ConnectedSystemId == null);
+        if (!connectedSystemId.HasValue)
+            return await queued.AnyAsync(t => t.ConnectedSystemId == null);
+
+        // Read out of the nullable before the predicate closes over it: the null check above already guarantees a
+        // value, but a nullable dereferenced inside an expression tree cannot be seen to be safe.
+        var requestedConnectedSystemId = connectedSystemId.Value;
+        return await queued.AnyAsync(t => t.ConnectedSystemId == null || t.ConnectedSystemId == requestedConnectedSystemId);
     }
 
     public async Task<WorkerTaskHeader?> GetFirstExampleDataTemplateWorkerTaskHeaderAsync(int templateId)

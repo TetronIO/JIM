@@ -529,18 +529,13 @@ public class PasswordSynchronisationServer
                 continue;
             }
 
-            try
-            {
-                var systemResult = await DeliverDuePasswordChangesAsync(connectedSystem, connector, asOf, cancellationToken);
-                result.Add(connectedSystem.Name, systemResult);
-            }
-            finally
-            {
-                // IConnector carries no disposal contract, but concrete Connectors hold connections; disposing
-                // what can be disposed keeps a pass over many systems from accumulating them.
-                if (connector is IDisposable disposableConnector)
-                    disposableConnector.Dispose();
-            }
+            // IConnector carries no disposal contract, but concrete Connectors hold connections; disposing
+            // what can be disposed keeps a pass over many systems from accumulating them. Null when the Connector
+            // is not disposable, which using handles.
+            using var disposableConnector = connector as IDisposable;
+
+            var systemResult = await DeliverDuePasswordChangesAsync(connectedSystem, connector, asOf, cancellationToken);
+            result.Add(connectedSystem.Name, systemResult);
         }
 
         Log.Information(

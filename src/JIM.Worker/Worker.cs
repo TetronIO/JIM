@@ -737,10 +737,11 @@ public class Worker : BackgroundService
             if (await jim.PasswordSynchronisation.HasWorkDueAsync(DateTime.UtcNow))
                 await jim.Tasking.RequestPasswordDeliveryAsync(null, "Password Synchronisation");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Same boundary as the housekeeping catch above: an escape here would take the worker's idle loop
-            // down, and the next tick is sixty seconds away in any case.
+            // down, and the next tick is sixty seconds away in any case. Cancellation is excluded deliberately:
+            // a worker shutting down must propagate, not be logged as a failure and carried on through.
             Log.Error(ex, "PerformHousekeepingAsync: Error requesting a Password Synchronisation delivery pass");
         }
 
