@@ -642,8 +642,6 @@ public class SynchronisationController(
         if (request.RetryBackoffBase.HasValue)
             configuration.RetryBackoffBase = request.RetryBackoffBase.Value;
 
-        if (request.RequireSecureTransport.HasValue)
-            configuration.RequireSecureTransport = request.RequireSecureTransport.Value;
 
         // Assessed before it is stored, and by the same code the portal's Save is gated on, so the two surfaces
         // accept and refuse exactly the same settings. Every problem it catches would otherwise show up as
@@ -1909,6 +1907,9 @@ public class SynchronisationController(
 
         if (request.InitialPasswordTimeToLive.HasValue)
             connectedSystem.InitialPasswordTimeToLive = request.InitialPasswordTimeToLive.Value;
+
+        if (request.RequireSecureTransport.HasValue)
+            connectedSystem.RequireSecureTransport = request.RequireSecureTransport.Value;
 
         if (request.UnresolvedReferenceHandling.HasValue)
             connectedSystem.UnresolvedReferenceHandling = request.UnresolvedReferenceHandling.Value;

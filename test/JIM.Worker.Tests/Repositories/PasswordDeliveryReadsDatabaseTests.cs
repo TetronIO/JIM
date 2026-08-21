@@ -205,7 +205,12 @@ public class PasswordDeliveryReadsDatabaseTests
                 SupportsPasswordSet = true,
                 Settings = [setting]
             };
-            var system = new ConnectedSystem { Name = "Corporate AD", ConnectorDefinition = connectorDefinition };
+            var system = new ConnectedSystem
+            {
+                Name = "Corporate AD",
+                ConnectorDefinition = connectorDefinition,
+                RequireSecureTransport = true
+            };
             var objectType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
             seed.AddRange(connectorDefinition, system, objectType);
             await seed.SaveChangesAsync();
@@ -222,8 +227,7 @@ public class PasswordDeliveryReadsDatabaseTests
                 Enabled = true,
                 TargetObjectTypeId = objectType.Id,
                 MaxRetries = 4,
-                RetryBackoffBase = TimeSpan.FromMinutes(3),
-                RequireSecureTransport = true
+                RetryBackoffBase = TimeSpan.FromMinutes(3)
             });
             await seed.SaveChangesAsync();
             systemId = system.Id;
@@ -244,7 +248,8 @@ public class PasswordDeliveryReadsDatabaseTests
             Assert.That(loaded.PasswordSynchronisation!.Enabled, Is.True);
             Assert.That(loaded.PasswordSynchronisation.MaxRetries, Is.EqualTo(4));
             Assert.That(loaded.PasswordSynchronisation.RetryBackoffBase, Is.EqualTo(TimeSpan.FromMinutes(3)));
-            Assert.That(loaded.PasswordSynchronisation.RequireSecureTransport, Is.True);
+            Assert.That(loaded.RequireSecureTransport, Is.True,
+                "The refusal is read off the Connected System itself, so the pass never needs an Include to find it.");
         }
     }
 

@@ -332,7 +332,7 @@ public class PasswordDeliveryPassTests
         // whole point of the setting: sending anyway, having been told not to, would be the worst outcome
         // available.
         var connectedSystem = ArrangeSystem(FirstSystemId, "Corporate AD");
-        connectedSystem.PasswordSynchronisation!.RequireSecureTransport = true;
+        connectedSystem.RequireSecureTransport = true;
         _connectors[FirstSystemId].PasswordChannelSecure = false;
         var change = await QueueAsync(FirstSystemId);
 
@@ -354,7 +354,7 @@ public class PasswordDeliveryPassTests
     public async Task DeliverDueAsync_SecureTransportRequiredAndChannelIs_DeliversAsync()
     {
         var connectedSystem = ArrangeSystem(FirstSystemId, "Corporate AD");
-        connectedSystem.PasswordSynchronisation!.RequireSecureTransport = true;
+        connectedSystem.RequireSecureTransport = true;
         _connectors[FirstSystemId].PasswordChannelSecure = true;
         await QueueAsync(FirstSystemId);
 
@@ -369,7 +369,7 @@ public class PasswordDeliveryPassTests
         // Some directories genuinely cannot offer TLS, and locking those sites out of Password Synchronisation
         // entirely helps nobody. The choice belongs to the administrator, who is warned either way.
         var connectedSystem = ArrangeSystem(FirstSystemId, "Corporate AD");
-        connectedSystem.PasswordSynchronisation!.RequireSecureTransport = false;
+        connectedSystem.RequireSecureTransport = false;
         _connectors[FirstSystemId].PasswordChannelSecure = false;
         await QueueAsync(FirstSystemId);
 
@@ -382,7 +382,7 @@ public class PasswordDeliveryPassTests
     public async Task DeliverDueAsync_SecureTransportRefused_ClosesTheChannelAsync()
     {
         var connectedSystem = ArrangeSystem(FirstSystemId, "Corporate AD");
-        connectedSystem.PasswordSynchronisation!.RequireSecureTransport = true;
+        connectedSystem.RequireSecureTransport = true;
         _connectors[FirstSystemId].PasswordChannelSecure = false;
         await QueueAsync(FirstSystemId);
 

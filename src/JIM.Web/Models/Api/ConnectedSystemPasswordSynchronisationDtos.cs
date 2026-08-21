@@ -70,6 +70,12 @@ public class ConnectedSystemPasswordSynchronisationResponse
 
     /// <summary>
     /// Whether JIM refuses to send a password to this system over a connection it cannot confirm is encrypted.
+    /// <para>
+    /// Reported here because it governs this feature, but it is set on the Connected System itself
+    /// (<c>requireSecureTransport</c>) because it governs every password JIM sends to the system, including the
+    /// initial password on an account it provisions and one an administrator sets by hand. Read-only on this
+    /// resource; change it on the Connected System.
+    /// </para>
     /// </summary>
     public bool RequireSecureTransport { get; set; }
 
@@ -107,7 +113,7 @@ public class ConnectedSystemPasswordSynchronisationResponse
             EffectiveMaxRetries = effective.EffectiveMaxRetries,
             RetryBackoffBase = effective.RetryBackoffBase,
             EffectiveRetryBackoffBase = effective.EffectiveRetryBackoffBase,
-            RequireSecureTransport = effective.RequireSecureTransport,
+            RequireSecureTransport = connectedSystem.RequireSecureTransport,
             EffectiveTimeToLive = connectedSystem.EffectiveInitialPasswordTimeToLive
         };
     }
@@ -141,13 +147,6 @@ public class UpdateConnectedSystemPasswordSynchronisationRequest
     /// live. Zero uses JIM's default.
     /// </summary>
     public TimeSpan? RetryBackoffBase { get; set; }
-
-    /// <summary>
-    /// Whether to refuse to transmit a password to this system over a connection JIM cannot confirm is
-    /// encrypted. Off by default, because a signed and sealed bind is a legitimate encrypted alternative that
-    /// cannot be detected from the Connected System's settings alone.
-    /// </summary>
-    public bool? RequireSecureTransport { get; set; }
 
     /// <summary>
     /// An optional reason for the change, recorded against the Connected System's configuration change history.

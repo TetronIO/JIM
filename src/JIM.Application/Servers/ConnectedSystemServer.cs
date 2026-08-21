@@ -2714,6 +2714,11 @@ public class ConnectedSystemServer
     /// a transient failure: it says nothing about whether the password itself would be acceptable, and an
     /// administrator's next move is to try again once the target is reachable.
     /// </para>
+    /// <para>
+    /// A channel the Connected System's configuration forbids is a different matter, and is refused outright
+    /// before anything is sent (#1119). It is a configuration fault rather than a transient one: trying again
+    /// changes nothing until somebody either encrypts the connection or accepts an unencrypted one.
+    /// </para>
     /// </summary>
     private static async Task<PasswordSetResult> ApplyPasswordAsync(
         IConnectorPasswordManagement passwordConnector,
@@ -2736,6 +2741,17 @@ public class ConnectedSystemServer
 
         try
         {
+            // Asked once the channel exists, because what is being judged is the channel that opened rather than
+            // the settings it was built from. The same rule governs the other two paths that write a password to
+            // this system, so an administrator who turns the setting on gets one answer everywhere.
+            if (PasswordChannelSecurity.RefusesChannel(connectedSystem, passwordConnector))
+            {
+                Log.Error("SetConnectedSystemObjectPasswordAsync: Connected System {ConnectedSystemId} requires a secure transport for passwords and the password channel is not encrypted; no password was sent",
+                    connectedSystem.Id);
+                return PasswordSetResult.Failed(PasswordSetFailureReason.ConfigurationFault,
+                    PasswordChannelSecurity.RefusalMessage(connectedSystem));
+            }
+
             return await passwordConnector.SetPasswordAsync(connectedSystemObject, password, options, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
