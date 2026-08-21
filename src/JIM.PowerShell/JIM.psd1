@@ -63,6 +63,8 @@
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
         'Get-JIMConnectedSystemCapability',
         'Get-JIMConnectedSystemPasswordPolicy',
+        'Get-JIMConnectedSystemPasswordSynchronisation',
+        'Set-JIMConnectedSystemPasswordSynchronisation',
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
 

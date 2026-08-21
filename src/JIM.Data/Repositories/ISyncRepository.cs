@@ -659,6 +659,69 @@ public interface ISyncRepository
     /// </summary>
     Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds);
 
+    #region Password Synchronisation queue (#1119)
+
+    /// <summary>
+    /// Queues password changes, coalescing each onto any change already owed to the same Connected System for
+    /// the same identity (requirement 8).
+    /// <para>
+    /// Coalescing is the point: the queue holds the latest intended password per target, never a replayable
+    /// sequence of historical ones. A person who changes their password twice must not have the older one
+    /// delivered to a system that was briefly unavailable.
+    /// </para>
+    /// </summary>
+    Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes);
+
+    /// <summary>
+    /// The password changes owed to a Connected System that are due for a delivery attempt now: pending, and
+    /// either never attempted or past their scheduled retry. Oldest first, capped at <paramref name="maximum"/>.
+    /// </summary>
+    Task<List<PendingPasswordChange>> GetDuePasswordChangesAsync(int connectedSystemId, DateTime asOf, int maximum);
+
+    /// <summary>
+    /// Which Connected Systems have password changes due now, so a delivery pass can be raised only for the
+    /// systems that have work rather than for every configured one.
+    /// </summary>
+    Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf);
+
+    /// <summary>
+    /// Records the outcome of a delivery attempt against each change: its status, failure classification, the
+    /// target's message, the attempt count, when the next retry falls due, and the account it resolved to.
+    /// </summary>
+    Task RecordPasswordChangeAttemptsAsync(IEnumerable<PendingPasswordChange> changes);
+
+    /// <summary>
+    /// Removes delivered password changes. Success deletes the row: the queue is work outstanding, and the
+    /// Activity is the history (requirement 11).
+    /// </summary>
+    Task DeletePasswordChangesAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
+    /// Marks every pending password change on a Connected System that has outlived its time to live as expired,
+    /// returning how many were marked. An expiry is a recorded outcome, never a silent drop (requirement 9).
+    /// </summary>
+    Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf);
+
+    /// <summary>
+    /// Makes every parked password change on a Connected System due again, returning how many were released.
+    /// Requirement 3's drain when a system is enabled, and the same mechanic when its settings change.
+    /// </summary>
+    Task<int> ReleasePasswordChangesForDeliveryAsync(int connectedSystemId);
+
+    /// <summary>
+    /// How much queued password work on each Connected System is waiting on a person. A system with nothing to
+    /// report is absent from the dictionary rather than present with zeroes.
+    /// </summary>
+    Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds);
+
+    /// <summary>
+    /// Removes terminal password changes last touched before <paramref name="olderThan"/>, up to
+    /// <paramref name="maxRecords"/>, oldest first. Live changes are never removed, however old.
+    /// </summary>
+    Task<int> DeleteTerminalPasswordChangesAsync(DateTime olderThan, int maxRecords);
+
+    #endregion
+
     /// <summary>
     /// The distinct reasons a target gave for refusing the initial passwords parked against a Synchronisation
     /// Rule, each with how many accounts it is holding up, most accounts first.

@@ -1635,6 +1635,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Direction")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DisabledReason")
+                        .HasColumnType("text");
+
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
@@ -1742,6 +1745,14 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("CreatedByType")
                         .HasColumnType("integer");
+
+                    b.Property<string>("DisabledReason")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Enabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("InboundValueProcessing")
                         .ValueGeneratedOnAdd()
@@ -3236,6 +3247,45 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ConnectedSystemPasswordPolicies");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPasswordSynchronisation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MaxRetries")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("RequireSecureTransport")
+                        .HasColumnType("boolean");
+
+                    b.Property<TimeSpan>("RetryBackoffBase")
+                        .HasColumnType("interval");
+
+                    b.Property<int>("TargetObjectTypeId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId")
+                        .IsUnique();
+
+                    b.HasIndex("Enabled")
+                        .HasDatabaseName("IX_ConnectedSystemPasswordSynchronisations_Enabled");
+
+                    b.HasIndex("TargetObjectTypeId");
+
+                    b.ToTable("ConnectedSystemPasswordSynchronisations");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemRunProfile", b =>
                 {
                     b.Property<int>("Id")
@@ -3886,6 +3936,72 @@ namespace JIM.PostgresData.Migrations
                         .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemId_Status");
 
                     b.ToTable("PendingInitialPasswords");
+                });
+
+            modelBuilder.Entity("JIM.Models.Transactional.PendingPasswordChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptedPassword")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ExpiryBehaviour")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FailureReason")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastAttemptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MetaverseObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("NextRetryAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetMessage")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemObjectId");
+
+                    b.HasIndex("MetaverseObjectId")
+                        .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId");
+
+                    b.HasIndex("MetaverseObjectId", "ConnectedSystemId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId_ConnectedSystemId_Unique");
+
+                    b.HasIndex("ConnectedSystemId", "Status", "NextRetryAt")
+                        .HasDatabaseName("IX_PendingPasswordChanges_ConnectedSystemId_Status_NextRetryAt");
+
+                    b.ToTable("PendingPasswordChanges");
                 });
 
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>
@@ -4914,6 +5030,21 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystem");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPasswordSynchronisation", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithOne("PasswordSynchronisation")
+                        .HasForeignKey("JIM.Models.Staging.ConnectedSystemPasswordSynchronisation", "ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", null)
+                        .WithMany()
+                        .HasForeignKey("TargetObjectTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemRunProfile", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
@@ -5088,6 +5219,26 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObject");
 
                     b.Navigation("SyncRule");
+                });
+
+            modelBuilder.Entity("JIM.Models.Transactional.PendingPasswordChange", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("JIM.Models.Core.MetaverseObject", null)
+                        .WithMany()
+                        .HasForeignKey("MetaverseObjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>
@@ -5268,6 +5419,8 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Partitions");
 
                     b.Navigation("PasswordPolicy");
+
+                    b.Navigation("PasswordSynchronisation");
 
                     b.Navigation("PendingExports");
 

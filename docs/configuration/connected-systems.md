@@ -260,10 +260,13 @@ The preview reports, per object type:
 | Object types or attributes **no longer reported** | **Retained** in JIM; nothing is deleted by a refresh. Their values stop refreshing from that point, and any Synchronisation Rule or Attribute Flow reading them works from stale data, so the preview flags them for your attention. |
 | Attribute **definitions changed** (data type or plurality) | The new definition is recorded. A mapping validated against the old definition may no longer behave as intended, so these are flagged too. A data type you [overrode yourself](#overriding-an-inferred-type) is never overwritten, and never appears here. |
 
+Where the diff carries destructive changes, the review also names the configuration that depends on them: Synchronisation Rules bound to a removed object type, Attribute Flow mappings reading a removed or redefined attribute (including attributes consumed inside an expression), and Object Matching Rules that match on a removed attribute, each deep-linking to its page so you can inspect a dependent without losing the review.
+
 You then choose:
 
-- **Apply Schema Changes** records the refresh, exactly as previewed, under an ImportSchema [Activity](activities.md).
-- **Discard** drops it; JIM's schema stays exactly as it was. Where the preview found removals or definition changes, discarding means JIM's configuration no longer matches the Connected System, and the next synchronisation runs against that mismatch; you are asked to confirm that you understand. Discarding additions alone needs no confirmation, because the next refresh simply finds them again.
+- **Cancel** applies nothing, with the honest warning: cancelling does not preserve the status quo. The next Full Import finds no objects of a removed object type and obsoletes them regardless, and the source now sends redefined attributes in their new form. Cancelling an additions-only diff needs no confirmation, because the next refresh simply finds them again.
+- **Apply Schema Changes** records the refresh exactly as previewed, under an ImportSchema [Activity](activities.md); removed entries are retained and their dependents keep running over frozen data.
+- **Apply &amp; Disable Dependents** records the refresh and then disables everything it invalidated: each named Synchronisation Rule and [mapping](synchronisation-rules.md#disabling-a-single-mapping) is disabled with the refresh recorded as the reason, under child Activities of the refresh, so nothing runs against entries the source no longer reports while you rework the configuration. No objects or values are touched, and re-enabling is a manual choice per rule or mapping. Object Matching Rules have no disabled state, so the review lists any needing your attention separately.
 
 Watch the preview's **discovery warnings** before applying: a Connected System identity without permission to read the full schema produces a partial read, which can make object types or attributes appear removed when they are not.
 
@@ -450,6 +453,31 @@ Each account's failure carries guidance you can open, specific to what went wron
 Every account gets its own Activity, grouped under one parent so the whole action is findable afterwards. Setting a password on a single account records no parent, because a group of one says nothing.
 
 For automation, `Set-JIMMetaverseObjectPassword` does the same thing over the per-account REST endpoint. You must name the Connected Systems, or pass `-AllAccounts`; there is no default, for the same reason the portal preselects nothing.
+
+## Password Synchronisation
+
+Setting a password, above, is something you ask for one account at a time. Password Synchronisation is the standing arrangement: one password change for a person reaching every system they have an account in.
+
+It is configured on the Connected System's **Passwords** tab, which appears only where the connector can set passwords at all. Systems whose connector has no password channel do not show the tab, because there is nothing to configure rather than something to switch on later.
+
+| Setting | What it does |
+|---|---|
+| **Deliver password changes to this Connected System** | Whether queued password changes are delivered. Separate from the configuration existing, so a system can be set up ahead of a change window and switched on during one. |
+| **Object Type holding user accounts** | Which Connected System Object Type receives passwords. Only Object Types you have selected for synchronisation are offered: an unselected one holds no objects, so choosing it would queue passwords for accounts that never appear. |
+| **Maximum attempts** | How many delivery attempts JIM makes before it stops and asks you to look. Leave it at 0 to use JIM's default of five. |
+| **First retry after** | How long to wait before the first retry. Each further attempt waits twice as long as the one before. |
+| **Only send passwords over an encrypted connection** | Whether JIM refuses to transmit rather than warning, where it cannot confirm the connection is encrypted. |
+
+Two things follow from the enable toggle being separate from the configuration:
+
+- **Switching a system off does not discard anything.** Password changes for identities with an account there accumulate, and switching it back on delivers what accumulated. That is what makes it safe to switch off for a maintenance window.
+- **There is no way to remove a configuration, only to disable it.** Removing one would throw away everything queued against it, so JIM does not offer that. This is true of the REST API and PowerShell too.
+
+How long a queued change waits before JIM expires it rather than delivering a password that has since been superseded is the Connected System's **initial password time to live**, on the Settings tab. It is shared with initial password provisioning deliberately: the question both are asking is how long this system may be unavailable before JIM stops trying, and the answer is a property of the system rather than of the deployment.
+
+Every change to these settings reaches the Connected System's configuration change history, so switching Password Synchronisation on or off is attributable afterwards.
+
+For automation, `Get-JIMConnectedSystemPasswordSynchronisation` and `Set-JIMConnectedSystemPasswordSynchronisation` do the same over the REST API; `ConnectorSupportsPasswordSet` on the response tells you whether a system can be configured at all.
 
 ## Directory Capabilities
 

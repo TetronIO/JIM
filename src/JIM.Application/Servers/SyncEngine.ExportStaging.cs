@@ -179,7 +179,9 @@ public partial class SyncEngine
 
         var changedAttributeIds = new HashSet<int>(changedAttributes.Select(av => av.AttributeId));
 
-        foreach (var source in exportRule.AttributeFlowRules.SelectMany(mapping => mapping.Sources))
+        // A disabled mapping (#1485) reads nothing at all, so it must not make changes relevant; left in,
+        // a disabled expression mapping would keep forcing evaluation of every change.
+        foreach (var source in exportRule.AttributeFlowRules.Where(mapping => mapping.Enabled).SelectMany(mapping => mapping.Sources))
         {
             // Expression-based mappings may depend on any MVO attribute, so conservatively
             // treat them as relevant when any attribute has changed.
@@ -353,8 +355,9 @@ public partial class SyncEngine
         // unmanaged by JIM once the object is past provisioning, and mappings whose target attribute is
         // WritableOnCreate, which the Connected System accepts only as part of creating the object.
         // FlowsOnUpdateExport() carries both rules; see its documentation for why the second one is a
-        // synchronisation integrity guard rather than an optimisation.
-        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => isCreateOperation || m.FlowsOnUpdateExport()))
+        // synchronisation integrity guard rather than an optimisation. A disabled mapping (#1485) is skipped
+        // on Create as much as Update, which is why Enabled sits outside the isCreateOperation escape.
+        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => m.Enabled && (isCreateOperation || m.FlowsOnUpdateExport())))
         {
             // For export rules, the target is the CSO attribute
             if (mapping.TargetConnectedSystemAttribute == null)

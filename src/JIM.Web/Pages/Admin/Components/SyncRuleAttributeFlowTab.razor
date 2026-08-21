@@ -178,6 +178,13 @@
                                                    Name="@connectedSystemTarget.Name"
                                                    Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, connectedSystemTarget.Type, connectedSystemTarget.AttributePlurality)" />
                                 </span>
+                                @if (!context.Item.Enabled)
+                                {
+                                    <MudTooltip Arrow="true" Placement="Placement.Top">
+                                        <TooltipContent><TooltipText Text="@DescribeDisabledMapping(context.Item)" /></TooltipContent>
+                                        <ChildContent><MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Disabled</MudChip></ChildContent>
+                                    </MudTooltip>
+                                }
                                 @if (context.Item.InitialExportOnly)
                                 {
                                     <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
@@ -344,6 +351,13 @@
                                            Name="@attributeFlowRule.TargetConnectedSystemAttribute?.Name"
                                            Tooltip="@DescribeConnectedSystemAttribute(attributeFlowRule.TargetConnectedSystemAttribute)" />
 
+                            @if (!attributeFlowRule.Enabled)
+                            {
+                                <MudTooltip Arrow="true" Placement="Placement.Top">
+                                    <TooltipContent><TooltipText Text="@DescribeDisabledMapping(attributeFlowRule)" /></TooltipContent>
+                                    <ChildContent><MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Disabled</MudChip></ChildContent>
+                                </MudTooltip>
+                            }
                             @if (attributeFlowRule.InitialExportOnly)
                             {
                                 <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
@@ -661,6 +675,21 @@
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
                         Only flow this attribute when JIM creates the object in the Connected System. Once provisioned, the attribute becomes unmanaged: Metaverse changes are not exported and Drift Correction leaves it alone, allowing the Connected System to own the value. Objects that join to pre-existing Connected System objects never receive the value.
                     </MudText>
+                }
+
+                @* ─── Enabled (#1485): applies to both directions, so it sits outside the import/export branches ─── *@
+                <MudCheckBox T="bool" Dense="true" Class="mt-5"
+                    @bind-Value="_attributeFlowMapping.Enabled"
+                    Label="Enabled" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    A disabled Attribute Flow is skipped by synchronisation in both directions until it is re-enabled, without touching the rest of the Synchronisation Rule.
+                </MudText>
+                @if (!string.IsNullOrWhiteSpace(_attributeFlowMapping.DisabledReason))
+                {
+                    var disabledReason = _attributeFlowMapping.DisabledReason;
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2">
+                        @disabledReason
+                    </MudAlert>
                 }
 
                 @* ─── Multi-Valued to Single-Valued warning (#435) ─── *@
@@ -1122,6 +1151,16 @@
     /// Reference sources are excluded because the runtime guard does not apply to them; on export, every data
     /// type is in scope.
     /// </summary>
+    /// <summary>
+    /// The Disabled chip's tooltip: what disabled means, plus the recorded reason where something disabled the
+    /// mapping on the administrator's behalf. Written as sentences so <c>TooltipText</c> renders one per line.
+    /// </summary>
+    private static string DescribeDisabledMapping(SyncRuleMapping mapping)
+    {
+        const string baseText = "This Attribute Flow is disabled and skipped by synchronisation until it is re-enabled.";
+        return string.IsNullOrWhiteSpace(mapping.DisabledReason) ? baseText : $"{baseText} {mapping.DisabledReason}";
+    }
+
     private bool DialogMappingIsMvaToSva()
     {
         if (_attributeFlowMappingSourceType != "Attribute" || _attributeFlowMapping == null || _attributeFlowMappingSource == null)

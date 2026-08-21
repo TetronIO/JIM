@@ -4879,6 +4879,16 @@ public abstract class SyncTaskProcessorBase
             "{ExportRules} export rules with EnforceState=true for system {SystemId}",
             _importMappingCache.Count, _driftDetectionExportRules.Count, _connectedSystem.Id);
 
+        // Disabled mappings (#1485) are skipped by every stage of this run; one summary here keeps that
+        // visible per run rather than silent, without a per-object report for a deliberate configuration choice.
+        var disabledMappingCount = currentSystemSyncRules
+            .Where(sr => sr.Enabled)
+            .SelectMany(sr => sr.AttributeFlowRules)
+            .Count(m => !m.Enabled);
+        if (disabledMappingCount > 0)
+            Log.Information("BuildDriftDetectionCache: {DisabledMappings} Attribute Flow mapping(s) on this run's enabled Synchronisation Rules are disabled and will be skipped.",
+                disabledMappingCount);
+
         span.SetTag("importMappingCount", _importMappingCache.Count);
         span.SetTag("enforceStateExportRuleCount", _driftDetectionExportRules.Count);
         span.SetSuccess();

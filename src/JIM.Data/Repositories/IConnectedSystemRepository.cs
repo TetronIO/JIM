@@ -1015,6 +1015,28 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(int connectedSystemId);
 
     /// <summary>
+    /// Gets a Connected System's Password Synchronisation configuration (#1119), or null where Password
+    /// Synchronisation has never been configured on it.
+    /// <para>
+    /// Read on its own for the same reason as the discovered policy above: the callers that need it (the
+    /// configuration editor, the API, and the comparison that decides whether saving releases parked work) do not
+    /// all arrive holding a fully loaded Connected System, and a navigation nobody loaded is indistinguishable
+    /// from a system nobody has configured.
+    /// </para>
+    /// </summary>
+    public Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Every Connected System configured and enabled to receive synchronised passwords (#1119), flattened to what
+    /// fan-out needs.
+    /// <para>
+    /// Asked on every password change, so it is a projection rather than a graph load: the alternative would
+    /// materialise every configured Connected System to read three fields off each.
+    /// </para>
+    /// </summary>
+    public Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync();
+
+    /// <summary>
     /// Returns the count of all Connected System Objects across all Connected Systems.
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountAsync();

@@ -223,6 +223,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IQueryable<ConnectedSystem> csQuery = Repository.Database.ConnectedSystems
             .Include(cs => cs.ConnectorDefinition)
             .Include(cs => cs.PasswordPolicy)
+            .Include(cs => cs.PasswordSynchronisation)
             .Include(cs => cs.SettingValues)
                 .ThenInclude(sv => sv.Setting);
 
@@ -535,6 +536,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Repository.Database.ConnectedSystemPasswordPolicies.Add(connectedSystem.PasswordPolicy);
             else
                 Repository.UpdateDetachedSafe(connectedSystem.PasswordPolicy);
+        }
+
+        // And again for the Password Synchronisation configuration, for the same reasons: the graph is not
+        // traversed, and a new configuration's navigation leads back to the Connected System, which must already
+        // be tracked above so that Add does not try to insert it a second time.
+        if (connectedSystem.PasswordSynchronisation != null)
+        {
+            if (connectedSystem.PasswordSynchronisation.Id == 0)
+                Repository.Database.ConnectedSystemPasswordSynchronisations.Add(connectedSystem.PasswordSynchronisation);
+            else
+                Repository.UpdateDetachedSafe(connectedSystem.PasswordSynchronisation);
         }
     }
 
@@ -5713,6 +5725,48 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
     }
 
+    public async Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId)
+    {
+        // The target Object Type is named from the Connected System's own Object Types by the caller
+        // (ResolveTargetObjectType), so there is nothing to include here.
+        return await Repository.Database.ConnectedSystemPasswordSynchronisations
+            .AsNoTracking()
+            .SingleOrDefaultAsync(ps => ps.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync()
+    {
+        // Joined and projected in the database rather than loading the Connected Systems: fan-out asks this on
+        // every password change, and it needs three fields per system.
+        var targets = await Repository.Database.ConnectedSystemPasswordSynchronisations
+            .AsNoTracking()
+            .Where(ps => ps.Enabled)
+            .Join(Repository.Database.ConnectedSystems.AsNoTracking(),
+                ps => ps.ConnectedSystemId,
+                cs => cs.Id,
+                (ps, cs) => new
+                {
+                    ps.ConnectedSystemId,
+                    cs.Name,
+                    ps.TargetObjectTypeId,
+                    cs.InitialPasswordTimeToLive
+                })
+            .ToListAsync();
+
+        // The effective time to live is resolved here rather than in the query, because the fallback lives on the
+        // entity (EffectiveInitialPasswordTimeToLive) and must not be restated in SQL where the two could drift.
+        return targets
+            .Select(t => new PasswordSynchronisationTarget
+            {
+                ConnectedSystemId = t.ConnectedSystemId,
+                ConnectedSystemName = t.Name,
+                TargetObjectTypeId = t.TargetObjectTypeId,
+                TimeToLive = new ConnectedSystem { InitialPasswordTimeToLive = t.InitialPasswordTimeToLive }
+                    .EffectiveInitialPasswordTimeToLive
+            })
+            .ToList();
+    }
+
     public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)
     {
         // Read-only comparison input, so no tracking: attaching it would put a second instance of this row in
@@ -6010,6 +6064,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             var source = changesById[mapping.Id];
             mapping.Priority = source.Priority;
             mapping.NullIsValue = source.NullIsValue;
+            // Enabled and its reason ride the same bulk path (#1485): the schema refresh decision disables a
+            // set of mappings in one pass, and a scalar omitted here is silently lost for every caller.
+            mapping.Enabled = source.Enabled;
+            mapping.DisabledReason = source.DisabledReason;
             // The caller stamps AuditHelper.SetUpdated on the detached source before persisting; the stamp is
             // the mapping's configuration change trail and feeds the Full Synchronisation configuration
             // watermark (GetLatestSyncRuleConfigurationChangeAsync), so it must be copied across too.

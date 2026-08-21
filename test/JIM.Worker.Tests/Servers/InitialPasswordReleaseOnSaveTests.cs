@@ -72,6 +72,20 @@ public class InitialPasswordReleaseOnSaveTests
     [TearDown]
     public void TearDown() => _jim?.Dispose();
 
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ReEnablingARule_ClearsTheDisabledReasonAsync()
+    {
+        // The reason describes why the rule is off (#1485); re-enabled, it would be a stale claim about a
+        // state that no longer holds, so every save of an enabled rule clears it.
+        var rule = Rule(initialPassword: null, direction: SyncRuleDirection.Import, provisions: null);
+        rule.Enabled = true;
+        rule.DisabledReason = "Object Type 'computer' is no longer reported by the Connected System.";
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiatedBy);
+
+        Assert.That(rule.DisabledReason, Is.Null);
+    }
+
     private static SyncRuleInitialPassword Configuration(int length = 16) => new()
     {
         SyncRuleId = SyncRuleId,

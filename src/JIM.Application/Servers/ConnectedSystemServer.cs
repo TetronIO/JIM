@@ -1634,6 +1634,26 @@ public class ConnectedSystemServer
     /// <param name="previewResult">The preview's result, used to complete the Activity.</param>
     /// <param name="initiatedBy">The user the change is attributed to.</param>
     public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, MetaverseObject? initiatedBy)
+        => await ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, disableDependents: null, initiatedBy);
+
+    /// <summary>
+    /// As <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>,
+    /// attributed to an API key (the REST API and PowerShell path).
+    /// </summary>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, ApiKey initiatedByApiKey)
+        => await ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, disableDependents: null, initiatedByApiKey);
+
+    /// <summary>
+    /// Applies a previewed schema refresh and then disables its dependents: the "Apply and Disable Dependents"
+    /// option of the schema refresh decision (#1485). The schema is recorded exactly as the plain apply records
+    /// it, then each Synchronisation Rule and Attribute Flow mapping the plan names is disabled with its
+    /// recorded reason, under child Activities of the refresh so the history reads as one decision.
+    /// </summary>
+    /// <param name="connectedSystem">The instance the preview merged into. Persisted as-is.</param>
+    /// <param name="previewResult">The preview's result, used to complete the refresh Activity.</param>
+    /// <param name="disableDependents">What to disable, with per-item reasons; null applies the schema alone.</param>
+    /// <param name="initiatedBy">The user the change is attributed to.</param>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents? disableDependents, MetaverseObject? initiatedBy)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
@@ -1659,13 +1679,16 @@ public class ConnectedSystemServer
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
         }
+
+        if (disableDependents is { HasAny: true })
+            await DisableSchemaRefreshDependentsAsync(connectedSystem, disableDependents, activity, initiatedBy, initiatedByApiKey: null);
     }
 
     /// <summary>
-    /// As <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>,
+    /// As <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, SchemaRefreshDependents?, MetaverseObject?)"/>,
     /// attributed to an API key (the REST API and PowerShell path).
     /// </summary>
-    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, ApiKey initiatedByApiKey)
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents? disableDependents, ApiKey initiatedByApiKey)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
@@ -1691,6 +1714,104 @@ public class ConnectedSystemServer
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
         }
+
+        if (disableDependents is { HasAny: true })
+            await DisableSchemaRefreshDependentsAsync(connectedSystem, disableDependents, activity, initiatedBy: null, initiatedByApiKey);
+    }
+
+    /// <summary>
+    /// Disables the rules and mappings a destructive schema refresh invalidated, as the administrator chose on
+    /// the refresh review. Deliberately targeted rather than routed through
+    /// <see cref="CreateOrUpdateSyncRuleAsync(SyncRule, MetaverseObject?, Activity?, string?, Guid?)"/>: that
+    /// path saves a whole rule and applies save-the-world semantics along the way (Simple Mode clears matching
+    /// rules, provisioning switches initial passwords off), none of which a disable has asked for. Each change
+    /// is audited as a child Activity of the refresh and captured into the rule's configuration history.
+    /// </summary>
+    private async Task DisableSchemaRefreshDependentsAsync(
+        ConnectedSystem connectedSystem,
+        SchemaRefreshDependents dependents,
+        Activity refreshActivity,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        var rules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+        var rulesById = rules.ToDictionary(rule => rule.Id);
+
+        foreach (var entry in dependents.InvalidatedSyncRules.Where(e => rulesById.ContainsKey(e.SyncRuleId)))
+        {
+            var rule = rulesById[entry.SyncRuleId];
+            rule.Enabled = false;
+            rule.DisabledReason = entry.Reason;
+            StampUpdated(rule, initiatedBy, initiatedByApiKey);
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(rule);
+            await RecordSyncRuleDisableActivityAsync(rule, connectedSystem, refreshActivity, initiatedBy, initiatedByApiKey);
+        }
+
+        // Mappings are disabled through the bulk path in one write, then each affected rule's configuration
+        // history is captured once, so a refresh disabling a dozen flows records one clean version per rule.
+        var mappingsToDisable = new List<SyncRuleMapping>();
+        var affectedRules = new List<SyncRule>();
+        foreach (var group in dependents.InvalidatedMappings.GroupBy(m => m.SyncRuleId).Where(g => rulesById.ContainsKey(g.Key)))
+        {
+            var rule = rulesById[group.Key];
+            var mappingsById = rule.AttributeFlowRules.ToDictionary(m => m.Id);
+            var disabledAny = false;
+            foreach (var entry in group.Where(e => mappingsById.ContainsKey(e.MappingId)))
+            {
+                var mapping = mappingsById[entry.MappingId];
+                mapping.Enabled = false;
+                mapping.DisabledReason = entry.Reason;
+                StampUpdated(mapping, initiatedBy, initiatedByApiKey);
+                mappingsToDisable.Add(mapping);
+                disabledAny = true;
+            }
+            if (disabledAny)
+                affectedRules.Add(rule);
+        }
+
+        if (mappingsToDisable.Count == 0)
+            return;
+
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(mappingsToDisable);
+        foreach (var rule in affectedRules)
+            await RecordSyncRuleDisableActivityAsync(rule, connectedSystem, refreshActivity, initiatedBy, initiatedByApiKey);
+    }
+
+    private static void StampUpdated(IAuditable entity, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+    {
+        if (initiatedByApiKey != null)
+            AuditHelper.SetUpdated(entity, initiatedByApiKey);
+        else
+            AuditHelper.SetUpdated(entity, initiatedBy);
+    }
+
+    /// <summary>
+    /// Records one rule's disable (or its mappings' disables) as an audited Update Activity, parented under the
+    /// refresh's ImportSchema Activity, and captures the rule's new configuration version.
+    /// </summary>
+    private async Task RecordSyncRuleDisableActivityAsync(
+        SyncRule rule,
+        ConnectedSystem connectedSystem,
+        Activity refreshActivity,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        var activity = new Activity
+        {
+            TargetName = rule.Name,
+            TargetContext = connectedSystem.Name,
+            TargetType = ActivityTargetType.SynchronisationRule,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ParentActivityId = refreshActivity.Id
+        };
+
+        if (initiatedByApiKey != null)
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        else
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.Id);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
     /// <summary>
@@ -1729,6 +1850,19 @@ public class ConnectedSystemServer
         // Discovery warnings travel on the result so the portal can show them beside what changed; the import's
         // Activity carries the same warnings for the other surfaces.
         var result = new SchemaRefreshResult { Success = true, DiscoveryWarnings = schema.Warnings.ToList() };
+
+        // Snapshot the pre-merge schema before the rebuild below: removed entries drop off the in-memory graph,
+        // and dependent detection (#1485) needs their ids to resolve what a removal invalidates.
+        result.PreRefreshSchema = (connectedSystem.ObjectTypes ?? []).Select(type => new SchemaRefreshPreRefreshType
+        {
+            Id = type.Id,
+            Name = type.Name,
+            Attributes = type.Attributes.Select(attribute => new SchemaRefreshPreRefreshAttribute
+            {
+                Id = attribute.Id,
+                Name = attribute.Name
+            }).ToList()
+        }).ToList();
 
         // Credential attributes must never enter JIM's schema as new, manageable attributes.
         FilterCredentialAttributesFromSchema(connectedSystem, schema, result);
@@ -2181,6 +2315,17 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId);
     }
+
+    /// <summary>
+    /// A Connected System's Password Synchronisation configuration (#1119), or null where it has never been
+    /// configured, which is where every system starts.
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystemId);
+    }
+
 
     /// <summary>
     /// The password expiry behaviours this Connected System's Connector is able to apply.
@@ -6122,6 +6267,16 @@ public class ConnectedSystemServer
 
         if (settings.InitialExportOnly.HasValue)
             mapping.InitialExportOnly = settings.InitialExportOnly.Value;
+
+        // Enabled applies to both directions (#1485), which is why it is absent from the direction guards
+        // above. Re-enabling clears the recorded reason: it describes why the mapping is off, and re-enabled
+        // it would be a stale claim about a state that no longer holds.
+        if (settings.Enabled.HasValue)
+        {
+            mapping.Enabled = settings.Enabled.Value;
+            if (mapping.Enabled)
+                mapping.DisabledReason = null;
+        }
     }
 
     /// <summary>
@@ -7462,6 +7617,11 @@ public class ConnectedSystemServer
         // can never satisfy, which would silently drop objects out of scope.
         ValidateScopingCriteriaOperators(syncRule);
 
+        // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
+        // re-enabled rule would carry a stale claim about a state that no longer holds.
+        if (syncRule.Enabled)
+            syncRule.DisabledReason = null;
+
         // remove any mutually-exclusive property combinations
         if (syncRule.Direction == SyncRuleDirection.Import)
         {
@@ -7613,6 +7773,11 @@ public class ConnectedSystemServer
         // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
         // can never satisfy, which would silently drop objects out of scope.
         ValidateScopingCriteriaOperators(syncRule);
+
+        // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
+        // re-enabled rule would carry a stale claim about a state that no longer holds.
+        if (syncRule.Enabled)
+            syncRule.DisabledReason = null;
 
         if (syncRule.Direction == SyncRuleDirection.Import)
         {

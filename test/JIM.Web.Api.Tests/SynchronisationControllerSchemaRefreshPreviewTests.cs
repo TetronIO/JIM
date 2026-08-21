@@ -10,6 +10,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
@@ -61,6 +62,10 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _connectedSystemRepo.Setup(r => r.UpdateConnectedSystemSchemaAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
+        _connectedSystemRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _connectedSystemRepo.Setup(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>())).Returns(Task.CompletedTask);
+        // Dependent detection loads the system's rules whenever the diff is destructive; default to none.
+        _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(It.IsAny<int>(), It.IsAny<bool>())).ReturnsAsync([]);
 
         _csvPath = Path.Join(Path.GetTempPath(), $"jim-schema-rest-preview-{Guid.NewGuid():N}.csv");
         File.WriteAllText(_csvPath, "id,displayName\n1,Test User\n");
@@ -147,6 +152,98 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
                 "A preview must not persist the merged schema.");
             _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never,
                 "A preview changes nothing in JIM, so it must not record an Activity.");
+        }
+    }
+
+    [Test]
+    public async Task PreviewSchemaImport_WithDestructiveChanges_NamesTheDependentsAsync()
+    {
+        // The decision needs the dependents on the wire (#1485): a REST caller reviewing the diff must see
+        // what the removals invalidate, exactly as the portal review names them.
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        var departmentAttr = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "department", Type = AttributeDataType.Text };
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType
+            {
+                Id = 7,
+                Name = "user",
+                Selected = true,
+                Attributes =
+                [
+                    new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number },
+                    new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "displayName", Type = AttributeDataType.Text },
+                    departmentAttr
+                ]
+            }
+        ];
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+
+        var rule = new SyncRule { Id = 20, Name = "HR Users Inbound", Direction = SyncRuleDirection.Import, Enabled = true, ConnectedSystemObjectTypeId = 7 };
+        var mapping = new SyncRuleMapping { Id = 200, TargetMetaverseAttribute = new MetaverseAttribute { Id = 900, Name = "Department", Type = AttributeDataType.Text } };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = departmentAttr, ConnectedSystemAttributeId = departmentAttr.Id });
+        rule.AttributeFlowRules.Add(mapping);
+        _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(ConnectedSystemId, true)).ReturnsAsync([rule]);
+
+        var result = await _controller.PreviewConnectedSystemSchemaImportAsync(ConnectedSystemId);
+
+        var dto = (result as OkObjectResult)!.Value as SchemaRefreshResultDto;
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.Dependents, Is.Not.Null, "A destructive diff carries its dependents.");
+            Assert.That(dto!.Dependents!.InvalidatedMappings, Has.Count.EqualTo(1));
+            Assert.That(dto!.Dependents!.InvalidatedMappings[0].SyncRuleName, Is.EqualTo("HR Users Inbound"));
+            Assert.That(dto!.Dependents!.InvalidatedMappings[0].Reason, Does.Contain("department"));
+        }
+    }
+
+    [Test]
+    public async Task ImportSchema_WithDisableDependents_AppliesAndDisablesAsync()
+    {
+        // The commit flavour of the decision: POST import-schema with disableDependents applies the schema and
+        // disables what the removals invalidate, so automation gets the same protective option as the portal.
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        var departmentAttr = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "department", Type = AttributeDataType.Text };
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType
+            {
+                Id = 7,
+                Name = "user",
+                Selected = true,
+                Attributes =
+                [
+                    new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number },
+                    new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "displayName", Type = AttributeDataType.Text },
+                    departmentAttr
+                ]
+            }
+        ];
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId, true)).ReturnsAsync(connectedSystem);
+
+        var rule = new SyncRule { Id = 20, Name = "HR Users Inbound", Direction = SyncRuleDirection.Import, Enabled = true, ConnectedSystemObjectTypeId = 7 };
+        var mapping = new SyncRuleMapping { Id = 200, TargetMetaverseAttribute = new MetaverseAttribute { Id = 900, Name = "Department", Type = AttributeDataType.Text } };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = departmentAttr, ConnectedSystemAttributeId = departmentAttr.Id });
+        rule.AttributeFlowRules.Add(mapping);
+        _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(ConnectedSystemId, true)).ReturnsAsync([rule]);
+
+        IReadOnlyCollection<SyncRuleMapping>? disabledMappings = null;
+        _connectedSystemRepo.Setup(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()))
+            .Callback<IReadOnlyCollection<SyncRuleMapping>>(m => disabledMappings = m)
+            .Returns(Task.CompletedTask);
+
+        var result = await _controller.ImportConnectedSystemSchemaAsync(ConnectedSystemId,
+            new ImportConnectedSystemSchemaRequest { DisableDependents = true });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<OkObjectResult>());
+            _connectedSystemRepo.Verify(r => r.UpdateConnectedSystemSchemaAsync(It.IsAny<ConnectedSystem>()), Times.Once);
+            Assert.That(disabledMappings, Is.Not.Null, "The invalidated mapping must be disabled.");
+            Assert.That(disabledMappings!.Single().Enabled, Is.False);
+            Assert.That(disabledMappings!.Single().DisabledReason, Does.Contain("department"));
         }
     }
 
