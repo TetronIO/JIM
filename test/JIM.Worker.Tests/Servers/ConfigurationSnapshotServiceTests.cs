@@ -153,6 +153,25 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_SyncRule_CapturesRuleDisabledReason()
+    {
+        // A rule disabled by the schema refresh decision (#1485) records why; the reason is configuration and
+        // must appear in the change history beside the Enabled toggle it explains.
+        var rule = new SyncRule
+        {
+            Id = 42,
+            Name = "Directory Computers Inbound",
+            Direction = SyncRuleDirection.Import,
+            Enabled = false,
+            DisabledReason = "Object Type 'computer' is no longer reported by the Connected System."
+        };
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        Assert.That(Child(snapshot.Root, "disabledReason")!.Value, Does.Contain("computer"));
+    }
+
+    [Test]
     public void CreateSnapshot_SyncRule_CapturesMappingEnabledAndDisabledReason()
     {
         // A disabled mapping (#1485) stops flowing entirely, so the toggle and the recorded reason are

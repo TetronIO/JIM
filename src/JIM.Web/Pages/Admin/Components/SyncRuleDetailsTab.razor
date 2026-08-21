@@ -167,6 +167,14 @@
     <MudSwitch Class="mt-5" @bind-Value="@SyncRule.Enabled" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary" Label="Enabled?" />
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Synchronisation Rules are not evaluated when disabled. Use
         this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated.</MudText>
+    @* A rule disabled on the administrator's behalf records why (#1485); saving the rule enabled clears it. *@
+    @if (!SyncRule.Enabled && !string.IsNullOrWhiteSpace(SyncRule.DisabledReason))
+    {
+        var disabledReason = SyncRule.DisabledReason;
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 ms-12">
+            @disabledReason
+        </MudAlert>
+    }
 </MudPaper>
 
 @* Advanced Options - Only show for Export rules *@
