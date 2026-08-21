@@ -7,9 +7,16 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// <see cref="CausalityPageContext.RecordLabel"/> is the single formatter behind the record's mention
-/// in the summary sentence, the flow view, the timeline view and the graph's source node; those four
-/// previously carried their own copy of the rule and could drift apart.
+/// The record is mentioned in the summary sentence, the Flow view, the Timeline view and the Graph's source
+/// node, and all four read it from <see cref="CausalityPageContext"/> rather than formatting their own copy,
+/// which is how they used to drift apart.
+/// <para>
+/// There are two formats, not one. <see cref="CausalityPageContext.RecordLabel"/> qualifies the name with the
+/// external id and is used by the Timeline, which has room to be precise.
+/// <see cref="CausalityPageContext.RecordName"/> is the name alone, for the summary sentence and the Flow and
+/// Graph views, where the record is named in running prose or inside a fixed-width chip and a trailing
+/// entryUUID is noise at best and pushes the name out of the chip at worst.
+/// </para>
 /// </summary>
 [TestFixture]
 public class CausalityRecordLabelTests
@@ -93,5 +100,35 @@ public class CausalityRecordLabelTests
 
         Assert.That(sentence, Does.Contain($"processed the record for {entryUuid}:"));
         Assert.That(sentence, Does.Not.Contain($"{entryUuid} ({entryUuid})"));
+    }
+
+    [Test]
+    public void RecordName_NameAndExternalIdDiffer_ReturnsTheNameAlone()
+    {
+        Assert.That(Context("Erin Byrne", "S8-100").RecordName, Is.EqualTo("Erin Byrne"));
+    }
+
+    [Test]
+    public void RecordName_NameOnly_ReturnsTheName()
+    {
+        Assert.That(Context("Erin Byrne", null).RecordName, Is.EqualTo("Erin Byrne"));
+    }
+
+    [Test]
+    public void RecordName_ExternalIdOnly_FallsBackToItRatherThanShowingNothing()
+    {
+        Assert.That(Context(null, "S8-100").RecordName, Is.EqualTo("S8-100"));
+    }
+
+    [Test]
+    public void RecordName_WhitespaceOnlyValues_TreatedAsAbsent()
+    {
+        Assert.That(Context("   ", "  ").RecordName, Is.Null);
+    }
+
+    [Test]
+    public void RecordName_NeitherPresent_ReturnsNull()
+    {
+        Assert.That(Context(null, null).RecordName, Is.Null);
     }
 }

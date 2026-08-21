@@ -194,10 +194,51 @@ public class ProcessedExportItem
     public ConnectedSystemExportErrorType? ErrorType { get; set; }
 
     /// <summary>
-    /// The Pending Export this item reports on. Set for every item raised by execution so a deferred
-    /// item (one that wrote nothing) can still be tied to its export.
+    /// The Pending Export this item reports on, captured before it is deleted. Set for every item raised by
+    /// execution so a deferred item (one that wrote nothing) can still be tied to its export, and identifies
+    /// the export cycle on the causal edge recording why the export happened (#1223).
     /// </summary>
     public Guid? PendingExportId { get; set; }
+
+    /// <summary>
+    /// The Metaverse Object whose change produced the Pending Export, copied from
+    /// <see cref="PendingExport.SourceMetaverseObjectId"/>.
+    /// </summary>
+    public Guid? SourceMetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// The Run Profile Execution Item of the synchronisation that staged the Pending Export, copied from
+    /// <see cref="PendingExport.QueuedByRunProfileExecutionItemId"/>. Null for an export staged before that
+    /// was recorded, or by a path that had no execution item to name.
+    /// </summary>
+    public Guid? QueuedByRunProfileExecutionItemId { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule whose provisioning decision produced this export, copied from
+    /// <see cref="PendingExport.ProvisioningSyncRuleId"/>. Only ever set for a create.
+    /// </summary>
+    public int? ProvisioningSyncRuleId { get; set; }
+
+    /// <summary>
+    /// Copies the identifiers that say why this export happened off the Pending Export being carried out, and
+    /// returns this item so it can be captured in a single expression at each call site.
+    /// </summary>
+    /// <remarks>
+    /// A method rather than three assignments repeated per site: the export path builds these items in eight
+    /// places, and a set of provenance fields that has to be remembered eight times is a set that will be
+    /// forgotten in the ninth. The Pending Export row is deleted the moment the export succeeds, so a field
+    /// missed here cannot be recovered afterwards.
+    /// </remarks>
+    public ProcessedExportItem WithCauseFrom(PendingExport export)
+    {
+        ArgumentNullException.ThrowIfNull(export);
+
+        PendingExportId = export.Id;
+        SourceMetaverseObjectId = export.SourceMetaverseObjectId;
+        QueuedByRunProfileExecutionItemId = export.QueuedByRunProfileExecutionItemId;
+        ProvisioningSyncRuleId = export.ProvisioningSyncRuleId;
+        return this;
+    }
 
     /// <summary>
     /// True when nothing was written to the Connected System for this export this run: it was deferred

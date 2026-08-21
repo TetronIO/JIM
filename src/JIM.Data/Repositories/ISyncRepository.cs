@@ -504,6 +504,21 @@ public interface ISyncRepository
     Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Names the Run Profile Execution Item that queued each Pending Export, after both exist (#1223).
+    /// </summary>
+    /// <remarks>
+    /// The ordinary outbound path stamps <see cref="PendingExport.QueuedByRunProfileExecutionItemId"/> before
+    /// the exports are persisted, but the deletion-cascade and reference-recall paths run the other way round:
+    /// their Pending Exports are staged and persisted first, and the execution item that reports each one (the
+    /// deletion item, the standalone cascade item, the recall item) is only built afterwards. This is the
+    /// set-once fix-up for those paths; the caller must also set the property on its in-memory Pending Export
+    /// instances so any tracked instance matches the row.
+    /// </remarks>
+    /// <param name="stamps">The Pending Export ids and the execution item id that queued each.</param>
+    Task SetPendingExportQueueingItemsAsync(
+        IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps);
+
+    /// <summary>
     /// Records that newly provisioned accounts are owed an initial password.
     /// <para>
     /// Staged rather than delivered inline, for the same reason a Pending Export is staged rather than written
@@ -851,6 +866,18 @@ public interface ISyncRepository
     Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis);
 
     /// <summary>
+    /// Bulk inserts causal edges via chunked raw SQL, bypassing the EF change tracker (#1223).
+    /// </summary>
+    /// <remarks>
+    /// Call this from inside the transaction that persists the effects the edges describe, never on its own.
+    /// An edge that outlived a rolled-back flush would attribute a cause to an effect that never happened, and
+    /// an effect persisted without its edges would read as uncaused; joining the existing flush means a failure
+    /// here fails or retries with the RPEI batch exactly as a failure to persist the RPEIs themselves does, so
+    /// provenance adds no new failure mode to synchronisation.
+    /// </remarks>
+    Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges);
+
+    /// <summary>
     /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs,
     /// and inserts any new SyncOutcomes added after initial persistence.
     /// Used by confirming imports to merge reconciliation outcomes onto existing RPEIs.
@@ -953,6 +980,18 @@ public interface ISyncRepository
     /// profile execution and cached by the caller, never per Metaverse Object.
     /// </summary>
     Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
+
+    /// <summary>
+    /// Every Metaverse Attribute id and its name, for snapshotting the relationship noun a causal edge reads
+    /// back (#1223): "removed from Project Diamond's <b>Static Members</b>".
+    /// </summary>
+    /// <remarks>
+    /// A tiny table read at most once per run profile execution and cached by the worker, in the manner of
+    /// <see cref="GetConnectedSystemNamesAsync"/>. The name has to be snapshotted rather than resolved at read
+    /// time because the attribute can be renamed or removed, and because the wording rule takes the
+    /// relationship noun from the schema rather than from the object type.
+    /// </remarks>
+    Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync();
 
     #endregion
 

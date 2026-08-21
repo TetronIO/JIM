@@ -35,7 +35,7 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen (S8-287551): " +
+            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: " +
             "a new Identity was created, 11 attributes flowed to it, and an export of 11 changes is now queued for Glitterband EMEA."));
     }
 
@@ -47,7 +47,7 @@ public class CausalitySummaryBuilderTests
 
         Assert.That(entities.Select(e => e.Label), Is.EqualTo(new[]
         {
-            "Full Synchronisation", "Yellowstone APAC", "Liam Allen (S8-287551)", "Glitterband EMEA"
+            "Full Synchronisation", "Yellowstone APAC", "Liam Allen", "Glitterband EMEA"
         }));
 
         var sourceSystem = entities[1];
@@ -96,7 +96,7 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(CausalityTestData.LeaverItem(), context);
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Erin Byrne (S8-100): " +
+            "A Full Synchronisation on Yellowstone APAC processed the record for Erin Byrne: " +
             "it left the scope of Synchronisation Rule Yellowstone People - Inbound, the Identity Erin Byrne was deleted, " +
             "and deprovisioning is now queued for 2 systems."));
     }
@@ -138,7 +138,7 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(CausalityTestData.ExportFailureItem(), CausalityTestData.ExportContext());
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "An Export on Glitterband EMEA processed the record for Liam Allen (S8-287551): " +
+            "An Export on Glitterband EMEA processed the record for Liam Allen: " +
             "an export of 3 changes was attempted, but it failed and needs attention."));
     }
 
@@ -162,7 +162,7 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen (S8-287551): no changes were needed."));
+            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: no changes were needed."));
         Assert.That(summary.Pills, Is.Empty);
     }
 
@@ -175,7 +175,7 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen (S8-287551): Drift corrected."));
+            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: Drift corrected."));
         Assert.That(summary.Pills.Select(p => (p.Label, p.Tone)), Is.EqualTo(new[]
         {
             ("Drift corrected", CausalityTone.Warning)
@@ -194,7 +194,7 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen (S8-287551): " +
+            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: " +
             "it was joined to the Identity Liam Allen, and 5 attributes flowed to it."));
 
         var identity = summary.Segments.OfType<SummarySegment.Entity>().Single(e => e.Kind == CausalityEntityKind.Identity);

@@ -38,6 +38,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, PendingPasswordChange> _pendingPasswordChanges = new();
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
+    private readonly Dictionary<Guid, CausalEdge> _causalEdges = new();
 
     /// <summary>
     /// When true, <see cref="BulkInsertRpeisAsync"/> returns true (simulating the production
@@ -1480,6 +1481,14 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public virtual Task SetPendingExportQueueingItemsAsync(
+        IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
+    {
+        foreach (var stamp in stamps.Where(s => _pendingExports.ContainsKey(s.PendingExportId)))
+            _pendingExports[stamp.PendingExportId].QueuedByRunProfileExecutionItemId = stamp.QueuedByRunProfileExecutionItemId;
+        return Task.CompletedTask;
+    }
+
     public Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
     {
         var expiring = _pendingInitialPasswords.Values
@@ -1836,6 +1845,18 @@ public class SyncRepository : ISyncRepository
 
             // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
             AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
+
+            // Drain the causal edge buffer (#1223), matching the production flush: outcome ids exist only now,
+            // so the edge's transient outcome reference is resolved here, and the buffer is emptied once written
+            // so a later flush of the same RPEI cannot duplicate it.
+            if (rpei.CausalEdges.Count == 0)
+                continue;
+
+            foreach (var edge in rpei.CausalEdges)
+                edge.ResolveTransientReferences(rpei.Id);
+
+            RecordCausalEdges(rpei.CausalEdges);
+            rpei.CausalEdges.Clear();
         }
         // When SimulateRawSqlPersistence is off (default), return false so the processor keeps
         // RPEIs in the activity's RunProfileExecutionItems collection for simpler test assertions.
@@ -1843,6 +1864,36 @@ public class SyncRepository : ISyncRepository
         // the production raw-SQL path and exposing cross-page lookup bugs.
         return Task.FromResult(SimulateRawSqlPersistence);
     }
+
+    /// <summary>
+    /// Records causal edges (#1223) in memory so worker tests can assert what a cascade attributed to what.
+    /// </summary>
+    /// <remarks>
+    /// The retention asymmetry the production path depends on (effect cascades, cause survives) cannot be
+    /// modelled here: this store enforces no foreign keys. That behaviour is covered by
+    /// <c>CausalEdgePersistenceDatabaseTests</c> against real PostgreSQL, and a test asserting it against this
+    /// implementation would prove nothing.
+    /// </remarks>
+    public Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges)
+    {
+        RecordCausalEdges(edges);
+        return Task.CompletedTask;
+    }
+
+    private void RecordCausalEdges(List<CausalEdge> edges)
+    {
+        foreach (var edge in edges)
+        {
+            if (edge.Id == Guid.Empty)
+                edge.Id = Guid.NewGuid();
+            _causalEdges[edge.Id] = edge;
+        }
+    }
+
+    /// <summary>
+    /// The causal edges recorded so far, for test assertions.
+    /// </summary>
+    public IReadOnlyCollection<CausalEdge> CausalEdges => _causalEdges.Values;
 
     private static void AssignSyncOutcomeIds(
         List<ActivityRunProfileExecutionItemSyncOutcome> outcomes, Guid rpeiId, Guid? parentId)
@@ -1869,7 +1920,22 @@ public class SyncRepository : ISyncRepository
         List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
     {
         foreach (var rpei in rpeis)
+        {
             _rpeis[rpei.Id] = rpei;
+
+            // Drain the causal edge buffer, matching the production path (#1223): confirming imports merge
+            // their outcomes through here, so an edge written at the export-confirmation seam reaches the
+            // store only if this path records it.
+            if (rpei.CausalEdges.Count == 0)
+                continue;
+
+            foreach (var edge in rpei.CausalEdges)
+                edge.ResolveTransientReferences(rpei.Id);
+
+            RecordCausalEdges(rpei.CausalEdges);
+            rpei.CausalEdges.Clear();
+        }
+
         return Task.CompletedTask;
     }
 
@@ -2005,6 +2071,21 @@ public class SyncRepository : ISyncRepository
 
     public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
         => Task.FromResult(_connectedSystems.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Name));
+
+    /// <summary>
+    /// Metaverse Attribute names for causal edge wording (#1223). Seeded by tests via
+    /// <see cref="SeedMetaverseAttributeName"/>; empty otherwise, which the seams treat as "no name known"
+    /// rather than as an error.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync()
+        => Task.FromResult(new Dictionary<int, string>(_metaverseAttributeNames));
+
+    private readonly Dictionary<int, string> _metaverseAttributeNames = new();
+
+    /// <summary>
+    /// Test hook: registers a Metaverse Attribute's name so reference-recall wording can be asserted.
+    /// </summary>
+    public void SeedMetaverseAttributeName(int attributeId, string name) => _metaverseAttributeNames[attributeId] = name;
 
     #endregion
 

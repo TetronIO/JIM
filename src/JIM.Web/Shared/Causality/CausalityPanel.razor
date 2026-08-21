@@ -1,4 +1,6 @@
 @using JIM.Models.Activities
+@using JIM.Models.Activities.DTOs
+@using JIM.Models.Sync
 @using JIM.Web.Causality
 @inject IUserPreferenceService PreferenceService
 
@@ -26,7 +28,8 @@
     }
     else if (_model != null && _summary != null)
     {
-        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()">
+        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()"
+                              TechnicalNames="_technicalNames">
             <Actions>
                 @if (AvailableViews.Count > 1)
                 {
@@ -85,6 +88,12 @@
                 </div>
             </div>
         }
+
+        @* ─── The upward chain: what caused this item, and what caused that ─── *@
+        @* Sits below the canvas and its drawer, so the panel reads downstream-first (what this run did)
+           then upstream (why it happened). Renders nothing when nothing caused the item, which is the
+           ordinary case. *@
+        <CausalityCausedBy Chain="Chain" EffectName="@Context.CsoDisplayName" EffectItemId="Item.Id" />
     }
 </div>
 
@@ -125,6 +134,29 @@
     [Parameter]
     public DateTime? Timestamp { get; set; }
 
+    /// <summary>
+    /// The upward causal walk for this item, or null when the host page did not resolve one. Owned by the
+    /// page rather than fetched here: the panel is a rendering component with no data access of its own,
+    /// and the walk is one query the page already has an application scope open for.
+    /// </summary>
+    [Parameter]
+    public CausalChain? Chain { get; set; }
+
+    /// <summary>
+    /// The decision-time Metaverse Object deletion policy recorded on the item, where one was captured. Supplies
+    /// the synthetic "Identity not deleted" event, which is the one thing a Deletion Rule's decision leaves no
+    /// outcome to render.
+    /// </summary>
+    [Parameter]
+    public MvoDeletionPolicySnapshot? DeletionPolicySnapshot { get; set; }
+
+    /// <summary>
+    /// Whether the Run Profile behind this item was a Full or Delta Synchronisation. Only a Synchronisation
+    /// evaluates a Deletion Rule, so only a Synchronisation can report that one declined.
+    /// </summary>
+    [Parameter]
+    public bool IsSynchronisationRun { get; set; }
+
     private CausalityModel? _model;
     private CausalitySummary? _summary;
     private CausalityView _view = CausalityView.Flow;
@@ -146,7 +178,8 @@
         _builtItem = Item;
         _builtContext = Context;
         _builtLivePendingExportIds = LivePendingExportIds;
-        _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds);
+        _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds,
+            DeletionPolicySnapshot, IsSynchronisationRun);
         _summary = CausalitySummaryBuilder.Build(_model);
         _expandedEvent = null;
         _selectedEvent = null;

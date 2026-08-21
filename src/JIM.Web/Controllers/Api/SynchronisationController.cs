@@ -3,6 +3,7 @@
 
 using Asp.Versioning;
 using JIM.Web.Extensions.Api;
+using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -794,8 +795,8 @@ public class SynchronisationController(
     /// The password is supplied by the caller. To have JIM produce one that satisfies what the Connected System
     /// itself demands, call the generate endpoint first and pass the result here.
     ///
-    /// This resets the password on whichever account it is pointed at: an administrator who can call it can
-    /// reset any account in this connector space, subject only to what the Connected System's own service
+    /// This sets the password on whichever account it is pointed at: an administrator who can call it can take
+    /// over any account in this connector space, subject only to what the Connected System's own service
     /// account is permitted to do.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
@@ -807,6 +808,7 @@ public class SynchronisationController(
     /// <response code="401">User could not be identified from authentication token.</response>
     /// <response code="502">The Connected System could not be reached, so it is not known whether the password would be accepted. Try again.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/password", Name = "SetConnectedSystemObjectPassword")]
+    [RequireSecureTransport]
     [ProducesResponseType(typeof(SetConnectedSystemObjectPasswordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -3410,6 +3412,7 @@ public class SynchronisationController(
     /// <response code="404">Synchronisation Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("sync-rules/{id:int}/initial-password", Name = "UpdateSyncRuleInitialPassword")]
+    [RequireSecureTransport]
     [ProducesResponseType(typeof(SyncRuleInitialPasswordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
