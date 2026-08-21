@@ -13,9 +13,27 @@ namespace JIM.Web.Causality;
 public sealed class CausalityEvent
 {
     /// <summary>
-    /// The underlying sync outcome type.
+    /// The underlying sync outcome type, or null for a synthetic event.
     /// </summary>
-    public ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType { get; init; }
+    public ActivityRunProfileExecutionItemSyncOutcomeType? OutcomeType { get; init; }
+
+    /// <summary>
+    /// Whether this event stands for something the run decided rather than something it recorded.
+    /// </summary>
+    /// <remarks>
+    /// A Deletion Rule that evaluates and declines produces no outcome: nothing happened, so there is nothing
+    /// to record. "The Metaverse Object was not deleted" is nonetheless one of the more important things the
+    /// page can say, and it is derivable from the decision-time policy snapshot the item already carries.
+    ///
+    /// Built once here rather than per view. The Flow and Graph views each construct their own "Source record"
+    /// root, which is the precedent for a synthetic node, but that precedent is also why
+    /// <see cref="CausalitySourceLabels"/> exists: three copies of one node drifted apart. A synthetic event
+    /// that all three views must agree on belongs in the model.
+    ///
+    /// A synthetic event has no <see cref="OutcomeType"/>, is never selectable, and carries no attribute rows;
+    /// consumers keying off the outcome type must treat null as "not a recorded outcome" rather than defaulting.
+    /// </remarks>
+    public bool IsSynthetic { get; init; }
 
     /// <summary>
     /// Plain-language label (e.g. "Identity created").

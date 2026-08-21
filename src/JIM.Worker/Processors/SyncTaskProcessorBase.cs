@@ -145,6 +145,20 @@ public abstract class SyncTaskProcessorBase
     // page's removals) and emit exactly one RPEI per CSO at end of run via FlushDeferredRecallRpeisAsync.
     private readonly Dictionary<Guid, (PendingExport PendingExport, string? DisplayName)> _deferredRecallRpeisByCsoId = new();
 
+    // The deleted Metaverse Objects whose removal each deferred recall RPEI records, keyed by the same
+    // referencing target CSO id and then by deleted Metaverse Object id (#1223). Unlike the Pending Export
+    // above, these ACCUMULATE across pages: the coalesced Pending Export carries every page's removals, so
+    // every page's deleted members are causes of the one RPEI emitted for the group. The inner dictionary
+    // is keyed by object AND attribute: a Group referencing the same deleted User through two attributes
+    // loses two distinct references, and the chain names the attribute each removal happened on.
+    private readonly Dictionary<Guid, Dictionary<(Guid MetaverseObjectId, string? AttributeName), CausalCause>> _deferredRecallCausesByCsoId = new();
+
+    // Why each Metaverse Object queued for deletion this run is being deleted, as the machine-readable code the
+    // attribution tuple groups on (#1223), keyed by Metaverse Object id. Captured at decision time because that
+    // is the only moment it exists: the decision is not persisted on the object, only its human-readable
+    // rendering on the outcome's detail message, and cohorts must never group on prose.
+    private readonly Dictionary<Guid, CausalReasonCode> _mvoDeletionReasonCodes = new();
+
     // Batch collection for MVO change object creation (deferred to page boundary for performance)
     // Stores: (MVO, Additions, Removals, ChangeType, RPEI) - captured BEFORE applying pending changes
     // ChangeType indicates how the MVO was created/modified (Projected, Joined, AttributeFlow, Updated)
@@ -209,6 +223,11 @@ public abstract class SyncTaskProcessorBase
     // Lazily fetched at most ONCE per run profile execution (a tiny table); source system names must
     // never cost per-object queries on the hot path. Null until first needed.
     private Dictionary<int, string>? _connectedSystemNamesById;
+
+    // Metaverse Attribute id to name, for the relationship noun a causal edge reads back (#1223). Fetched at
+    // most once per run profile execution, like the Connected System names above; the table is tiny and a
+    // per-object query on the deletion path would not be acceptable.
+    private Dictionary<int, string>? _metaverseAttributeNamesById;
 
     // Deferred MVO→RPEI mappings for newly projected MVOs whose ID is Guid.Empty at registration time.
     // After PersistPendingMetaverseObjectsAsync assigns real IDs, these are re-keyed into _mvoIdToRpei.
@@ -1197,6 +1216,9 @@ public abstract class SyncTaskProcessorBase
             GracePeriod = type.DeletionGracePeriod,
             TriggeringSystemId = disconnectingSystemId,
             TriggeringSystemName = await ResolveConnectedSystemNameAsync(disconnectingSystemId),
+            // Carried so a grace-period deletion, executed by housekeeping in a later Activity, can still
+            // attribute the cascade it causes to the reason this run decided on (#1223).
+            ReasonCode = decision.ReasonCode,
             // Record when the deletion becomes due, so surfaces can answer "when?" without deriving it
             // from the disconnection time and a grace period that may since have been reconfigured (#119).
             DeletionEligibleDate = decision.Fate == MvoDeletionFate.DeletionScheduled && decision.GracePeriod.HasValue
@@ -1232,9 +1254,10 @@ public abstract class SyncTaskProcessorBase
                 return MvoDeletionFate.NotDeleted;
 
             case MvoDeletionFate.DeletedImmediately:
-                return await MarkMvoForDeletionAsync(mvo, decision.Reason ?? "deletion rule triggered", disconnectingSystemId, policySnapshotJson);
-
             case MvoDeletionFate.DeletionScheduled:
+                // Remember why, before the decision goes out of scope: the cascade this deletion goes on to
+                // cause is attributed to this code, and nothing else records it (#1223).
+                _mvoDeletionReasonCodes[mvo.Id] = decision.ReasonCode;
                 return await MarkMvoForDeletionAsync(mvo, decision.Reason ?? "deletion rule triggered", disconnectingSystemId, policySnapshotJson);
 
             default:
@@ -1781,6 +1804,11 @@ public abstract class SyncTaskProcessorBase
             // Collect Pending Exports for batch saving at end of page
             if (result.PendingExports.Count > 0)
             {
+                // Name this synchronisation as the reason each export exists, before the export run that
+                // carries it out (a different Activity, minutes or days later) is left holding a queued change
+                // it cannot explain (#1223). Deliberately outside the outcome-tracking guard below: why a
+                // change happened is not a level of detail an administrator can turn off.
+                StampQueueingItemOnPendingExports(mvo.Id, result.PendingExports);
                 _pendingExportsToCreate.AddRange(result.PendingExports);
             }
 
@@ -2863,6 +2891,37 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Names this synchronisation's Run Profile Execution Item on each Pending Export it just staged, so the
+    /// export run that carries them out can say what caused it (#1223).
+    /// </summary>
+    /// <remarks>
+    /// The two runs are separated by an Activity boundary and often by days, and nothing else spans it: the
+    /// export's own item carries no <c>PendingExportId</c> (that column is populated only on a
+    /// <see cref="ObjectChangeType.PendingExport"/>-type item), and the Pending Export row is deleted the moment
+    /// the export succeeds, so a link derived afterwards could never resolve.
+    ///
+    /// The item's id is assigned here rather than read, because the page flush writes Pending Exports before it
+    /// persists Run Profile Execution Items and it is the persistence that would otherwise assign one. Reading
+    /// the id as it stands would store <see cref="Guid.Empty"/> on every export. Assigning early is safe: the
+    /// flush only fills an id in where one is missing.
+    /// </remarks>
+    /// <param name="metaverseObjectId">The object being synchronised, which keys the per-object item map.</param>
+    /// <param name="pendingExports">The exports staged for that object during this evaluation.</param>
+    protected void StampQueueingItemOnPendingExports(Guid metaverseObjectId, List<PendingExport> pendingExports)
+    {
+        // Not every run records an item per object; those exports simply carry no queueing item, and the
+        // causality chain ends at the Metaverse Object rather than walking on to the run that staged them.
+        if (!_mvoIdToRpei.TryGetValue(metaverseObjectId, out var queueingItem))
+            return;
+
+        if (queueingItem.Id == Guid.Empty)
+            queueingItem.Id = Guid.NewGuid();
+
+        foreach (var pendingExport in pendingExports)
+            pendingExport.QueuedByRunProfileExecutionItemId = queueingItem.Id;
+    }
+
+    /// <summary>
     /// Batch persists all provisioning CSOs and Pending Export creates, deletes, and updates collected during the current page.
     /// CSOs must be created before Pending Exports since Pending Exports reference CSOs by ID.
     /// This reduces database round trips from n writes to 4 writes (CSOs, creates, deletes, updates).
@@ -3381,14 +3440,52 @@ public abstract class SyncTaskProcessorBase
                 // members span N pages stages N times, but the delete-then-create merge means each flush's
                 // Pending Export already carries the prior removals, so only the final one matters. Last
                 // write wins; emitting per page-flush inflated TotalPendingExports on large-scale runs.
+                // Which deleted objects each referencing object lost, so the recall RPEI can say why it exists
+                // (#1223). Built from the recall context captured before deletion, which is the only record of
+                // the linkage: deletion nulls the reference FKs, after which nothing connects the group's
+                // removal to the members that caused it. Restricted to objects actually deleted, because the
+                // context was captured over deletion *candidates* and a candidate rescued by a same-page
+                // rejoin caused nothing.
+                var deletedMvoIdSet = deletedMvoIds.ToHashSet();
+                var mvoDeletedNodes = FindMvoDeletedOutcomeNodes();
+
+                // The relationship noun the chain reads back comes from the schema, so the attribute's name is
+                // resolved here and snapshotted onto each cause. Fetched at most once per run.
+                _metaverseAttributeNamesById ??= await _syncRepo.GetMetaverseAttributeNamesAsync();
+
+                // Keyed on the candidate rather than on the referenced object: one deleted object referenced
+                // through two attributes is two distinct removals, and each names its own attribute.
+                var causesByReferencingMvoId = referenceRecallContext.Candidates
+                    .Where(c => deletedMvoIdSet.Contains(c.ReferencedMetaverseObjectId))
+                    .GroupBy(c => c.ReferencingMetaverseObjectId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(c => (c.ReferencedMetaverseObjectId, c.MetaverseAttributeId)).Distinct()
+                            .Select(pair =>
+                            {
+                                deletionCandidatesByMvoId.TryGetValue(pair.ReferencedMetaverseObjectId, out var deletedMvo);
+                                mvoDeletedNodes.TryGetValue(pair.ReferencedMetaverseObjectId, out var node);
+                                return deletedMvo != null
+                                    ? BuildDeletionCause(deletedMvo, node.Rpei, node.Outcome,
+                                        _metaverseAttributeNamesById.GetValueOrDefault(pair.MetaverseAttributeId))
+                                    : null;
+                            })
+                            .Where(cause => cause != null)
+                            .Select(cause => cause!)
+                            .ToList());
+
                 foreach (var stagedPendingExport in recallResult.StagedPendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue))
                 {
                     var displayName = stagedPendingExport.SourceMetaverseObjectId.HasValue
                         ? recallResult.ReferencingObjectDisplayNames
                             .GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value)
                         : null;
-                    StageDeferredRecallRpei(stagedPendingExport, displayName);
+                    var causes = stagedPendingExport.SourceMetaverseObjectId.HasValue
+                        ? causesByReferencingMvoId.GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value) ?? []
+                        : [];
+                    StageDeferredRecallRpei(stagedPendingExport, displayName, causes);
                 }
+
             }
         }
 
@@ -3432,18 +3529,7 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("MvoDeletionReportCascadeExports");
         span.SetTag("deleteExportCount", reportableExports.Count);
 
-        // The MvoDeleted outcome nodes recorded for this page's deletions, keyed by the Metaverse Object each
-        // one deleted. Both deletion-triggering paths (obsoletion and out-of-scope disconnection) record one,
-        // and this page's items have not been flushed yet, so the nodes are still in memory to parent onto.
-        var mvoDeletedNodes = new Dictionary<Guid, (ActivityRunProfileExecutionItem Rpei, ActivityRunProfileExecutionItemSyncOutcome Outcome)>();
-        foreach (var rpei in _activity.RunProfileExecutionItems)
-        {
-            foreach (var outcome in rpei.SyncOutcomes.Where(o =>
-                o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted && o.TargetEntityId.HasValue))
-            {
-                mvoDeletedNodes[outcome.TargetEntityId!.Value] = (rpei, outcome);
-            }
-        }
+        var mvoDeletedNodes = FindMvoDeletedOutcomeNodes();
 
         // Connected System id to name, so each outcome names the system the account is being deleted from
         // (the convention for every PendingExportCreated outcome; the identity is named by the parent node).
@@ -3460,6 +3546,13 @@ public abstract class SyncTaskProcessorBase
         Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>? csoSnapshots = null;
         var nestedCount = 0;
         var standaloneCount = 0;
+
+        // Queueing provenance (#1223): the item reporting a staged delete Pending Export is the item that
+        // queued it, and the export must record that. Both cause identifiers a delete Pending Export could
+        // otherwise offer are gone by export time (SourceMetaverseObjectId is nulled by the deletion's SET
+        // NULL cascade), so without this stamp a deprovisioned account shows no cause whatsoever. The rows
+        // are already persisted by the staging above, hence the set-once fix-up at the end.
+        var queueingStamps = new List<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)>();
 
         foreach (var (pendingExport, csoId) in reportableExports)
         {
@@ -3483,6 +3576,12 @@ public abstract class SyncTaskProcessorBase
                     detailCount: pendingExport.AttributeValueChanges.Count,
                     detailMessage: pendingExport.ConnectedSystemId.ToString());
                 await SnapshotPendingExportChangesAsync(nestedOutcome, pendingExport);
+                // The deletion item's id is assigned here where missing, because the RPEI flush that would
+                // otherwise assign it runs after this method; the flush only fills ids in where absent.
+                if (mvoDeletedNode.Rpei.Id == Guid.Empty)
+                    mvoDeletedNode.Rpei.Id = Guid.NewGuid();
+                pendingExport.QueuedByRunProfileExecutionItemId = mvoDeletedNode.Rpei.Id;
+                queueingStamps.Add((pendingExport.Id, mvoDeletedNode.Rpei.Id));
                 nestedCount++;
                 continue;
             }
@@ -3502,6 +3601,7 @@ public abstract class SyncTaskProcessorBase
                 ObjectTypeSnapshot = snapshot?.TypeName
             };
 
+            ActivityRunProfileExecutionItemSyncOutcome? cascadeEffectOutcome = null;
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var cascadeOutcome = SyncOutcomeBuilder.AddRootOutcome(cascadeRpei,
@@ -3511,11 +3611,28 @@ public abstract class SyncTaskProcessorBase
                     detailCount: pendingExport.AttributeValueChanges.Count,
                     detailMessage: pendingExport.ConnectedSystemId.ToString());
                 await SnapshotPendingExportChangesAsync(cascadeOutcome, pendingExport);
+                cascadeEffectOutcome = cascadeOutcome;
             }
 
+            // This is the one deprovisioning case an outcome tree cannot explain, so it is the one that gets an
+            // edge (#1223). The nested branch above needs none: the export is already a child of the deletion
+            // outcome, so the tree states the cause, and an edge would duplicate a persisted link. This branch
+            // exists precisely because no deletion outcome could be found to parent onto, leaving an item that
+            // says an account is being deprovisioned and nothing about why.
+            if (deletedMvo != null)
+            {
+                cascadeRpei.CausalEdges.Add(
+                    BuildDeletionCause(deletedMvo, rpei: null, outcome: null)
+                        .ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedDeprovision, cascadeEffectOutcome));
+            }
+
+            pendingExport.QueuedByRunProfileExecutionItemId = cascadeRpei.Id;
+            queueingStamps.Add((pendingExport.Id, cascadeRpei.Id));
             _activity.RunProfileExecutionItems.Add(cascadeRpei);
             standaloneCount++;
         }
+
+        await _syncRepo.SetPendingExportQueueingItemsAsync(queueingStamps);
 
         Log.Information(
             "FlushPendingMvoDeletionsAsync: Reported {Count} deletion-cascade delete Pending Export(s) on the Activity " +
@@ -3533,10 +3650,101 @@ public abstract class SyncTaskProcessorBase
     /// removals (delete-then-create merge), so re-staging the same CSO across pages must not accumulate
     /// duplicate RPEIs. Called once per staged Pending Export from <see cref="FlushPendingMvoDeletionsAsync"/>.
     /// </summary>
-    protected void StageDeferredRecallRpei(PendingExport stagedPendingExport, string? displayName)
+    /// <summary>
+    /// Describes a Metaverse Object deletion as the cause of whatever it goes on to trigger (#1223), so an
+    /// effect recorded against a different object, or on an item with no deletion outcome to parent onto, can
+    /// still name the object whose deletion caused it.
+    /// </summary>
+    /// <param name="deletedMvo">The object being deleted.</param>
+    /// <param name="rpei">The execution item recording the deletion, where outcome tracking recorded one.</param>
+    /// <param name="outcome">The <c>MvoDeleted</c> outcome node, where one was recorded.</param>
+    /// <param name="effectAttributeName">The reference attribute the cause acted through, where the seam knows
+    /// one. Null on the deprovisioning path, which removes an account rather than a reference.</param>
+    private CausalCause BuildDeletionCause(
+        MetaverseObject deletedMvo,
+        ActivityRunProfileExecutionItem? rpei,
+        ActivityRunProfileExecutionItemSyncOutcome? outcome,
+        string? effectAttributeName = null)
     {
-        if (stagedPendingExport.ConnectedSystemObjectId.HasValue)
-            _deferredRecallRpeisByCsoId[stagedPendingExport.ConnectedSystemObjectId.Value] = (stagedPendingExport, displayName);
+        return new CausalCause
+        {
+            RunProfileExecutionItem = rpei,
+            SyncOutcome = outcome,
+            MetaverseObjectId = deletedMvo.Id,
+            // Name, not NameOrId: the id is carried above, and the fallback would render the chain as
+            // "<guid> was deleted" for an unnamed object.
+            DisplayName = deletedMvo.Name,
+            // Both nouns, curated on the type rather than derived: the chain says "1 User" or "10 Users"
+            // depending on a cohort size computed at read time, which this edge cannot know.
+            ObjectTypeName = deletedMvo.Type?.Name,
+            ObjectTypePluralName = deletedMvo.Type?.PluralName,
+            EffectAttributeName = effectAttributeName,
+            ReasonCode = _mvoDeletionReasonCodes.GetValueOrDefault(deletedMvo.Id, CausalReasonCode.NotSet),
+            // The system whose disconnection triggered the Deletion Rule, set on both the immediate and
+            // grace-period paths by MarkMvoForDeletionAsync. This is the attribution an administrator cohorts
+            // on: "10 removed because Yellowstone APAC disconnected".
+            ConnectedSystemId = deletedMvo.DeletionTriggeredBySystemId,
+            ConnectedSystemName = deletedMvo.DeletionTriggeredBySystemName
+        };
+    }
+
+    /// <summary>
+    /// The <c>MvoDeleted</c> outcome nodes recorded for this page's deletions, keyed by the Metaverse Object
+    /// each one deleted. Both deletion-triggering paths (obsoletion and out-of-scope disconnection) record one.
+    /// </summary>
+    /// <remarks>
+    /// Callable only while the page's items are still in memory, which is the case for everything running
+    /// inside <see cref="FlushPendingMvoDeletionsAsync"/>: the raw-SQL flush clears
+    /// <c>_activity.RunProfileExecutionItems</c> afterwards. Consumers that need these nodes later must hold
+    /// the references (as <see cref="CausalCause"/> does), not re-scan.
+    /// </remarks>
+    private Dictionary<Guid, (ActivityRunProfileExecutionItem Rpei, ActivityRunProfileExecutionItemSyncOutcome Outcome)> FindMvoDeletedOutcomeNodes()
+    {
+        var nodes = new Dictionary<Guid, (ActivityRunProfileExecutionItem Rpei, ActivityRunProfileExecutionItemSyncOutcome Outcome)>();
+        foreach (var rpei in _activity.RunProfileExecutionItems)
+        {
+            foreach (var outcome in rpei.SyncOutcomes.Where(o =>
+                o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted && o.TargetEntityId.HasValue))
+            {
+                nodes[outcome.TargetEntityId!.Value] = (rpei, outcome);
+            }
+        }
+
+        return nodes;
+    }
+
+    protected void StageDeferredRecallRpei(
+        PendingExport stagedPendingExport,
+        string? displayName,
+        IReadOnlyCollection<CausalCause> causes)
+    {
+        if (!stagedPendingExport.ConnectedSystemObjectId.HasValue)
+            return;
+
+        var csoId = stagedPendingExport.ConnectedSystemObjectId.Value;
+        _deferredRecallRpeisByCsoId[csoId] = (stagedPendingExport, displayName);
+
+        if (causes.Count == 0)
+            return;
+
+        // Causes ACCUMULATE where the Pending Export above is overwritten (#1223). The two are staged by the
+        // same call but have opposite merge rules, and getting this wrong is silent: the final page's Pending
+        // Export already carries every earlier page's removals, so last-write-wins is right for it, whereas
+        // each page contributes different deleted members and keeping only the last page's causes would
+        // attribute a ten-member removal to whichever handful was processed last.
+        //
+        // Deduplicated by object AND attribute, not by object alone. A Group that references the same deleted
+        // User through both Static Members and Owners loses two distinct references, and the chain names the
+        // attribute each removal happened on, so collapsing them on object id would report one removal where
+        // two happened and attribute it to whichever attribute was staged last.
+        if (!_deferredRecallCausesByCsoId.TryGetValue(csoId, out var accumulated))
+        {
+            accumulated = [];
+            _deferredRecallCausesByCsoId[csoId] = accumulated;
+        }
+
+        foreach (var cause in causes.Where(c => c.MetaverseObjectId.HasValue))
+            accumulated[(cause.MetaverseObjectId!.Value, cause.EffectAttributeName)] = cause;
     }
 
     /// <summary>
@@ -3574,6 +3782,8 @@ public abstract class SyncTaskProcessorBase
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name)
             ?? new Dictionary<int, string>();
 
+        var recallQueueingStamps = new List<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)>();
+
         foreach (var (csoId, (stagedPendingExport, displayName)) in _deferredRecallRpeisByCsoId)
         {
             csoSnapshots.TryGetValue(csoId, out var snapshot);
@@ -3588,6 +3798,7 @@ public abstract class SyncTaskProcessorBase
                 ObjectTypeSnapshot = snapshot?.TypeName
             };
 
+            ActivityRunProfileExecutionItemSyncOutcome? effectOutcome = null;
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 // TargetEntityDescription on a PendingExportCreated outcome is contractually the TARGET
@@ -3602,12 +3813,32 @@ public abstract class SyncTaskProcessorBase
                     detailCount: stagedPendingExport.AttributeValueChanges.Count,
                     detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
                 await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
+                effectOutcome = recallOutcome;
             }
+
+            // Record what caused this removal (#1223). Nothing else can: this item belongs to the referencing
+            // group, while its cause is the deletion of a different object, recorded on a different item in a
+            // different Connected System. The edges ride the item's own flush, so they cannot outlive it.
+            if (_deferredRecallCausesByCsoId.TryGetValue(csoId, out var causes))
+            {
+                foreach (var cause in causes.Values)
+                    recallRpei.CausalEdges.Add(cause.ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval, effectOutcome));
+            }
+
+            // Queueing provenance (#1223): this item is what queued the removal export, and the export must
+            // record that so the run carrying it out later can chain back here, where the edges above name
+            // the deleted members. The Pending Export rows were persisted pages ago, hence the set-once
+            // fix-up below rather than a pre-persist stamp.
+            recallQueueingStamps.Add((stagedPendingExport.Id, recallRpei.Id));
+            stagedPendingExport.QueuedByRunProfileExecutionItemId = recallRpei.Id;
 
             _activity.RunProfileExecutionItems.Add(recallRpei);
         }
 
+        await _syncRepo.SetPendingExportQueueingItemsAsync(recallQueueingStamps);
+
         _deferredRecallRpeisByCsoId.Clear();
+        _deferredRecallCausesByCsoId.Clear();
         await FlushRpeisAsync();
         span.SetSuccess();
     }
@@ -4754,6 +4985,14 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
             runProfileExecutionItem.ObjectChangeType = ObjectChangeType.DriftCorrection;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            // Name this drift correction as the reason the corrective exports exist (#1223). Without it the
+            // export run reads as an ordinary update, with nothing to say the values it is putting back were
+            // changed behind JIM's back.
+            if (runProfileExecutionItem.Id == Guid.Empty)
+                runProfileExecutionItem.Id = Guid.NewGuid();
+            foreach (var correctiveExport in result.CorrectiveExports)
+                correctiveExport.QueuedByRunProfileExecutionItemId = runProfileExecutionItem.Id;
 
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                 SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem,

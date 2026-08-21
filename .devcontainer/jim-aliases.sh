@@ -339,6 +339,11 @@ jim-keycloak-logs() {
 # Docker-in-Docker proxy ports aren't forwarded by VS Code Dev Containers
 # unless they were present at devcontainer build time. This socat bridge
 # runs as the vscode user, which VS Code detects and forwards to the host.
+# Always returns 0: the pkill is `|| true`, and an unmatched `if` exits 0 too. So any function that
+# ends with a call to this reports success no matter what ran before it. jim-build did exactly that,
+# and reported exit 0 through a Docker build that had aborted on a broken apt pin, leaving the stale
+# containers running and nothing to say so. Callers must gate on their own command's status
+# (`... || return $?`) rather than letting this decide their exit code.
 _jim_keycloak_bridge() {
   pkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null || true
   if command -v socat &>/dev/null; then
@@ -417,7 +422,7 @@ unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-
 jim-stack() {
   _jim_heal_docker_creds
   _jim_kill_local
-  docker compose $(_jim_compose) up -d
+  docker compose $(_jim_compose) up -d || return $?
   _jim_keycloak_bridge
 }
 jim-stack-logs() {
@@ -432,7 +437,7 @@ jim-stack-down() {
 jim-restart() {
   _jim_heal_docker_creds
   _jim_kill_local
-  docker compose $(_jim_compose) down && docker compose $(_jim_compose) up -d --force-recreate
+  docker compose $(_jim_compose) down && docker compose $(_jim_compose) up -d --force-recreate || return $?
   _jim_keycloak_bridge
 }
 
@@ -447,7 +452,7 @@ _jim_version_suffix() {
 jim-build() {
   _jim_heal_docker_creds
   _jim_kill_local
-  VERSION_SUFFIX="$(_jim_version_suffix)" OPENAPI_STAGE=publish docker compose $(_jim_compose) up -d --build
+  VERSION_SUFFIX="$(_jim_version_suffix)" OPENAPI_STAGE=publish docker compose $(_jim_compose) up -d --build || return $?
   _jim_keycloak_bridge
 }
 jim-build-web() {

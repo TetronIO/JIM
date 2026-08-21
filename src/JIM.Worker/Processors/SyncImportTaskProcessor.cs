@@ -3715,6 +3715,41 @@ public class SyncImportTaskProcessor
     /// </summary>
     /// <param name="updatedCsos">The CSOs that were updated during this import run.</param>
     /// <param name="importRpeisByCsoId">Lookup of already-persisted import RPEIs keyed by ConnectedSystemObjectId.</param>
+    /// <summary>
+    /// Records which export execution a confirmation confirms (#1223).
+    /// </summary>
+    /// <remarks>
+    /// This hop cannot be reconstructed afterwards, which is why it earns an edge where the other same-item
+    /// hops do not. Reconciliation pairs a Pending Export with an imported object by Connected System Object id
+    /// alone, and an object cycles through export and import repeatedly, so a later attempt to pair a
+    /// confirmation with its export by object id can land on the wrong cycle and report a confirmation against
+    /// an export that did not produce it. The Pending Export row IS the cycle, and this reconciliation is about
+    /// to delete it, so the link is recorded here or not at all.
+    ///
+    /// No reason code: the effect outcome already distinguishes confirmed from failed, and cohorts are computed
+    /// per effect, so a code here would add nothing to group on.
+    /// </remarks>
+    private void RecordExportConfirmationCause(
+        ActivityRunProfileExecutionItem item,
+        ActivityRunProfileExecutionItemSyncOutcome? confirmedOutcome,
+        PendingExport? pendingExport,
+        ConnectedSystemObject cso)
+    {
+        if (pendingExport == null)
+            return;
+
+        item.CausalEdges.Add(new CausalCause
+        {
+            PendingExportId = pendingExport.Id,
+            ConnectedSystemObjectId = cso.Id,
+            // Named from the object being confirmed, so the chain still reads once the Connected System Object
+            // is gone; the Pending Export itself is deleted moments from now and can never supply a name.
+            DisplayName = cso.Name,
+            ConnectedSystemId = _connectedSystem.Id,
+            ConnectedSystemName = _connectedSystem.Name
+        }.ToEdge(CausalEdgeType.ExportCausedImportConfirmation, confirmedOutcome));
+    }
+
     private async Task ReconcilePendingExportsAsync(
         IReadOnlyCollection<ConnectedSystemObject> updatedCsos,
         Dictionary<Guid, ActivityRunProfileExecutionItem> importRpeisByCsoId,
@@ -3874,12 +3909,14 @@ public class SyncImportTaskProcessor
                             {
                                 if (existingRpei != null)
                                 {
+                                    ActivityRunProfileExecutionItemSyncOutcome? confirmedOutcome = null;
                                     if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                                     {
-                                        SyncOutcomeBuilder.AddRootOutcome(existingRpei,
+                                        confirmedOutcome = SyncOutcomeBuilder.AddRootOutcome(existingRpei,
                                             ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed,
                                             detailCount: result.ConfirmedChanges.Count);
                                     }
+                                    RecordExportConfirmationCause(existingRpei, confirmedOutcome, pendingExport, cso);
                                     modifiedExistingRpeis.TryAdd(existingRpei.Id, existingRpei);
                                 }
                                 else
@@ -3893,12 +3930,14 @@ public class SyncImportTaskProcessor
                                     };
                                     executionItem.SnapshotCsoDisplayFields(cso);
 
+                                    ActivityRunProfileExecutionItemSyncOutcome? confirmedOutcome = null;
                                     if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                                     {
-                                        SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                                        confirmedOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem,
                                             ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed,
                                             detailCount: result.ConfirmedChanges.Count);
                                     }
+                                    RecordExportConfirmationCause(executionItem, confirmedOutcome, pendingExport, cso);
 
                                     pageExecutionItems.Add(executionItem);
                                 }

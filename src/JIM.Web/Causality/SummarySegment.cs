@@ -15,10 +15,21 @@ public abstract record SummarySegment
     }
 
     /// <summary>
-    /// A plain text segment.
+    /// A plain text segment, optionally carrying the wording to use when the technical-names toggle is on.
     /// </summary>
-    /// <param name="Value">The text to render verbatim (encoded by Blazor at render time).</param>
-    public sealed record Text(string Value) : SummarySegment;
+    /// <remarks>
+    /// Both wordings are built together rather than the sentence being rebuilt on toggle, because the summary
+    /// is composed once per (Item, Context) pair while the toggle flips at any time; rebuilding on toggle
+    /// would either discard the panel's expanded and selected event or need a second, parallel build path.
+    /// A segment with no technical alternative renders the same either way, which is right for the many parts
+    /// of the sentence that carry no JIM vocabulary at all ("on", "was deleted", counts and punctuation).
+    /// </remarks>
+    /// <param name="Value">The plain-language text to render verbatim (encoded by Blazor at render time).</param>
+    /// <param name="Technical">
+    /// The same text in JIM's own vocabulary ("the record" becomes "the Connected System Object"), or null
+    /// where the wording is already technical or has no technical counterpart.
+    /// </param>
+    public sealed record Text(string Value, string? Technical = null) : SummarySegment;
 
     /// <summary>
     /// An entity mention, rendered as a highlighted token chip. Href is null when the entity cannot

@@ -585,7 +585,7 @@ public class ExportExecutionServer
                                     ErrorMessage = $"Batch export failed: {ex.Message}",
                                     ErrorCount = export.ErrorCount,
                                     ErrorType = ConnectedSystemExportErrorType.General
-                                });
+                                }.WithCauseFrom(export));
                             }
                             await SyncRepo.UpdatePendingExportsAsync(immediateExports);
 
@@ -937,7 +937,7 @@ public class ExportExecutionServer
                         Deferred = true,
                         Succeeded = false,
                         UnresolvedReferenceMessage = note
-                    });
+                    }.WithCauseFrom(export));
                 }
 
                 // Confirming an export still cannot be written finishes with it as surely as
@@ -1451,7 +1451,7 @@ public class ExportExecutionServer
                     ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                     ErrorCount = export.ErrorCount,
                     ErrorType = exportResult.ErrorType
-                });
+                }.WithCauseFrom(export));
                 continue;
             }
 
@@ -1465,7 +1465,7 @@ public class ExportExecutionServer
                 AttributeValueChanges = writtenChanges,
                 Succeeded = true,
                 UnresolvedReferenceMessage = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null
-            });
+            }.WithCauseFrom(export));
 
             if (stillUnresolvedCount > 0)
             {
@@ -2135,7 +2135,7 @@ public class ExportExecutionServer
                         ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                         ErrorCount = export.ErrorCount,
                         ErrorType = exportResult.ErrorType
-                    });
+                    }.WithCauseFrom(export));
                     continue;
                 }
 
@@ -2147,7 +2147,7 @@ public class ExportExecutionServer
                     AttributeChangeCount = export.AttributeValueChanges.Count,
                     AttributeValueChanges = export.AttributeValueChanges.ToList(),
                     Succeeded = true
-                });
+                }.WithCauseFrom(export));
 
                 // For Create exports, update the CSO status from PendingProvisioning to Normal
                 if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
@@ -2243,7 +2243,7 @@ public class ExportExecutionServer
                     ErrorMessage = $"Export failed: {ex.Message}",
                     ErrorCount = export.ErrorCount,
                     ErrorType = ConnectedSystemExportErrorType.General
-                });
+                }.WithCauseFrom(export));
             }
             using (Diagnostics.Diagnostics.Database.StartSpan("UpdateFailedExports")
                 .SetTag("count", pendingExports.Count))
@@ -2531,7 +2531,7 @@ public class ExportExecutionServer
                 ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                 ErrorCount = export.ErrorCount,
                 ErrorType = exportResult.ErrorType
-            });
+            }.WithCauseFrom(export));
             return;
         }
 
@@ -2543,7 +2543,7 @@ public class ExportExecutionServer
             AttributeChangeCount = export.AttributeValueChanges.Count,
             AttributeValueChanges = export.AttributeValueChanges.ToList(),
             Succeeded = true
-        });
+        }.WithCauseFrom(export));
 
         export.Status = PendingExportStatus.Exported;
 

@@ -89,6 +89,11 @@ $dockerfiles = Get-ChildItem -Path $repoRoot -Recurse -File -Filter 'Dockerfile'
     Where-Object {
         $_.FullName -notmatch '[\\/]node_modules[\\/]' -and
         $_.FullName -notmatch '[\\/]\.git[\\/]' -and
+        # Agent worktrees are checkouts of other branches living inside the repo. Their
+        # Dockerfiles carry that branch's pins against that branch's base image digests,
+        # so including them queries images this branch does not ship and reports pins
+        # nobody is going to bump here. CI never sees them; a local run always does.
+        $_.FullName -notmatch '[\\/]\.claude[\\/]worktrees[\\/]' -and
         $_.FullName -notmatch '[\\/]bin[\\/]' -and
         $_.FullName -notmatch '[\\/]obj[\\/]'
     }

@@ -381,6 +381,25 @@ public class SyncExportTaskProcessor
     }
 
     /// <summary>
+    /// The name behind each provisioning Synchronisation Rule id met this run, so a create's causal edge can
+    /// snapshot it (#1223). Loaded once, on the first create that names a rule: most export runs stage only
+    /// updates and never pay for the lookup. Includes disabled rules deliberately; the decision was made when
+    /// the rule was enabled, and the chain must still name it.
+    /// </summary>
+    private Dictionary<int, string>? _provisioningRuleNames;
+
+    private async Task<string?> ResolveProvisioningRuleNameAsync(int? provisioningSyncRuleId)
+    {
+        if (!provisioningSyncRuleId.HasValue)
+            return null;
+
+        _provisioningRuleNames ??= (await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, includeDisabled: true))
+            .ToDictionary(rule => rule.Id, rule => rule.Name);
+
+        return _provisioningRuleNames.GetValueOrDefault(provisioningSyncRuleId.Value);
+    }
+
+    /// <summary>
     /// Creates RPEIs from a batch of processed export items, bulk-inserts them, and releases memory.
     /// Called per-batch via the batchCompletedCallback, bounding memory to batch size (~100 items)
     /// instead of accumulating 100K+ items across the entire export run.
@@ -452,6 +471,7 @@ public class SyncExportTaskProcessor
             }
 
             // Build sync outcome. A deferred item wrote nothing, so there is no export outcome to record.
+            ActivityRunProfileExecutionItemSyncOutcome? exportOutcome = null;
             if (!exportItem.Deferred && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var outcomeType = exportItem.ChangeType switch
@@ -459,9 +479,15 @@ public class SyncExportTaskProcessor
                     PendingExportChangeType.Delete => ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned,
                     _ => ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 };
-                SyncOutcomeBuilder.AddRootOutcome(executionItem, outcomeType,
+                exportOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem, outcomeType,
                     detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null);
             }
+
+            // Record why this export happened (#1223). An export run knows only that it had a queue of changes
+            // to make; the synchronisation that put this one in the queue ran in a different Activity, and the
+            // Pending Export carrying the link is deleted moments from now.
+            ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, exportOutcome, _connectedSystem,
+                await ResolveProvisioningRuleNameAsync(exportItem.ProvisioningSyncRuleId));
 
             // Create CSO change record for export change history
             if (_csoChangeTrackingEnabled && exportItem.AttributeValueChanges.Count > 0)

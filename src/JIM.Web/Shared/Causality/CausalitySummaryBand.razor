@@ -38,7 +38,7 @@
         {
             @if (segment is SummarySegment.Text text)
             {
-                @text.Value
+                @(TechnicalNames && text.Technical != null ? text.Technical : text.Value)
             }
             else if (segment is SummarySegment.Entity entity)
             {
@@ -82,6 +82,14 @@
     /// </summary>
     [Parameter]
     public DateTime? Timestamp { get; set; }
+
+    /// <summary>
+    /// When true, sentence segments that carry a technical wording render it instead of the plain-language
+    /// one, so the summary answers the technical-names toggle exactly as the views beneath it do. A segment
+    /// with no technical alternative is unaffected.
+    /// </summary>
+    [Parameter]
+    public bool TechnicalNames { get; set; }
 
     /// <summary>
     /// The tone of the run chip's status dot (Success when the item completed cleanly, Error when

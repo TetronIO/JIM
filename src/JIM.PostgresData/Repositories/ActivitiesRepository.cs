@@ -92,6 +92,31 @@ public class ActivityRepository : IActivityRepository
         var syncOutcomes = items.SelectMany(i => i.SyncOutcomes).ToList();
         await ActivityStatCounterWriter.UpsertDeltasAsync(
             Repository.Database, ActivityStatCounterCalculator.CalculateRpeiInsertDeltas(items, syncOutcomes));
+
+        // Drain any causal edges buffered on these items (#1223). This path is EF-based and the buffer is
+        // deliberately unmapped, so AddRange above does not reach the edges; without this, every edge written
+        // by a caller that persists through here (Metaverse Object Housekeeping, which is where grace-period
+        // deletions and their cascades happen) would be dropped with nothing failing. Ids are resolved here for
+        // the same reason the bulk path resolves them at flush time: neither the item nor the outcome has one
+        // until it is persisted.
+        var edges = new List<CausalEdge>();
+        foreach (var item in items.Where(i => i.CausalEdges.Count > 0))
+        {
+            foreach (var edge in item.CausalEdges)
+                edge.ResolveTransientReferences(item.Id);
+
+            edges.AddRange(item.CausalEdges);
+        }
+
+        if (edges.Count == 0)
+            return;
+
+        Repository.Database.CausalEdges.AddRange(edges);
+        await Repository.Database.SaveChangesAsync();
+
+        // Emptied once written, matching the bulk path: an item re-persisted later must not duplicate them.
+        foreach (var item in items.Where(i => i.CausalEdges.Count > 0))
+            item.CausalEdges.Clear();
     }
 
     public async Task UpdateActivityAsync(Activity activity)
@@ -1743,6 +1768,83 @@ public class ActivityRepository : IActivityRepository
             TotalMvoNoAttributeChanges = totalMvoNoAttributeChanges,
             TotalCsoAlreadyCurrent = totalCsoAlreadyCurrent,
         };
+    }
+
+    /// <summary>
+    /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223).
+    /// </summary>
+    public async Task<List<CausalEdge>> GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> effectRunProfileExecutionItemIds)
+    {
+        if (effectRunProfileExecutionItemIds.Count == 0)
+            return [];
+
+        var ids = effectRunProfileExecutionItemIds as List<Guid> ?? effectRunProfileExecutionItemIds.ToList();
+        return await Repository.Database.CausalEdges
+            .AsNoTracking()
+            .Where(e => ids.Contains(e.EffectRunProfileExecutionItemId))
+            .OrderBy(e => e.Created)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Summarises the given Run Profile Execution Items for the causal walk (#1223); presence in the result is
+    /// the retention check.
+    /// </summary>
+    public async Task<Dictionary<Guid, CausalChainItemSummary>> GetRunProfileExecutionItemCausalSummariesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds)
+    {
+        if (runProfileExecutionItemIds.Count == 0)
+            return [];
+
+        var ids = runProfileExecutionItemIds as List<Guid> ?? runProfileExecutionItemIds.ToList();
+        // A scalar projection: the walk needs a handful of fields per cause, and materialising execution items
+        // to answer it would load attribute graphs for every cause in a cascade.
+        var summaries = await Repository.Database.ActivityRunProfileExecutionItems
+            .AsNoTracking()
+            .Where(r => ids.Contains(r.Id))
+            .Select(r => new CausalChainItemSummary
+            {
+                Id = r.Id,
+                ObjectChangeType = r.ObjectChangeType,
+                ConnectedSystemObjectId = r.ConnectedSystemObjectId,
+                ActivityExecuted = r.Activity.Executed
+            })
+            .ToListAsync();
+
+        return summaries.ToDictionary(s => s.Id);
+    }
+
+    /// <summary>
+    /// The import event that last changed a Connected System Object at or before the given Activity time,
+    /// excluding the asking item itself (#1223).
+    /// </summary>
+    public async Task<CausalSourceImportEvent?> GetLatestImportItemForCsoAsync(
+        Guid connectedSystemObjectId, DateTime atOrBeforeActivityExecuted, Guid excludeRunProfileExecutionItemId)
+    {
+        return await Repository.Database.ActivityRunProfileExecutionItems
+            .AsNoTracking()
+            .Where(r => r.ConnectedSystemObjectId == connectedSystemObjectId
+                && r.Id != excludeRunProfileExecutionItemId
+                && (r.ObjectChangeType == ObjectChangeType.Added
+                    || r.ObjectChangeType == ObjectChangeType.Updated
+                    || r.ObjectChangeType == ObjectChangeType.Deleted)
+                && r.Activity.Executed <= atOrBeforeActivityExecuted)
+            .OrderByDescending(r => r.Activity.Executed)
+            .Select(r => new CausalSourceImportEvent
+            {
+                RunProfileExecutionItemId = r.Id,
+                ChangeType = r.ObjectChangeType,
+                DisplayName = r.DisplayNameSnapshot,
+                ConnectedSystemId = r.Activity.ConnectedSystemId,
+                // The Activity model carries the system by id alone; resolve the name live. Unlike the edge
+                // snapshots this is a derived hop, so a deleted system degrades the sentence rather than
+                // falsifying history.
+                ConnectedSystemName = Repository.Database.ConnectedSystems
+                    .Where(cs => cs.Id == r.Activity.ConnectedSystemId)
+                    .Select(cs => cs.Name)
+                    .FirstOrDefault()
+            })
+            .FirstOrDefaultAsync();
     }
 
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)

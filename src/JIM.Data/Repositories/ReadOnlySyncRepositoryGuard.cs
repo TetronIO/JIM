@@ -287,6 +287,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => _inner.BeginRollbackOnlyTransactionAsync();
 
+    public Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync()
+        => _inner.GetMetaverseAttributeNamesAsync();
+
     #endregion
 
     #region Writes (always throw)
@@ -464,6 +467,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(MarkPendingExportsAsExecutingAsync));
+
+    public Task SetPendingExportQueueingItemsAsync(IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
+        => throw new PreviewWriteAttemptedException(nameof(SetPendingExportQueueingItemsAsync));
+
+    public Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges)
+        => throw new PreviewWriteAttemptedException(nameof(BulkInsertCausalEdgesAsync));
 
     #endregion
 }

@@ -38,7 +38,7 @@ else
         {
             <MudTimelineItem Color="@GetChangeTypeColor(changeGroup.ChangeType)" Elevation="0">
                 <ItemContent>
-                    <MudCard Outlined="true" Class="cursor-pointer" @onclick="() => OpenChangeDetails(changeGroup)">
+                    <MudCard Outlined="true" Class="cursor-pointer change-card" @onclick="() => OpenChangeDetails(changeGroup)">
                         <MudCardContent>
                             <MudStack Spacing="2">
                                 <!-- Change Header: {icon} {type}    {relative date}    {mechanism icon} {mechanism} by {initiator} -->
@@ -492,10 +492,46 @@ else
                                             cursor: pointer;
                                         }
 
-                                        .cursor-pointer:hover {
-                                            background: linear-gradient(to right,
-                                                    var(--mud-palette-surface) 0%,
-                                                    var(--jim-inner-surface, var(--mud-palette-background-grey)) 15%);
+                                        /* The hover colour must be opaque, and identical on the card body and the
+                                           arrow's ::after fill, for the two to render as one contiguous shape: the
+                                           timeline arrow is two stacked border-triangles (::before draws the opaque
+                                           outline, ::after the fill, and the fill also covers the card's left border
+                                           at the seam), so a translucent hover colour composites differently over
+                                           each layer and the arrow visibly detaches from the card. Hence a Material
+                                           state layer computed as an opaque colour: 8% of the text colour over the
+                                           card's resting fill, which follows every theme automatically. */
+                                        .change-card {
+                                            --jim-change-card-resting: var(--jim-inner-surface, var(--mud-palette-surface));
+                                            --jim-change-card-hover: color-mix(in srgb,
+                                                var(--mud-palette-text-primary) 8%,
+                                                var(--jim-change-card-resting));
+                                        }
+
+                                        /* Inside dialogs the resting fill is the dialog inner surface (site.css). */
+                                        .mud-dialog .change-card {
+                                            --jim-change-card-resting: var(--jim-dialog-inner-surface, var(--mud-palette-surface));
+                                        }
+
+                                        /* The html[lang] qualifier and !important are load-bearing: the cards' resting
+                                           backgrounds are set by html[lang] rules in site.css (inside dialogs with
+                                           !important), which outrank any bare class selector here. The card is itself
+                                           the .mud-paper (it has no .mud-paper ancestor inside a dialog), so the card
+                                           classes alone carry the specificity. The arrow's ::before outline is
+                                           deliberately untouched so the triangle stays outlined on hover. */
+                                        html[lang] .mud-card.change-card:hover {
+                                            background-color: var(--jim-change-card-hover) !important;
+                                        }
+
+                                        html[lang] .mud-card.change-card:hover::after {
+                                            border-right-color: var(--jim-change-card-hover) !important;
+                                        }
+
+                                        /* The hover fill lands close to the divider colour, hiding the header rule;
+                                           step the divider by the same state layer so its contrast is preserved. */
+                                        html[lang] .mud-card.change-card:hover .mud-divider {
+                                            border-color: color-mix(in srgb,
+                                                var(--mud-palette-text-primary) 8%,
+                                                var(--mud-palette-divider)) !important;
                                         }
                                     </style>
 

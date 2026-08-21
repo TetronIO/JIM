@@ -1279,6 +1279,30 @@ public partial class SyncRepository
 
     #endregion
 
+    /// <summary>
+    /// Names the Run Profile Execution Item that queued each Pending Export, after both exist (#1223): the
+    /// set-once fix-up for the deletion-cascade and reference-recall paths, whose Pending Exports are persisted
+    /// before the item reporting each one is built. A deliberately narrow single-column statement rather than a
+    /// PendingExportBulkColumns writer, per the raw-SQL column-list rules' targeted-mutation exemption.
+    /// </summary>
+    public async Task SetPendingExportQueueingItemsAsync(
+        IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
+    {
+        if (stamps.Count == 0)
+            return;
+
+        var pendingExportIds = stamps.Select(stamp => stamp.PendingExportId).ToArray();
+        var queueingItemIds = stamps.Select(stamp => stamp.QueuedByRunProfileExecutionItemId).ToArray();
+
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""PendingExports"" AS pe
+              SET ""QueuedByRunProfileExecutionItemId"" = stamp.queueing_item_id
+              FROM unnest({0}, {1}) AS stamp(pending_export_id, queueing_item_id)
+              WHERE pe.""Id"" = stamp.pending_export_id",
+            new Npgsql.NpgsqlParameter { Value = pendingExportIds, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid },
+            new Npgsql.NpgsqlParameter { Value = queueingItemIds, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid });
+    }
+
     #region Private Pending Export Bulk Helpers
 
     private async Task BulkInsertPendingExportsRawAsync(List<PendingExport> exports)
@@ -1317,6 +1341,7 @@ public partial class SyncRepository
                 parameters.Add(pe.HasUnresolvedReferences);
                 parameters.Add(pe.CreatedAt);
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.ProvisioningSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.QueuedByRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

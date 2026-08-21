@@ -24,6 +24,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<RunPhaseStepper Phases="@x" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
 | `<RunProgressMetrics ObjectsProcessed="@x" ObjectsToProcess="@y" ... />` | A running Activity's progress bar and its count, rate and time remaining | "Live progress figures" below |
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
+| `<NavigableMudTabs>` | Top-level page tabs (syncs the active tab to `?t=slug`) | "Tabs" below |
 | `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
 | `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
 | `<AttributeChip Kind="@k" Name="@n" />` | Any attribute shown as belonging to a side of the Metaverse: the `CS` / `MV` / `Ex` avatar chip | "Attribute chips" below |
@@ -299,6 +300,9 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 ## Tabs
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
 - Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
+- **Do not pass the presentation parameters; the component's defaults are JIM's tab look.** `Elevation="0" Rounded="true" Outlined="true" ApplyEffectsToContainer="false"` are the defaults on `NavigableMudTabs` itself. MudTabs' own defaults render an unbordered, unrounded white band that reads on screen as a broken tab bar, and that is exactly what a page got by omitting them. No call site spells them out any more, so there is nothing to copy: a page that names one of the four is either opting out deliberately or restating a default. `NavigableMudTabsTests` pins the defaults and fails the build for any call site that passes `Outlined="false"` or `Rounded="false"`, so an opt-out has to be a deliberate, explained choice; `MvoDetailsTabs` is the worked example, naming only the `ApplyEffectsToContainer="true"` its tinted panel surface needs.
+- Only `Class` and `TabPanelsClass` are routinely worth passing; see "Panel spacing" above for which values (`Class="mt-2"` after breadcrumbs, `TabPanelsClass="pt-5"` when the first tab's content starts flush)
+- **A one-tab bar hides itself.** Where a page's tabs are conditional (a tab that appears only when there is something to put in it), `NavigableMudTabs` drops the bar and the panel's top padding once it sees a single panel, so the content lands where it would have with no tabs at all. Nothing to do at the call site; `HideBarWhenSingleTab="false"` opts out, for instance to stop a page's height jumping as a tab appears. Panels register during their own render, so this costs a second render pass and cannot be decided earlier.
 
 ## `@key` on loops whose contents can change
 
