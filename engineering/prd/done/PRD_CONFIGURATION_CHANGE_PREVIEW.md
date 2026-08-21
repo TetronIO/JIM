@@ -1,6 +1,7 @@
 # Configuration Change Preview Framework
 
-- **Status:** Doing (framework complete and proven by two shipped adapters, G5 deletion settings and G4 partition/container deselection, each across portal, REST and PowerShell; four of six coverage-map gaps remain, all blocked on the #288 engine core)
+- **Status:** Done
+- **Note:** The framework and every coverage-map gap (G1 to G6, including the destructive-toggle and behaviour-toggle halves of G3) shipped as adapters with portal, REST and PowerShell parity; the schema refresh phase and its three-way decision closed with #421 and #1485. Deferred, tracked on their own issues: #91 mode 2 (Attribute Priority as an adapter) and #134/#809 (Connected System deletion re-platformed onto the framework).
 - **Created:** 2026-07-16
 - **Author:** JayVDZ
 - **Issue:** [#827](https://github.com/TetronIO/JIM/issues/827)
@@ -193,7 +194,7 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 ## Acceptance Criteria
 
 - [x] Framework design agreed (this PRD reviewed and approved, Jul 2026)
-- [x] Implementation plan generated from this PRD (adapter contract, result schema, dispatch, notification abstraction, UI shell) and approved (Jul 2026: [`engineering/plans/doing/CONFIGURATION_CHANGE_PREVIEW.md`](../../plans/doing/CONFIGURATION_CHANGE_PREVIEW.md))
+- [x] Implementation plan generated from this PRD (adapter contract, result schema, dispatch, notification abstraction, UI shell) and approved (Jul 2026: [`engineering/plans/done/CONFIGURATION_CHANGE_PREVIEW.md`](../../plans/done/CONFIGURATION_CHANGE_PREVIEW.md))
 - [x] Per-surface adapter issues split out in severity order: G5 and G3-destructive first (Jul 2026: [#1114](https://github.com/TetronIO/JIM/issues/1114), [#1115](https://github.com/TetronIO/JIM/issues/1115)), then G4, then G1/G2, then G6 and remaining toggles as each wave starts; #204, #134, #421, #91 mode 2 re-scoped as adapter issues in the final wave
 - [ ] Interim apply-time messaging delivered as an early phase of the framework implementation plan, covering all surfaces awaiting adapters
 - [x] #307/#202 alignment recorded on those issues (Jul 2026: #307 blocks #827; sequencing and notifier contract recorded on #307 and in the implementation plan)
