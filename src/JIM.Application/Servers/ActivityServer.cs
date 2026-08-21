@@ -568,6 +568,16 @@ public class ActivityServer
         return await Application.Repository.Activity.GetWorkerTaskActivityFilterOptionsAsync();
     }
 
+    /// <summary>
+    /// Whether any Run Profile has ever been executed, in any state. Backs the home page's "Run your first
+    /// synchronisation" setup step: an administrator who ran a Run Profile by hand has run their first
+    /// synchronisation, whether or not a Schedule has ever fired.
+    /// </summary>
+    public async Task<bool> HasAnyRunProfileExecutionAsync()
+    {
+        return await Application.Repository.Activity.HasAnyRunProfileExecutionAsync();
+    }
+
     #region synchronisation related
     /// <summary>
     /// Retrieves a page's worth of sync execution item headers for a specific activity.

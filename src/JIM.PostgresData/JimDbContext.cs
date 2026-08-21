@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data;
@@ -192,6 +192,30 @@ public class JimDbContext : DbContext
             // CreateExecutionStrategy().ExecuteAsync() before retry can be enabled.
             // See issue #408 for the tracking item.
             // Transient failures are handled at the API level by GlobalExceptionHandler (HTTP 503).
+            // Both suppressions below are load-bearing; neither is a leftover. Removing either
+            // one has a specific, immediate consequence.
+            //
+            // PendingModelChangesWarning: JIM's runtime model permanently disagrees with its own
+            // migrations, by exactly the 99 DateTime columns in the schema. PostgresDataRepository's
+            // constructor sets the Npgsql.EnableLegacyTimestampBehavior AppContext switch, under
+            // which DateTime maps to "timestamp without time zone". The EF tooling never constructs
+            // that repository, so every migration and JimDbContextModelSnapshot.cs was scaffolded
+            // with the switch off and declares "timestamp with time zone", which is also what the
+            // database actually holds. Every service process therefore starts up carrying 99
+            // AlterColumn differences, and MigrateAsync() throws on the first boot without this
+            // line (verified by removing it: JIM.Worker fails InitialiseDatabaseAsync immediately).
+            // The cost is that a genuine model change is invisible here too, so the checks that do
+            // still bite are the design-time ones, which run with the switch off: the
+            // 'dotnet ef migrations has-pending-model-changes' command, and
+            // MigrationDesignerChainTests in JIM.Worker.Tests. Retiring this suppression means
+            // retiring the legacy switch and normalising DateTime.Kind to Utc at every write; the
+            // schema itself already needs no change.
+            //
+            // MultipleCollectionIncludeWarning: AsSplitQuery() was deliberately removed from the
+            // sync paths because of the EF Core materialisation bug (dotnet/efcore#33826) that
+            // silently drops navigation properties during concurrent writes. The remaining
+            // single-query includes are intentional; the warning is the price of not reintroducing
+            // a data integrity risk.
             optionsBuilder.UseNpgsql(_connectionString)
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
                 .ConfigureWarnings(warnings => warnings.Ignore(
@@ -306,6 +330,16 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);
+
+        // The Object Type a Reference attribute declares as its target (#1285). Distinct from the owning
+        // relationship above, so it is configured explicitly. SetNull: removing an Object Type must not take
+        // attributes of other Object Types with it; the reference simply loses its declared target and
+        // resolution falls back to searching every Object Type.
+        modelBuilder.Entity<ConnectedSystemObjectTypeAttribute>()
+            .HasOne(csa => csa.ReferencedObjectType)
+            .WithMany()
+            .HasForeignKey(csa => csa.ReferencedObjectTypeId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // Classification tags have no meaning without the object type they classify, so they go with it. The unique
         // index enforces the same rule schema import applies in memory: a type is classified a given way once.
@@ -909,5 +943,69 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<WorkerTask>()
             .HasIndex(wt => wt.ScheduleExecutionId)
             .HasDatabaseName("IX_WorkerTasks_ScheduleExecutionId");
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Configuration ownership (issue #1477)
+        // ---------------------------------------------------------------------------------------------------------
+        // Each relationship below is containment: the child has no meaning once its owner is gone. They were all
+        // left to convention, and because every one of these foreign keys is optional, the convention is
+        // ClientSetNull, which becomes NO ACTION in the database. That is wrong twice over. It orphans child rows
+        // whenever the owner is deleted outside a change-tracked graph, and it makes the factory reset's
+        // "DELETE ... WHERE ""BuiltIn"" = false" statements fail with 23503 for any custom object holding the child
+        // rows it ordinarily holds; since the whole wipe is one transaction, the reset then rolls back entirely.
+        // SystemResetForeignKeyCoverageTests asserts this property across the whole schema, so a child table added
+        // later cannot silently reintroduce the fault.
+
+        // A Predefined Search owns its top-level criteria groups; a group is how the search filters.
+        modelBuilder.Entity<PredefinedSearch>()
+            .HasMany(ps => ps.CriteriaGroups)
+            .WithOne()
+            .HasForeignKey(g => g.PredefinedSearchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A criteria group owns its nested groups. Without this the cascade above stops at the top level and a
+        // nested group holds the whole delete up.
+        modelBuilder.Entity<PredefinedSearchCriteriaGroup>()
+            .HasMany(g => g.ChildGroups)
+            .WithOne(g => g.ParentGroup)
+            .HasForeignKey(g => g.ParentGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A criteria group owns its criteria.
+        modelBuilder.Entity<PredefinedSearchCriteriaGroup>()
+            .HasMany(g => g.Criteria)
+            .WithOne()
+            .HasForeignKey(c => c.PredefinedSearchCriteriaGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A Connector Definition owns the settings it declares.
+        modelBuilder.Entity<ConnectorDefinition>()
+            .HasMany(cd => cd.Settings)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // An Example Data Set owns its values; the set is nothing but its values.
+        modelBuilder.Entity<ExampleDataSet>()
+            .HasMany(ds => ds.Values)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // An Example Data Template owns the Object Types it covers, each of which owns the attributes it
+        // generates, each of which owns its weighted values. The whole chain has to cascade: stopping part way
+        // down leaves the delete blocked one level deeper instead of at the top.
+        modelBuilder.Entity<ExampleDataTemplate>()
+            .HasMany(t => t.ObjectTypes)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ExampleDataObjectType>()
+            .HasMany(ot => ot.TemplateAttributes)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ExampleDataTemplateAttribute>()
+            .HasMany(ta => ta.WeightedStringValues)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

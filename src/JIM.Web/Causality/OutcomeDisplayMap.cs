@@ -122,7 +122,53 @@ public static class OutcomeDisplayMap
                 "keep their Metaverse Object join"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] =
             new OutcomeDisplay("Scope-exit action changes", "Would Change Deprovision Action", CausalityTone.Warning, Icons.Material.Filled.SwapHoriz,
-                "have their scope-exit action changed")
+                "have their scope-exit action changed"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] =
+            new OutcomeDisplay("Attribute Flow does not evaluate", "Would Fail Attribute Flow", CausalityTone.Error, Icons.Material.Filled.RuleFolder,
+                "have an Attribute Flow that would not evaluate"),
+        // The Object Matching preview's fates (#1457). Error tone on joining a different Metaverse Object and on
+        // projecting instead of joining, because both are identity corruption that nothing reports at run time:
+        // one merges an account into the wrong identity, the other splits one identity into two. Ambiguity is a
+        // Warning because the next synchronisation refuses the object loudly rather than joining it wrongly.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] =
+            new OutcomeDisplay("Joins a different Metaverse Object", "Would Join Different Metaverse Object", CausalityTone.Error, Icons.Material.Filled.SwapHoriz,
+                "join a different Metaverse Object"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] =
+            new OutcomeDisplay("Joins instead of projecting", "Would Join Instead Of Project", CausalityTone.Success, Icons.Material.Filled.Link,
+                "join an existing Metaverse Object instead of projecting a new one"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] =
+            new OutcomeDisplay("Projects instead of joining", "Would Project Instead Of Join", CausalityTone.Error, Icons.Material.Filled.CallSplit,
+                "project a new Metaverse Object instead of joining an existing one"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] =
+            new OutcomeDisplay("Matches more than one Metaverse Object", "Would Match Ambiguously", CausalityTone.Warning, Icons.Material.Filled.QuestionMark,
+                "match more than one Metaverse Object"),
+        // The behaviour-toggle preview's fates (#1462). Warning rather than Error on all three: nothing existing
+        // is destroyed by any of them, and what they cost is an identity, an account or a correction that never
+        // arrives, which is a different kind of harm from a deletion.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] =
+            new OutcomeDisplay("No longer creates an identity", "Would Stop Projecting", CausalityTone.Warning, Icons.Material.Filled.PersonOff,
+                "no longer have a Metaverse Object created for them"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] =
+            new OutcomeDisplay("No longer creates an account", "Would Stop Provisioning", CausalityTone.Warning, Icons.Material.Filled.NoAccounts,
+                "no longer have an account created for them"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] =
+            new OutcomeDisplay("Free to drift from JIM", "Would Stop Correcting Drift", CausalityTone.Warning, Icons.Material.Filled.SyncDisabled,
+                "be free to drift from what JIM holds"),
+        // The schema selection preview's fates (#1475). Warning on the freeze rather than Error, because nothing is
+        // destroyed and nothing is disconnected; what happens is that values stop tracking their source while still
+        // being contributed, which is a slower harm and an easier one to miss.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] =
+            new OutcomeDisplay("Stops being imported, stays joined", "Would Stop Being Imported", CausalityTone.Warning, Icons.Material.Filled.CloudOff,
+                "stop being imported while staying joined, keeping the values they last imported"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] =
+            new OutcomeDisplay("Imported again", "Would Resume Being Imported", CausalityTone.Success, Icons.Material.Filled.CloudSync,
+                "be imported again, so their values track the Connected System once more"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] =
+            new OutcomeDisplay("Contributed values withdrawn", "Would Withdraw Contributed Values", CausalityTone.Warning, Icons.Material.Filled.Undo,
+                "have the values this Connected System contributed withdrawn"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] =
+            new OutcomeDisplay("Contributed values kept", "Would Retain Contributed Values", CausalityTone.Info, Icons.Material.Filled.Inventory2,
+                "keep the values this Connected System contributed")
     };
 
     /// <summary>

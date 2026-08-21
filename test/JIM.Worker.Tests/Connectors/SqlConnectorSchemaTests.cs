@@ -513,6 +513,74 @@ public class SqlConnectorSchemaTests
     }
 
     [Test]
+    public async Task GetSchemaAsync_AConfiguredReferenceColumn_CarriesItsDeclaredTargetObjectTypeAsync()
+    {
+        // The document names the Object Type every reference points at; before #1285 that name died here,
+        // and import resolution had to guess. Cross-type, because same-type references are the case a guess
+        // happens to get right.
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "DEPARTMENTS", new FakeCatalogueColumn("DEPARTMENT_ID", "int", IsNullable: false));
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("DEPARTMENT_ID", "int"));
+
+        var schema = await GetSchemaAsync(provider, PersonAndDepartmentDocument(configureTheReference: true));
+
+        var department = schema.ObjectTypes.Single(o => o.Name == "Person").Attributes.Single(a => a.Name == "DEPARTMENT_ID");
+        Assert.That(department.ReferencesObjectTypeName, Is.EqualTo("Department"),
+            "The declared target must survive discovery so the schema merge can persist it and resolution can use it.");
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_AReferenceRelatedTableAttribute_CarriesItsDeclaredTargetObjectTypeAsync()
+    {
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "EMPLOYEES", new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false));
+        provider.Catalogue.AddTable("HR", "GROUPS", new FakeCatalogueColumn("GROUP_ID", "int", IsNullable: false));
+        provider.Catalogue.AddTable("HR", "GROUP_MEMBERS",
+            new FakeCatalogueColumn("GROUP_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("MEMBER_EMPLOYEE_ID", "int", IsNullable: false));
+
+        var schema = await GetSchemaAsync(provider, """
+            {
+              "objectTypes": [
+                { "name": "Person", "schema": "HR", "table": "EMPLOYEES", "anchorColumns": [ "EMPLOYEE_ID" ] },
+                {
+                  "name": "Group",
+                  "schema": "HR",
+                  "table": "GROUPS",
+                  "anchorColumns": [ "GROUP_ID" ],
+                  "relatedTables": [
+                    {
+                      "attributeName": "Members",
+                      "schema": "HR",
+                      "table": "GROUP_MEMBERS",
+                      "valueColumn": "MEMBER_EMPLOYEE_ID",
+                      "joinColumns": [ "GROUP_ID" ],
+                      "referencesObjectType": "Person"
+                    }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        var members = schema.ObjectTypes.Single(o => o.Name == "Group").Attributes.Single(a => a.Name == "Members");
+        Assert.That(members.ReferencesObjectTypeName, Is.EqualTo("Person"));
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_ANonReferenceAttribute_DeclaresNoTargetObjectTypeAsync()
+    {
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "EMPLOYEES", new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false));
+
+        var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
+
+        Assert.That(schema.ObjectTypes.Single().Attributes.Single(a => a.Name == "EMPLOYEE_ID").ReferencesObjectTypeName, Is.Null);
+    }
+
+    [Test]
     public void GetSchemaAsync_AConfiguredReferenceColumnTheSourceDoesNotHave_ThrowsNamingIt()
     {
         var provider = new FakeSqlProvider();

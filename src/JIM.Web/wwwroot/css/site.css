@@ -397,10 +397,11 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
 }
 
 /* Joined to the block directly above it (its Schedule Execution's header, or the worker status bar), so the two
-   read as one box. Qualified past MudBlazor's own outlined-table rule, which loads after this sheet. */
+   read as one box. !important because the portal's own container-radius rule above (.mud-table) carries it, and
+   a longhand without it loses to a shorthand that has it however specific the selector is. */
 html[lang] .jim-queue-grid--joined.mud-table-outlined {
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
 }
 
 /* Worker activity indicator bar — shown above queue table when tasks are processing */

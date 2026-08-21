@@ -36,6 +36,12 @@ function Get-JIMConnectedSystemObjectType {
         the object and never again, because changing it would break the link to the object (a
         table's primary key, a directory's relative distinguished name).
 
+        A Reference attribute additionally carries referencedObjectTypeId and
+        referencedObjectTypeName when the Connected System's schema declares which Object Type
+        the reference points at (the SQL Connector's referencesObjectType); import reference
+        resolution then resolves the reference within that Object Type alone. Both are null when
+        the schema does not say. Read-only: discovered from the schema, never settable.
+
     .EXAMPLE
         Get-JIMConnectedSystemObjectType -ConnectedSystemId 1
 

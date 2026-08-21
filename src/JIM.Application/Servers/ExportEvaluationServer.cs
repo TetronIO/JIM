@@ -2402,10 +2402,11 @@ public class ExportEvaluationServer
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
         IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
-        List<AttributeFlowError>? flowErrors = null)
+        List<AttributeFlowError>? flowErrors = null,
+        List<PendingExportAttributeValueChange>? noNetChangeSkipped = null)
         => _syncEngine.ComputeAttributeValueChanges(mvo, exportRule, changedAttributes, changeType,
             existingCso, csoAttributeCache, out csoAlreadyCurrentCount, ExpressionEvaluator,
-            removedAttributes, mvAttributeDictionary, preResolvedReferenceValues, flowErrors);
+            removedAttributes, mvAttributeDictionary, preResolvedReferenceValues, flowErrors, noNetChangeSkipped);
 
     /// <summary>
     /// Compares a Pending Export attribute value change against existing CSO attribute values to determine
@@ -2629,12 +2630,18 @@ public class ExportEvaluationServer
 
         var attributeChanges = new List<PendingExportAttributeValueChange>();
         var noNetChangeSkipped = 0;
+
+        // The values already correct in the target are collected, not merely counted (#1443): a configuration
+        // change preview diffs what two configurations would stage, and a value the target already holds is staged
+        // by neither, so without these the old side of an export delta would always be empty.
+        var noNetChangeSkippedChanges = new List<PendingExportAttributeValueChange>();
         if (effectiveChangeType.HasValue)
         {
             attributeChanges = _syncEngine.ComputeAttributeValueChanges(
                 mvo, exportRule, changedAttributes, effectiveChangeType.Value,
                 existingCso: effectiveExistingCso, csoAttributeCache: cache.CsoAttributeValues,
-                out noNetChangeSkipped, ExpressionEvaluator);
+                out noNetChangeSkipped, ExpressionEvaluator,
+                noNetChangeSkipped: noNetChangeSkippedChanges);
         }
 
         return new OutboundPreviewEntry
@@ -2649,7 +2656,8 @@ public class ExportEvaluationServer
             ExistingTargetCsoId = existingCso?.Id,
             WouldJoinCsoId = wouldJoinCsoId,
             AttributeChanges = attributeChanges,
-            NoNetChangeSkippedCount = noNetChangeSkipped
+            NoNetChangeSkippedCount = noNetChangeSkipped,
+            NoNetChangeSkippedChanges = noNetChangeSkippedChanges
         };
     }
 

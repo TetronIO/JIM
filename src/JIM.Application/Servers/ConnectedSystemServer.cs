@@ -1478,8 +1478,11 @@ public class ConnectedSystemServer
 
     #region Connected System Schema
     /// <summary>
-    /// Causes the associated Connector to be instantiated and the schema imported from the Connected System.
-    /// Changes will be persisted, even if they are destructive, i.e. an attribute is removed.
+    /// Causes the associated Connector to be instantiated and the schema imported from the Connected System, in
+    /// one call: retrieve, merge and persist. Additions and definition updates are persisted; removals are
+    /// reported but deliberately retained (see issue #782), so nothing is deleted by a refresh. For a
+    /// preview-then-decide flow, use <see cref="PreviewConnectedSystemSchemaRefreshAsync"/> followed by
+    /// <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>.
     /// </summary>
     /// <returns>A result object containing details about what changed during the schema refresh.</returns>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
@@ -1591,6 +1594,106 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Retrieves the Connected System's schema and merges it into the supplied instance <b>in memory only</b>,
+    /// reporting what a refresh would change. Nothing is persisted and no Activity is recorded: a preview is a
+    /// read, and the administrator decides what happens next. To persist exactly what this call merged, pass the
+    /// same instance and result to
+    /// <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>;
+    /// to discard, drop the instance and reload the Connected System.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System to preview a schema refresh for. Mutated in memory by
+    /// the merge; callers who must keep an untouched instance should pass a freshly loaded one.</param>
+    /// <returns>A result object describing what the refresh would change, including removals (which an apply
+    /// would retain, not delete) and attribute definition changes.</returns>
+    public async Task<SchemaRefreshResult> PreviewConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorSchema schemaConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
+
+        var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+        var result = MergeSchemaIntoConnectedSystem(connectedSystem, schema);
+
+        // Read while connected, exactly as the one-call import does, so an apply persists the same graph the
+        // one-call path would have. Mutates the in-memory instance only.
+        await DiscoverPasswordPolicyAsync(connector, connectedSystem, result);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Persists a schema refresh previously retrieved and merged by
+    /// <see cref="PreviewConnectedSystemSchemaRefreshAsync"/>, under an ImportSchema Activity. The pair is
+    /// equivalent to <see cref="ImportConnectedSystemSchemaAsync(ConnectedSystem, MetaverseObject?)"/> with a
+    /// decision point in the middle; the preview result completes the Activity so discovery warnings still reach
+    /// the other surfaces.
+    /// </summary>
+    /// <param name="connectedSystem">The instance the preview merged into. Persisted as-is.</param>
+    /// <param name="previewResult">The preview's result, used to complete the Activity.</param>
+    /// <param name="initiatedBy">The user the change is attributed to.</param>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, MetaverseObject? initiatedBy)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.ImportSchema,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        try
+        {
+            await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+            await CompleteSchemaImportActivityAsync(activity, previewResult);
+        }
+        catch (Exception ex)
+        {
+            // Discard staged schema changes before recording the failure: see the one-call import overloads.
+            Application.Repository.ClearChangeTracker();
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// As <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>,
+    /// attributed to an API key (the REST API and PowerShell path).
+    /// </summary>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, ApiKey initiatedByApiKey)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.ImportSchema,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        try
+        {
+            await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+            await CompleteSchemaImportActivityAsync(activity, previewResult);
+        }
+        catch (Exception ex)
+        {
+            // Discard staged schema changes before recording the failure: see the one-call import overloads.
+            Application.Repository.ClearChangeTracker();
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Completes a schema import's Activity, downgraded to complete-with-warning when discovery reported
     /// shortfalls, so an import that discovered less than it should have never presents as an unqualified success.
     /// </summary>
@@ -1641,6 +1744,10 @@ public class ConnectedSystemServer
 
         connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
 
+        // Declared reference targets are wired in a second pass after this loop, once every Object Type
+        // instance exists in the graph: a reference may point at an Object Type declared after it (#1285).
+        var declaredReferenceTargets = new List<(ConnectedSystemObjectTypeAttribute Attribute, string TargetName)>();
+
         // Track removed object types
         foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
         {
@@ -1683,8 +1790,22 @@ public class ConnectedSystemServer
 
                     if (existingAttribute != null)
                     {
-                        // Update existing attribute properties but preserve the ID
+                        // Update existing attribute properties but preserve the ID. Definition changes (plurality
+                        // and data type) are recorded on the result before being applied: they were applied
+                        // silently for years, and a restated definition can invalidate an Attribute Flow mapping
+                        // that was validated against the old one, so the administrator must get to see them.
                         existingAttribute.Description = schemaAttribute.Description;
+
+                        if (existingAttribute.AttributePlurality != schemaAttribute.AttributePlurality)
+                        {
+                            result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                            {
+                                AttributeName = existingAttribute.Name,
+                                Aspect = SchemaAttributeChangeAspect.Plurality,
+                                OldValue = existingAttribute.AttributePlurality.ToString(),
+                                NewValue = schemaAttribute.AttributePlurality.ToString()
+                            });
+                        }
                         existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
 
                         // A refresh restates what the Connector discovered and leaves what the administrator
@@ -1697,7 +1818,19 @@ public class ConnectedSystemServer
                         // source type, would write the value into the wrong column of the Metaverse Object.
                         // It would also sidestep the rule that an override is refused once values exist (#1354).
                         if (!existingAttribute.TypeSetByAdministrator)
+                        {
+                            if (existingAttribute.Type != schemaAttribute.Type)
+                            {
+                                result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                                {
+                                    AttributeName = existingAttribute.Name,
+                                    Aspect = SchemaAttributeChangeAspect.DataType,
+                                    OldValue = existingAttribute.Type.ToString(),
+                                    NewValue = schemaAttribute.Type.ToString()
+                                });
+                            }
                             existingAttribute.Type = schemaAttribute.Type;
+                        }
 
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
@@ -1746,6 +1879,21 @@ public class ConnectedSystemServer
                 result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
             }
 
+            // Restate the declared reference target (connector-stated, like Writability): cleared here so a
+            // withdrawn declaration cannot leave a stale target behind, and re-wired in the second pass below
+            // when the schema still declares one (#1285).
+            foreach (var schemaAttribute in schemaObjectType.Attributes)
+            {
+                var mergedAttribute = connectedSystemObjectType.Attributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
+                if (mergedAttribute == null)
+                    continue;
+
+                mergedAttribute.ReferencedObjectType = null;
+                mergedAttribute.ReferencedObjectTypeId = null;
+                if (!string.IsNullOrWhiteSpace(schemaAttribute.ReferencesObjectTypeName))
+                    declaredReferenceTargets.Add((mergedAttribute, schemaAttribute.ReferencesObjectTypeName.Trim()));
+            }
+
             MergeObjectTypeTags(connectedSystemObjectType, schemaObjectType);
 
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
@@ -1774,6 +1922,25 @@ public class ConnectedSystemServer
             }
 
             connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
+        }
+
+        // Second pass: wire each declared reference target to the merged Object Type instance it names. The
+        // navigation carries the link because a brand-new target has no id until it is saved; EF assigns the
+        // foreign key from the navigation for those, and the id is set directly where one already exists.
+        // Case-insensitive to match the SQL Connector's own name handling. A declared target the schema does
+        // not contain is a connector defect: reported as a discovery warning, never wired (#1285).
+        foreach (var (attribute, targetName) in declaredReferenceTargets)
+        {
+            var target = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Name.Equals(targetName, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            {
+                result.DiscoveryWarnings.Add(
+                    $"Attribute '{attribute.Name}' declares reference target Object Type '{targetName}', which the schema does not contain. The target was not recorded.");
+                continue;
+            }
+
+            attribute.ReferencedObjectType = target;
+            attribute.ReferencedObjectTypeId = target.Id > 0 ? target.Id : null;
         }
 
         // Any credential attribute that survived the merge is one that was already persisted; force it into a
@@ -3593,6 +3760,16 @@ public class ConnectedSystemServer
     /// Gets a Connected System Object Type by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the object type.</param>
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a lightweight projection for resolving
+    /// a Reference attribute's declared target name (#1285) without loading a navigation into an entity
+    /// graph a mutating path might attach.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId);
+    }
+
     public async Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id)
     {
         return await Application.Repository.ConnectedSystems.GetObjectTypeAsync(id);
@@ -4547,6 +4724,85 @@ public class ConnectedSystemServer
     public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         return Application.Repository.ConnectedSystems.StreamJoinedConnectedSystemObjects(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Streams every Connected System Object of one type in a Connected System, joined or not, with the attribute
+    /// values and type loaded that Scoping Criteria evaluation reads, for previewing what a change to a
+    /// Synchronisation Rule's scope would do (#1436). The unjoined objects are what a widened scope would newly
+    /// project, so unlike the destructive-toggle walk this one cannot be reduced to the joined population.
+    /// </summary>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return Application.Repository.ConnectedSystems.StreamConnectedSystemObjectsOfType(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects of one type in a Connected System, joined or not: the
+    /// population a Scoping Criteria change preview walks, counted set-based for the dispatch decision (#1436).
+    /// </summary>
+    public async Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's live, unjoined objects of one type: the population a
+    /// synchronisation would put to Object Matching on its next run, and therefore the only population an Object
+    /// Matching change can move (#1457).
+    /// </summary>
+    public async Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// How many live, unjoined objects of one type a Connected System holds; the set-based count behind an Object
+    /// Matching preview's cost estimate.
+    /// </summary>
+    public async Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnjoinedConnectedSystemObjectCountOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type, joined or not: the population that stops
+    /// being imported when the type is deselected (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectIdsOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type that hold a value for one attribute: the
+    /// population whose values freeze when that attribute is deselected (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(
+            connectedSystemId, connectedSystemObjectTypeId, attributeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's obsolete objects of one type that are still joined: the population
+    /// whose fate changes when Remove Contributed Attributes On Obsoletion is toggled (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(
+            connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Connected System Objects by identifier, without change tracking: the batched read behind a population that
+    /// was resolved to identifiers first.
+    /// </summary>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, connectedSystemObjectIds);
     }
 
     /// <summary>
@@ -7654,10 +7910,33 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Refuses an Object Matching Rule that could never match anything, before it is stored.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ObjectMatchingRule.IsValid"/> described what a workable rule looks like and nothing called it,
+    /// so the portal was able to store Simple mode rules with no Metaverse Object Type (#1458). The matching engine
+    /// skips such a rule and moves to the next one, so a Connected System whose only rules are malformed matches
+    /// nothing at all: every account that should have joined an existing identity projects a new one instead, and
+    /// nothing reports it. A hard refusal here is what the Synchronisation Integrity rules ask for; the alternative
+    /// is discovering the duplicate identities by hand, months later.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The rule cannot work, with the reason.</exception>
+    private static void EnsureObjectMatchingRuleIsWorkable(ObjectMatchingRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        var invalidity = rule.DescribeInvalidity();
+        if (invalidity != null)
+            throw new InvalidDataException(invalidity);
+    }
+
+    /// <summary>
     /// Creates a new Object Matching Rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7677,6 +7956,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7696,6 +7977,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7715,6 +7998,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",

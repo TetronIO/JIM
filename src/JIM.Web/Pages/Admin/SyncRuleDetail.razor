@@ -141,6 +141,30 @@ else if (_syncRule != null)
                     Disabled="@_startingPreview">
                     Preview Deprovisioning Impact
                 </MudButton>
+                @* Preview (#1436): a Scoping Criteria edit decides which objects the rule manages at all, and what *@
+                @* the ones that leave cost is read from the toggles beside it, so the two are previewed           *@
+                @* separately and answer different questions.                                                     *@
+                <MudButton data-testid="jim-preview-scoping-criteria" Variant="Variant.Outlined" Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.FilterAlt" OnClick="PreviewScopingCriteriaAsync"
+                    Disabled="@_startingPreview">
+                    Preview Scope Impact
+                </MudButton>
+                @* Preview (#1437): an Attribute Flow edit rewrites values on every object the rule already      *@
+                @* manages, which is a third question again: scope decides WHICH objects, the toggles decide what *@
+                @* leaving costs them, and this decides what the ones staying end up holding.                     *@
+                <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Outlined" Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.SyncAlt" OnClick="PreviewAttributeFlowAsync"
+                    Disabled="@_startingPreview">
+                    Preview Attribute Flow Impact
+                </MudButton>
+                @* Preview (#1462): the behaviour toggles are a fourth question. Scope decides which objects, the *@
+                @* deprovisioning toggles decide what leaving costs them, Attribute Flow decides what the ones    *@
+                @* staying hold, and these decide whether the rule runs at all and what it may create.            *@
+                <MudButton data-testid="jim-preview-behaviour" Variant="Variant.Outlined" Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.ToggleOn" OnClick="PreviewBehaviourAsync"
+                    Disabled="@_startingPreview">
+                    Preview Behaviour Impact
+                </MudButton>
             }
         </MudStack>
 
@@ -160,6 +184,63 @@ else if (_syncRule != null)
             <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
                                              Title="Preview: Deprovisioning Impact"
                                              OnPreviewChanged="OnDestructiveTogglePreviewChanged"
+                                             Class="mt-6" />
+        }
+
+        @if (_scopePreviewActivityId.HasValue)
+        {
+            var scopePreviewActivityId = _scopePreviewActivityId.Value;
+
+            @if (ScopingPreviewIsStale)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                          data-testid="jim-scope-preview-stale">
+                    The Scoping Criteria have been edited since this preview ran, so it no longer describes what
+                    saving would do. Preview again for an answer about the current criteria.
+                </MudAlert>
+            }
+
+            <ConfigurationChangePreviewPanel ActivityId="@scopePreviewActivityId"
+                                             Title="Preview: Scope Impact"
+                                             OnPreviewChanged="OnScopingPreviewChanged"
+                                             Class="mt-6" />
+        }
+
+        @if (_behaviourPreviewActivityId.HasValue)
+        {
+            var behaviourPreviewActivityId = _behaviourPreviewActivityId.Value;
+
+            @if (BehaviourPreviewIsStale)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                          data-testid="jim-behaviour-preview-stale">
+                    The behaviour toggles have been edited since this preview ran, so it no longer describes what
+                    saving would do. Preview again for an answer about the current settings.
+                </MudAlert>
+            }
+
+            <ConfigurationChangePreviewPanel ActivityId="@behaviourPreviewActivityId"
+                                             Title="Preview: Behaviour Impact"
+                                             OnPreviewChanged="OnBehaviourPreviewChanged"
+                                             Class="mt-6" />
+        }
+
+        @if (_attributeFlowPreviewActivityId.HasValue)
+        {
+            var attributeFlowPreviewActivityId = _attributeFlowPreviewActivityId.Value;
+
+            @if (AttributeFlowPreviewIsStale)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                          data-testid="jim-attribute-flow-preview-stale">
+                    The Attribute Flow has been edited since this preview ran, so it no longer describes what saving
+                    would do. Preview again for an answer about the current mappings.
+                </MudAlert>
+            }
+
+            <ConfigurationChangePreviewPanel ActivityId="@attributeFlowPreviewActivityId"
+                                             Title="Preview: Attribute Flow Impact"
+                                             OnPreviewChanged="OnAttributeFlowPreviewChanged"
                                              Class="mt-6" />
         }
     </div>
@@ -393,6 +474,223 @@ else if (_syncRule != null)
     /// </summary>
     private void OnDestructiveTogglePreviewChanged(ConfigurationChangePreview? preview) => _preview = preview;
 
+    // ─── Scoping Criteria preview (#1436) ───
+
+    private Guid? _scopePreviewActivityId;
+    private SyncRuleScopingProposal? _previewedScopingProposal;
+    private ConfigurationChangePreview? _scopePreview;
+
+    /// <summary>
+    /// The Scoping Criteria as they stand on the form. The Scope tab edits the loaded rule's criteria in place, so
+    /// this is already the proposal; the adapter re-reads the stored criteria from the database to compare against,
+    /// which is why the page does not need to snapshot them itself.
+    /// </summary>
+    private SyncRuleScopingProposal BuildScopingProposal() => SyncRuleScopingProposal.FromCurrentScope(_syncRule!);
+
+    /// <summary>
+    /// Whether the criteria have moved on from the ones the visible preview was run against.
+    /// </summary>
+    private bool ScopingPreviewIsStale =>
+        _previewedScopingProposal is not null && !BuildScopingProposal().DescribesSameScopeAs(_previewedScopingProposal);
+
+    private async Task PreviewScopingCriteriaAsync()
+    {
+        if (_syncRule is not { Id: > 0 } || _startingPreview)
+            return;
+
+        _startingPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var proposal = BuildScopingProposal();
+
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.SynchronisationRuleScope,
+                TargetId = _syncRule.Id,
+                TargetName = _syncRule.Name,
+                ProposedConfiguration = proposal,
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user?.Id,
+                InitiatedByName = user?.Name
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _scopePreviewActivityId = activityId;
+            _previewedScopingProposal = proposal;
+            _scopePreview = null;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            _scopePreviewActivityId = null;
+            _previewedScopingProposal = null;
+            _scopePreview = null;
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingPreview = false;
+        }
+    }
+
+    private void OnScopingPreviewChanged(ConfigurationChangePreview? preview) => _scopePreview = preview;
+
+    // ─── Attribute Flow preview (#1437) ───
+
+    private Guid? _attributeFlowPreviewActivityId;
+    private Guid? _behaviourPreviewActivityId;
+    private ConfigurationChangePreview? _behaviourPreview;
+    private SyncRuleBehaviourToggleProposal? _previewedBehaviourProposal;
+    private SyncRuleAttributeFlowProposal? _previewedAttributeFlowProposal;
+    private ConfigurationChangePreview? _attributeFlowPreview;
+
+    /// <summary>
+    /// The Attribute Flow as it stands on the form. The Attribute Flow tab edits the loaded rule's mappings in
+    /// place, so this is already the proposal; the adapter re-reads the stored mappings from the database to
+    /// compare against, which is why the page does not need to snapshot them itself.
+    /// </summary>
+    private SyncRuleAttributeFlowProposal BuildAttributeFlowProposal() =>
+        SyncRuleAttributeFlowProposal.FromCurrentMappings(_syncRule!);
+
+    /// <summary>
+    /// Whether the mappings have moved on from the ones the visible preview was run against.
+    /// </summary>
+    private bool AttributeFlowPreviewIsStale =>
+        _previewedAttributeFlowProposal is not null
+        && !BuildAttributeFlowProposal().DescribesSameMappingsAs(_previewedAttributeFlowProposal);
+
+    private async Task PreviewAttributeFlowAsync()
+    {
+        if (_syncRule is not { Id: > 0 } || _startingPreview)
+            return;
+
+        _startingPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var proposal = BuildAttributeFlowProposal();
+
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow,
+                TargetId = _syncRule.Id,
+                TargetName = _syncRule.Name,
+                ProposedConfiguration = proposal,
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user?.Id,
+                InitiatedByName = user?.Name
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _attributeFlowPreviewActivityId = activityId;
+            _previewedAttributeFlowProposal = proposal;
+            _attributeFlowPreview = null;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            _attributeFlowPreviewActivityId = null;
+            _previewedAttributeFlowProposal = null;
+            _attributeFlowPreview = null;
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingPreview = false;
+        }
+    }
+
+    private void OnAttributeFlowPreviewChanged(ConfigurationChangePreview? preview) => _attributeFlowPreview = preview;
+
+    private void OnBehaviourPreviewChanged(ConfigurationChangePreview? preview) => _behaviourPreview = preview;
+
+    /// <summary>
+    /// The behaviour toggles as the editor currently holds them.
+    /// </summary>
+    private SyncRuleBehaviourToggleProposal BuildBehaviourProposal() =>
+        SyncRuleBehaviourToggleProposal.FromCurrentSettings(_syncRule!);
+
+    /// <summary>
+    /// Whether the toggles have moved on from the ones the visible preview was run against.
+    /// </summary>
+    private bool BehaviourPreviewIsStale =>
+        _previewedBehaviourProposal is not null
+        && !BuildBehaviourProposal().DescribesSameSettingsAs(_previewedBehaviourProposal);
+
+    private async Task PreviewBehaviourAsync()
+    {
+        if (_syncRule is not { Id: > 0 } || _startingPreview)
+            return;
+
+        _startingPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var proposal = BuildBehaviourProposal();
+
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.SynchronisationRuleBehaviour,
+                TargetId = _syncRule.Id,
+                TargetName = _syncRule.Name,
+                ProposedConfiguration = proposal,
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user?.Id,
+                InitiatedByName = user?.Name
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _behaviourPreviewActivityId = activityId;
+            _previewedBehaviourProposal = proposal;
+            _behaviourPreview = null;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            _behaviourPreviewActivityId = null;
+            _previewedBehaviourProposal = null;
+            _behaviourPreview = null;
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingPreview = false;
+        }
+    }
+
+    /// <summary>
+    /// The preview whose counts the save confirmation states, and the Activity the change is linked to.
+    /// </summary>
+    /// <remarks>
+    /// A fresh behaviour preview wins over all of them, because the behaviour toggles decide whether the rule runs
+    /// at all: a rule being disabled makes every other preview's answer moot, since none of what they describe
+    /// happens. Below it, a fresh Scoping Criteria preview wins over a fresh Attribute Flow one, which in turn
+    /// wins over a fresh destructive-toggle one, in order of how much of the population each moves: a scope change decides which
+    /// objects the rule manages at all and its counts already describe what leaving costs them, an Attribute Flow
+    /// change rewrites values on the objects that stay, and the toggle preview describes the fate of objects whose
+    /// scope is unchanged. Where several have been edited in one sitting no single preview is complete on its own
+    /// (each evaluated the others' settings as stored), so the administrator is answering with the largest of the
+    /// questions in front of them; the panels above show all of them in full.
+    /// </remarks>
+    private (ConfigurationChangePreview? Preview, bool IsStale, Guid? ActivityId) ConfirmingPreview =>
+        _behaviourPreviewActivityId.HasValue && !BehaviourPreviewIsStale
+            ? (_behaviourPreview, false, _behaviourPreviewActivityId)
+        : _scopePreviewActivityId.HasValue && !ScopingPreviewIsStale
+            ? (_scopePreview, false, _scopePreviewActivityId)
+            : _attributeFlowPreviewActivityId.HasValue && !AttributeFlowPreviewIsStale
+                ? (_attributeFlowPreview, false, _attributeFlowPreviewActivityId)
+                : (_preview, DestructiveTogglePreviewIsStale, _previewActivityId);
+
     private async Task HandleCreateOrUpdateSyncRuleAsync()
     {
         if (_syncRule == null || _jim == null)
@@ -407,10 +705,11 @@ else if (_syncRule != null)
         // on the confirmation, so consent is to a number rather than to a sentence (#1115); a stale, failed or
         // still-running preview states nothing.
         var preflight = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(_syncRule);
+        var confirming = ConfirmingPreview;
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
                 "Synchronisation Rule", _syncRule.Name,
-                ConfigurationChangePreviewCounts.ForConfirmation(_preview, DestructiveTogglePreviewIsStale),
-                ConfigurationChangePreviewCounts.ForConfirmationVerdict(_preview, DestructiveTogglePreviewIsStale)))
+                ConfigurationChangePreviewCounts.ForConfirmation(confirming.Preview, confirming.IsStale),
+                ConfigurationChangePreviewCounts.ForConfirmationVerdict(confirming.Preview, confirming.IsStale)))
             return;
 
         // offer an optional reason for the configuration change history; cancelling aborts the save
@@ -421,7 +720,7 @@ else if (_syncRule != null)
         // save on the SAME context the rule was loaded on, so EF Core's change tracker sees the edits.
         // A preview that still describes the form links the apply Activity back to it (#827: "previewed, then
         // applied" is auditable); a stale one is not claimed.
-        var previewActivityId = DestructiveTogglePreviewIsStale ? null : _previewActivityId;
+        var previewActivityId = confirming.IsStale ? null : confirming.ActivityId;
         var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
         var wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user, changeReason: changeReason, previewActivityId: previewActivityId);
         switch (wasSuccessful)

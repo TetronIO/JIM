@@ -19,7 +19,7 @@
 
 @* ─── Getting Started Checklist (admin-only, hidden when fully configured) ─── *@
 <AuthorizeView Roles="Administrator">
-    @if (_dataLoaded && !_allSetupComplete)
+    @if (_dataLoaded && !_checklist.AllComplete)
     {
         <MudPaper Class="pa-5 mt-5" Outlined="true">
             <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
@@ -31,7 +31,7 @@
             </MudText>
             <MudStack Spacing="2">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    @if (_connectedSystemCount > 0)
+                    @if (_checklist.ConnectedSystemCreated)
                     {
                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
                         <MudText Typo="Typo.body1">Create a Connected System</MudText>
@@ -43,7 +43,7 @@
                     }
                 </MudStack>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    @if (_syncRuleCount > 0)
+                    @if (_checklist.SynchronisationRulesCreated)
                     {
                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
                         <MudText Typo="Typo.body1">Create Synchronisation Rules</MudText>
@@ -55,7 +55,7 @@
                     }
                 </MudStack>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    @if (_hasSchedules)
+                    @if (_checklist.ScheduleCreated)
                     {
                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
                         <MudText Typo="Typo.body1">Create a Schedule</MudText>
@@ -67,7 +67,7 @@
                     }
                 </MudStack>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    @if (_hasEverRun)
+                    @if (_checklist.FirstSynchronisationRun)
                     {
                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
                         <MudText Typo="Typo.body1">Run your first synchronisation</MudText>
@@ -347,9 +347,7 @@
     private int _connectedSystemCount;
     private int _syncRuleCount;
     private List<Schedule> _schedules = new();
-    private bool _hasSchedules;
-    private bool _hasEverRun;
-    private bool _allSetupComplete;
+    private GettingStartedChecklist _checklist = new(false, false, false, false);
 
     protected override async Task OnInitializedAsync()
     {
@@ -369,14 +367,16 @@
 
         // Load schedules
         _schedules = await jim.Scheduler.GetAllSchedulesAsync();
-        _hasSchedules = _schedules.Count > 0;
-        _hasEverRun = _schedules.Any(s => s.LastRunTime.HasValue);
 
-        // Determine if all setup steps are complete
-        _allSetupComplete = _connectedSystemCount > 0
-                            && _syncRuleCount > 0
-                            && _hasSchedules
-                            && _hasEverRun;
+        // Evaluate the Getting Started checklist. A synchronisation counts as run whether an administrator
+        // executed a Run Profile by hand or a Schedule fired it; keying only on Schedules leaves the step
+        // permanently outstanding on a system that is demonstrably synchronising.
+        _checklist = GettingStartedChecklist.Evaluate(
+            connectedSystemCount: _connectedSystemCount,
+            syncRuleCount: _syncRuleCount,
+            scheduleCount: _schedules.Count,
+            anyScheduleHasRun: _schedules.Any(s => s.LastRunTime.HasValue),
+            anyRunProfileExecuted: await jim.Activities.HasAnyRunProfileExecutionAsync());
 
         _dataLoaded = true;
     }

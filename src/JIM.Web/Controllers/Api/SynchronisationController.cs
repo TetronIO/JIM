@@ -122,7 +122,10 @@ public class SynchronisationController(
         if (objectTypes == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        var dtos = objectTypes.Select(ConnectedSystemObjectTypeDto.FromEntity);
+        // Sibling names resolve a Reference attribute's declared target (#1285) without the entity graph
+        // carrying a ReferencedObjectType navigation.
+        var objectTypeNamesById = objectTypes.ToDictionary(ot => ot.Id, ot => ot.Name);
+        var dtos = objectTypes.Select(objectType => ConnectedSystemObjectTypeDto.FromEntity(objectType, objectTypeNamesById));
         return Ok(dtos);
     }
 
@@ -153,7 +156,7 @@ public class SynchronisationController(
         if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
 
-        return Ok(ConnectedSystemObjectTypeDto.FromEntity(objectType));
+        return Ok(ConnectedSystemObjectTypeDto.FromEntity(objectType, await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId)));
     }
 
     /// <summary>
@@ -226,7 +229,7 @@ public class SynchronisationController(
 
         // Return the updated object type
         var updated = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
-        return Ok(ConnectedSystemObjectTypeDto.FromEntity(updated!));
+        return Ok(ConnectedSystemObjectTypeDto.FromEntity(updated!, await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId)));
     }
 
     /// <summary>
@@ -398,7 +401,7 @@ public class SynchronisationController(
 
         // Return the updated attribute
         var updated = await _application.ConnectedSystems.GetAttributeAsync(attributeId);
-        return Ok(ConnectedSystemAttributeDto.FromEntity(updated!));
+        return Ok(ConnectedSystemAttributeDto.FromEntity(updated!, await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId)));
     }
 
     /// <summary>
@@ -483,11 +486,12 @@ public class SynchronisationController(
             updated.Count, errors.Count);
 
         // Build the response
+        var objectTypeNamesById = await _application.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId);
         var response = new BulkUpdateConnectedSystemAttributesResponse
         {
             ActivityId = activity.Id,
             UpdatedCount = updated.Count,
-            UpdatedAttributes = updated.Select(ConnectedSystemAttributeDto.FromEntity).ToList(),
+            UpdatedAttributes = updated.Select(attribute => ConnectedSystemAttributeDto.FromEntity(attribute, objectTypeNamesById)).ToList(),
             Errors = errors.Count > 0
                 ? errors.Select(e => new BulkUpdateAttributeError { AttributeId = e.AttributeId, ErrorMessage = e.Error }).ToList()
                 : null
@@ -1499,6 +1503,144 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Preview a change to a Connected System's schema selection
+    /// </summary>
+    /// <remarks>
+    /// Answers what a proposed schema selection would do, without making it (#827 gap G6, #1475): which Connected
+    /// System Objects would stop being imported, which attributes would stop being refreshed and on how many
+    /// objects, and which Metaverse Objects would have this system's contributed values withdrawn, or kept, when
+    /// their obsolete objects are next synchronised.
+    ///
+    /// This matters because the change has no visible effect. Nothing fails, nothing is deleted and nothing is
+    /// disconnected; JIM simply stops reading, and everything downstream carries on over data that has stopped
+    /// moving. In particular, deselecting an Object Type does **not** obsolete the objects already imported from
+    /// it: they stay joined to their Metaverse Objects and go on contributing the values they last imported.
+    ///
+    /// Every omission means "leave this as it stands". An Object Type the request does not name is left alone, and
+    /// a field it does not set keeps that Type's stored value, so a request changing one attribute cannot
+    /// accidentally propose deselecting a whole Type.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The proposed schema selection.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="400">A named Object Type or attribute does not belong to this Connected System.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/schema-selection/preview", Name = "StartConnectedSystemSchemaPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartConnectedSystemSchemaPreviewAsync(int connectedSystemId,
+        [FromBody] StartConnectedSystemSchemaPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var objectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId) ?? [];
+        var stored = ConnectedSystemSchemaProposal.FromCurrentConfiguration(objectTypes);
+
+        // An id naming nothing in this schema is different in kind from a selection the preview disagrees with:
+        // there is no coherent proposal to evaluate, and silently ignoring it would produce a confident answer to
+        // a question the caller did not ask.
+        var unknown = UnknownSchemaSelectionIds(objectTypes, request);
+        if (unknown != null)
+            return BadRequest(unknown);
+
+        var proposal = MergeSchemaProposal(stored, request);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ConnectedSystemSchema,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started schema selection preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// The whole proposed schema, built by laying the request's overrides over the stored selection. Every
+    /// omission keeps the stored value, at both levels: an Object Type the request does not name is carried
+    /// through untouched, and a field it does not set on a Type it does name keeps that Type's setting.
+    /// </summary>
+    /// <remarks>
+    /// Merging here rather than in the adapter is what lets a caller change one flag. The type defaults are the
+    /// destructive answers (an omitted <c>selected</c> read as false deselects an Object Type; an omitted
+    /// attribute list read as empty deselects every attribute), so silence has to reach the stored value before
+    /// anything compares the two.
+    /// </remarks>
+    private static ConnectedSystemSchemaProposal MergeSchemaProposal(ConnectedSystemSchemaProposal stored,
+        StartConnectedSystemSchemaPreviewRequest request)
+    {
+        var requested = (request.ObjectTypes ?? [])
+            .GroupBy(objectType => objectType.ObjectTypeId)
+            .ToDictionary(group => group.Key, group => group.Last());
+
+        return new ConnectedSystemSchemaProposal(stored.ObjectTypes
+            .Select(storedType => requested.TryGetValue(storedType.ObjectTypeId, out var proposed)
+                ? storedType with
+                {
+                    Selected = proposed.Selected ?? storedType.Selected,
+                    RemoveContributedAttributesOnObsoletion = proposed.RemoveContributedAttributesOnObsoletion
+                                                              ?? storedType.RemoveContributedAttributesOnObsoletion,
+                    SelectedAttributeIds = proposed.SelectedAttributeIds ?? storedType.SelectedAttributeIds
+                }
+                : storedType)
+            .ToList());
+    }
+
+    /// <summary>
+    /// The error response for a proposal naming an Object Type or attribute this Connected System does not have,
+    /// or null when every id in the proposal resolves.
+    /// </summary>
+    private static ApiErrorResponse? UnknownSchemaSelectionIds(
+        IReadOnlyCollection<ConnectedSystemObjectType> objectTypes, StartConnectedSystemSchemaPreviewRequest request)
+    {
+        foreach (var proposed in request.ObjectTypes ?? [])
+        {
+            var storedType = objectTypes.FirstOrDefault(objectType => objectType.Id == proposed.ObjectTypeId);
+            if (storedType == null)
+                return ApiErrorResponse.BadRequest(
+                    $"Object Type {proposed.ObjectTypeId} does not belong to this Connected System.");
+
+            if (proposed.SelectedAttributeIds == null)
+                continue;
+
+            var knownAttributeIds = storedType.Attributes.Select(attribute => attribute.Id).ToHashSet();
+            var unknown = proposed.SelectedAttributeIds.Where(id => !knownAttributeIds.Contains(id)).ToList();
+            if (unknown.Count > 0)
+                return ApiErrorResponse.BadRequest(
+                    $"Attribute(s) {string.Join(", ", unknown.Order())} do not belong to Object Type " +
+                    $"{storedType.Name} on this Connected System.");
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// The error response for a proposal naming a partition or container this Connected System does not have, or
     /// stating that one Container is both managed and carved out, or null when the proposal is coherent.
     /// </summary>
@@ -1910,6 +2052,59 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Preview a schema refresh for a Connected System
+    /// </summary>
+    /// <remarks>
+    /// Connects to the external system, retrieves its schema and reports what a refresh would change, without
+    /// persisting anything or recording an Activity. Removals and attribute definition changes are flagged via
+    /// <c>hasRemovalsOrDefinitionChanges</c>; a refresh never deletes retained entries. To commit, call the
+    /// import-schema endpoint after reviewing this result.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>A result object describing what a schema refresh would change.</returns>
+    /// <response code="200">Schema retrieved and compared successfully.</response>
+    /// <response code="400">Schema retrieval failed (e.g., connection error, invalid settings).</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/import-schema/preview", Name = "PreviewConnectedSystemSchemaImport")]
+    [ProducesResponseType(typeof(SchemaRefreshResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> PreviewConnectedSystemSchemaImportAsync(int connectedSystemId)
+    {
+        _logger.LogInformation("Schema refresh preview requested for Connected System: {Id}", connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for schema refresh preview");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // No change tracking: the merge mutates the loaded instance in memory only, and this request discards it
+        // after building the response.
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        try
+        {
+            var result = await _application.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+            return Ok(SchemaRefreshResultDto.FromModel(result));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Deliberately broad, with the cancellation exclusion the fallback-dispatcher rule requires: schema
+            // retrieval fails in as many concrete types as there are connectors (file IO, LDAP, SQL, HTTP), and
+            // every one of them is a fact about the Connected System's configuration or reachability that the
+            // caller must see as a 400 with the reason, not a 500. A cancelled request still propagates.
+            _logger.LogError(ex, "Failed to preview schema refresh for Connected System: {Id}", connectedSystemId);
+            return BadRequest(ApiErrorResponse.BadRequest($"Schema refresh preview failed: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
     /// Import hierarchy from a Connected System
     /// </summary>
     /// <remarks>
@@ -2222,7 +2417,7 @@ public class SynchronisationController(
     /// <param name="id">The unique identifier of the Connector Definition.</param>
     /// <returns>The Connector Definition details including all settings and capabilities.</returns>
     [HttpGet("connector-definitions/{id:int}", Name = "GetConnectorDefinition")]
-    [ProducesResponseType(typeof(ConnectorDefinition), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectorDefinitionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectorDefinitionAsync(int id)
@@ -2232,7 +2427,7 @@ public class SynchronisationController(
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with ID {id} not found."));
 
-        return Ok(definition);
+        return Ok(ConnectorDefinitionDto.FromEntity(definition));
     }
 
     /// <summary>
@@ -2241,7 +2436,7 @@ public class SynchronisationController(
     /// <param name="name">The name of the Connector Definition (e.g., "CSV File", "LDAP").</param>
     /// <returns>The Connector Definition details including all settings and capabilities.</returns>
     [HttpGet("connector-definitions/by-name/{name}", Name = "GetConnectorDefinitionByName")]
-    [ProducesResponseType(typeof(ConnectorDefinition), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectorDefinitionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectorDefinitionByNameAsync(string name)
@@ -2251,7 +2446,7 @@ public class SynchronisationController(
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with name '{name}' not found."));
 
-        return Ok(definition);
+        return Ok(ConnectorDefinitionDto.FromEntity(definition));
     }
 
     #endregion
@@ -2831,6 +3026,73 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Preview a Synchronisation Rule behaviour change
+    /// </summary>
+    /// <remarks>
+    /// Answers what changing the rule's behaviour toggles would do before anything is saved: how many objects
+    /// would stop having an identity created for them, how many would stop having an account created, and how many
+    /// would be left free to drift from what JIM holds, along with each of their inverses.
+    ///
+    /// These are the settings whose consequences are hardest to picture, because none of them names a population.
+    /// Disabling a rule reads like pausing it and is closer to withdrawing every value it owns; turning
+    /// `provisionToConnectedSystem` on reads like granting a capability and is account creation at scale.
+    ///
+    /// Every omitted toggle is taken from the stored rule, exactly as the update endpoint does, so a caller
+    /// proposing one change never silently proposes a second.
+    ///
+    /// `direction` is accepted and refused with a blocking finding rather than evaluated: a saved rule's Attribute
+    /// Flow mappings and Object Matching Rules are written for the direction it has, and would all address the
+    /// wrong side after a flip. Create a rule in the direction you need instead.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from `GET /previews/{activityId}`, drill-down rows from
+    /// `GET /previews/{activityId}/deltas`, and abandon a running preview with `DELETE /previews/{activityId}`.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed behaviour toggles.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/behaviour/preview", Name = "StartSyncRuleBehaviourPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleBehaviourPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleBehaviourPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var proposal = request.ToProposal(syncRule);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleBehaviour,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started behaviour-toggle preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
     /// Preview what changing a Synchronisation Rule's destructive toggles would do
     /// </summary>
     /// <remarks>
@@ -2897,6 +3159,150 @@ public class SynchronisationController(
         var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
 
         _logger.LogInformation("Started destructive-toggle preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// Preview what changing a Synchronisation Rule's Scoping Criteria would do
+    /// </summary>
+    /// <remarks>
+    /// Evaluates a proposed set of Scoping Criteria against the rule's persisted configuration, without saving
+    /// either: which objects would leave scope and what that costs each of them, which would enter scope and what
+    /// would be created for them, and which Metaverse Objects the departures would leave eligible for deletion.
+    ///
+    /// This matters because a scope change decides which objects a rule manages at all, while what happens to the
+    /// ones that leave is decided by a different setting: an import rule's Out-of-Scope Action can disconnect every
+    /// object that goes, and an export rule's Deprovisioning Action can delete them from the target system.
+    ///
+    /// Omitting <c>criteriaGroups</c> (or sending null) previews the rule's stored criteria, matching the update
+    /// endpoints' semantics. Sending an EMPTY array is a real and much larger proposal: it removes every criterion,
+    /// handing the rule every object of its type. Apply the previewed change through the Scoping Criteria
+    /// endpoints, passing the preview's Activity id so the change records what was read before it.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    ///
+    /// A criterion naming an attribute the rule's direction cannot read comes back as a blocking validation
+    /// finding rather than being evaluated around, because a criterion that can never match would silently make
+    /// the previewed scope wider than the one described.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed Scoping Criteria.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria/preview", Name = "StartSyncRuleScopingPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleScopingPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleScopingPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var proposal = request.ToProposal(syncRule);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleScope,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started Scoping Criteria preview {ActivityId} for Synchronisation Rule {Id}",
+            result.ActivityId, syncRule.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// Preview what changing a Synchronisation Rule's Attribute Flow would write
+    /// </summary>
+    /// <remarks>
+    /// Evaluates a proposed set of Attribute Flow mappings against the rule's persisted configuration, without
+    /// saving either, and reports per object and per attribute what the values would become.
+    ///
+    /// This matters because a changed mapping rewrites an attribute on every object the rule manages, on the next
+    /// synchronisation, with no statement of what the values become; an Expression that malforms one case in a
+    /// thousand is invisible until it has flowed.
+    ///
+    /// The evaluation is the synchronisation engine's own, run twice per object (once against the stored
+    /// configuration, once against the proposal) and diffed, so Attribute Priority, Missing Input Behaviour and
+    /// Expression evaluation are the engine's answers rather than this endpoint's reading of the configuration. A
+    /// proposed mapping that would lose Attribute Priority comes back as a validation finding: it would be
+    /// evaluated and then write nothing, and reporting the values it produces without saying so would be a
+    /// confident statement about a write that never happens.
+    ///
+    /// Omitting <c>mappings</c> (or sending null) previews the rule's stored mappings, matching the update
+    /// endpoints' semantics. Sending an EMPTY array is a real proposal: it removes every mapping, so the rule flows
+    /// nothing. Note that removing a mapping changes no value on the next synchronisation; inbound flow contributes
+    /// what its mappings produce, so a mapping that no longer exists leaves the values it last wrote in place, and
+    /// the preview reports that as a finding rather than as a withdrawal.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>. Apply the previewed change through the Attribute Flow endpoints,
+    /// passing the preview's Activity id so the change records what was read before it.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The proposed Attribute Flow mappings.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/mappings/preview", Name = "StartSyncRuleAttributeFlowPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartSyncRuleAttributeFlowPreviewAsync(int syncRuleId,
+        [FromBody] StartSyncRuleAttributeFlowPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var proposal = request.ToProposal(syncRule);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow,
+            TargetId = syncRule.Id,
+            TargetName = syncRule.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started Attribute Flow preview {ActivityId} for Synchronisation Rule {Id}",
             result.ActivityId, syncRule.Id);
 
         return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
@@ -4220,6 +4626,80 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
 
         return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+    }
+
+    /// <summary>
+    /// Preview an Object Matching change
+    /// </summary>
+    /// <remarks>
+    /// Answers what changing a Connected System's Object Matching Rules would do before anything is saved: which
+    /// of its unjoined objects would join a different Metaverse Object, which would join instead of projecting a
+    /// new identity, which would project instead of joining, and which would match ambiguously and fail.
+    ///
+    /// This matters because none of those outcomes fails at synchronisation time. A rule matched too loosely
+    /// merges an account into the wrong identity and takes every value it contributes with it; a rule matched too
+    /// tightly projects a duplicate identity beside the right one. Both look like a successful run.
+    ///
+    /// The evaluation is the matching engine's own, run twice per object (once against the stored rules, once
+    /// against the proposal) and diffed, so a match is the engine's answer rather than this endpoint's reading of
+    /// the configuration.
+    ///
+    /// Only objects that are not already joined to a Metaverse Object are evaluated, because only they are ever
+    /// matched again. A Connected System Object already joined keeps the Metaverse Object it has, whatever this
+    /// change does.
+    ///
+    /// Omitting `mode` previews the Connected System's stored mode, and omitting `rules` previews its stored
+    /// rules, matching the update endpoints' semantics. Sending an EMPTY `rules` array is a real proposal: it
+    /// removes every rule, so nothing would ever join.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from `GET /previews/{activityId}`, drill-down rows from
+    /// `GET /previews/{activityId}/deltas`, and abandon a running preview with `DELETE /previews/{activityId}`.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The proposed Object Matching configuration.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/matching-rules/preview", Name = "StartObjectMatchingPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartObjectMatchingPreviewAsync(int connectedSystemId,
+        [FromBody] StartObjectMatchingPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var objectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
+        var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, false);
+        var proposal = request.ToProposal(connectedSystem, objectTypes, syncRules);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ObjectMatching,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started Object Matching preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
     }
 
     /// <summary>
