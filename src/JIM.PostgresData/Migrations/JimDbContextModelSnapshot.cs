@@ -4866,21 +4866,17 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPasswordSynchronisation", b =>
                 {
-                    b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
                         .WithOne("PasswordSynchronisation")
                         .HasForeignKey("JIM.Models.Staging.ConnectedSystemPasswordSynchronisation", "ConnectedSystemId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", "TargetObjectType")
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", null)
                         .WithMany()
                         .HasForeignKey("TargetObjectTypeId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("ConnectedSystem");
-
-                    b.Navigation("TargetObjectType");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemRunProfile", b =>
