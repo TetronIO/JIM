@@ -51,19 +51,20 @@ The administrator can see the problem and has no tool to respond to it. This PRD
 2. When the diff contains destructive changes, the panel's actions become the three options above; when it contains only additions, the existing Apply/Discard pair stands unchanged.
 3. Dependent-configuration detection covers: Synchronisation Rules whose Object Type is removed; Attribute Flow mappings whose source or target attribute is removed or retyped, including mappings consuming the attribute as an expression input; and Object Matching Rules referencing a removed attribute.
 4. Options 2 and 3 open a preview before committing: option 2 lists every configuration object that would be disabled; option 3 lists that plus the data impact (Connected System Objects obsoleted per removed Object Type, stored values removed per removed attribute), using the counting machinery the preview framework already has.
-5. Cancel, when the diff carries destructive changes, warns concretely: objects of removed Object Types will be obsoleted by the next Full Import regardless of cancelling, and mappings over retyped attributes may misbehave. Additions-only cancels remain warning-free (#421 behaviour).
+5. Synchronisation Rule and Object Type names shown in the review and in the option previews deep-link to their pages, opening in a new window, so the administrator can inspect a dependent without losing the review.
+6. Cancel, when the diff carries destructive changes, warns concretely: objects of removed Object Types will be obsoleted by the next Full Import regardless of cancelling, and mappings over retyped attributes may misbehave. Additions-only cancels remain warning-free (#421 behaviour).
 
 **Option 2 mechanics: apply and disable dependents**
 
-6. Attribute Flow mappings gain a persisted enabled/disabled state with portal, REST and PowerShell write parity. A disabled mapping is skipped by synchronisation and reported as skipped on the run's Activity, never silently absent.
-7. Disabling performed by option 2 records why (which refresh, which schema change) so the administrator later sees the cause on the rule or mapping, distinct from a disable they performed themselves. Re-enabling is a manual administrator action.
-8. Synchronisation Rules disabled by option 2 use the existing rule-level Enabled state, with the same recorded reason.
+7. Attribute Flow mappings gain a persisted enabled/disabled state with portal, REST and PowerShell write parity. A disabled mapping is skipped by synchronisation and reported as skipped on the run's Activity.
+8. Disabling performed by option 2 records why (which refresh, which schema change) so the administrator later sees the cause on the rule or mapping, distinct from a disable they performed themselves. Re-enabling is a manual administrator action.
+9. Synchronisation Rules disabled by option 2 use the existing rule-level Enabled state, with the same recorded reason.
 
 **Option 3 mechanics: apply and remove**
 
-9. Removal of dependent configuration deletes the affected Synchronisation Rules and mappings (as previewed and confirmed; this is the one sanctioned configuration-deleting path, and it is always explicit).
-10. Removal of dependent data routes through existing machinery, never a new bulk-delete path: Connected System Objects of a removed Object Type are obsoleted and flow through disconnection, attribute recall (per the type's obsoletion setting), grace periods and Metaverse Deletion Rules; stored values of a removed attribute are removed via the pending-removal machinery.
-11. Option 3 executes as a worker task under an audited Activity with per-object results; the portal request only queues it.
+10. Removal of dependent configuration deletes the affected Synchronisation Rules and mappings (as previewed and confirmed; this is the one sanctioned configuration-deleting path, and it is always explicit).
+11. Removal of dependent data routes through existing machinery, never a new bulk-delete path: Connected System Objects of a removed Object Type are obsoleted and flow through disconnection, attribute recall (per the type's obsoletion setting), grace periods and Metaverse Deletion Rules; stored values of a removed attribute are removed via the pending-removal machinery.
+12. Option 3 executes as a worker task under an audited Activity with per-object results; the portal request only queues it.
 
 ### Non-Functional Requirements
 
