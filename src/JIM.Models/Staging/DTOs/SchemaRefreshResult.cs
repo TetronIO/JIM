@@ -78,6 +78,13 @@ public class SchemaRefreshResult
     public Dictionary<string, List<string>> BlockedCredentialAttributes { get; set; } = new();
 
     /// <summary>
+    /// The schema as JIM held it before the merge ran: the merge rebuilds the in-memory graph from what the
+    /// Connector reported, so this snapshot is the only place a removed entry's id survives, and it is what
+    /// dependent detection (#1485) resolves removal names against.
+    /// </summary>
+    public List<SchemaRefreshPreRefreshType> PreRefreshSchema { get; set; } = new();
+
+    /// <summary>
     /// Discovery shortfalls the Connector worked around rather than failed on, copied from
     /// <see cref="ConnectorSchema.Warnings"/> so the portal can show them alongside what changed. The schema
     /// import's Activity carries the same warnings, which is how they reach the REST API and PowerShell.

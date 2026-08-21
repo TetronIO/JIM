@@ -1,3 +1,4 @@
+@using JIM.Application.Services
 @using JIM.Models.Core
 @using JIM.Models.Exceptions
 @using JIM.Models.Staging
@@ -132,8 +133,10 @@
 @if (_schemaRefreshPreview != null)
 {
     <SchemaRefreshPreviewPanel Result="_schemaRefreshPreview"
+                               Dependents="_schemaRefreshDependents"
                                Busy="_schemaRefreshApplying"
                                OnApply="HandleApplySchemaRefreshAsync"
+                               OnApplyWithDisables="HandleApplySchemaRefreshWithDisablesAsync"
                                OnDiscard="HandleDiscardSchemaRefresh" />
 }
 
@@ -761,8 +764,10 @@
 
     // A refresh with an existing schema previews first (#421): the merge runs against this freshly loaded
     // instance so the live graph the tabs render stays untouched until the administrator applies. Discarding
-    // is just dropping the pair.
+    // is just dropping the pair. The dependents are what the destructive changes invalidate, and double as
+    // the Apply & Disable Dependents plan (#1485).
     private SchemaRefreshResult? _schemaRefreshPreview;
+    private SchemaRefreshDependents? _schemaRefreshDependents;
     private ConnectedSystem? _pendingSchemaRefreshSystem;
     private bool _schemaRefreshApplying;
     private ConnectedSystemObjectType? _selectedObjectType;
@@ -967,6 +972,7 @@
         _schemaBeingRetrieved = true;
         _schemaRefreshResult = null; // Clear any previous result
         _schemaRefreshPreview = null;
+        _schemaRefreshDependents = null;
         _pendingSchemaRefreshSystem = null;
         StateHasChanged();
         await Task.Delay(1);
@@ -994,6 +1000,14 @@
 
                 _schemaRefreshPreview = await jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(pending);
                 _pendingSchemaRefreshSystem = pending;
+
+                // A destructive diff names what depends on it, which is also the Apply & Disable plan (#1485).
+                _schemaRefreshDependents = _schemaRefreshPreview.HasRemovalsOrDefinitionChanges
+                    ? SchemaRefreshDependentDetector.Detect(
+                        _schemaRefreshPreview,
+                        await jim.ConnectedSystems.GetSyncRulesAsync(ConnectedSystem.Id, includeDisabledSyncRules: true),
+                        DateTime.UtcNow)
+                    : null;
             }
         }
         catch (CsvParsingException ex)
@@ -1035,6 +1049,7 @@
             await jim.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(_pendingSchemaRefreshSystem, _schemaRefreshPreview, user);
             _schemaRefreshResult = _schemaRefreshPreview;
             _schemaRefreshPreview = null;
+            _schemaRefreshDependents = null;
             _pendingSchemaRefreshSystem = null;
             await OnConnectedSystemChanged.InvokeAsync();
         }
@@ -1054,12 +1069,52 @@
     }
 
     /// <summary>
+    /// The Apply &amp; Disable Dependents option (#1485): records the new schema, then disables every rule and
+    /// mapping the plan names, each with its reason, so nothing runs against entries the source no longer reports.
+    /// </summary>
+    private async Task HandleApplySchemaRefreshWithDisablesAsync()
+    {
+        if (_schemaRefreshPreview == null || _pendingSchemaRefreshSystem == null || _schemaRefreshDependents == null)
+            return;
+
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+
+        _schemaRefreshApplying = true;
+        StateHasChanged();
+        await Task.Delay(1);
+
+        try
+        {
+            await jim.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(_pendingSchemaRefreshSystem, _schemaRefreshPreview, _schemaRefreshDependents, user);
+            Snackbar.Add("Schema applied; the dependent configuration has been disabled.", Severity.Success);
+            _schemaRefreshResult = _schemaRefreshPreview;
+            _schemaRefreshPreview = null;
+            _schemaRefreshDependents = null;
+            _pendingSchemaRefreshSystem = null;
+            await OnConnectedSystemChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Same boundary as the plain apply: any failure reaches the administrator, never the circuit.
+            Log.Error(ex, "Failed to apply schema refresh with disables for Connected System {SystemId}", ConnectedSystem.Id);
+            Snackbar.Add($"Failed to apply the schema changes: {ex.Message}", Severity.Error, options => options.RequireInteraction = true);
+        }
+        finally
+        {
+            _schemaRefreshApplying = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
     /// Drops the previewed refresh. The preview merged into its own instance, so the schema JIM holds was never
     /// touched; the panel has already confirmed the decision where the discard leaves JIM adrift of the source.
     /// </summary>
     private void HandleDiscardSchemaRefresh()
     {
         _schemaRefreshPreview = null;
+        _schemaRefreshDependents = null;
         _pendingSchemaRefreshSystem = null;
     }
 

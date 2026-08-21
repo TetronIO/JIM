@@ -115,6 +115,9 @@ public class ConfigurationSnapshotService
         Add(children, "description", rule.Description, "Description");
         AddEnum(children, "direction", rule.Direction, "Direction");
         Add(children, "enabled", Render(rule.Enabled), "Enabled");
+        // A rule disabled on the administrator's behalf records why (#1485); the reason is configuration and
+        // sits beside the toggle it explains.
+        Add(children, "disabledReason", rule.DisabledReason, "Disabled reason");
         Add(children, "provisionToConnectedSystem", Render(rule.ProvisionToConnectedSystem), "Provision to Connected System");
         Add(children, "projectToMetaverse", Render(rule.ProjectToMetaverse), "Project to Metaverse");
         AddEnum(children, "outboundDeprovisionAction", rule.OutboundDeprovisionAction, "Outbound deprovision action");
