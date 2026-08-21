@@ -6,11 +6,17 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace JIM.PostgresData.Migrations
 {
     /// <inheritdoc />
-    public partial class AddCausalEdges : Migration
+    public partial class AddCausalProvenance : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<Guid>(
+                name: "QueuedByRunProfileExecutionItemId",
+                table: "PendingExports",
+                type: "uuid",
+                nullable: true);
+
             migrationBuilder.CreateTable(
                 name: "CausalEdges",
                 columns: table => new
@@ -22,6 +28,10 @@ namespace JIM.PostgresData.Migrations
                     CauseSyncOutcomeId = table.Column<Guid>(type: "uuid", nullable: true),
                     CauseMetaverseObjectId = table.Column<Guid>(type: "uuid", nullable: true),
                     CauseConnectedSystemObjectId = table.Column<Guid>(type: "uuid", nullable: true),
+                    CausePendingExportId = table.Column<Guid>(type: "uuid", nullable: true),
+                    CauseObjectTypeName = table.Column<string>(type: "text", nullable: true),
+                    CauseObjectTypePluralName = table.Column<string>(type: "text", nullable: true),
+                    EffectAttributeName = table.Column<string>(type: "text", nullable: true),
                     CauseDisplayName = table.Column<string>(type: "text", nullable: true),
                     EdgeType = table.Column<int>(type: "integer", nullable: false),
                     ReasonCode = table.Column<int>(type: "integer", nullable: false),
@@ -63,6 +73,10 @@ namespace JIM.PostgresData.Migrations
         {
             migrationBuilder.DropTable(
                 name: "CausalEdges");
+
+            migrationBuilder.DropColumn(
+                name: "QueuedByRunProfileExecutionItemId",
+                table: "PendingExports");
         }
     }
 }
