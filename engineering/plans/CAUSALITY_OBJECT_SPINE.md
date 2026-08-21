@@ -1,7 +1,7 @@
 # Causality Object Spine — Implementation Plan
 
 - **Status:** Planned
-- **Issue:** *(to be filed; blocked on gh credentials at plan time)*
+- **Issue:** [#1495](https://github.com/TetronIO/JIM/issues/1495)
 - **PRD:** [`engineering/prd/PRD_CAUSALITY_OBJECT_SPINE.md`](../prd/PRD_CAUSALITY_OBJECT_SPINE.md)
 
 ## Overview

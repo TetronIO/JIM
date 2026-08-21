@@ -3,7 +3,7 @@
 - **Status:** Planned
 - **Created:** 2026-08-21
 - **Author:** JayVDZ (with Claude)
-- **Issue:** *(to be filed)*
+- **Issue:** [#1495](https://github.com/TetronIO/JIM/issues/1495)
 
 ## Problem Statement
 
