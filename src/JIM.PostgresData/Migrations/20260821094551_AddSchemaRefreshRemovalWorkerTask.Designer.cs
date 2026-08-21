@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20260821092237_AddSchemaRefreshRemovalWorkerTask")]
+    [Migration("20260821094551_AddSchemaRefreshRemovalWorkerTask")]
     partial class AddSchemaRefreshRemovalWorkerTask
     {
         /// <inheritdoc />
@@ -3176,6 +3176,45 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ConnectedSystemPasswordPolicies");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPasswordSynchronisation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MaxRetries")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("RequireSecureTransport")
+                        .HasColumnType("boolean");
+
+                    b.Property<TimeSpan>("RetryBackoffBase")
+                        .HasColumnType("interval");
+
+                    b.Property<int>("TargetObjectTypeId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId")
+                        .IsUnique();
+
+                    b.HasIndex("Enabled")
+                        .HasDatabaseName("IX_ConnectedSystemPasswordSynchronisations_Enabled");
+
+                    b.HasIndex("TargetObjectTypeId");
+
+                    b.ToTable("ConnectedSystemPasswordSynchronisations");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemRunProfile", b =>
                 {
                     b.Property<int>("Id")
@@ -4863,6 +4902,21 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystem");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPasswordSynchronisation", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithOne("PasswordSynchronisation")
+                        .HasForeignKey("JIM.Models.Staging.ConnectedSystemPasswordSynchronisation", "ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", null)
+                        .WithMany()
+                        .HasForeignKey("TargetObjectTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemRunProfile", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
@@ -5217,6 +5271,8 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Partitions");
 
                     b.Navigation("PasswordPolicy");
+
+                    b.Navigation("PasswordSynchronisation");
 
                     b.Navigation("PendingExports");
 
