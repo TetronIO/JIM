@@ -5767,6 +5767,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToList();
     }
 
+    public async Task<ConnectedSystem?> GetConnectedSystemForPasswordDeliveryAsync(int connectedSystemId)
+    {
+        // No tracking: the pass reads the configuration and the settings, and writes only to the queue, which it
+        // does through raw SQL of its own. Tracking the graph here would put a second instance of every setting
+        // value in the identity map for the length of the pass and buy nothing.
+        return await Repository.Database.ConnectedSystems
+            .AsNoTracking()
+            .Include(cs => cs.ConnectorDefinition)
+            .Include(cs => cs.PasswordSynchronisation)
+            .Include(cs => cs.SettingValues)
+                .ThenInclude(sv => sv.Setting)
+            .SingleOrDefaultAsync(cs => cs.Id == connectedSystemId);
+    }
+
     public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)
     {
         // Read-only comparison input, so no tracking: attaching it would put a second instance of this row in
