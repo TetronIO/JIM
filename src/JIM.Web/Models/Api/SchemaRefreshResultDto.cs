@@ -98,10 +98,18 @@ public class SchemaRefreshResultDto
 
     /// <summary>
     /// What the destructive changes invalidate (#1485): the Synchronisation Rules and Attribute Flow mappings
-    /// that would be disabled by committing with <c>disableDependents</c>, each with its reason, plus Object
-    /// Matching Rules needing attention. Null when the refresh carries no destructive changes.
+    /// that would be disabled by committing with <c>disableDependents</c> (or deleted by committing with
+    /// <c>removeDependents</c>), each with its reason, plus Object Matching Rules needing attention. Null when
+    /// the refresh carries no destructive changes.
     /// </summary>
     public SchemaRefreshDependents? Dependents { get; set; }
+
+    /// <summary>
+    /// What committing with <c>removeDependents</c> would remove, counted (#1485): Connected System Objects per
+    /// removed Object Type (marked Obsolete and deprovisioned through the standard pipeline) and stored values
+    /// per removed attribute (deleted). Null when the refresh carries no destructive changes.
+    /// </summary>
+    public SchemaRefreshRemovalImpact? RemovalImpact { get; set; }
 
     /// <summary>
     /// Maps a schema refresh result to its API representation.

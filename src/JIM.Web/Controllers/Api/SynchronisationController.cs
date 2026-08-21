@@ -1904,6 +1904,9 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
+        if (request is { DisableDependents: true, RemoveDependents: true })
+            return BadRequest(ApiErrorResponse.BadRequest("disableDependents and removeDependents are mutually exclusive; a refresh takes one posture."));
+
         // Get the Connected System with change tracking since schema import modifies and saves it
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
@@ -1914,7 +1917,23 @@ public class SynchronisationController(
             // Get the current API key for Activity attribution if authenticated via API key
             var apiKey = await GetCurrentApiKeyAsync();
 
-            if (request is { DisableDependents: true })
+            if (request is { RemoveDependents: true })
+            {
+                // The Apply and Remove flavour (#1485): retrieve and merge in memory, detect what the
+                // destructive changes invalidate, then apply the schema, delete exactly that configuration and
+                // queue the data removal task. Stateless for the same reason as the disable flavour below: the
+                // plan is recomputed here so the removals always match the schema being applied. The queued
+                // task is observable via the worker tasks API.
+                var previewResult = await _application.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+                var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules: true);
+                var dependents = SchemaRefreshDependentDetector.Detect(previewResult, syncRules, DateTime.UtcNow);
+
+                if (apiKey != null)
+                    await _application.ConnectedSystems.ApplyConnectedSystemSchemaRefreshWithRemovalAsync(connectedSystem, previewResult, dependents, apiKey);
+                else
+                    await _application.ConnectedSystems.ApplyConnectedSystemSchemaRefreshWithRemovalAsync(connectedSystem, previewResult, dependents, initiatedBy);
+            }
+            else if (request is { DisableDependents: true })
             {
                 // The Apply and Disable Dependents flavour (#1485): retrieve and merge in memory, detect what
                 // the destructive changes invalidate, then apply the schema and disable exactly that, each rule
@@ -1990,12 +2009,14 @@ public class SynchronisationController(
             var result = await _application.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
             var dto = SchemaRefreshResultDto.FromModel(result);
 
-            // A destructive diff names its dependents (#1485): what committing with disableDependents would
-            // disable, so a caller reviews the whole decision from this one response.
+            // A destructive diff names its dependents and counts the removal impact (#1485): what committing
+            // with disableDependents would disable, or removeDependents would delete, so a caller reviews the
+            // whole decision from this one response.
             if (result.HasRemovalsOrDefinitionChanges)
             {
                 var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules: true);
                 dto.Dependents = SchemaRefreshDependentDetector.Detect(result, syncRules, DateTime.UtcNow);
+                dto.RemovalImpact = await _application.ConnectedSystems.ComputeSchemaRefreshRemovalImpactAsync(connectedSystemId, result);
             }
 
             return Ok(dto);
