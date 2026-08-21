@@ -136,6 +136,19 @@ public class InitialPasswordDeliveryServer
             return result;
         }
 
+        // Asked once the channel exists, because what is being judged is the channel that opened rather than the
+        // settings it was built from. The rule is shared with the other two paths that write a password to this
+        // system, so an administrator who turns the setting on gets one answer everywhere. Reported once and the
+        // accounts left owed, exactly as for a connection that could not be opened.
+        if (PasswordChannelSecurity.RefusesChannel(connectedSystem, passwordConnector))
+        {
+            passwordConnector.ClosePasswordConnection();
+            result.PasswordChannelNotSecure = true;
+            Log.Error("DeliverOutstandingAsync: {SystemName} requires a secure transport for passwords and the password channel is not encrypted; {Count} accounts are still owed an initial password",
+                LogSanitiser.Sanitise(connectedSystem.Name), outstanding.Count);
+            return result;
+        }
+
         try
         {
             foreach (var pending in outstanding)

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260821104631_RequireSecureTransportOnConnectedSystem")]
+    partial class RequireSecureTransportOnConnectedSystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -503,80 +506,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasKey("ActivityId", "Dimension", "Key");
 
                     b.ToTable("ActivityStatCounters");
-                });
-
-            modelBuilder.Entity("JIM.Models.Activities.CausalEdge", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CauseConnectedSystemObjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CauseDisplayName")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("CauseMetaverseObjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CauseObjectTypeName")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CauseObjectTypePluralName")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("CausePendingExportId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CauseRunProfileExecutionItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CauseSyncOutcomeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ConnectedSystemName")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("Created")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("EdgeType")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("EffectAttributeName")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("EffectRunProfileExecutionItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("EffectSyncOutcomeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("ReasonCode")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("SyncRuleId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SyncRuleName")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CauseMetaverseObjectId")
-                        .HasDatabaseName("IX_CausalEdges_CauseMetaverseObjectId");
-
-                    b.HasIndex("CauseRunProfileExecutionItemId")
-                        .HasDatabaseName("IX_CausalEdges_CauseRunProfileExecutionItemId");
-
-                    b.HasIndex("EffectRunProfileExecutionItemId")
-                        .HasDatabaseName("IX_CausalEdges_EffectRunProfileExecutionItemId");
-
-                    b.ToTable("CausalEdges");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
@@ -3787,9 +3716,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ProvisioningSyncRuleId")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("QueuedByRunProfileExecutionItemId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid?>("SourceMetaverseObjectId")
                         .HasColumnType("uuid");
 
@@ -4254,18 +4180,6 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("ActivityId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("JIM.Models.Activities.CausalEdge", b =>
-                {
-                    b.HasOne("JIM.Models.Activities.ActivityRunProfileExecutionItem", "EffectRunProfileExecutionItem")
-                        .WithMany()
-                        .HasForeignKey("EffectRunProfileExecutionItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_CausalEdges_ActivityRunProfileExecutionItems");
-
-                    b.Navigation("EffectRunProfileExecutionItem");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttributeStandardMapping", b =>

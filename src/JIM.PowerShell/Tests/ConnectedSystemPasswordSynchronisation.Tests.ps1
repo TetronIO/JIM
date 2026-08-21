@@ -79,7 +79,6 @@ Describe 'Set-JIMConnectedSystemPasswordSynchronisation' {
             @{ Name = 'TargetObjectType' }
             @{ Name = 'MaxRetries' }
             @{ Name = 'RetryBackoffBase' }
-            @{ Name = 'RequireSecureTransport' }
             @{ Name = 'ChangeReason' }
             @{ Name = 'PassThru' }
         ) {

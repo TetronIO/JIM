@@ -361,6 +361,12 @@ public class SyncExportTaskProcessor
         if (result.CouldNotOpenPasswordConnection)
             return $"Initial passwords: the password connection could not be opened; {result.PasswordConnectionErrorMessage}";
 
+        // Lead with this rather than reporting nothing delivered: the accounts are owed passwords and are not
+        // getting them, and the fix is a Connected System setting rather than anything about the accounts.
+        if (result.PasswordChannelNotSecure)
+            return "Initial passwords: this Connected System requires a secure transport for passwords and the " +
+                   "password connection is not encrypted, so none were sent";
+
         var parts = new List<string> { $"{result.DeliveredCount:N0} delivered" };
         if (result.ParkedCount > 0)
             parts.Add($"{result.ParkedCount:N0} needing attention");

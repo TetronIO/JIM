@@ -29,8 +29,7 @@ public class ConnectedSystemPasswordSynchronisationTests
         Enabled = true,
         TargetObjectTypeId = 1,
         MaxRetries = 5,
-        RetryBackoffBase = TimeSpan.FromMinutes(5),
-        RequireSecureTransport = false
+        RetryBackoffBase = TimeSpan.FromMinutes(5)
     };
 
     [Test]
@@ -167,9 +166,6 @@ public class ConnectedSystemPasswordSynchronisationTests
         var slowerBackoff = Configuration();
         slowerBackoff.RetryBackoffBase = TimeSpan.FromMinutes(30);
 
-        var secureOnly = Configuration();
-        secureOnly.RequireSecureTransport = true;
-
         var otherObjectType = Configuration();
         otherObjectType.TargetObjectTypeId = 2;
 
@@ -178,7 +174,6 @@ public class ConnectedSystemPasswordSynchronisationTests
             Assert.That(ConnectedSystemPasswordSynchronisation.WouldDeliverTheSameAs(enabled, disabled), Is.False);
             Assert.That(ConnectedSystemPasswordSynchronisation.WouldDeliverTheSameAs(enabled, moreRetries), Is.False);
             Assert.That(ConnectedSystemPasswordSynchronisation.WouldDeliverTheSameAs(enabled, slowerBackoff), Is.False);
-            Assert.That(ConnectedSystemPasswordSynchronisation.WouldDeliverTheSameAs(enabled, secureOnly), Is.False);
             Assert.That(ConnectedSystemPasswordSynchronisation.WouldDeliverTheSameAs(enabled, otherObjectType), Is.False);
         }
     }

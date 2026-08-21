@@ -34,6 +34,13 @@ public class ConnectedSystemDetailDto
     public TimeSpan? InitialPasswordTimeToLive { get; set; }
 
     /// <summary>
+    /// Whether JIM refuses to send a password to this Connected System over a connection it cannot confirm is
+    /// encrypted. Governs every password JIM sends here: the initial password on an account it provisions, one an
+    /// administrator sets by hand, and a synchronised password change.
+    /// </summary>
+    public bool RequireSecureTransport { get; set; }
+
+    /// <summary>
     /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
     /// is treated. Default is Error (current behaviour); Warn downgrades to an Activity warning; Ignore suppresses
     /// both the per-object error and the Activity warning while still logging the occurrence.
@@ -95,6 +102,7 @@ public class ConnectedSystemDetailDto
             SettingValuesValid = entity.SettingValuesValid,
             MaxExportParallelism = entity.MaxExportParallelism,
             InitialPasswordTimeToLive = entity.InitialPasswordTimeToLive,
+            RequireSecureTransport = entity.RequireSecureTransport,
             UnresolvedReferenceHandling = entity.UnresolvedReferenceHandling,
             Connector = new ConnectorReferenceDto
             {

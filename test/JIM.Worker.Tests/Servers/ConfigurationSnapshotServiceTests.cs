@@ -865,8 +865,7 @@ public class ConfigurationSnapshotServiceTests
                 Enabled = true,
                 TargetObjectTypeId = 7,
                 MaxRetries = 8,
-                RetryBackoffBase = TimeSpan.FromMinutes(15),
-                RequireSecureTransport = true
+                RetryBackoffBase = TimeSpan.FromMinutes(15)
             }
         };
 
@@ -883,7 +882,8 @@ public class ConfigurationSnapshotServiceTests
                 "The history reads for a person, so the Object Type is named as well as identified.");
             Assert.That(Child(node!, "maxRetries")!.Value, Is.EqualTo("8"));
             Assert.That(Child(node!, "retryBackoffBase")!.Value, Is.EqualTo("00:15:00"));
-            Assert.That(Child(node!, "requireSecureTransport")!.Value, Is.EqualTo("true"));
+            Assert.That(Child(node!, "requireSecureTransport"), Is.Null,
+                "Require Secure Transport is a Connected System setting; it is recorded on the system's own node.");
         }
     }
 
