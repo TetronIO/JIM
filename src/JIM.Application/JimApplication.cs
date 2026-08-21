@@ -170,7 +170,11 @@ public class JimApplication : IDisposable
             // configured exactly as one reached any other way: same factory, same credential protection, same
             // certificate validation.
             connectedSystem => ConnectedSystems.CreateConnector(connectedSystem),
-            (activity, initiatedBy) => Activities.CreateActivityAsync(activity, initiatedBy),
+            // Exactly one initiator is set; the Activity server has an overload per principal kind and refuses
+            // an Activity attributed to neither.
+            (activity, initiatedBy, initiatedByApiKey) => initiatedByApiKey != null
+                ? Activities.CreateActivityAsync(activity, initiatedByApiKey)
+                : Activities.CreateActivityAsync(activity, initiatedBy),
             activity => Activities.CompleteActivityAsync(activity),
             // Null-forgiving for the same reason as the repository above: Tasking is assigned further down this
             // constructor, and the delegate is not called until a password change is queued or released.

@@ -1,6 +1,6 @@
 # Password Synchronisation (Phase 1: JIM as Password Origin)
 
-- **Status:** Doing (Phases 1 to 3 complete; surfaces, retention and the integration scenario not started)
+- **Status:** Doing (Phases 1 to 3 complete; Phase 4's entry point and secure-transport work done, queue page and reporting surfaces outstanding)
 - **Issue:** [#1119](https://github.com/TetronIO/JIM/issues/1119)
 - **PRD:** [`engineering/prd/doing/PRD_PASSWORD_SYNCHRONISATION.md`](../prd/doing/PRD_PASSWORD_SYNCHRONISATION.md)
 
@@ -157,8 +157,10 @@ Each phase is TDD, red first, and lands with its tests, docs, and changelog entr
 
 ### Phase 4: Surfaces and reporting
 
+- ✅ **Entry point (delivered).** `POST /api/v1/metaverse/objects/{id}/password` queues a synchronised change, with `Sync-JIMMetaverseObjectPassword` and a Synchronise Password action on the Metaverse Object beside it. Deliberately a new operation rather than a change to the existing per-account Set Password, whose own design already settled the point: it preselects nothing, because resetting a forgotten password in one system must not silently reset the others (#1172). The two answer different questions and keep different expiry defaults
+- ✅ **Secure transport on every password endpoint (delivered, requirement 34).** A `RequireSecureTransport` filter refuses a password over a transport JIM cannot confirm is encrypted, with a completeness guard that fails the build if an endpoint binds a password without it. Development over plain HTTP is exempt; the refusal names `JIM_TRUSTED_PROXIES` because TLS terminating at an untrusted proxy is the likeliest legitimate cause
 - Queue page (`/admin/password-synchronisation`): queued/parked/expired with target, status, reason, attempt count, next retry; retry one, retry filtered selection, cancel/delete; DTO never carries the payload (requirements 21, 22)
-- REST queue read/retry/cancel endpoints and PowerShell cmdlets (requirement 33); new `POST /api/v1/metaverse/objects/{id}/password` closing the existing MVO-endpoint gap, with the secure-transport check (`Request.IsHttps` reject, requirement 34) applied to every password-accepting endpoint
+- REST queue read/retry/cancel endpoints and PowerShell cmdlets (requirement 33)
 - Connected System list: state on `ConnectedSystemHeader` (all three projection sites), indicator chip, `passwordsync` sort arm, filter control (requirement 26)
 - Metaverse Object detail: admin-only Password Synchronisation panel via the `AuthorizeView` tab precedent, listing that identity's password Activities with per-system outcomes (requirement 25)
 
