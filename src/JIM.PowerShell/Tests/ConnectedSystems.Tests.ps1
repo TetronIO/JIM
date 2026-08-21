@@ -123,6 +123,15 @@ Describe 'Set-JIMConnectedSystem' {
             $validateRange | Should -Not -BeNullOrEmpty
         }
 
+        It 'Should have a RequireSecureTransport switch parameter' {
+            # It lives here rather than on Set-JIMConnectedSystemPasswordSynchronisation because it governs every
+            # password JIM sends to the system, and because a system that provisions accounts but receives no
+            # synchronised passwords has no Password Synchronisation configuration to hold it.
+            $param = $command.Parameters['RequireSecureTransport']
+            $param | Should -Not -BeNullOrEmpty
+            $param.SwitchParameter | Should -BeTrue
+        }
+
         It 'Should have an InitialPasswordTimeToLive parameter typed as a TimeSpan' {
             $param = $command.Parameters['InitialPasswordTimeToLive']
             $param | Should -Not -BeNullOrEmpty

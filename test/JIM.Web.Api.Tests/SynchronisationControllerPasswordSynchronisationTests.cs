@@ -203,11 +203,11 @@ public class SynchronisationControllerPasswordSynchronisationTests
         ArrangeConnectedSystem(connectedSystem);
 
         await _controller.UpdateConnectedSystemPasswordSynchronisationAsync(ConnectedSystemId,
-            new UpdateConnectedSystemPasswordSynchronisationRequest { RequireSecureTransport = true });
+            new UpdateConnectedSystemPasswordSynchronisationRequest { RetryBackoffBase = TimeSpan.FromMinutes(20) });
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(connectedSystem.PasswordSynchronisation!.RequireSecureTransport, Is.True);
+            Assert.That(connectedSystem.PasswordSynchronisation!.RetryBackoffBase, Is.EqualTo(TimeSpan.FromMinutes(20)));
             Assert.That(connectedSystem.PasswordSynchronisation!.MaxRetries, Is.EqualTo(8));
             Assert.That(connectedSystem.PasswordSynchronisation!.Enabled, Is.True);
         }

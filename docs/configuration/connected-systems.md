@@ -466,14 +466,16 @@ It is configured on the Connected System's **Passwords** tab, which appears only
 | **Object Type holding user accounts** | Which Connected System Object Type receives passwords. Only Object Types you have selected for synchronisation are offered: an unselected one holds no objects, so choosing it would queue passwords for accounts that never appear. |
 | **Maximum attempts** | How many delivery attempts JIM makes before it stops and asks you to look. Leave it at 0 to use JIM's default of five. |
 | **First retry after** | How long to wait before the first retry. Each further attempt waits twice as long as the one before. |
-| **Only send passwords over an encrypted connection** | Whether JIM refuses to transmit rather than warning, where it cannot confirm the connection is encrypted. |
 
 Two things follow from the enable toggle being separate from the configuration:
 
 - **Switching a system off does not discard anything.** Password changes for identities with an account there accumulate, and switching it back on delivers what accumulated. That is what makes it safe to switch off for a maintenance window.
 - **There is no way to remove a configuration, only to disable it.** Removing one would throw away everything queued against it, so JIM does not offer that. This is true of the REST API and PowerShell too.
 
-How long a queued change waits before JIM expires it rather than delivering a password that has since been superseded is the Connected System's **initial password time to live**, on the Settings tab. It is shared with initial password provisioning deliberately: the question both are asking is how long this system may be unavailable before JIM stops trying, and the answer is a property of the system rather than of the deployment.
+Two settings that govern delivery here live on the **Settings** tab instead, under Passwords, because they govern every password JIM sends to this system rather than only synchronised ones:
+
+- **Only send passwords over an encrypted connection.** JIM cannot always tell an encrypted connection from an unencrypted one; a signed and sealed bind is encrypted but does not look it from the system's settings, which is why JIM warns rather than refusing by default. Turn this on, once you know the connection is encrypted, to have JIM refuse to send instead. Nothing is discarded when it refuses: queued password changes wait, and accounts stay owed their first password. It applies equally to the initial password on an account JIM provisions and to a password you set by hand.
+- **Give up after.** How long a queued change waits before JIM expires it rather than delivering a password that has since been superseded. Shared with initial password provisioning deliberately: the question both are asking is how long this system may be unavailable before JIM stops trying, and the answer is a property of the system rather than of the deployment.
 
 Every change to these settings reaches the Connected System's configuration change history, so switching Password Synchronisation on or off is attributable afterwards.
 

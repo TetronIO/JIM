@@ -786,13 +786,109 @@ public class InitialPasswordDeliveryServerTests
     /// <summary>
     /// A Connector that can set passwords, answering every set with the given result.
     /// </summary>
-    private static Mock<IConnector> MockConnector(PasswordSetResult result, Action<string>? capturePassword = null)
+    /// <param name="passwordChannelSecure">
+    /// Whether the Connector reports its password channel as encrypted. Secure by default, because that is the
+    /// ordinary case and Moq would otherwise answer false for every fixture here.
+    /// </param>
+    #region Require Secure Transport
+
+    [Test]
+    public async Task DeliverOutstandingAsync_SecureTransportRequiredAndChannelIsNot_DeliversNothingAsync()
+    {
+        // Reported once for the pass rather than as a failure per account, matching the connection-problem
+        // precedent: the problem belongs to the channel, and counting it against each account would inflate an
+        // attempt count that is supposed to mean "distinct attempts at giving this account a password".
+        _connectedSystem.RequireSecureTransport = true;
+        var cso = await StageOutstandingAsync();
+        var connector = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn),
+            passwordChannelSecure: false);
+
+        var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
+
+        var stored = _syncRepo.PendingInitialPasswords.Values.Single(p => p.ConnectedSystemObjectId == cso.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PasswordChannelNotSecure, Is.True);
+            Assert.That(result.DeliveredCount, Is.Zero);
+            Assert.That(result.AttemptedCount, Is.Zero, "Nothing was sent, so nothing was attempted.");
+            Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending),
+                "The account is still owed a password, and gets one once the connection is encrypted.");
+            Assert.That(stored.AttemptCount, Is.Zero);
+        }
+    }
+
+    [Test]
+    public async Task DeliverOutstandingAsync_SecureTransportRequiredAndChannelIsNot_NeverAsksTheConnectorToSetAsync()
+    {
+        _connectedSystem.RequireSecureTransport = true;
+        await StageOutstandingAsync();
+        var connector = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn),
+            passwordChannelSecure: false);
+
+        await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
+
+        connector.As<IConnectorPasswordManagement>().Verify(
+            c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(), It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task DeliverOutstandingAsync_SecureTransportRequiredAndChannelIsNot_ClosesTheChannelAsync()
+    {
+        _connectedSystem.RequireSecureTransport = true;
+        await StageOutstandingAsync();
+        var connector = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn),
+            passwordChannelSecure: false);
+
+        await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
+
+        connector.As<IConnectorPasswordManagement>().Verify(c => c.ClosePasswordConnection(), Times.Once,
+            "The channel opened to make the check must not be left hanging open.");
+    }
+
+    [Test]
+    public async Task DeliverOutstandingAsync_SecureTransportRequiredAndChannelIs_DeliversAsync()
+    {
+        _connectedSystem.RequireSecureTransport = true;
+        await StageOutstandingAsync();
+        var connector = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn),
+            passwordChannelSecure: true);
+
+        var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PasswordChannelNotSecure, Is.False);
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task DeliverOutstandingAsync_SecureTransportNotRequiredAndChannelIsNot_DeliversAsync()
+    {
+        // Some directories genuinely cannot offer an encrypted connection, and locking those sites out of
+        // provisioning entirely helps nobody. The Connector warns; the choice stays with the administrator.
+        _connectedSystem.RequireSecureTransport = false;
+        await StageOutstandingAsync();
+        var connector = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn),
+            passwordChannelSecure: false);
+
+        var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
+
+        Assert.That(result.DeliveredCount, Is.EqualTo(1));
+    }
+
+    #endregion
+
+    private static Mock<IConnector> MockConnector(PasswordSetResult result, Action<string>? capturePassword = null,
+        bool passwordChannelSecure = true)
     {
         var connector = new Mock<IConnector>();
         connector.Setup(c => c.Name).Returns("Test Password Connector");
 
         var passwordConnector = connector.As<IConnectorPasswordManagement>();
         passwordConnector.Setup(c => c.SupportedExpiryBehaviours).Returns(Enum.GetValues<PasswordExpiryBehaviour>());
+        passwordConnector.Setup(c => c.IsPasswordChannelSecure).Returns(passwordChannelSecure);
         passwordConnector.Setup(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(), It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ConnectedSystemObject _, string password, PasswordSetOptions _, CancellationToken _) =>
             {
