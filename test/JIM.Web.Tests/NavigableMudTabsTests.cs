@@ -123,7 +123,7 @@ public class NavigableMudTabsTests : JimComponentTestContext
     {
         // A class named in markup but absent from site.css compiles, renders, and silently does nothing;
         // there is no general sweep for that, so the one class this component invents checks itself.
-        var css = File.ReadAllText(Path.Combine(FindWebProjectRoot(), "wwwroot", "css", "site.css"));
+        var css = File.ReadAllText(Path.Join(FindWebProjectRoot(), "wwwroot", "css", "site.css"));
 
         using (Assert.EnterMultipleScope())
         {
@@ -155,10 +155,10 @@ public class NavigableMudTabsTests : JimComponentTestContext
     private static string FindWebProjectRoot()
     {
         var directory = new DirectoryInfo(NUnit.Framework.TestContext.CurrentContext.TestDirectory);
-        while (directory != null && !Directory.Exists(Path.Combine(directory.FullName, "src", "JIM.Web")))
+        while (directory != null && !Directory.Exists(Path.Join(directory.FullName, "src", "JIM.Web")))
             directory = directory.Parent;
 
         Assert.That(directory, Is.Not.Null, "could not locate the repository root from the test directory");
-        return Path.Combine(directory!.FullName, "src", "JIM.Web");
+        return Path.Join(directory!.FullName, "src", "JIM.Web");
     }
 }
