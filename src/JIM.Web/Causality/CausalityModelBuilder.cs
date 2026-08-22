@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
@@ -40,12 +41,19 @@ public static class CausalityModelBuilder
     /// Whether the Run Profile that produced this item was a Full or Delta Synchronisation. Only a
     /// Synchronisation evaluates a Deletion Rule, so only a Synchronisation can report that one declined.
     /// </param>
+    /// <param name="chain">
+    /// The item's upward causal walk, or null when the caller did not resolve one. Supplies the one
+    /// fact this run cannot know about itself: what an export execution's staged change actually was
+    /// (create, update or delete), carried on the queueing edge's reason code, so an Exported outcome
+    /// can state its decision rather than a bare "Exported" (#1495). Null keeps the bare label.
+    /// </param>
     public static CausalityModel Build(
         ActivityRunProfileExecutionItem item,
         CausalityPageContext context,
         IReadOnlySet<Guid>? livePendingExportIds = null,
         MvoDeletionPolicySnapshot? deletionPolicySnapshot = null,
-        bool isSynchronisationRun = false)
+        bool isSynchronisationRun = false,
+        CausalChain? chain = null)
     {
         var outcomes = item.SyncOutcomes;
         var outcomeIds = outcomes.Select(o => o.Id).ToHashSet();
@@ -72,7 +80,7 @@ public static class CausalityModelBuilder
             .Where(o => !attachedChildIds.Contains(o.Id))
             .OrderBy(o => o.Ordinal)
             .Select(o => BuildEvent(o, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
-                livePendingExportIds))
+                livePendingExportIds, chain))
             .ToList();
 
         if (BuildDeclinedDeletionEvent(item, deletionPolicySnapshot, isSynchronisationRun) is { } declined)
@@ -154,9 +162,10 @@ public static class CausalityModelBuilder
         CausalityPageContext context,
         IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
         IReadOnlyList<CausalityAttributeRow> identityAttributeRows,
-        IReadOnlySet<Guid>? livePendingExportIds)
+        IReadOnlySet<Guid>? livePendingExportIds,
+        CausalChain? chain)
     {
-        var display = OutcomeDisplayMap.Get(outcome.OutcomeType);
+        var display = GetEventDisplay(outcome, chain);
         var parsedDetail = OutcomeDetailMessageParser.Parse(outcome.DetailMessage);
         var usesIdChannel = UsesDetailMessageIdChannel(outcome.OutcomeType);
         var lane = GetLane(outcome.OutcomeType);
@@ -187,9 +196,51 @@ public static class CausalityModelBuilder
             AttributeRows = GetAttributeRows(outcome, recordAttributeRows, identityAttributeRows),
             Children = childOutcomes
                 .Select(c => BuildEvent(c, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
-                    livePendingExportIds))
+                    livePendingExportIds, chain))
                 .ToList()
         };
+    }
+
+    /// <summary>
+    /// The display mapping for an outcome, decision-aware for export executions (#1495): an Exported
+    /// outcome states what the export did (record created, changes applied, record deleted) when the
+    /// chain's queueing edge recorded the staged change's kind, and stays the bare "Exported" when it
+    /// did not (pre-edge history, or no chain resolved).
+    /// </summary>
+    private static OutcomeDisplay GetEventDisplay(
+        ActivityRunProfileExecutionItemSyncOutcome outcome,
+        CausalChain? chain)
+    {
+        if (outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
+            return OutcomeDisplayMap.Get(outcome.OutcomeType);
+
+        return FindQueueingReason(chain, outcome.Id) is { } reasonCode
+            ? OutcomeDisplayMap.GetExportDecision(reasonCode)
+            : OutcomeDisplayMap.Get(outcome.OutcomeType);
+    }
+
+    /// <summary>
+    /// The queueing edge's staged-change reason for an export outcome, or null where the chain does
+    /// not carry one. An exact <see cref="CausalChainCohort.EffectSyncOutcomeId"/> match wins; a
+    /// cohort attached to the item as a whole covers the rest, which is the ordinary single-export
+    /// item.
+    /// </summary>
+    private static CausalReasonCode? FindQueueingReason(CausalChain? chain, Guid outcomeId)
+    {
+        if (chain == null)
+            return null;
+
+        var queueingCohorts = chain.Cohorts
+            .Where(c => c.SourceImportChangeType == null
+                && c.EdgeType == CausalEdgeType.PendingExportQueueingCausedExportExecution
+                && c.ReasonCode is CausalReasonCode.ExportCreateStaged
+                    or CausalReasonCode.ExportUpdateStaged
+                    or CausalReasonCode.ExportDeleteStaged)
+            .ToList();
+
+        var match = queueingCohorts.FirstOrDefault(c => c.EffectSyncOutcomeId == outcomeId)
+            ?? queueingCohorts.FirstOrDefault(c => c.EffectSyncOutcomeId == null);
+        return match?.ReasonCode;
     }
 
     /// <summary>

@@ -40,6 +40,18 @@ public enum CausalityView
 }
 
 /// <summary>
+/// The kind of object a spine column stands for (#1495): a record in a Connected System, the
+/// Identity (the Metaverse side of the story), or the neutral trailing column that holds any chain
+/// hop the builder cannot place, so nothing in the chain is ever silently dropped.
+/// </summary>
+public enum CausalitySpineColumnKind
+{
+    Record,
+    Identity,
+    Unassigned
+}
+
+/// <summary>
 /// The kind of entity a causality link or sentence segment refers to, so the renderer can choose
 /// the matching glyph chip (Connected System, Record, Identity, Synchronisation Rule, etc.).
 /// </summary>
