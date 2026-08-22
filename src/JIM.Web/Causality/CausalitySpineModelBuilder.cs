@@ -271,12 +271,23 @@ public static class CausalitySpineModelBuilder
             .Select(r => new CausalitySpineEnding(r, CausalityCauseWording.Ending(r)!))
             .ToList();
 
-        var head = state.Kind switch
+        ColumnHead head;
+        switch (state.Kind)
         {
-            CausalitySpineColumnKind.Identity => GetIdentityHead(state, chain),
-            CausalitySpineColumnKind.Record => GetRecordHead(state, context),
-            _ => new ColumnHead("Earlier causes", IsRoleHead: false, Href: null, ObjectTypeName: null)
-        };
+            case CausalitySpineColumnKind.Identity:
+                head = GetIdentityHead(state, chain);
+                // A single-object Identity head carries the page's Metaverse Object Type name for
+                // its subtitle ("Identity · User"); a role head is already a type noun.
+                if (!head.IsRoleHead)
+                    head = head with { ObjectTypeName = context.MvoTypeName };
+                break;
+            case CausalitySpineColumnKind.Record:
+                head = GetRecordHead(state, context);
+                break;
+            default:
+                head = new ColumnHead("Earlier causes", IsRoleHead: false, Href: null, ObjectTypeName: null);
+                break;
+        }
 
         return new CausalitySpineColumn
         {

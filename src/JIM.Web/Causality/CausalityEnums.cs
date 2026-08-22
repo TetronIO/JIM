@@ -29,14 +29,16 @@ public enum CausalityLane
 }
 
 /// <summary>
-/// The toggleable causality visualisation views. Timeline ships first; Flow and Graph arrive in
-/// later phases by adding themselves to <c>CausalityPanel</c>'s available-view list.
+/// The toggleable causality visualisation views. Timeline shipped first; Flow and Graph followed by
+/// adding themselves to <c>CausalityPanel</c>'s available-view list, and Spine (#1495) is set to
+/// replace Flow and Graph as the default once verified.
 /// </summary>
 public enum CausalityView
 {
     Flow,
     Timeline,
-    Graph
+    Graph,
+    Spine
 }
 
 /// <summary>

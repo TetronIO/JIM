@@ -61,6 +61,10 @@
                     <CausalityGraphView Model="_model" TechnicalNames="_technicalNames"
                                         @bind-SelectedEvent="_selectedEvent" />
                     break;
+                case CausalityView.Spine when _spineModel is { } spineModel:
+                    <CausalitySpineView Model="spineModel" TechnicalNames="_technicalNames"
+                                        @bind-SelectedEvent="_selectedEvent" />
+                    break;
                 case CausalityView.Timeline:
                 default:
                     <CausalityTimelineView Model="_model" TechnicalNames="_technicalNames"
@@ -92,8 +96,12 @@
         @* ─── The upward chain: what caused this item, and what caused that ─── *@
         @* Sits below the canvas and its drawer, so the panel reads downstream-first (what this run did)
            then upstream (why it happened). Renders nothing when nothing caused the item, which is the
-           ordinary case. *@
-        <CausalityCausedBy Chain="Chain" EffectName="@Context.CsoDisplayName" EffectItemId="Item.Id" />
+           ordinary case. The Spine view renders the chain on its own canvas (#1495), so the separate
+           list would say everything twice; it stays with the older views until they retire. *@
+        @if (_view != CausalityView.Spine)
+        {
+            <CausalityCausedBy Chain="Chain" EffectName="@Context.CsoDisplayName" EffectItemId="Item.Id" />
+        }
     }
 </div>
 
@@ -103,7 +111,7 @@
     /// when its view appears here.
     /// </summary>
     private static readonly IReadOnlyList<CausalityView> AvailableViews =
-        [CausalityView.Flow, CausalityView.Timeline, CausalityView.Graph];
+        [CausalityView.Flow, CausalityView.Timeline, CausalityView.Graph, CausalityView.Spine];
 
     /// <summary>
     /// The Run Profile Execution Item whose causality is visualised.
@@ -159,6 +167,7 @@
 
     private CausalityModel? _model;
     private CausalitySummary? _summary;
+    private CausalitySpineModel? _spineModel;
     private CausalityView _view = CausalityView.Flow;
     private bool _technicalNames;
     private CausalityEvent? _expandedEvent;
@@ -166,21 +175,27 @@
     private ActivityRunProfileExecutionItem? _builtItem;
     private CausalityPageContext? _builtContext;
     private IReadOnlySet<Guid>? _builtLivePendingExportIds;
+    private CausalChain? _builtChain;
 
     protected override void OnParametersSet()
     {
-        // Build once per (Item, Context) pair; parent re-renders with unchanged values must not
-        // discard the expanded/selected-event state by rebuilding the model
+        // Build once per (Item, Context, Chain) tuple; parent re-renders with unchanged values must
+        // not discard the expanded/selected-event state by rebuilding the model. The chain is an
+        // input now (#1495): it supplies the export decision captions and the spine's chain cards,
+        // and the page resolves it after the first render, so its arrival must rebuild.
         if (ReferenceEquals(Item, _builtItem) && Equals(Context, _builtContext)
-            && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds))
+            && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds)
+            && ReferenceEquals(Chain, _builtChain))
             return;
 
         _builtItem = Item;
         _builtContext = Context;
         _builtLivePendingExportIds = LivePendingExportIds;
+        _builtChain = Chain;
         _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds,
-            DeletionPolicySnapshot, IsSynchronisationRun);
+            DeletionPolicySnapshot, IsSynchronisationRun, Chain);
         _summary = CausalitySummaryBuilder.Build(_model);
+        _spineModel = CausalitySpineModelBuilder.Build(_model, Chain, Item.ObjectChangeType);
         _expandedEvent = null;
         _selectedEvent = null;
     }
@@ -246,6 +261,7 @@
         {
             CausalityView.Flow => "Flow",
             CausalityView.Graph => "Graph",
+            CausalityView.Spine => "Spine",
             _ => "Timeline"
         };
     }

@@ -40,8 +40,10 @@ public sealed class CausalitySpineColumn
     public string? SystemName { get; init; }
 
     /// <summary>
-    /// The record's object type name ("person"), where known; null for the Identity and for
-    /// chain-derived record columns, whose snapshots do not carry it.
+    /// The object's type name, where known: the record's own type ("person") on the page's record
+    /// column, or the Metaverse Object Type ("User") on a single-object Identity column. Null for
+    /// chain-derived record columns (their snapshots do not carry it) and for role heads, whose
+    /// title is already a type noun.
     /// </summary>
     public string? ObjectTypeName { get; init; }
 

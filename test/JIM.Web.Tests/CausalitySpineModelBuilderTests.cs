@@ -72,6 +72,7 @@ public class CausalitySpineModelBuilderTests
 
             Assert.That(identity.Kind, Is.EqualTo(CausalitySpineColumnKind.Identity));
             Assert.That(identity.Title, Is.EqualTo("Liam Allen"));
+            Assert.That(identity.ObjectTypeName, Is.EqualTo("Person"));
             Assert.That(identity.IsLit, Is.True);
             Assert.That(identity.Cards.Select(c => c.Event!.OutcomeType), Is.EqualTo(new[]
             {

@@ -102,15 +102,68 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void Render_ViewSwitcher_ShowsAllThreeViewsWithFlowOn()
+    public void Render_ViewSwitcher_ShowsAllFourViewsWithFlowOn()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         var buttons = cut.FindAll(".seg button");
-        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Flow", "Timeline", "Graph" }));
+        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Flow", "Timeline", "Graph", "Spine" }));
         Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
         Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Not.Contain("on"));
         Assert.That(cut.FindAll(".seg button")[2].ClassList, Does.Not.Contain("on"));
+        Assert.That(cut.FindAll(".seg button")[3].ClassList, Does.Not.Contain("on"));
+    }
+
+    [Test]
+    public void ViewSwitcher_SelectingSpine_SwitchesTheViewAndPersistsThePreference()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        cut.FindAll(".seg button")[3].Click();
+
+        Assert.That(cut.FindAll(".sp-canvas"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
+        Assert.That(_preferences.CausalityViewWrites, Is.EqualTo(new[] { "spine" }));
+    }
+
+    [Test]
+    public void Render_PersistedSpinePreference_StartsOnTheSpine()
+    {
+        _preferences.StoredCausalityView = "spine";
+
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        Assert.That(cut.FindAll(".sp-canvas"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
+        Assert.That(cut.FindAll(".seg button")[3].ClassList, Does.Contain("on"));
+        Assert.That(_preferences.CausalityViewWrites, Is.Empty);
+    }
+
+    [Test]
+    public void SpineView_Active_ReplacesTheCausedBySection()
+    {
+        _preferences.StoredCausalityView = "spine";
+        var item = CausalityTestData.NewJoinerItem();
+        var chain = CausalityTestData.Chain(item.Id, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                CausalEdgeType.ExportCausedImportConfirmation,
+                connectedSystemId: 1, connectedSystemName: "Yellowstone APAC",
+                members: CausalityTestData.Member("Liam Allen", Guid.NewGuid(),
+                    CausalChainResolution.NoFurtherCauses)));
+
+        var cut = _context.Render<CausalityPanel>(ps => ps
+            .Add(c => c.Item, item)
+            .Add(c => c.Context, CausalityTestData.NewJoinerContext())
+            .Add(c => c.Chain, chain));
+
+        // The chain renders on the canvas itself, so the separate list would say it all twice.
+        Assert.That(cut.FindAll(".caused-by"), Is.Empty);
+        Assert.That(cut.FindAll(".sp-card"), Is.Not.Empty);
+
+        cut.FindAll(".seg button")[0].Click();
+
+        Assert.That(cut.FindAll(".caused-by"), Has.Count.EqualTo(1),
+            "the older views keep the Caused by list until they retire");
     }
 
     [Test]

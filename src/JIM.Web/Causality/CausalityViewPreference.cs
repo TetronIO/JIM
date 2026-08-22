@@ -5,7 +5,7 @@ namespace JIM.Web.Causality;
 
 /// <summary>
 /// Converts between <see cref="CausalityView"/> values and the lowercase string keys the user
-/// preference store persists ("flow" | "timeline" | "graph").
+/// preference store persists ("flow" | "timeline" | "graph" | "spine").
 /// </summary>
 public static class CausalityViewPreference
 {
@@ -18,6 +18,7 @@ public static class CausalityViewPreference
         {
             CausalityView.Flow => "flow",
             CausalityView.Graph => "graph",
+            CausalityView.Spine => "spine",
             _ => "timeline"
         };
     }
@@ -32,6 +33,7 @@ public static class CausalityViewPreference
             "flow" => CausalityView.Flow,
             "timeline" => CausalityView.Timeline,
             "graph" => CausalityView.Graph,
+            "spine" => CausalityView.Spine,
             _ => null
         };
     }
