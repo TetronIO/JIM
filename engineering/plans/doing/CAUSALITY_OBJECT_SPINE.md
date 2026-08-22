@@ -1,8 +1,8 @@
 # Causality Object Spine — Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing
 - **Issue:** [#1495](https://github.com/TetronIO/JIM/issues/1495)
-- **PRD:** [`engineering/prd/PRD_CAUSALITY_OBJECT_SPINE.md`](../prd/PRD_CAUSALITY_OBJECT_SPINE.md)
+- **PRD:** [`engineering/prd/doing/PRD_CAUSALITY_OBJECT_SPINE.md`](../../prd/doing/PRD_CAUSALITY_OBJECT_SPINE.md)
 
 ## Overview
 
@@ -76,9 +76,13 @@ One new projection layer and one new view; the chain walk, wording and capture l
 ### Export decision captions (PRD requirement 6)
 
 `OutcomeDisplayMap`'s Exported labels become decision-aware: "Record created" / "Changes applied" /
-"Record deleted" derived from the item's `ConnectedSystemObjectChange.ChangeType` (falling back to the
-queueing edge's reason code where change history is off). This lands in the display map so the Timeline
-and the summary band benefit as well as the spine.
+"Record deleted", derived from the queueing edge's reason code (`ExportCreateStaged` /
+`ExportUpdateStaged` / `ExportDeleteStaged`), which the causal chain already carries to the page. The
+item's `ConnectedSystemObjectChange.ChangeType` cannot supply this: `ExportChangeHistoryBuilder` records
+`Exported` for creates and updates alike, so the reason code is the only durable copy of the decision
+(the Pending Export row that knew it is deleted on execution). Items with no queueing edge (pre-#1223
+history) keep the bare "Exported" label honestly. This lands in the display map so the Timeline and the
+summary band benefit as well as the spine.
 
 ## Implementation Phases
 
