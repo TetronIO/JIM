@@ -784,7 +784,15 @@ public class ActivityServer
 
                 if (memberCohorts.Count == 0)
                 {
-                    member.Resolution = CausalChainResolution.NoFurtherCauses;
+                    // A synchronisation-side item was fed by an import by definition, so where its record's
+                    // deletion has nulled the id the timeline is walked on and the snapshot fallback reached
+                    // no import either, the story was cut short rather than completed: report the loss, as
+                    // the not-retained ending, instead of presenting it as the whole story. An import-side
+                    // item, and a synchronisation whose record is still live with no retained import, keep
+                    // the complete-story ending they always had (#1495).
+                    member.Resolution = IsTimelineSevered(summary)
+                        ? CausalChainResolution.CauseNotRetained
+                        : CausalChainResolution.NoFurtherCauses;
                     continue;
                 }
 
@@ -847,11 +855,10 @@ public class ActivityServer
     /// </remarks>
     private async Task<CausalChainCohort?> TryBuildSourceImportCohortAsync(CausalChainItemSummary summary)
     {
-        if (!SourceImportHopItemTypes.Contains(summary.ObjectChangeType) || !summary.ConnectedSystemObjectId.HasValue)
+        if (!SourceImportHopItemTypes.Contains(summary.ObjectChangeType))
             return null;
 
-        var importEvent = await Application.Repository.Activity.GetLatestImportItemForCsoAsync(
-            summary.ConnectedSystemObjectId.Value, summary.ActivityExecuted, summary.Id);
+        var importEvent = await FindSourceImportEventAsync(summary);
         if (importEvent == null)
             return null;
 
@@ -872,6 +879,35 @@ public class ActivityServer
             ]
         };
     }
+
+    /// <summary>
+    /// Finds the import that last changed the item's record: by the record's id while it exists, and by the
+    /// external ID snapshotted on the item once the record's deletion has nulled the id on every item that
+    /// processed it (#1495). The degraded key is bounded exactly as the id is (latest at or before the
+    /// synchronisation, within the Activity's Connected System) and reaches the same import, which matters
+    /// most on precisely these chains: a deletion cascade is where the timeline used to go dark.
+    /// </summary>
+    private async Task<CausalSourceImportEvent?> FindSourceImportEventAsync(CausalChainItemSummary summary)
+    {
+        if (summary.ConnectedSystemObjectId is { } connectedSystemObjectId)
+            return await Application.Repository.Activity.GetLatestImportItemForCsoAsync(
+                connectedSystemObjectId, summary.ActivityExecuted, summary.Id);
+
+        if (summary.ConnectedSystemId is { } connectedSystemId && !string.IsNullOrEmpty(summary.ExternalIdSnapshot))
+            return await Application.Repository.Activity.GetLatestImportItemForExternalIdAsync(
+                connectedSystemId, summary.ExternalIdSnapshot, summary.ActivityExecuted, summary.Id);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whether the record's timeline behind a synchronisation-side item is known to be lost rather than
+    /// complete: the item was fed by an import by definition, but its record's deletion nulled the id the
+    /// timeline is walked on. Only meaningful once hop-building has already failed; where the snapshot
+    /// fallback reached the import, the member resolved and this is never asked.
+    /// </summary>
+    private static bool IsTimelineSevered(CausalChainItemSummary summary) =>
+        SourceImportHopItemTypes.Contains(summary.ObjectChangeType) && !summary.ConnectedSystemObjectId.HasValue;
 
     private static List<CausalChainCohort> GroupIntoCohorts(List<CausalEdge> edges)
     {

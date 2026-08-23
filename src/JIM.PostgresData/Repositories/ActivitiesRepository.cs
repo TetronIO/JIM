@@ -1807,7 +1807,9 @@ public class ActivityRepository : IActivityRepository
                 Id = r.Id,
                 ObjectChangeType = r.ObjectChangeType,
                 ConnectedSystemObjectId = r.ConnectedSystemObjectId,
-                ActivityExecuted = r.Activity.Executed
+                ActivityExecuted = r.Activity.Executed,
+                ConnectedSystemId = r.Activity.ConnectedSystemId,
+                ExternalIdSnapshot = r.ExternalIdSnapshot
             })
             .ToListAsync();
 
@@ -1821,10 +1823,39 @@ public class ActivityRepository : IActivityRepository
     public async Task<CausalSourceImportEvent?> GetLatestImportItemForCsoAsync(
         Guid connectedSystemObjectId, DateTime atOrBeforeActivityExecuted, Guid excludeRunProfileExecutionItemId)
     {
-        return await Repository.Database.ActivityRunProfileExecutionItems
+        return await GetLatestImportEventAsync(
+            Repository.Database.ActivityRunProfileExecutionItems
+                .Where(r => r.ConnectedSystemObjectId == connectedSystemObjectId),
+            atOrBeforeActivityExecuted, excludeRunProfileExecutionItemId);
+    }
+
+    /// <summary>
+    /// The source-import hop's degraded key (#1495): the same event as
+    /// <see cref="GetLatestImportItemForCsoAsync"/>, found by the external ID snapshotted on the items after
+    /// the record's deletion has nulled the id they would otherwise be walked on.
+    /// </summary>
+    public async Task<CausalSourceImportEvent?> GetLatestImportItemForExternalIdAsync(
+        int connectedSystemId, string externalIdSnapshot, DateTime atOrBeforeActivityExecuted,
+        Guid excludeRunProfileExecutionItemId)
+    {
+        return await GetLatestImportEventAsync(
+            Repository.Database.ActivityRunProfileExecutionItems
+                .Where(r => r.ExternalIdSnapshot == externalIdSnapshot
+                    && r.Activity.ConnectedSystemId == connectedSystemId),
+            atOrBeforeActivityExecuted, excludeRunProfileExecutionItemId);
+    }
+
+    /// <summary>
+    /// The latest import-side event among <paramref name="candidateRecords"/> at or before the given
+    /// Activity time, excluding the asking item: the shared shape of the causal walk's two timeline keys.
+    /// </summary>
+    private async Task<CausalSourceImportEvent?> GetLatestImportEventAsync(
+        IQueryable<ActivityRunProfileExecutionItem> candidateRecords, DateTime atOrBeforeActivityExecuted,
+        Guid excludeRunProfileExecutionItemId)
+    {
+        return await candidateRecords
             .AsNoTracking()
-            .Where(r => r.ConnectedSystemObjectId == connectedSystemObjectId
-                && r.Id != excludeRunProfileExecutionItemId
+            .Where(r => r.Id != excludeRunProfileExecutionItemId
                 && (r.ObjectChangeType == ObjectChangeType.Added
                     || r.ObjectChangeType == ObjectChangeType.Updated
                     || r.ObjectChangeType == ObjectChangeType.Deleted)

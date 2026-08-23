@@ -38,6 +38,7 @@ public class CausalChainWalkTests
     private readonly HashSet<Guid> _retainedItemIds = [];
     private readonly Dictionary<Guid, CausalChainItemSummary> _summariesById = new();
     private readonly Dictionary<Guid, CausalSourceImportEvent> _importEventsByCsoId = new();
+    private readonly Dictionary<(int SystemId, string ExternalId), CausalSourceImportEvent> _importEventsByExternalId = new();
 
     [SetUp]
     public void SetUp()
@@ -46,6 +47,7 @@ public class CausalChainWalkTests
         _retainedItemIds.Clear();
         _summariesById.Clear();
         _importEventsByCsoId.Clear();
+        _importEventsByExternalId.Clear();
 
         _mockRepository = new Mock<IRepository>();
         _mockActivityRepository = new Mock<IActivityRepository>();
@@ -68,6 +70,12 @@ public class CausalChainWalkTests
         _mockActivityRepository
             .Setup(r => r.GetLatestImportItemForCsoAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<Guid>()))
             .ReturnsAsync((Guid csoId, DateTime _, Guid _) => _importEventsByCsoId.GetValueOrDefault(csoId));
+
+        _mockActivityRepository
+            .Setup(r => r.GetLatestImportItemForExternalIdAsync(
+                It.IsAny<int>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<Guid>()))
+            .ReturnsAsync((int systemId, string externalId, DateTime _, Guid _) =>
+                _importEventsByExternalId.GetValueOrDefault((systemId, externalId)));
 
         _application = new JimApplication(_mockRepository.Object);
     }
@@ -514,6 +522,124 @@ public class CausalChainWalkTests
 
         var member = chain.Cohorts.Single().Members.Single();
         Assert.That(member.Resolution, Is.EqualTo(CausalChainResolution.NoFurtherCauses));
+    }
+
+    private void SeedSeveredSyncCauseSummary(
+        Guid itemId, string? externalIdSnapshot = "S8-352", int? connectedSystemId = 1)
+    {
+        _retainedItemIds.Add(itemId);
+        _summariesById[itemId] = new CausalChainItemSummary
+        {
+            Id = itemId,
+            ObjectChangeType = ObjectChangeType.Disconnected,
+            // The severed shape (#1495): the record's deletion nulled the id the timeline is walked on.
+            ConnectedSystemObjectId = null,
+            ConnectedSystemId = connectedSystemId,
+            ExternalIdSnapshot = externalIdSnapshot,
+            ActivityExecuted = new DateTime(2026, 8, 15, 11, 0, 0, DateTimeKind.Utc)
+        };
+    }
+
+    private Guid SeedImportEventForExternalId(
+        string externalId, int connectedSystemId = 1, ObjectChangeType changeType = ObjectChangeType.Deleted)
+    {
+        var importItemId = Guid.NewGuid();
+        _retainedItemIds.Add(importItemId);
+        _importEventsByExternalId[(connectedSystemId, externalId)] = new CausalSourceImportEvent
+        {
+            RunProfileExecutionItemId = importItemId,
+            ChangeType = changeType,
+            DisplayName = "Mia Young (S8-352)",
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystemName = "Yellowstone APAC"
+        };
+        return importItemId;
+    }
+
+    /// <summary>
+    /// The deletion-cascade shape (#1495): a deprovision's chain runs back to the synchronisation that
+    /// staged the delete, whose record was hard-deleted in the same cascade, nulling the id its timeline is
+    /// walked on. The external ID snapshotted on the items survives the deletion and reaches the same
+    /// import, so the chain still ends at the source deletion that truly started the story.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_SynchronisationCauseWhoseRecordWasDeleted_ContinuesViaTheExternalIdSnapshotAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSeveredSyncCauseSummary(syncItemId);
+        var importItemId = SeedImportEventForExternalId("S8-352");
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var syncMember = chain.Cohorts.Single().Members.Single();
+        Assert.That(syncMember.Resolution, Is.EqualTo(CausalChainResolution.Resolved),
+            "the record's deletion must not sever the very chain that explains the deletion");
+        var sourceHop = syncMember.Causes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sourceHop.SourceImportChangeType, Is.EqualTo(ObjectChangeType.Deleted));
+            Assert.That(sourceHop.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
+            Assert.That(sourceHop.Members.Single().RunProfileExecutionItemId, Is.EqualTo(importItemId));
+        }
+    }
+
+    /// <summary>
+    /// The same shape entered from the synchronisation item itself must read identically: the snapshot key
+    /// serves the root hop exactly as the record id would have.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_SeveredSynchronisationItemViewedDirectly_GetsTheSnapshotHopAtRootAsync()
+    {
+        var itemId = Guid.NewGuid();
+        SeedSeveredSyncCauseSummary(itemId);
+        SeedImportEventForExternalId("S8-352");
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        Assert.That(chain.Cohorts, Has.Count.EqualTo(1));
+        Assert.That(chain.Cohorts[0].SourceImportChangeType, Is.EqualTo(ObjectChangeType.Deleted));
+    }
+
+    /// <summary>
+    /// Where even the snapshot reaches no import, a synchronisation-side item with a deleted record must
+    /// end as history lost, not as a complete story: the item was fed by an import by definition, so
+    /// "nothing caused this" would tell the reader they had the whole story when the deletion cut it short.
+    /// A live record with no retained import keeps the complete-story ending it always had (the test
+    /// above); only the severed shape is known to have lost information.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_SeveredTimelineWithNoReachableImport_ReportsTheHistoryAsNotRetainedAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSeveredSyncCauseSummary(syncItemId);
+        // Deliberately no import event seeded: the snapshot lookup finds nothing either.
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        Assert.That(chain.Cohorts.Single().Members.Single().Resolution,
+            Is.EqualTo(CausalChainResolution.CauseNotRetained));
+    }
+
+    /// <summary>
+    /// A severed item that recorded no snapshot at all (legacy history) has nothing to look up, and must
+    /// still end as history lost rather than complete.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_SeveredTimelineWithNoSnapshot_StillReportsTheHistoryAsNotRetainedAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSeveredSyncCauseSummary(syncItemId, externalIdSnapshot: null, connectedSystemId: null);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        Assert.That(chain.Cohorts.Single().Members.Single().Resolution,
+            Is.EqualTo(CausalChainResolution.CauseNotRetained));
     }
 
     #endregion
