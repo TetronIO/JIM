@@ -42,5 +42,20 @@ public enum PendingPasswordChangeStatus
     /// is not; that is the silent divergence this whole feature exists to prevent.
     /// </para>
     /// </summary>
-    Expired = 2
+    Expired = 2,
+
+    /// <summary>
+    /// An administrator decided the change should not be delivered, so JIM stopped trying.
+    /// <para>
+    /// Recorded rather than deleted, for the reason <see cref="Expired"/> is: the identity's password stays
+    /// divergent in that system whether or not the row survives, and a row that vanishes says the opposite. This
+    /// is the one thing that separates a cancellation from a delivery, which does delete its row: a delivery
+    /// leaves nothing divergent to report.
+    /// </para>
+    /// <para>
+    /// Unlike an expiry it is not final. The password is still held, so an administrator who cancelled by mistake
+    /// can retry the row back into the queue until its time to live runs out.
+    /// </para>
+    /// </summary>
+    Cancelled = 3
 }
