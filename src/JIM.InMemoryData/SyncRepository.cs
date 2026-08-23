@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
@@ -2929,6 +2929,7 @@ public class SyncRepository : ISyncRepository
                 Id = c.Id,
                 MetaverseObjectId = c.MetaverseObjectId,
                 MetaverseObjectDisplayName = _mvos.TryGetValue(c.MetaverseObjectId, out var mvo) ? mvo.CachedDisplayName : null,
+                MetaverseObjectTypePluralName = mvo?.Type?.PluralName,
                 ConnectedSystemId = c.ConnectedSystemId,
                 ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
                 Status = c.Status,

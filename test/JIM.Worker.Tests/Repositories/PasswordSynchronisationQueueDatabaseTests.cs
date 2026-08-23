@@ -486,6 +486,9 @@ public class PasswordSynchronisationQueueDatabaseTests
             Assert.That(window.Results[0].ConnectedSystemName, Is.Not.Empty,
                 "The Connected System's name is joined in, so a list can name it without a second query.");
             Assert.That(window.Results[0].MetaverseObjectId, Is.EqualTo(mvoId));
+            Assert.That(window.Results[0].MetaverseObjectTypePluralName, Is.Not.Empty,
+                "The Object Type's plural name is what a link to the identity is built from, and it is reached " +
+                "through a navigation whose foreign key is a shadow property; only a real provider proves it translates.");
             Assert.That(window.Results[0].Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
         }
     }

@@ -96,8 +96,9 @@ public class PasswordSynchronisationControllerQueueTests
         _syncRepo = new SyncRepository();
         _syncRepo.SeedConnectedSystem(new ConnectedSystem { Id = CorporateAdId, Name = "Corporate AD" });
         _syncRepo.SeedConnectedSystem(new ConnectedSystem { Id = HrPortalId, Name = "HR Portal" });
-        _syncRepo.SeedMetaverseObject(new MetaverseObject { Id = _adaId, CachedDisplayName = "Ada Lovelace" });
-        _syncRepo.SeedMetaverseObject(new MetaverseObject { Id = _graceId, CachedDisplayName = "Grace Hopper" });
+        var userType = new MetaverseObjectType { Id = 1, Name = "User", PluralName = "Users" };
+        _syncRepo.SeedMetaverseObject(new MetaverseObject { Id = _adaId, CachedDisplayName = "Ada Lovelace", Type = userType });
+        _syncRepo.SeedMetaverseObject(new MetaverseObject { Id = _graceId, CachedDisplayName = "Grace Hopper", Type = userType });
 
         _application = new JimApplication(repository.Object, syncRepository: _syncRepo);
         _controller = new PasswordSynchronisationController(
@@ -191,6 +192,18 @@ public class PasswordSynchronisationControllerQueueTests
                 "A queue an administrator reads must name a person, not a Guid.");
             Assert.That(row.ConnectedSystemName, Is.EqualTo("Corporate AD"));
         }
+    }
+
+    [Test]
+    public async Task Queue_CarriesWhatALinkToTheIdentityNeedsAsync()
+    {
+        // The identity's page is addressed by its Object Type's plural name, so without this a list would need a
+        // read per row to link a row, or would not link at all.
+        await SeedChangeAsync(_adaId, CorporateAdId);
+
+        var body = await ListAsync();
+
+        Assert.That(body.Items.Single().MetaverseObjectTypePluralName, Is.EqualTo("Users"));
     }
 
     [Test]

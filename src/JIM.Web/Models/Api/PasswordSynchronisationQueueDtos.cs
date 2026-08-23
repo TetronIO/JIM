@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
@@ -30,6 +30,12 @@ public class PendingPasswordChangeResponse
 
     /// <inheritdoc cref="MetaverseObjectId"/>
     public string? MetaverseObjectDisplayName { get; set; }
+
+    /// <summary>
+    /// The plural name of the identity's Metaverse Object Type, which is what a link to that identity is built
+    /// from. Carried so a caller rendering a list does not need a read per row to make one.
+    /// </summary>
+    public string? MetaverseObjectTypePluralName { get; set; }
 
     /// <summary>
     /// The Connected System the change is queued for, and its name.
@@ -108,6 +114,7 @@ public class PendingPasswordChangeResponse
             Id = header.Id,
             MetaverseObjectId = header.MetaverseObjectId,
             MetaverseObjectDisplayName = header.MetaverseObjectDisplayName,
+            MetaverseObjectTypePluralName = header.MetaverseObjectTypePluralName,
             ConnectedSystemId = header.ConnectedSystemId,
             ConnectedSystemName = header.ConnectedSystemName,
             Status = header.Status,

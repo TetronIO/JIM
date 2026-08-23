@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Staging;
@@ -234,6 +234,9 @@ public partial class SyncRepository
                 Id = change.Id,
                 MetaverseObjectId = change.MetaverseObjectId,
                 MetaverseObjectDisplayName = mvo.CachedDisplayName,
+                // Reached through the navigation rather than an explicit join: the Object Type foreign key is a
+                // shadow property, and EF translates this into the same join without naming it here.
+                MetaverseObjectTypePluralName = mvo.Type.PluralName,
                 ConnectedSystemId = change.ConnectedSystemId,
                 ConnectedSystemName = system.Name,
                 Status = change.Status,
