@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -96,7 +97,10 @@ public class PasswordSynchronisationQueueDatabaseTests
             CreatedAt = createdAt,
             LastAttemptedAt = createdAt.AddMinutes(1),
             ExpiresAt = createdAt.AddDays(7),
-            ActivityId = Guid.NewGuid()
+            ActivityId = Guid.NewGuid(),
+            CancelledAt = createdAt.AddMinutes(2),
+            CancelledById = Guid.NewGuid(),
+            CancelledByName = "Ada Lovelace"
         };
 
         await using (var write = NewContext())
@@ -121,6 +125,9 @@ public class PasswordSynchronisationQueueDatabaseTests
             Assert.That(stored.LastAttemptedAt, Is.EqualTo(change.LastAttemptedAt));
             Assert.That(stored.ExpiresAt, Is.EqualTo(change.ExpiresAt));
             Assert.That(stored.ActivityId, Is.EqualTo(change.ActivityId));
+            Assert.That(stored.CancelledAt, Is.EqualTo(change.CancelledAt));
+            Assert.That(stored.CancelledById, Is.EqualTo(change.CancelledById));
+            Assert.That(stored.CancelledByName, Is.EqualTo("Ada Lovelace"));
         }
     }
 
@@ -441,5 +448,246 @@ public class PasswordSynchronisationQueueDatabaseTests
         seed.Add(mvo);
         await seed.SaveChangesAsync();
         return mvo.Id;
+    }
+
+    /// <summary>
+    /// The list projection resolves both names and, deliberately, has nowhere to carry the password.
+    /// </summary>
+    [Test]
+    public async Task GetPendingPasswordChangeHeadersAsync_ResolvesNamesAndWindowsTheResultsAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var createdAt = new DateTime(2026, 8, 21, 9, 0, 0, DateTimeKind.Utc);
+
+        await using (var write = NewContext())
+        {
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([
+                new PendingPasswordChange
+                {
+                    MetaverseObjectId = mvoId,
+                    ConnectedSystemId = systemId,
+                    ConnectedSystemObjectId = csoId,
+                    EncryptedPassword = "$JIMPW$v1$ciphertext",
+                    CreatedAt = createdAt,
+                    ExpiresAt = createdAt.AddDays(7),
+                    ActivityId = Guid.NewGuid()
+                }
+            ]);
+        }
+
+        await using var read = NewContext();
+        var window = await new PostgresDataRepository(read).Sync.GetPendingPasswordChangeHeadersAsync(
+            new PendingPasswordChangeFilter(), 0, 10, "queued", sortDescending: false, includeTotalCount: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(window.TotalResults, Is.EqualTo(1));
+            Assert.That(window.Results, Has.Count.EqualTo(1));
+            Assert.That(window.Results[0].ConnectedSystemName, Is.Not.Empty,
+                "The Connected System's name is joined in, so a list can name it without a second query.");
+            Assert.That(window.Results[0].MetaverseObjectId, Is.EqualTo(mvoId));
+            Assert.That(window.Results[0].Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+        }
+    }
+
+    /// <summary>
+    /// Counting is the expensive half of a window read, so a caller that already knows the total gets a null
+    /// back rather than a second count. Null must not read as zero.
+    /// </summary>
+    [Test]
+    public async Task GetPendingPasswordChangeHeadersAsync_WithoutTheTotal_ReturnsNullRatherThanZeroAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        await SeedChangeAsync(systemId, mvoId, csoId);
+
+        await using var read = NewContext();
+        var window = await new PostgresDataRepository(read).Sync.GetPendingPasswordChangeHeadersAsync(
+            new PendingPasswordChangeFilter(), 0, 10, "queued", sortDescending: false, includeTotalCount: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(window.Results, Has.Count.EqualTo(1));
+            Assert.That(window.TotalResults, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// Retry is the way out of a park, and it must clear the failure that caused the park along with the attempt
+    /// budget the park exhausted.
+    /// </summary>
+    [Test]
+    public async Task RetryPasswordChangesAsync_ReleasesAParkedChangeAndClearsItsFailureAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var id = await SeedChangeAsync(systemId, mvoId, csoId, change =>
+        {
+            change.Status = PendingPasswordChangeStatus.Parked;
+            change.AttemptCount = 5;
+            change.FailureReason = PasswordSetFailureReason.PolicyRejection;
+            change.TargetMessage = "Too short";
+        });
+
+        await using (var act = NewContext())
+        {
+            var affected = await new PostgresDataRepository(act).Sync.RetryPasswordChangesAsync(
+                new PendingPasswordChangeFilter { Ids = [id] });
+            Assert.That(affected, Is.EqualTo(1));
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(stored.AttemptCount, Is.Zero);
+            Assert.That(stored.FailureReason, Is.Null);
+            Assert.That(stored.TargetMessage, Is.Null);
+            Assert.That(stored.NextRetryAt, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// An expired change has no password left to send, so a retry that swept it up would queue an empty delivery.
+    /// </summary>
+    [Test]
+    public async Task RetryPasswordChangesAsync_LeavesAnExpiredChangeExpiredAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var id = await SeedChangeAsync(systemId, mvoId, csoId, change => change.Status = PendingPasswordChangeStatus.Expired);
+
+        await using (var act = NewContext())
+        {
+            var affected = await new PostgresDataRepository(act).Sync.RetryPasswordChangesAsync(
+                new PendingPasswordChangeFilter { Ids = [id] });
+            Assert.That(affected, Is.Zero);
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+        Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Expired));
+    }
+
+    /// <summary>
+    /// Cancelling records who and when, and keeps the failure that stranded the change: why it was stuck is
+    /// usually why it was cancelled.
+    /// </summary>
+    [Test]
+    public async Task CancelPasswordChangesAsync_RecordsTheOutcomeAndItsAuthorAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var id = await SeedChangeAsync(systemId, mvoId, csoId, change =>
+        {
+            change.Status = PendingPasswordChangeStatus.Parked;
+            change.FailureReason = PasswordSetFailureReason.PolicyRejection;
+        });
+
+        var administratorId = Guid.NewGuid();
+        var cancelledAt = new DateTime(2026, 8, 21, 11, 0, 0, DateTimeKind.Utc);
+
+        await using (var act = NewContext())
+        {
+            var affected = await new PostgresDataRepository(act).Sync.CancelPasswordChangesAsync(
+                new PendingPasswordChangeFilter { Ids = [id] }, administratorId, "Ada Lovelace", cancelledAt);
+            Assert.That(affected, Is.EqualTo(1));
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Cancelled));
+            Assert.That(stored.CancelledAt, Is.EqualTo(cancelledAt));
+            Assert.That(stored.CancelledById, Is.EqualTo(administratorId));
+            Assert.That(stored.CancelledByName, Is.EqualTo("Ada Lovelace"));
+            Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
+        }
+    }
+
+    /// <summary>
+    /// Cancelling something already finished would overwrite the outcome that actually happened to it.
+    /// </summary>
+    [Test]
+    public async Task CancelPasswordChangesAsync_LeavesAnExpiredChangeAloneAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var id = await SeedChangeAsync(systemId, mvoId, csoId, change => change.Status = PendingPasswordChangeStatus.Expired);
+
+        await using (var act = NewContext())
+        {
+            var affected = await new PostgresDataRepository(act).Sync.CancelPasswordChangesAsync(
+                new PendingPasswordChangeFilter { Ids = [id] }, Guid.NewGuid(), "Ada Lovelace", DateTime.UtcNow);
+            Assert.That(affected, Is.Zero);
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Expired));
+            Assert.That(stored.CancelledAt, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// The summary counts every state, including the two an administrator produced. Due is reported apart from
+    /// waiting because a queue working through its backoffs and a queue nobody is draining look identical
+    /// otherwise.
+    /// </summary>
+    [Test]
+    public async Task GetPasswordQueueSummaryAsync_CountsEveryStateAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var asOf = new DateTime(2026, 8, 21, 12, 0, 0, DateTimeKind.Utc);
+
+        await SeedChangeAsync(systemId, mvoId, csoId);
+        var (_, secondMvo, secondCso) = await SeedSystemIdentityAndAccountAsync();
+        await SeedChangeAsync(systemId, secondMvo, secondCso, change =>
+        {
+            change.Status = PendingPasswordChangeStatus.Pending;
+            change.NextRetryAt = asOf.AddHours(2);
+        });
+
+        await using var read = NewContext();
+        var summary = await new PostgresDataRepository(read).Sync.GetPasswordQueueSummaryAsync(asOf);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.WaitingCount, Is.EqualTo(2));
+            Assert.That(summary.DueCount, Is.EqualTo(1),
+                "The change waiting out a backoff is waiting, but not due.");
+            Assert.That(summary.ParkedCount, Is.Zero);
+            Assert.That(summary.ExpiredCount, Is.Zero);
+            Assert.That(summary.CancelledCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// Seeds one queued change, optionally adjusted, and returns its identifier.
+    /// </summary>
+    private async Task<Guid> SeedChangeAsync(
+        int systemId,
+        Guid mvoId,
+        Guid csoId,
+        Action<PendingPasswordChange>? adjust = null)
+    {
+        var change = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoId,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = csoId,
+            EncryptedPassword = "$JIMPW$v1$ciphertext",
+            CreatedAt = new DateTime(2026, 8, 21, 9, 0, 0, DateTimeKind.Utc),
+            ExpiresAt = new DateTime(2026, 8, 28, 9, 0, 0, DateTimeKind.Utc),
+            ActivityId = Guid.NewGuid()
+        };
+
+        adjust?.Invoke(change);
+
+        await using var write = NewContext();
+        await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([change]);
+        return change.Id;
     }
 }

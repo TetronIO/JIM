@@ -11,6 +11,7 @@ using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -629,5 +630,150 @@ public class PasswordSynchronisationServer
     public async Task<Dictionary<int, PasswordQueueAttention>> GetAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
     {
         return await _syncRepo.GetPasswordQueueAttentionAsync(connectedSystemIds);
+    }
+
+    /// <summary>
+    /// One window of the queue for a list view (requirement 21). The rows carry the identity and Connected
+    /// System names and, deliberately, no password.
+    /// </summary>
+    public async Task<RangeResultSet<PendingPasswordChangeHeader>> GetPendingPasswordChangesAsync(
+        PendingPasswordChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        return await _syncRepo.GetPendingPasswordChangeHeadersAsync(
+            filter, startIndex, count, sortBy, sortDescending, includeTotalCount);
+    }
+
+    /// <summary>
+    /// What the whole queue holds, for the summary above a queue list.
+    /// </summary>
+    public async Task<PasswordQueueSummary> GetQueueSummaryAsync()
+    {
+        return await _syncRepo.GetPasswordQueueSummaryAsync(DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// Makes every change matching <paramref name="filter"/> due immediately and raises a delivery pass for it:
+    /// the queue page's retry action, and its REST and PowerShell counterparts (requirement 22).
+    /// </summary>
+    /// <returns>How many changes were made due again.</returns>
+    public async Task<int> RetryAsync(
+        PendingPasswordChangeFilter filter,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var retried = await _syncRepo.RetryPasswordChangesAsync(filter);
+
+        // One Activity for the administrator's action, not one per row: a retry over a directory that has just
+        // come back is a single decision, and a hundred Activities saying so would bury the decision in its own
+        // consequences.
+        await RecordQueueActionAsync(
+            ActivityTargetOperationType.RetryPasswordDelivery,
+            retried == 1
+                ? "1 queued password change will be attempted again."
+                : $"{retried} queued password changes will be attempted again.",
+            filter,
+            initiatedBy,
+            initiatedByApiKey);
+
+        if (retried > 0)
+        {
+            Log.Information("RetryAsync: {Retried} queued password change(s) are due again.", retried);
+
+            // Scoped where the filter was, unscoped where it was not: a retry aimed at one system has no reason
+            // to visit the others.
+            await _requestDelivery(filter.ConnectedSystemId);
+        }
+
+        return retried;
+    }
+
+    /// <summary>
+    /// Records that an administrator stopped every change matching <paramref name="filter"/> being delivered
+    /// (requirement 22).
+    /// </summary>
+    /// <returns>How many changes were cancelled.</returns>
+    public async Task<int> CancelAsync(
+        PendingPasswordChangeFilter filter,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var cancelled = await _syncRepo.CancelPasswordChangesAsync(
+            filter, initiatedBy?.Id, initiatedBy?.Name, DateTime.UtcNow);
+
+        await RecordQueueActionAsync(
+            ActivityTargetOperationType.CancelPasswordDelivery,
+            cancelled == 1
+                ? "1 queued password change will not be delivered."
+                : $"{cancelled} queued password changes will not be delivered.",
+            filter,
+            initiatedBy,
+            initiatedByApiKey);
+
+        if (cancelled > 0)
+            Log.Information("CancelAsync: {Cancelled} queued password change(s) were cancelled.", cancelled);
+
+        return cancelled;
+    }
+
+    /// <summary>
+    /// Records an administrator's action over the queue as one completed Activity.
+    /// <para>
+    /// Recorded even when nothing matched. An administrator who retried a system and changed nothing needs to be
+    /// able to find that out afterwards, and an Activity that only appears when work happened cannot tell them
+    /// the difference between "nothing was owed" and "the retry never ran".
+    /// </para>
+    /// </summary>
+    private async Task RecordQueueActionAsync(
+        ActivityTargetOperationType operation,
+        string message,
+        PendingPasswordChangeFilter filter,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        var activity = new Activity
+        {
+            TargetType = ActivityTargetType.PasswordSynchronisation,
+            TargetOperationType = operation,
+            TargetName = DescribeFilter(filter),
+            ConnectedSystemId = filter.ConnectedSystemId,
+            MetaverseObjectId = filter.MetaverseObjectId,
+            Message = message
+        };
+
+        await _createActivity(activity, initiatedBy, initiatedByApiKey);
+        await _completeActivity(activity);
+    }
+
+    /// <summary>
+    /// Names what an action ran over, for the Activity's target. Says what the administrator chose rather than
+    /// what it resolved to, because that is what they will look for later.
+    /// </summary>
+    private static string DescribeFilter(PendingPasswordChangeFilter filter)
+    {
+        if (filter.TargetsSpecificChanges)
+            return filter.Ids!.Count == 1 ? "One password change" : $"{filter.Ids!.Count} password changes";
+
+        var parts = new List<string>();
+
+        if (filter.Status.HasValue)
+            parts.Add(filter.Status.Value.ToString());
+
+        if (filter.FailureReason.HasValue)
+            parts.Add(filter.FailureReason.Value.ToString());
+
+        return parts.Count == 0
+            ? "The Password Synchronisation queue"
+            : $"{string.Join(", ", parts)} password changes";
     }
 }
