@@ -177,6 +177,24 @@ namespace JIM.Application.Servers
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
             }
+            else if (workerTask is SchemaRefreshRemovalWorkerTask schemaRefreshRemovalTask)
+            {
+                // The data-removal half of the schema refresh decision's Apply and Remove option (#1485) is
+                // tracked with its own Activity so the queue and history carry the removal distinctly from the
+                // refresh's ImportSchema Activity. Core: only .Name is read for activity context.
+                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(schemaRefreshRemovalTask.ConnectedSystemId);
+                var activity = new Activity
+                {
+                    TargetName = connectedSystem?.Name,
+                    TargetType = ActivityTargetType.ConnectedSystem,
+                    TargetOperationType = ActivityTargetOperationType.SchemaRefreshRemoval,
+                    ConnectedSystemId = schemaRefreshRemovalTask.ConnectedSystemId,
+                };
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
+
+                // associate the activity with the worker task so the worker task processor can complete the activity when done.
+                workerTask.Activity = activity;
+            }
             else if (workerTask is ConfigurationChangePreviewWorkerTask)
             {
                 // The only task type that does NOT create its Activity. A preview's Activity already exists,
@@ -185,6 +203,25 @@ namespace JIM.Application.Servers
                 // the wrong one.
                 if (workerTask.Activity == null)
                     return WorkerTaskCreationResult.Failed("A configuration change preview task must carry the Activity its preview was started under.");
+            }
+            else if (workerTask is PasswordDeliveryWorkerTask passwordDeliveryTask)
+            {
+                // Delivering queued password changes is a system-wide operation rather than a change to one
+                // object, so it is tracked with its own Activity. Its target type is the Password
+                // Synchronisation one, so the run appears under the same Activities filter as the password
+                // changes it delivers rather than among unrelated maintenance.
+                var activity = new Activity
+                {
+                    TargetName = passwordDeliveryTask.ConnectedSystemId == null
+                        ? "All Connected Systems"
+                        : $"Connected System {passwordDeliveryTask.ConnectedSystemId}",
+                    TargetType = ActivityTargetType.PasswordSynchronisation,
+                    TargetOperationType = ActivityTargetOperationType.Execute,
+                    ConnectedSystemId = passwordDeliveryTask.ConnectedSystemId
+                };
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
+
+                workerTask.Activity = activity;
             }
             else if (workerTask is TemporalScopeReconciliationWorkerTask)
             {
@@ -210,6 +247,35 @@ namespace JIM.Application.Servers
                 return WorkerTaskCreationResult.SucceededWithWarnings(workerTask.Id, partitionWarning);
             }
             return WorkerTaskCreationResult.Succeeded(workerTask.Id);
+        }
+
+        /// <summary>
+        /// Asks for a Password Delivery pass, unless one that would cover the same scope is already waiting to run
+        /// (#1119).
+        /// <para>
+        /// Every trigger for Password Synchronisation delivery comes through here: a password change fanning out, a
+        /// Connected System being enabled, and the worker's idle housekeeping finding retries due. Each of those can
+        /// fire repeatedly in a short window (a bulk password reset, a run of configuration edits), and a queue full
+        /// of identical passes helps nobody: they would run one after another, each finding the work the first one
+        /// already did.
+        /// </para>
+        /// </summary>
+        /// <param name="connectedSystemId">
+        /// The Connected System to deliver to, or null for every system with work due.
+        /// </param>
+        /// <param name="initiatedByName">What raised the request, shown on the Activity.</param>
+        /// <returns>True where a task was raised; false where one was already waiting.</returns>
+        public async Task<bool> RequestPasswordDeliveryAsync(int? connectedSystemId, string initiatedByName)
+        {
+            if (await Application.Repository.Tasking.HasQueuedPasswordDeliveryTaskAsync(connectedSystemId))
+            {
+                Log.Debug("RequestPasswordDeliveryAsync: A Password Delivery task covering Connected System {ConnectedSystemId} is already queued.",
+                    connectedSystemId);
+                return false;
+            }
+
+            await CreateWorkerTaskAsync(PasswordDeliveryWorkerTask.ForSystem(initiatedByName, connectedSystemId));
+            return true;
         }
 
         /// <summary>

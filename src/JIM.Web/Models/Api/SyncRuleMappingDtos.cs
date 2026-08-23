@@ -53,6 +53,18 @@ public class SyncRuleMappingDto
     /// </summary>
     public bool InitialExportOnly { get; set; }
 
+    /// <summary>
+    /// Whether the mapping is evaluated at all (#1485). A disabled mapping is skipped by synchronisation in
+    /// both directions until it is re-enabled. Applies to import and export mappings alike.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Why the mapping is disabled, when something disabled it on the administrator's behalf. Null when the
+    /// mapping is enabled, and null when an administrator disabled it themselves.
+    /// </summary>
+    public string? DisabledReason { get; set; }
+
     public List<SyncRuleMappingSourceDto> Sources { get; set; } = new();
 
     public static SyncRuleMappingDto FromEntity(SyncRuleMapping entity)
@@ -71,6 +83,8 @@ public class SyncRuleMappingDto
             Priority = entity.Priority,
             NullIsValue = entity.NullIsValue,
             InitialExportOnly = entity.InitialExportOnly,
+            Enabled = entity.Enabled,
+            DisabledReason = entity.DisabledReason,
             Sources = entity.Sources.Select(SyncRuleMappingSourceDto.FromEntity).ToList()
         };
     }
@@ -121,6 +135,13 @@ public class UpdateSyncRuleMappingRequest
     public bool? InitialExportOnly { get; set; }
 
     /// <summary>
+    /// Enables or disables the mapping (#1485). A disabled mapping is skipped by synchronisation in both
+    /// directions until it is re-enabled; re-enabling clears any recorded disabled reason. Applies to import
+    /// and export mappings alike.
+    /// </summary>
+    public bool? Enabled { get; set; }
+
+    /// <summary>
     /// Converts the request into the settings change the application layer understands.
     /// </summary>
     public SyncRuleMappingSettingsUpdate ToSettingsUpdate()
@@ -132,7 +153,8 @@ public class UpdateSyncRuleMappingRequest
             NullIsValue = NullIsValue,
             InboundValueProcessing = InboundValueProcessing,
             CaseNormalisation = CaseNormalisation,
-            InitialExportOnly = InitialExportOnly
+            InitialExportOnly = InitialExportOnly,
+            Enabled = Enabled
         };
     }
 }

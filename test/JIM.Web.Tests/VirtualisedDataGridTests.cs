@@ -73,6 +73,97 @@ public class VirtualisedDataGridTests : JimComponentTestContext
     }
 
     [Test]
+    public void VirtualisedDataGrid_EmbeddedWithNoSearchOrExtras_RendersNoToolBarAtAll()
+    {
+        // An embedded grid drops the density toggle, and one with ShowSearch off has no search box either, so
+        // the toolbar is left holding nothing but the count: a full-height bar across the top of the table
+        // saying what the rows beneath it already say. The Operations queue puts such a grid directly under the
+        // worker status bar, where the stranded row wedges itself between the bar and the table's header.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 2)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.PluralName, "Widgets")
+            .Add(c => c.Embedded, true)
+            .Add(c => c.ShowSearch, false));
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Instance.ShowToolBar, Is.False);
+                Assert.That(cut.FindComponents<MudBlazor.MudToolBar>(), Is.Empty, "an empty toolbar still occupies a row");
+                Assert.That(cut.Markup, Does.Not.Contain("2 Widgets"), "the stranded count must go with the toolbar");
+            }
+        });
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_EmbeddedWithSearch_KeepsItsToolBarAndCount()
+    {
+        // The count earns its place beside the control that changes it. An embedded grid that can be searched
+        // keeps both, which is every embedded grid in the portal bar the Operations queue's.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 2)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.PluralName, "Widgets")
+            .Add(c => c.Embedded, true));
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Instance.ShowToolBar, Is.True);
+                Assert.That(cut.Markup, Does.Contain("2 Widgets"));
+            }
+        });
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_EmbeddedWithExtrasButNoSearch_KeepsItsToolBar()
+    {
+        // The toolbar goes only when it would hold nothing but the count; a page that put its own actions there
+        // still needs somewhere to draw them.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 2)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.PluralName, "Widgets")
+            .Add(c => c.Embedded, true)
+            .Add(c => c.ShowSearch, false)
+            .Add(c => c.ToolBarExtras, (RenderFragment)(builder => builder.AddMarkupContent(0, "<span>Create Widget</span>"))));
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Instance.ShowToolBar, Is.True);
+                Assert.That(cut.Markup, Does.Contain("Create Widget"));
+            }
+        });
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_NotEmbeddedWithNoSearch_KeepsItsToolBarForTheDensityToggle()
+    {
+        // A full-page grid always has the density toggle in its toolbar, so the toolbar is never empty however
+        // the rest of it is configured.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 2)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.PluralName, "Widgets")
+            .Add(c => c.ShowSearch, false));
+
+        cut.WaitForAssertion(() => Assert.That(cut.Instance.ShowToolBar, Is.True));
+    }
+
+    [Test]
     public void VirtualisedDataGrid_RowClassFunc_IsForwardedToTheUnderlyingGrid()
     {
         // Pages need per-row classes (e.g. dimming disabled Predefined Searches) without hand-rolling their own

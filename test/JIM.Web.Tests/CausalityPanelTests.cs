@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using AngleSharp.Dom;
 using Bunit;
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
 using Microsoft.Extensions.DependencyInjection;
@@ -291,5 +292,69 @@ public class CausalityPanelTests
 
         Assert.That(cut.FindAll(".drawer"), Is.Empty);
         Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void TechnicalNamesToggle_AlsoRewordsTheSummarySentence()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        Assert.That(cut.Find(".summary-sentence").TextContent, Does.Contain("processed the record for"));
+
+        cut.Find(".toggle-line").Click();
+
+        // The toggle governs the whole panel, not just the views: the summary is the first sentence
+        // read, and leaving "record" and "Identity" in it made the toggle look like it had not worked.
+        var sentence = cut.Find(".summary-sentence").TextContent;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sentence, Does.Contain("processed the Connected System Object"));
+            Assert.That(sentence, Does.Not.Contain("the record"));
+        }
+    }
+
+    [Test]
+    public void CausalChain_NotResolvedByThePage_RendersNoCausedBySection()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        Assert.That(cut.FindAll(".caused-by"), Is.Empty);
+    }
+
+    [Test]
+    public void CausalChain_Supplied_RendersBeneathTheCanvasAndReadsTheRecordAsTheEffect()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var chain = new CausalChain
+        {
+            RunProfileExecutionItemId = item.Id,
+            Cohorts =
+            [
+                new CausalChainCohort
+                {
+                    EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
+                    ObjectTypeName = "User",
+                    ObjectTypePluralName = "Users",
+                    AttributeName = "Static Members",
+                    Members =
+                    [
+                        new CausalChainMember
+                        {
+                            DisplayName = "Tina Adams",
+                            Resolution = CausalChainResolution.NoFurtherCauses
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var cut = _context.Render<CausalityPanel>(ps => ps
+            .Add(c => c.Item, item)
+            .Add(c => c.Context, CausalityTestData.NewJoinerContext())
+            .Add(c => c.Chain, chain));
+
+        // The record's display name, not its label: the label carries the external id in parentheses,
+        // which reads as nonsense inside a possessive.
+        Assert.That(cut.Find(".cb-sentence").TextContent.Trim(), Is.EqualTo(
+            "Tina Adams was deleted, so they were removed from Liam Allen's Static Members"));
     }
 }

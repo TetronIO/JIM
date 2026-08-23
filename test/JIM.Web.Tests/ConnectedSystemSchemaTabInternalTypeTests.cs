@@ -4,6 +4,7 @@
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
+using JIM.Models.Preview;
 using JIM.Models.Staging;
 using JIM.Web.Pages.Admin.Components;
 using JIM.Web.Services;
@@ -29,6 +30,17 @@ public class ConnectedSystemSchemaTabInternalTypeTests : JimComponentTestContext
     {
         Services.AddSingleton<IJimApplicationFactory>(new UnusedJimApplicationFactory());
         Services.AddSingleton<IUserPreferenceService>(new FakeUserPreferenceService());
+        Services.AddSingleton<IConfigurationChangePreviewStarter>(new UnusedPreviewStarter());
+    }
+
+    /// <summary>
+    /// Likewise for the preview: the tab starts one only when an administrator asks for it (#1475), so merely
+    /// rendering must not.
+    /// </summary>
+    private sealed class UnusedPreviewStarter : IConfigurationChangePreviewStarter
+    {
+        public Task<Guid?> StartAsync(ConfigurationChangePreviewRequest request) =>
+            throw new InvalidOperationException("The schema tab started a preview while merely rendering, which it should not do.");
     }
 
     /// <summary>

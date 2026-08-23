@@ -50,6 +50,11 @@ function Set-JIMSyncRuleMapping {
     .PARAMETER InitialExportOnly
         Whether the mapping flows only during the initial provisioning export. Export mappings only.
 
+    .PARAMETER Enabled
+        Enables or disables the mapping. A disabled mapping is skipped by synchronisation in both
+        directions until it is re-enabled; re-enabling clears any recorded disabled reason. Applies
+        to import and export mappings alike.
+
     .PARAMETER PassThru
         Returns the updated mapping.
 
@@ -66,6 +71,12 @@ function Set-JIMSyncRuleMapping {
         Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Expression 'Lower(cs["mail"])' -PassThru
 
         Rewrites an import mapping's expression and returns the updated mapping.
+
+    .EXAMPLE
+        Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Enabled $false
+
+        Disables one Attribute Flow without touching the Synchronisation Rule; the mapping is
+        skipped by synchronisation until it is re-enabled with -Enabled $true.
 
     .EXAMPLE
         Get-JIMSyncRuleMapping -SyncRuleId 1 |
@@ -106,6 +117,8 @@ function Set-JIMSyncRuleMapping {
 
         [bool]$InitialExportOnly,
 
+        [bool]$Enabled,
+
         [switch]$PassThru
     )
 
@@ -127,9 +140,10 @@ function Set-JIMSyncRuleMapping {
         if ($PSBoundParameters.ContainsKey('InboundValueProcessing')) { $body.inboundValueProcessing = $InboundValueProcessing }
         if ($PSBoundParameters.ContainsKey('CaseNormalisation')) { $body.caseNormalisation = $CaseNormalisation }
         if ($PSBoundParameters.ContainsKey('InitialExportOnly')) { $body.initialExportOnly = $InitialExportOnly }
+        if ($PSBoundParameters.ContainsKey('Enabled')) { $body.enabled = $Enabled }
 
         if ($body.Count -eq 0) {
-            Write-Error "No settings were supplied to change. Supply at least one of -Expression, -MissingInputBehaviour, -NullIsValue, -InboundValueProcessing, -CaseNormalisation or -InitialExportOnly."
+            Write-Error "No settings were supplied to change. Supply at least one of -Expression, -MissingInputBehaviour, -NullIsValue, -InboundValueProcessing, -CaseNormalisation, -InitialExportOnly or -Enabled."
             return
         }
 

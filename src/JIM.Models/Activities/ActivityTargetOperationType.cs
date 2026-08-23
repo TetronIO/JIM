@@ -50,5 +50,11 @@ public enum ActivityTargetOperationType
     /// <see cref="ActivityTargetType.ConnectedSystemObject"/>. The Activity records that a password was set and
     /// what the target said about it, never the password itself.
     /// </summary>
-    SetPassword = 12
+    SetPassword = 12,
+    /// <summary>
+    /// The data-removal task of the schema refresh decision's "Apply and Remove" option (#1485): Connected
+    /// System Objects of removed Object Types marked Obsolete and stored values of removed attributes deleted,
+    /// executed by the worker under this Activity with per-object results.
+    /// </summary>
+    SchemaRefreshRemoval = 13
 }

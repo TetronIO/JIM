@@ -147,9 +147,7 @@ GO
 
 -- Drop in dependency order so a re-seed is clean rather than additive.
 DROP TABLE IF EXISTS hr.APP_USER_ROLES;
-DROP TABLE IF EXISTS hr.APP_USERS_CHANGE_LOG;
 DROP TABLE IF EXISTS hr.APP_USERS;
-DROP TABLE IF EXISTS hr.APP_ACCOUNTS_CHANGE_LOG;
 DROP TABLE IF EXISTS hr.APP_ACCOUNTS_NATURAL;
 DROP TABLE IF EXISTS hr.V_EMPLOYEES_CHANGE_LOG;
 DROP TABLE IF EXISTS hr.IDM_CHANGE_LOG;
@@ -222,13 +220,13 @@ CREATE TABLE hr.IDM_CHANGE_LOG (
 );
 GO
 
--- The view's own change log. Keyed on EMAIL because PersonView is anchored on EMAIL; see the anchor
--- comment in Setup-Scenario16.ps1 for why the view cannot be anchored on EMPLOYEE_ID. Written by the
--- same triggers as IDM_CHANGE_LOG, logging the anchor as the view exposes it, which is what the guide
--- says to do for a view-backed Object Type.
+-- The view's own change log, keyed on EMPLOYEE_ID: PersonView is anchored on the view's own key, the
+-- same integer key space as Person, which is exactly the coexistence the matrix proves (#1285).
+-- Written by the same triggers as IDM_CHANGE_LOG, logging the anchor as the view exposes it, which is
+-- what the guide says to do for a view-backed Object Type.
 CREATE TABLE hr.V_EMPLOYEES_CHANGE_LOG (
     CHANGE_ID    $($config.Types.Anchor)       NOT NULL PRIMARY KEY,
-    EMAIL        $($config.Types.Text)         NOT NULL,
+    EMPLOYEE_ID  int                           NOT NULL,
     CHANGE_TYPE  nchar(1)                      NOT NULL,
     CHANGED_AT   $($config.Types.ZonelessDate) NOT NULL DEFAULT SYSUTCDATETIME()
 );
@@ -252,8 +250,8 @@ BEGIN
     FROM inserted AS i
     LEFT JOIN deleted AS d ON d.EMPLOYEE_ID = i.EMPLOYEE_ID;
 
-    INSERT INTO hr.V_EMPLOYEES_CHANGE_LOG (EMAIL, CHANGE_TYPE)
-    SELECT i.EMAIL, CASE WHEN d.EMPLOYEE_ID IS NULL THEN 'I' ELSE 'U' END
+    INSERT INTO hr.V_EMPLOYEES_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE)
+    SELECT i.EMPLOYEE_ID, CASE WHEN d.EMPLOYEE_ID IS NULL THEN 'I' ELSE 'U' END
     FROM inserted AS i
     LEFT JOIN deleted AS d ON d.EMPLOYEE_ID = i.EMPLOYEE_ID;
 
@@ -264,8 +262,8 @@ BEGIN
     LEFT JOIN inserted AS i ON i.EMPLOYEE_ID = d.EMPLOYEE_ID
     WHERE i.EMPLOYEE_ID IS NULL;
 
-    INSERT INTO hr.V_EMPLOYEES_CHANGE_LOG (EMAIL, CHANGE_TYPE)
-    SELECT d.EMAIL, 'D'
+    INSERT INTO hr.V_EMPLOYEES_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE)
+    SELECT d.EMPLOYEE_ID, 'D'
     FROM deleted AS d
     LEFT JOIN inserted AS i ON i.EMPLOYEE_ID = d.EMPLOYEE_ID
     WHERE i.EMPLOYEE_ID IS NULL;
@@ -311,11 +309,12 @@ END;
 GO
 
 -- Export target with a database-generated key, returned as the external ID via OUTPUT INSERTED.
--- The IDENTITY starts at 1,000,000 rather than 1 so that generated keys never overlap the seeded
--- EMPLOYEE_ID range; see the anchor comment in Setup-Scenario16.ps1. It is still the database that
--- authors the key, which is all the Export.Create row asserts.
+-- The IDENTITY starts at 1, so generated keys deliberately overlap the seeded EMPLOYEE_ID range:
+-- reference resolution is scoped by Object Type (#1285), so the overlap is harmless, and before #1285
+-- the seed started at 1,000,000 to work around the flat lookup that made it fatal. It is the database
+-- that authors the key, which is all the Export.Create row asserts.
 CREATE TABLE hr.APP_USERS (
-    ID            int IDENTITY(1000000,1)       NOT NULL PRIMARY KEY,
+    ID            int IDENTITY(1,1)             NOT NULL PRIMARY KEY,
     USER_NAME     $($config.Types.Text)         NOT NULL,
     DISPLAY_NAME  $($config.Types.Text)         NULL,
     EMAIL         $($config.Types.Text)         NULL,
@@ -323,13 +322,7 @@ CREATE TABLE hr.APP_USERS (
     FTE           $($config.Types.Decimal)      NULL,
     IS_ENABLED    $($config.Types.Boolean)      NOT NULL,
     STARTS_ON     $($config.Types.ZonelessDate) NULL,
-    STARTS_AT     $($config.Types.OffsetDate)   NULL,
-    -- Every table in the shared Object Types document carries a watermark column, for the same reason
-    -- every Object Type carries a change log (below): Watermark Column mode is refused at save time
-    -- unless every Object Type in the document names one, whether or not the Connected System has
-    -- selected it. Nothing here writes to it beyond the default; the delta rows drive the identity
-    -- tables, and these exist so the mode can be declared at all.
-    LAST_MODIFIED $($config.Types.ZonelessDate) NOT NULL DEFAULT SYSUTCDATETIME()
+    STARTS_AT     $($config.Types.OffsetDate)   NULL
 );
 GO
 
@@ -337,7 +330,6 @@ CREATE TABLE hr.APP_USER_ROLES (
     ROLE_ID        $($config.Types.Anchor)       NOT NULL PRIMARY KEY,
     USER_ID        $($config.Types.Integer)      NOT NULL,
     ROLE_NAME      $($config.Types.Text)         NOT NULL,
-    LAST_MODIFIED  $($config.Types.ZonelessDate) NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_ROLES_USER FOREIGN KEY (USER_ID) REFERENCES hr.APP_USERS (ID) ON DELETE CASCADE
 );
 GO
@@ -346,31 +338,14 @@ GO
 CREATE TABLE hr.APP_ACCOUNTS_NATURAL (
     ACCOUNT_CODE  $($config.Types.NaturalAnchor) NOT NULL PRIMARY KEY,
     DISPLAY_NAME  $($config.Types.Text)          NULL,
-    IS_ENABLED    $($config.Types.Boolean)       NOT NULL,
-    LAST_MODIFIED $($config.Types.ZonelessDate)  NOT NULL DEFAULT SYSUTCDATETIME()
+    IS_ENABLED    $($config.Types.Boolean)       NOT NULL
 );
 GO
 
--- A change log per export-target Object Type. Change-Log Table mode is refused at save time unless
--- EVERY selected Object Type has one, and deliberately so: a Delta Import that silently skipped a type
--- would report success while leaving its objects to drift. These stay empty, which is the honest state
--- of affairs, because nothing outside JIM ever writes to the export targets; their existence is what
--- lets the Connected System declare a delta mode at all.
-CREATE TABLE hr.APP_USERS_CHANGE_LOG (
-    CHANGE_ID    $($config.Types.Anchor)       NOT NULL PRIMARY KEY,
-    ID           $($config.Types.Integer)      NOT NULL,
-    CHANGE_TYPE  nchar(1)                      NOT NULL,
-    CHANGED_AT   $($config.Types.ZonelessDate) NOT NULL
-);
-GO
-
-CREATE TABLE hr.APP_ACCOUNTS_CHANGE_LOG (
-    CHANGE_ID     $($config.Types.Anchor)        NOT NULL PRIMARY KEY,
-    ACCOUNT_CODE  $($config.Types.NaturalAnchor) NOT NULL,
-    CHANGE_TYPE   nchar(1)                       NOT NULL,
-    CHANGED_AT    $($config.Types.ZonelessDate)  NOT NULL
-);
-GO
+-- The export targets carry no watermark column and no change log. Nothing outside JIM writes to them,
+-- and the Connected Systems that select them never run a Delta Import; the delta-mode requirements
+-- apply to the Object Types selected for synchronisation on a Connected System that has a mode set
+-- (#1424), which is only the identity tables above.
 
 CREATE TABLE hr.JIM_SEED_MANIFEST (
     SEED_HASH  nvarchar(64) NOT NULL PRIMARY KEY,
@@ -529,10 +504,10 @@ CREATE TABLE IDM_CHANGE_LOG (
 )
 /
 
--- The view's own change log; see the SQL Server script for why PersonView is anchored on EMAIL.
+-- The view's own change log, keyed on EMPLOYEE_ID; see the SQL Server script for the commentary (#1285).
 CREATE TABLE V_EMPLOYEES_CHANGE_LOG (
     CHANGE_ID    $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    EMAIL        $($config.Types.Text)         NOT NULL,
+    EMPLOYEE_ID  $($config.Types.Integer)      NOT NULL,
     CHANGE_TYPE  CHAR(1)                       NOT NULL,
     CHANGED_AT   $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL
 )
@@ -545,13 +520,13 @@ FOR EACH ROW
 BEGIN
     IF INSERTING THEN
         INSERT INTO IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE) VALUES (:NEW.EMPLOYEE_ID, 'I');
-        INSERT INTO V_EMPLOYEES_CHANGE_LOG (EMAIL, CHANGE_TYPE) VALUES (:NEW.EMAIL, 'I');
+        INSERT INTO V_EMPLOYEES_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE) VALUES (:NEW.EMPLOYEE_ID, 'I');
     ELSIF UPDATING THEN
         INSERT INTO IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE) VALUES (:NEW.EMPLOYEE_ID, 'U');
-        INSERT INTO V_EMPLOYEES_CHANGE_LOG (EMAIL, CHANGE_TYPE) VALUES (:NEW.EMAIL, 'U');
+        INSERT INTO V_EMPLOYEES_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE) VALUES (:NEW.EMPLOYEE_ID, 'U');
     ELSE
         INSERT INTO IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE) VALUES (:OLD.EMPLOYEE_ID, 'D');
-        INSERT INTO V_EMPLOYEES_CHANGE_LOG (EMAIL, CHANGE_TYPE) VALUES (:OLD.EMAIL, 'D');
+        INSERT INTO V_EMPLOYEES_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE) VALUES (:OLD.EMPLOYEE_ID, 'D');
     END IF;
 END;
 /
@@ -583,10 +558,10 @@ END;
 /
 
 -- Export target with a sequence-generated key, returned via RETURNING ... INTO an output parameter.
--- The identity starts at 1,000,000 so generated keys never overlap the seeded EMPLOYEE_ID range; see
--- the SQL Server script and the anchor comment in Setup-Scenario16.ps1.
+-- The identity starts at 1, so generated keys deliberately overlap the seeded EMPLOYEE_ID range; see
+-- the SQL Server script for why that is now harmless (#1285).
 CREATE TABLE APP_USERS (
-    ID            $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY (START WITH 1000000) PRIMARY KEY,
+    ID            $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY (START WITH 1) PRIMARY KEY,
     USER_NAME     $($config.Types.Text)         NOT NULL,
     DISPLAY_NAME  $($config.Types.Text),
     EMAIL         $($config.Types.Text),
@@ -594,9 +569,7 @@ CREATE TABLE APP_USERS (
     FTE           $($config.Types.Decimal),
     IS_ENABLED    $($config.Types.Boolean)      NOT NULL,
     STARTS_ON     $($config.Types.ZonelessDate),
-    STARTS_AT     $($config.Types.OffsetDate),
-    -- A watermark column on every table in the shared document; see the SQL Server script.
-    LAST_MODIFIED $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL
+    STARTS_AT     $($config.Types.OffsetDate)
 )
 /
 
@@ -604,7 +577,6 @@ CREATE TABLE APP_USER_ROLES (
     ROLE_ID        $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     USER_ID        $($config.Types.Integer)      NOT NULL,
     ROLE_NAME      $($config.Types.Text)         NOT NULL,
-    LAST_MODIFIED  $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL,
     CONSTRAINT FK_ROLES_USER FOREIGN KEY (USER_ID) REFERENCES APP_USERS (ID) ON DELETE CASCADE
 )
 /
@@ -612,8 +584,7 @@ CREATE TABLE APP_USER_ROLES (
 CREATE TABLE APP_ACCOUNTS_NATURAL (
     ACCOUNT_CODE  $($config.Types.NaturalAnchor) NOT NULL PRIMARY KEY,
     DISPLAY_NAME  $($config.Types.Text),
-    IS_ENABLED    $($config.Types.Boolean)       NOT NULL,
-    LAST_MODIFIED $($config.Types.ZonelessDate)  DEFAULT SYSTIMESTAMP NOT NULL
+    IS_ENABLED    $($config.Types.Boolean)       NOT NULL
 )
 /
 
@@ -624,36 +595,11 @@ CREATE TABLE APP_ACCOUNTS_NATURAL (
 CREATE TABLE GUID_KEYED_PEOPLE (
     PERSON_ID      $($config.Types.Guid) DEFAULT SYS_GUID() NOT NULL PRIMARY KEY,
     FULL_NAME      $($config.Types.Text) NOT NULL,
-    DEPARTMENT     $($config.Types.Text),
-    LAST_MODIFIED  $($config.Types.ZonelessDate) DEFAULT SYSTIMESTAMP NOT NULL
+    DEPARTMENT     $($config.Types.Text)
 )
 /
 
--- A change log per export-target Object Type; see the SQL Server script for why every selected Object
--- Type needs one and why these stay empty.
-CREATE TABLE APP_USERS_CHANGE_LOG (
-    CHANGE_ID    $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    ID           $($config.Types.Integer)      NOT NULL,
-    CHANGE_TYPE  CHAR(1)                       NOT NULL,
-    CHANGED_AT   $($config.Types.ZonelessDate) NOT NULL
-)
-/
-
-CREATE TABLE APP_ACCOUNTS_CHANGE_LOG (
-    CHANGE_ID     $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    ACCOUNT_CODE  $($config.Types.NaturalAnchor) NOT NULL,
-    CHANGE_TYPE   CHAR(1)                        NOT NULL,
-    CHANGED_AT    $($config.Types.ZonelessDate)  NOT NULL
-)
-/
-
-CREATE TABLE GUID_PEOPLE_CHANGE_LOG (
-    CHANGE_ID    $($config.Types.Integer) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    PERSON_ID    $($config.Types.Guid)         NOT NULL,
-    CHANGE_TYPE  CHAR(1)                       NOT NULL,
-    CHANGED_AT   $($config.Types.ZonelessDate) NOT NULL
-)
-/
+-- The export targets carry no watermark column and no change log; see the SQL Server script (#1424).
 
 CREATE TABLE JIM_SEED_MANIFEST (
     SEED_HASH  VARCHAR2(64) NOT NULL PRIMARY KEY,
@@ -689,9 +635,9 @@ EXIT SUCCESS
 # database-generated keys duplicate silently, and every export row of the matrix fails against residue
 # rather than against the code under test. These scripts run on the hash-match path, so the expensive
 # source seed is still skipped while JIM's own targets always start empty. Identity counters are
-# deliberately NOT restarted: continuing from a higher value never overlaps the seeded EMPLOYEE_ID
-# range, which is all the seed's START WITH 1,000,000 exists to guarantee, and the matrix reads
-# generated keys back from the database rather than asserting absolute values.
+# deliberately NOT restarted: the matrix reads generated keys back from the database rather than
+# asserting absolute values, and an overlap with the seeded EMPLOYEE_ID range is harmless now that
+# reference resolution is scoped by Object Type (#1285).
 
 function New-SqlServerExportTargetResetScript {
     param([int]$Rows)
@@ -706,8 +652,6 @@ GO
 DELETE FROM hr.APP_USER_ROLES;
 DELETE FROM hr.APP_USERS;
 DELETE FROM hr.APP_ACCOUNTS_NATURAL;
-DELETE FROM hr.APP_USERS_CHANGE_LOG;
-DELETE FROM hr.APP_ACCOUNTS_CHANGE_LOG;
 GO
 
 -- The matrix's rows mutate the SOURCE tables too: Export.Update rewrites an email and adds a phone
@@ -746,9 +690,6 @@ DELETE FROM APP_USER_ROLES;
 DELETE FROM APP_USERS;
 DELETE FROM APP_ACCOUNTS_NATURAL;
 DELETE FROM GUID_KEYED_PEOPLE;
-DELETE FROM APP_USERS_CHANGE_LOG;
-DELETE FROM APP_ACCOUNTS_CHANGE_LOG;
-DELETE FROM GUID_PEOPLE_CHANGE_LOG;
 
 -- The matrix's rows mutate the SOURCE tables too (see the SQL Server reset above for the history);
 -- restore them wholesale from the same SQL the seed uses.

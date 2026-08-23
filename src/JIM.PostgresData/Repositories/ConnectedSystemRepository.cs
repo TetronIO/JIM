@@ -223,6 +223,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IQueryable<ConnectedSystem> csQuery = Repository.Database.ConnectedSystems
             .Include(cs => cs.ConnectorDefinition)
             .Include(cs => cs.PasswordPolicy)
+            .Include(cs => cs.PasswordSynchronisation)
             .Include(cs => cs.SettingValues)
                 .ThenInclude(sv => sv.Setting);
 
@@ -535,6 +536,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Repository.Database.ConnectedSystemPasswordPolicies.Add(connectedSystem.PasswordPolicy);
             else
                 Repository.UpdateDetachedSafe(connectedSystem.PasswordPolicy);
+        }
+
+        // And again for the Password Synchronisation configuration, for the same reasons: the graph is not
+        // traversed, and a new configuration's navigation leads back to the Connected System, which must already
+        // be tracked above so that Add does not try to insert it a second time.
+        if (connectedSystem.PasswordSynchronisation != null)
+        {
+            if (connectedSystem.PasswordSynchronisation.Id == 0)
+                Repository.Database.ConnectedSystemPasswordSynchronisations.Add(connectedSystem.PasswordSynchronisation);
+            else
+                Repository.UpdateDetachedSafe(connectedSystem.PasswordSynchronisation);
         }
     }
 
@@ -2529,43 +2541,180 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.StringValue.ToLower() == lowerValue));
     }
 
+    /// <summary>
+    /// Finds Connected System Objects holding any of the supplied values in the given attribute, for import
+    /// reference resolution's database fallback. Reference values arrive as strings whatever the anchor's
+    /// data type, so each value is read through the attribute's own type and matched against the
+    /// correspondingly typed column (#1285); before this, only StringValue was compared, so a reference to a
+    /// Guid- or int-anchored object could never resolve through the fallback. Results are keyed so the caller
+    /// can probe with the value string it asked for (case-insensitively).
+    /// </summary>
     public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
         var values = attributeValues.ToList();
-        if (values.Count == 0)
-            return new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
-
-        // Use case-insensitive matching consistent with the single-value method
-        var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
-        // Lightweight query: only include AttributeValues with Attribute for key extraction.
-        // No Type/Attributes or deep ReferenceValue chains needed — the CSO entity itself is
-        // sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
-        var csos = await Repository.Database.ConnectedSystemObjects
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Where(cso =>
-                cso.ConnectedSystem.Id == connectedSystemId &&
-                cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && lowerValues.Contains(av.StringValue.ToLower())))
-            .ToListAsync();
-
-        // Build dictionary keyed by lowercase attribute value for case-insensitive lookup.
-        // Use TryAdd for duplicates — first match wins (matching single-value method semantics).
         var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
-        foreach (var cso in csos)
+        if (values.Count == 0)
+            return result;
+
+        var attributeType = await Repository.Database.ConnectedSystemAttributes
+            .Where(a => a.Id == attributeId)
+            .Select(a => (AttributeDataType?)a.Type)
+            .FirstOrDefaultAsync();
+        if (attributeType == null)
+            return result;
+
+        // Lightweight query: only include AttributeValues with Attribute for key extraction.
+        // No Type/Attributes or deep ReferenceValue chains needed; the CSO entity itself is
+        // sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
+        switch (attributeType.Value)
         {
-            var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.StringValue != null);
-            if (matchingAttrValue?.StringValue != null)
+            case AttributeDataType.Text:
             {
-                if (!result.TryAdd(matchingAttrValue.StringValue, cso))
+                // Use case-insensitive matching consistent with the single-value method
+                var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && lowerValues.Contains(av.StringValue.ToLower())))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
                 {
-                    Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Found duplicate Connected System Objects for external ID '{ExternalId}' in Connected System {ConnectedSystemId}. Returning first match.",
-                        matchingAttrValue.StringValue, connectedSystemId);
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.StringValue != null);
+                    if (matchingAttrValue?.StringValue != null && !result.TryAdd(matchingAttrValue.StringValue, cso))
+                        LogDuplicateReferenceFallbackMatch(matchingAttrValue.StringValue, connectedSystemId);
                 }
+
+                break;
             }
+            case AttributeDataType.Guid:
+            {
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (Guid.TryParse(v, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.GuidValue != null && parsedValues.Contains(av.GuidValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.GuidValue.HasValue && requestedByParsedValue.ContainsKey(av.GuidValue.Value));
+                    if (matchingAttrValue?.GuidValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.GuidValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.GuidValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            case AttributeDataType.Number:
+            {
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (int.TryParse(v, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.IntValue != null && parsedValues.Contains(av.IntValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.IntValue.HasValue && requestedByParsedValue.ContainsKey(av.IntValue.Value));
+                    if (matchingAttrValue?.IntValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.IntValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.IntValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            case AttributeDataType.LongNumber:
+            {
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (long.TryParse(v, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.LongValue != null && parsedValues.Contains(av.LongValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.LongValue.HasValue && requestedByParsedValue.ContainsKey(av.LongValue.Value));
+                    if (matchingAttrValue?.LongValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.LongValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.LongValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            case AttributeDataType.Decimal:
+            {
+                // Invariant culture: reference values are written invariant by the import path (#1283).
+                var requestedByParsedValue = ParseRequestedReferenceValues(values, v => (decimal.TryParse(v, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var parsed), parsed));
+                if (requestedByParsedValue.Count == 0)
+                    break;
+
+                var parsedValues = requestedByParsedValue.Keys.ToList();
+                var csos = await Repository.Database.ConnectedSystemObjects
+                    .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                    .Where(cso =>
+                        cso.ConnectedSystem.Id == connectedSystemId &&
+                        cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.DecimalValue != null && parsedValues.Contains(av.DecimalValue.Value)))
+                    .ToListAsync();
+
+                foreach (var cso in csos)
+                {
+                    var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.DecimalValue.HasValue && requestedByParsedValue.ContainsKey(av.DecimalValue.Value));
+                    if (matchingAttrValue?.DecimalValue != null && !result.TryAdd(requestedByParsedValue[matchingAttrValue.DecimalValue.Value], cso))
+                        LogDuplicateReferenceFallbackMatch(requestedByParsedValue[matchingAttrValue.DecimalValue.Value], connectedSystemId);
+                }
+
+                break;
+            }
+            default:
+                Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Attribute {AttributeId} has type {AttributeType}, which cannot be used for external ids; no references can be resolved against it.",
+                    attributeId, attributeType.Value);
+                break;
         }
 
         return result;
     }
+
+    /// <summary>
+    /// Parses reference value strings into an anchor's data type, keyed by parsed value with the original
+    /// request string retained, so fallback results can be keyed by exactly what the caller asked for.
+    /// Values that cannot be read as the type are dropped: with several candidate Object Types a value
+    /// legitimately parses for some anchors and not others (#1285).
+    /// </summary>
+    private static Dictionary<TParsed, string> ParseRequestedReferenceValues<TParsed>(IEnumerable<string> values, Func<string, (bool Ok, TParsed Parsed)> parser) where TParsed : notnull =>
+        values
+            .Select(value => (Result: parser(value), Value: value))
+            .Where(pair => pair.Result.Ok)
+            .GroupBy(pair => pair.Result.Parsed)
+            .ToDictionary(group => group.Key, group => group.First().Value);
+
+    /// <summary>
+    /// Duplicates here mean two objects of one type carry the same anchor value in the database; first match
+    /// wins, matching the single-value method's semantics.
+    /// </summary>
+    private static void LogDuplicateReferenceFallbackMatch(string value, int connectedSystemId) =>
+        Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Found duplicate Connected System Objects for external ID '{ExternalId}' in Connected System {ConnectedSystemId}. Returning first match.",
+            value, connectedSystemId);
 
     public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
     {
@@ -2651,6 +2800,236 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .FirstOrDefault(),
                 cso.MetaverseObjectId))
             .AsAsyncEnumerable();
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId != null)
+            .OrderBy(cso => cso.Id)
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            // The attribute ENTITY behind each value, not just the value (#1450). ConnectedSystemObject.Name ranks
+            // candidate naming attributes by the attribute's own name, so without this every candidate is null and
+            // the object falls through to its External ID: for a directory that is a GUID, so a Configuration
+            // Change Preview's drill-down rendered a column of them for the objects an administrator opened it to
+            // recognise. The sibling delta query above already includes it; this one was written without.
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId)
+            .OrderBy(cso => cso.Id)
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
+    public async Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId)
+            .CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await UnjoinedOfType(connectedSystemId, connectedSystemObjectTypeId)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await UnjoinedOfType(connectedSystemId, connectedSystemObjectTypeId).CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await LiveOfType(connectedSystemId, connectedSystemObjectTypeId)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId)
+    {
+        return await LiveOfType(connectedSystemId, connectedSystemObjectTypeId)
+            .Where(cso => cso.AttributeValues.Any(av => av.AttributeId == attributeId))
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetLiveConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await LiveOfType(connectedSystemId, connectedSystemObjectTypeId).CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetConnectedSystemAttributeValueCountAsync(int connectedSystemId, int attributeId)
+    {
+        return await Repository.Database.ConnectedSystemObjectAttributeValues
+            .AsNoTracking()
+            .Where(av => av.AttributeId == attributeId &&
+                         av.ConnectedSystemObject != null &&
+                         av.ConnectedSystemObject.ConnectedSystemId == connectedSystemId)
+            .CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> ObsoleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return 0;
+
+        var ids = connectedSystemObjectIds.ToArray();
+
+        // A narrow status-mark update (exempt from the bulk column-list rule): only Normal-status rows flip, so
+        // re-running an interrupted removal never touches objects the sync pipeline is already draining.
+        var updated = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects""
+              SET ""Status"" = {0}, ""LastUpdated"" = {1}
+              WHERE ""Id"" = ANY({2}) AND ""Status"" = {3}",
+            (int)ConnectedSystemObjectStatus.Obsolete,
+            DateTime.UtcNow,
+            ids,
+            (int)ConnectedSystemObjectStatus.Normal);
+
+        // Fix up any tracked instances so a later SaveChangesAsync cannot write the stale status back.
+        var idSet = ids.ToHashSet();
+        var previousAutoDetect = Repository.Database.ChangeTracker.AutoDetectChangesEnabled;
+        Repository.Database.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            foreach (var entry in Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
+                         .Where(e => idSet.Contains(e.Entity.Id)))
+            {
+                entry.Entity.Status = ConnectedSystemObjectStatus.Obsolete;
+            }
+        }
+        finally
+        {
+            Repository.Database.ChangeTracker.AutoDetectChangesEnabled = previousAutoDetect;
+        }
+
+        return updated;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeletePendingExportsForConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return 0;
+
+        var ids = connectedSystemObjectIds.ToArray();
+
+        // Children first: the attribute value changes do not cascade from their Pending Export.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExportAttributeValueChanges""
+              WHERE ""PendingExportId"" IN (
+                  SELECT pe.""Id"" FROM ""PendingExports"" pe
+                  WHERE pe.""ConnectedSystemObjectId"" = ANY({0})
+              )",
+            ids);
+
+        return await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" WHERE ""ConnectedSystemObjectId"" = ANY({0})",
+            ids);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds)
+    {
+        if (attributeIds.Count == 0)
+            return 0;
+
+        var ids = attributeIds.ToArray();
+
+        // Change history rows may reference a value row as a deleted object's external id snapshot holder; the
+        // FK does not cascade, so clear those references first (mirrors DeleteAllConnectedSystemObjectsAndDependenciesAsync).
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjectChanges""
+              SET ""DeletedObjectExternalIdAttributeValueId"" = NULL
+              WHERE ""DeletedObjectExternalIdAttributeValueId"" IN (
+                  SELECT av.""Id"" FROM ""ConnectedSystemObjectAttributeValues"" av
+                  JOIN ""ConnectedSystemObjects"" cso ON cso.""Id"" = av.""ConnectedSystemObjectId""
+                  WHERE av.""AttributeId"" = ANY({0}) AND cso.""ConnectedSystemId"" = {1}
+              )",
+            ids,
+            connectedSystemId);
+
+        return await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemObjectAttributeValues"" av
+              USING ""ConnectedSystemObjects"" cso
+              WHERE cso.""Id"" = av.""ConnectedSystemObjectId""
+                AND av.""AttributeId"" = ANY({0})
+                AND cso.""ConnectedSystemId"" = {1}",
+            ids,
+            connectedSystemId);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId != null &&
+                          cso.Status == ConnectedSystemObjectStatus.Obsolete)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// The live objects of one type, joined or not. What an import would refresh, and so what stops being
+    /// refreshed when the type or one of its attributes is deselected.
+    /// </summary>
+    private IQueryable<ConnectedSystemObject> LiveOfType(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
+
+    /// <summary>
+    /// The live, unjoined objects of one type: what a synchronisation would put to Object Matching. Obsolete
+    /// objects are excluded because a synchronisation never reaches the join step for them.
+    /// </summary>
+    private IQueryable<ConnectedSystemObject> UnjoinedOfType(int connectedSystemId, int connectedSystemObjectTypeId) =>
+        Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
+
+    /// <inheritdoc />
+    public async Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId != null)
+            .CountAsync();
+    }
 
     /// <inheritdoc />
     public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId)
@@ -3067,6 +3446,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(x => x.ConnectedSystemId == connectedSystemId).OrderBy(x => x.Name)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a Summary-tier projection for
+    /// resolving a Reference attribute's declared target name (#1285) without loading the
+    /// ReferencedObjectType navigation. That navigation is deliberately never eager-loaded here: under
+    /// the web host's no-tracking queries a self-referencing Object Type materialises twice, and the
+    /// update path's graph attach then fails on the duplicate key.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemObjectTypes
+            .Where(ot => ot.ConnectedSystemId == connectedSystemId)
+            .Select(ot => new { ot.Id, ot.Name })
+            .ToDictionaryAsync(ot => ot.Id, ot => ot.Name);
     }
 
     /// <summary>
@@ -3996,6 +4390,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             "errors" => sortDescending
                 ? query.OrderByDescending(pe => pe.ErrorCount)
                 : query.OrderBy(pe => pe.ErrorCount),
+            "references" => sortDescending
+                ? query.OrderByDescending(pe => pe.AttributeValueChanges.Count(ac => ac.UnresolvedReferenceValue != null && ac.UnresolvedReferenceValue != ""))
+                : query.OrderBy(pe => pe.AttributeValueChanges.Count(ac => ac.UnresolvedReferenceValue != null && ac.UnresolvedReferenceValue != "")),
             "nextretry" => sortDescending
                 ? query.OrderByDescending(pe => pe.NextRetryAt ?? DateTime.MaxValue)
                 : query.OrderBy(pe => pe.NextRetryAt ?? DateTime.MaxValue),
@@ -5437,6 +5834,62 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
     }
 
+    public async Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId)
+    {
+        // The target Object Type is named from the Connected System's own Object Types by the caller
+        // (ResolveTargetObjectType), so there is nothing to include here.
+        return await Repository.Database.ConnectedSystemPasswordSynchronisations
+            .AsNoTracking()
+            .SingleOrDefaultAsync(ps => ps.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync()
+    {
+        // Joined and projected in the database rather than loading the Connected Systems: fan-out asks this on
+        // every password change, and it needs three fields per system.
+        var targets = await Repository.Database.ConnectedSystemPasswordSynchronisations
+            .AsNoTracking()
+            .Where(ps => ps.Enabled)
+            .Join(Repository.Database.ConnectedSystems.AsNoTracking(),
+                ps => ps.ConnectedSystemId,
+                cs => cs.Id,
+                (ps, cs) => new
+                {
+                    ps.ConnectedSystemId,
+                    cs.Name,
+                    ps.TargetObjectTypeId,
+                    cs.InitialPasswordTimeToLive
+                })
+            .ToListAsync();
+
+        // The effective time to live is resolved here rather than in the query, because the fallback lives on the
+        // entity (EffectiveInitialPasswordTimeToLive) and must not be restated in SQL where the two could drift.
+        return targets
+            .Select(t => new PasswordSynchronisationTarget
+            {
+                ConnectedSystemId = t.ConnectedSystemId,
+                ConnectedSystemName = t.Name,
+                TargetObjectTypeId = t.TargetObjectTypeId,
+                TimeToLive = new ConnectedSystem { InitialPasswordTimeToLive = t.InitialPasswordTimeToLive }
+                    .EffectiveInitialPasswordTimeToLive
+            })
+            .ToList();
+    }
+
+    public async Task<ConnectedSystem?> GetConnectedSystemForPasswordDeliveryAsync(int connectedSystemId)
+    {
+        // No tracking: the pass reads the configuration and the settings, and writes only to the queue, which it
+        // does through raw SQL of its own. Tracking the graph here would put a second instance of every setting
+        // value in the identity map for the length of the pass and buy nothing.
+        return await Repository.Database.ConnectedSystems
+            .AsNoTracking()
+            .Include(cs => cs.ConnectorDefinition)
+            .Include(cs => cs.PasswordSynchronisation)
+            .Include(cs => cs.SettingValues)
+                .ThenInclude(sv => sv.Setting)
+            .SingleOrDefaultAsync(cs => cs.Id == connectedSystemId);
+    }
+
     public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)
     {
         // Read-only comparison input, so no tracking: attaching it would put a second instance of this row in
@@ -5734,6 +6187,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             var source = changesById[mapping.Id];
             mapping.Priority = source.Priority;
             mapping.NullIsValue = source.NullIsValue;
+            // Enabled and its reason ride the same bulk path (#1485): the schema refresh decision disables a
+            // set of mappings in one pass, and a scalar omitted here is silently lost for every caller.
+            mapping.Enabled = source.Enabled;
+            mapping.DisabledReason = source.DisabledReason;
             // The caller stamps AuditHelper.SetUpdated on the detached source before persisting; the stamp is
             // the mapping's configuration change trail and feeds the Full Synchronisation configuration
             // watermark (GetLatestSyncRuleConfigurationChangeAsync), so it must be copied across too.

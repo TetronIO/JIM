@@ -15,7 +15,7 @@ namespace JIM.Worker.Tests.Services;
 /// the real service has and the one worth preserving in a double.
 /// </para>
 /// </summary>
-internal sealed class TestCredentialProtection : ICredentialProtectionService
+internal sealed class TestCredentialProtection : ICredentialProtectionService, IPasswordProtectionService
 {
     private const string Prefix = "$JIM$v1$";
 
@@ -43,4 +43,33 @@ internal sealed class TestCredentialProtection : ICredentialProtectionService
         // IsProtected has already established this is non-null, but its null-state does not flow out of the call.
         return Encoding.UTF8.GetString(Convert.FromBase64String(protectedData![Prefix.Length..]));
     }
+
+    /// <summary>
+    /// Synchronised passwords (#1119) round-trip through a prefix of their own, mirroring the real service: the
+    /// two purposes are cryptographically separate there, so a double that used one prefix for both would let a
+    /// test pass while the code confused them.
+    /// </summary>
+    private const string PasswordPrefix = "$JIMPW$v1$";
+
+    public string? ProtectPassword(string? password) =>
+        string.IsNullOrEmpty(password) || IsPasswordProtected(password)
+            ? password
+            : PasswordPrefix + Convert.ToBase64String(Encoding.UTF8.GetBytes(password));
+
+    public string? UnprotectPassword(string? protectedPassword)
+    {
+        if (string.IsNullOrEmpty(protectedPassword))
+            return protectedPassword;
+
+        if (!IsPasswordProtected(protectedPassword))
+            throw new CryptographicException("The stored value is not a JIM-protected password.");
+
+        if (FailToDecrypt)
+            throw new CryptographicException("The key used to protect this payload could not be found.");
+
+        return Encoding.UTF8.GetString(Convert.FromBase64String(protectedPassword[PasswordPrefix.Length..]));
+    }
+
+    public bool IsPasswordProtected(string? value) =>
+        !string.IsNullOrEmpty(value) && value.StartsWith(PasswordPrefix, StringComparison.Ordinal);
 }

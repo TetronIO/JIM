@@ -63,6 +63,8 @@
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
         'Get-JIMConnectedSystemCapability',
         'Get-JIMConnectedSystemPasswordPolicy',
+        'Get-JIMConnectedSystemPasswordSynchronisation',
+        'Set-JIMConnectedSystemPasswordSynchronisation',
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
 
@@ -147,6 +149,7 @@
         # Metaverse
         'Get-JIMMetaverseObject',
         'Set-JIMMetaverseObjectPassword',
+        'Sync-JIMMetaverseObjectPassword',
         'Get-JIMMetaverseObjectChangeHistory',
         'Get-JIMPendingDeletion',
         'Search-JIMMetaverseObject',
@@ -188,12 +191,16 @@
         'Remove-JIMRoleMember',
 
         # Data Generation
+        'Add-JIMExampleDataTemplateAttribute',
         'Get-JIMExampleDataSet',
         'Get-JIMExampleDataTemplate',
         'Invoke-JIMExampleDataTemplate',
         'New-JIMExampleDataSet',
+        'New-JIMExampleDataTemplate',
         'Remove-JIMExampleDataSet',
+        'Remove-JIMExampleDataTemplate',
         'Set-JIMExampleDataSet',
+        'Set-JIMExampleDataTemplate',
 
         # Expressions
         'Test-JIMExpression',

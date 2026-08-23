@@ -18,7 +18,7 @@ public enum CausalityTone
 }
 
 /// <summary>
-/// The column a causality event belongs to in the Flow view: what came in (Source), what JIM did
+/// The column a causality event belongs to in the Flow view: what happened (Source), what JIM did
 /// (Identity), and what it caused (Downstream).
 /// </summary>
 public enum CausalityLane

@@ -281,6 +281,7 @@ Describe 'Set-JIMSyncRuleMapping' {
             @{ Name = 'InboundValueProcessing' }
             @{ Name = 'CaseNormalisation' }
             @{ Name = 'InitialExportOnly' }
+            @{ Name = 'Enabled' }
             @{ Name = 'PassThru' }
         ) {
             $command.Parameters[$Name] | Should -Not -BeNullOrEmpty
@@ -328,6 +329,36 @@ Describe 'Set-JIMSyncRuleMapping' {
 
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
                     $Body.ContainsKey('nullIsValue') -and $Body.nullIsValue -eq $false
+                }
+            }
+        }
+
+        It 'Disables a mapping by sending enabled=false' {
+            # Enabled applies to both directions (#1485); a disabled mapping is skipped by synchronisation
+            # until it is re-enabled.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 8 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Enabled $false -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and
+                    $Endpoint -eq '/api/v1/synchronisation/sync-rules/1/mappings/8' -and
+                    $Body.ContainsKey('enabled') -and $Body.enabled -eq $false
+                }
+            }
+        }
+
+        It 'Re-enables a mapping by sending enabled=true' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 8 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Enabled $true -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('enabled') -and $Body.enabled -eq $true
                 }
             }
         }

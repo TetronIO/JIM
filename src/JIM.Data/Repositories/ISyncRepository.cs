@@ -504,6 +504,21 @@ public interface ISyncRepository
     Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Names the Run Profile Execution Item that queued each Pending Export, after both exist (#1223).
+    /// </summary>
+    /// <remarks>
+    /// The ordinary outbound path stamps <see cref="PendingExport.QueuedByRunProfileExecutionItemId"/> before
+    /// the exports are persisted, but the deletion-cascade and reference-recall paths run the other way round:
+    /// their Pending Exports are staged and persisted first, and the execution item that reports each one (the
+    /// deletion item, the standalone cascade item, the recall item) is only built afterwards. This is the
+    /// set-once fix-up for those paths; the caller must also set the property on its in-memory Pending Export
+    /// instances so any tracked instance matches the row.
+    /// </remarks>
+    /// <param name="stamps">The Pending Export ids and the execution item id that queued each.</param>
+    Task SetPendingExportQueueingItemsAsync(
+        IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps);
+
+    /// <summary>
     /// Records that newly provisioned accounts are owed an initial password.
     /// <para>
     /// Staged rather than delivered inline, for the same reason a Pending Export is staged rather than written
@@ -643,6 +658,69 @@ public interface ISyncRepository
     /// </para>
     /// </summary>
     Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds);
+
+    #region Password Synchronisation queue (#1119)
+
+    /// <summary>
+    /// Queues password changes, coalescing each onto any change already owed to the same Connected System for
+    /// the same identity (requirement 8).
+    /// <para>
+    /// Coalescing is the point: the queue holds the latest intended password per target, never a replayable
+    /// sequence of historical ones. A person who changes their password twice must not have the older one
+    /// delivered to a system that was briefly unavailable.
+    /// </para>
+    /// </summary>
+    Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes);
+
+    /// <summary>
+    /// The password changes owed to a Connected System that are due for a delivery attempt now: pending, and
+    /// either never attempted or past their scheduled retry. Oldest first, capped at <paramref name="maximum"/>.
+    /// </summary>
+    Task<List<PendingPasswordChange>> GetDuePasswordChangesAsync(int connectedSystemId, DateTime asOf, int maximum);
+
+    /// <summary>
+    /// Which Connected Systems have password changes due now, so a delivery pass can be raised only for the
+    /// systems that have work rather than for every configured one.
+    /// </summary>
+    Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf);
+
+    /// <summary>
+    /// Records the outcome of a delivery attempt against each change: its status, failure classification, the
+    /// target's message, the attempt count, when the next retry falls due, and the account it resolved to.
+    /// </summary>
+    Task RecordPasswordChangeAttemptsAsync(IEnumerable<PendingPasswordChange> changes);
+
+    /// <summary>
+    /// Removes delivered password changes. Success deletes the row: the queue is work outstanding, and the
+    /// Activity is the history (requirement 11).
+    /// </summary>
+    Task DeletePasswordChangesAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
+    /// Marks every pending password change on a Connected System that has outlived its time to live as expired,
+    /// returning how many were marked. An expiry is a recorded outcome, never a silent drop (requirement 9).
+    /// </summary>
+    Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf);
+
+    /// <summary>
+    /// Makes every parked password change on a Connected System due again, returning how many were released.
+    /// Requirement 3's drain when a system is enabled, and the same mechanic when its settings change.
+    /// </summary>
+    Task<int> ReleasePasswordChangesForDeliveryAsync(int connectedSystemId);
+
+    /// <summary>
+    /// How much queued password work on each Connected System is waiting on a person. A system with nothing to
+    /// report is absent from the dictionary rather than present with zeroes.
+    /// </summary>
+    Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds);
+
+    /// <summary>
+    /// Removes terminal password changes last touched before <paramref name="olderThan"/>, up to
+    /// <paramref name="maxRecords"/>, oldest first. Live changes are never removed, however old.
+    /// </summary>
+    Task<int> DeleteTerminalPasswordChangesAsync(DateTime olderThan, int maxRecords);
+
+    #endregion
 
     /// <summary>
     /// The distinct reasons a target gave for refusing the initial passwords parked against a Synchronisation
@@ -788,6 +866,18 @@ public interface ISyncRepository
     Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis);
 
     /// <summary>
+    /// Bulk inserts causal edges via chunked raw SQL, bypassing the EF change tracker (#1223).
+    /// </summary>
+    /// <remarks>
+    /// Call this from inside the transaction that persists the effects the edges describe, never on its own.
+    /// An edge that outlived a rolled-back flush would attribute a cause to an effect that never happened, and
+    /// an effect persisted without its edges would read as uncaused; joining the existing flush means a failure
+    /// here fails or retries with the RPEI batch exactly as a failure to persist the RPEIs themselves does, so
+    /// provenance adds no new failure mode to synchronisation.
+    /// </remarks>
+    Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges);
+
+    /// <summary>
     /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs,
     /// and inserts any new SyncOutcomes added after initial persistence.
     /// Used by confirming imports to merge reconciliation outcomes onto existing RPEIs.
@@ -890,6 +980,18 @@ public interface ISyncRepository
     /// profile execution and cached by the caller, never per Metaverse Object.
     /// </summary>
     Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
+
+    /// <summary>
+    /// Every Metaverse Attribute id and its name, for snapshotting the relationship noun a causal edge reads
+    /// back (#1223): "removed from Project Diamond's <b>Static Members</b>".
+    /// </summary>
+    /// <remarks>
+    /// A tiny table read at most once per run profile execution and cached by the worker, in the manner of
+    /// <see cref="GetConnectedSystemNamesAsync"/>. The name has to be snapshotted rather than resolved at read
+    /// time because the attribute can be renamed or removed, and because the wording rule takes the
+    /// relationship noun from the schema rather than from the object type.
+    /// </remarks>
+    Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync();
 
     #endregion
 
@@ -1151,6 +1253,20 @@ public interface ISyncRepository
     /// Used during parallel export processing to reload exports in a separate context.
     /// </summary>
     Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
+
+    #endregion
+
+    #region Preview Backstops (#288)
+
+    /// <summary>
+    /// Begins a database transaction that is unconditionally rolled back when the returned scope is disposed,
+    /// whatever happened inside it: the outermost defence-in-depth layer around the synchronisation preview's
+    /// zero-side-effect guarantee (PRD requirement 8). Any write that slipped past the preview path's other
+    /// guards is discarded rather than committed. Returns null when the underlying provider is not relational
+    /// (the in-memory test repository), where there is no transaction to hold; the preview's other layers
+    /// still apply there.
+    /// </summary>
+    Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync();
 
     #endregion
 }

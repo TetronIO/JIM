@@ -35,6 +35,7 @@ public class AdministratorPasswordSetTests
     private Mock<IConnectedSystemRepository> _connectedSystemRepository = null!;
     private RecordingPasswordConnector _connector = null!;
     private JimApplication _application = null!;
+    private ConnectedSystem _connectedSystem = null!;
     private Guid _csoId;
 
     [SetUp]
@@ -45,7 +46,7 @@ public class AdministratorPasswordSetTests
         _csoId = Guid.NewGuid();
         _connector = new RecordingPasswordConnector();
 
-        var connectedSystem = new ConnectedSystem
+        _connectedSystem = new ConnectedSystem
         {
             Id = ConnectedSystemId,
             Name = "Contoso AD",
@@ -63,7 +64,7 @@ public class AdministratorPasswordSetTests
 
         _activityRepository = new Mock<IActivityRepository>();
         _connectedSystemRepository = new Mock<IConnectedSystemRepository>();
-        _connectedSystemRepository.Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId)).ReturnsAsync(_connectedSystem);
         _connectedSystemRepository.Setup(r => r.GetConnectedSystemObjectAsync(ConnectedSystemId, _csoId)).ReturnsAsync(cso);
 
         _repository = new Mock<IRepository>();
@@ -155,6 +156,86 @@ public class AdministratorPasswordSetTests
         }
         await Task.CompletedTask;
     }
+
+    #region Require Secure Transport
+
+    [Test]
+    public async Task SetPassword_SecureTransportRequiredAndChannelIsNot_RefusesWithoutSendingAsync()
+    {
+        // An administrator standing at a screen is told outright, rather than having the password quietly go out
+        // over a connection they explicitly said must not carry one.
+        _connectedSystem.RequireSecureTransport = true;
+        _connector.IsPasswordChannelSecure = false;
+
+        var result = await SetPasswordAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault),
+                "Retrying helps only once an administrator has corrected the configuration.");
+            Assert.That(_connector.PasswordsSet, Is.Empty, "Nothing may reach the target.");
+            Assert.That(result.ErrorMessage, Does.Contain("Require Secure Transport"),
+                "The message has to name the setting, or the administrator cannot act on it.");
+        }
+    }
+
+    [Test]
+    public async Task SetPassword_SecureTransportRequiredAndChannelIsNot_ClosesTheChannelAsync()
+    {
+        _connectedSystem.RequireSecureTransport = true;
+        _connector.IsPasswordChannelSecure = false;
+
+        await SetPasswordAsync();
+
+        Assert.That(_connector.CloseCount, Is.EqualTo(_connector.OpenCount),
+            "The channel opened to make the check must not be left hanging open.");
+    }
+
+    [Test]
+    public async Task SetPassword_SecureTransportRequiredAndChannelIsNot_FailsTheActivityAsync()
+    {
+        _connectedSystem.RequireSecureTransport = true;
+        _connector.IsPasswordChannelSecure = false;
+
+        await SetPasswordAsync();
+
+        var activity = CreatedActivities().Single();
+        Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+    }
+
+    [Test]
+    public async Task SetPassword_SecureTransportRequiredAndChannelIs_SendsAsync()
+    {
+        _connectedSystem.RequireSecureTransport = true;
+        _connector.IsPasswordChannelSecure = true;
+
+        var result = await SetPasswordAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(_connector.PasswordsSet, Has.Exactly(1).Items);
+        }
+    }
+
+    [Test]
+    public async Task SetPassword_SecureTransportNotRequiredAndChannelIsNot_SendsAsync()
+    {
+        // The Connector warns; the choice belongs to the administrator who knows the deployment.
+        _connectedSystem.RequireSecureTransport = false;
+        _connector.IsPasswordChannelSecure = false;
+
+        var result = await SetPasswordAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(_connector.PasswordsSet, Has.Exactly(1).Items);
+        }
+    }
+
+    #endregion
 
     #endregion
 
@@ -404,6 +485,12 @@ public class AdministratorPasswordSetTests
 
         public IReadOnlyCollection<PasswordExpiryBehaviour> SupportedExpiryBehaviours =>
             [PasswordExpiryBehaviour.RequireChangeAtNextSignIn, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy];
+
+        /// <summary>
+        /// Whether this double reports its password channel as encrypted. Secure by default, because that is the
+        /// ordinary case; settable so a test can drive the Require Secure Transport refusal.
+        /// </summary>
+        public bool IsPasswordChannelSecure { get; set; } = true;
 
         public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings)
         {

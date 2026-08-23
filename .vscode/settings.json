@@ -125,6 +125,5 @@
         "Xamarin",
         "xpress"
     ],
-    "editor.mouseWheelZoom": true,
-    "terminal.integrated.fontFamily": "Consolas, 'Courier New', monospace"
+    "editor.mouseWheelZoom": true
 }

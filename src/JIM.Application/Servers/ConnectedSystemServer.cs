@@ -8,6 +8,7 @@ using JIM.Connectors;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -15,6 +16,7 @@ using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Tasking;
+using JIM.Models.Tasking.DTOs;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -53,7 +55,7 @@ public class ConnectedSystemServer
     /// credential protection and certificate validation when it supports them.
     /// </summary>
     /// <exception cref="NotSupportedException">Thrown when the Connector Definition is not recognised.</exception>
-    private IConnector CreateConnector(ConnectedSystem connectedSystem)
+    internal IConnector CreateConnector(ConnectedSystem connectedSystem)
     {
         return ConnectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
     }
@@ -540,6 +542,10 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem}");
 
+        // Read before the write, so what parked password work is compared against is what was stored rather than
+        // what is about to replace it.
+        var passwordSynchronisationAsStored = await Application.Repository.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystem.Id);
+
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
@@ -559,7 +565,37 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
         await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
+        await ReleaseParkedPasswordChangesIfDeliveryChangedAsync(connectedSystem, passwordSynchronisationAsStored);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Sets a Connected System's parked password changes retrying, when the save changed what would be delivered
+    /// to it (#1119, requirement 3).
+    /// <para>
+    /// A change parks because the target refused it and the same configuration would produce the same refusal, so
+    /// the administrator correcting that configuration is the only event that makes another attempt worth making.
+    /// Without this, parking is a one-way door and a queued password never reaches the account it belongs to.
+    /// </para>
+    /// <para>
+    /// Gated on delivery actually changing rather than firing on every save, matching the Synchronisation Rule
+    /// precedent: an unrelated edit would otherwise retry against settings the target has already answered on,
+    /// failing identically and inflating an attempt count that is supposed to count distinct configurations tried.
+    /// </para>
+    /// </summary>
+    private async Task ReleaseParkedPasswordChangesIfDeliveryChangedAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemPasswordSynchronisation? asStored)
+    {
+        // A system that is not taking passwords has nothing to drain onto: requirement 2 has it accumulate while
+        // it is off, and releasing work a disabled system will not deliver would only churn the queue.
+        if (connectedSystem.PasswordSynchronisation is not { Enabled: true })
+            return;
+
+        if (ConnectedSystemPasswordSynchronisation.WouldDeliverTheSameAs(asStored, connectedSystem.PasswordSynchronisation))
+            return;
+
+        await Application.PasswordSynchronisation.ReleaseForDeliveryAsync(connectedSystem.Id);
     }
 
     /// <summary>
@@ -574,6 +610,9 @@ public class ConnectedSystemServer
             throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem} (API key initiated)");
+
+        // Read before the write, for the same reason as the user-initiated overload above.
+        var passwordSynchronisationAsStored = await Application.Repository.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystem.Id);
 
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
@@ -593,6 +632,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
         await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
+        await ReleaseParkedPasswordChangesIfDeliveryChangedAsync(connectedSystem, passwordSynchronisationAsStored);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -616,6 +656,10 @@ public class ConnectedSystemServer
         // before persistence. Credential attributes are forced back into a safe state here regardless of what the
         // caller sent, which closes any route that sets Selected outside the validated per-attribute endpoints.
         QuarantineCredentialAttributes(connectedSystem);
+
+        // the selection is what this save changes, and some Connectors can only serve their settings for some
+        // selections (#1424); refused here, before an Activity is opened for a save that will not happen.
+        ThrowIfObjectTypeSelectionInvalid(connectedSystem, connectedSystem.ObjectTypes ?? []);
 
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
@@ -1387,6 +1431,12 @@ public class ConnectedSystemServer
         {
             if (connector is IConnectorSettings settingsConnector)
                 results.AddRange(settingsConnector.ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
+
+            // some of what the settings say is about the Object Types selected for synchronisation (the SQL Connector's
+            // Delta Import Mode, for one), so a connector that can judge that is shown the schema as it stands. no schema
+            // yet is nothing selected, which is a valid answer, not a reason to skip the question.
+            if (connector is IConnectorObjectTypeSelectionValidation selectionValidation)
+                results.AddRange(selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, connectedSystem.ObjectTypes ?? [], Log.Logger));
         }
         finally
         {
@@ -1394,6 +1444,61 @@ public class ConnectedSystemServer
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Refuses a schema selection the Connector says the settings cannot serve (#1424): selecting an Object Type
+    /// that lacks what the configured Delta Import Mode needs, for example. Asked of the values and the schema
+    /// alone, never of the target system, so it is safe on every save path. Connected Systems whose Connector
+    /// cannot judge the selection, or that carry no settings to judge it against, are left alone.
+    /// </summary>
+    /// <param name="connectedSystem">Carries the Connector Definition and the setting values.</param>
+    /// <param name="objectTypes">The schema as it will stand once the change is persisted.</param>
+    /// <exception cref="InvalidSettingValuesException">The Connector refused the selection; the message is the Connector's own.</exception>
+    private void ThrowIfObjectTypeSelectionInvalid(ConnectedSystem connectedSystem, IReadOnlyCollection<ConnectedSystemObjectType> objectTypes)
+    {
+        if (connectedSystem.ConnectorDefinition == null || connectedSystem.SettingValues is not { Count: > 0 })
+            return;
+
+        // connectors that hold connections or temporary files are disposable; the rest are not, and a null here is fine.
+        var connector = CreateConnector(connectedSystem);
+        using var disposableConnector = connector as IDisposable;
+
+        if (connector is not IConnectorObjectTypeSelectionValidation selectionValidation)
+            return;
+
+        var problems = selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, objectTypes, Log.Logger)
+            .Where(result => !result.IsValid)
+            .Select(result => result.ErrorMessage)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .ToList();
+
+        if (problems.Count > 0)
+            throw new InvalidSettingValuesException(string.Join(" ", problems));
+    }
+
+    /// <summary>
+    /// As <see cref="ThrowIfObjectTypeSelectionInvalid"/>, for a single Object Type being updated on its own (the
+    /// REST API and PowerShell path). Only a selection can newly violate the settings, so a deselection is not
+    /// judged; for a selection the persisted schema is loaded and this Object Type's pending state stands in for
+    /// its persisted one, so the Connector judges the selection as it will be after the update.
+    /// </summary>
+    private async Task ThrowIfObjectTypeSelectionInvalidAsync(ConnectedSystemObjectType objectType)
+    {
+        if (!objectType.Selected)
+            return;
+
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(objectType.ConnectedSystemId);
+        if (connectedSystem?.ConnectorDefinition == null || connectedSystem.SettingValues is not { Count: > 0 })
+            return;
+
+        var persisted = await Application.Repository.ConnectedSystems.GetObjectTypesAsync(objectType.ConnectedSystemId) ?? [];
+        var objectTypes = persisted
+            .Where(candidate => candidate.Id != objectType.Id)
+            .Append(objectType)
+            .ToList();
+
+        ThrowIfObjectTypeSelectionInvalid(connectedSystem, objectTypes);
     }
 
     private static void ValidateConnectedSystemParameter(ConnectedSystem connectedSystem)
@@ -1412,8 +1517,11 @@ public class ConnectedSystemServer
 
     #region Connected System Schema
     /// <summary>
-    /// Causes the associated Connector to be instantiated and the schema imported from the Connected System.
-    /// Changes will be persisted, even if they are destructive, i.e. an attribute is removed.
+    /// Causes the associated Connector to be instantiated and the schema imported from the Connected System, in
+    /// one call: retrieve, merge and persist. Additions and definition updates are persisted; removals are
+    /// reported but deliberately retained (see issue #782), so nothing is deleted by a refresh. For a
+    /// preview-then-decide flow, use <see cref="PreviewConnectedSystemSchemaRefreshAsync"/> followed by
+    /// <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>.
     /// </summary>
     /// <returns>A result object containing details about what changed during the schema refresh.</returns>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
@@ -1525,6 +1633,495 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Retrieves the Connected System's schema and merges it into the supplied instance <b>in memory only</b>,
+    /// reporting what a refresh would change. Nothing is persisted and no Activity is recorded: a preview is a
+    /// read, and the administrator decides what happens next. To persist exactly what this call merged, pass the
+    /// same instance and result to
+    /// <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>;
+    /// to discard, drop the instance and reload the Connected System.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System to preview a schema refresh for. Mutated in memory by
+    /// the merge; callers who must keep an untouched instance should pass a freshly loaded one.</param>
+    /// <returns>A result object describing what the refresh would change, including removals (which an apply
+    /// would retain, not delete) and attribute definition changes.</returns>
+    public async Task<SchemaRefreshResult> PreviewConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorSchema schemaConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
+
+        var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+        var result = MergeSchemaIntoConnectedSystem(connectedSystem, schema);
+
+        // Read while connected, exactly as the one-call import does, so an apply persists the same graph the
+        // one-call path would have. Mutates the in-memory instance only.
+        await DiscoverPasswordPolicyAsync(connector, connectedSystem, result);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Persists a schema refresh previously retrieved and merged by
+    /// <see cref="PreviewConnectedSystemSchemaRefreshAsync"/>, under an ImportSchema Activity. The pair is
+    /// equivalent to <see cref="ImportConnectedSystemSchemaAsync(ConnectedSystem, MetaverseObject?)"/> with a
+    /// decision point in the middle; the preview result completes the Activity so discovery warnings still reach
+    /// the other surfaces.
+    /// </summary>
+    /// <param name="connectedSystem">The instance the preview merged into. Persisted as-is.</param>
+    /// <param name="previewResult">The preview's result, used to complete the Activity.</param>
+    /// <param name="initiatedBy">The user the change is attributed to.</param>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, MetaverseObject? initiatedBy)
+        => await ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, disableDependents: null, initiatedBy);
+
+    /// <summary>
+    /// As <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, MetaverseObject?)"/>,
+    /// attributed to an API key (the REST API and PowerShell path).
+    /// </summary>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, ApiKey initiatedByApiKey)
+        => await ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, disableDependents: null, initiatedByApiKey);
+
+    /// <summary>
+    /// Applies a previewed schema refresh and then disables its dependents: the "Apply and Disable Dependents"
+    /// option of the schema refresh decision (#1485). The schema is recorded exactly as the plain apply records
+    /// it, then each Synchronisation Rule and Attribute Flow mapping the plan names is disabled with its
+    /// recorded reason, under child Activities of the refresh so the history reads as one decision.
+    /// </summary>
+    /// <param name="connectedSystem">The instance the preview merged into. Persisted as-is.</param>
+    /// <param name="previewResult">The preview's result, used to complete the refresh Activity.</param>
+    /// <param name="disableDependents">What to disable, with per-item reasons; null applies the schema alone.</param>
+    /// <param name="initiatedBy">The user the change is attributed to.</param>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents? disableDependents, MetaverseObject? initiatedBy)
+    {
+        var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy, initiatedByApiKey: null);
+
+        if (disableDependents is { HasAny: true })
+            await DisableSchemaRefreshDependentsAsync(connectedSystem, disableDependents, activity, initiatedBy, initiatedByApiKey: null);
+    }
+
+    /// <summary>
+    /// As <see cref="ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem, SchemaRefreshResult, SchemaRefreshDependents?, MetaverseObject?)"/>,
+    /// attributed to an API key (the REST API and PowerShell path).
+    /// </summary>
+    public async Task ApplyConnectedSystemSchemaRefreshAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents? disableDependents, ApiKey initiatedByApiKey)
+    {
+        var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy: null, initiatedByApiKey);
+
+        if (disableDependents is { HasAny: true })
+            await DisableSchemaRefreshDependentsAsync(connectedSystem, disableDependents, activity, initiatedBy: null, initiatedByApiKey);
+    }
+
+    /// <summary>
+    /// Applies a previewed schema refresh and then removes its dependents: the "Apply and Remove" option of the
+    /// schema refresh decision (#1485). The schema is recorded exactly as the plain apply records it; the
+    /// Synchronisation Rules and mappings the plan names are deleted under child Activities of the refresh; and
+    /// the dependent data is removed by a queued worker task, so a Connected System holding hundreds of
+    /// thousands of objects never does that work in the request path. The task's ids are resolved from the
+    /// preview's pre-refresh snapshot, because removed entries are no longer on the merged schema graph.
+    /// </summary>
+    /// <param name="connectedSystem">The instance the preview merged into. Persisted as-is.</param>
+    /// <param name="previewResult">The preview's result: completes the refresh Activity and resolves the
+    /// removed Object Type and attribute ids the data removal targets.</param>
+    /// <param name="removeDependents">The configuration to delete, as previewed and confirmed.</param>
+    /// <param name="initiatedBy">The user the change is attributed to.</param>
+    /// <returns>The queued data-removal task's creation result, or null when the refresh removed no Object
+    /// Types or attributes and there is therefore no data to remove.</returns>
+    public async Task<WorkerTaskCreationResult?> ApplyConnectedSystemSchemaRefreshWithRemovalAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents removeDependents, MetaverseObject? initiatedBy)
+    {
+        ArgumentNullException.ThrowIfNull(removeDependents);
+
+        var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy, initiatedByApiKey: null);
+        await RemoveSchemaRefreshDependentConfigurationAsync(connectedSystem, removeDependents, activity, initiatedBy, initiatedByApiKey: null);
+        return await QueueSchemaRefreshRemovalTaskAsync(connectedSystem, previewResult, initiatedBy, initiatedByApiKey: null);
+    }
+
+    /// <summary>
+    /// As <see cref="ApplyConnectedSystemSchemaRefreshWithRemovalAsync(ConnectedSystem, SchemaRefreshResult, SchemaRefreshDependents, MetaverseObject?)"/>,
+    /// attributed to an API key (the REST API and PowerShell path).
+    /// </summary>
+    public async Task<WorkerTaskCreationResult?> ApplyConnectedSystemSchemaRefreshWithRemovalAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, SchemaRefreshDependents removeDependents, ApiKey initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(removeDependents);
+
+        var activity = await PersistSchemaRefreshUnderActivityAsync(connectedSystem, previewResult, initiatedBy: null, initiatedByApiKey);
+        await RemoveSchemaRefreshDependentConfigurationAsync(connectedSystem, removeDependents, activity, initiatedBy: null, initiatedByApiKey);
+        return await QueueSchemaRefreshRemovalTaskAsync(connectedSystem, previewResult, initiatedBy: null, initiatedByApiKey);
+    }
+
+    /// <summary>
+    /// The shared middle of every schema refresh apply: records the refresh under an ImportSchema Activity and
+    /// returns that Activity so the decision's follow-on work (disables, deletions) can parent itself under it.
+    /// A failure discards the staged schema changes before recording it, exactly as the one-call import does.
+    /// </summary>
+    private async Task<Activity> PersistSchemaRefreshUnderActivityAsync(ConnectedSystem connectedSystem, SchemaRefreshResult previewResult, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.ImportSchema,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        if (initiatedByApiKey != null)
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        else
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        try
+        {
+            if (initiatedByApiKey != null)
+                await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
+            else
+                await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+            await CompleteSchemaImportActivityAsync(activity, previewResult);
+        }
+        catch (Exception ex)
+        {
+            // Discard staged schema changes before recording the failure: see the one-call import overloads.
+            Application.Repository.ClearChangeTracker();
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+
+        return activity;
+    }
+
+    /// <summary>
+    /// Deletes the rules and mappings a destructive schema refresh invalidated, as the administrator chose on
+    /// the refresh review (#1485). Deletion goes through the same audited paths a standalone delete uses
+    /// (tombstone snapshot, attribute priority reconciliation), with each delete Activity parented under the
+    /// refresh so the history reads as one decision. Mappings named by the plan that belong to a rule the plan
+    /// also deletes are skipped: the database cascades them with their rule.
+    /// </summary>
+    private async Task RemoveSchemaRefreshDependentConfigurationAsync(
+        ConnectedSystem connectedSystem,
+        SchemaRefreshDependents dependents,
+        Activity refreshActivity,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        if (!dependents.HasAny)
+            return;
+
+        var rules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+        var rulesById = rules.ToDictionary(rule => rule.Id);
+        var ruleIdsBeingDeleted = dependents.InvalidatedSyncRules.Select(entry => entry.SyncRuleId).ToHashSet();
+
+        foreach (var entry in dependents.InvalidatedSyncRules.Where(e => rulesById.ContainsKey(e.SyncRuleId)))
+        {
+            var rule = rulesById[entry.SyncRuleId];
+            if (initiatedByApiKey != null)
+                await DeleteSyncRuleAsync(rule, initiatedByApiKey, entry.Reason, refreshActivity.Id);
+            else
+                await DeleteSyncRuleAsync(rule, initiatedBy, entry.Reason, refreshActivity.Id);
+        }
+
+        foreach (var group in dependents.InvalidatedMappings
+                     .Where(m => !ruleIdsBeingDeleted.Contains(m.SyncRuleId))
+                     .GroupBy(m => m.SyncRuleId)
+                     .Where(g => rulesById.ContainsKey(g.Key)))
+        {
+            var rule = rulesById[group.Key];
+            var mappingsById = rule.AttributeFlowRules.ToDictionary(m => m.Id);
+            foreach (var mapping in group.Where(e => mappingsById.ContainsKey(e.MappingId)).Select(e => mappingsById[e.MappingId]))
+            {
+                // The rule navigation gives the delete Activity its context (the rule's name) and the
+                // post-delete configuration capture its id.
+                mapping.SyncRule ??= rule;
+                if (initiatedByApiKey != null)
+                    await DeleteSyncRuleMappingAsync(mapping, initiatedByApiKey, refreshActivity.Id);
+                else
+                    await DeleteSyncRuleMappingAsync(mapping, initiatedBy, refreshActivity.Id);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Queues the data-removal half of "Apply and Remove" (#1485): a worker task carrying the pre-refresh ids
+    /// of the Object Types and attributes the Connected System no longer reports. Returns null when the refresh
+    /// removed neither, because there is then no data to remove and a queued no-op would only confuse the queue.
+    /// </summary>
+    private async Task<WorkerTaskCreationResult?> QueueSchemaRefreshRemovalTaskAsync(
+        ConnectedSystem connectedSystem,
+        SchemaRefreshResult previewResult,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        var (removedObjectTypeIds, removedAttributeIds) = ResolveRemovedSchemaIds(previewResult);
+        if (removedObjectTypeIds.Count == 0 && removedAttributeIds.Count == 0)
+            return null;
+
+        var task = initiatedByApiKey != null
+            ? SchemaRefreshRemovalWorkerTask.ForApiKey(connectedSystem.Id, removedObjectTypeIds, removedAttributeIds, initiatedByApiKey.Id, initiatedByApiKey.Name)
+            : SchemaRefreshRemovalWorkerTask.ForUser(connectedSystem.Id, removedObjectTypeIds, removedAttributeIds,
+                initiatedBy?.Id ?? Guid.Empty, initiatedBy?.CachedDisplayName ?? "Unknown");
+
+        return await Application.Tasking.CreateWorkerTaskAsync(task);
+    }
+
+    /// <summary>
+    /// Resolves what a refresh removed into the ids configuration and data reference, using the pre-refresh
+    /// snapshot the merge captured: removed entries are no longer on the merged graph, and the schema rows
+    /// themselves are retained on apply (see issue #782), so the pre-refresh ids remain valid to act on.
+    /// Attributes of a wholly removed Object Type are deliberately not resolved; their values leave with their
+    /// objects through the obsoletion pipeline.
+    /// </summary>
+    private static (List<int> RemovedObjectTypeIds, List<int> RemovedAttributeIds) ResolveRemovedSchemaIds(SchemaRefreshResult previewResult)
+    {
+        var preRefreshTypesByName = previewResult.PreRefreshSchema.ToDictionary(type => type.Name);
+
+        var removedObjectTypeIds = previewResult.RemovedObjectTypes
+            .Where(preRefreshTypesByName.ContainsKey)
+            .Select(name => preRefreshTypesByName[name].Id)
+            .ToList();
+
+        var removedAttributeIds = previewResult.RemovedAttributes
+            .Where(kvp => preRefreshTypesByName.ContainsKey(kvp.Key))
+            .SelectMany(kvp =>
+            {
+                var attributeNames = kvp.Value.ToHashSet();
+                return preRefreshTypesByName[kvp.Key].Attributes
+                    .Where(attribute => attributeNames.Contains(attribute.Name))
+                    .Select(attribute => attribute.Id);
+            })
+            .ToList();
+
+        return (removedObjectTypeIds, removedAttributeIds);
+    }
+
+    /// <summary>
+    /// Counts what the schema refresh decision's "Apply and Remove" option (#1485) would remove, so the
+    /// administrator confirms with the numbers in front of them: Connected System Objects per removed Object
+    /// Type (each would be marked Obsolete and flow through the standard deprovisioning pipeline) and stored
+    /// values per removed attribute (each would be deleted). Uses the preview's pre-refresh snapshot to resolve
+    /// ids, exactly as the removal itself does, so the preview and the action can never disagree on scope.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the refresh was previewed against.</param>
+    /// <param name="previewResult">The refresh preview whose removals are being counted.</param>
+    public async Task<SchemaRefreshRemovalImpact> ComputeSchemaRefreshRemovalImpactAsync(int connectedSystemId, SchemaRefreshResult previewResult)
+    {
+        ArgumentNullException.ThrowIfNull(previewResult);
+
+        var impact = new SchemaRefreshRemovalImpact();
+        var preRefreshTypesByName = previewResult.PreRefreshSchema.ToDictionary(type => type.Name);
+
+        foreach (var type in previewResult.RemovedObjectTypes.Where(preRefreshTypesByName.ContainsKey).Select(name => preRefreshTypesByName[name]))
+        {
+            impact.RemovedObjectTypes.Add(new SchemaRefreshRemovalTypeImpact
+            {
+                ObjectTypeId = type.Id,
+                ObjectTypeName = type.Name,
+                ConnectedSystemObjectCount = await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectCountOfTypeAsync(connectedSystemId, type.Id)
+            });
+        }
+
+        foreach (var kvp in previewResult.RemovedAttributes.Where(kvp => preRefreshTypesByName.ContainsKey(kvp.Key)))
+        {
+            var type = preRefreshTypesByName[kvp.Key];
+            var attributeNames = kvp.Value.ToHashSet();
+            foreach (var attribute in type.Attributes.Where(attribute => attributeNames.Contains(attribute.Name)))
+            {
+                impact.RemovedAttributes.Add(new SchemaRefreshRemovalAttributeImpact
+                {
+                    AttributeId = attribute.Id,
+                    AttributeName = attribute.Name,
+                    ObjectTypeName = type.Name,
+                    StoredValueCount = await Application.Repository.ConnectedSystems.GetConnectedSystemAttributeValueCountAsync(connectedSystemId, attribute.Id)
+                });
+            }
+        }
+
+        return impact;
+    }
+
+    /// <summary>
+    /// Executes a queued schema refresh removal (#1485), on the worker: marks every live Connected System
+    /// Object of the removed Object Types Obsolete (they flow through disconnection, attribute recall, grace
+    /// periods and Metaverse Deletion Rules on the next synchronisation run), deletes their Pending Exports
+    /// exactly as import-detected deletions do, deletes every stored value of the removed attributes, and
+    /// records one Run Profile Execution Item per obsoleted object on the task's Activity so the decision's
+    /// history names every object it touched.
+    /// </summary>
+    /// <param name="task">The queued task, carrying the pre-refresh ids to act on and the Activity to report to.</param>
+    public async Task<SchemaRefreshRemovalResult> ExecuteSchemaRefreshRemovalAsync(SchemaRefreshRemovalWorkerTask task)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        if (task.Activity == null)
+            throw new InvalidDataException("ExecuteSchemaRefreshRemovalAsync: the task must carry the Activity it was queued under.");
+
+        const int batchSize = 500;
+        var result = new SchemaRefreshRemovalResult();
+        var activity = task.Activity;
+
+        // The schema rows of removed Object Types are retained on apply (issue #782), so their names resolve
+        // from the persisted system; tolerate their absence rather than fail the whole removal over a label.
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(task.ConnectedSystemId);
+        var typeNamesById = (connectedSystem?.ObjectTypes ?? []).ToDictionary(type => type.Id, type => type.Name);
+
+        var idsByType = new Dictionary<int, List<Guid>>();
+        foreach (var objectTypeId in task.RemovedObjectTypeIds)
+            idsByType[objectTypeId] = await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectIdsOfTypeAsync(task.ConnectedSystemId, objectTypeId);
+
+        activity.ObjectsToProcess = idsByType.Values.Sum(ids => ids.Count);
+        activity.ObjectsProcessed = 0;
+        await Application.Repository.Activity.UpdateActivityAsync(activity);
+
+        foreach (var (objectTypeId, csoIds) in idsByType)
+        {
+            var typeName = typeNamesById.GetValueOrDefault(objectTypeId, $"Removed Object Type {objectTypeId}");
+            foreach (var batch in csoIds.Chunk(batchSize))
+            {
+                // Load before flipping the status: the display snapshots have to reflect the object as it was,
+                // and the live-of-type query would no longer return it afterwards.
+                var csos = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(task.ConnectedSystemId, batch);
+
+                result.ConnectedSystemObjectsObsoleted += await Application.Repository.ConnectedSystems.ObsoleteConnectedSystemObjectsByIdsAsync(batch);
+                result.PendingExportsRemoved += await Application.Repository.ConnectedSystems.DeletePendingExportsForConnectedSystemObjectsAsync(batch);
+
+                var executionItems = csos.Select(cso =>
+                {
+                    var item = new ActivityRunProfileExecutionItem
+                    {
+                        Id = Guid.NewGuid(),
+                        ObjectChangeType = ObjectChangeType.Deleted,
+                        ConnectedSystemObjectId = cso.Id
+                    };
+                    item.SnapshotCsoDisplayFields(cso);
+                    // The by-ids load does not include the Type navigation; the removed type's name is resolved above.
+                    item.ObjectTypeSnapshot = typeName;
+                    item.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome
+                    {
+                        OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected,
+                        TargetEntityId = cso.Id,
+                        TargetEntityDescription = cso.Name,
+                        DetailMessage = $"Object Type '{typeName}' is no longer reported by the Connected System; marked Obsolete by the schema refresh removal.",
+                        Ordinal = 0
+                    });
+                    item.OutcomeSummary = $"{ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected}:1";
+                    return item;
+                }).ToList();
+
+                await Application.Activities.AddRunProfileExecutionItemsAsync(activity, executionItems);
+
+                activity.ObjectsProcessed += batch.Length;
+                await Application.Repository.Activity.UpdateActivityAsync(activity);
+            }
+        }
+
+        if (task.RemovedAttributeIds.Count > 0)
+            result.AttributeValuesRemoved = await Application.Repository.ConnectedSystems.DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(task.ConnectedSystemId, task.RemovedAttributeIds);
+
+        activity.TotalDeleted = result.ConnectedSystemObjectsObsoleted;
+        activity.Message = $"Marked {result.ConnectedSystemObjectsObsoleted:N0} Connected System Object(s) Obsolete, removed {result.PendingExportsRemoved:N0} Pending Export(s) and deleted {result.AttributeValuesRemoved:N0} stored attribute value(s).";
+
+        Log.Information(
+            "ExecuteSchemaRefreshRemovalAsync: Connected System {ConnectedSystemId}: {ObsoletedCount} Connected System Object(s) marked Obsolete across {TypeCount} removed Object Type(s), {PendingExportCount} Pending Export(s) removed, {ValueCount} stored value(s) deleted across {AttributeCount} removed attribute(s).",
+            task.ConnectedSystemId, result.ConnectedSystemObjectsObsoleted, task.RemovedObjectTypeIds.Count,
+            result.PendingExportsRemoved, result.AttributeValuesRemoved, task.RemovedAttributeIds.Count);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Disables the rules and mappings a destructive schema refresh invalidated, as the administrator chose on
+    /// the refresh review. Deliberately targeted rather than routed through
+    /// <see cref="CreateOrUpdateSyncRuleAsync(SyncRule, MetaverseObject?, Activity?, string?, Guid?)"/>: that
+    /// path saves a whole rule and applies save-the-world semantics along the way (Simple Mode clears matching
+    /// rules, provisioning switches initial passwords off), none of which a disable has asked for. Each change
+    /// is audited as a child Activity of the refresh and captured into the rule's configuration history.
+    /// </summary>
+    private async Task DisableSchemaRefreshDependentsAsync(
+        ConnectedSystem connectedSystem,
+        SchemaRefreshDependents dependents,
+        Activity refreshActivity,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        var rules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+        var rulesById = rules.ToDictionary(rule => rule.Id);
+
+        foreach (var entry in dependents.InvalidatedSyncRules.Where(e => rulesById.ContainsKey(e.SyncRuleId)))
+        {
+            var rule = rulesById[entry.SyncRuleId];
+            rule.Enabled = false;
+            rule.DisabledReason = entry.Reason;
+            StampUpdated(rule, initiatedBy, initiatedByApiKey);
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(rule);
+            await RecordSyncRuleDisableActivityAsync(rule, connectedSystem, refreshActivity, initiatedBy, initiatedByApiKey);
+        }
+
+        // Mappings are disabled through the bulk path in one write, then each affected rule's configuration
+        // history is captured once, so a refresh disabling a dozen flows records one clean version per rule.
+        var mappingsToDisable = new List<SyncRuleMapping>();
+        var affectedRules = new List<SyncRule>();
+        foreach (var group in dependents.InvalidatedMappings.GroupBy(m => m.SyncRuleId).Where(g => rulesById.ContainsKey(g.Key)))
+        {
+            var rule = rulesById[group.Key];
+            var mappingsById = rule.AttributeFlowRules.ToDictionary(m => m.Id);
+            var disabledAny = false;
+            foreach (var entry in group.Where(e => mappingsById.ContainsKey(e.MappingId)))
+            {
+                var mapping = mappingsById[entry.MappingId];
+                mapping.Enabled = false;
+                mapping.DisabledReason = entry.Reason;
+                StampUpdated(mapping, initiatedBy, initiatedByApiKey);
+                mappingsToDisable.Add(mapping);
+                disabledAny = true;
+            }
+            if (disabledAny)
+                affectedRules.Add(rule);
+        }
+
+        if (mappingsToDisable.Count == 0)
+            return;
+
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(mappingsToDisable);
+        foreach (var rule in affectedRules)
+            await RecordSyncRuleDisableActivityAsync(rule, connectedSystem, refreshActivity, initiatedBy, initiatedByApiKey);
+    }
+
+    private static void StampUpdated(IAuditable entity, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+    {
+        if (initiatedByApiKey != null)
+            AuditHelper.SetUpdated(entity, initiatedByApiKey);
+        else
+            AuditHelper.SetUpdated(entity, initiatedBy);
+    }
+
+    /// <summary>
+    /// Records one rule's disable (or its mappings' disables) as an audited Update Activity, parented under the
+    /// refresh's ImportSchema Activity, and captures the rule's new configuration version.
+    /// </summary>
+    private async Task RecordSyncRuleDisableActivityAsync(
+        SyncRule rule,
+        ConnectedSystem connectedSystem,
+        Activity refreshActivity,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        var activity = new Activity
+        {
+            TargetName = rule.Name,
+            TargetContext = connectedSystem.Name,
+            TargetType = ActivityTargetType.SynchronisationRule,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ParentActivityId = refreshActivity.Id
+        };
+
+        if (initiatedByApiKey != null)
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        else
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.Id);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
     /// Completes a schema import's Activity, downgraded to complete-with-warning when discovery reported
     /// shortfalls, so an import that discovered less than it should have never presents as an unqualified success.
     /// </summary>
@@ -1561,6 +2158,19 @@ public class ConnectedSystemServer
         // Activity carries the same warnings for the other surfaces.
         var result = new SchemaRefreshResult { Success = true, DiscoveryWarnings = schema.Warnings.ToList() };
 
+        // Snapshot the pre-merge schema before the rebuild below: removed entries drop off the in-memory graph,
+        // and dependent detection (#1485) needs their ids to resolve what a removal invalidates.
+        result.PreRefreshSchema = (connectedSystem.ObjectTypes ?? []).Select(type => new SchemaRefreshPreRefreshType
+        {
+            Id = type.Id,
+            Name = type.Name,
+            Attributes = type.Attributes.Select(attribute => new SchemaRefreshPreRefreshAttribute
+            {
+                Id = attribute.Id,
+                Name = attribute.Name
+            }).ToList()
+        }).ToList();
+
         // Credential attributes must never enter JIM's schema as new, manageable attributes.
         FilterCredentialAttributesFromSchema(connectedSystem, schema, result);
 
@@ -1574,6 +2184,10 @@ public class ConnectedSystemServer
         var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
 
         connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
+
+        // Declared reference targets are wired in a second pass after this loop, once every Object Type
+        // instance exists in the graph: a reference may point at an Object Type declared after it (#1285).
+        var declaredReferenceTargets = new List<(ConnectedSystemObjectTypeAttribute Attribute, string TargetName)>();
 
         // Track removed object types
         foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
@@ -1617,8 +2231,22 @@ public class ConnectedSystemServer
 
                     if (existingAttribute != null)
                     {
-                        // Update existing attribute properties but preserve the ID
+                        // Update existing attribute properties but preserve the ID. Definition changes (plurality
+                        // and data type) are recorded on the result before being applied: they were applied
+                        // silently for years, and a restated definition can invalidate an Attribute Flow mapping
+                        // that was validated against the old one, so the administrator must get to see them.
                         existingAttribute.Description = schemaAttribute.Description;
+
+                        if (existingAttribute.AttributePlurality != schemaAttribute.AttributePlurality)
+                        {
+                            result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                            {
+                                AttributeName = existingAttribute.Name,
+                                Aspect = SchemaAttributeChangeAspect.Plurality,
+                                OldValue = existingAttribute.AttributePlurality.ToString(),
+                                NewValue = schemaAttribute.AttributePlurality.ToString()
+                            });
+                        }
                         existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
 
                         // A refresh restates what the Connector discovered and leaves what the administrator
@@ -1631,7 +2259,19 @@ public class ConnectedSystemServer
                         // source type, would write the value into the wrong column of the Metaverse Object.
                         // It would also sidestep the rule that an override is refused once values exist (#1354).
                         if (!existingAttribute.TypeSetByAdministrator)
+                        {
+                            if (existingAttribute.Type != schemaAttribute.Type)
+                            {
+                                result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                                {
+                                    AttributeName = existingAttribute.Name,
+                                    Aspect = SchemaAttributeChangeAspect.DataType,
+                                    OldValue = existingAttribute.Type.ToString(),
+                                    NewValue = schemaAttribute.Type.ToString()
+                                });
+                            }
                             existingAttribute.Type = schemaAttribute.Type;
+                        }
 
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
@@ -1680,6 +2320,21 @@ public class ConnectedSystemServer
                 result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
             }
 
+            // Restate the declared reference target (connector-stated, like Writability): cleared here so a
+            // withdrawn declaration cannot leave a stale target behind, and re-wired in the second pass below
+            // when the schema still declares one (#1285).
+            foreach (var schemaAttribute in schemaObjectType.Attributes)
+            {
+                var mergedAttribute = connectedSystemObjectType.Attributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
+                if (mergedAttribute == null)
+                    continue;
+
+                mergedAttribute.ReferencedObjectType = null;
+                mergedAttribute.ReferencedObjectTypeId = null;
+                if (!string.IsNullOrWhiteSpace(schemaAttribute.ReferencesObjectTypeName))
+                    declaredReferenceTargets.Add((mergedAttribute, schemaAttribute.ReferencesObjectTypeName.Trim()));
+            }
+
             MergeObjectTypeTags(connectedSystemObjectType, schemaObjectType);
 
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
@@ -1708,6 +2363,25 @@ public class ConnectedSystemServer
             }
 
             connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
+        }
+
+        // Second pass: wire each declared reference target to the merged Object Type instance it names. The
+        // navigation carries the link because a brand-new target has no id until it is saved; EF assigns the
+        // foreign key from the navigation for those, and the id is set directly where one already exists.
+        // Case-insensitive to match the SQL Connector's own name handling. A declared target the schema does
+        // not contain is a connector defect: reported as a discovery warning, never wired (#1285).
+        foreach (var (attribute, targetName) in declaredReferenceTargets)
+        {
+            var target = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Name.Equals(targetName, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            {
+                result.DiscoveryWarnings.Add(
+                    $"Attribute '{attribute.Name}' declares reference target Object Type '{targetName}', which the schema does not contain. The target was not recorded.");
+                continue;
+            }
+
+            attribute.ReferencedObjectType = target;
+            attribute.ReferencedObjectTypeId = target.Id > 0 ? target.Id : null;
         }
 
         // Any credential attribute that survived the merge is one that was already persisted; force it into a
@@ -1948,6 +2622,17 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId);
     }
+
+    /// <summary>
+    /// A Connected System's Password Synchronisation configuration (#1119), or null where it has never been
+    /// configured, which is where every system starts.
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystemId);
+    }
+
 
     /// <summary>
     /// The password expiry behaviours this Connected System's Connector is able to apply.
@@ -2298,6 +2983,11 @@ public class ConnectedSystemServer
     /// a transient failure: it says nothing about whether the password itself would be acceptable, and an
     /// administrator's next move is to try again once the target is reachable.
     /// </para>
+    /// <para>
+    /// A channel the Connected System's configuration forbids is a different matter, and is refused outright
+    /// before anything is sent (#1119). It is a configuration fault rather than a transient one: trying again
+    /// changes nothing until somebody either encrypts the connection or accepts an unencrypted one.
+    /// </para>
     /// </summary>
     private static async Task<PasswordSetResult> ApplyPasswordAsync(
         IConnectorPasswordManagement passwordConnector,
@@ -2320,6 +3010,17 @@ public class ConnectedSystemServer
 
         try
         {
+            // Asked once the channel exists, because what is being judged is the channel that opened rather than
+            // the settings it was built from. The same rule governs the other two paths that write a password to
+            // this system, so an administrator who turns the setting on gets one answer everywhere.
+            if (PasswordChannelSecurity.RefusesChannel(connectedSystem, passwordConnector))
+            {
+                Log.Error("SetConnectedSystemObjectPasswordAsync: Connected System {ConnectedSystemId} requires a secure transport for passwords and the password channel is not encrypted; no password was sent",
+                    connectedSystem.Id);
+                return PasswordSetResult.Failed(PasswordSetFailureReason.ConfigurationFault,
+                    PasswordChannelSecurity.RefusalMessage(connectedSystem));
+            }
+
             return await passwordConnector.SetPasswordAsync(connectedSystemObject, password, options, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -3516,6 +4217,16 @@ public class ConnectedSystemServer
     /// Gets a Connected System Object Type by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the object type.</param>
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a lightweight projection for resolving
+    /// a Reference attribute's declared target name (#1285) without loading a navigation into an entity
+    /// graph a mutating path might attach.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetObjectTypeNamesAsync(connectedSystemId);
+    }
+
     public async Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id)
     {
         return await Application.Repository.ConnectedSystems.GetObjectTypeAsync(id);
@@ -3532,6 +4243,8 @@ public class ConnectedSystemServer
             throw new ArgumentNullException(nameof(objectType));
 
         Log.Debug("UpdateObjectTypeAsync() called for {ObjectType}", objectType.Name);
+
+        await ThrowIfObjectTypeSelectionInvalidAsync(objectType);
 
         var activity = new Activity
         {
@@ -3597,6 +4310,8 @@ public class ConnectedSystemServer
             throw new ArgumentNullException(nameof(objectType));
 
         Log.Debug("UpdateObjectTypeAsync() called for {ObjectType} (API key initiated)", objectType.Name);
+
+        await ThrowIfObjectTypeSelectionInvalidAsync(objectType);
 
         var activity = new Activity
         {
@@ -4456,6 +5171,104 @@ public class ConnectedSystemServer
     public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId)
     {
         return Application.Repository.ConnectedSystems.StreamConnectedSystemObjectScopeCandidates(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Streams the joined Connected System Objects of one type in a Connected System, with the attribute values
+    /// and type loaded that Synchronisation Rule scope evaluation reads, for previewing what a destructive
+    /// Synchronisation Rule toggle would do to the objects the rule stands over (#1115).
+    /// </summary>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return Application.Repository.ConnectedSystems.StreamJoinedConnectedSystemObjects(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Streams every Connected System Object of one type in a Connected System, joined or not, with the attribute
+    /// values and type loaded that Scoping Criteria evaluation reads, for previewing what a change to a
+    /// Synchronisation Rule's scope would do (#1436). The unjoined objects are what a widened scope would newly
+    /// project, so unlike the destructive-toggle walk this one cannot be reduced to the joined population.
+    /// </summary>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return Application.Repository.ConnectedSystems.StreamConnectedSystemObjectsOfType(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Returns the count of Connected System Objects of one type in a Connected System, joined or not: the
+    /// population a Scoping Criteria change preview walks, counted set-based for the dispatch decision (#1436).
+    /// </summary>
+    public async Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's live, unjoined objects of one type: the population a
+    /// synchronisation would put to Object Matching on its next run, and therefore the only population an Object
+    /// Matching change can move (#1457).
+    /// </summary>
+    public async Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// How many live, unjoined objects of one type a Connected System holds; the set-based count behind an Object
+    /// Matching preview's cost estimate.
+    /// </summary>
+    public async Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnjoinedConnectedSystemObjectCountOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type, joined or not: the population that stops
+    /// being imported when the type is deselected (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectIdsOfTypeAsync(connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type that hold a value for one attribute: the
+    /// population whose values freeze when that attribute is deselected (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(
+            connectedSystemId, connectedSystemObjectTypeId, attributeId);
+    }
+
+    /// <summary>
+    /// The identifiers of a Connected System's obsolete objects of one type that are still joined: the population
+    /// whose fate changes when Remove Contributed Attributes On Obsoletion is toggled (#1475).
+    /// </summary>
+    public async Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(
+            connectedSystemId, connectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// Connected System Objects by identifier, without change tracking: the batched read behind a population that
+    /// was resolved to identifiers first.
+    /// </summary>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, connectedSystemObjectIds);
+    }
+
+    /// <summary>
+    /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
+    /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
+    /// </summary>
+    public async Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetJoinedConnectedSystemObjectCountAsync(connectedSystemId, connectedSystemObjectTypeId);
     }
 
     /// <summary>
@@ -5777,6 +6590,16 @@ public class ConnectedSystemServer
 
         if (settings.InitialExportOnly.HasValue)
             mapping.InitialExportOnly = settings.InitialExportOnly.Value;
+
+        // Enabled applies to both directions (#1485), which is why it is absent from the direction guards
+        // above. Re-enabling clears the recorded reason: it describes why the mapping is off, and re-enabled
+        // it would be a stale claim about a state that no longer holds.
+        if (settings.Enabled.HasValue)
+        {
+            mapping.Enabled = settings.Enabled.Value;
+            if (mapping.Enabled)
+                mapping.DisabledReason = null;
+        }
     }
 
     /// <summary>
@@ -5784,7 +6607,7 @@ public class ConnectedSystemServer
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
-    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy)
+    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy, Guid? parentActivityId = null)
     {
         if (mapping == null)
             throw new ArgumentNullException(nameof(mapping));
@@ -5798,7 +6621,10 @@ public class ConnectedSystemServer
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // A deletion performed as part of a larger decision (a schema refresh's Apply and Remove, #1485)
+            // parents itself under that decision's Activity so the history reads as one action.
+            ParentActivityId = parentActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -5821,7 +6647,7 @@ public class ConnectedSystemServer
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the deletion.</param>
-    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, ApiKey initiatedByApiKey)
+    public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, ApiKey initiatedByApiKey, Guid? parentActivityId = null)
     {
         if (mapping == null)
             throw new ArgumentNullException(nameof(mapping));
@@ -5835,7 +6661,9 @@ public class ConnectedSystemServer
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // See the MetaverseObject-initiated overload above.
+            ParentActivityId = parentActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -7097,7 +7925,11 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
     }
 
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null)
     {
         // validate the Synchronisation Rule
         if (syncRule == null)
@@ -7112,6 +7944,11 @@ public class ConnectedSystemServer
         // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
         // can never satisfy, which would silently drop objects out of scope.
         ValidateScopingCriteriaOperators(syncRule);
+
+        // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
+        // re-enabled rule would carry a stale claim about a state that no longer holds.
+        if (syncRule.Enabled)
+            syncRule.DisabledReason = null;
 
         // remove any mutually-exclusive property combinations
         if (syncRule.Direction == SyncRuleDirection.Import)
@@ -7182,7 +8019,8 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            ParentActivityId = parentActivity?.Id
+            ParentActivityId = parentActivity?.Id,
+            PreviewActivityId = previewActivityId
         };
 
         if (syncRule.Id == 0)
@@ -7245,7 +8083,11 @@ public class ConnectedSystemServer
     /// <summary>
     /// Creates or updates a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null, Guid? previewActivityId = null)
     {
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
@@ -7259,6 +8101,11 @@ public class ConnectedSystemServer
         // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
         // can never satisfy, which would silently drop objects out of scope.
         ValidateScopingCriteriaOperators(syncRule);
+
+        // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
+        // re-enabled rule would carry a stale claim about a state that no longer holds.
+        if (syncRule.Enabled)
+            syncRule.DisabledReason = null;
 
         if (syncRule.Direction == SyncRuleDirection.Import)
         {
@@ -7301,7 +8148,8 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            ParentActivityId = parentActivity?.Id
+            ParentActivityId = parentActivity?.Id,
+            PreviewActivityId = previewActivityId
         };
 
         if (syncRule.Id == 0)
@@ -7331,7 +8179,7 @@ public class ConnectedSystemServer
         return true;
     }
 
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, string? changeReason = null)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, string? changeReason = null, Guid? parentActivityId = null)
     {
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
@@ -7349,7 +8197,10 @@ public class ConnectedSystemServer
             // since last Full Synchronisation" indicator: a false negative on one of the most consequential changes
             // there is. The Connected System survives the deletion, so its id is the durable link. This does not
             // pollute the system's own configuration history, which additionally requires a captured version.
-            ConnectedSystemId = syncRule.ConnectedSystemId
+            ConnectedSystemId = syncRule.ConnectedSystemId,
+            // A deletion performed as part of a larger decision (a schema refresh's Apply and Remove, #1485)
+            // parents itself under that decision's Activity so the history reads as one action.
+            ParentActivityId = parentActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -7368,7 +8219,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Deletes a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, string? changeReason = null)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, string? changeReason = null, Guid? parentActivityId = null)
     {
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
@@ -7382,7 +8233,9 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Delete,
             // See the MetaverseObject-initiated overload above: the Connected System id is what keeps a rule deletion
             // attributable once the rule itself is gone.
-            ConnectedSystemId = syncRule.ConnectedSystemId
+            ConnectedSystemId = syncRule.ConnectedSystemId,
+            // See the MetaverseObject-initiated overload above.
+            ParentActivityId = parentActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -7544,10 +8397,33 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Refuses an Object Matching Rule that could never match anything, before it is stored.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ObjectMatchingRule.IsValid"/> described what a workable rule looks like and nothing called it,
+    /// so the portal was able to store Simple mode rules with no Metaverse Object Type (#1458). The matching engine
+    /// skips such a rule and moves to the next one, so a Connected System whose only rules are malformed matches
+    /// nothing at all: every account that should have joined an existing identity projects a new one instead, and
+    /// nothing reports it. A hard refusal here is what the Synchronisation Integrity rules ask for; the alternative
+    /// is discovering the duplicate identities by hand, months later.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The rule cannot work, with the reason.</exception>
+    private static void EnsureObjectMatchingRuleIsWorkable(ObjectMatchingRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        var invalidity = rule.DescribeInvalidity();
+        if (invalidity != null)
+            throw new InvalidDataException(invalidity);
+    }
+
+    /// <summary>
     /// Creates a new Object Matching Rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7567,6 +8443,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7586,6 +8464,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
@@ -7605,6 +8485,8 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
+        EnsureObjectMatchingRuleIsWorkable(rule);
+
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",

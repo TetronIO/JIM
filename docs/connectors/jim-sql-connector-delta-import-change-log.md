@@ -136,7 +136,7 @@ GRANT SELECT ON HR.IDM_CHANGE_LOG TO jim_sync;
 
 ## 4. Configure the Object Type
 
-Add a `changeLog` to **every** Object Type in the Connected System's **Object Types** document. Choosing Change-Log Table mode with an Object Type that has no `changeLog` is refused when you save, because a Delta Import that skipped an Object Type would report success while leaving its objects to drift.
+Add a `changeLog` to **every Object Type that is selected for synchronisation** in the Connected System's **Object Types** document. If a selected Object Type has no `changeLog` when this mode is chosen, saving is refused and the message names the Object Type; otherwise a Delta Import could report success while that Object Type's changes went unread. An Object Type that is not selected (a table JIM only exports to, say) takes no part in a Delta Import and needs no change log.
 
 ```json title="Object Types with a change log"
 {
@@ -183,7 +183,7 @@ A value may appear in only one list, and no value may be blank. Where your appli
 
 ## 5. Choose the mode and save
 
-On the Connected System's Settings tab, set **Delta Import Mode** to **Change-Log Table** and save. Validation runs at this point: any Object Type without a `changeLog`, any change-type value that means two things, and any missing field is reported now, at the keyboard, rather than by an overnight run.
+On the Connected System's Settings tab, set **Delta Import Mode** to **Change-Log Table** and save. The configuration is checked as you save: a selected Object Type without a `changeLog`, a change-type value listed under two kinds of change, or a missing field is reported immediately. The same check runs when you select an Object Type on the Schema tab (or through the REST API or PowerShell): selecting one that has no `changeLog` while this mode is set is refused there and then, so give it a change log first, or leave it unselected.
 
 ## 6. Baseline with a Full Import
 
@@ -197,7 +197,7 @@ Schedule the Delta Import at whatever cadence the application warrants, and a Fu
 
 ## 8. Keep the change log short
 
-JIM never purges the change log. Purge rows yourself once they are comfortably older than the interval between Delta Imports; a job that deletes rows older than thirty days is typical. A row purged before JIM has read it is a change lost until the next Full Import, so purge on age, generously, rather than on anything cleverer.
+JIM never deletes from the change log, so schedule a purge of your own. Delete rows by age, keeping them for comfortably longer than the gap between your Delta Imports; thirty days is typical. A row deleted before JIM has read it is a change JIM will not see until the next Full Import.
 
 ```sql title="Microsoft SQL Server"
 DELETE FROM HR.IDM_CHANGE_LOG WHERE CHANGED_AT < DATEADD(DAY, -30, SYSUTCDATETIME());
@@ -210,7 +210,7 @@ DELETE FROM HR.IDM_CHANGE_LOG WHERE CHANGED_AT < SYSTIMESTAMP - INTERVAL '30' DA
 ## Troubleshooting
 
 **"No `Delta Import Mode` has been chosen for this Connected System"**<br />
-The mode is unanswered. JIM refuses rather than guessing, because a scheduled Delta Import quietly costing a Full Import every cycle would hide the omission for ever. Choose the mode and save.
+The **Delta Import Mode** setting is blank. Choose **Change-Log Table** (or **Watermark Column**) on the Connected System's Settings tab and save; JIM does not assume a mode, because a Delta Import with no change source would have to read everything every time.
 
 **"A Delta Import was requested, but JIM holds no watermark ... A Full Import was performed instead"**<br />
 Expected on the first run and after changing the mode. If it recurs, the Full Import is not completing; check its Activity.
@@ -219,7 +219,7 @@ Expected on the first run and after changing the mode. If it recurs, the Full Im
 The application wrote a change-type value you have not listed. Add it to `createValues`, `updateValues` or `deleteValues`, and re-run: the object is reported as an error until it is.
 
 **"Object Type 'Person' has a change-log row with a NULL value in anchor column"**<br />
-A trigger logged a row it could not attribute to an object, most likely from a related table whose join column was `NULL`. Fix the trigger to skip such rows; the run fails until the row is corrected, because a change that belongs to nobody cannot be applied.
+A trigger logged a row with no key in it, most likely from a related table whose join column was `NULL`. Correct or delete the row, and change the trigger to skip rows with no key; the Delta Import cannot continue while a change it cannot attribute to an object is in the log.
 
 **Objects that were deleted are still in JIM**<br />
 Check that the delete path is logged (a bulk `DELETE` fires a statement-level trigger on SQL Server exactly as a single-row one does, but an application that soft-deletes by flag writes an update, not a delete). Where the application soft-deletes, JIM sees an updated row and it is a Synchronisation Rule's scope, not the change log, that should retire the object.

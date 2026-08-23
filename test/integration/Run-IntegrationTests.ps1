@@ -2386,7 +2386,12 @@ Initialize-WorkerLogDirectories -LogDirectory (Join-Path $scriptRoot "results" "
 # writes), so spacing them out reduces total I/O, not just stalls. lz4 WAL compression
 # shrinks the full-page images that dominate bulk-load WAL. shm_size must exceed
 # shared_buffers with ~25% headroom (see docker-compose.yml).
-$jimDbProfile = switch -Wildcard ($Template) {
+#
+# Scenario 16 does not use the templates (its data lives in the phase2 database servers), but its
+# -FullMatrix tier imports 500,000 rows into JIM, which is exactly the load the Scale500k profile was
+# sized for; the default profile would checkpoint-storm through it just as it did for the CSV template.
+$jimDbProfileTemplate = if ($FullMatrix -and $Scenario -like "*Scenario16*") { "Scale500k65Groups" } else { $Template }
+$jimDbProfile = switch -Wildcard ($jimDbProfileTemplate) {
     "Scale1m*"   { @{ SharedBuffers = "8GB"; EffectiveCache = "16GB"; ShmSize = "10gb"; MaxWal = "24GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
     "Scale750k*" { @{ SharedBuffers = "6GB"; EffectiveCache = "12GB"; ShmSize = "8gb";  MaxWal = "20GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
     "Scale500k*" { @{ SharedBuffers = "4GB"; EffectiveCache = "8GB";  ShmSize = "5gb";  MaxWal = "16GB"; MinWal = "1GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
@@ -2408,7 +2413,7 @@ $env:JIM_DB_WAL_BUFFERS          = $jimDbProfile.WalBuffers
 $env:JIM_DB_CHECKPOINT_TIMEOUT   = $jimDbProfile.CheckpointTimeout
 $env:JIM_DB_WAL_COMPRESSION      = $jimDbProfile.WalCompression
 if ($jimDbProfile.SharedBuffers) {
-    Write-Host "  PostgreSQL scaled for $Template template: shared_buffers=$($jimDbProfile.SharedBuffers), max_wal_size=$($jimDbProfile.MaxWal), checkpoint_timeout=$($jimDbProfile.CheckpointTimeout), wal_compression=$($jimDbProfile.WalCompression)" -ForegroundColor Gray
+    Write-Host "  PostgreSQL scaled for $jimDbProfileTemplate profile: shared_buffers=$($jimDbProfile.SharedBuffers), max_wal_size=$($jimDbProfile.MaxWal), checkpoint_timeout=$($jimDbProfile.CheckpointTimeout), wal_compression=$($jimDbProfile.WalCompression)" -ForegroundColor Gray
 }
 
 Write-Step "Starting JIM stack..."
@@ -2819,6 +2824,31 @@ if (-not $jimApiReady) {
 }
 
 $timings["4. Wait for Services"] = (Get-Date) - $step4Start
+
+# Step 4a: Trust Samba AD certificates in the JIM certificate store (#1141)
+# LDAPTLS_REQCERT=never no longer disables LDAPS certificate validation for jim.web / jim.worker, so
+# every Samba AD scenario connection from here on is validated for real. Trust each running instance's
+# self-signed CA (it doubles as its own CA) before any scenario setup script connects to it, so the
+# very first LDAPS connection succeeds instead of failing with a validation error that reads exactly
+# like "server unavailable". Skipped entirely for OpenLDAP-only runs, which connect unencrypted and
+# have no certificate to trust.
+if ($DirectoryType -eq "SambaAD") {
+    Write-Section "Step 4a: Trusting Samba AD Certificates"
+
+    Add-SambaCertificateToJimStore -ContainerName "samba-ad-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+
+    # samba-ad-source / samba-ad-target only run under the scenario2 / scenario8 Compose profiles, and
+    # may be left running across scenarios in -Scenario All mode (see Get-DirectoryConfig and
+    # Clear-ConnectorFilesVolume's remarks on containers kept alive between scenarios). Detect with
+    # docker ps rather than the scenario name, so a container kept alive from an earlier scenario in
+    # this run is trusted too.
+    foreach ($otherSambaContainer in @("samba-ad-source", "samba-ad-target")) {
+        $otherSambaRunning = docker ps --filter "name=^/${otherSambaContainer}$" --format '{{.Names}}' 2>$null
+        if ($otherSambaRunning) {
+            Add-SambaCertificateToJimStore -ContainerName $otherSambaContainer -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+        }
+    }
+}
 
 # Step 4b: Prepare Samba AD for testing
 # For Scenario 1, we need a clean Corp OU - delete if exists and recreate

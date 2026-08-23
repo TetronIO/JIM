@@ -201,6 +201,43 @@ public interface IActivityRepository
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id);
 
     /// <summary>
+    /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223), so the
+    /// upward walk can resolve a whole level of a cascade in one round trip.
+    /// </summary>
+    /// <remarks>
+    /// Batched by design: a cohort can hold thousands of members, and a walk that queried per member would
+    /// issue thousands of round trips to render one panel.
+    /// </remarks>
+    public Task<List<CausalEdge>> GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> effectRunProfileExecutionItemIds);
+
+    /// <summary>
+    /// Summarises the given Run Profile Execution Items for the causal walk (#1223): which still exist, and
+    /// what each did to which Connected System Object.
+    /// </summary>
+    /// <remarks>
+    /// Presence in the result is the retention check. The walk needs it to tell two situations apart that are
+    /// otherwise identical: a cause with no edges above it is a genuine root and the chain is complete, whereas
+    /// a cause whose item has aged out of history is a chain that was cut short. Both produce no further edges;
+    /// only one of them lost information, and reporting the second as the first would tell an administrator
+    /// they had the whole story when they did not.
+    ///
+    /// The change type, Connected System Object and Activity time carried per item are what let the walk
+    /// continue past a synchronisation to the import that fed it, via
+    /// <see cref="GetLatestImportItemForCsoAsync"/>.
+    /// </remarks>
+    public Task<Dictionary<Guid, CausalChainItemSummary>> GetRunProfileExecutionItemCausalSummariesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
+    /// <summary>
+    /// The import event that last changed a Connected System Object at or before the given Activity time,
+    /// excluding the asking item itself: the causal walk's source-import hop (#1223). Null where no import on
+    /// the record is retained, in which case the chain ends at the synchronisation instead.
+    /// </summary>
+    public Task<CausalSourceImportEvent?> GetLatestImportItemForCsoAsync(
+        Guid connectedSystemObjectId, DateTime atOrBeforeActivityExecuted, Guid excludeRunProfileExecutionItemId);
+
+
+    /// <summary>
     /// Gets all activities associated with a schedule execution.
     /// Used by the scheduler to determine step outcomes after worker tasks have been deleted.
     /// </summary>
@@ -231,6 +268,15 @@ public interface IActivityRepository
     /// preventing immediate re-execution after worker restarts.
     /// </summary>
     public Task<DateTime?> GetLastHistoryCleanupTimeAsync();
+
+    /// <summary>
+    /// Whether any Run Profile has ever been executed, in any state (in progress, complete, failed or cancelled).
+    /// Backs the home page's "Run your first synchronisation" setup step, which asks only whether an administrator
+    /// has run one, never how it turned out. Run Profile configuration changes (create, update, delete) carry the
+    /// same <see cref="ActivityTargetType.ConnectedSystemRunProfile"/> target type as executions, so implementations
+    /// must additionally require <see cref="ActivityTargetOperationType.Execute"/>.
+    /// </summary>
+    public Task<bool> HasAnyRunProfileExecutionAsync();
 
     /// <summary>
     /// Gets the highest configuration-change version recorded for a configuration object, identified by its activity

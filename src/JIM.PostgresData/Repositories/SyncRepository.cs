@@ -421,6 +421,13 @@ public partial class SyncRepository : ISyncRepository
             .Select(cs => new { cs.Id, cs.Name })
             .ToDictionaryAsync(cs => cs.Id, cs => cs.Name);
 
+    public Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync()
+        // Same rationale as the Connected System names above: a tiny table, read at most once per run.
+        => _context.MetaverseAttributes
+            .AsNoTracking()
+            .Select(a => new { a.Id, a.Name })
+            .ToDictionaryAsync(a => a.Id, a => a.Name);
+
     #endregion
 
     #region Change Tracker Management
@@ -583,6 +590,39 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
         => _repo.ConnectedSystems.GetPendingExportsByIdsAsync(pendingExportIds);
+
+    #endregion
+
+    #region Preview Backstops (#288)
+
+    /// <summary>
+    /// Begins a transaction that is unconditionally rolled back when the returned scope is disposed (#288,
+    /// PRD requirement 8): the outermost defence-in-depth layer around the preview's zero-side-effect
+    /// guarantee. Null when the provider is not relational (the EF in-memory provider used by some tests),
+    /// where there is no transaction to hold.
+    /// </summary>
+    public async Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
+    {
+        if (!_context.Database.IsRelational())
+            return null;
+
+        var transaction = await _context.Database.BeginTransactionAsync();
+        return new RollbackOnlyTransactionScope(transaction);
+    }
+
+    /// <summary>
+    /// Disposal wrapper that rolls the wrapped transaction back unconditionally: commit is not offered,
+    /// by design. Rolling back a transaction the server already aborted is a no-op, so disposal is safe
+    /// on every path.
+    /// </summary>
+    private sealed class RollbackOnlyTransactionScope(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await transaction.RollbackAsync();
+            await transaction.DisposeAsync();
+        }
+    }
 
     #endregion
 }

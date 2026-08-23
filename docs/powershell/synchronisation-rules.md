@@ -199,7 +199,7 @@ Modifies an existing Synchronisation Rule. Supports renaming, toggling enabled s
 Set-JIMSyncRule -Id <int> [-Name <string>] [-Description <string>]
     [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
     [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
-    [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
+    [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 
 # Enable shortcut
 Set-JIMSyncRule -Id <int> -Enable [-ChangeReason <string>] [-PassThru]
@@ -211,7 +211,7 @@ Set-JIMSyncRule -Id <int> -Disable [-ChangeReason <string>] [-PassThru]
 Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <string>]
     [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
     [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
-    [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
+    [-EnforceState <bool>] [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 ```
 
 ### Parameters
@@ -230,6 +230,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 | `OutboundDeprovisionAction` | `string` | No | | Export rules: action when an MVO falls out of the rule's scope or is deleted. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
 | `EnforceState` | `bool` | No | | Enables drift detection: re-asserts the rule's expected attribute values when the target system has drifted from them |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
+| `PreviewActivityId` | `guid` | No | | The [Configuration Change Preview](previews.md) this change was made after reading, as returned by `New-JIMConfigurationChangePreview -SyncRuleId`. Recorded on the change's Activity so "previewed, then applied" is auditable. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Synchronisation Rule object |
 
 ### Output
@@ -268,8 +269,9 @@ Get-JIMSyncRule -ConnectedSystemName "HR System" | Set-JIMSyncRule -Disable
 Set-JIMSyncRule -Id 5 -ProjectToMetaverse $true -PassThru
 ```
 
-```powershell title="Set out-of-scope handling and drift detection on an export rule"
-Set-JIMSyncRule -Id 5 -OutboundDeprovisionAction Delete -EnforceState $true
+```powershell title="Preview, then set, the Deprovisioning Action on an export rule"
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 5 -OutboundDeprovisionAction Delete -Wait
+Set-JIMSyncRule -Id 5 -OutboundDeprovisionAction Delete -EnforceState $true -PreviewActivityId $preview.ActivityId
 ```
 
 ```powershell title="Disable a rule and record why (shown in the change history)"
@@ -476,6 +478,7 @@ Set-JIMSyncRuleMapping -SyncRuleId <int>
     [-InboundValueProcessing <string>]
     [-CaseNormalisation <string>]
     [-InitialExportOnly <bool>]
+    [-Enabled <bool>]
     [-PassThru]
 
 # From the pipeline
@@ -495,6 +498,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 | `InboundValueProcessing` | `string` | No | | Comma-separated flag names, e.g. `'TreatWhitespaceAsNoValue, TrimWhitespace'`. Import mappings only |
 | `CaseNormalisation` | `string` | No | | `None`, `Upper`, `Lower` or `Title`. Import mappings only |
 | `InitialExportOnly` | `bool` | No | | Whether the mapping flows only during the initial provisioning export. Export mappings only |
+| `Enabled` | `bool` | No | | Enables or disables the mapping. A disabled mapping is skipped by synchronisation in both directions; re-enabling clears any recorded disabled reason. Import and export mappings alike |
 | `PassThru` | `switch` | No | `$false` | Returns the updated mapping |
 
 ### Output
@@ -518,6 +522,10 @@ Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -MissingInputBehaviour FailOb
 
 ```powershell title="Rewrite an import mapping's expression"
 Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Expression 'Lower(cs["mail"])' -PassThru
+```
+
+```powershell title="Disable one Attribute Flow without touching the Synchronisation Rule"
+Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Enabled $false
 ```
 
 ```powershell title="Report every expression mapping on a Rule that meets a missing input"

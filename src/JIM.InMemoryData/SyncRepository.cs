@@ -35,8 +35,10 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, MetaverseObject> _mvos = new();
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
     private readonly Dictionary<Guid, PendingInitialPassword> _pendingInitialPasswords = new();
+    private readonly Dictionary<Guid, PendingPasswordChange> _pendingPasswordChanges = new();
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
+    private readonly Dictionary<Guid, CausalEdge> _causalEdges = new();
 
     /// <summary>
     /// When true, <see cref="BulkInsertRpeisAsync"/> returns true (simulating the production
@@ -94,6 +96,7 @@ public class SyncRepository : ISyncRepository
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
     public IReadOnlyDictionary<Guid, PendingInitialPassword> PendingInitialPasswords => _pendingInitialPasswords;
+    public IReadOnlyDictionary<Guid, PendingPasswordChange> PendingPasswordChanges => _pendingPasswordChanges;
 
     /// <summary>All activities, keyed by activity ID.</summary>
     public IReadOnlyDictionary<Guid, Activity> Activities => _activities;
@@ -131,6 +134,24 @@ public class SyncRepository : ISyncRepository
     {
         _syncRules[syncRule.Id] = syncRule;
     }
+
+    /// <summary>
+    /// Test support: removes a previously seeded CSO, for scenarios that need the object gone again
+    /// (for example previewing provisioning after removing the joined object).
+    /// </summary>
+    public void RemoveConnectedSystemObject(ConnectedSystemObject cso)
+    {
+        _csos.Remove(cso.Id);
+        if (_csosByConnectedSystem.TryGetValue(cso.ConnectedSystemId, out var csSet))
+            csSet.Remove(cso.Id);
+        if (cso.MetaverseObjectId.HasValue && _csosByMvo.TryGetValue(cso.MetaverseObjectId.Value, out var mvoSet))
+            mvoSet.Remove(cso.Id);
+    }
+
+    /// <summary>
+    /// Test support: how many CSOs the repository holds, for zero-side-effect assertions.
+    /// </summary>
+    public int ConnectedSystemObjectCount => _csos.Count;
 
     public void SeedConnectedSystemObject(ConnectedSystemObject cso)
     {
@@ -242,8 +263,17 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
     }
 
+    /// <summary>
+    /// The Connected System Objects <see cref="GetConnectedSystemObjectAsync"/> has been asked for, in call order.
+    /// Lets a test prove which objects an evaluation actually put to the engine, rather than only what it reported
+    /// (#1437: an Attribute Flow preview skips objects the rule does not manage, and skipping them is the whole
+    /// difference between a preview that runs over a subset and one that evaluates a whole system twice).
+    /// </summary>
+    public List<Guid> RequestedConnectedSystemObjectIds { get; } = [];
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
     {
+        RequestedConnectedSystemObjectIds.Add(csoId);
         _csos.TryGetValue(csoId, out var cso);
         if (cso != null && cso.ConnectedSystemId != connectedSystemId)
             cso = null;
@@ -485,16 +515,22 @@ public class SyncRepository : ISyncRepository
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
-        var valueSet = new HashSet<string>(attributeValues);
-        var result = new Dictionary<string, ConnectedSystemObject>();
+        // Reference values arrive as strings whatever the anchor's data type, so stored values are rendered
+        // to their canonical strings for comparison, mirroring the Postgres implementation's typed matching
+        // (#1285). Case-insensitive so Guid renderings match however the caller cased them.
+        var valueSet = new HashSet<string>(attributeValues, StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
-            foreach (var av in cso.AttributeValues)
+            foreach (var av in cso.AttributeValues.Where(av => av.AttributeId == attributeId || av.Attribute?.Id == attributeId))
             {
-                if (av.AttributeId == attributeId && av.StringValue != null && valueSet.Contains(av.StringValue))
-                {
-                    result.TryAdd(av.StringValue, cso);
-                }
+                var renderedValue = av.StringValue
+                    ?? av.GuidValue?.ToString()
+                    ?? av.IntValue?.ToString()
+                    ?? av.LongValue?.ToString()
+                    ?? (av.DecimalValue.HasValue ? ExternalIdValue.ToCanonicalString(av.DecimalValue.Value) : null);
+                if (renderedValue != null && valueSet.Contains(renderedValue))
+                    result.TryAdd(renderedValue, cso);
             }
         }
         return Task.FromResult(result);
@@ -1445,6 +1481,14 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public virtual Task SetPendingExportQueueingItemsAsync(
+        IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
+    {
+        foreach (var stamp in stamps.Where(s => _pendingExports.ContainsKey(s.PendingExportId)))
+            _pendingExports[stamp.PendingExportId].QueuedByRunProfileExecutionItemId = stamp.QueuedByRunProfileExecutionItemId;
+        return Task.CompletedTask;
+    }
+
     public Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
     {
         var expiring = _pendingInitialPasswords.Values
@@ -1801,6 +1845,18 @@ public class SyncRepository : ISyncRepository
 
             // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
             AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
+
+            // Drain the causal edge buffer (#1223), matching the production flush: outcome ids exist only now,
+            // so the edge's transient outcome reference is resolved here, and the buffer is emptied once written
+            // so a later flush of the same RPEI cannot duplicate it.
+            if (rpei.CausalEdges.Count == 0)
+                continue;
+
+            foreach (var edge in rpei.CausalEdges)
+                edge.ResolveTransientReferences(rpei.Id);
+
+            RecordCausalEdges(rpei.CausalEdges);
+            rpei.CausalEdges.Clear();
         }
         // When SimulateRawSqlPersistence is off (default), return false so the processor keeps
         // RPEIs in the activity's RunProfileExecutionItems collection for simpler test assertions.
@@ -1808,6 +1864,36 @@ public class SyncRepository : ISyncRepository
         // the production raw-SQL path and exposing cross-page lookup bugs.
         return Task.FromResult(SimulateRawSqlPersistence);
     }
+
+    /// <summary>
+    /// Records causal edges (#1223) in memory so worker tests can assert what a cascade attributed to what.
+    /// </summary>
+    /// <remarks>
+    /// The retention asymmetry the production path depends on (effect cascades, cause survives) cannot be
+    /// modelled here: this store enforces no foreign keys. That behaviour is covered by
+    /// <c>CausalEdgePersistenceDatabaseTests</c> against real PostgreSQL, and a test asserting it against this
+    /// implementation would prove nothing.
+    /// </remarks>
+    public Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges)
+    {
+        RecordCausalEdges(edges);
+        return Task.CompletedTask;
+    }
+
+    private void RecordCausalEdges(List<CausalEdge> edges)
+    {
+        foreach (var edge in edges)
+        {
+            if (edge.Id == Guid.Empty)
+                edge.Id = Guid.NewGuid();
+            _causalEdges[edge.Id] = edge;
+        }
+    }
+
+    /// <summary>
+    /// The causal edges recorded so far, for test assertions.
+    /// </summary>
+    public IReadOnlyCollection<CausalEdge> CausalEdges => _causalEdges.Values;
 
     private static void AssignSyncOutcomeIds(
         List<ActivityRunProfileExecutionItemSyncOutcome> outcomes, Guid rpeiId, Guid? parentId)
@@ -1834,7 +1920,22 @@ public class SyncRepository : ISyncRepository
         List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
     {
         foreach (var rpei in rpeis)
+        {
             _rpeis[rpei.Id] = rpei;
+
+            // Drain the causal edge buffer, matching the production path (#1223): confirming imports merge
+            // their outcomes through here, so an edge written at the export-confirmation seam reaches the
+            // store only if this path records it.
+            if (rpei.CausalEdges.Count == 0)
+                continue;
+
+            foreach (var edge in rpei.CausalEdges)
+                edge.ResolveTransientReferences(rpei.Id);
+
+            RecordCausalEdges(rpei.CausalEdges);
+            rpei.CausalEdges.Clear();
+        }
+
         return Task.CompletedTask;
     }
 
@@ -1970,6 +2071,21 @@ public class SyncRepository : ISyncRepository
 
     public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
         => Task.FromResult(_connectedSystems.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Name));
+
+    /// <summary>
+    /// Metaverse Attribute names for causal edge wording (#1223). Seeded by tests via
+    /// <see cref="SeedMetaverseAttributeName"/>; empty otherwise, which the seams treat as "no name known"
+    /// rather than as an error.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync()
+        => Task.FromResult(new Dictionary<int, string>(_metaverseAttributeNames));
+
+    private readonly Dictionary<int, string> _metaverseAttributeNames = new();
+
+    /// <summary>
+    /// Test hook: registers a Metaverse Attribute's name so reference-recall wording can be asserted.
+    /// </summary>
+    public void SeedMetaverseAttributeName(int attributeId, string name) => _metaverseAttributeNames[attributeId] = name;
 
     #endregion
 
@@ -2671,6 +2787,144 @@ public class SyncRepository : ISyncRepository
             csSet.Remove(pe.Id);
         if (pe.ConnectedSystemObjectId.HasValue)
             _pendingExportsByCsoId.Remove(pe.ConnectedSystemObjectId.Value);
+    }
+
+    #endregion
+
+    /// <summary>
+    /// No transaction to hold in memory (#288 preview backstop); the preview's other defence-in-depth
+    /// layers (structural purity, the read-only guard) still apply against this repository.
+    /// </summary>
+    public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
+        => Task.FromResult<IAsyncDisposable?>(null);
+
+    #region Password Synchronisation queue (#1119)
+
+    public Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
+    {
+        foreach (var change in changes)
+        {
+            // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema.
+            // Looked up per iteration rather than snapshotted, so two changes for the same target inside one
+            // batch coalesce against each other exactly as ON CONFLICT DO UPDATE does.
+            var existing = _pendingPasswordChanges.Values.SingleOrDefault(c =>
+                c.MetaverseObjectId == change.MetaverseObjectId && c.ConnectedSystemId == change.ConnectedSystemId);
+
+            if (existing != null)
+            {
+                existing.ConnectedSystemObjectId = change.ConnectedSystemObjectId;
+                existing.Supersede(change.EncryptedPassword, change.ExpiryBehaviour, change.ActivityId,
+                    change.ExpiresAt - change.CreatedAt, change.CreatedAt);
+                continue;
+            }
+
+            if (change.Id == Guid.Empty)
+                change.Id = Guid.NewGuid();
+
+            _pendingPasswordChanges[change.Id] = change;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<List<PendingPasswordChange>> GetDuePasswordChangesAsync(int connectedSystemId, DateTime asOf, int maximum)
+    {
+        var due = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.IsDue(asOf))
+            .OrderBy(c => c.CreatedAt)
+            .Take(maximum)
+            .ToList();
+
+        return Task.FromResult(due);
+    }
+
+    public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf)
+    {
+        var systems = _pendingPasswordChanges.Values
+            .Where(c => c.IsDue(asOf))
+            .Select(c => c.ConnectedSystemId)
+            .Distinct()
+            .ToList();
+
+        return Task.FromResult(systems);
+    }
+
+    public Task RecordPasswordChangeAttemptsAsync(IEnumerable<PendingPasswordChange> changes)
+    {
+        foreach (var change in changes.Where(c => _pendingPasswordChanges.ContainsKey(c.Id)))
+        {
+            var stored = _pendingPasswordChanges[change.Id];
+            stored.ConnectedSystemObjectId = change.ConnectedSystemObjectId;
+            stored.Status = change.Status;
+            stored.FailureReason = change.FailureReason;
+            stored.TargetMessage = change.TargetMessage;
+            stored.AttemptCount = change.AttemptCount;
+            stored.NextRetryAt = change.NextRetryAt;
+            stored.LastAttemptedAt = change.LastAttemptedAt;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
+    {
+        foreach (var id in ids)
+            _pendingPasswordChanges.Remove(id);
+
+        return Task.CompletedTask;
+    }
+
+    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf)
+    {
+        var expiring = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.HasExpired(asOf))
+            .ToList();
+
+        foreach (var change in expiring)
+            change.Expire();
+
+        return Task.FromResult(expiring.Count);
+    }
+
+    public Task<int> ReleasePasswordChangesForDeliveryAsync(int connectedSystemId)
+    {
+        var releasing = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.Status == PendingPasswordChangeStatus.Parked)
+            .ToList();
+
+        foreach (var change in releasing)
+            change.Retry();
+
+        return Task.FromResult(releasing.Count);
+    }
+
+    public Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        var attention = _pendingPasswordChanges.Values
+            .Where(c => connectedSystemIds.Contains(c.ConnectedSystemId) && c.Status != PendingPasswordChangeStatus.Pending)
+            .GroupBy(c => c.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => new PasswordQueueAttention
+            {
+                ParkedCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Parked),
+                ExpiredCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Expired)
+            });
+
+        return Task.FromResult(attention);
+    }
+
+    public Task<int> DeleteTerminalPasswordChangesAsync(DateTime olderThan, int maxRecords)
+    {
+        var removing = _pendingPasswordChanges.Values
+            .Where(c => c.Status != PendingPasswordChangeStatus.Pending && (c.LastAttemptedAt ?? c.CreatedAt) < olderThan)
+            .OrderBy(c => c.LastAttemptedAt ?? c.CreatedAt)
+            .Take(maxRecords)
+            .Select(c => c.Id)
+            .ToList();
+
+        foreach (var id in removing)
+            _pendingPasswordChanges.Remove(id);
+
+        return Task.FromResult(removing.Count);
     }
 
     #endregion

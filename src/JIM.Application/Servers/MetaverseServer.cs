@@ -47,9 +47,9 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(id, includeChildObjects);
     }
 
-    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string objectTypeName, bool includeChildObjects)
+    public async Task<MetaverseObjectType?> GetMetaverseObjectTypeAsync(string objectTypeName, bool includeChildObjects, bool withChangeTracking = false)
     {
-        return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeName, includeChildObjects);
+        return await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeName, includeChildObjects, withChangeTracking);
     }
 
     public async Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects)
@@ -256,9 +256,9 @@ public class MetaverseServer
     #endregion
 
     #region metaverse attributes
-    public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync()
+    public async Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync(bool withChangeTracking = false)
     {
-        return await Application.Repository.Metaverse.GetMetaverseAttributesAsync();
+        return await Application.Repository.Metaverse.GetMetaverseAttributesAsync(withChangeTracking);
     }
 
     public async Task<IList<MetaverseAttributeHeader>?> GetMetaverseAttributeHeadersAsync()
@@ -1867,6 +1867,15 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Streams every Metaverse Object of a type with the attribute values and Connected System Object joins an
+    /// export rule's Scoping Criteria evaluation reads, for previewing a change to that rule's scope (#1436).
+    /// </summary>
+    public IAsyncEnumerable<MetaverseObject> StreamMetaverseObjectsOfType(int metaverseObjectTypeId)
+    {
+        return Application.Repository.Metaverse.StreamMetaverseObjectsOfType(metaverseObjectTypeId);
+    }
+
+    /// <summary>
     /// How many objects a single fetch of disconnection candidates asks the database for. Bounded because the id
     /// list becomes an <c>IN</c> clause, and a preview's population can run to hundreds of thousands.
     /// </summary>
@@ -1891,6 +1900,16 @@ public class MetaverseServer
             candidates.AddRange(await Application.Repository.Metaverse.GetMetaverseObjectDisconnectionCandidatesAsync(chunk));
 
         return candidates;
+    }
+
+    /// <summary>
+    /// Batch-loads Metaverse Objects by ID with their type and attribute values, untracked, for evaluating
+    /// Synchronisation Rule scope in memory (the destructive-toggle preview's outbound walk, #1115; the same
+    /// read the Temporal Scope Reconciler performs for its export re-evaluation).
+    /// </summary>
+    public async Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> metaverseObjectIds)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsByIdsNoTrackingAsync(metaverseObjectIds);
     }
 
     /// <summary>

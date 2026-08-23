@@ -37,6 +37,19 @@ public interface IConnectorPasswordManagement
     public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings);
 
     /// <summary>
+    /// Whether the password channel opened by <see cref="OpenPasswordConnection"/> encrypts what is sent over it.
+    /// Undefined before that call and after <see cref="ClosePasswordConnection"/>.
+    /// <para>
+    /// A statement of fact about the channel, not a policy decision. Whether an unencrypted channel is acceptable
+    /// belongs to the administrator, who declares it per Connected System with the Password Synchronisation
+    /// "Require Secure Transport" setting; a Connector cannot know whether a given deployment is an isolated
+    /// network with a directory that cannot serve TLS or a corporate one that simply has not been configured for
+    /// it. Implementations report what they have and refuse nothing on this basis.
+    /// </para>
+    /// </summary>
+    public bool IsPasswordChannelSecure { get; }
+
+    /// <summary>
     /// Sets the password on a single object in the Connected System, applying the expiry behaviour and, where
     /// requested, enabling the account.
     /// </summary>

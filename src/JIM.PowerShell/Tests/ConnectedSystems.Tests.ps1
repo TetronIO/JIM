@@ -123,6 +123,15 @@ Describe 'Set-JIMConnectedSystem' {
             $validateRange | Should -Not -BeNullOrEmpty
         }
 
+        It 'Should have a RequireSecureTransport switch parameter' {
+            # It lives here rather than on Set-JIMConnectedSystemPasswordSynchronisation because it governs every
+            # password JIM sends to the system, and because a system that provisions accounts but receives no
+            # synchronised passwords has no Password Synchronisation configuration to hold it.
+            $param = $command.Parameters['RequireSecureTransport']
+            $param | Should -Not -BeNullOrEmpty
+            $param.SwitchParameter | Should -BeTrue
+        }
+
         It 'Should have an InitialPasswordTimeToLive parameter typed as a TimeSpan' {
             $param = $command.Parameters['InitialPasswordTimeToLive']
             $param | Should -Not -BeNullOrEmpty
@@ -466,6 +475,122 @@ Describe 'Set-JIMConnectedSystemContainer' {
 
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
                     $Body.selected -eq $false -and $Body.excluded -eq $true
+                }
+            }
+        }
+    }
+}
+
+Describe 'Import-JIMConnectedSystemSchema' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Import-JIMConnectedSystemSchema
+        }
+
+        It 'Should have a Preview switch parameter' {
+            $command.Parameters['Preview'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should have a DisableDependents switch parameter' {
+            $command.Parameters['DisableDependents'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should have a RemoveDependents switch parameter' {
+            $command.Parameters['RemoveDependents'].SwitchParameter | Should -BeTrue
+        }
+    }
+
+    Context 'Preview behaviour' {
+
+        It 'Calls the preview endpoint and returns the result when -Preview is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        success                        = $true
+                        hasChanges                     = $true
+                        hasRemovalsOrDefinitionChanges = $true
+                        removedObjectTypes             = @('computer')
+                    }
+                }
+
+                $result = Import-JIMConnectedSystemSchema -Id 5 -Preview
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/5/import-schema/preview' -and $Method -eq 'POST'
+                }
+                $result.HasRemovalsOrDefinitionChanges | Should -BeTrue
+                $result.RemovedObjectTypes | Should -Contain 'computer'
+            }
+        }
+
+        It 'Previews without persisting even though PassThru is not specified' {
+            # The result IS the point of a preview; gating it behind -PassThru would return nothing at all.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ success = $true; hasChanges = $false } }
+
+                $result = Import-JIMConnectedSystemSchema -Id 5 -Preview
+
+                $result | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It 'Sends disableDependents in the body when -DisableDependents is specified' {
+            # The Apply and Disable Dependents flavour (#1485): the schema is applied and everything the
+            # removals invalidate is disabled with a recorded reason.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ objectTypes = @() } }
+
+                Import-JIMConnectedSystemSchema -Id 5 -DisableDependents -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/5/import-schema' -and
+                    $Body.disableDependents -eq $true
+                }
+            }
+        }
+
+        It 'Sends removeDependents in the body when -RemoveDependents is specified' {
+            # The Apply and Remove flavour (#1485): the schema is applied, the invalidated configuration is
+            # deleted and the data removal is queued as a worker task.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ objectTypes = @() } }
+
+                Import-JIMConnectedSystemSchema -Id 5 -RemoveDependents -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/5/import-schema' -and
+                    $Body.removeDependents -eq $true
+                }
+            }
+        }
+
+        It 'Refuses -DisableDependents together with -RemoveDependents without calling the API' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ objectTypes = @() } }
+
+                { Import-JIMConnectedSystemSchema -Id 5 -DisableDependents -RemoveDependents -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*mutually exclusive*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+
+        It 'Calls the import endpoint, not the preview endpoint, when -Preview is absent' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ objectTypes = @() } }
+
+                Import-JIMConnectedSystemSchema -Id 5 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/5/import-schema'
                 }
             }
         }

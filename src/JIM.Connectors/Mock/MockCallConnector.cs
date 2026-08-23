@@ -387,6 +387,15 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         return this;
     }
 
+    /// <summary>
+    /// Whether this mock reports its password channel as encrypted. Settable so tests can drive both sides of the
+    /// "Require Secure Transport" decision; secure by default, because that is the ordinary case.
+    /// </summary>
+    public bool PasswordChannelSecure { get; set; } = true;
+
+    /// <inheritdoc />
+    public bool IsPasswordChannelSecure => PasswordChannelSecure;
+
     public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings)
     {
         PasswordConnectionOpen = true;

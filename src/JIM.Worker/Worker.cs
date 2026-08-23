@@ -14,6 +14,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Enums;
 using Microsoft.EntityFrameworkCore;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Utilities;
@@ -465,6 +466,36 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
+                                case SchemaRefreshRemovalWorkerTask schemaRefreshRemovalTask:
+                                {
+                                    Log.Information("ExecuteAsync: SchemaRefreshRemovalWorkerTask received for Connected System id: {ConnectedSystemId} ({TypeCount} removed Object Type(s), {AttributeCount} removed attribute(s))",
+                                        schemaRefreshRemovalTask.ConnectedSystemId, schemaRefreshRemovalTask.RemovedObjectTypeIds.Count, schemaRefreshRemovalTask.RemovedAttributeIds.Count);
+                                    if (schemaRefreshRemovalTask.InitiatedByType == ActivityInitiatorType.NotSet)
+                                    {
+                                        Log.Error($"ExecuteAsync: SchemaRefreshRemovalWorkerTask {schemaRefreshRemovalTask.Id} is missing initiator information. Cannot continue processing worker task.");
+                                    }
+                                    else
+                                    {
+                                        try
+                                        {
+                                            // the server owns the removal itself (obsoletion, Pending Export and value
+                                            // deletion, per-object results); this boundary owns the Activity's fate.
+                                            await taskJim.ConnectedSystems.ExecuteSchemaRefreshRemovalAsync(schemaRefreshRemovalTask);
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                            Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing schema refresh removal task.");
+                                        }
+                                        finally
+                                        {
+                                            Log.Information($"ExecuteAsync: Completed the schema refresh removal for Connected System ({schemaRefreshRemovalTask.ConnectedSystemId}) in {newWorkerTask.Activity.ExecutionTime}.");
+                                        }
+                                    }
+
+                                    break;
+                                }
                                 case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
                                 {
                                     Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for Connected System id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}, DeleteChangeHistory: {DeleteHistory}",
@@ -537,6 +568,35 @@ public class Worker : BackgroundService
                                     {
                                         await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
                                         Log.Error(ex, "ExecuteAsync: Unhandled exception whilst running a configuration change preview.");
+                                    }
+
+                                    break;
+                                }
+                                case PasswordDeliveryWorkerTask passwordDeliveryTask:
+                                {
+                                    Log.Information("ExecuteAsync: PasswordDeliveryWorkerTask received for Connected System {ConnectedSystemId}, initiated by: {InitiatedBy}",
+                                        passwordDeliveryTask.ConnectedSystemId, LogSanitiser.Sanitise(passwordDeliveryTask.InitiatedByName) ?? "Unknown");
+
+                                    try
+                                    {
+                                        // Every outcome that belongs to a queued password change is recorded on the change
+                                        // itself by the pass, including the ones that failed. What reaches this catch is a
+                                        // failure of the pass as a whole, which belongs on the Activity.
+                                        var deliveryResult = await taskJim.PasswordSynchronisation.DeliverDueAsync(
+                                            passwordDeliveryTask.ConnectedSystemId, DateTime.UtcNow, cancellationTokenSource.Token);
+
+                                        // Null where the pass had nothing to do, which is the common case for the
+                                        // housekeeping trigger: an Activity saying "nothing happened" reads as an outcome.
+                                        newWorkerTask.Activity.Message = deliveryResult.Describe();
+                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+
+                                        Log.Information("ExecuteAsync: Password delivery completed in {ExecutionTime}: {Visited} Connected System(s) visited, {Delivered} password change(s) delivered.",
+                                            newWorkerTask.Activity.ExecutionTime, deliveryResult.ConnectedSystemsVisited, deliveryResult.DeliveredCount);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst delivering queued password changes.");
                                     }
 
                                     break;
@@ -699,6 +759,23 @@ public class Worker : BackgroundService
             Log.Error(ex, "PerformHousekeepingAsync: Error during housekeeping");
         }
 
+        try
+        {
+            // Password Synchronisation (#1119). Queued password work is normally delivered by a pass raised the
+            // moment it is queued, but a retry falls due later with nothing else happening in the system to
+            // notice it. This idle tick is what catches those. The request is de-duplicated against passes
+            // already waiting to run, so a busy queue does not accumulate identical ones.
+            if (await jim.PasswordSynchronisation.HasWorkDueAsync(DateTime.UtcNow))
+                await jim.Tasking.RequestPasswordDeliveryAsync(null, "Password Synchronisation");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Same boundary as the housekeeping catch above: an escape here would take the worker's idle loop
+            // down, and the next tick is sixty seconds away in any case. Cancellation is excluded deliberately:
+            // a worker shutting down must propagate, not be logged as a failure and carried on through.
+            Log.Error(ex, "PerformHousekeepingAsync: Error requesting a Password Synchronisation delivery pass");
+        }
+
         // History retention cleanup runs on its own schedule (every 6 hours).
         // On first check after worker start, query the database for the last cleanup time
         // so we don't re-run immediately if the interval hasn't elapsed yet.
@@ -736,7 +813,7 @@ public class Worker : BackgroundService
 
         var activity = new Activity
         {
-            TargetName = "Metaverse Object Housekeeping",
+            TargetName = "Scheduled Identity Deletion",
             TargetType = ActivityTargetType.MetaverseObjectHousekeeping,
             TargetOperationType = ActivityTargetOperationType.Execute,
             ObjectsToProcess = mvosToDelete.Count
@@ -748,12 +825,23 @@ public class Worker : BackgroundService
             var outcomeTrackingLevel = await jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
             var csoChangeTrackingEnabled = await jim.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
             var executionItems = new List<ActivityRunProfileExecutionItem>();
+            // Queueing provenance (#1223): the item reporting each staged Pending Export is the item that
+            // queued it, and the export must record that or the export run that carries it out has nothing to
+            // walk back along. The rows are persisted by the staging calls below before their reporting items
+            // exist, so the stamps are applied as a set-once fix-up at the end of the batch.
+            var queueingStamps = new List<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)>();
 
             // Reference recall (#908): capture referencing objects and resolved reference values
             // BEFORE deletion nulls the reference FKs and disconnects the candidates' CSOs.
             var recallContext = await jim.ExportEvaluation.CaptureReferenceRecallContextAsync(
                 mvosToDelete.Select(m => m.Id).ToList());
             var deletedMvoIds = new List<Guid>();
+
+            // What each deletion will be recorded as having caused (#1223). Housekeeping is the grace-period
+            // path, and it runs in its own Activity long after the run that scheduled the deletion, so nothing
+            // else connects the removals below to the objects whose deletion caused them. Populated as each
+            // object is deleted, so the cause carries the very execution item and outcome recording it.
+            var deletionCauses = new Dictionary<Guid, CausalCause>();
 
             // One export evaluation cache for the batch, so per-MVO deletion evaluation (issue #655)
             // and reference recall staging do not re-load Synchronisation Rules for every object.
@@ -801,12 +889,17 @@ public class Worker : BackgroundService
                         DeletionPolicySnapshotJson = mvo.DeletionPolicySnapshotJson
                     };
                     var reportableDeleteExports = deletePendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue).ToList();
+                    // The decision-time snapshot is the only surviving record of WHY this object is being
+                    // deleted: the deciding run ended in a previous Activity, and only the snapshot rode across
+                    // on the object. Cohorts group on the code it carries, never on the reason sentence.
+                    var policySnapshot = MvoDeletionPolicySnapshot.FromJson(mvo.DeletionPolicySnapshotJson);
                     if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                     {
                         var mvoDeletedOutcome = SyncOutcomeBuilder.AddRootOutcome(deletionItem,
                             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                             targetEntityId: mvo.Id,
                             targetEntityDescription: mvo.NameOrId);
+                        deletionCauses[mvo.Id] = BuildDeletionCause(mvo, policySnapshot, deletionItem, mvoDeletedOutcome);
 
                         // Deletion cascade (#1044): record each delete Pending Exports this deletion staged as a
                         // consequence of it, so the item reads as action and consequences: MVO Deleted, then one
@@ -818,16 +911,30 @@ public class Worker : BackgroundService
                             AddPendingExportOutcome(deletionItem, mvoDeletedOutcome, deletePendingExport,
                                 csNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
                                 activity, csoChangeTrackingEnabled);
+                            deletePendingExport.QueuedByRunProfileExecutionItemId = deletionItem.Id;
+                            queueingStamps.Add((deletePendingExport.Id, deletionItem.Id));
                         }
                     }
                     else
                     {
                         // Outcome tracking is off, so there is no deletion outcome to hang the exports off. They
                         // are still staged work an administrator must see: record one execution item each.
-                        executionItems.AddRange(reportableDeleteExports
-                            .Select(pe => BuildPendingExportExecutionItem(pe, mvo.NameOrId, mvo.Type?.Name,
-                                csNameLookup.GetValueOrDefault(pe.ConnectedSystemId),
-                                activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
+                        // With no outcome tree to express it, the deprovisioning's cause is recorded as an edge
+                        // instead; this is the standalone case that edge type exists for (#1223).
+                        var deprovisionCause = BuildDeletionCause(mvo, policySnapshot, rpei: null, outcome: null);
+                        deletionCauses[mvo.Id] = deprovisionCause;
+                        foreach (var pendingExport in reportableDeleteExports)
+                        {
+                            var deprovisionItem = BuildPendingExportExecutionItem(pendingExport, mvo.NameOrId, mvo.Type?.Name,
+                                csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
+                                activity, outcomeTrackingLevel, csoChangeTrackingEnabled);
+                            deprovisionItem.CausalEdges.Add(deprovisionCause.ToEdge(
+                                CausalEdgeType.MetaverseObjectDeletionCausedDeprovision,
+                                deprovisionItem.SyncOutcomes.FirstOrDefault()));
+                            pendingExport.QueuedByRunProfileExecutionItemId = deprovisionItem.Id;
+                            queueingStamps.Add((pendingExport.Id, deprovisionItem.Id));
+                            executionItems.Add(deprovisionItem);
+                        }
                     }
 
                     executionItems.Add(deletionItem);
@@ -865,14 +972,46 @@ public class Worker : BackgroundService
 
                 // Fold the staged recall exports into Activity reporting: one execution item per staged
                 // Pending Export with a PendingExportCreated outcome, mirroring the sync-run recall reporting.
-                executionItems.AddRange(recallResult.StagedPendingExports
-                    .Select(pe => BuildPendingExportExecutionItem(
-                        pe,
-                        ResolveReferencingObjectDisplayName(pe, recallResult),
+                // Which deleted objects each referencing object lost, from the recall context captured before
+                // deletion nulled the reference foreign keys. This is the only record of the linkage, and the
+                // recall item belongs to the referencing group rather than to anything deleted, so without the
+                // edges below the group's removal reads as having no cause whatsoever (#1223).
+                var deletedMvoIdSet = deletedMvoIds.ToHashSet();
+                var causesByReferencingMvoId = recallContext.Candidates
+                    .Where(c => deletedMvoIdSet.Contains(c.ReferencedMetaverseObjectId))
+                    .GroupBy(c => c.ReferencingMetaverseObjectId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(c => c.ReferencedMetaverseObjectId).Distinct()
+                            .Select(id => deletionCauses.GetValueOrDefault(id))
+                            .Where(cause => cause != null)
+                            .Select(cause => cause!)
+                            .ToList());
+
+                foreach (var pendingExport in recallResult.StagedPendingExports)
+                {
+                    var recallItem = BuildPendingExportExecutionItem(
+                        pendingExport,
+                        ResolveReferencingObjectDisplayName(pendingExport, recallResult),
                         objectTypeSnapshot: null,
-                        csNameLookup.GetValueOrDefault(pe.ConnectedSystemId),
-                        activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
+                        csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
+                        activity, outcomeTrackingLevel, csoChangeTrackingEnabled);
+
+                    if (pendingExport.SourceMetaverseObjectId.HasValue
+                        && causesByReferencingMvoId.TryGetValue(pendingExport.SourceMetaverseObjectId.Value, out var causes))
+                    {
+                        var effectOutcome = recallItem.SyncOutcomes.FirstOrDefault();
+                        foreach (var cause in causes)
+                            recallItem.CausalEdges.Add(cause.ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval, effectOutcome));
+                    }
+
+                    pendingExport.QueuedByRunProfileExecutionItemId = recallItem.Id;
+                    queueingStamps.Add((pendingExport.Id, recallItem.Id));
+                    executionItems.Add(recallItem);
+                }
             }
+
+            await jim.SyncRepo.SetPendingExportQueueingItemsAsync(queueingStamps);
 
             if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
@@ -893,6 +1032,44 @@ public class Worker : BackgroundService
             Log.Error(ex, "PerformMetaverseObjectHousekeepingAsync: Error during Metaverse Object housekeeping batch");
             await jim.Activities.FailActivityWithErrorAsync(activity, ex);
         }
+    }
+
+    /// <summary>
+    /// Describes a housekeeping deletion as the cause of whatever it goes on to trigger (#1223), so a removal
+    /// recorded against a different object can still name the object whose deletion caused it.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object being deleted. Read for its name and the triggering system
+    /// recorded on it when the deletion was scheduled.</param>
+    /// <param name="policySnapshot">The decision-time policy snapshot carried across from the run that
+    /// scheduled the deletion, and the only surviving source of the reason code. Null on objects scheduled
+    /// before snapshots were captured, or whose snapshot no longer parses, in which case the cause is recorded
+    /// without a reason: an unattributed cause is still far better than none.</param>
+    /// <param name="rpei">The execution item recording the deletion, where one carries a deletion outcome.</param>
+    /// <param name="outcome">The <c>MvoDeleted</c> outcome node, where outcome tracking recorded one.</param>
+    private static CausalCause BuildDeletionCause(
+        MetaverseObject mvo,
+        MvoDeletionPolicySnapshot? policySnapshot,
+        ActivityRunProfileExecutionItem? rpei,
+        ActivityRunProfileExecutionItemSyncOutcome? outcome)
+    {
+        return new CausalCause
+        {
+            RunProfileExecutionItem = rpei,
+            SyncOutcome = outcome,
+            MetaverseObjectId = mvo.Id,
+            // Name, not NameOrId: the id is carried above, and the fallback would render the chain as
+            // "<guid> was deleted" for an unnamed object.
+            DisplayName = mvo.Name,
+            // Both nouns, curated on the type rather than derived: the chain says "1 User" or "10 Users"
+            // depending on a cohort size computed at read time, which this edge cannot know.
+            ObjectTypeName = mvo.Type?.Name,
+            ObjectTypePluralName = mvo.Type?.PluralName,
+            ReasonCode = policySnapshot?.ReasonCode ?? CausalReasonCode.NotSet,
+            // Prefer the snapshot's triggering system: it is the decision-time fact, whereas the object's own
+            // marker fields are cleared by a cancelled deletion and re-set by a later one.
+            ConnectedSystemId = policySnapshot?.TriggeringSystemId ?? mvo.DeletionTriggeredBySystemId,
+            ConnectedSystemName = policySnapshot?.TriggeringSystemName ?? mvo.DeletionTriggeredBySystemName
+        };
     }
 
     /// <summary>

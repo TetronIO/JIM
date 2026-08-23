@@ -1619,6 +1619,86 @@ function Test-S16ConfigurationValidation {
 
 # ─── Scale ─────────────────────────────────────────────────────────────────────
 
+function Start-S16MemorySampler {
+    <#
+    .SYNOPSIS
+        Samples `docker stats` for the named containers until stopped, keeping only the peak memory seen.
+    .DESCRIPTION
+        A background job, not the runner's whole-run docker-stats CSV: the scale row wants the peak over
+        exactly its own Full Import, per container, without knowing where the runner put its file. Every
+        sample is a `docker stats --no-stream` call, which is why the interval is seconds rather than
+        milliseconds; a 500,000-row import lasts long enough that a two-second grain misses nothing that
+        matters. Stop-S16MemorySampler returns the peaks in bytes, keyed by container name.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string[]]$Containers,
+        [int]$IntervalSeconds = 2
+    )
+
+    $stopFile = Join-Path ([System.IO.Path]::GetTempPath()) "s16-memory-sampler-$([guid]::NewGuid().ToString('N')).stop"
+    $job = Start-Job -ScriptBlock {
+        param($containers, $intervalSeconds, $stopFile)
+
+        function ConvertTo-Bytes {
+            param([string]$Value)
+            $m = [regex]::Match($Value.Trim(), '^\s*([0-9.]+)\s*([KMGT]?i?B)\s*$', 'IgnoreCase')
+            if (-not $m.Success) { return [long]0 }
+            $num = [double]$m.Groups[1].Value
+            switch ($m.Groups[2].Value.ToLowerInvariant()) {
+                'b'   { return [long]$num }
+                'kb'  { return [long]($num * 1000) }
+                'kib' { return [long]($num * 1024) }
+                'mb'  { return [long]($num * 1000 * 1000) }
+                'mib' { return [long]($num * 1024 * 1024) }
+                'gb'  { return [long]($num * 1000 * 1000 * 1000) }
+                'gib' { return [long]($num * 1024 * 1024 * 1024) }
+                'tb'  { return [long]($num * 1000 * 1000 * 1000 * 1000) }
+                'tib' { return [long]($num * 1024 * 1024 * 1024 * 1024) }
+                default { return [long]0 }
+            }
+        }
+
+        $peaks = @{}
+        foreach ($c in $containers) { $peaks[$c] = [long]0 }
+        while (-not (Test-Path $stopFile)) {
+            $lines = docker stats --no-stream --format '{{.Name}}|{{.MemUsage}}' @containers 2>$null
+            foreach ($line in @($lines)) {
+                $parts = "$line".Split('|')
+                if ($parts.Count -lt 2) { continue }
+                $used = ConvertTo-Bytes -Value ($parts[1].Split('/')[0])
+                if ($peaks.ContainsKey($parts[0]) -and $used -gt $peaks[$parts[0]]) { $peaks[$parts[0]] = $used }
+            }
+            Start-Sleep -Seconds $intervalSeconds
+        }
+        return $peaks
+    } -ArgumentList @($Containers, $IntervalSeconds, $stopFile)
+
+    return @{ Job = $job; StopFile = $stopFile }
+}
+
+function Stop-S16MemorySampler {
+    param([Parameter(Mandatory=$true)][hashtable]$Sampler)
+
+    New-Item -ItemType File -Path $Sampler.StopFile -Force | Out-Null
+    try {
+        $peaks = Receive-Job -Job $Sampler.Job -Wait -AutoRemoveJob
+    }
+    finally {
+        Remove-Item $Sampler.StopFile -Force -ErrorAction SilentlyContinue
+    }
+    # Receive-Job hands back the hashtable as a PSObject-wrapped Hashtable; a plain copy keeps callers simple.
+    $result = @{}
+    if ($peaks) { foreach ($key in $peaks.Keys) { $result[$key] = [long]$peaks[$key] } }
+    return $result
+}
+
+function Format-S16Bytes {
+    param([long]$Bytes)
+    if ($Bytes -ge 1GB) { return "$(($Bytes / 1GB).ToString('F2')) GiB" }
+    if ($Bytes -ge 1MB) { return "$(($Bytes / 1MB).ToString('F0')) MiB" }
+    return "$Bytes B"
+}
+
 function Test-S16ScaleImport {
     param([hashtable]$Context, [hashtable]$Config)
 
@@ -1626,16 +1706,58 @@ function Test-S16ScaleImport {
         return @{ Status = 'skip'; Detail = "The database is seeded with $($Context.RowCount) row(s); the scale row needs 500,000." }
     }
 
+    # Peak memory is sampled for the whole import on the three containers that do the work: JIM's worker
+    # (the product under test), JIM's own database (where the 500,000 Connected System Objects land) and
+    # the source database server being read.
+    $sampler = Start-S16MemorySampler -Containers @('jim.worker', 'jim.database', $Config.ContainerName)
     $started = Get-Date
-    Invoke-S16FullImport -Context $Context | Out-Null
-    $elapsed = (Get-Date) - $started
-
-    $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
-    $imported = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $personTypeId -Count
-
-    if ([int]$imported -ne $Context.RowCount) {
-        return @{ Status = 'fail'; Detail = "Expected $($Context.RowCount) object(s) at scale, found $imported after $($elapsed.TotalMinutes.ToString('F1')) minute(s)." }
+    try {
+        $run = Invoke-S16FullImport -Context $Context
+    }
+    finally {
+        $elapsed = (Get-Date) - $started
+        $peaks = Stop-S16MemorySampler -Sampler $sampler
     }
 
-    return @{ Status = 'pass'; Detail = "$imported object(s) imported in $($elapsed.TotalMinutes.ToString('F1')) minute(s)." }
+    $activity = Get-JIMActivity -Id $run.activityId
+    $activityExecutionTime = if ($activity.executionTime) { "$($activity.executionTime)" } else { 'n/a' }
+    $objectsProcessed = [int]$activity.objectsProcessed
+
+    # The identity Connected System imports the table (Person) and the view over it (PersonView), so a
+    # 500,000-row database is a 1,000,000-object Full Import; both counts are asserted and the throughput
+    # is per object read, which is what the connector actually did.
+    $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
+    $viewTypeId   = Get-Scenario16ObjectTypeId -Context $Context -Name 'PersonView'
+    $imported     = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $personTypeId -Count)
+    $importedView = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $viewTypeId -Count)
+    $expectedObjects = $Context.RowCount * 2
+
+    $rowsPerSecond = if ($elapsed.TotalSeconds -gt 0) { [double]$objectsProcessed / $elapsed.TotalSeconds } else { 0 }
+    $wallClock = $elapsed.ToString('hh\:mm\:ss')
+
+    $metrics = [ordered]@{
+        Provider                 = $Context.Provider
+        Rows                     = [int]$Context.RowCount
+        Objects                  = $objectsProcessed
+        WallClock                = $wallClock
+        RowsPerSecond            = [math]::Round($rowsPerSecond, 0)
+        ActivityId               = $run.activityId
+        ActivityExecutionTime    = $activityExecutionTime
+        PageSize                 = $Context.PageSize
+        WorkerPeakMemory         = Format-S16Bytes -Bytes $peaks['jim.worker']
+        DatabasePeakMemory       = Format-S16Bytes -Bytes $peaks['jim.database']
+        SourceContainer          = $Config.ContainerName
+        SourcePeakMemory         = Format-S16Bytes -Bytes $peaks[$Config.ContainerName]
+    }
+
+    $summary = "$($Context.RowCount.ToString('N0')) source rows read as $($objectsProcessed.ToString('N0')) object(s) (Person + PersonView) in $wallClock ($($metrics.RowsPerSecond.ToString('N0')) objects/s, page size $($Context.PageSize)); Activity execution time $activityExecutionTime; peak memory: worker $($metrics.WorkerPeakMemory), JIM database $($metrics.DatabasePeakMemory), $($Config.ContainerName) $($metrics.SourcePeakMemory)."
+
+    if ($imported -ne $Context.RowCount -or $importedView -ne $Context.RowCount) {
+        return @{ Status = 'fail'; Detail = "Expected $($Context.RowCount) Person and $($Context.RowCount) PersonView object(s) at scale, found $imported and $importedView. $summary"; Metrics = $metrics }
+    }
+    if ($objectsProcessed -ne $expectedObjects) {
+        return @{ Status = 'fail'; Detail = "The Activity reports $objectsProcessed object(s) processed, expected $expectedObjects. $summary"; Metrics = $metrics }
+    }
+
+    return @{ Status = 'pass'; Detail = $summary; Metrics = $metrics }
 }

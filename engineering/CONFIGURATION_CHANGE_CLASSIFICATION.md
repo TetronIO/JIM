@@ -4,7 +4,7 @@
 
 - **Status:** Done
 - **Applies to:** every configuration property captured in a `ConfigurationSnapshot`
-- **Related:** [`plans/doing/CONFIGURATION_CHANGE_PREVIEW.md`](plans/doing/CONFIGURATION_CHANGE_PREVIEW.md) (the framework this feeds), issue #827
+- **Related:** [`plans/done/CONFIGURATION_CHANGE_PREVIEW.md`](plans/done/CONFIGURATION_CHANGE_PREVIEW.md) (the framework this feeds), issue #827
 
 ## Why this exists
 
@@ -183,6 +183,9 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | `settingValues` | B | Connector settings drive what the connector reads and writes. |
 | `settingValue` | B | One individual setting value, whatever the connector calls it (see the note below). |
 | `maxExportParallelism` | C | Throughput only; explicitly excluded from preview scope by #827. |
+| `initialPasswordTimeToLive` | C | How long JIM keeps trying to deliver a password to this system before giving up, whether it is an account's first password or a queued password change. Changes how long JIM tries, never what it synchronises. |
+| `requireSecureTransport` | C | Whether JIM refuses to send a password over a connection it cannot confirm is encrypted (#1119). Turning it on can stop passwords reaching this system altogether, which an administrator has to see; it changes nothing about what JIM synchronises. |
+| `passwordSynchronisation`, `enabled`, `targetObjectTypeId`, `maxRetries`, `retryBackoffBase` | C | Whether and how queued password changes are delivered to this system (#1119). None change what JIM synchronises. Enabling delivery is the consequential one: it releases every password change that accumulated while the system was switched off, which reaches a live directory. |
 
 > **One key for every setting value.** A Connected System's setting values are all recorded under the single node key `settingValue` (`ConfigurationSnapshotService.SettingValueNodeKey`), with the connector's own setting name carried as the node's *label* and the setting id as its ItemId. They were previously keyed by that setting name, which put an open, connector-author-controlled key space in front of a classifier that has no default class: every Connected System settings change failed to classify and was recorded unclassified. A node key is a stable machine key, and a display name supplied by a third party is neither stable nor enumerable.
 

@@ -132,7 +132,8 @@ public class UpdateSyncRuleRequest
     /// RemoveContributedAttributesOnObsoletion flag, the MVO type's deletion grace
     /// period, and whether the MVO is slated for immediate deletion. RemainJoined
     /// keeps the join intact and stops further Attribute Flow. Only applicable when
-    /// Direction = Import.
+    /// Direction = Import. Omitted or null leaves the stored action unchanged.
+    /// Preview the change first with POST sync-rules/{id}/destructive-toggles/preview.
     /// </summary>
     public InboundOutOfScopeAction? InboundOutOfScopeAction { get; set; }
 
@@ -140,6 +141,8 @@ public class UpdateSyncRuleRequest
     /// For Export rules: Action to take when an MVO falls out of this rule's scope or is deleted
     /// (Disconnect breaks the join and leaves the CSO untouched in the target system;
     /// Delete queues a delete PendingExport). Only applicable when Direction = Export.
+    /// Omitted or null leaves the stored action unchanged.
+    /// Preview the change first with POST sync-rules/{id}/destructive-toggles/preview.
     /// </summary>
     public OutboundDeprovisionAction? OutboundDeprovisionAction { get; set; }
 
@@ -148,4 +151,11 @@ public class UpdateSyncRuleRequest
     /// </summary>
     [StringLength(2000)]
     public string? ChangeReason { get; set; }
+
+    /// <summary>
+    /// The Configuration Change Preview this change was made after reading, where one was run
+    /// (the ActivityId returned by POST sync-rules/{id}/destructive-toggles/preview). Recorded on the
+    /// change's Activity so "previewed, then applied" is auditable rather than a claim.
+    /// </summary>
+    public Guid? PreviewActivityId { get; set; }
 }

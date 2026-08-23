@@ -125,16 +125,16 @@
     <value>..\Resources\Colours.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="Companies_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Companies.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+    <value>..\Resources\Companies.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="Departments_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Departments.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+    <value>..\Resources\Departments.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="FirstnamesFemale_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\FirstnamesFemale.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+    <value>..\Resources\FirstnamesFemale.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="FirstnamesMale_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\FirstnamesMale.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+    <value>..\Resources\FirstnamesMale.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="GroupNameEndings_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\GroupNameEndings.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
@@ -143,13 +143,13 @@
     <value>..\Resources\GroupStatuses.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="JobTitles_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\JobTitles.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+    <value>..\Resources\JobTitles.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="Lastnames_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Lastnames.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+    <value>..\Resources\Lastnames.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="Teams_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Teams.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;Windows-1252</value>
+    <value>..\Resources\Teams.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="UserStatuses_en" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\UserStatuses.en.txt;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>

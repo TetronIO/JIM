@@ -152,6 +152,51 @@ public class ConfigurationSnapshotServiceTests
         Assert.That(Child(flow, "initialExportOnly")!.Label, Is.EqualTo("Initial Export Only"));
     }
 
+    [Test]
+    public void CreateSnapshot_SyncRule_CapturesRuleDisabledReason()
+    {
+        // A rule disabled by the schema refresh decision (#1485) records why; the reason is configuration and
+        // must appear in the change history beside the Enabled toggle it explains.
+        var rule = new SyncRule
+        {
+            Id = 42,
+            Name = "Directory Computers Inbound",
+            Direction = SyncRuleDirection.Import,
+            Enabled = false,
+            DisabledReason = "Object Type 'computer' is no longer reported by the Connected System."
+        };
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        Assert.That(Child(snapshot.Root, "disabledReason")!.Value, Does.Contain("computer"));
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_CapturesMappingEnabledAndDisabledReason()
+    {
+        // A disabled mapping (#1485) stops flowing entirely, so the toggle and the recorded reason are
+        // configuration and must be snapshotted; without them a disable would diff as "no change".
+        var mapping = new SyncRuleMapping
+        {
+            Id = 100,
+            TargetMetaverseAttributeId = 5,
+            Enabled = false,
+            DisabledReason = "Attribute 'faxNumber' is no longer reported by the Connected System (schema refresh, 21 Aug 2026)."
+        };
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(flow, "enabled")!.Value, Is.EqualTo("false"));
+            Assert.That(Child(flow, "enabled")!.Label, Is.EqualTo("Enabled"));
+            Assert.That(Child(flow, "disabledReason")!.Value, Does.Contain("faxNumber"));
+        }
+    }
+
     /// <summary>
     /// A Synchronisation Rule now carries a secret: the one password an administrator chose for every account it
     /// provisions (#1273). Change history has to record that it changed, and only that; the ciphertext must not
@@ -800,6 +845,59 @@ public class ConfigurationSnapshotServiceTests
     }
 
     // -- helpers -------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_CapturesPasswordSynchronisationConfiguration()
+    {
+        // Password Synchronisation decides whether a person's password reaches this system at all, so switching it
+        // on or off, or changing how hard JIM tries, is exactly the kind of change a security officer will later
+        // need attributed to whoever made it.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3,
+            Name = "Corporate AD",
+            ConnectorDefinitionId = 4,
+            ObjectTypes = [new ConnectedSystemObjectType { Id = 7, Name = "user", Selected = true }],
+            PasswordSynchronisation = new ConnectedSystemPasswordSynchronisation
+            {
+                Id = 9,
+                ConnectedSystemId = 3,
+                Enabled = true,
+                TargetObjectTypeId = 7,
+                MaxRetries = 8,
+                RetryBackoffBase = TimeSpan.FromMinutes(15)
+            }
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+        var node = Child(snapshot.Root, "passwordSynchronisation");
+
+        Assert.That(node, Is.Not.Null, "Password Synchronisation settings must reach the configuration history.");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(node!, "enabled")!.Value, Is.EqualTo("true"));
+            Assert.That(Child(node!, "targetObjectTypeId")!.Value, Is.EqualTo("7"));
+            Assert.That(Child(node!, "targetObjectTypeId")!.DisplayValue, Is.EqualTo("user"),
+                "The history reads for a person, so the Object Type is named as well as identified.");
+            Assert.That(Child(node!, "maxRetries")!.Value, Is.EqualTo("8"));
+            Assert.That(Child(node!, "retryBackoffBase")!.Value, Is.EqualTo("00:15:00"));
+            Assert.That(Child(node!, "requireSecureTransport"), Is.Null,
+                "Require Secure Transport is a Connected System setting; it is recorded on the system's own node.");
+        }
+    }
+
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_WithoutPasswordSynchronisation_RecordsNothingForIt()
+    {
+        // Unconfigured is the state every system starts in; recording an empty node for it would put a line in
+        // every Connected System's creation history about a feature nobody has touched.
+        var connectedSystem = new ConnectedSystem { Id = 3, Name = "AD", ConnectorDefinitionId = 4 };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        Assert.That(Child(snapshot.Root, "passwordSynchronisation"), Is.Null);
+    }
 
     private static ConfigurationSnapshotNode? Child(ConfigurationSnapshotNode node, string key) =>
         node.Children?.FirstOrDefault(c => c.Key == key);

@@ -70,7 +70,7 @@ public class PredefinedSearchesControllerTests
     };
 
     [Test]
-    public async Task GetByIdAsync_WithExistingId_ReturnsOkWithEntityAsync()
+    public async Task GetByIdAsync_WithExistingId_ReturnsOkWithDtoAsync()
     {
         var existing = BuildSearch(7, isEnabled: true);
         _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(7)).ReturnsAsync(existing);
@@ -78,8 +78,9 @@ public class PredefinedSearchesControllerTests
         var result = await _controller.GetByIdAsync(7);
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
-        var okResult = (OkObjectResult)result;
-        Assert.That(okResult.Value, Is.SameAs(existing));
+        var dto = (PredefinedSearchDetailDto)((OkObjectResult)result).Value!;
+        Assert.That(dto.Id, Is.EqualTo(7));
+        Assert.That(dto.MetaverseObjectTypeName, Is.EqualTo("Person"));
     }
 
     [Test]
@@ -93,7 +94,7 @@ public class PredefinedSearchesControllerTests
     }
 
     [Test]
-    public async Task GetByUriAsync_WithExistingUri_ReturnsOkWithEntityAsync()
+    public async Task GetByUriAsync_WithExistingUri_ReturnsOkWithDtoAsync()
     {
         var existing = BuildSearch(7, isEnabled: true);
         _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync("people")).ReturnsAsync(existing);
@@ -101,8 +102,9 @@ public class PredefinedSearchesControllerTests
         var result = await _controller.GetByUriAsync("people");
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
-        var okResult = (OkObjectResult)result;
-        Assert.That(okResult.Value, Is.SameAs(existing));
+        var dto = (PredefinedSearchDetailDto)((OkObjectResult)result).Value!;
+        Assert.That(dto.Uri, Is.EqualTo("people"));
+        Assert.That(dto.MetaverseObjectTypeId, Is.EqualTo(1));
     }
 
     [Test]

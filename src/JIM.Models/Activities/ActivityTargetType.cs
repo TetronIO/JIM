@@ -97,10 +97,15 @@ public enum ActivityTargetType
     Authentication = 22,
 
     /// <summary>
-    /// A Metaverse Object Housekeeping batch (issue #1020): the worker's idle-time deletion of Metaverse Objects
+    /// A Scheduled Identity Deletion batch (issue #1020): the worker's idle-time deletion of Metaverse Objects
     /// whose deletion grace period has expired, including the reference-recall Pending Exports staged for objects
     /// (for example groups) that referenced them. Created only when a batch actually has work to do; a quiet idle
     /// tick records no Activity at all.
+    /// <para>
+    /// The member name says "Housekeeping" because this is a persisted enum stored by ordinal and its members are
+    /// append-only; the user-facing name is "Scheduled Identity Deletion", which says what the batch does rather
+    /// than which internal process does it. Never derive display text from the member name.
+    /// </para>
     /// </summary>
     MetaverseObjectHousekeeping = 23,
 
@@ -115,5 +120,18 @@ public enum ActivityTargetType
     /// pollute.
     /// </para>
     /// </summary>
-    ConnectedSystemObject = 24
+    ConnectedSystemObject = 24,
+
+    /// <summary>
+    /// A password change fanning out to the Connected Systems an identity has accounts in (#1119). Guid-keyed via
+    /// <see cref="Activity.MetaverseObjectId"/> on the parent, with a child Activity per target Connected System
+    /// carrying that system's outcome.
+    /// <para>
+    /// Its own target type, and its own category, so the Activities list can isolate password events with the
+    /// quick-filter it already has. Deliberately not <see cref="MetaverseObject"/>, which is categorised as
+    /// Identity Data and carries an identity's attribute change history: a password reaches no attribute and must
+    /// not appear among the changes to them.
+    /// </para>
+    /// </summary>
+    PasswordSynchronisation = 25
 }

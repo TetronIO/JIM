@@ -361,6 +361,12 @@ public class SyncExportTaskProcessor
         if (result.CouldNotOpenPasswordConnection)
             return $"Initial passwords: the password connection could not be opened; {result.PasswordConnectionErrorMessage}";
 
+        // Lead with this rather than reporting nothing delivered: the accounts are owed passwords and are not
+        // getting them, and the fix is a Connected System setting rather than anything about the accounts.
+        if (result.PasswordChannelNotSecure)
+            return "Initial passwords: this Connected System requires a secure transport for passwords and the " +
+                   "password connection is not encrypted, so none were sent";
+
         var parts = new List<string> { $"{result.DeliveredCount:N0} delivered" };
         if (result.ParkedCount > 0)
             parts.Add($"{result.ParkedCount:N0} needing attention");
@@ -372,6 +378,25 @@ public class SyncExportTaskProcessor
             parts.Add($"{result.ExpiredCount:N0} expired without one");
 
         return $"Initial passwords: {string.Join(", ", parts)}";
+    }
+
+    /// <summary>
+    /// The name behind each provisioning Synchronisation Rule id met this run, so a create's causal edge can
+    /// snapshot it (#1223). Loaded once, on the first create that names a rule: most export runs stage only
+    /// updates and never pay for the lookup. Includes disabled rules deliberately; the decision was made when
+    /// the rule was enabled, and the chain must still name it.
+    /// </summary>
+    private Dictionary<int, string>? _provisioningRuleNames;
+
+    private async Task<string?> ResolveProvisioningRuleNameAsync(int? provisioningSyncRuleId)
+    {
+        if (!provisioningSyncRuleId.HasValue)
+            return null;
+
+        _provisioningRuleNames ??= (await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, includeDisabled: true))
+            .ToDictionary(rule => rule.Id, rule => rule.Name);
+
+        return _provisioningRuleNames.GetValueOrDefault(provisioningSyncRuleId.Value);
     }
 
     /// <summary>
@@ -446,6 +471,7 @@ public class SyncExportTaskProcessor
             }
 
             // Build sync outcome. A deferred item wrote nothing, so there is no export outcome to record.
+            ActivityRunProfileExecutionItemSyncOutcome? exportOutcome = null;
             if (!exportItem.Deferred && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var outcomeType = exportItem.ChangeType switch
@@ -453,9 +479,15 @@ public class SyncExportTaskProcessor
                     PendingExportChangeType.Delete => ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned,
                     _ => ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 };
-                SyncOutcomeBuilder.AddRootOutcome(executionItem, outcomeType,
+                exportOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem, outcomeType,
                     detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null);
             }
+
+            // Record why this export happened (#1223). An export run knows only that it had a queue of changes
+            // to make; the synchronisation that put this one in the queue ran in a different Activity, and the
+            // Pending Export carrying the link is deleted moments from now.
+            ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, exportOutcome, _connectedSystem,
+                await ResolveProvisioningRuleNameAsync(exportItem.ProvisioningSyncRuleId));
 
             // Create CSO change record for export change history
             if (_csoChangeTrackingEnabled && exportItem.AttributeValueChanges.Count > 0)

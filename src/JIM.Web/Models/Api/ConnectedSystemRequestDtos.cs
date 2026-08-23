@@ -76,6 +76,17 @@ public class UpdateConnectedSystemRequest
     public TimeSpan? InitialPasswordTimeToLive { get; set; }
 
     /// <summary>
+    /// Whether to refuse to send a password to this Connected System over a connection JIM cannot confirm is
+    /// encrypted. Omitted or null leaves the current value unchanged; off when never set.
+    /// <para>
+    /// Off by default because a signed and sealed bind is a legitimate encrypted alternative that cannot be
+    /// detected from the Connected System's settings alone, so refusing on the settings would refuse a valid
+    /// configuration. Turning it on applies to every password JIM sends to this system.
+    /// </para>
+    /// </summary>
+    public bool? RequireSecureTransport { get; set; }
+
+    /// <summary>
     /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
     /// is treated: Error (default), Warn, or Ignore. Null or omitted leaves the current value unchanged.
     /// </summary>

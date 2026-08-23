@@ -266,7 +266,8 @@ public interface ISyncEngine
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
         IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
-        List<AttributeFlowError>? flowErrors = null);
+        List<AttributeFlowError>? flowErrors = null,
+        List<PendingExportAttributeValueChange>? noNetChangeSkipped = null);
 
     /// <summary>
     /// Decides the removal change a reference recall stages for one matched target row (#908/#1003): a

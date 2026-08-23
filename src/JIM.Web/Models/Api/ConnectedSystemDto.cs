@@ -34,6 +34,13 @@ public class ConnectedSystemDetailDto
     public TimeSpan? InitialPasswordTimeToLive { get; set; }
 
     /// <summary>
+    /// Whether JIM refuses to send a password to this Connected System over a connection it cannot confirm is
+    /// encrypted. Governs every password JIM sends here: the initial password on an account it provisions, one an
+    /// administrator sets by hand, and a synchronised password change.
+    /// </summary>
+    public bool RequireSecureTransport { get; set; }
+
+    /// <summary>
     /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
     /// is treated. Default is Error (current behaviour); Warn downgrades to an Activity warning; Ignore suppresses
     /// both the per-object error and the Activity warning while still logging the occurrence.
@@ -95,18 +102,30 @@ public class ConnectedSystemDetailDto
             SettingValuesValid = entity.SettingValuesValid,
             MaxExportParallelism = entity.MaxExportParallelism,
             InitialPasswordTimeToLive = entity.InitialPasswordTimeToLive,
+            RequireSecureTransport = entity.RequireSecureTransport,
             UnresolvedReferenceHandling = entity.UnresolvedReferenceHandling,
             Connector = new ConnectorReferenceDto
             {
                 Id = entity.ConnectorDefinition?.Id ?? 0,
                 Name = entity.ConnectorDefinition?.Name ?? string.Empty
             },
-            ObjectTypes = entity.ObjectTypes?
-                .Select(ConnectedSystemObjectTypeDto.FromEntity)
-                .ToList() ?? new(),
+            ObjectTypes = MapObjectTypes(entity.ObjectTypes),
             ObjectCount = objectCount,
             PendingExportCount = pendingExportCount
         };
+    }
+
+    /// <summary>
+    /// Maps the Object Types with their sibling names in hand, so a Reference attribute's declared target
+    /// (#1285) resolves to a name without the entity graph carrying a ReferencedObjectType navigation.
+    /// </summary>
+    private static List<ConnectedSystemObjectTypeDto> MapObjectTypes(List<ConnectedSystemObjectType>? objectTypes)
+    {
+        if (objectTypes == null)
+            return new();
+
+        var objectTypeNamesById = objectTypes.ToDictionary(ot => ot.Id, ot => ot.Name);
+        return objectTypes.Select(ot => ConnectedSystemObjectTypeDto.FromEntity(ot, objectTypeNamesById)).ToList();
     }
 }
 
@@ -148,7 +167,7 @@ public class ConnectedSystemObjectTypeDto
 
     public List<ConnectedSystemAttributeDto>? Attributes { get; set; }
 
-    public static ConnectedSystemObjectTypeDto FromEntity(ConnectedSystemObjectType entity)
+    public static ConnectedSystemObjectTypeDto FromEntity(ConnectedSystemObjectType entity, IReadOnlyDictionary<int, string>? objectTypeNamesById = null)
     {
         return new ConnectedSystemObjectTypeDto
         {
@@ -163,7 +182,7 @@ public class ConnectedSystemObjectTypeDto
                 .ToList(),
             IsInternal = entity.IsInternal(),
             Attributes = entity.Attributes?
-                .Select(ConnectedSystemAttributeDto.FromEntity)
+                .Select(attribute => ConnectedSystemAttributeDto.FromEntity(attribute, objectTypeNamesById))
                 .ToList()
         };
     }
@@ -219,7 +238,22 @@ public class ConnectedSystemAttributeDto
     /// </remarks>
     public string Writability { get; set; } = null!;
 
-    public static ConnectedSystemAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute entity)
+    /// <summary>
+    /// For a Reference attribute, the id of the Object Type this reference points at, when the Connected
+    /// System's schema declares one (the SQL Connector's <c>referencesObjectType</c>). Import reference
+    /// resolution resolves the reference within that Object Type alone; null means the schema does not say
+    /// and resolution requires the value to be unambiguous across Object Types.
+    /// </summary>
+    /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
+    public int? ReferencedObjectTypeId { get; set; }
+
+    /// <summary>
+    /// The name of the Object Type identified by <see cref="ReferencedObjectTypeId"/>, when declared.
+    /// </summary>
+    /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
+    public string? ReferencedObjectTypeName { get; set; }
+
+    public static ConnectedSystemAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute entity, IReadOnlyDictionary<int, string>? objectTypeNamesById = null)
     {
         return new ConnectedSystemAttributeDto
         {
@@ -235,8 +269,27 @@ public class ConnectedSystemAttributeDto
             IsExternalId = entity.IsExternalId,
             IsSecondaryExternalId = entity.IsSecondaryExternalId,
             SelectionLocked = entity.SelectionLocked,
-            Writability = entity.Writability.ToString()
+            Writability = entity.Writability.ToString(),
+            ReferencedObjectTypeId = entity.ReferencedObjectTypeId,
+            ReferencedObjectTypeName = ResolveReferencedObjectTypeName(entity, objectTypeNamesById)
         };
+    }
+
+    /// <summary>
+    /// Resolves the declared target's name from the sibling name dictionary when the caller has one, else
+    /// from the navigation if it happens to be loaded. The navigation is deliberately not eager-loaded by
+    /// the object type retrievals (#1285): under no-tracking queries a self-referencing Object Type would
+    /// materialise twice and an update's graph attach then fails on the duplicate key.
+    /// </summary>
+    private static string? ResolveReferencedObjectTypeName(ConnectedSystemObjectTypeAttribute entity, IReadOnlyDictionary<int, string>? objectTypeNamesById)
+    {
+        if (entity.ReferencedObjectTypeId is not { } referencedObjectTypeId)
+            return null;
+
+        if (objectTypeNamesById != null && objectTypeNamesById.TryGetValue(referencedObjectTypeId, out var name))
+            return name;
+
+        return entity.ReferencedObjectType?.Name;
     }
 }
 
