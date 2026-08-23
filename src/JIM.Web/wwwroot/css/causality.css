@@ -42,9 +42,12 @@
     --cz-chip-bg: color-mix(in srgb, var(--mud-palette-text-primary) 9%, transparent);
     --cz-mono: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
 
+    /* The panel is an ordinary JIM container and must look like every other one on the page: the
+       standard border colour and the container radius token, not the mock-up's own 14px and a
+       half-strength line. Its internals keep --cz-line-soft where a softer line is deliberate. */
     background: var(--cz-surface);
-    border: 1px solid var(--cz-line-soft);
-    border-radius: 14px;
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-radius: var(--jim-container-radius);
     overflow: hidden;
     color: var(--cz-text);
 }
