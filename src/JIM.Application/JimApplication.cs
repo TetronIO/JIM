@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Interfaces;
@@ -164,6 +164,7 @@ public class JimApplication : IDisposable
             // constructor, where Repository is not yet definitely assigned. It never does: the delegate exists
             // precisely so the repository is resolved when a password change is queued.
             () => Repository!.ConnectedSystems,
+            () => Repository!.Activity,
             () => (CredentialProtection as IPasswordProtectionService)
                   ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider()),
             // Connector resolution goes through the Connected System server so a Connector reached this way is
@@ -176,6 +177,7 @@ public class JimApplication : IDisposable
                 ? Activities.CreateActivityAsync(activity, initiatedByApiKey)
                 : Activities.CreateActivityAsync(activity, initiatedBy),
             activity => Activities.CompleteActivityAsync(activity),
+            (activity, errorMessage) => Activities.CompleteActivityWithErrorAsync(activity, errorMessage),
             // Null-forgiving for the same reason as the repository above: Tasking is assigned further down this
             // constructor, and the delegate is not called until a password change is queued or released.
             connectedSystemId => Tasking!.RequestPasswordDeliveryAsync(connectedSystemId, "Password Synchronisation"));

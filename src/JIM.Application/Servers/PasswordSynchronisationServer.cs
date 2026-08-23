@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Interfaces;
@@ -35,10 +35,12 @@ public class PasswordSynchronisationServer
 {
     private readonly ISyncRepository _syncRepo;
     private readonly Func<IConnectedSystemRepository> _connectedSystemRepo;
+    private readonly Func<IActivityRepository> _activityRepo;
     private readonly Func<IPasswordProtectionService> _passwordProtection;
     private readonly Func<ConnectedSystem, IConnector> _createConnector;
     private readonly Func<Activity, MetaverseObject?, ApiKey?, Task> _createActivity;
     private readonly Func<Activity, Task> _completeActivity;
+    private readonly Func<Activity, string, Task> _completeActivityWithError;
     private readonly Func<int?, Task> _requestDelivery;
 
     /// <param name="passwordProtection">
@@ -50,6 +52,11 @@ public class PasswordSynchronisationServer
     /// How to reach the Connected System repository, resolved when a change is queued rather than now, for the
     /// same reason as password protection: the facade's own repository properties are not populated until after
     /// this constructor has run, so anything read here would be the null that precedes them.
+    /// </param>
+    /// <param name="activityRepository">
+    /// How to reach the Activity repository, resolved on use rather than now, for the same reason as the
+    /// Connected System repository above. Read-only here: this server records Activities through the Activity
+    /// server's callbacks, and reaches the repository only to read an identity's password history back.
     /// </param>
     /// <param name="createConnector">
     /// Resolves a Connected System's Connector, already configured with credential protection and certificate
@@ -68,21 +75,30 @@ public class PasswordSynchronisationServer
     /// queue tells the worker there is something to do rather than leaving it to the next housekeeping tick.
     /// </param>
     /// <param name="completeActivity">Completes an Activity.</param>
+    /// <param name="completeActivityWithError">
+    /// Completes an Activity as a failure, carrying the reason. A separate delegate because a target refusing a
+    /// password is an operational outcome rather than a thrown exception: nothing here has an exception to pass,
+    /// and the outcome still has to be recorded as a failure rather than described in prose on a completed one.
+    /// </param>
     internal PasswordSynchronisationServer(
         ISyncRepository syncRepository,
         Func<IConnectedSystemRepository> connectedSystemRepository,
+        Func<IActivityRepository> activityRepository,
         Func<IPasswordProtectionService> passwordProtection,
         Func<ConnectedSystem, IConnector> createConnector,
         Func<Activity, MetaverseObject?, ApiKey?, Task> createActivity,
         Func<Activity, Task> completeActivity,
+        Func<Activity, string, Task> completeActivityWithError,
         Func<int?, Task> requestDelivery)
     {
         _syncRepo = syncRepository;
         _connectedSystemRepo = connectedSystemRepository;
+        _activityRepo = activityRepository;
         _passwordProtection = passwordProtection;
         _createConnector = createConnector;
         _createActivity = createActivity;
         _completeActivity = completeActivity;
+        _completeActivityWithError = completeActivityWithError;
         _requestDelivery = requestDelivery;
     }
 
@@ -466,6 +482,8 @@ public class PasswordSynchronisationServer
     /// </summary>
     private async Task RecordDeliveryOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, bool success)
     {
+        var failure = success ? null : DescribeFailure(connectedSystem, change);
+
         var activity = new Activity
         {
             TargetName = connectedSystem.Name,
@@ -480,10 +498,19 @@ public class PasswordSynchronisationServer
             MetaverseObjectId = change.MetaverseObjectId,
             Message = success
                 ? $"Password set on {connectedSystem.Name}."
-                : DescribeFailure(connectedSystem, change)
+                : failure
         };
 
         await _createActivity(activity, null, null);
+
+        // Completed, and completed as what it was. Creating an Activity sets it InProgress, so an outcome that is
+        // never completed sits in the Activities list looking like work still under way; and a refusal recorded
+        // only as prose in the Message is invisible to everything that counts, filters or alerts on outcomes,
+        // which is most of what an audit record is for (requirement 23).
+        if (success)
+            await _completeActivity(activity);
+        else
+            await _completeActivityWithError(activity, failure!);
     }
 
     private static string DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
@@ -648,6 +675,20 @@ public class PasswordSynchronisationServer
 
         return await _syncRepo.GetPendingPasswordChangeHeadersAsync(
             filter, startIndex, count, sortBy, sortDescending, includeTotalCount);
+    }
+
+    /// <summary>
+    /// One identity's most recent password changes and what each Connected System did with them (#1119,
+    /// requirement 25), newest change first.
+    /// <para>
+    /// Read from Activities rather than from the queue, deliberately. The queue row is deleted the moment the
+    /// password arrives, so a panel built on the queue would show an identity's failures and none of its
+    /// successes: the most misleading possible view of whether their password propagated.
+    /// </para>
+    /// </summary>
+    public async Task<List<PasswordSynchronisationEvent>> GetEventsForMetaverseObjectAsync(Guid metaverseObjectId, int maximumEvents)
+    {
+        return await _activityRepo().GetPasswordSynchronisationEventsAsync(metaverseObjectId, maximumEvents);
     }
 
     /// <summary>
