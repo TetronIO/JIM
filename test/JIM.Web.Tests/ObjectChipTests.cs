@@ -3,6 +3,7 @@
 
 using Bunit;
 using JIM.Web.Shared;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -84,6 +85,44 @@ public class ObjectChipTests : JimComponentTestContext
             // belongs on the link rather than the chip because it is the hover target.
             Assert.That(link.ClassList, Does.Contain("jim-chip-link"));
         }
+    }
+
+    [TestCase(ObjectChipKind.ConnectedSystem, "Connected System Object")]
+    [TestCase(ObjectChipKind.Metaverse, "Metaverse Object")]
+    public void ObjectChip_ByDefault_TooltipNamesTheSideTheAvatarAbbreviates(ObjectChipKind kind, string expected)
+    {
+        var cut = Render<ObjectChip>(p => p.Add(c => c.Kind, kind).Add(c => c.TypeName, "User"));
+
+        Assert.That(cut.FindComponent<MudTooltip>().Instance.Text, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ObjectChip_WithATooltip_UsesItInsteadOfTheDefault()
+    {
+        var cut = Render<ObjectChip>(p => p
+            .Add(c => c.Kind, ObjectChipKind.ConnectedSystem)
+            .Add(c => c.TypeName, "inetOrgPerson")
+            .Add(c => c.Tooltip, "Connected System Object in Yellowstone OpenLDAP"));
+
+        Assert.That(cut.FindComponent<MudTooltip>().Instance.Text,
+            Is.EqualTo("Connected System Object in Yellowstone OpenLDAP"));
+    }
+
+    [Test]
+    public void ObjectChip_WithHref_KeepsTheTooltipOutsideTheHoverTreatmentsSubtree()
+    {
+        // The tooltip renders an inline-flex box of its own. Nesting it between the link and the chip would
+        // sit a new box across the hover treatment's descendant selectors, so the link must stay the chip's
+        // direct ancestor; this pins the nesting rather than trusting the markup to stay that way.
+        var cut = Render<ObjectChip>(p => p
+            .Add(c => c.Kind, ObjectChipKind.ConnectedSystem)
+            .Add(c => c.TypeName, "inetOrgPerson")
+            .Add(c => c.Name, "abc")
+            .Add(c => c.Href, "/somewhere"));
+
+        var link = cut.Find("a.jim-chip-link");
+        Assert.That(link.QuerySelector(".mud-chip"), Is.Not.Null,
+            "the chip must remain inside the link that carries the hover treatment");
     }
 
     [Test]

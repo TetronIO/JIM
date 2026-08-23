@@ -11,16 +11,21 @@
 @* only, so every CS badge kept its resting colour on hover. Pending Export Detail rendered both, side by side, *@
 @* with nothing tying them together. See JIM.Web/CLAUDE.md "Shared UI components".                              *@
 
-@if (!string.IsNullOrEmpty(Href))
-{
-    <MudLink Href="@Href" Underline="Underline.None" Class="jim-chip-link">
+@* The tooltip wraps the LINK rather than the chip, and that nesting is load-bearing: MudTooltip renders an  *@
+@* inline-flex box of its own, and putting that between the link and the chip would sit a new box across the *@
+@* hover treatment's descendant selectors. Wrapping the whole link leaves jim-chip-link's subtree intact.    *@
+<MudTooltip Text="@EffectiveTooltip" Arrow="true" Placement="Placement.Top">
+    @if (!string.IsNullOrEmpty(Href))
+    {
+        <MudLink Href="@Href" Underline="Underline.None" Class="jim-chip-link">
+            @Chip
+        </MudLink>
+    }
+    else
+    {
         @Chip
-    </MudLink>
-}
-else
-{
-    @Chip
-}
+    }
+</MudTooltip>
 
 @code {
     /// <summary>
@@ -56,6 +61,17 @@ else
     /// </summary>
     [Parameter]
     public string? Class { get; set; }
+
+    /// <summary>
+    /// Optional tooltip. Defaults to naming the side the object sits on, which is the fact the avatar is
+    /// abbreviating and the one a reader cannot infer from a name or a GUID; pass a richer one where the call
+    /// site knows more (which Connected System the record lives in, say).
+    /// </summary>
+    [Parameter]
+    public string? Tooltip { get; set; }
+
+    private string EffectiveTooltip => Tooltip ??
+        (Kind == ObjectChipKind.Metaverse ? "Metaverse Object" : "Connected System Object");
 
     /// <summary>
     /// The avatar's colour by side. These are the two colours the hover rule in site.css recolours; changing one
