@@ -80,7 +80,7 @@ Everything a cause says was captured at the moment it happened: the causing obje
 
 The chain always says why it ends, as a quiet footer under the column it closes, because the three reasons mean entirely different things:
 
-- **End of the recorded causality chain**: nothing caused this. It is the whole story.
+- **No earlier causes recorded**: nothing caused this. It is the whole story.
 - **What caused this is no longer retained**: the causing record has aged out of Activity retention. This is expected rather than exceptional on a deployment that has been live longer than one retention window, and is shown calmly rather than as an error; the cause itself is still named, from the wording recorded at the time.
 - **More causes exist beyond this point**: the walk stopped at its depth bound, not at a real end. A chain that hit the bound anywhere says so above the canvas as well.
 

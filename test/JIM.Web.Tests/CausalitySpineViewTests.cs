@@ -202,7 +202,7 @@ public class CausalitySpineViewTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(endings, Has.Count.EqualTo(1));
-            Assert.That(endings[0].TextContent.Trim(), Is.EqualTo("End of the recorded causality chain"));
+            Assert.That(endings[0].TextContent.Trim(), Is.EqualTo("No earlier causes recorded"));
         }
     }
 
