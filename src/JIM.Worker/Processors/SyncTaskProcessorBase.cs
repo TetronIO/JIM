@@ -1482,7 +1482,7 @@ public abstract class SyncTaskProcessorBase
             // Scope is per rule, not per Connected System: a system may hold several import rules over the same
             // object type with different Scoping Criteria, which is the mechanism behind fine-grained authority
             // (a narrowly scoped rule taking authority for a subset of objects; see the worked example in
-            // engineering/plans/doing/ATTRIBUTE_PRIORITY.md). Flowing every rule regardless of its own scope
+            // engineering/plans/done/ATTRIBUTE_PRIORITY.md). Flowing every rule regardless of its own scope
             // would let a rule the object is explicitly excluded from contribute anyway, which both corrupts the
             // Attribute Priority resolution for that attribute and silently ignores the administrator's scope.
             // inScopeImportRules is already filtered to this CSO's type and direction (it derives from
