@@ -44,11 +44,12 @@ An execution item's detail page is split over tabs. **Overview** carries the ite
 
 The Overview tab opens with a causality panel that answers "what happened to this object, and what did it cause?" without any digging. A summary band leads with a single plain-English sentence describing the run's effect on the object, with every entity mentioned (Connected Systems, Identities, Synchronisation Rules) highlighted as a clickable token, and a strip of colour-coded outcome pills beneath it summarising the outcomes at a glance (for example "Identity created", "11 attributes flowed", "Export queued").
 
-Below the summary, the same chain of outcomes can be explored in three switchable views; the view you choose is remembered for your next visit:
+Below the summary, the story can be explored in two switchable views; the view you choose is remembered for your next visit:
 
-- **Flow**<br /> A left-to-right pipeline showing what happened, what JIM did, and what it caused, with downstream effects grouped per Connected System. The best starting point for understanding a typical import or synchronisation.
+- **Spine**<br /> The default: the object graph itself, as columns. Each record involved is a column with its Connected System named beneath it, the Identity is a column of its own, and the columns are joined by the relationships between them (imported, projected, joined, provisioned, exported), reading source to Identity to target. Every causally relevant event is a card on the column of the object it happened to: this run's own events stand out with an accent ring and a **This run** marker, while events from earlier runs render subdued beneath them, each carrying the kind of run that recorded it, its timestamp and a link to that run's own execution item. One canvas answers "what happened and why".
 - **Timeline**<br /> A vertical narrative read from top to bottom, with attribute change detail expanding inline beneath each event. Useful when you want the whole story, every attribute included, in one scroll.
-- **Graph**<br /> A node-and-edge rendering of the underlying outcome tree. Useful for seeing the branching structure of a complex causal chain in one picture.
+
+The same layout serves every kind of item by lighting a different column: an import lights the source record, a synchronisation lights the Identity (and any target records it staged exports for), and an export lights the target record. Wide stories scroll horizontally within the canvas, and on a narrow screen the columns stack vertically.
 
 Every event is named in plain language first (for example "Identity created") with the technical term alongside ("MVO Projected"); a technical-names toggle swaps the emphasis for practitioners who prefer the underlying vocabulary. Attribute change detail is built for scanning: each change carries a Set, Add or Remove operation badge and a monospace value (with the previous value struck through where one existed), and a search box plus count-annotated filter chips narrow large change sets quickly.
 
@@ -65,29 +66,29 @@ A queued deprovision is distinguished from an ordinary **Export queued** because
 !!! note "Applies to new runs"
     Outcomes recorded before this distinction existed remain as they were written, so a deprovisioning cascade on an older Activity still reads **Export queued**. Runs from this version onwards use the new outcome.
 
-A Deletion Rule that evaluates and decides *not* to delete records nothing, because nothing happened, so the causality views show an **Identity not deleted** step in the Identity column with the reason beside it ("an authoritative source is still connected"). The rule that decided it is available underneath as **Deletion Rule in force at the time**, collapsed, and is the rule as it was recorded at the moment of the decision rather than the object type's current configuration.
+A Deletion Rule that evaluates and decides *not* to delete records nothing, because nothing happened, so the causality views show an **Identity not deleted** step on the Identity column with the reason beside it ("an authoritative source is still connected"). The rule that decided it is available underneath as **Deletion Rule in force at the time**, collapsed, and is the rule as it was recorded at the moment of the decision rather than the object type's current configuration.
 
-### Caused by
+### Why it happened
 
-The causality panel answers "what did this run do?", reading downstream. Beneath it, **Caused by** answers the opposite question: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it.
+The Spine's subdued cards are the item's causal chain: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it, each cause placed on the column of the object it happened to rather than listed separately.
 
-Each step is a sentence rather than a diagram, for example "10 Users were deleted, so they were removed from Project Diamond's Static Members", with the relationship the cascade acted through picked out in colour. Objects removed for the same reason, on the same Connected System, through the same Synchronisation Rule read as one statement carrying a count instead of as ten near-identical rows; expanding it names each of them individually. Two independent causes converging on one effect stay as two, because a hidden second cause is precisely what an administrator needs to see.
+Each cause is a sentence rather than a diagram, for example "10 Users were deleted, so they were removed from Project Diamond's Static Members", with the relationship the cascade acted through picked out in colour. Objects removed for the same reason, on the same Connected System, through the same Synchronisation Rule read as one card carrying a count instead of as ten near-identical cards; expanding it in place names each of them individually. Two independent causes converging on one effect stay as two, because a hidden second cause is precisely what an administrator needs to see.
 
 Where JIM recorded why the cause itself happened, that follows as a second sentence, led by the Connected System responsible: "Yellowstone APAC was the last authoritative source to disconnect, so the Deletion Rule deleted them".
 
-Everything a step says was captured at the moment it happened: the causing object's name, its object type, the attribute, the Connected System and the Synchronisation Rule. A cause is by definition older than its effect, so the objects and records a chain names have very often been deleted, renamed, or aged out of history by the time anyone reads it; recording the wording alongside the link is what lets the chain still read correctly when they have.
+Everything a cause says was captured at the moment it happened: the causing object's name, its object type, the attribute, the Connected System and the Synchronisation Rule. A cause is by definition older than its effect, so the objects and records a chain names have very often been deleted, renamed, or aged out of history by the time anyone reads it; recording the wording alongside the link is what lets the chain still read correctly when they have. A deleted Identity still gets its column, named from those snapshots.
 
-The chain always says why it ends, because the three reasons mean entirely different things:
+The chain always says why it ends, as a quiet footer under the column it closes, because the three reasons mean entirely different things:
 
 - **End of the recorded causality chain**: nothing caused this. It is the whole story.
 - **What caused this is no longer retained**: the causing record has aged out of Activity retention. This is expected rather than exceptional on a deployment that has been live longer than one retention window, and is shown calmly rather than as an error; the cause itself is still named, from the wording recorded at the time.
-- **More causes exist beyond this point**: the walk stopped at its depth bound, not at a real end. A chain that hit the bound anywhere says so at the top as well.
+- **More causes exist beyond this point**: the walk stopped at its depth bound, not at a real end. A chain that hit the bound anywhere says so above the canvas as well.
 
 A cause that was recorded on a different execution item links to it, so a long chain can be walked one page at a time. A cause recorded on the item you are already looking at is shown without a link.
 
 #### Why an export happened
 
-An export run is the common case of a run whose reason lies elsewhere. It holds a queue of changes to make and nothing more; the synchronisation that decided on a given change ran in a different Activity, often days earlier. An export item therefore leads with what that synchronisation decided:
+An export run is the common case of a run whose reason lies elsewhere. It holds a queue of changes to make and nothing more; the synchronisation that decided on a given change ran in a different Activity, often days earlier. The same recorded decision is what lets an export outcome state what it actually did, **Record created**, **Changes applied** or **Record deleted**, rather than a bare "Exported". An export item leads with what that synchronisation decided:
 
 - A provisioning create reads "Mia Young was provisioned to Glitterband EMEA, so this run created the record", with the Synchronisation Rule that made the provisioning decision beside it.
 - An update reads "Mia Young's Identity changed, so this run applied the changes to the record".

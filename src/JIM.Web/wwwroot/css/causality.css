@@ -98,19 +98,10 @@
 .causality-panel .tl-expander:focus-visible,
 .causality-panel .filter-chips button:focus-visible,
 .causality-panel .evt-card:focus-visible,
-.causality-panel .g-node:focus-visible,
 .causality-panel .drawer-close:focus-visible,
 .causality-panel a:focus-visible {
     outline: 2px solid var(--cz-primary);
     outline-offset: 2px;
-}
-
-/* A focusable SVG node draws the browser's default focus ring on mouse :focus (a squared box that
-   pokes past the card's rounded corners, reading as a black border with white corners). Suppress it
-   for pointer focus only; the .selected accent already marks the choice, and keyboard focus keeps
-   the styled :focus-visible ring above for accessibility. */
-.causality-panel .g-node:focus:not(:focus-visible) {
-    outline: none;
 }
 
 .causality-panel .toggle-line {
@@ -381,109 +372,7 @@
     margin-top: 9px;
 }
 
-/* ─── Flow view ─── */
-
-.causality-panel .flow-scroller {
-    overflow-x: auto;
-    padding-bottom: 6px;
-}
-
-.causality-panel .flow-canvas {
-    position: relative;
-    min-width: 900px;
-}
-
-.causality-panel .flow-svg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    /* No viewBox on the element: user units are CSS pixels, so a canvas resize can never scale or
-       centre the drawn connectors. overflow keeps them visible while a re-measure is debouncing. */
-    overflow: visible;
-    pointer-events: none;
-    z-index: 0;
-}
-
-.causality-panel .flow-svg path {
-    fill: none;
-    stroke: var(--cz-line);
-    stroke-width: 1.6;
-}
-
-/* The dot masks the path beneath it rather than approximating the line's colour, so it can then be
-   painted in that colour exactly. The previous single dot was a hand-flattened guess (12% of the text
-   colour over the surface) which happened to land near the line in dark themes and well short of it in
-   light ones, where the line carries 28% alpha: the destination end of every connector read as a faded
-   smudge. There is no CSS that flattens a translucent colour against a background, hence two circles. */
-.causality-panel .flow-svg circle.flow-dot-mask {
-    fill: var(--cz-surface);
-    stroke: none;
-}
-
-.causality-panel .flow-svg circle.flow-dot {
-    fill: var(--cz-line);
-    stroke: none;
-}
-
-.causality-panel .flow-cols {
-    position: relative;
-    z-index: 1;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 0 72px;
-    align-items: start;
-}
-
-.causality-panel .flow-col {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    min-width: 0;
-}
-
-.causality-panel .flow-col-head {
-    font-size: 0.875rem;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-    font-weight: 650;
-    color: var(--cz-text-faint);
-    padding-bottom: 2px;
-    border-bottom: 1px solid var(--cz-line-soft);
-    margin-bottom: 4px;
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.causality-panel .flow-col-head .hint {
-    letter-spacing: 0;
-    text-transform: none;
-    font-weight: 450;
-    font-size: 0.875rem;
-    color: var(--cz-text-faint);
-}
-
-/* The connector overlay is drawn behind the columns, so every card masks the lines running under it with
-   its own background. This placeholder was the one piece of column content with no ground of its own, and
-   it sits in the lane a connector crosses when that lane is empty: the line was drawn straight through its
-   text. Giving it the same ground the cards have breaks the line around the words instead, so the phrase
-   reads as a label on the connector it interrupts, which is exactly what it is.
-
-   align-self keeps the ground the width of the text rather than the column (a full-width mask would erase
-   the connector across the whole lane), and the negative margin offsets the padding so the text still lines
-   up with the column heading above it. */
-.causality-panel .flow-empty {
-    align-self: flex-start;
-    padding: 6px 8px;
-    margin-left: -6px;
-    background: var(--cz-surface);
-    font-size: 1rem;
-    color: var(--cz-text-dim);
-}
-
-/* ─── Flow event cards ─── */
+/* ─── Event cards (this run's events, shared with the Timeline's detail) ─── */
 
 .causality-panel .evt-card {
     background: var(--cz-inner);
@@ -604,42 +493,6 @@
 
 .causality-panel .evt-foot a:hover {
     text-decoration: underline;
-}
-
-/* ─── Downstream Connected System groups ─── */
-
-.causality-panel .sys-group {
-    background: var(--cz-inner);
-    border: 1px solid var(--cz-line-soft);
-    border-radius: 12px;
-    overflow: hidden;
-}
-
-/* The accent rail continues through the header, so it runs the group's full height instead of
-   appearing to start below it, and the header's content lines up with the cards underneath (each of
-   which is inset by its own 3px rail; without this the header sat 3px to their left). Padding-left
-   drops by the rail's width to keep the content in the same place. */
-.causality-panel .sys-group-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 13px 9px 10px;
-    border-left: 3px solid var(--tone, var(--cz-secondary));
-    background: color-mix(in srgb, var(--mud-palette-text-primary) 7%, var(--cz-inner));
-    font-weight: 650;
-    font-size: 1rem;
-}
-
-.causality-panel .sys-group .evt-card {
-    border-radius: 0;
-    border: none;
-    border-left: 3px solid var(--tone, var(--cz-secondary));
-    border-top: 1px solid var(--cz-line-soft);
-    background: transparent;
-}
-
-.causality-panel .sys-group .evt-card:first-of-type {
-    border-top: none;
 }
 
 /* ─── Timeline view ─── */
@@ -833,87 +686,6 @@
     margin-top: 12px;
 }
 
-/* ─── Graph view ─── */
-
-.causality-panel .graph-scroller {
-    overflow-x: auto;
-    padding-bottom: 6px;
-}
-
-.causality-panel .graph-svg {
-    display: block;
-}
-
-.causality-panel .graph-svg .edge {
-    fill: none;
-    stroke: var(--cz-line);
-    stroke-width: 1.6;
-}
-
-.causality-panel .g-node {
-    cursor: pointer;
-}
-
-.causality-panel .g-node.static {
-    cursor: default;
-}
-
-.causality-panel .g-node rect.body {
-    fill: var(--cz-inner);
-    stroke: var(--cz-line-soft);
-    stroke-width: 1;
-    rx: 10;
-    transition: filter 0.15s;
-}
-
-.causality-panel .g-node:not(.static):hover rect.body {
-    filter: brightness(1.12);
-}
-
-.causality-panel .g-node.selected rect.body {
-    stroke: var(--cz-primary);
-    stroke-width: 1.8;
-}
-
-.causality-panel .g-node rect.accent {
-    rx: 1.5;
-}
-
-.causality-panel .g-node text {
-    fill: var(--cz-text);
-    font-size: 1rem;
-    font-weight: 600;
-    font-family: inherit;
-}
-
-.causality-panel .g-node text.sub {
-    fill: var(--cz-text-dim);
-    font-weight: 450;
-    font-size: 0.875rem;
-}
-
-.causality-panel .g-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-    margin-top: 14px;
-    font-size: 0.875rem;
-    color: var(--cz-text-dim);
-}
-
-.causality-panel .g-legend span {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.causality-panel .g-legend i {
-    width: 10px;
-    height: 10px;
-    border-radius: 3px;
-    display: inline-block;
-}
-
 /* ─── Attribute change detail ─── */
 
 .causality-panel .attr-toolbar {
@@ -965,7 +737,7 @@
     white-space: nowrap;
 }
 
-/* ─── Attribute detail drawer (Flow view) ─── */
+/* ─── Attribute detail drawer (Spine) ─── */
 
 .causality-panel .drawer {
     border-top: 1px solid var(--cz-line-soft);
@@ -1010,185 +782,6 @@
 
 .causality-panel .drawer-close:hover {
     color: var(--cz-text);
-}
-
-/* ─── Caused by: the upward causal chain (#1223) ─── */
-
-/* Reads as one continuous chain rather than as a stack of cards: a single rail runs down the left of
-   every level, and nesting indents against it, so a fork is visible as two rails leaving one point. */
-.causality-panel .caused-by {
-    border-top: 1px solid var(--cz-line-soft);
-    background: var(--cz-surface);
-    padding: 18px 24px 22px;
-}
-
-.causality-panel .cb-head {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
-}
-
-.causality-panel .cb-title {
-    font-weight: 650;
-    font-size: 1rem;
-}
-
-.causality-panel .cb-truncated {
-    font-size: 0.875rem;
-    color: var(--cz-text-faint);
-}
-
-.causality-panel .cb-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.causality-panel .cb-hop {
-    position: relative;
-    padding: 0 0 14px 20px;
-    border-left: 2px solid var(--cz-line-soft);
-}
-
-/* The last hop of a level stops its rail at its own content, so the line does not trail into
-   whitespace below the chain */
-.causality-panel .cb-hop:last-child {
-    border-left-color: transparent;
-    padding-bottom: 0;
-}
-
-/* ...but it still has to reach its own marker from the hop above, or the rail breaks at the last
-   step. A lone hop has nothing above it to join, so it gets no stub. */
-.causality-panel .cb-hop:last-child:not(:first-child)::after {
-    content: "";
-    position: absolute;
-    left: -2px;
-    top: 0;
-    bottom: calc(100% - 11px);
-    border-left: 2px solid var(--cz-line-soft);
-}
-
-.causality-panel .cb-hop::before {
-    content: "";
-    position: absolute;
-    left: -5px;
-    top: 5px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--cz-line);
-    z-index: 1;
-}
-
-.causality-panel .cb-sentence {
-    font-size: 0.9375rem;
-    line-height: 1.45;
-    color: var(--cz-text);
-}
-
-/* The relationship the cascade acted through, highlighted by colour rather than weight: it is the one
-   span an administrator scans for, and bolding it fights the sentence carrying it. */
-.causality-panel .cb-attr {
-    color: var(--cz-primary-text);
-}
-
-.causality-panel .cb-meta {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px 10px;
-    margin-top: 7px;
-}
-
-.causality-panel .cb-reason {
-    font-size: 0.875rem;
-    color: var(--cz-text-faint);
-}
-
-/* The link sits on its own row rather than trailing the reason, so the chip and reason read as the one
-   sentence they are. Tighter above than .cb-meta because it belongs to the hop, not to a new thought. */
-.causality-panel .cb-actions {
-    margin-top: 5px;
-}
-
-.causality-panel .cb-link {
-    font-size: 0.875rem;
-    color: var(--cz-primary-text);
-    text-decoration: none;
-    font-weight: 550;
-}
-
-.causality-panel .cb-link:hover {
-    text-decoration: underline;
-}
-
-/* Every terminal state is calm neutral, never amber: a chain that ends because history aged out is the
-   expected outcome of any deployment older than its retention window, not a fault to be flagged. */
-.causality-panel .cb-end {
-    display: inline-block;
-    margin-top: 7px;
-    font-size: 0.875rem;
-    color: var(--cz-text-faint);
-}
-
-.causality-panel .cb-members-toggle {
-    display: inline-flex;
-    align-items: center;
-    margin-top: 9px;
-    border: 1px solid var(--cz-line);
-    background: transparent;
-    color: var(--cz-text-dim);
-    font-size: 0.875rem;
-    font-weight: 550;
-    font-family: inherit;
-    padding: 4px 11px;
-    border-radius: 999px;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-}
-
-.causality-panel .cb-members-toggle:hover,
-.causality-panel .cb-members-toggle.on {
-    background: var(--cz-inner);
-    color: var(--cz-text);
-}
-
-.causality-panel .cb-members-toggle:focus-visible {
-    outline: 2px solid var(--cz-primary);
-    outline-offset: 2px;
-}
-
-.causality-panel .cb-members {
-    list-style: none;
-    margin: 10px 0 0;
-    padding: 0;
-}
-
-.causality-panel .cb-member {
-    padding: 0 0 10px 14px;
-    border-left: 1px solid var(--cz-line-soft);
-}
-
-.causality-panel .cb-member:last-child {
-    padding-bottom: 0;
-}
-
-.causality-panel .cb-member-head {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px 10px;
-}
-
-.causality-panel .cb-member-name {
-    font-size: 0.9375rem;
-    font-weight: 550;
-}
-
-.causality-panel .cb-nested {
-    margin-top: 10px;
 }
 
 /* ─── Responsive ─── */
@@ -1327,6 +920,12 @@
     line-height: 1.5;
 }
 
+/* The reference attribute a cascade acted through, highlighted so the relationship stands
+   out from the sentence carrying it. */
+.causality-panel .sp-attr {
+    color: var(--cz-primary-text);
+}
+
 .causality-panel .sp-meta {
     display: flex;
     align-items: center;
@@ -1458,20 +1057,7 @@
 }
 
 @media (max-width: 820px) {
-    .causality-panel .flow-cols {
-        grid-template-columns: 1fr;
-        gap: 18px;
-    }
-
-    .causality-panel .flow-canvas {
-        min-width: 0;
-    }
-
-    .causality-panel .flow-svg {
-        display: none;
-    }
-
-    /* Narrow viewports stack the spine's columns, mirroring the Flow view; !important because the
+    /* Narrow viewports stack the spine's columns; !important because the
        grid template arrives as an inline style (the column count is data). */
     .causality-panel .sp-canvas {
         grid-template-columns: 1fr !important;

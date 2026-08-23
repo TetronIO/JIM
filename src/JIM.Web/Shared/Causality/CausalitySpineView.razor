@@ -24,10 +24,13 @@
             @if (i > 0)
             {
                 var join = Model.Joins[i - 1];
+                @* A join with no relationship (the trailing column, or two records adjacent with no
+                   Identity between them) is an empty gutter: an arrow would claim a relationship the
+                   model does not state. *@
                 <div class="sp-join" @key="@($"join-{i}")">
-                    <span class="sp-join-arrow" aria-hidden="true">&rarr;</span>
                     @if (join.Label != null)
                     {
+                        <span class="sp-join-arrow" aria-hidden="true">&rarr;</span>
                         <span class="sp-join-label">@join.Label</span>
                     }
                 </div>

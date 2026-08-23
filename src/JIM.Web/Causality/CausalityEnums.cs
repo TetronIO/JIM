@@ -18,8 +18,10 @@ public enum CausalityTone
 }
 
 /// <summary>
-/// The column a causality event belongs to in the Flow view: what happened (Source), what JIM did
-/// (Identity), and what it caused (Downstream).
+/// Which side of the story a causality event belongs to: what happened (Source), what JIM did
+/// (Identity), and what it caused (Downstream). The spine builder projects lanes onto object
+/// columns: Identity-lane events land on the Identity, the rest on the record of their owning
+/// system.
 /// </summary>
 public enum CausalityLane
 {
@@ -29,15 +31,14 @@ public enum CausalityLane
 }
 
 /// <summary>
-/// The toggleable causality visualisation views. Timeline shipped first; Flow and Graph followed by
-/// adding themselves to <c>CausalityPanel</c>'s available-view list, and Spine (#1495) is set to
-/// replace Flow and Graph as the default once verified.
+/// The toggleable causality visualisation views: the Spine (the object graph with every causally
+/// relevant event on the object it happened to; the default) and the Timeline (strict chronological
+/// reading). The Flow and Graph views the panel launched with were retired when the Spine replaced
+/// them (#1495); their stored preference keys fall back to the default.
 /// </summary>
 public enum CausalityView
 {
-    Flow,
     Timeline,
-    Graph,
     Spine
 }
 

@@ -5,7 +5,9 @@ namespace JIM.Web.Causality;
 
 /// <summary>
 /// Converts between <see cref="CausalityView"/> values and the lowercase string keys the user
-/// preference store persists ("flow" | "timeline" | "graph" | "spine").
+/// preference store persists ("spine" | "timeline"). The retired Flow and Graph views' keys
+/// ("flow", "graph") deliberately map to null, so a preference stored before their retirement
+/// resolves to the panel's default without being overwritten.
 /// </summary>
 public static class CausalityViewPreference
 {
@@ -16,23 +18,19 @@ public static class CausalityViewPreference
     {
         return view switch
         {
-            CausalityView.Flow => "flow",
-            CausalityView.Graph => "graph",
             CausalityView.Spine => "spine",
             _ => "timeline"
         };
     }
 
     /// <summary>
-    /// Maps a stored preference key back to its view; null for unknown or missing values.
+    /// Maps a stored preference key back to its view; null for unknown, retired or missing values.
     /// </summary>
     public static CausalityView? FromKey(string? key)
     {
         return key switch
         {
-            "flow" => CausalityView.Flow,
             "timeline" => CausalityView.Timeline,
-            "graph" => CausalityView.Graph,
             "spine" => CausalityView.Spine,
             _ => null
         };

@@ -8,13 +8,15 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The causality visualisation panel for a Run Profile Execution Item. Owns the current view, the
-   technical-names toggle, the Timeline's expanded event and the Flow and Graph views' selected
-   event (whose attribute detail renders in the shared bottom drawer); builds the causality model
-   and summary once per (Item, Context) pair and renders the summary band (whose head row carries
-   the view switcher and technical-names toggle in its Actions slot), the active view and the
-   drawer. Persisted view and technical-names preferences load on first render per the
-   TableDensityToggle idiom; the Flow view is the default, and a stored preference for an unknown
-   view falls back to it without being overwritten. *@
+   technical-names toggle, the Timeline's expanded event and the Spine's selected event (whose
+   attribute detail renders in the shared bottom drawer); builds the causality and spine models and
+   the summary once per (Item, Context, Chain) tuple and renders the summary band (whose head row
+   carries the view switcher and technical-names toggle in its Actions slot), the active view and
+   the drawer. Persisted view and technical-names preferences load on first render per the
+   TableDensityToggle idiom; the Spine is the default, and a stored preference for an unknown or
+   retired view (the old Flow and Graph keys included) falls back to it without being overwritten.
+   The causal chain renders on the Spine itself (#1495); the separate Caused by list retired with
+   the Flow and Graph views. *@
 
 <div class="causality-panel">
     @if (Item.SyncOutcomes.Count == 0)
@@ -53,14 +55,6 @@
         <div class="canvas-wrap">
             @switch (_view)
             {
-                case CausalityView.Flow:
-                    <CausalityFlowView Model="_model" TechnicalNames="_technicalNames"
-                                       @bind-SelectedEvent="_selectedEvent" />
-                    break;
-                case CausalityView.Graph:
-                    <CausalityGraphView Model="_model" TechnicalNames="_technicalNames"
-                                        @bind-SelectedEvent="_selectedEvent" />
-                    break;
                 case CausalityView.Spine when _spineModel is { } spineModel:
                     <CausalitySpineView Model="spineModel" TechnicalNames="_technicalNames"
                                         @bind-SelectedEvent="_selectedEvent" />
@@ -73,7 +67,7 @@
             }
         </div>
 
-        @* ─── Bottom drawer: attribute detail for the Flow/Graph views' selected event ─── *@
+        @* ─── Bottom drawer: attribute detail for the Spine's selected event ─── *@
         @if (_view != CausalityView.Timeline && _selectedEvent is { } selectedEvent && selectedEvent.AttributeRows.Count > 0)
         {
             <div class="drawer">
@@ -92,16 +86,6 @@
                 </div>
             </div>
         }
-
-        @* ─── The upward chain: what caused this item, and what caused that ─── *@
-        @* Sits below the canvas and its drawer, so the panel reads downstream-first (what this run did)
-           then upstream (why it happened). Renders nothing when nothing caused the item, which is the
-           ordinary case. The Spine view renders the chain on its own canvas (#1495), so the separate
-           list would say everything twice; it stays with the older views until they retire. *@
-        @if (_view != CausalityView.Spine)
-        {
-            <CausalityCausedBy Chain="Chain" EffectName="@Context.CsoDisplayName" EffectItemId="Item.Id" />
-        }
     }
 </div>
 
@@ -111,7 +95,7 @@
     /// when its view appears here.
     /// </summary>
     private static readonly IReadOnlyList<CausalityView> AvailableViews =
-        [CausalityView.Flow, CausalityView.Timeline, CausalityView.Graph, CausalityView.Spine];
+        [CausalityView.Spine, CausalityView.Timeline];
 
     /// <summary>
     /// The Run Profile Execution Item whose causality is visualised.
@@ -143,9 +127,10 @@
     public DateTime? Timestamp { get; set; }
 
     /// <summary>
-    /// The upward causal walk for this item, or null when the host page did not resolve one. Owned by the
-    /// page rather than fetched here: the panel is a rendering component with no data access of its own,
-    /// and the walk is one query the page already has an application scope open for.
+    /// The upward causal walk for this item, or null when the host page did not resolve one. Owned by
+    /// the page rather than fetched here: the panel is a rendering component with no data access of
+    /// its own, and the walk is one query the page already has an application scope open for. Feeds
+    /// the Spine's chain cards and the export decision captions (#1495).
     /// </summary>
     [Parameter]
     public CausalChain? Chain { get; set; }
@@ -168,7 +153,7 @@
     private CausalityModel? _model;
     private CausalitySummary? _summary;
     private CausalitySpineModel? _spineModel;
-    private CausalityView _view = CausalityView.Flow;
+    private CausalityView _view = CausalityView.Spine;
     private bool _technicalNames;
     private CausalityEvent? _expandedEvent;
     private CausalityEvent? _selectedEvent;
@@ -181,8 +166,8 @@
     {
         // Build once per (Item, Context, Chain) tuple; parent re-renders with unchanged values must
         // not discard the expanded/selected-event state by rebuilding the model. The chain is an
-        // input now (#1495): it supplies the export decision captions and the spine's chain cards,
-        // and the page resolves it after the first render, so its arrival must rebuild.
+        // input (#1495): it supplies the export decision captions and the Spine's chain cards, and
+        // the page resolves it after the first render, so its arrival must rebuild.
         if (ReferenceEquals(Item, _builtItem) && Equals(Context, _builtContext)
             && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds)
             && ReferenceEquals(Chain, _builtChain))
@@ -209,8 +194,8 @@
         var storedView = CausalityViewPreference.FromKey(await PreferenceService.GetCausalityViewAsync());
         var storedTechNames = await PreferenceService.GetCausalityTechNamesAsync();
 
-        // A stored preference for a view that has not shipped keeps the default without
-        // overwriting the stored value, so it takes effect if that view becomes available
+        // A stored preference for an unknown or retired view keeps the default without overwriting
+        // the stored value; the old Flow and Graph keys land here deliberately (#1495)
         if (storedView.HasValue && AvailableViews.Contains(storedView.Value))
             _view = storedView.Value;
 
@@ -259,8 +244,6 @@
     {
         return view switch
         {
-            CausalityView.Flow => "Flow",
-            CausalityView.Graph => "Graph",
             CausalityView.Spine => "Spine",
             _ => "Timeline"
         };

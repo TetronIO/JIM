@@ -245,4 +245,30 @@ public class CausalitySpineViewTests
         Assert.That(cut.FindAll(".sp-join-label").Select(l => l.TextContent.Trim()),
             Is.EqualTo(new[] { "imported", "provisioned" }));
     }
+
+    [Test]
+    public void Render_JoinWithNoRelationship_IsAnEmptyGutterNotABareArrow()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0);
+        var chain = CausalityTestData.Chain(ExportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                (CausalEdgeType)99,
+                members: CausalityTestData.Member("Mystery cause", Guid.NewGuid(),
+                    CausalChainResolution.NoFurtherCauses)));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
+        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+
+        var cut = RenderSpine(spine);
+
+        // The record column and the trailing unassigned column are adjacent but unrelated: an arrow
+        // between them would claim a relationship the model does not state.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll(".sp-join"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll(".sp-join-arrow"), Is.Empty);
+            Assert.That(cut.FindAll(".sp-join-label"), Is.Empty);
+        }
+    }
 }

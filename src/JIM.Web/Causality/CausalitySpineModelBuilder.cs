@@ -310,12 +310,11 @@ public static class CausalitySpineModelBuilder
     /// </summary>
     private static ColumnHead GetIdentityHead(ColumnState state, CausalChain? chain)
     {
-        foreach (var causalityEvent in state.ThisRunEvents)
-        {
-            var identityLink = causalityEvent.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
-            if (identityLink != null && !string.IsNullOrWhiteSpace(identityLink.Label))
-                return new ColumnHead(identityLink.Label, IsRoleHead: false, identityLink.Href, ObjectTypeName: null);
-        }
+        var identityLink = state.ThisRunEvents
+            .SelectMany(e => e.Links)
+            .FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity && !string.IsNullOrWhiteSpace(l.Label));
+        if (identityLink != null)
+            return new ColumnHead(identityLink.Label, IsRoleHead: false, identityLink.Href, ObjectTypeName: null);
 
         var soleName = state.Hops.OrderBy(h => h.Sequence)
             .Where(h => h.Hop.Cohort.MemberCount == 1)

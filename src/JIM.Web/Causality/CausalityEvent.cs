@@ -56,7 +56,7 @@ public sealed class CausalityEvent
     public string Icon { get; init; } = string.Empty;
 
     /// <summary>
-    /// The Flow view column this event belongs to.
+    /// Which side of the story this event belongs to, driving its spine column assignment.
     /// </summary>
     public CausalityLane Lane { get; init; }
 
