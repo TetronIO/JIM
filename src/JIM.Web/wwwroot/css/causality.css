@@ -740,7 +740,7 @@
     white-space: nowrap;
 }
 
-/* ─── Attribute detail drawer (Spine) ─── */
+/* ─── Attribute detail drawer (Lineage) ─── */
 
 .causality-panel .drawer {
     border-top: 1px solid var(--cz-line-soft);
@@ -789,15 +789,15 @@
 
 /* ─── Responsive ─── */
 
-/* ─── Spine view (#1495) ─── */
+/* ─── Lineage view (#1495) ─── */
 
 /* Wide stories scroll horizontally inside the scroller; the page body never scrolls sideways. */
-.causality-panel .sp-scroller {
+.causality-panel .ln-scroller {
     overflow-x: auto;
     padding: 18px;
 }
 
-.causality-panel .sp-truncated {
+.causality-panel .ln-truncated {
     font-size: 0.8125rem;
     color: var(--cz-text-dim);
     margin-bottom: 12px;
@@ -805,12 +805,12 @@
 
 /* Column and join tracks come inline from the view (the column count is data), so the stylesheet
    owns everything but the template. */
-.causality-panel .sp-canvas {
+.causality-panel .ln-canvas {
     display: grid;
     align-items: start;
 }
 
-.causality-panel .sp-col {
+.causality-panel .ln-col {
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -819,7 +819,7 @@
 
 /* ─── Column heads: the object, never its system ─── */
 
-.causality-panel .sp-obj {
+.causality-panel .ln-obj {
     border: 1px solid var(--cz-line);
     border-radius: 10px;
     padding: 9px 12px;
@@ -834,7 +834,7 @@
 
 /* The head's R/ID chip: square-cornered so heads read as objects rather than as the round entity
    chips on cards, but coloured identically so the vocabulary stays one vocabulary. */
-.causality-panel .sp-obj .glyph {
+.causality-panel .ln-obj .glyph {
     width: 22px;
     height: 22px;
     border-radius: 6px;
@@ -849,30 +849,30 @@
     color: var(--mud-palette-secondary-text, #fff);
 }
 
-.causality-panel .sp-obj .glyph.rec {
+.causality-panel .ln-obj .glyph.rec {
     background: var(--cz-secondary);
     color: var(--mud-palette-secondary-text, #fff);
 }
 
-.causality-panel .sp-obj .glyph.idn {
+.causality-panel .ln-obj .glyph.idn {
     background: var(--cz-primary);
     color: var(--mud-palette-primary-text, #fff);
 }
 
-.causality-panel .sp-obj-title {
+.causality-panel .ln-obj-title {
     color: var(--cz-text);
     overflow-wrap: anywhere;
 }
 
-.causality-panel a.sp-obj-title {
+.causality-panel a.ln-obj-title {
     text-decoration: none;
 }
 
-.causality-panel a.sp-obj-title:hover {
+.causality-panel a.ln-obj-title:hover {
     text-decoration: underline;
 }
 
-.causality-panel .sp-obj-sub {
+.causality-panel .ln-obj-sub {
     width: 100%;
     font-weight: 400;
     font-size: 0.8rem;
@@ -881,7 +881,7 @@
 
 /* ─── Joins: the labelled relationships between adjacent objects ─── */
 
-.causality-panel .sp-join {
+.causality-panel .ln-join {
     align-self: stretch;
     display: flex;
     flex-direction: column;
@@ -889,13 +889,13 @@
     padding-top: 14px;
 }
 
-.causality-panel .sp-join-arrow {
+.causality-panel .ln-join-arrow {
     color: var(--cz-text-dim);
     font-size: 1.1rem;
     line-height: 1;
 }
 
-.causality-panel .sp-join-label {
+.causality-panel .ln-join-label {
     writing-mode: vertical-rl;
     font-size: 0.7rem;
     letter-spacing: 0.08em;
@@ -908,9 +908,9 @@
 
 /* Subdued is quiet chrome (flat surface, soft border, no tone rail), never reduced opacity: the
    sentence keeps --cz-text so it meets WCAG AA without interaction. This run's cards are the shared
-   .evt-card inside .sp-now, which keeps its recessed surface and gains the accent ring, so the two
+   .evt-card inside .ln-now, which keeps its recessed surface and gains the accent ring, so the two
    registers are unmistakable side by side. */
-.causality-panel .sp-card {
+.causality-panel .ln-card {
     border: 1px solid var(--cz-line-soft);
     border-radius: 10px;
     padding: 9px 12px;
@@ -918,18 +918,18 @@
     font-size: 0.875rem;
 }
 
-.causality-panel .sp-sentence {
+.causality-panel .ln-sentence {
     color: var(--cz-text);
     line-height: 1.5;
 }
 
 /* The reference attribute a cascade acted through, highlighted so the relationship stands
    out from the sentence carrying it. */
-.causality-panel .sp-attr {
+.causality-panel .ln-attr {
     color: var(--cz-primary-text);
 }
 
-.causality-panel .sp-meta {
+.causality-panel .ln-meta {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -937,12 +937,12 @@
     margin-top: 6px;
 }
 
-.causality-panel .sp-reason {
+.causality-panel .ln-reason {
     font-size: 0.8125rem;
     color: var(--cz-text-dim);
 }
 
-.causality-panel .sp-when {
+.causality-panel .ln-when {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -950,7 +950,7 @@
     margin-top: 6px;
 }
 
-.causality-panel .sp-runchip {
+.causality-panel .ln-runchip {
     font-size: 0.72rem;
     color: var(--cz-text-dim);
     background: var(--cz-chip-bg);
@@ -958,29 +958,29 @@
     padding: 1px 7px;
 }
 
-.causality-panel .sp-time {
+.causality-panel .ln-time {
     font-size: 0.75rem;
     color: var(--cz-text-dim);
 }
 
-.causality-panel .sp-actions {
+.causality-panel .ln-actions {
     margin-top: 5px;
 }
 
-.causality-panel .sp-link {
+.causality-panel .ln-link {
     font-size: 0.8125rem;
     color: var(--cz-info);
     text-decoration: none;
 }
 
-.causality-panel .sp-link:hover {
+.causality-panel .ln-link:hover {
     text-decoration: underline;
 }
 
 /* ─── Cohort expansion ─── */
 
 /* The same pill as the Caused by list's disclosure, so the affordance survives the migration. */
-.causality-panel .sp-members-toggle {
+.causality-panel .ln-members-toggle {
     display: inline-flex;
     align-items: center;
     align-self: flex-start;
@@ -997,13 +997,13 @@
     transition: background 0.15s, color 0.15s;
 }
 
-.causality-panel .sp-members-toggle:hover,
-.causality-panel .sp-members-toggle.on {
+.causality-panel .ln-members-toggle:hover,
+.causality-panel .ln-members-toggle.on {
     background: var(--cz-inner);
     color: var(--cz-text);
 }
 
-.causality-panel .sp-members {
+.causality-panel .ln-members {
     list-style: none;
     margin: 6px 0 0;
     padding: 0 0 0 2px;
@@ -1012,7 +1012,7 @@
     gap: 4px;
 }
 
-.causality-panel .sp-member {
+.causality-panel .ln-member {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
@@ -1020,18 +1020,18 @@
     font-size: 0.8125rem;
 }
 
-.causality-panel .sp-member-name {
+.causality-panel .ln-member-name {
     color: var(--cz-text);
 }
 
 /* ─── This run: the primary register ─── */
 
-.causality-panel .sp-now .evt-card {
+.causality-panel .ln-now .evt-card {
     border-color: var(--cz-primary);
     box-shadow: 0 0 0 1px var(--cz-primary), 0 0 0 5px var(--cz-primary-soft);
 }
 
-.causality-panel .sp-now-badge {
+.causality-panel .ln-now-badge {
     display: inline-block;
     font-size: 0.66rem;
     font-weight: 700;
@@ -1046,28 +1046,28 @@
 
 /* ─── Endings: quiet footers, never warnings ─── */
 
-.causality-panel .sp-end {
+.causality-panel .ln-end {
     font-size: 0.8125rem;
     color: var(--cz-text-dim);
     padding: 0 2px;
 }
 
-.causality-panel .sp-members-toggle:focus-visible,
-.causality-panel .sp-link:focus-visible {
+.causality-panel .ln-members-toggle:focus-visible,
+.causality-panel .ln-link:focus-visible {
     outline: 2px solid var(--cz-primary);
     outline-offset: 2px;
     border-radius: 4px;
 }
 
 @media (max-width: 820px) {
-    /* Narrow viewports stack the spine's columns; !important because the
+    /* Narrow viewports stack the lineage's columns; !important because the
        grid template arrives as an inline style (the column count is data). */
-    .causality-panel .sp-canvas {
+    .causality-panel .ln-canvas {
         grid-template-columns: 1fr !important;
         gap: 14px;
     }
 
-    .causality-panel .sp-join {
+    .causality-panel .ln-join {
         flex-direction: row;
         align-items: center;
         justify-content: flex-start;
@@ -1075,11 +1075,11 @@
         padding-top: 0;
     }
 
-    .causality-panel .sp-join-arrow {
+    .causality-panel .ln-join-arrow {
         transform: rotate(90deg);
     }
 
-    .causality-panel .sp-join-label {
+    .causality-panel .ln-join-label {
         writing-mode: horizontal-tb;
         margin-top: 0;
     }

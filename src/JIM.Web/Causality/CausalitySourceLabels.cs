@@ -12,7 +12,7 @@ namespace JIM.Web.Causality;
 /// it has no <see cref="CausalityEvent"/> to carry a plain and technical label the way every other row does,
 /// and the views previously hard-coded the plain wording. That made the toggle a half-truth: it swapped
 /// every row except the first one on screen. The retired Flow and Graph views shared this class too (its
-/// <c>Title</c> retired with them); the Spine names objects from the model instead.
+/// <c>Title</c> retired with them); the Lineage names objects from the model instead.
 /// </remarks>
 public static class CausalitySourceLabels
 {

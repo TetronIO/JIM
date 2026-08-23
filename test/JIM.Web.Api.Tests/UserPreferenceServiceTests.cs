@@ -980,7 +980,7 @@ public class UserPreferenceServiceTests
 
     [Test]
     [TestCase("timeline")]
-    [TestCase("spine")]
+    [TestCase("lineage")]
     public async Task GetCausalityViewAsync_WhenValidValueStored_ReturnsStoredValueAsync(string storedValue)
     {
         // Arrange
@@ -1054,7 +1054,7 @@ public class UserPreferenceServiceTests
 
     [Test]
     [TestCase("timeline")]
-    [TestCase("spine")]
+    [TestCase("lineage")]
     public async Task SetCausalityViewAsync_WithValidValue_StoresValueAsync(string view)
     {
         // Arrange

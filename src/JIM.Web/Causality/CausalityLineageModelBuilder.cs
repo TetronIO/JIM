@@ -9,15 +9,15 @@ using JimUtilities = JIM.Utilities.Utilities;
 namespace JIM.Web.Causality;
 
 /// <summary>
-/// Projects a Run Profile Execution Item's causality model and causal chain onto the object spine
+/// Projects a Run Profile Execution Item's causality model and causal chain onto the object lineage
 /// (#1495): which object columns exist and in what order, which column each event and chain hop
 /// renders on, where the chain's endings close, and how adjacent columns are joined. Pure and
 /// side-effect free, so every projection rule is unit-testable without rendering anything.
 /// </summary>
-public static class CausalitySpineModelBuilder
+public static class CausalityLineageModelBuilder
 {
     /// <summary>
-    /// Builds the spine for an item.
+    /// Builds the lineage for an item.
     /// </summary>
     /// <param name="model">The item's causality model (this run's events and the page context).</param>
     /// <param name="chain">The upward causal walk, or null where the page did not resolve one.</param>
@@ -25,7 +25,7 @@ public static class CausalitySpineModelBuilder
     /// What the run did to the object, which decides which side of the Identity the page's own
     /// record column sits on: an export-side item's record is a target, everything else's a source.
     /// </param>
-    public static CausalitySpineModel Build(
+    public static CausalityLineageModel Build(
         CausalityModel model,
         CausalChain? chain,
         ObjectChangeType itemChangeType)
@@ -44,7 +44,7 @@ public static class CausalitySpineModelBuilder
         var hopSequence = 0;
 
         ColumnState GetIdentityColumn() =>
-            identityColumn ??= new ColumnState { Kind = CausalitySpineColumnKind.Identity, CreationOrder = creationOrder++ };
+            identityColumn ??= new ColumnState { Kind = CausalityLineageColumnKind.Identity, CreationOrder = creationOrder++ };
 
         ColumnState GetRecordColumn(int? systemId, string? systemName, bool isSourceSide)
         {
@@ -57,7 +57,7 @@ public static class CausalitySpineModelBuilder
 
             var created = new ColumnState
             {
-                Kind = CausalitySpineColumnKind.Record,
+                Kind = CausalityLineageColumnKind.Record,
                 SystemId = systemId,
                 SystemName = systemName,
                 IsSourceSide = isSourceSide,
@@ -137,7 +137,7 @@ public static class CausalitySpineModelBuilder
                 default:
                     return unassignedColumn ??= new ColumnState
                     {
-                        Kind = CausalitySpineColumnKind.Unassigned,
+                        Kind = CausalityLineageColumnKind.Unassigned,
                         CreationOrder = creationOrder++
                     };
             }
@@ -187,11 +187,11 @@ public static class CausalitySpineModelBuilder
         var hasJoined = allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
 
         var columns = orderedStates.Select(state => Materialise(state, context, chain)).ToList();
-        var joins = new List<CausalitySpineJoin>();
+        var joins = new List<CausalityLineageJoin>();
         for (var i = 0; i < orderedStates.Count - 1; i++)
-            joins.Add(new CausalitySpineJoin(GetJoinLabel(orderedStates[i], orderedStates[i + 1], hasProjected, hasJoined)));
+            joins.Add(new CausalityLineageJoin(GetJoinLabel(orderedStates[i], orderedStates[i + 1], hasProjected, hasJoined)));
 
-        return new CausalitySpineModel
+        return new CausalityLineageModel
         {
             Columns = columns,
             Joins = joins,
@@ -203,11 +203,11 @@ public static class CausalitySpineModelBuilder
     /// Prepares one cohort for rendering: sentence, attribution, run kind, timestamp, links and the
     /// member list a plural cohort expands to.
     /// </summary>
-    private static CausalitySpineChainHop BuildHop(CausalChainCohort cohort, string? effectName, Guid? effectItemId)
+    private static CausalityLineageChainHop BuildHop(CausalChainCohort cohort, string? effectName, Guid? effectItemId)
     {
         var soleMember = cohort.MemberCount == 1 ? cohort.Members[0] : null;
 
-        return new CausalitySpineChainHop
+        return new CausalityLineageChainHop
         {
             Cohort = cohort,
             SentenceParts = CausalityCauseWording.Sentence(cohort, effectName),
@@ -218,7 +218,7 @@ public static class CausalitySpineModelBuilder
             Occurred = cohort.Members.Count > 0 ? cohort.Members.Min(m => m.Occurred) : default,
             Members = soleMember != null
                 ? []
-                : cohort.Members.Select(m => new CausalitySpineChainHopMember(
+                : cohort.Members.Select(m => new CausalityLineageChainHopMember(
                     string.IsNullOrWhiteSpace(m.DisplayName) ? "Unnamed object" : m.DisplayName!,
                     GetActivityItemHref(m, effectItemId))).ToList()
         };
@@ -259,29 +259,29 @@ public static class CausalitySpineModelBuilder
     /// Materialises a column: its head, its cards oldest-first (chain hops in time order, then this
     /// run's events, which are always the newest thing in the story) and its endings.
     /// </summary>
-    private static CausalitySpineColumn Materialise(ColumnState state, CausalityPageContext context, CausalChain? chain)
+    private static CausalityLineageColumn Materialise(ColumnState state, CausalityPageContext context, CausalChain? chain)
     {
         var cards = state.Hops
             .OrderBy(h => h.Hop.Occurred).ThenBy(h => h.Sequence)
-            .Select(h => new CausalitySpineCard { Hop = h.Hop, Occurred = h.Hop.Occurred })
-            .Concat(state.ThisRunEvents.Select(e => new CausalitySpineCard { Event = e }))
+            .Select(h => new CausalityLineageCard { Hop = h.Hop, Occurred = h.Hop.Occurred })
+            .Concat(state.ThisRunEvents.Select(e => new CausalityLineageCard { Event = e }))
             .ToList();
 
         var endings = state.EndingResolutions
-            .Select(r => new CausalitySpineEnding(r, CausalityCauseWording.Ending(r)!))
+            .Select(r => new CausalityLineageEnding(r, CausalityCauseWording.Ending(r)!))
             .ToList();
 
         ColumnHead head;
         switch (state.Kind)
         {
-            case CausalitySpineColumnKind.Identity:
+            case CausalityLineageColumnKind.Identity:
                 head = GetIdentityHead(state, chain);
                 // A single-object Identity head carries the page's Metaverse Object Type name for
                 // its subtitle ("Identity · User"); a role head is already a type noun.
                 if (!head.IsRoleHead)
                     head = head with { ObjectTypeName = context.MvoTypeName };
                 break;
-            case CausalitySpineColumnKind.Record:
+            case CausalityLineageColumnKind.Record:
                 head = GetRecordHead(state, context);
                 break;
             default:
@@ -289,13 +289,13 @@ public static class CausalitySpineModelBuilder
                 break;
         }
 
-        return new CausalitySpineColumn
+        return new CausalityLineageColumn
         {
             Kind = state.Kind,
             Title = head.Title,
             IsRoleHead = head.IsRoleHead,
-            SystemId = state.Kind == CausalitySpineColumnKind.Record ? state.SystemId : null,
-            SystemName = state.Kind == CausalitySpineColumnKind.Record ? state.SystemName : null,
+            SystemId = state.Kind == CausalityLineageColumnKind.Record ? state.SystemId : null,
+            SystemName = state.Kind == CausalityLineageColumnKind.Record ? state.SystemName : null,
             ObjectTypeName = head.ObjectTypeName,
             Href = head.Href,
             Cards = cards,
@@ -407,10 +407,10 @@ public static class CausalitySpineModelBuilder
     /// </summary>
     private static string? GetJoinLabel(ColumnState left, ColumnState right, bool hasProjected, bool hasJoined)
     {
-        if (left.Kind == CausalitySpineColumnKind.Unassigned || right.Kind == CausalitySpineColumnKind.Unassigned)
+        if (left.Kind == CausalityLineageColumnKind.Unassigned || right.Kind == CausalityLineageColumnKind.Unassigned)
             return null;
 
-        if (left.Kind == CausalitySpineColumnKind.Record && right.Kind == CausalitySpineColumnKind.Identity)
+        if (left.Kind == CausalityLineageColumnKind.Record && right.Kind == CausalityLineageColumnKind.Identity)
         {
             if (left.IsPageRecord && hasProjected)
                 return "projected";
@@ -419,7 +419,7 @@ public static class CausalitySpineModelBuilder
             return "imported";
         }
 
-        if (left.Kind == CausalitySpineColumnKind.Identity && right.Kind == CausalitySpineColumnKind.Record)
+        if (left.Kind == CausalityLineageColumnKind.Identity && right.Kind == CausalityLineageColumnKind.Record)
         {
             var provisioned = right.ThisRunEvents.Any(e =>
                     e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)
@@ -436,7 +436,7 @@ public static class CausalitySpineModelBuilder
     /// </summary>
     private sealed class ColumnState
     {
-        public CausalitySpineColumnKind Kind { get; init; }
+        public CausalityLineageColumnKind Kind { get; init; }
 
         public int? SystemId { get; init; }
 
@@ -450,7 +450,7 @@ public static class CausalitySpineModelBuilder
 
         public List<CausalityEvent> ThisRunEvents { get; } = [];
 
-        public List<(CausalitySpineChainHop Hop, int Sequence)> Hops { get; } = [];
+        public List<(CausalityLineageChainHop Hop, int Sequence)> Hops { get; } = [];
 
         public List<CausalChainResolution> EndingResolutions { get; } = [];
     }

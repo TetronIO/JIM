@@ -3,19 +3,19 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* One chain hop on a spine column (#1495): an earlier run's event, rendered subdued beneath the
+@* One chain hop on a lineage column (#1495): an earlier run's event, rendered subdued beneath the
    object it happened to. Carries the hop's snapshotted sentence (with the reference attribute
    highlighted), the attribution chips and reason, the run kind and timestamp, the link to the item
    that recorded it, and the in-place expansion of a plural cohort's members. Subdued is achieved
    with colour tokens, never bare opacity, so the text meets WCAG AA without interaction. *@
 
-<div class="sp-card">
-    <div class="sp-sentence">
+<div class="ln-card">
+    <div class="ln-sentence">
         @foreach (var part in Hop.SentenceParts)
         {
             @if (part.IsAttributeName)
             {
-                <span class="sp-attr">@part.Text</span>
+                <span class="ln-attr">@part.Text</span>
             }
             else
             {
@@ -28,7 +28,7 @@
     {
         @* The row is a sentence and the Connected System chip is its subject, so the reason follows
            the chips; see CausalityCauseWording.Reason. *@
-        <div class="sp-meta">
+        <div class="ln-meta">
             @if (Hop.ShowConnectedSystemChip && Hop.Cohort.ConnectedSystemId is { } connectedSystemId
                  && Hop.Cohort.HasConnectedSystem)
             {
@@ -44,43 +44,43 @@
             }
             @if (Hop.Reason != null)
             {
-                <span class="sp-reason">@Hop.Reason</span>
+                <span class="ln-reason">@Hop.Reason</span>
             }
         </div>
     }
 
-    <div class="sp-when">
-        <span class="sp-runchip">@(Hop.RunKind ?? "Earlier run")</span>
+    <div class="ln-when">
+        <span class="ln-runchip">@(Hop.RunKind ?? "Earlier run")</span>
         @if (Hop.Occurred != default)
         {
             var occurredLocal = Hop.Occurred.ToLocalTime();
-            <span class="sp-time">@occurredLocal.ToFriendlyDate()</span>
+            <span class="ln-time">@occurredLocal.ToFriendlyDate()</span>
         }
     </div>
 
     @if (Hop.ActivityItemHref != null)
     {
-        <div class="sp-actions">
-            <a class="sp-link" href="@Hop.ActivityItemHref">View activity item</a>
+        <div class="ln-actions">
+            <a class="ln-link" href="@Hop.ActivityItemHref">View activity item</a>
         </div>
     }
 
     @if (Hop.Members.Count > 0)
     {
-        <button type="button" class="sp-members-toggle @(_expanded ? "on" : null)"
+        <button type="button" class="ln-members-toggle @(_expanded ? "on" : null)"
                 aria-expanded="@(_expanded ? "true" : "false")" @onclick="ToggleMembers">
             @(_expanded ? CausalityCauseWording.HideMembersLabel(Hop.Cohort) : CausalityCauseWording.MembersLabel(Hop.Cohort))
         </button>
         @if (_expanded)
         {
-            <ul class="sp-members">
+            <ul class="ln-members">
                 @foreach (var member in Hop.Members)
                 {
-                    <li class="sp-member" @key="member">
-                        <span class="sp-member-name">@member.DisplayName</span>
+                    <li class="ln-member" @key="member">
+                        <span class="ln-member-name">@member.DisplayName</span>
                         @if (member.ActivityItemHref != null)
                         {
-                            <a class="sp-link" href="@member.ActivityItemHref">View activity item</a>
+                            <a class="ln-link" href="@member.ActivityItemHref">View activity item</a>
                         }
                     </li>
                 }
@@ -94,7 +94,7 @@
     /// The prepared chain hop to render.
     /// </summary>
     [Parameter, EditorRequired]
-    public CausalitySpineChainHop Hop { get; set; } = null!;
+    public CausalityLineageChainHop Hop { get; set; } = null!;
 
     private bool _expanded;
 

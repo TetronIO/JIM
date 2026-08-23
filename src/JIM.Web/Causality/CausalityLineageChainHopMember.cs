@@ -9,4 +9,4 @@ namespace JIM.Web.Causality;
 /// </summary>
 /// <param name="DisplayName">The cause's name as snapshotted when the edge was written.</param>
 /// <param name="ActivityItemHref">Link to the recording item, or null where there is nothing useful to link.</param>
-public sealed record CausalitySpineChainHopMember(string DisplayName, string? ActivityItemHref);
+public sealed record CausalityLineageChainHopMember(string DisplayName, string? ActivityItemHref);

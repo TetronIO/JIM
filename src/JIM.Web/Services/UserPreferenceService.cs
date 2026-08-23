@@ -117,13 +117,13 @@ public interface IUserPreferenceService
     /// <summary>
     /// Gets the user's preferred causality visualisation view.
     /// </summary>
-    /// <returns>"spine" or "timeline"; null if no preference (the causality panel decides).</returns>
+    /// <returns>"lineage" or "timeline"; null if no preference (the causality panel decides).</returns>
     Task<string?> GetCausalityViewAsync();
 
     /// <summary>
     /// Sets the user's preferred causality visualisation view.
     /// </summary>
-    /// <param name="view">"spine" or "timeline".</param>
+    /// <param name="view">"lineage" or "timeline".</param>
     Task SetCausalityViewAsync(string view);
 
     /// <summary>
@@ -532,11 +532,11 @@ public class UserPreferenceService : IUserPreferenceService
     /// <summary>
     /// Valid causality view values. Every view <c>CausalityViewPreference.ToKey</c> can produce must
     /// be listed: the whitelist silently drops anything else on both read and write, which is how a
-    /// Spine selection failed to survive navigation when the view shipped without its entry (#1495).
+    /// Lineage selection failed to survive navigation when the view shipped without its entry (#1495).
     /// The retired Flow and Graph views' keys are deliberately absent, so a value stored before
     /// their retirement reads as null and the panel falls back to its default.
     /// </summary>
-    private static readonly string[] ValidCausalityViews = ["timeline", "spine"];
+    private static readonly string[] ValidCausalityViews = ["timeline", "lineage"];
 
     /// <inheritdoc />
     public async Task<string?> GetCausalityViewAsync()

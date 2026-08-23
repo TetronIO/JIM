@@ -46,7 +46,7 @@ The Overview tab opens with a causality panel that answers "what happened to thi
 
 Below the summary, the story can be explored in two switchable views; the view you choose is remembered for your next visit:
 
-- **Spine**<br /> The default: the object graph itself, as columns. Each record involved is a column with its Connected System named beneath it, the Identity is a column of its own, and the columns are joined by the relationships between them (imported, projected, joined, provisioned, exported), reading source to Identity to target. Every causally relevant event is a card on the column of the object it happened to: this run's own events stand out with an accent ring and a **This run** marker, while events from earlier runs render subdued beneath them, each carrying the kind of run that recorded it, its timestamp and a link to that run's own execution item. One canvas answers "what happened and why".
+- **Lineage**<br /> The default: the object graph itself, as columns. Each record involved is a column with its Connected System named beneath it, the Identity is a column of its own, and the columns are joined by the relationships between them (imported, projected, joined, provisioned, exported), reading source to Identity to target. Every causally relevant event is a card on the column of the object it happened to: this run's own events stand out with an accent ring and a **This run** marker, while events from earlier runs render subdued beneath them, each carrying the kind of run that recorded it, its timestamp and a link to that run's own execution item. One canvas answers "what happened and why".
 - **Timeline**<br /> A vertical narrative read from top to bottom, with attribute change detail expanding inline beneath each event. Useful when you want the whole story, every attribute included, in one scroll.
 
 The same layout serves every kind of item by lighting a different column: an import lights the source record, a synchronisation lights the Identity (and any target records it staged exports for), and an export lights the target record. Wide stories scroll horizontally within the canvas, and on a narrow screen the columns stack vertically.
@@ -70,7 +70,7 @@ A Deletion Rule that evaluates and decides *not* to delete records nothing, beca
 
 ### Why it happened
 
-The Spine's subdued cards are the item's causal chain: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it, each cause placed on the column of the object it happened to rather than listed separately.
+The Lineage's subdued cards are the item's causal chain: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it, each cause placed on the column of the object it happened to rather than listed separately.
 
 Each cause is a sentence rather than a diagram, for example "10 Users were deleted, so they were removed from Project Diamond's Static Members", with the relationship the cascade acted through picked out in colour. Objects removed for the same reason, on the same Connected System, through the same Synchronisation Rule read as one card carrying a count instead of as ten near-identical cards; expanding it in place names each of them individually. Two independent causes converging on one effect stay as two, because a hidden second cause is precisely what an administrator needs to see.
 

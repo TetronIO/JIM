@@ -56,7 +56,7 @@ public sealed class CausalityEvent
     public string Icon { get; init; } = string.Empty;
 
     /// <summary>
-    /// Which side of the story this event belongs to, driving its spine column assignment.
+    /// Which side of the story this event belongs to, driving its lineage column assignment.
     /// </summary>
     public CausalityLane Lane { get; init; }
 

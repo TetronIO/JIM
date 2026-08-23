@@ -4,6 +4,13 @@
 - **Issue:** [#1495](https://github.com/TetronIO/JIM/issues/1495)
 - **PRD:** [`engineering/prd/doing/PRD_CAUSALITY_OBJECT_SPINE.md`](../../prd/doing/PRD_CAUSALITY_OBJECT_SPINE.md)
 
+> **Naming:** the view ships as **Lineage**, not "Spine". "Spine" described the layout's shape (a
+> backbone with events hanging off it), which is an implementation metaphor rather than something the
+> reader is looking for, and it paired badly with its sibling "Timeline", whose name plainly announces
+> its organising axis. "Lineage" is standard vocabulary in identity and data governance for "where did
+> this come from and where did it go". This document, the PRD and issue #1495 keep the original title;
+> only the product surface was renamed.
+
 ## Overview
 
 Replace the causality panel's Flow and Graph views, and the separate **Caused by** section, with one
