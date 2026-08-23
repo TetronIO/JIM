@@ -60,6 +60,7 @@ public class PasswordSynchronisationFanOutTests
         _server = new PasswordSynchronisationServer(
             _syncRepository,
             () => _connectedSystemRepository.Object,
+            () => new Mock<JIM.Data.Repositories.IActivityRepository>().Object,
             () => _protection,
             // These fixtures never reach a Connector: they exercise queueing and one-change delivery with a
             // Connector handed in directly. Resolving one here would be answering a question they do not ask.
@@ -70,6 +71,7 @@ public class PasswordSynchronisationFanOutTests
                 return Task.CompletedTask;
             },
             _ => Task.CompletedTask,
+            (_, _) => Task.CompletedTask,
             connectedSystemId =>
             {
                 _deliveryRequests.Add(connectedSystemId);

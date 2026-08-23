@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Interfaces;
@@ -11,6 +11,7 @@ using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -34,10 +35,12 @@ public class PasswordSynchronisationServer
 {
     private readonly ISyncRepository _syncRepo;
     private readonly Func<IConnectedSystemRepository> _connectedSystemRepo;
+    private readonly Func<IActivityRepository> _activityRepo;
     private readonly Func<IPasswordProtectionService> _passwordProtection;
     private readonly Func<ConnectedSystem, IConnector> _createConnector;
     private readonly Func<Activity, MetaverseObject?, ApiKey?, Task> _createActivity;
     private readonly Func<Activity, Task> _completeActivity;
+    private readonly Func<Activity, string, Task> _completeActivityWithError;
     private readonly Func<int?, Task> _requestDelivery;
 
     /// <param name="passwordProtection">
@@ -49,6 +52,11 @@ public class PasswordSynchronisationServer
     /// How to reach the Connected System repository, resolved when a change is queued rather than now, for the
     /// same reason as password protection: the facade's own repository properties are not populated until after
     /// this constructor has run, so anything read here would be the null that precedes them.
+    /// </param>
+    /// <param name="activityRepository">
+    /// How to reach the Activity repository, resolved on use rather than now, for the same reason as the
+    /// Connected System repository above. Read-only here: this server records Activities through the Activity
+    /// server's callbacks, and reaches the repository only to read an identity's password history back.
     /// </param>
     /// <param name="createConnector">
     /// Resolves a Connected System's Connector, already configured with credential protection and certificate
@@ -67,21 +75,30 @@ public class PasswordSynchronisationServer
     /// queue tells the worker there is something to do rather than leaving it to the next housekeeping tick.
     /// </param>
     /// <param name="completeActivity">Completes an Activity.</param>
+    /// <param name="completeActivityWithError">
+    /// Completes an Activity as a failure, carrying the reason. A separate delegate because a target refusing a
+    /// password is an operational outcome rather than a thrown exception: nothing here has an exception to pass,
+    /// and the outcome still has to be recorded as a failure rather than described in prose on a completed one.
+    /// </param>
     internal PasswordSynchronisationServer(
         ISyncRepository syncRepository,
         Func<IConnectedSystemRepository> connectedSystemRepository,
+        Func<IActivityRepository> activityRepository,
         Func<IPasswordProtectionService> passwordProtection,
         Func<ConnectedSystem, IConnector> createConnector,
         Func<Activity, MetaverseObject?, ApiKey?, Task> createActivity,
         Func<Activity, Task> completeActivity,
+        Func<Activity, string, Task> completeActivityWithError,
         Func<int?, Task> requestDelivery)
     {
         _syncRepo = syncRepository;
         _connectedSystemRepo = connectedSystemRepository;
+        _activityRepo = activityRepository;
         _passwordProtection = passwordProtection;
         _createConnector = createConnector;
         _createActivity = createActivity;
         _completeActivity = completeActivity;
+        _completeActivityWithError = completeActivityWithError;
         _requestDelivery = requestDelivery;
     }
 
@@ -465,6 +482,8 @@ public class PasswordSynchronisationServer
     /// </summary>
     private async Task RecordDeliveryOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, bool success)
     {
+        var failure = success ? null : DescribeFailure(connectedSystem, change);
+
         var activity = new Activity
         {
             TargetName = connectedSystem.Name,
@@ -479,10 +498,19 @@ public class PasswordSynchronisationServer
             MetaverseObjectId = change.MetaverseObjectId,
             Message = success
                 ? $"Password set on {connectedSystem.Name}."
-                : DescribeFailure(connectedSystem, change)
+                : failure
         };
 
         await _createActivity(activity, null, null);
+
+        // Completed, and completed as what it was. Creating an Activity sets it InProgress, so an outcome that is
+        // never completed sits in the Activities list looking like work still under way; and a refusal recorded
+        // only as prose in the Message is invisible to everything that counts, filters or alerts on outcomes,
+        // which is most of what an audit record is for (requirement 23).
+        if (success)
+            await _completeActivity(activity);
+        else
+            await _completeActivityWithError(activity, failure!);
     }
 
     private static string DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
@@ -629,5 +657,164 @@ public class PasswordSynchronisationServer
     public async Task<Dictionary<int, PasswordQueueAttention>> GetAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
     {
         return await _syncRepo.GetPasswordQueueAttentionAsync(connectedSystemIds);
+    }
+
+    /// <summary>
+    /// One window of the queue for a list view (requirement 21). The rows carry the identity and Connected
+    /// System names and, deliberately, no password.
+    /// </summary>
+    public async Task<RangeResultSet<PendingPasswordChangeHeader>> GetPendingPasswordChangesAsync(
+        PendingPasswordChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        return await _syncRepo.GetPendingPasswordChangeHeadersAsync(
+            filter, startIndex, count, sortBy, sortDescending, includeTotalCount);
+    }
+
+    /// <summary>
+    /// One identity's most recent password changes and what each Connected System did with them (#1119,
+    /// requirement 25), newest change first.
+    /// <para>
+    /// Read from Activities rather than from the queue, deliberately. The queue row is deleted the moment the
+    /// password arrives, so a panel built on the queue would show an identity's failures and none of its
+    /// successes: the most misleading possible view of whether their password propagated.
+    /// </para>
+    /// </summary>
+    public async Task<List<PasswordSynchronisationEvent>> GetEventsForMetaverseObjectAsync(Guid metaverseObjectId, int maximumEvents)
+    {
+        return await _activityRepo().GetPasswordSynchronisationEventsAsync(metaverseObjectId, maximumEvents);
+    }
+
+    /// <summary>
+    /// What the whole queue holds, for the summary above a queue list.
+    /// </summary>
+    public async Task<PasswordQueueSummary> GetQueueSummaryAsync()
+    {
+        return await _syncRepo.GetPasswordQueueSummaryAsync(DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// Makes every change matching <paramref name="filter"/> due immediately and raises a delivery pass for it:
+    /// the queue page's retry action, and its REST and PowerShell counterparts (requirement 22).
+    /// </summary>
+    /// <returns>How many changes were made due again.</returns>
+    public async Task<int> RetryAsync(
+        PendingPasswordChangeFilter filter,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var retried = await _syncRepo.RetryPasswordChangesAsync(filter);
+
+        // One Activity for the administrator's action, not one per row: a retry over a directory that has just
+        // come back is a single decision, and a hundred Activities saying so would bury the decision in its own
+        // consequences.
+        await RecordQueueActionAsync(
+            ActivityTargetOperationType.RetryPasswordDelivery,
+            retried == 1
+                ? "1 queued password change will be attempted again."
+                : $"{retried} queued password changes will be attempted again.",
+            filter,
+            initiatedBy,
+            initiatedByApiKey);
+
+        if (retried > 0)
+        {
+            Log.Information("RetryAsync: {Retried} queued password change(s) are due again.", retried);
+
+            // Scoped where the filter was, unscoped where it was not: a retry aimed at one system has no reason
+            // to visit the others.
+            await _requestDelivery(filter.ConnectedSystemId);
+        }
+
+        return retried;
+    }
+
+    /// <summary>
+    /// Records that an administrator stopped every change matching <paramref name="filter"/> being delivered
+    /// (requirement 22).
+    /// </summary>
+    /// <returns>How many changes were cancelled.</returns>
+    public async Task<int> CancelAsync(
+        PendingPasswordChangeFilter filter,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var cancelled = await _syncRepo.CancelPasswordChangesAsync(
+            filter, initiatedBy?.Id, initiatedBy?.Name, DateTime.UtcNow);
+
+        await RecordQueueActionAsync(
+            ActivityTargetOperationType.CancelPasswordDelivery,
+            cancelled == 1
+                ? "1 queued password change will not be delivered."
+                : $"{cancelled} queued password changes will not be delivered.",
+            filter,
+            initiatedBy,
+            initiatedByApiKey);
+
+        if (cancelled > 0)
+            Log.Information("CancelAsync: {Cancelled} queued password change(s) were cancelled.", cancelled);
+
+        return cancelled;
+    }
+
+    /// <summary>
+    /// Records an administrator's action over the queue as one completed Activity.
+    /// <para>
+    /// Recorded even when nothing matched. An administrator who retried a system and changed nothing needs to be
+    /// able to find that out afterwards, and an Activity that only appears when work happened cannot tell them
+    /// the difference between "nothing was owed" and "the retry never ran".
+    /// </para>
+    /// </summary>
+    private async Task RecordQueueActionAsync(
+        ActivityTargetOperationType operation,
+        string message,
+        PendingPasswordChangeFilter filter,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
+    {
+        var activity = new Activity
+        {
+            TargetType = ActivityTargetType.PasswordSynchronisation,
+            TargetOperationType = operation,
+            TargetName = DescribeFilter(filter),
+            ConnectedSystemId = filter.ConnectedSystemId,
+            MetaverseObjectId = filter.MetaverseObjectId,
+            Message = message
+        };
+
+        await _createActivity(activity, initiatedBy, initiatedByApiKey);
+        await _completeActivity(activity);
+    }
+
+    /// <summary>
+    /// Names what an action ran over, for the Activity's target. Says what the administrator chose rather than
+    /// what it resolved to, because that is what they will look for later.
+    /// </summary>
+    private static string DescribeFilter(PendingPasswordChangeFilter filter)
+    {
+        if (filter.TargetsSpecificChanges)
+            return filter.Ids!.Count == 1 ? "One password change" : $"{filter.Ids!.Count} password changes";
+
+        var parts = new List<string>();
+
+        if (filter.Status.HasValue)
+            parts.Add(filter.Status.Value.ToString());
+
+        if (filter.FailureReason.HasValue)
+            parts.Add(filter.FailureReason.Value.ToString());
+
+        return parts.Count == 0
+            ? "The Password Synchronisation queue"
+            : $"{string.Join(", ", parts)} password changes";
     }
 }

@@ -75,6 +75,7 @@ public class PasswordDeliveryTests
         _server = new PasswordSynchronisationServer(
             _syncRepository,
             () => _connectedSystemRepository.Object,
+            () => new Mock<JIM.Data.Repositories.IActivityRepository>().Object,
             () => _protection,
             // These fixtures never reach a Connector: they exercise queueing and one-change delivery with a
             // Connector handed in directly. Resolving one here would be answering a question they do not ask.
@@ -84,7 +85,20 @@ public class PasswordDeliveryTests
                 _createdActivities.Add(activity);
                 return Task.CompletedTask;
             },
-            _ => Task.CompletedTask,
+            // Mirrors what the real Activity server does on completion, because these fixtures assert on the
+            // outcome an administrator would read: an Activity left InProgress forever is a defect this harness
+            // has to be able to see.
+            activity =>
+            {
+                activity.Status = ActivityStatus.Complete;
+                return Task.CompletedTask;
+            },
+            (activity, errorMessage) =>
+            {
+                activity.Status = ActivityStatus.FailedWithError;
+                activity.ErrorMessage = errorMessage;
+                return Task.CompletedTask;
+            },
             _ => Task.CompletedTask);
     }
 
@@ -393,6 +407,64 @@ public class PasswordDeliveryTests
                 Is.All.EqualTo(ActivityTargetType.PasswordSynchronisation));
             Assert.That(_createdActivities.Select(a => a.ConnectedSystemId), Is.All.EqualTo(ConnectedSystemId));
         }
+    }
+
+    /// <summary>
+    /// The outcome Activity has to reach a terminal state. Creating one sets it InProgress, so an outcome that
+    /// is never completed sits in the Activities list looking like work still under way, forever, for a delivery
+    /// that finished seconds after it started.
+    /// </summary>
+    [Test]
+    public async Task Deliver_Success_CompletesTheOutcomeActivityAsync()
+    {
+        var change = await QueueAsync();
+        ArrangeAccount(change);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_createdActivities.Single().Status, Is.EqualTo(ActivityStatus.Complete));
+    }
+
+    /// <summary>
+    /// A refusal is recorded as a failure, not merely described in prose (requirement 23). A Message saying
+    /// "Password not set on..." reads correctly and is invisible to everything that counts, filters or alerts on
+    /// outcomes, which is most of what an audit record is for.
+    /// </summary>
+    [Test]
+    public async Task Deliver_Refusal_RecordsTheOutcomeAsAFailureAsync()
+    {
+        var change = await QueueAsync();
+        ArrangeAccount(change);
+        _connector.WithPasswordSetResult(_ =>
+            PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Too short"));
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+            Assert.That(activity.ErrorMessage, Does.Contain("Too short"),
+                "the target's own words are what say where the remedy lives");
+        }
+    }
+
+    [Test]
+    public async Task Deliver_Refusal_NeverPutsThePasswordInTheErrorMessageAsync()
+    {
+        var change = await QueueAsync("Correct-Horse-Battery-Staple");
+        ArrangeAccount(change);
+        _connector.WithPasswordSetResult(_ =>
+            PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Too short"));
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_createdActivities.Single().ErrorMessage ?? string.Empty,
+            Does.Not.Contain("Correct-Horse").And.Not.Contain(change.EncryptedPassword));
     }
 
     [Test]

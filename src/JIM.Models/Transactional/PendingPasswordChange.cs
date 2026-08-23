@@ -125,6 +125,24 @@ public class PendingPasswordChange
     public Guid ActivityId { get; set; }
 
     /// <summary>
+    /// When an administrator cancelled this change, or null if nobody has.
+    /// </summary>
+    public DateTime? CancelledAt { get; set; }
+
+    /// <summary>
+    /// Who cancelled it, mirroring the Activity initiator fields (<see cref="Activities.Activity.InitiatedById"/>
+    /// and <see cref="Activities.Activity.InitiatedByName"/>) rather than inventing a second shape.
+    /// <para>
+    /// Both are nullable because the API-key path has no person behind it. A cancellation with no name is still
+    /// worth recording: what matters most is that the change stopped being delivered on purpose.
+    /// </para>
+    /// </summary>
+    public Guid? CancelledById { get; set; }
+
+    /// <inheritdoc cref="CancelledById"/>
+    public string? CancelledByName { get; set; }
+
+    /// <summary>
     /// Whether a delivery pass at <paramref name="asOf"/> should attempt this change: it is still pending, and
     /// either has no retry scheduled or has reached it.
     /// </summary>
@@ -213,6 +231,7 @@ public class PendingPasswordChange
         TargetMessage = null;
         NextRetryAt = null;
         LastAttemptedAt = null;
+        ClearCancellation();
     }
 
     /// <summary>
@@ -231,6 +250,43 @@ public class PendingPasswordChange
         NextRetryAt = null;
         FailureReason = null;
         TargetMessage = null;
+
+        // Retrying is also how a cancellation is undone, so the stamp goes with it: a pending row still claiming
+        // to have been cancelled would be read as a cancellation that failed to take.
+        ClearCancellation();
+    }
+
+    /// <summary>
+    /// Records that an administrator stopped this change being delivered: the cancel action on the queue page
+    /// (requirement 22).
+    /// <para>
+    /// Deliberately an outcome rather than a deletion. The identity's password stays divergent in that system
+    /// either way, and a row that simply disappears reports the opposite; that is the same reasoning
+    /// <see cref="Expire"/> follows. The failure that stranded the change is kept, because why it was stuck is
+    /// usually why it was cancelled.
+    /// </para>
+    /// </summary>
+    /// <param name="cancelledById">The administrator, or null where an API key acted with no person behind it.</param>
+    /// <param name="cancelledByName">Their display name, under the same caveat.</param>
+    /// <param name="asOf">The instant of the cancellation.</param>
+    public void Cancel(Guid? cancelledById, string? cancelledByName, DateTime asOf)
+    {
+        Status = PendingPasswordChangeStatus.Cancelled;
+        CancelledAt = asOf;
+        CancelledById = cancelledById;
+        CancelledByName = cancelledByName;
+        NextRetryAt = null;
+    }
+
+    /// <summary>
+    /// Drops the cancellation stamp, for the two paths that put a cancelled row back to work: a manual retry, and
+    /// a newer password change superseding it.
+    /// </summary>
+    private void ClearCancellation()
+    {
+        CancelledAt = null;
+        CancelledById = null;
+        CancelledByName = null;
     }
 
     /// <summary>

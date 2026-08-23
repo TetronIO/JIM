@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
@@ -5874,6 +5874,44 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .EffectiveInitialPasswordTimeToLive
             })
             .ToList();
+    }
+
+    public async Task<Dictionary<int, PasswordSynchronisationState>> GetPasswordSynchronisationStatesAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemIds);
+
+        if (connectedSystemIds.Count == 0)
+            return [];
+
+        // One projection over the systems and a left join to their configuration, rather than a read per row: the
+        // caller is a list page that already batches its other two indicators the same way.
+        var rows = await Repository.Database.ConnectedSystems
+            .AsNoTracking()
+            .Where(cs => connectedSystemIds.Contains(cs.Id))
+            .Select(cs => new
+            {
+                cs.Id,
+                SupportsPasswordSet = cs.ConnectorDefinition != null && cs.ConnectorDefinition.SupportsPasswordSet,
+                Configuration = Repository.Database.ConnectedSystemPasswordSynchronisations
+                    .Where(ps => ps.ConnectedSystemId == cs.Id)
+                    .Select(ps => (bool?)ps.Enabled)
+                    .FirstOrDefault()
+            })
+            .ToListAsync();
+
+        // NotSupported wins over everything else. A configuration can outlive the capability that justified it
+        // (a Connector Definition losing SupportsPasswordSet on upgrade), and reporting such a system as Enabled
+        // would promise delivery that cannot happen.
+        return rows.ToDictionary(
+            r => r.Id,
+            r => !r.SupportsPasswordSet
+                ? PasswordSynchronisationState.NotSupported
+                : r.Configuration switch
+                {
+                    null => PasswordSynchronisationState.NotConfigured,
+                    true => PasswordSynchronisationState.Enabled,
+                    false => PasswordSynchronisationState.Disabled
+                });
     }
 
     public async Task<ConnectedSystem?> GetConnectedSystemForPasswordDeliveryAsync(int connectedSystemId)

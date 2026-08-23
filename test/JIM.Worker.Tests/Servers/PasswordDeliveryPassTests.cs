@@ -68,10 +68,12 @@ public class PasswordDeliveryPassTests
         _server = new PasswordSynchronisationServer(
             _syncRepository,
             () => _connectedSystemRepository.Object,
+            () => new Mock<JIM.Data.Repositories.IActivityRepository>().Object,
             () => _protection,
             cs => _createConnector(cs),
             (_, _, _) => Task.CompletedTask,
             _ => Task.CompletedTask,
+            (_, _) => Task.CompletedTask,
             _ => Task.CompletedTask);
     }
 

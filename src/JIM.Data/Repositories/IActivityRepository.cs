@@ -1,10 +1,11 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Scheduling;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -55,6 +56,24 @@ public interface IActivityRepository
         int count,
         string? searchQuery = null,
         bool includeTotalCount = true);
+
+    /// <summary>
+    /// One identity's most recent password changes and what each Connected System did with them (#1119,
+    /// requirement 25), newest change first.
+    /// <para>
+    /// A purpose-built read rather than another set of filters on the general Activity list: that list already
+    /// takes nineteen, none of them an identity, and this panel asks a single narrow question. It also needs the
+    /// parents and their children together, which the general list cannot express at all.
+    /// </para>
+    /// <para>
+    /// Read from Activities rather than from the queue because the queue row is deleted the moment the password
+    /// arrives; the queue alone would show an identity's failures and none of its successes.
+    /// </para>
+    /// </summary>
+    /// <param name="metaverseObjectId">The identity whose password changes are wanted.</param>
+    /// <param name="maximumEvents">How many changes to return, newest first. The panel shows recent history, not
+    /// an archive; the Activities list is where the whole record lives.</param>
+    public Task<List<PasswordSynchronisationEvent>> GetPasswordSynchronisationEventsAsync(Guid metaverseObjectId, int maximumEvents);
 
     /// <summary>
     /// Returns a dictionary mapping each activity ID (from the provided set) to its direct child activity count.

@@ -56,5 +56,16 @@ public enum ActivityTargetOperationType
     /// System Objects of removed Object Types marked Obsolete and stored values of removed attributes deleted,
     /// executed by the worker under this Activity with per-object results.
     /// </summary>
-    SchemaRefreshRemoval = 13
+    SchemaRefreshRemoval = 13,
+
+    /// <summary>
+    /// An administrator asked JIM to attempt queued password changes again, having fixed whatever stopped them
+    /// (#1119, requirement 22).
+    /// </summary>
+    RetryPasswordDelivery = 14,
+
+    /// <summary>
+    /// An administrator stopped queued password changes being delivered (#1119, requirement 22).
+    /// </summary>
+    CancelPasswordDelivery = 15
 }

@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
@@ -1035,6 +1035,17 @@ public interface IConnectedSystemRepository
     /// </para>
     /// </summary>
     public Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync();
+
+    /// <summary>
+    /// Where each of the named Connected Systems stands on Password Synchronisation (#1119, requirement 26).
+    /// <para>
+    /// Batched because the caller is a list: asking per row would be an N+1 over a page that already loads its
+    /// drift and initial-password indicators in one call each. Systems whose Connector cannot set passwords are
+    /// reported as <see cref="PasswordSynchronisationState.NotSupported"/> rather than omitted, so a row that has
+    /// no answer is distinguishable from one whose answer has not arrived.
+    /// </para>
+    /// </summary>
+    public Task<Dictionary<int, PasswordSynchronisationState>> GetPasswordSynchronisationStatesAsync(IReadOnlyCollection<int> connectedSystemIds);
 
     /// <summary>
     /// Loads a Connected System with exactly what a Password Synchronisation delivery pass needs (#1119): its

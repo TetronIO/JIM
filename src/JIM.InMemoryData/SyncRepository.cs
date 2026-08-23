@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
@@ -2901,7 +2901,8 @@ public class SyncRepository : ISyncRepository
     public Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds)
     {
         var attention = _pendingPasswordChanges.Values
-            .Where(c => connectedSystemIds.Contains(c.ConnectedSystemId) && c.Status != PendingPasswordChangeStatus.Pending)
+            .Where(c => connectedSystemIds.Contains(c.ConnectedSystemId)
+                        && c.Status is PendingPasswordChangeStatus.Parked or PendingPasswordChangeStatus.Expired)
             .GroupBy(c => c.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => new PasswordQueueAttention
             {
@@ -2910,6 +2911,180 @@ public class SyncRepository : ISyncRepository
             });
 
         return Task.FromResult(attention);
+    }
+
+    public Task<RangeResultSet<PendingPasswordChangeHeader>> GetPendingPasswordChangeHeadersAsync(
+        PendingPasswordChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var headers = FilterPasswordChanges(filter)
+            .Select(c =>
+            {
+                // Looked up once and held, rather than reusing an out variable from one initialiser inside
+                // another: that reads as though the second initialiser has its own lookup, and is only correct
+                // because member initialisers happen to evaluate in source order.
+                _mvos.TryGetValue(c.MetaverseObjectId, out var mvo);
+
+                return new PendingPasswordChangeHeader
+                {
+                    Id = c.Id,
+                    MetaverseObjectId = c.MetaverseObjectId,
+                    MetaverseObjectDisplayName = mvo?.CachedDisplayName,
+                    MetaverseObjectTypePluralName = mvo?.Type?.PluralName,
+                    ConnectedSystemId = c.ConnectedSystemId,
+                    ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
+                    Status = c.Status,
+                    FailureReason = c.FailureReason,
+                    TargetMessage = c.TargetMessage,
+                    AttemptCount = c.AttemptCount,
+                    NextRetryAt = c.NextRetryAt,
+                    CreatedAt = c.CreatedAt,
+                    LastAttemptedAt = c.LastAttemptedAt,
+                    ExpiresAt = c.ExpiresAt,
+                    CancelledAt = c.CancelledAt,
+                    CancelledByName = c.CancelledByName
+                };
+            })
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var search = filter.SearchText.Trim();
+            headers = headers
+                .Where(h => (h.MetaverseObjectDisplayName ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase)
+                            || h.ConnectedSystemName.Contains(search, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        IOrderedEnumerable<PendingPasswordChangeHeader> ordered = sortBy?.ToLowerInvariant() switch
+        {
+            "identity" => sortDescending
+                ? headers.OrderByDescending(h => h.MetaverseObjectDisplayName)
+                : headers.OrderBy(h => h.MetaverseObjectDisplayName),
+            "system" => sortDescending
+                ? headers.OrderByDescending(h => h.ConnectedSystemName)
+                : headers.OrderBy(h => h.ConnectedSystemName),
+            "status" => sortDescending
+                ? headers.OrderByDescending(h => h.Status)
+                : headers.OrderBy(h => h.Status),
+            "attempts" => sortDescending
+                ? headers.OrderByDescending(h => h.AttemptCount)
+                : headers.OrderBy(h => h.AttemptCount),
+            "nextattempt" => sortDescending
+                ? headers.OrderByDescending(h => h.NextRetryAt)
+                : headers.OrderBy(h => h.NextRetryAt),
+            "expires" => sortDescending
+                ? headers.OrderByDescending(h => h.ExpiresAt)
+                : headers.OrderBy(h => h.ExpiresAt),
+            _ => sortDescending
+                ? headers.OrderByDescending(h => h.CreatedAt)
+                : headers.OrderBy(h => h.CreatedAt)
+        };
+
+        var sorted = ordered.ThenBy(h => h.Id).ToList();
+
+        return Task.FromResult(new RangeResultSet<PendingPasswordChangeHeader>
+        {
+            Results = sorted.Skip(startIndex).Take(count).ToList(),
+            TotalResults = includeTotalCount ? sorted.Count : null
+        });
+    }
+
+    public Task<PasswordQueueSummary> GetPasswordQueueSummaryAsync(DateTime asOf)
+    {
+        var changes = _pendingPasswordChanges.Values.ToList();
+
+        return Task.FromResult(new PasswordQueueSummary
+        {
+            WaitingCount = changes.Count(c => c.Status == PendingPasswordChangeStatus.Pending),
+            DueCount = changes.Count(c => c.IsDue(asOf)),
+            ParkedCount = changes.Count(c => c.Status == PendingPasswordChangeStatus.Parked),
+            ExpiredCount = changes.Count(c => c.Status == PendingPasswordChangeStatus.Expired),
+            CancelledCount = changes.Count(c => c.Status == PendingPasswordChangeStatus.Cancelled)
+        });
+    }
+
+    public Task<int> RetryPasswordChangesAsync(PendingPasswordChangeFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var retrying = FilterPasswordChanges(filter)
+            .Where(c => c.Status != PendingPasswordChangeStatus.Expired)
+            .ToList();
+
+        foreach (var change in retrying)
+            change.Retry();
+
+        return Task.FromResult(retrying.Count);
+    }
+
+    public Task<int> CancelPasswordChangesAsync(
+        PendingPasswordChangeFilter filter,
+        Guid? cancelledById,
+        string? cancelledByName,
+        DateTime asOf)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var cancelling = FilterPasswordChanges(filter)
+            .Where(c => c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Parked)
+            .ToList();
+
+        foreach (var change in cancelling)
+            change.Cancel(cancelledById, cancelledByName, asOf);
+
+        return Task.FromResult(cancelling.Count);
+    }
+
+    /// <summary>
+    /// The in-memory twin of the PostgreSQL filter, shared by the list, retry and cancel paths so all three
+    /// narrow identically.
+    /// </summary>
+    private List<PendingPasswordChange> FilterPasswordChanges(PendingPasswordChangeFilter filter)
+    {
+        IEnumerable<PendingPasswordChange> query = _pendingPasswordChanges.Values;
+
+        // Each criterion is captured into a local before the predicate closes over it, exactly as the PostgreSQL
+        // twin does. Closing over the filter itself re-reads the property on every element and leaves a nullable
+        // dereference in the lambda; matching the twin line for line is also what keeps "narrow identically"
+        // true of the code rather than only of the comment.
+        if (filter.ConnectedSystemId.HasValue)
+        {
+            var connectedSystemId = filter.ConnectedSystemId.Value;
+            query = query.Where(c => c.ConnectedSystemId == connectedSystemId);
+        }
+
+        if (filter.Status.HasValue)
+        {
+            var status = filter.Status.Value;
+            query = query.Where(c => c.Status == status);
+        }
+
+        if (filter.FailureReason.HasValue)
+        {
+            var reason = filter.FailureReason.Value;
+            query = query.Where(c => c.FailureReason == reason);
+        }
+
+        if (filter.MetaverseObjectId.HasValue)
+        {
+            var metaverseObjectId = filter.MetaverseObjectId.Value;
+            query = query.Where(c => c.MetaverseObjectId == metaverseObjectId);
+        }
+
+        if (filter.Ids is { Count: > 0 })
+        {
+            var ids = filter.Ids.ToList();
+            query = query.Where(c => ids.Contains(c.Id));
+        }
+
+        return query.ToList();
     }
 
     public Task<int> DeleteTerminalPasswordChangesAsync(DateTime olderThan, int maxRecords)

@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
@@ -10,6 +10,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Scheduling;
 using JIM.Models.Staging;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
@@ -519,6 +520,70 @@ public class ActivityRepository : IActivityRepository
     /// Gets a page's worth of direct child activities for a given parent activity ID,
     /// ordered by creation date ascending.
     /// </summary>
+    /// <inheritdoc />
+    public async Task<List<PasswordSynchronisationEvent>> GetPasswordSynchronisationEventsAsync(Guid metaverseObjectId, int maximumEvents)
+    {
+        if (maximumEvents < 1)
+            return [];
+
+        // Two reads rather than an Include, so the limit applies to changes rather than to rows: a single
+        // Include over parents and children, taken to a row count, can cut a change off from half its outcomes
+        // and show an identity a success while hiding the refusal that followed it.
+        var changes = await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.MetaverseObjectId == metaverseObjectId
+                        && a.TargetType == ActivityTargetType.PasswordSynchronisation
+                        && a.ParentActivityId == null)
+            .OrderByDescending(a => a.Created)
+            .Take(maximumEvents)
+            .Select(a => new PasswordSynchronisationEvent
+            {
+                ActivityId = a.Id,
+                Created = a.Created,
+                InitiatedByName = a.InitiatedByName,
+                InitiatedByType = a.InitiatedByType,
+                Message = a.Message
+            })
+            .ToListAsync();
+
+        if (changes.Count == 0)
+            return changes;
+
+        var changeIds = changes.Select(c => c.ActivityId).ToList();
+
+        var outcomes = await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentActivityId != null && changeIds.Contains(a.ParentActivityId.Value))
+            .OrderBy(a => a.Created)
+            .Select(a => new
+            {
+                ParentActivityId = a.ParentActivityId!.Value,
+                Outcome = new PasswordSynchronisationEventOutcome
+                {
+                    ActivityId = a.Id,
+                    ConnectedSystemId = a.ConnectedSystemId,
+                    ConnectedSystemName = a.TargetName ?? string.Empty,
+                    Status = a.Status,
+                    ErrorMessage = a.ErrorMessage,
+                    Message = a.Message,
+                    OccurredAt = a.Created
+                }
+            })
+            .ToListAsync();
+
+        var byChange = outcomes
+            .GroupBy(o => o.ParentActivityId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<PasswordSynchronisationEventOutcome>)g.Select(o => o.Outcome).ToList());
+
+        foreach (var change in changes)
+        {
+            if (byChange.TryGetValue(change.ActivityId, out var changeOutcomes))
+                change.Outcomes = changeOutcomes;
+        }
+
+        return changes;
+    }
+
     public async Task<PagedResultSet<Activity>> GetChildActivitiesAsync(Guid parentActivityId, int page, int pageSize)
     {
         if (pageSize < 1)
