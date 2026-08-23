@@ -1,6 +1,6 @@
 # Causality Object Spine — Implementation Plan
 
-- **Status:** Doing
+- **Status:** Doing (Phases 1-3 complete on `feature/causality-object-spine`; Phase 4 runtime verification in progress. Stack layer PR #1502 carries the record-system fallback fix discovered during verification.)
 - **Issue:** [#1495](https://github.com/TetronIO/JIM/issues/1495)
 - **PRD:** [`engineering/prd/doing/PRD_CAUSALITY_OBJECT_SPINE.md`](../../prd/doing/PRD_CAUSALITY_OBJECT_SPINE.md)
 
