@@ -2924,24 +2924,32 @@ public class SyncRepository : ISyncRepository
         ArgumentNullException.ThrowIfNull(filter);
 
         var headers = FilterPasswordChanges(filter)
-            .Select(c => new PendingPasswordChangeHeader
+            .Select(c =>
             {
-                Id = c.Id,
-                MetaverseObjectId = c.MetaverseObjectId,
-                MetaverseObjectDisplayName = _mvos.TryGetValue(c.MetaverseObjectId, out var mvo) ? mvo.CachedDisplayName : null,
-                MetaverseObjectTypePluralName = mvo?.Type?.PluralName,
-                ConnectedSystemId = c.ConnectedSystemId,
-                ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
-                Status = c.Status,
-                FailureReason = c.FailureReason,
-                TargetMessage = c.TargetMessage,
-                AttemptCount = c.AttemptCount,
-                NextRetryAt = c.NextRetryAt,
-                CreatedAt = c.CreatedAt,
-                LastAttemptedAt = c.LastAttemptedAt,
-                ExpiresAt = c.ExpiresAt,
-                CancelledAt = c.CancelledAt,
-                CancelledByName = c.CancelledByName
+                // Looked up once and held, rather than reusing an out variable from one initialiser inside
+                // another: that reads as though the second initialiser has its own lookup, and is only correct
+                // because member initialisers happen to evaluate in source order.
+                _mvos.TryGetValue(c.MetaverseObjectId, out var mvo);
+
+                return new PendingPasswordChangeHeader
+                {
+                    Id = c.Id,
+                    MetaverseObjectId = c.MetaverseObjectId,
+                    MetaverseObjectDisplayName = mvo?.CachedDisplayName,
+                    MetaverseObjectTypePluralName = mvo?.Type?.PluralName,
+                    ConnectedSystemId = c.ConnectedSystemId,
+                    ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
+                    Status = c.Status,
+                    FailureReason = c.FailureReason,
+                    TargetMessage = c.TargetMessage,
+                    AttemptCount = c.AttemptCount,
+                    NextRetryAt = c.NextRetryAt,
+                    CreatedAt = c.CreatedAt,
+                    LastAttemptedAt = c.LastAttemptedAt,
+                    ExpiresAt = c.ExpiresAt,
+                    CancelledAt = c.CancelledAt,
+                    CancelledByName = c.CancelledByName
+                };
             })
             .ToList();
 
@@ -3042,20 +3050,39 @@ public class SyncRepository : ISyncRepository
     {
         IEnumerable<PendingPasswordChange> query = _pendingPasswordChanges.Values;
 
+        // Each criterion is captured into a local before the predicate closes over it, exactly as the PostgreSQL
+        // twin does. Closing over the filter itself re-reads the property on every element and leaves a nullable
+        // dereference in the lambda; matching the twin line for line is also what keeps "narrow identically"
+        // true of the code rather than only of the comment.
         if (filter.ConnectedSystemId.HasValue)
-            query = query.Where(c => c.ConnectedSystemId == filter.ConnectedSystemId.Value);
+        {
+            var connectedSystemId = filter.ConnectedSystemId.Value;
+            query = query.Where(c => c.ConnectedSystemId == connectedSystemId);
+        }
 
         if (filter.Status.HasValue)
-            query = query.Where(c => c.Status == filter.Status.Value);
+        {
+            var status = filter.Status.Value;
+            query = query.Where(c => c.Status == status);
+        }
 
         if (filter.FailureReason.HasValue)
-            query = query.Where(c => c.FailureReason == filter.FailureReason.Value);
+        {
+            var reason = filter.FailureReason.Value;
+            query = query.Where(c => c.FailureReason == reason);
+        }
 
         if (filter.MetaverseObjectId.HasValue)
-            query = query.Where(c => c.MetaverseObjectId == filter.MetaverseObjectId.Value);
+        {
+            var metaverseObjectId = filter.MetaverseObjectId.Value;
+            query = query.Where(c => c.MetaverseObjectId == metaverseObjectId);
+        }
 
         if (filter.Ids is { Count: > 0 })
-            query = query.Where(c => filter.Ids.Contains(c.Id));
+        {
+            var ids = filter.Ids.ToList();
+            query = query.Where(c => ids.Contains(c.Id));
+        }
 
         return query.ToList();
     }
