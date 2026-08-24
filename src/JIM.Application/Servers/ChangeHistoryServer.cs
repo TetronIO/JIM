@@ -43,6 +43,20 @@ public class ChangeHistoryServer
         /// account's Activity is unaffected and long outlives it.
         /// </summary>
         public int InitialPasswordWorkRecordsDeleted { get; set; }
+
+        /// <summary>
+        /// Password Synchronisation Activities (#1119) past their own retention period: the delivery passes, the
+        /// fan-out records, and the per-system outcome children.
+        /// </summary>
+        public int PasswordEventActivitiesDeleted { get; set; }
+
+        /// <summary>
+        /// Queued password changes (#1119) that had reached a terminal state (parked, expired, or cancelled) and
+        /// have since had their retention period. Counted apart from the Activities above because this is the
+        /// number that says how many encrypted passwords JIM stopped holding.
+        /// </summary>
+        public int PasswordQueueRecordsDeleted { get; set; }
+
         public DateTime? OldestRecordDeleted { get; set; }
         public DateTime? NewestRecordDeleted { get; set; }
     }
@@ -53,18 +67,49 @@ public class ChangeHistoryServer
     /// far older/longer-lived than the general one), so configuration change history and security event history
     /// each outlive the high-volume sync and identity-data history, governed independently.
     /// Creates a system-initiated Activity record to audit the cleanup operation.
-    /// Use this overload for automated/scheduled cleanup (worker housekeeping).
+    /// Use this overload for automated/scheduled cleanup (the built-in History Retention Cleanup Schedule).
     /// </summary>
-    public async Task<ChangeHistoryCleanupResult> DeleteExpiredChangeHistoryAsync(
-        DateTime olderThan,
-        DateTime configurationOlderThan,
-        DateTime securityOlderThan,
-        DateTime initialPasswordOlderThan,
-        int maxRecordsPerType)
+    public async Task<ChangeHistoryCleanupResult> DeleteExpiredChangeHistoryAsync(ChangeHistoryRetentionCutoffs cutoffs)
     {
         var activity = CreateCleanupActivity();
         await _application.Activities.CreateSystemActivityAsync(activity);
-        return await ExecuteCleanupAsync(activity, olderThan, configurationOlderThan, securityOlderThan, initialPasswordOlderThan, maxRecordsPerType);
+        return await ExecuteCleanupAsync(activity, cutoffs);
+    }
+
+    /// <summary>
+    /// Runs a retention cleanup under an Activity the caller already owns, and does not complete it: the scheduled
+    /// step's Activity is created by the worker task pipeline and completed by the worker once the step's summary
+    /// statistics have been attached, so a second completion here would close it before the numbers were on it.
+    /// </summary>
+    public async Task<ChangeHistoryCleanupResult> DeleteExpiredChangeHistoryAsync(
+        Activity activity,
+        ChangeHistoryRetentionCutoffs cutoffs)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+        return await ExecuteCleanupAsync(activity, cutoffs, completeActivity: false);
+    }
+
+    /// <summary>
+    /// Reads every retention period from its Service Setting and turns them into the cutoffs one cleanup pass
+    /// works to. One place, so the scheduled step and the API endpoint cannot drift apart in how they derive them.
+    /// <para>
+    /// Configuration-change Activities carry the versioned configuration snapshots, security event Activities are
+    /// the security audit trail, and Password Synchronisation Activities answer a question asked long after the
+    /// fact, so each gets its own (typically much longer) period than the general history.
+    /// </para>
+    /// </summary>
+    /// <param name="asOf">The instant to measure each period back from; normally now.</param>
+    public async Task<ChangeHistoryRetentionCutoffs> GetRetentionCutoffsAsync(DateTime asOf)
+    {
+        return new ChangeHistoryRetentionCutoffs
+        {
+            General = asOf - await _application.ServiceSettings.GetHistoryRetentionPeriodAsync(),
+            ConfigurationChange = asOf - await _application.ServiceSettings.GetConfigurationChangeRetentionPeriodAsync(),
+            SecurityEvent = asOf - await _application.ServiceSettings.GetSecurityEventRetentionPeriodAsync(),
+            InitialPassword = asOf - await _application.ServiceSettings.GetInitialPasswordRetentionPeriodAsync(),
+            PasswordEvent = asOf - await _application.ServiceSettings.GetPasswordEventRetentionPeriodAsync(),
+            MaxRecordsPerType = await _application.ServiceSettings.GetHistoryCleanupBatchSizeAsync()
+        };
     }
 
     /// <summary>
@@ -76,25 +121,12 @@ public class ChangeHistoryServer
     /// Use this overload for API-initiated cleanup.
     /// </summary>
     public async Task<ChangeHistoryCleanupResult> DeleteExpiredChangeHistoryAsync(
-        DateTime olderThan,
-        DateTime configurationOlderThan,
-        DateTime securityOlderThan,
-        DateTime initialPasswordOlderThan,
-        int maxRecordsPerType,
+        ChangeHistoryRetentionCutoffs cutoffs,
         ApiKey initiatedByApiKey)
     {
         var activity = CreateCleanupActivity();
         await _application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
-        return await ExecuteCleanupAsync(activity, olderThan, configurationOlderThan, securityOlderThan, initialPasswordOlderThan, maxRecordsPerType);
-    }
-
-    /// <summary>
-    /// Gets the time of the most recent history retention cleanup.
-    /// Returns null if no cleanup has ever been performed.
-    /// </summary>
-    public async Task<DateTime?> GetLastCleanupTimeAsync()
-    {
-        return await _application.Repository.Activity.GetLastHistoryCleanupTimeAsync();
+        return await ExecuteCleanupAsync(activity, cutoffs);
     }
 
     /// <summary>
@@ -367,13 +399,18 @@ public class ChangeHistoryServer
 
     private async Task<ChangeHistoryCleanupResult> ExecuteCleanupAsync(
         Activity activity,
-        DateTime olderThan,
-        DateTime configurationOlderThan,
-        DateTime securityOlderThan,
-        DateTime initialPasswordOlderThan,
-        int maxRecordsPerType)
+        ChangeHistoryRetentionCutoffs cutoffs,
+        bool completeActivity = true)
     {
+        ArgumentNullException.ThrowIfNull(cutoffs);
+
         var result = new ChangeHistoryCleanupResult();
+        var olderThan = cutoffs.General;
+        var configurationOlderThan = cutoffs.ConfigurationChange;
+        var securityOlderThan = cutoffs.SecurityEvent;
+        var initialPasswordOlderThan = cutoffs.InitialPassword;
+        var passwordOlderThan = cutoffs.PasswordEvent;
+        var maxRecordsPerType = cutoffs.MaxRecordsPerType;
 
         try
         {
@@ -410,6 +447,16 @@ public class ChangeHistoryServer
             Log.Information("ChangeHistoryCleanup: Removing initial-password records parked or expired before {InitialPasswordOlderThan}", initialPasswordOlderThan);
             result.InitialPasswordWorkRecordsDeleted = await _application.InitialPasswords.DeleteExpiredWorkRecordsAsync(initialPasswordOlderThan, maxRecordsPerType);
 
+            // Password Synchronisation history at its own retention cutoff (#1119, requirements 28 and 29). The
+            // Activities are spared by the general Activity pass above, so this is the only thing that removes
+            // them; the queue rows are removed here too, because a parked or cancelled one still carries an
+            // encrypted password and the retention period is what bounds how long JIM holds it.
+            Log.Information("ChangeHistoryCleanup: Deleting expired Password Synchronisation activities (older than {PasswordOlderThan})", passwordOlderThan);
+            result.PasswordEventActivitiesDeleted = await _application.Repository.ChangeHistory.DeleteExpiredPasswordEventActivitiesAsync(passwordOlderThan, maxRecordsPerType);
+
+            Log.Information("ChangeHistoryCleanup: Removing password changes terminal before {PasswordOlderThan}", passwordOlderThan);
+            result.PasswordQueueRecordsDeleted = await _application.PasswordSynchronisation.DeleteExpiredQueueRecordsAsync(passwordOlderThan, maxRecordsPerType);
+
             // Calculate overall date range (use oldest/newest across all types)
             // Note: We can't get the exact IDs that were deleted without changing the repository methods,
             // so we'll use the olderThan date as a proxy for the date range
@@ -423,21 +470,29 @@ public class ChangeHistoryServer
             // Update activity with cleanup statistics
             activity.DeletedCsoChangeCount = result.CsoChangesDeleted;
             activity.DeletedMvoChangeCount = result.MvoChangesDeleted;
-            activity.DeletedActivityCount = result.ActivitiesDeleted + result.ConfigurationChangeActivitiesDeleted + result.SecurityEventActivitiesDeleted;
+            activity.DeletedActivityCount = result.ActivitiesDeleted + result.ConfigurationChangeActivitiesDeleted
+                + result.SecurityEventActivitiesDeleted + result.PasswordEventActivitiesDeleted;
             activity.DeletedRecordsFromDate = result.OldestRecordDeleted;
             activity.DeletedRecordsToDate = result.NewestRecordDeleted;
 
-            await _application.Activities.CompleteActivityAsync(activity);
+            if (completeActivity)
+                await _application.Activities.CompleteActivityAsync(activity);
 
-            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {InitialPasswordCount} initial-password records deleted",
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted);
+            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {InitialPasswordCount} initial-password records, {PasswordActivityCount} Password Synchronisation activities, {PasswordQueueCount} queued password changes deleted",
+                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted, result.PasswordEventActivitiesDeleted, result.PasswordQueueRecordsDeleted);
 
             return result;
         }
         catch (Exception ex)
         {
             Log.Error(ex, "ChangeHistoryCleanup: Error during cleanup");
-            await _application.Activities.FailActivityWithErrorAsync(activity, $"Cleanup failed: {ex.Message}");
+
+            // Only when this method owns the Activity's lifecycle. Where the caller owns it (the scheduled step,
+            // whose Activity belongs to the worker task pipeline), failing it here and again in the caller's
+            // handler would record the same failure twice.
+            if (completeActivity)
+                await _application.Activities.FailActivityWithErrorAsync(activity, $"Cleanup failed: {ex.Message}");
+
             throw;
         }
     }

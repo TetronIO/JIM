@@ -1,8 +1,10 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories;
@@ -55,7 +57,10 @@ public partial class SyncRepository
                 change.CreatedAt,
                 BulkSqlHelpers.NullableParam(change.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
                 change.ExpiresAt,
-                change.ActivityId);
+                change.ActivityId,
+                BulkSqlHelpers.NullableParam(change.CancelledAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                BulkSqlHelpers.NullableParam(change.CancelledById, NpgsqlTypes.NpgsqlDbType.Uuid),
+                BulkSqlHelpers.NullableParam(change.CancelledByName, NpgsqlTypes.NpgsqlDbType.Text));
         }
     }
 
@@ -169,8 +174,11 @@ public partial class SyncRepository
 
         var counts = await _context.PendingPasswordChanges
             .AsNoTracking()
+            // Named rather than "not pending": a cancelled change waits on nobody, so counting it here would
+            // report a system as needing attention it does not need.
             .Where(c => connectedSystemIds.Contains(c.ConnectedSystemId)
-                        && c.Status != PendingPasswordChangeStatus.Pending)
+                        && (c.Status == PendingPasswordChangeStatus.Parked
+                            || c.Status == PendingPasswordChangeStatus.Expired))
             .GroupBy(c => new { c.ConnectedSystemId, c.Status })
             .Select(g => new { g.Key.ConnectedSystemId, g.Key.Status, Count = g.Count() })
             .ToListAsync();
@@ -201,6 +209,243 @@ public partial class SyncRepository
                 .Select(t => t.Id)
                 .Contains(c.Id))
             .ExecuteDeleteAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<PendingPasswordChangeHeader>> GetPendingPasswordChangeHeadersAsync(
+        PendingPasswordChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        // Joined and projected in the database rather than loaded: the queue can hold a row per identity per
+        // system, and the list needs two names off each row, not the entity behind it. Projection is also what
+        // guarantees the encrypted password is never materialised on a read path.
+        var query =
+            from change in _context.PendingPasswordChanges.AsNoTracking()
+            join system in _context.ConnectedSystems.AsNoTracking() on change.ConnectedSystemId equals system.Id
+            join mvo in _context.MetaverseObjects.AsNoTracking() on change.MetaverseObjectId equals mvo.Id
+            select new PendingPasswordChangeHeader
+            {
+                Id = change.Id,
+                MetaverseObjectId = change.MetaverseObjectId,
+                MetaverseObjectDisplayName = mvo.CachedDisplayName,
+                // Reached through the navigation rather than an explicit join: the Object Type foreign key is a
+                // shadow property, and EF translates this into the same join without naming it here.
+                MetaverseObjectTypePluralName = mvo.Type.PluralName,
+                ConnectedSystemId = change.ConnectedSystemId,
+                ConnectedSystemName = system.Name,
+                Status = change.Status,
+                FailureReason = change.FailureReason,
+                TargetMessage = change.TargetMessage,
+                AttemptCount = change.AttemptCount,
+                NextRetryAt = change.NextRetryAt,
+                CreatedAt = change.CreatedAt,
+                LastAttemptedAt = change.LastAttemptedAt,
+                ExpiresAt = change.ExpiresAt,
+                CancelledAt = change.CancelledAt,
+                CancelledByName = change.CancelledByName
+            };
+
+        query = ApplyHeaderFilter(query, filter);
+
+        // Counted before windowing, and only when asked: the count is the expensive half of a window read, and
+        // a scroll re-reads windows far more often than the filters change.
+        int? total = includeTotalCount ? await query.CountAsync() : null;
+
+        query = sortBy?.ToLowerInvariant() switch
+        {
+            "identity" => sortDescending
+                ? query.OrderByDescending(h => h.MetaverseObjectDisplayName)
+                : query.OrderBy(h => h.MetaverseObjectDisplayName),
+            "system" => sortDescending
+                ? query.OrderByDescending(h => h.ConnectedSystemName)
+                : query.OrderBy(h => h.ConnectedSystemName),
+            "status" => sortDescending
+                ? query.OrderByDescending(h => h.Status)
+                : query.OrderBy(h => h.Status),
+            "attempts" => sortDescending
+                ? query.OrderByDescending(h => h.AttemptCount)
+                : query.OrderBy(h => h.AttemptCount),
+            "nextattempt" => sortDescending
+                ? query.OrderByDescending(h => h.NextRetryAt)
+                : query.OrderBy(h => h.NextRetryAt),
+            "expires" => sortDescending
+                ? query.OrderByDescending(h => h.ExpiresAt)
+                : query.OrderBy(h => h.ExpiresAt),
+            // Queued time is the default and the fallback: it is the one column every row has a value for.
+            _ => sortDescending
+                ? query.OrderByDescending(h => h.CreatedAt)
+                : query.OrderBy(h => h.CreatedAt)
+        };
+
+        // Id breaks ties, so paging over rows queued in the same instant cannot repeat or skip one.
+        var ordered = ((IOrderedQueryable<PendingPasswordChangeHeader>)query).ThenBy(h => h.Id);
+
+        return new RangeResultSet<PendingPasswordChangeHeader>
+        {
+            Results = await ordered.Skip(startIndex).Take(count).ToListAsync(),
+            TotalResults = total
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<PasswordQueueSummary> GetPasswordQueueSummaryAsync(DateTime asOf)
+    {
+        // One grouped round trip rather than five counts: the summary sits above a list that is already reading,
+        // and five queries to populate four numbers is four too many.
+        var counts = await _context.PendingPasswordChanges.AsNoTracking()
+            .GroupBy(_ => 1)
+            .Select(g => new PasswordQueueSummary
+            {
+                WaitingCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Pending),
+                DueCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Pending
+                                        && (c.NextRetryAt == null || c.NextRetryAt <= asOf)),
+                ParkedCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Parked),
+                ExpiredCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Expired),
+                CancelledCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Cancelled)
+            })
+            .SingleOrDefaultAsync();
+
+        // An empty queue groups to nothing rather than to a row of zeroes, which is the answer the caller wants.
+        return counts ?? new PasswordQueueSummary();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RetryPasswordChangesAsync(PendingPasswordChangeFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        // Set-based rather than load-mutate-save: "retry everything parked on this system" is the action the
+        // page exists for, and it must not depend on how many rows that is. The columns cleared here MUST stay
+        // in step with PendingPasswordChange.Retry(), which is the same transition done in memory.
+        return await ApplyChangeFilter(_context.PendingPasswordChanges, filter)
+            // An expired change has no password left to send, so retrying one would queue an empty delivery.
+            .Where(c => c.Status != PendingPasswordChangeStatus.Expired)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(c => c.Status, PendingPasswordChangeStatus.Pending)
+                .SetProperty(c => c.AttemptCount, 0)
+                .SetProperty(c => c.NextRetryAt, (DateTime?)null)
+                .SetProperty(c => c.FailureReason, (PasswordSetFailureReason?)null)
+                .SetProperty(c => c.TargetMessage, (string?)null)
+                .SetProperty(c => c.CancelledAt, (DateTime?)null)
+                .SetProperty(c => c.CancelledById, (Guid?)null)
+                .SetProperty(c => c.CancelledByName, (string?)null));
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CancelPasswordChangesAsync(
+        PendingPasswordChangeFilter filter,
+        Guid? cancelledById,
+        string? cancelledByName,
+        DateTime asOf)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        return await ApplyChangeFilter(_context.PendingPasswordChanges, filter)
+            // Cancelling something already finished would overwrite the outcome that actually happened to it.
+            .Where(c => c.Status == PendingPasswordChangeStatus.Pending
+                        || c.Status == PendingPasswordChangeStatus.Parked)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(c => c.Status, PendingPasswordChangeStatus.Cancelled)
+                .SetProperty(c => c.NextRetryAt, (DateTime?)null)
+                .SetProperty(c => c.CancelledAt, asOf)
+                .SetProperty(c => c.CancelledById, cancelledById)
+                .SetProperty(c => c.CancelledByName, cancelledByName));
+    }
+
+    /// <summary>
+    /// Narrows a queue query to what a filter names. Kept separate from the header projection so the retry and
+    /// cancel actions apply exactly the same rules the list did, rather than a re-typed approximation of them.
+    /// </summary>
+    private static IQueryable<PendingPasswordChange> ApplyChangeFilter(
+        IQueryable<PendingPasswordChange> query,
+        PendingPasswordChangeFilter filter)
+    {
+        if (filter.ConnectedSystemId.HasValue)
+        {
+            var connectedSystemId = filter.ConnectedSystemId.Value;
+            query = query.Where(c => c.ConnectedSystemId == connectedSystemId);
+        }
+
+        if (filter.Status.HasValue)
+        {
+            var status = filter.Status.Value;
+            query = query.Where(c => c.Status == status);
+        }
+
+        if (filter.FailureReason.HasValue)
+        {
+            var reason = filter.FailureReason.Value;
+            query = query.Where(c => c.FailureReason == reason);
+        }
+
+        if (filter.MetaverseObjectId.HasValue)
+        {
+            var metaverseObjectId = filter.MetaverseObjectId.Value;
+            query = query.Where(c => c.MetaverseObjectId == metaverseObjectId);
+        }
+
+        if (filter.Ids is { Count: > 0 })
+        {
+            var ids = filter.Ids.ToList();
+            query = query.Where(c => ids.Contains(c.Id));
+        }
+
+        return query;
+    }
+
+    /// <summary>
+    /// The header-side twin of <see cref="ApplyChangeFilter"/>, applied after projection so the free-text search
+    /// can reach the resolved identity and Connected System names.
+    /// </summary>
+    private static IQueryable<PendingPasswordChangeHeader> ApplyHeaderFilter(
+        IQueryable<PendingPasswordChangeHeader> query,
+        PendingPasswordChangeFilter filter)
+    {
+        if (filter.ConnectedSystemId.HasValue)
+        {
+            var connectedSystemId = filter.ConnectedSystemId.Value;
+            query = query.Where(h => h.ConnectedSystemId == connectedSystemId);
+        }
+
+        if (filter.Status.HasValue)
+        {
+            var status = filter.Status.Value;
+            query = query.Where(h => h.Status == status);
+        }
+
+        if (filter.FailureReason.HasValue)
+        {
+            var reason = filter.FailureReason.Value;
+            query = query.Where(h => h.FailureReason == reason);
+        }
+
+        if (filter.MetaverseObjectId.HasValue)
+        {
+            var metaverseObjectId = filter.MetaverseObjectId.Value;
+            query = query.Where(h => h.MetaverseObjectId == metaverseObjectId);
+        }
+
+        if (filter.Ids is { Count: > 0 })
+        {
+            var ids = filter.Ids.ToList();
+            query = query.Where(h => ids.Contains(h.Id));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var search = filter.SearchText.Trim();
+            query = query.Where(h =>
+                (h.MetaverseObjectDisplayName != null && EF.Functions.ILike(h.MetaverseObjectDisplayName, $"%{search}%"))
+                || EF.Functions.ILike(h.ConnectedSystemName, $"%{search}%"));
+        }
+
+        return query;
     }
 
     #endregion

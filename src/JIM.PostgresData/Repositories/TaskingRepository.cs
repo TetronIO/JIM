@@ -50,6 +50,10 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.TemporalScopeReconciliationWorkerTasks.Add(temporalScopeReconciliationTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
+            case HistoryRetentionCleanupWorkerTask historyRetentionCleanupTask:
+                Repository.Database.HistoryRetentionCleanupWorkerTasks.Add(historyRetentionCleanupTask);
+                await Repository.Database.SaveChangesAsync();
+                break;
             case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
                 Repository.Database.ClearConnectedSystemObjectsTasks.Add(clearConnectedSystemObjectsTask);
                 await Repository.Database.SaveChangesAsync();
@@ -468,6 +472,9 @@ public class TaskingRepository : ITaskingRepository
             case TemporalScopeReconciliationWorkerTask:
                 // the sweep carries no per-instance configuration, so the feature name is the display name
                 return "Temporal Scope Reconciliation";
+            case HistoryRetentionCleanupWorkerTask:
+                // likewise: the pass reads every cutoff from Service Settings, so there is nothing per-instance to name
+                return "History Retention Cleanup";
             case SchemaRefreshRemovalWorkerTask schemaRefreshRemovalTask:
             {
                 // The Connected System survives a schema refresh removal, but tolerate its deletion the way the
@@ -490,6 +497,7 @@ public class TaskingRepository : ITaskingRepository
             DeleteConnectedSystemWorkerTask => nameof(DeleteConnectedSystemWorkerTask).SplitOnCapitalLetters(),
             PasswordDeliveryWorkerTask => nameof(PasswordDeliveryWorkerTask).SplitOnCapitalLetters(),
             TemporalScopeReconciliationWorkerTask => nameof(TemporalScopeReconciliationWorkerTask).SplitOnCapitalLetters(),
+            HistoryRetentionCleanupWorkerTask => nameof(HistoryRetentionCleanupWorkerTask).SplitOnCapitalLetters(),
             SchemaRefreshRemovalWorkerTask => nameof(SchemaRefreshRemovalWorkerTask).SplitOnCapitalLetters(),
             _ => "Unknown Worker Task Type"
         };

@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Data.Common;
@@ -2631,6 +2631,16 @@ public class ConnectedSystemServer
     public async Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId)
     {
         return await Application.Repository.ConnectedSystems.GetPasswordSynchronisationAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Where each of the named Connected Systems stands on Password Synchronisation (#1119, requirement 26), for
+    /// a list that shows the state per row and lets an administrator sort and filter on it.
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<Dictionary<int, PasswordSynchronisationState>> GetPasswordSynchronisationStatesAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetPasswordSynchronisationStatesAsync(connectedSystemIds);
     }
 
 

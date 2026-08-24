@@ -231,7 +231,9 @@ Get-JIMConnectedSystem |
 
 ## Invoke-JIMHistoryCleanup
 
-Manually triggers change history cleanup based on the configured retention policy. Deletes expired CSO changes, MVO changes, and activities older than the configured retention period.
+Runs a history retention pass on demand. Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, configuration change previews, Activities, initial-password records, and Pending Password Changes that reached a terminal state. Records still being worked are never removed, however old.
+
+This also runs on its own, daily, on the built-in [History Retention Cleanup Schedule](../configuration/schedules.md#built-in-schedules). Use this cmdlet to run a pass now, or to drain a large backlog faster than one pass a day.
 
 ### Syntax
 
@@ -253,17 +255,27 @@ When `PassThru` is specified, returns a `PSCustomObject` with the following prop
 |----------|------|-------------|
 | `CsoChangesDeleted` | `int` | Number of Connected System Object change records deleted. |
 | `MvoChangesDeleted` | `int` | Number of Metaverse Object change records deleted. |
-| `ActivitiesDeleted` | `int` | Number of activity records deleted. |
+| `PreviewsDeleted` | `int` | Number of configuration change previews whose results were cleared. |
+| `ActivitiesDeleted` | `int` | Number of general Activity records deleted, under the general retention period. |
+| `ConfigurationChangeActivitiesDeleted` | `int` | Configuration change Activities deleted, under their own retention period. |
+| `SecurityEventActivitiesDeleted` | `int` | Security event Activities deleted, under their own retention period. |
+| `InitialPasswordWorkRecordsDeleted` | `int` | Terminal initial-password records deleted, under their own retention period. |
+| `PasswordEventActivitiesDeleted` | `int` | Password Synchronisation Activities deleted, under their own retention period. |
+| `PasswordQueueRecordsDeleted` | `int` | Terminal Pending Password Changes deleted. Also the number of encrypted passwords JIM stopped holding. |
 | `OldestRecordDeleted` | `DateTime` | Timestamp of the oldest record removed. |
 | `NewestRecordDeleted` | `DateTime` | Timestamp of the newest record removed. |
-| `CutoffDate` | `DateTime` | The calculated cutoff date based on retention policy. |
-| `RetentionPeriodDays` | `int` | The configured retention period in days. |
-| `BatchSize` | `int` | Maximum number of records processed per invocation. |
+| `CutoffDate` | `DateTime` | The cutoff used for the general retention period. |
+| `RetentionPeriodDays` | `int` | The configured general retention period in days. |
+| `ConfigurationChangeRetentionPeriodDays` | `int` | The configured configuration change retention period in days. |
+| `SecurityEventRetentionPeriodDays` | `int` | The configured security event retention period in days. |
+| `InitialPasswordRetentionPeriodDays` | `int` | The configured initial-password record retention period in days. |
+| `PasswordEventRetentionPeriodDays` | `int` | The configured Password Synchronisation retention period in days. |
+| `BatchSize` | `int` | Maximum number of records of any one kind processed per invocation. |
 
 Without `PassThru`, produces no output.
 
 !!! note "Batch Size Limitation"
-    Each invocation processes up to the configured batch size. For environments with large volumes of expired history, you may need to call this cmdlet multiple times or rely on automatic housekeeping, which runs every 60 seconds. Each cleanup invocation creates an audit activity.
+    Each invocation removes at most `History.CleanupBatchSize` records of any one kind. For environments with a large backlog, call this cmdlet repeatedly, or leave the daily Schedule to work through it over successive runs. Each invocation creates an audit Activity saying what it removed.
 
 ### Examples
 
@@ -283,6 +295,11 @@ do {
 } while ($total -gt 0)
 ```
 
+```powershell title="Check what a pass removed from Password Synchronisation history"
+Invoke-JIMHistoryCleanup -PassThru |
+    Select-Object PasswordEventActivitiesDeleted, PasswordQueueRecordsDeleted, PasswordEventRetentionPeriodDays
+```
+
 ---
 
 ## See also
@@ -290,3 +307,5 @@ do {
 - [API reference](../api/index.md): the Scalar API reference (linked from the API index) covers the history endpoints
 - [Activities](activities.md): cmdlets for querying activity logs and execution history
 - [Activities concept](../configuration/activities.md): how configuration changes are carried on Activities, including the redaction model
+- [Schedules](../configuration/schedules.md#built-in-schedules): the built-in History Retention Cleanup Schedule that runs a retention pass daily
+- [Service settings](../administration/configuration.md#service-settings): the `History.*` retention periods each kind of record is governed by

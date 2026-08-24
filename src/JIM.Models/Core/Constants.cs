@@ -303,6 +303,19 @@ public static class Constants
         /// </summary>
         public const string InitialPasswordRetentionPeriod = "History.InitialPasswordRetentionPeriod";
 
+        /// <summary>
+        /// How long Password Synchronisation history is kept: both the Activities recording what happened to each
+        /// password change, and the queue rows that reached a terminal state (parked, expired, or cancelled).
+        /// Changes still owed to a system are never removed, however old. Default: 365 days.
+        /// <para>
+        /// Its own retention class rather than the general one because these Activities answer a question asked
+        /// long after the fact ("was this person's password ever set in that system, and if not, why?"), and
+        /// because the queue rows carry an encrypted password: a retention period an operator can shorten is what
+        /// bounds how long JIM holds one it can no longer use.
+        /// </para>
+        /// </summary>
+        public const string PasswordEventRetentionPeriod = "History.PasswordEventRetentionPeriod";
+
         // Change Tracking Settings
         /// <summary>
         /// Enables or disables change tracking for Connected System Objects.

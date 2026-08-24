@@ -179,6 +179,18 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds)
         => _inner.GetPasswordQueueAttentionAsync(connectedSystemIds);
 
+    public Task<RangeResultSet<PendingPasswordChangeHeader>> GetPendingPasswordChangeHeadersAsync(
+        PendingPasswordChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+        => _inner.GetPendingPasswordChangeHeadersAsync(filter, startIndex, count, sortBy, sortDescending, includeTotalCount);
+
+    public Task<PasswordQueueSummary> GetPasswordQueueSummaryAsync(DateTime asOf)
+        => _inner.GetPasswordQueueSummaryAsync(asOf);
+
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => _inner.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
@@ -386,6 +398,16 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<int> DeleteTerminalPasswordChangesAsync(DateTime olderThan, int maxRecords)
         => throw new PreviewWriteAttemptedException(nameof(DeleteTerminalPasswordChangesAsync));
+
+    public Task<int> RetryPasswordChangesAsync(PendingPasswordChangeFilter filter)
+        => throw new PreviewWriteAttemptedException(nameof(RetryPasswordChangesAsync));
+
+    public Task<int> CancelPasswordChangesAsync(
+        PendingPasswordChangeFilter filter,
+        Guid? cancelledById,
+        string? cancelledByName,
+        DateTime asOf)
+        => throw new PreviewWriteAttemptedException(nameof(CancelPasswordChangesAsync));
 
     public Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportsAsync));

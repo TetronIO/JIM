@@ -314,4 +314,119 @@ public class PendingPasswordChangeTests
             Assert.That(change.NextRetryAt, Is.Null);
         }
     }
+
+    [Test]
+    public void Cancel_RecordsTheOutcomeRatherThanClearingTheRow()
+    {
+        // The administrator's counterpart to Expire: a change nobody wants delivered any more. Recorded rather
+        // than deleted, for the same reason an expiry is: the identity's password stays divergent in that system,
+        // and a row that vanishes says the opposite.
+        var now = new DateTime(2026, 8, 21, 9, 30, 0, DateTimeKind.Utc);
+        var administratorId = Guid.NewGuid();
+
+        var change = Change();
+        change.Status = PendingPasswordChangeStatus.Parked;
+        change.AttemptCount = 4;
+        change.FailureReason = PasswordSetFailureReason.PolicyRejection;
+        change.TargetMessage = "Password does not meet complexity requirements";
+
+        change.Cancel(administratorId, "Ada Lovelace", now);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Cancelled));
+            Assert.That(change.CancelledAt, Is.EqualTo(now));
+            Assert.That(change.CancelledById, Is.EqualTo(administratorId));
+            Assert.That(change.CancelledByName, Is.EqualTo("Ada Lovelace"));
+            Assert.That(change.NextRetryAt, Is.Null);
+            Assert.That(change.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection),
+                "Why it was stuck is why it was cancelled; losing it would leave the row unexplained.");
+            Assert.That(change.TargetMessage, Is.EqualTo("Password does not meet complexity requirements"));
+            Assert.That(change.AttemptCount, Is.EqualTo(4));
+        }
+    }
+
+    [Test]
+    public void Cancel_ChangeThatWasStillWaiting_IsNoLongerDue()
+    {
+        // A cancelled change must drop out of the delivery pass, exactly as a parked or expired one does.
+        var now = new DateTime(2026, 8, 21, 9, 30, 0, DateTimeKind.Utc);
+
+        var change = Change();
+        change.ExpiresAt = now.AddDays(1);
+
+        Assert.That(change.IsDue(now), Is.True, "Guard: the change starts out due.");
+
+        change.Cancel(Guid.NewGuid(), "Ada Lovelace", now);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.IsDue(now), Is.False);
+            Assert.That(change.HasExpired(now.AddDays(2)), Is.False,
+                "A cancelled change must not later be re-stamped as expired: it already has its outcome.");
+        }
+    }
+
+    [Test]
+    public void Cancel_WithNoNamedAdministrator_StillRecordsTheOutcome()
+    {
+        // The API-key path has no person behind it. The outcome and its instant still matter; only the name is
+        // unknown, and recording "cancelled by nobody" beats not recording the cancellation.
+        var now = new DateTime(2026, 8, 21, 9, 30, 0, DateTimeKind.Utc);
+
+        var change = Change();
+        change.Cancel(null, null, now);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Cancelled));
+            Assert.That(change.CancelledAt, Is.EqualTo(now));
+            Assert.That(change.CancelledById, Is.Null);
+            Assert.That(change.CancelledByName, Is.Null);
+        }
+    }
+
+    [Test]
+    public void Retry_AfterCancel_PutsTheChangeBackInTheQueueAndClearsTheCancellation()
+    {
+        // Cancelling is not final in the way expiring is: the password is still held, so an administrator who
+        // cancelled by mistake can put it back. What must not survive is the cancellation stamp, which would
+        // leave a pending row claiming to have been cancelled.
+        var now = new DateTime(2026, 8, 21, 9, 30, 0, DateTimeKind.Utc);
+
+        var change = Change();
+        change.Cancel(Guid.NewGuid(), "Ada Lovelace", now);
+
+        change.Retry();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(change.CancelledAt, Is.Null);
+            Assert.That(change.CancelledById, Is.Null);
+            Assert.That(change.CancelledByName, Is.Null);
+        }
+    }
+
+    [Test]
+    public void Supersede_AfterCancel_ClearsTheCancellation()
+    {
+        // A newer password change for the same target revives the row (requirement 8). It must not carry the
+        // previous cancellation forward: that cancellation was of a password nobody is delivering any more.
+        var now = new DateTime(2026, 8, 21, 9, 30, 0, DateTimeKind.Utc);
+
+        var change = Change();
+        change.Cancel(Guid.NewGuid(), "Ada Lovelace", now);
+
+        change.Supersede("$JIMPW$v1$newer", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+            Guid.NewGuid(), TimeSpan.FromHours(12), now.AddMinutes(5));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(change.CancelledAt, Is.Null);
+            Assert.That(change.CancelledById, Is.Null);
+            Assert.That(change.CancelledByName, Is.Null);
+        }
+    }
 }

@@ -19,7 +19,8 @@ internal static class PendingPasswordChangeBulkColumns
     [
         "Id", "MetaverseObjectId", "ConnectedSystemId", "ConnectedSystemObjectId", "EncryptedPassword",
         "ExpiryBehaviour", "Status", "FailureReason", "TargetMessage", "AttemptCount", "NextRetryAt",
-        "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId"
+        "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId", "CancelledAt", "CancelledById",
+        "CancelledByName"
     ];
 
     /// <summary>
@@ -29,11 +30,16 @@ internal static class PendingPasswordChangeBulkColumns
     /// are here rather than in the exclusions. Carrying them forward would let a newer password inherit an
     /// exhausted retry budget, or a park earned by a password nobody is trying to deliver any more.
     /// </para>
+    /// <para>
+    /// The cancellation stamp goes with them, and for the same reason: it cancelled a password that no longer
+    /// exists on this row. Leaving it would produce a pending row claiming to have been cancelled.
+    /// </para>
     /// </summary>
     internal static readonly string[] PendingPasswordChangesSupersedeUpdate =
     [
         "ConnectedSystemObjectId", "EncryptedPassword", "ExpiryBehaviour", "Status", "FailureReason",
-        "TargetMessage", "AttemptCount", "NextRetryAt", "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId"
+        "TargetMessage", "AttemptCount", "NextRetryAt", "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId",
+        "CancelledAt", "CancelledById", "CancelledByName"
     ];
 
     /// <summary>

@@ -1,6 +1,7 @@
-@page "/admin/connected-systems"
+﻿@page "/admin/connected-systems"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities.DTOs
+@using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional.DTOs
 @using JIM.Utilities
@@ -41,12 +42,26 @@
 
 @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, the search box)
    lives in the shared grid; this page loads the small configuration list once and windows it in memory. *@
-<VirtualisedDataGrid T="ConnectedSystemHeader"
+<VirtualisedDataGrid @ref="_grid" T="ConnectedSystemHeader"
                      ContainerId="connected-system-list"
                      DefaultSortBy="name"
                      LoadWindow="LoadWindowAsync"
                      SingularName="Connected System"
                      PluralName="Connected Systems">
+    <ToolBarExtras>
+        @* Beside the table rather than in a filter row of its own: it is the only page-owned filter here, and a
+           full row of chrome above the grid for one control would cost more than it explains. *@
+        <MudSelect T="PasswordSynchronisationFilter" Label="Password Synchronisation" Value="_passwordSyncFilter"
+                   ValueChanged="OnPasswordSynchronisationFilterChangedAsync" Variant="Variant.Text" Dense="true"
+                   Margin="Margin.Dense" Class="mt-0" Style="max-width: 260px;">
+            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.Any">Any</MudSelectItem>
+            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.NeedsAttention">Needs attention</MudSelectItem>
+            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.Enabled">Enabled</MudSelectItem>
+            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.Disabled">Switched off</MudSelectItem>
+            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.NotConfigured">Not configured</MudSelectItem>
+            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.NotSupported">Not supported</MudSelectItem>
+        </MudSelect>
+    </ToolBarExtras>
     <Columns>
         <TemplateColumn Title="Name" Sortable="false">
             <HeaderTemplate>
@@ -102,6 +117,20 @@
                 </MudStack>
             </CellTemplate>
         </TemplateColumn>
+        @* Its own column rather than another chip in Stats, because unlike the counts beside it this one has a
+           state as well as a size, and the column is what the sort header can hang off (requirement 26). *@
+        <TemplateColumn Title="Password Sync" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Password Sync" Name="passwordsync" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <PasswordSynchronisationIndicator State="@GetPasswordSynchronisationState(context.Item.Id)"
+                                                      Attention="@GetPasswordQueueAttention(context.Item.Id)"
+                                                      ConnectedSystemName="@context.Item.Name" />
+                </MudStack>
+            </CellTemplate>
+        </TemplateColumn>
         <TemplateColumn Title="Connector" Sortable="false">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Connector" Name="connector" />
@@ -152,9 +181,31 @@
 </VirtualisedDataGrid>
 
 @code {
+    private VirtualisedDataGrid<ConnectedSystemHeader>? _grid;
     private IList<ConnectedSystemHeader>? _connectedSystemHeaders;
     private Dictionary<int, ConfigurationDriftStatus>? _drift;
     private Dictionary<int, InitialPasswordAttention>? _initialPasswordAttention;
+    private Dictionary<int, PasswordSynchronisationState>? _passwordSynchronisationStates;
+    private Dictionary<int, PasswordQueueAttention>? _passwordQueueAttention;
+    private PasswordSynchronisationFilter _passwordSyncFilter = PasswordSynchronisationFilter.Any;
+
+    /// <summary>
+    /// What the Password Synchronisation filter can narrow the list to (#1119, requirement 26).
+    /// <para>
+    /// Not simply <see cref="PasswordSynchronisationState"/>, because the most useful thing to ask of this list
+    /// is not a state at all: "which systems have password work stuck?" cuts across Enabled and Disabled alike,
+    /// and is the question an administrator arrives with.
+    /// </para>
+    /// </summary>
+    private enum PasswordSynchronisationFilter
+    {
+        Any,
+        NeedsAttention,
+        Enabled,
+        Disabled,
+        NotConfigured,
+        NotSupported
+    }
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
@@ -189,6 +240,11 @@
 
             // One grouped count for the whole page, for the same reason: a per-row query here would be an N+1.
             _initialPasswordAttention = await jim.InitialPasswords.GetAttentionByConnectedSystemAsync(ids);
+
+            // Two more batched reads for the Password Synchronisation column: where each system stands, and how
+            // much of its queued work is waiting on a person.
+            _passwordSynchronisationStates = await jim.ConnectedSystems.GetPasswordSynchronisationStatesAsync(ids);
+            _passwordQueueAttention = await jim.PasswordSynchronisation.GetAttentionByConnectedSystemAsync(ids);
         }
     }
 
@@ -204,8 +260,23 @@
         if (!string.IsNullOrWhiteSpace(request.SearchText))
             filtered = filtered.Where(cs => cs.Name.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase));
 
+        if (_passwordSyncFilter != PasswordSynchronisationFilter.Any)
+            filtered = filtered.Where(MatchesPasswordSynchronisationFilter);
+
         filtered = request.SortBy switch
         {
+            // Descending is "most involved, most stuck first": Enabled before Disabled before never-configured,
+            // and within that the systems with the largest backlog at the top. The two counts still break the tie
+            // separately rather than being summed, which is the same reason they are two chips and not one.
+            "passwordsync" => request.SortDescending
+                ? filtered.OrderByDescending(cs => (int)(GetPasswordSynchronisationState(cs.Id) ?? PasswordSynchronisationState.NotSupported))
+                    .ThenByDescending(cs => GetPasswordQueueAttention(cs.Id)?.ParkedCount ?? 0)
+                    .ThenByDescending(cs => GetPasswordQueueAttention(cs.Id)?.ExpiredCount ?? 0)
+                    .ThenBy(cs => cs.Name)
+                : filtered.OrderBy(cs => (int)(GetPasswordSynchronisationState(cs.Id) ?? PasswordSynchronisationState.NotSupported))
+                    .ThenBy(cs => GetPasswordQueueAttention(cs.Id)?.ParkedCount ?? 0)
+                    .ThenBy(cs => GetPasswordQueueAttention(cs.Id)?.ExpiredCount ?? 0)
+                    .ThenBy(cs => cs.Name),
             "description" => request.SortDescending
                 ? filtered.OrderByDescending(cs => cs.Description ?? string.Empty)
                 : filtered.OrderBy(cs => cs.Description ?? string.Empty),
@@ -228,6 +299,49 @@
 
     private InitialPasswordAttention? GetInitialPasswordAttention(int connectedSystemId) =>
         _initialPasswordAttention != null && _initialPasswordAttention.TryGetValue(connectedSystemId, out var attention) ? attention : null;
+
+    private PasswordSynchronisationState? GetPasswordSynchronisationState(int connectedSystemId) =>
+        _passwordSynchronisationStates != null && _passwordSynchronisationStates.TryGetValue(connectedSystemId, out var state) ? state : null;
+
+    private PasswordQueueAttention? GetPasswordQueueAttention(int connectedSystemId) =>
+        _passwordQueueAttention != null && _passwordQueueAttention.TryGetValue(connectedSystemId, out var attention) ? attention : null;
+
+    /// <summary>
+    /// Whether a row survives the Password Synchronisation filter. A system whose state has not loaded matches
+    /// nothing but <see cref="PasswordSynchronisationFilter.Any"/>, rather than being assumed into a state.
+    /// </summary>
+    private bool MatchesPasswordSynchronisationFilter(ConnectedSystemHeader header)
+    {
+        if (_passwordSyncFilter == PasswordSynchronisationFilter.NeedsAttention)
+        {
+            var attention = GetPasswordQueueAttention(header.Id);
+            return attention is { ParkedCount: > 0 } or { ExpiredCount: > 0 };
+        }
+
+        var state = GetPasswordSynchronisationState(header.Id);
+
+        return _passwordSyncFilter switch
+        {
+            PasswordSynchronisationFilter.Enabled => state == PasswordSynchronisationState.Enabled,
+            PasswordSynchronisationFilter.Disabled => state == PasswordSynchronisationState.Disabled,
+            PasswordSynchronisationFilter.NotConfigured => state == PasswordSynchronisationState.NotConfigured,
+            PasswordSynchronisationFilter.NotSupported => state == PasswordSynchronisationState.NotSupported,
+            _ => true
+        };
+    }
+
+    private async Task OnPasswordSynchronisationFilterChangedAsync(PasswordSynchronisationFilter value)
+    {
+        _passwordSyncFilter = value;
+
+        // The filter changes which systems match, so the total has to be counted again and the reader's scroll
+        // position describes a match set that no longer exists.
+        if (_grid != null)
+        {
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
+        }
+    }
 
     private static int GetPercentage(int total, int part)
     {

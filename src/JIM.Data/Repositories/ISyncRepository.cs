@@ -720,6 +720,58 @@ public interface ISyncRepository
     /// </summary>
     Task<int> DeleteTerminalPasswordChangesAsync(DateTime olderThan, int maxRecords);
 
+    /// <summary>
+    /// One window of the Password Synchronisation queue for a list view, with the identity and Connected System
+    /// names resolved (requirement 21).
+    /// </summary>
+    /// <param name="filter">Which changes to list.</param>
+    /// <param name="startIndex">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted.</param>
+    /// <param name="sortBy">The column to sort by. Unrecognised names fall back to the queued time.</param>
+    /// <param name="sortDescending">Whether the sort is descending.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window. Counting is
+    /// the expensive half of a window read, so a caller that already knows the total passes false and gets a
+    /// null total back.</param>
+    Task<RangeResultSet<PendingPasswordChangeHeader>> GetPendingPasswordChangeHeadersAsync(
+        PendingPasswordChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount);
+
+    /// <summary>
+    /// What the whole queue holds, for the summary above a queue list. Counted in the database rather than from
+    /// a materialised list, because the list is windowed and the summary is not.
+    /// </summary>
+    Task<PasswordQueueSummary> GetPasswordQueueSummaryAsync(DateTime asOf);
+
+    /// <summary>
+    /// Makes every change matching <paramref name="filter"/> due immediately, clearing the failure that stopped
+    /// it, and returns how many were affected: the manual retry behind the queue page's row and bulk actions
+    /// (requirement 22).
+    /// <para>
+    /// A delivered change cannot be retried because its row is already gone, and an expired one must not be:
+    /// its password is no longer held. Both fall out of the filter naturally, the first by not existing and the
+    /// second by the implementation excluding it.
+    /// </para>
+    /// </summary>
+    Task<int> RetryPasswordChangesAsync(PendingPasswordChangeFilter filter);
+
+    /// <summary>
+    /// Records that an administrator stopped every change matching <paramref name="filter"/> being delivered,
+    /// and returns how many were affected (requirement 22).
+    /// <para>
+    /// An outcome rather than a deletion, for the reason an expiry is one: the identity's password stays
+    /// divergent on that system either way, and a row that disappears reports the opposite.
+    /// </para>
+    /// </summary>
+    Task<int> CancelPasswordChangesAsync(
+        PendingPasswordChangeFilter filter,
+        Guid? cancelledById,
+        string? cancelledByName,
+        DateTime asOf);
+
     #endregion
 
     /// <summary>

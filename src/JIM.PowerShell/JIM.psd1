@@ -146,6 +146,11 @@
         'Set-JIMPredefinedSearchCriterion',
         'Remove-JIMPredefinedSearchCriterion',
 
+        # Password Synchronisation
+        'Get-JIMPendingPasswordChange',
+        'Resume-JIMPendingPasswordChange',
+        'Stop-JIMPendingPasswordChange',
+
         # Metaverse
         'Get-JIMMetaverseObject',
         'Set-JIMMetaverseObjectPassword',

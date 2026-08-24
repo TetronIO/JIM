@@ -26,6 +26,16 @@
         replaced it: the pair then shares an opening clause and diverges later.
         Eight words is the shortest prefix that flags every such pair in the
         file's history without a false positive.
+      - HARD FAIL: an [Unreleased] entry identical to one in a released
+        section. This is the other half of what `merge=union` costs: union
+        merging re-adds lines rather than reconciling them, so a branch that
+        merges or rebases across a release brings the entries it contributed
+        back into [Unreleased], where they read as unshipped work and would
+        ship a second time in the next release notes. An entry that has
+        already shipped is never a judgement call.
+      - WARNING: an [Unreleased] entry opening with the same eight words as a
+        released one. Usually the same re-add after a reword; occasionally a
+        genuine follow-up that revisits shipped work, which is why it warns.
 
     Warnings do not fail the run unless -WarningsAsErrors is set. The emoji
     whitelist and the identical-entry check always fail the run, because
@@ -81,33 +91,43 @@ $duplicatePrefixWords = 8  # opening words compared when looking for a re-added 
 $lines = Get-Content -Path $Path
 $header = if ($Section -eq 'Unreleased') { '## [Unreleased]' } else { "## [$Section]" }
 
-# Locate the section and collect its top-level entries (lines starting "- "),
-# remembering which subsection (### Added, ### Fixed, ...) each one sits under
-# so duplicates are only compared against their own kind.
-$inSection = $false
+# Walk the whole file once, collecting every top-level entry (lines starting
+# "- ") with the section and subsection it sits under. The whole file rather
+# than just the target section because an entry that has already shipped is
+# only visible by looking at the released sections too.
+# NOTE: deliberately NOT named $section. PowerShell variable names are
+# case-insensitive, so that would silently overwrite the $Section parameter
+# and leave the script linting whichever version section came last in the file.
+$currentSection = $null
 $subsection = '(none)'
-$entries = [System.Collections.Generic.List[object]]::new()
+$allEntries = [System.Collections.Generic.List[object]]::new()
 for ($i = 0; $i -lt $lines.Count; $i++) {
     $line = $lines[$i]
-    if (-not $inSection) {
-        if ($line.StartsWith($header)) { $inSection = $true }
+    if ($line -match '^##\s+\[([^\]]+)\]') {
+        $currentSection = $Matches[1].Trim()
+        $subsection = '(none)'
         continue
     }
-    if ($line -match '^##\s') { break }   # next version section
+    if ($null -eq $currentSection) { continue }
     if ($line -match '^###\s+(.+)$') { $subsection = $Matches[1].Trim(); continue }
     if ($line -match '^- ') {
-        $entries.Add([pscustomobject]@{
+        $allEntries.Add([pscustomobject]@{
             Number     = $i + 1
             Text       = $line.Substring(2).Trim()
+            Section    = $currentSection
             Subsection = $subsection
         })
     }
 }
 
-if (-not $inSection) {
+$targetSection = if ($Section -eq 'Unreleased') { 'Unreleased' } else { $Section }
+if (-not ($lines | Where-Object { $_.StartsWith($header) })) {
     Write-Error "Section '$header' not found in '$Path'."
     exit 2
 }
+
+$entries = @($allEntries | Where-Object { $_.Section -eq $targetSection })
+$otherSectionEntries = @($allEntries | Where-Object { $_.Section -ne $targetSection })
 
 $errors = [System.Collections.Generic.List[string]]::new()
 $warnings = [System.Collections.Generic.List[string]]::new()
@@ -160,6 +180,46 @@ foreach ($group in $entries | Group-Object Subsection) {
                 $warnings.Add("$Path`:$($entry.Number)  entry opens with the same $duplicatePrefixWords words as the one at line $($byPrefix[$prefix]) under '$($group.Name)'; if they describe the same change, keep the version you want and delete the other (CHANGELOG.md merges by union, so a replaced entry can come back).")
             }
             else { $byPrefix[$prefix] = $entry.Number }
+        }
+    }
+}
+
+# Entries that have already shipped. Union merging re-adds lines rather than
+# reconciling them, so a branch that merges or rebases across a release brings
+# the entries it contributed back into the section it is being linted against.
+# Compared across the whole file rather than within a subsection, because the
+# re-add lands wherever the merge put it, which need not be where it shipped.
+$shippedByExact  = @{}
+$shippedByPrefix = @{}
+foreach ($other in $otherSectionEntries) {
+    $words = Get-NormalisedEntryText -Text $other.Text
+    if ($words.Count -eq 0) { continue }
+
+    $exact = $words -join ' '
+    if (-not $shippedByExact.ContainsKey($exact)) { $shippedByExact[$exact] = $other }
+
+    if ($words.Count -ge $duplicatePrefixWords) {
+        $prefix = ($words | Select-Object -First $duplicatePrefixWords) -join ' '
+        if (-not $shippedByPrefix.ContainsKey($prefix)) { $shippedByPrefix[$prefix] = $other }
+    }
+}
+
+foreach ($entry in $entries) {
+    $words = Get-NormalisedEntryText -Text $entry.Text
+    if ($words.Count -eq 0) { continue }
+
+    $exact = $words -join ' '
+    if ($shippedByExact.ContainsKey($exact)) {
+        $shipped = $shippedByExact[$exact]
+        $errors.Add("$Path`:$($entry.Number)  entry has already shipped in [$($shipped.Section)] (line $($shipped.Number)); delete it from $header rather than releasing it twice (CHANGELOG.md merges by union, so merging or rebasing across a release re-adds the entries the branch contributed): `"$($entry.Text)`"")
+        continue
+    }
+
+    if ($words.Count -ge $duplicatePrefixWords) {
+        $prefix = ($words | Select-Object -First $duplicatePrefixWords) -join ' '
+        if ($shippedByPrefix.ContainsKey($prefix)) {
+            $shipped = $shippedByPrefix[$prefix]
+            $warnings.Add("$Path`:$($entry.Number)  entry opens with the same $duplicatePrefixWords words as one that already shipped in [$($shipped.Section)] (line $($shipped.Number)); delete it unless it genuinely describes further work on the same thing.")
         }
     }
 }
