@@ -1,8 +1,11 @@
 # Causality Visualisation Redesign: Implementation Plan
 
-- **Status:** Doing (Phases 1-5 complete; awaiting review and merge)
+- **Status:** Done
 - **Issue:** [#1087](https://github.com/TetronIO/JIM/issues/1087)
-- **PRD:** [`engineering/prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md`](../../prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md)
+- **PRD:** [`engineering/prd/done/PRD_CAUSALITY_VISUALISATION_REDESIGN.md`](../../prd/done/PRD_CAUSALITY_VISUALISATION_REDESIGN.md)
+
+> **Closed 2026-08-23.** All phases shipped. The Flow and Graph views were later replaced by the
+> Object Spine (#1495, `CAUSALITY_OBJECT_SPINE.md`), which also retired the Caused by list.
 - **Design reference:** approved interactive mock-up (internal): https://claude.ai/code/artifact/c928e648-1fb1-4f39-961d-9c73c497dacb
 
 ## Overview

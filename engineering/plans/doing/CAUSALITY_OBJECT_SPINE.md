@@ -1,8 +1,15 @@
 # Causality Object Spine — Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phases 1-3 complete on `feature/causality-object-spine`; Phase 4 runtime verification in progress. Stack layer PR #1502, merged, carried the record-system fallback fix; a second layer, `feature/causality-object-spine-stack-chain-fidelity`, carries three further fixes from user review of the deprovision item: the executed deprovision's DN captioned as target identification, the complete-story footer reworded to read forwards, and the deleted record's timeline walked by its external ID snapshot.)
 - **Issue:** [#1495](https://github.com/TetronIO/JIM/issues/1495)
-- **PRD:** [`engineering/prd/PRD_CAUSALITY_OBJECT_SPINE.md`](../prd/PRD_CAUSALITY_OBJECT_SPINE.md)
+- **PRD:** [`engineering/prd/doing/PRD_CAUSALITY_OBJECT_SPINE.md`](../../prd/doing/PRD_CAUSALITY_OBJECT_SPINE.md)
+
+> **Naming:** the view ships as **Lineage**, not "Spine". "Spine" described the layout's shape (a
+> backbone with events hanging off it), which is an implementation metaphor rather than something the
+> reader is looking for, and it paired badly with its sibling "Timeline", whose name plainly announces
+> its organising axis. "Lineage" is standard vocabulary in identity and data governance for "where did
+> this come from and where did it go". This document, the PRD and issue #1495 keep the original title;
+> only the product surface was renamed.
 
 ## Overview
 
@@ -76,9 +83,13 @@ One new projection layer and one new view; the chain walk, wording and capture l
 ### Export decision captions (PRD requirement 6)
 
 `OutcomeDisplayMap`'s Exported labels become decision-aware: "Record created" / "Changes applied" /
-"Record deleted" derived from the item's `ConnectedSystemObjectChange.ChangeType` (falling back to the
-queueing edge's reason code where change history is off). This lands in the display map so the Timeline
-and the summary band benefit as well as the spine.
+"Record deleted", derived from the queueing edge's reason code (`ExportCreateStaged` /
+`ExportUpdateStaged` / `ExportDeleteStaged`), which the causal chain already carries to the page. The
+item's `ConnectedSystemObjectChange.ChangeType` cannot supply this: `ExportChangeHistoryBuilder` records
+`Exported` for creates and updates alike, so the reason code is the only durable copy of the decision
+(the Pending Export row that knew it is deleted on execution). Items with no queueing edge (pre-#1223
+history) keep the bare "Exported" label honestly. This lands in the display map so the Timeline and the
+summary band benefit as well as the spine.
 
 ## Implementation Phases
 
@@ -150,7 +161,7 @@ phase, bUnit coverage of every projection rule, runtime verification on live Sce
 |------|------------|
 | Subdued cards fail WCAG AA (opacity dimming fails contrast by construction) | Dim via colour tokens, not opacity; per-theme contrast check is an acceptance criterion |
 | A chain shape the spine cannot place (unexpected edge type / missing snapshot) | Builder places unassignable hops on a neutral trailing column rather than dropping them; a test pins that nothing in the chain is ever silently omitted |
-| Wide stories (many systems) become unreadable | Horizontal scroll inside the canvas (decided in the PRD); revisit a "+n more" collapse only on real data |
+| Wide stories (many systems) become unreadable | Horizontal scroll inside the canvas (decided in the PRD); revisit a "+n more" collapse only on real data. **Revisited and resolved:** real data showed a two-system story already truncating record names and a three-system one overflowing 1,090px of panel width, so records on the same side of the Identity now share a column and a story is at most four columns wide. Neither a column cap nor a wrap was needed; the axis was the problem, since sibling records sit at the same hop and the builder returns no relationship between them. |
 | Losing behaviour users rely on from Flow/Graph (attribute drawer, event selection) | The drawer and selection model are panel-level and carried over; bUnit tests assert parity before retirement |
 | Stored view preferences point at retired views | The panel's existing unknown-view fallback; pinned by test |
 | Timeline and spine drift in vocabulary | Both read `OutcomeDisplayMap` and `CausalityCauseWording`; the decision captions land in the shared map |

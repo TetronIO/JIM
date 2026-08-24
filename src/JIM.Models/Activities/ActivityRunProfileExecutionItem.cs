@@ -182,9 +182,38 @@ public class ActivityRunProfileExecutionItem
         return ExternalIdSnapshot;
     }
 
+    /// <summary>
+    /// Which Connected System this item's record belongs to, surviving the record's own deletion
+    /// where that can be answered honestly.
+    /// </summary>
+    /// <remarks>
+    /// The record itself is the authority while it exists. Once it is deleted, the item-level change
+    /// snapshot is the only other row carrying a system id, and it is only the record's own on
+    /// record-side items (imports, export executions, drift corrections and Pending Export
+    /// surfacing). A synchronisation-side item's change row describes a record the run created
+    /// elsewhere: the provisioned stub in a target system. Trusting it there labelled a projection
+    /// item's source record with its provisioning target's system, and every consumer links by this
+    /// id, so the honest degraded answer is no system rather than the wrong one (#1495).
+    /// </remarks>
     public int? GetConnectedSystemId()
     {
-        return ConnectedSystemObject?.ConnectedSystemId ?? ConnectedSystemObjectChange?.ConnectedSystemId;
+        if (ConnectedSystemObject?.ConnectedSystemId is { } liveSystemId)
+            return liveSystemId;
+
+        return ObjectChangeType switch
+        {
+            Enums.ObjectChangeType.Added
+                or Enums.ObjectChangeType.Updated
+                or Enums.ObjectChangeType.Deleted
+                or Enums.ObjectChangeType.Exported
+                or Enums.ObjectChangeType.Deprovisioned
+                or Enums.ObjectChangeType.DriftCorrection
+                or Enums.ObjectChangeType.NoChange
+                or Enums.ObjectChangeType.PendingExport
+                or Enums.ObjectChangeType.PendingExportConfirmed
+                => ConnectedSystemObjectChange?.ConnectedSystemId,
+            _ => null
+        };
     }
 
     /// <summary>

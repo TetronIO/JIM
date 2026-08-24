@@ -428,6 +428,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemObjectId");
 
+                    b.HasIndex("ExternalIdSnapshot");
+
                     b.ToTable("ActivityRunProfileExecutionItems");
                 });
 
