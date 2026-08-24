@@ -66,7 +66,14 @@ public enum ScheduleStepType
     /// whose scope membership drifts with the clock but whose source data has not changed. Used only by the
     /// built-in Temporal Scope Reconciliation schedule.
     /// </summary>
-    TemporalScopeReconciliation = 4
+    TemporalScopeReconciliation = 4,
+
+    /// <summary>
+    /// Run one history retention cleanup pass (issue #1118): remove change history, Activities, initial-password
+    /// records and terminal Pending Password Changes that have had their retention period. Used only by the
+    /// built-in History Retention Cleanup schedule.
+    /// </summary>
+    HistoryRetentionCleanup = 5
 }
 
 /// <summary>

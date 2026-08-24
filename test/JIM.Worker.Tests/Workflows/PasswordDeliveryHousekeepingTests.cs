@@ -57,7 +57,6 @@ public class PasswordDeliveryHousekeepingTests
         var activityRepository = new Mock<IActivityRepository>();
         activityRepository.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         // A recent cleanup stops the history retention path running during these tests.
-        activityRepository.Setup(r => r.GetLastHistoryCleanupTimeAsync()).ReturnsAsync(DateTime.UtcNow);
 
         var serviceSettingsRepository = new Mock<IServiceSettingsRepository>();
         serviceSettingsRepository.Setup(r => r.GetSettingAsync(It.IsAny<string>())).ReturnsAsync((ServiceSetting?)null);

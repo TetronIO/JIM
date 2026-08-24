@@ -22,14 +22,16 @@ html[lang] {
     --mud-palette-primary-rgb: 68,136,255;
     --mud-palette-primary-darken: #3070ee;
     --mud-palette-primary-lighten: #66a0ff;
-    --mud-palette-primary-text: #ffffffff;
+    /* Dark, not white: white on this fill measures 3.38:1, below the 4.5:1 AA floor. */
+    --mud-palette-primary-text: #000000dd;
 
     /* === Secondary Palette === */
     --mud-palette-secondary: #4488ff;
     --mud-palette-secondary-rgb: 68,136,255;
     --mud-palette-secondary-darken: #3070ee;
     --mud-palette-secondary-lighten: #66a0ff;
-    --mud-palette-secondary-text: #ffffffff;
+    /* Dark, not white: this theme's secondary is the same fill as its primary, so it fails identically. */
+    --mud-palette-secondary-text: #000000dd;
 
     /* === Tertiary Palette === */
     --mud-palette-tertiary: #00796B;

@@ -238,6 +238,23 @@ namespace JIM.Application.Servers
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
             }
+            else if (workerTask is HistoryRetentionCleanupWorkerTask)
+            {
+                // A retention pass removes history across every class of record rather than changing one entity,
+                // so it is tracked with a system-targeted Activity, under the same target type the manual and
+                // API-initiated cleanups use. That is what keeps one deployment's retention history in one place
+                // however it was triggered.
+                var activity = new Activity
+                {
+                    TargetName = "History Retention Cleanup",
+                    TargetType = ActivityTargetType.HistoryRetentionCleanup,
+                    TargetOperationType = ActivityTargetOperationType.Delete
+                };
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
+
+                // associate the activity with the worker task so the worker task processor can complete the activity when done.
+                workerTask.Activity = activity;
+            }
 
             await Application.Repository.Tasking.CreateWorkerTaskAsync(workerTask);
 

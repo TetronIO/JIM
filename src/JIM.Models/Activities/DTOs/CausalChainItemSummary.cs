@@ -35,4 +35,19 @@ public class CausalChainItemSummary
     /// latest one at or before it.
     /// </summary>
     public DateTime ActivityExecuted { get; init; }
+
+    /// <summary>
+    /// The Connected System the item's Activity ran against, where one is recorded. With
+    /// <see cref="ExternalIdSnapshot"/> it forms the degraded key the record's timeline is walked on after
+    /// the record itself has been deleted (#1495).
+    /// </summary>
+    public int? ConnectedSystemId { get; init; }
+
+    /// <summary>
+    /// The record's external ID as snapshotted on the item, surviving the record's deletion. A deletion
+    /// cascade hard-deletes the Connected System Object and nulls <see cref="ConnectedSystemObjectId"/> on
+    /// every item that processed it, which severed the source-import hop on precisely the chains where the
+    /// deletion story matters most; the snapshot reaches the same import (#1495).
+    /// </summary>
+    public string? ExternalIdSnapshot { get; init; }
 }

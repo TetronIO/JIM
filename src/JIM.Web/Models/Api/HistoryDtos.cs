@@ -59,6 +59,24 @@ public class HistoryCleanupResponse
     public int InitialPasswordRetentionPeriodDays { get; set; }
 
     /// <summary>
+    /// Number of Password Synchronisation Activity records deleted (the delivery passes, the fan-out records, and
+    /// the per-system outcome children), per the Password Synchronisation retention period.
+    /// </summary>
+    public int PasswordEventActivitiesDeleted { get; set; }
+
+    /// <summary>
+    /// Number of queued password changes removed: those parked, expired or cancelled for longer than the Password
+    /// Synchronisation retention period. Changes still owed to a Connected System are never removed, however old.
+    /// This is also the number of encrypted passwords JIM stopped holding.
+    /// </summary>
+    public int PasswordQueueRecordsDeleted { get; set; }
+
+    /// <summary>
+    /// Configured Password Synchronisation retention period in days.
+    /// </summary>
+    public int PasswordEventRetentionPeriodDays { get; set; }
+
+    /// <summary>
     /// Oldest record timestamp that was deleted (if any records were deleted).
     /// </summary>
     public DateTime? OldestRecordDeleted { get; set; }

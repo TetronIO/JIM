@@ -184,6 +184,28 @@ public static class OutcomeDisplayMap
     }
 
     /// <summary>
+    /// The decision-aware display for an Exported outcome (#1495): what the export actually did,
+    /// keyed on the queueing edge's reason code because that is the only durable copy of the
+    /// create/update/delete decision (the Pending Export row that knew it is deleted on execution,
+    /// and the item's change snapshot records Exported for creates and updates alike). Falls back
+    /// to the bare Exported mapping for any other code, which is the honest label for pre-edge
+    /// history.
+    /// </summary>
+    public static OutcomeDisplay GetExportDecision(CausalReasonCode reasonCode)
+    {
+        return reasonCode switch
+        {
+            CausalReasonCode.ExportCreateStaged =>
+                new OutcomeDisplay("Record created", "CSO Exported (Create)", CausalityTone.Success, Icons.Material.Filled.AddCircle),
+            CausalReasonCode.ExportUpdateStaged =>
+                new OutcomeDisplay("Changes applied", "CSO Exported (Update)", CausalityTone.Info, Icons.Material.Filled.Output),
+            CausalReasonCode.ExportDeleteStaged =>
+                new OutcomeDisplay("Record deleted", "CSO Exported (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete),
+            _ => Get(ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
+        };
+    }
+
+    /// <summary>
     /// Maps a causality tone onto the corresponding MudBlazor palette colour.
     /// </summary>
     public static Color ToMudBlazorColor(CausalityTone tone)

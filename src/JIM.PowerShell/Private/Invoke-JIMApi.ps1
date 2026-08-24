@@ -205,7 +205,12 @@ function Invoke-JIMApiRequest {
     }
 
     try {
-        $response = Invoke-RestMethod @params -ErrorAction Stop -MaximumRedirection 0
+        # -Debug:$false is load-bearing, not tidiness: with the debug stream active,
+        # Invoke-RestMethod emits a "WebRequest Detail" record dumping the request headers and body
+        # verbatim. That leaks the API key on every call and the password on a set-password one (#1516),
+        # which is JIM's never-log invariant undone by a cmdlet JIM does not own.
+        # JIM's own Write-Debug lines above are unaffected; they run outside this call.
+        $response = Invoke-RestMethod @params -ErrorAction Stop -MaximumRedirection 0 -Debug:$false
         Write-Debug "API response received successfully"
         return $response
     }

@@ -78,6 +78,70 @@ public class ChangeHistoryRetentionTests
     }
 
     [Test]
+    public async Task DeleteExpiredActivitiesAsync_SparesPasswordSynchronisationActivitiesAsync()
+    {
+        var expiredPlain = NewActivity(daysOld: 100);
+        var expiredPassword = NewActivity(daysOld: 100, targetType: ActivityTargetType.PasswordSynchronisation);
+        _dbContext.Activities.AddRange(expiredPlain, expiredPassword);
+        await _dbContext.SaveChangesAsync();
+
+        var deleted = await _repository.ChangeHistory.DeleteExpiredActivitiesAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        Assert.That(deleted, Is.EqualTo(1), "only the expired general Activity is eligible");
+        var remainingIds = await _dbContext.Activities.Select(a => a.Id).ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(remainingIds, Does.Not.Contain(expiredPlain.Id));
+            Assert.That(remainingIds, Does.Contain(expiredPassword.Id),
+                "a Password Synchronisation Activity answers a question asked long after the sync history around " +
+                "it stops mattering, so it is governed only by its own retention cutoff");
+        }
+    }
+
+    [Test]
+    public async Task DeleteExpiredPasswordEventActivitiesAsync_DeletesOnlyExpiredPasswordActivitiesAsync()
+    {
+        var expiredPlain = NewActivity(daysOld: 100);
+        var expiredAuthentication = NewActivity(daysOld: 100, targetType: ActivityTargetType.Authentication);
+        var expiredPassword = NewActivity(daysOld: 100, targetType: ActivityTargetType.PasswordSynchronisation);
+        var currentPassword = NewActivity(daysOld: 1, targetType: ActivityTargetType.PasswordSynchronisation);
+        _dbContext.Activities.AddRange(expiredPlain, expiredAuthentication, expiredPassword, currentPassword);
+        await _dbContext.SaveChangesAsync();
+
+        var deleted = await _repository.ChangeHistory.DeleteExpiredPasswordEventActivitiesAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        Assert.That(deleted, Is.EqualTo(1), "only the expired Password Synchronisation Activity is eligible");
+        var remainingIds = await _dbContext.Activities.Select(a => a.Id).ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(remainingIds, Does.Contain(expiredPlain.Id), "general Activities are the general cleanup's concern");
+            Assert.That(remainingIds, Does.Contain(expiredAuthentication.Id), "security events have their own cutoff");
+            Assert.That(remainingIds, Does.Not.Contain(expiredPassword.Id));
+            Assert.That(remainingIds, Does.Contain(currentPassword.Id));
+        }
+    }
+
+    [Test]
+    public async Task DeleteExpiredPasswordEventActivitiesAsync_HonoursTheBatchCapOldestFirstAsync()
+    {
+        // Requirement 30: every trim is bounded by the shared cleanup batch size, so a deployment that has
+        // accumulated a large backlog drains over several passes rather than in one long transaction. Oldest
+        // first is what makes successive passes drain rather than churn the same arbitrary slice.
+        var oldest = NewActivity(daysOld: 300, targetType: ActivityTargetType.PasswordSynchronisation);
+        var middle = NewActivity(daysOld: 200, targetType: ActivityTargetType.PasswordSynchronisation);
+        var newest = NewActivity(daysOld: 100, targetType: ActivityTargetType.PasswordSynchronisation);
+        _dbContext.Activities.AddRange(newest, oldest, middle);
+        await _dbContext.SaveChangesAsync();
+
+        var deleted = await _repository.ChangeHistory.DeleteExpiredPasswordEventActivitiesAsync(DateTime.UtcNow.AddDays(-90), 2);
+
+        Assert.That(deleted, Is.EqualTo(2), "the batch cap bounds the pass");
+        var remainingIds = await _dbContext.Activities.Select(a => a.Id).ToListAsync();
+        Assert.That(remainingIds, Is.EqualTo(new[] { newest.Id }),
+            "the two oldest go first, so the next pass continues rather than repeating");
+    }
+
+    [Test]
     public async Task DeleteExpiredSecurityEventActivitiesAsync_DeletesOnlyExpiredAuthenticationActivitiesAsync()
     {
         var expiredPlain = NewActivity(daysOld: 100);
