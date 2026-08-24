@@ -21,7 +21,8 @@ html[lang] {
     --mud-palette-primary-rgb: 232,90,74;
     --mud-palette-primary-darken: #d63a28;
     --mud-palette-primary-lighten: #f07868;
-    --mud-palette-primary-text: #ffffffff;
+    /* Dark, not white: white on this coral measures 3.50:1, below the 4.5:1 AA floor. */
+    --mud-palette-primary-text: #000000dd;
 
     /* === Secondary Palette (warm grey — the light theme's bg tone) === */
     --mud-palette-secondary: #8a8d8b;

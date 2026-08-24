@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -475,9 +476,14 @@ public class SystemResetDatabaseTests
 
         await using (var verify = NewContext())
         {
-            var schedule = await verify.Schedules.SingleAsync(sc => sc.BuiltIn);
-            Assert.That(schedule.IsEnabled, Is.True, "the restored built-in Schedule must be enabled");
-            Assert.That(schedule.CreatedByType, Is.EqualTo(ActivityInitiatorType.System),
+            // Every entry in the catalogue, not just one: the restore must bring back all of them, and asserting
+            // over a single row would silently stop covering the rest the moment a built-in Schedule was added.
+            var schedules = await verify.Schedules.Where(sc => sc.BuiltIn).ToListAsync();
+            Assert.That(schedules.Select(sc => sc.Name),
+                Is.EquivalentTo(SeedingServer.BuiltInSchedules().Select(sc => sc.Name)),
+                "every built-in Schedule must be back before the reset returns");
+            Assert.That(schedules.Select(sc => sc.IsEnabled), Is.All.True, "restored built-in Schedules must be enabled");
+            Assert.That(schedules.Select(sc => sc.CreatedByType), Is.All.EqualTo(ActivityInitiatorType.System),
                 "built-in Schedules are created through the audited path, attributed to System");
 
             // Provenance: the wipe truncated the Activities table, so every built-in that survived it needs its

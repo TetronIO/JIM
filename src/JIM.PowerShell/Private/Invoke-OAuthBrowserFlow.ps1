@@ -205,7 +205,10 @@ function Invoke-OAuthBrowserFlow {
                 "$([Uri]::EscapeDataString($_.Key))=$([Uri]::EscapeDataString($_.Value))"
             }) -join '&'
 
-        $tokenResponse = Invoke-RestMethod -Uri $TokenEndpoint -Method Post -Body $tokenBody -ContentType 'application/x-www-form-urlencoded'
+        # -Debug:$false: Invoke-RestMethod's own debug record would dump this exchange verbatim, and
+        # both halves are secret (the code or refresh token going out, the tokens coming back).
+        # See the same guard in Invoke-JIMApi.
+        $tokenResponse = Invoke-RestMethod -Uri $TokenEndpoint -Method Post -Body $tokenBody -ContentType 'application/x-www-form-urlencoded' -Debug:$false
 
         # Calculate expiry time
         $expiresAt = (Get-Date).AddSeconds($tokenResponse.expires_in - 60)  # Subtract 60s buffer
@@ -503,7 +506,10 @@ function Invoke-OAuthTokenRefresh {
         }) -join '&'
 
     try {
-        $tokenResponse = Invoke-RestMethod -Uri $TokenEndpoint -Method Post -Body $tokenBody -ContentType 'application/x-www-form-urlencoded'
+        # -Debug:$false: Invoke-RestMethod's own debug record would dump this exchange verbatim, and
+        # both halves are secret (the code or refresh token going out, the tokens coming back).
+        # See the same guard in Invoke-JIMApi.
+        $tokenResponse = Invoke-RestMethod -Uri $TokenEndpoint -Method Post -Body $tokenBody -ContentType 'application/x-www-form-urlencoded' -Debug:$false
 
         # Calculate expiry time
         $expiresAt = (Get-Date).AddSeconds($tokenResponse.expires_in - 60)
@@ -550,7 +556,10 @@ function Get-OidcDiscoveryDocument {
     Write-Verbose "Fetching OIDC discovery document from $discoveryUrl"
 
     try {
-        $discovery = Invoke-RestMethod -Uri $discoveryUrl -Method Get
+        # -Debug:$false for consistency with the token calls above rather than because discovery is
+        # secret: the rule is that nothing in this file narrates its own requests, so a call added
+        # here later inherits the guard instead of having to remember it.
+        $discovery = Invoke-RestMethod -Uri $discoveryUrl -Method Get -Debug:$false
 
         return @{
             AuthorizeEndpoint = $discovery.authorization_endpoint

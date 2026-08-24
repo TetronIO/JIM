@@ -43,6 +43,11 @@ namespace JIM.Web.Causality;
 /// <param name="CsoObjectTypeName">The record's object type name (e.g. "person").</param>
 /// <param name="MvoTypeName">Singular Metaverse Object Type name (e.g. "Person").</param>
 /// <param name="MvoTypePluralName">Plural Metaverse Object Type name (e.g. "People") for link building.</param>
+/// <param name="DeletedMetaverseObjectId">
+/// The Identity's id where the page looked it up and it was not there, so the panel can say the object is
+/// gone and offer its deletion record; null where the Identity is alive, or where nothing was looked up.
+/// Distinct from an unbuildable link: this is evidence of deletion, not an inability to address something.
+/// </param>
 public sealed record CausalityPageContext(
     int? ConnectedSystemId,
     string? ConnectedSystemName,
@@ -54,7 +59,8 @@ public sealed record CausalityPageContext(
     string? CsoExternalId,
     string? CsoObjectTypeName,
     string? MvoTypeName,
-    string? MvoTypePluralName)
+    string? MvoTypePluralName,
+    Guid? DeletedMetaverseObjectId = null)
 {
     /// <summary>
     /// The record's label for display: its name qualified by its external id, or whichever of the two

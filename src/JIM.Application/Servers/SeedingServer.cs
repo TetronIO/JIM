@@ -639,6 +639,40 @@ internal class SeedingServer
                 }
             }
         };
+
+        // History Retention Cleanup (issue #1118): removes change history, Activities, initial-password records
+        // and terminal Pending Password Changes that have had their retention period. Daily and off-peak, because
+        // a retention pass is bounded by the cleanup batch size rather than by how much has accumulated: running
+        // it more often would not drain a backlog faster, and running it in the working day competes with
+        // synchronisation for the same tables.
+        yield return new Schedule
+        {
+            Name = "History Retention Cleanup",
+            Description = "Built-in schedule that removes change history, Activities, initial-password records and " +
+                          "terminal Pending Password Changes once they have had the retention period set for their " +
+                          "kind. Records still being worked are never removed, however old.",
+            BuiltIn = true,
+            IsEnabled = true,
+            TriggerType = ScheduleTriggerType.Cron,
+            PatternType = SchedulePatternType.SpecificTimes,
+            DaysOfWeek = "0,1,2,3,4,5,6",
+            CronExpression = "30 2 * * *",
+            CreatedByType = ActivityInitiatorType.System,
+            CreatedByName = "System",
+            Steps = new List<ScheduleStep>
+            {
+                new()
+                {
+                    StepIndex = 0,
+                    Name = "Clean Up Expired History",
+                    StepType = ScheduleStepType.HistoryRetentionCleanup,
+                    ExecutionMode = StepExecutionMode.Sequential,
+                    ContinueOnFailure = false,
+                    CreatedByType = ActivityInitiatorType.System,
+                    CreatedByName = "System"
+                }
+            }
+        };
     }
 
     /// <summary>
@@ -1266,6 +1300,17 @@ internal class SeedingServer
             Category = ServiceSettingCategory.History,
             ValueType = ServiceSettingValueType.TimeSpan,
             DefaultValue = "90.00:00:00", // 90 days
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.PasswordEventRetentionPeriod,
+            DisplayName = "Password Synchronisation retention period",
+            Description = "The duration for which Password Synchronisation history is kept: the Activities recording what happened to each password change, and the queue rows that reached a terminal state (parked, expired, or cancelled). Changes still owed to a Connected System are never removed, however old. Shorten this to bound how long JIM holds an encrypted password it can no longer deliver. Format: d.hh:mm:ss (e.g., '365.00:00:00' for ~1 year).",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.TimeSpan,
+            DefaultValue = "365.00:00:00", // ~1 year
             IsReadOnly = false
         });
 
