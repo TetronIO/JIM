@@ -407,10 +407,12 @@ else
                                                             else
                                                             {
                                                                 @* Scalar update: old value de-emphasised, new value plain. *@
+                                                                @* The values take the app's shared code face; the arrow between them does
+                                                                   not, being punctuation rather than part of either value. *@
                                                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                                    <MudText Class="mud-text-secondary">@change.OldValue</MudText>
+                                                                    <MudText Class="mud-text-secondary jim-text-code">@change.OldValue</MudText>
                                                                     <MudText Class="mud-text-secondary">→</MudText>
-                                                                    <MudText>@change.NewValue</MudText>
+                                                                    <MudText Class="jim-text-code">@change.NewValue</MudText>
                                                                 </MudStack>
                                                             }
                                                         }
@@ -429,14 +431,17 @@ else
                                                         }
                                                         else
                                                         {
-                                                            @* Simple scalar Add/Remove: de-emphasised where the value went away. *@
+                                                            @* Simple scalar Add/Remove: de-emphasised where the value went away. The code
+                                                               face goes on TextValueDisplay's Class, which applies it to a real value only,
+                                                               so the empty and whitespace affordances keep the ordinary face: neither is a
+                                                               value, and setting them in code type would read as one. *@
                                                             @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
                                                             {
-                                                                <MudText Class="mud-text-secondary"><TextValueDisplay Value="@change.DisplayValue" /></MudText>
+                                                                <MudText Class="mud-text-secondary"><TextValueDisplay Value="@change.DisplayValue" Class="jim-text-code" /></MudText>
                                                             }
                                                             else
                                                             {
-                                                                <MudText><TextValueDisplay Value="@change.DisplayValue" /></MudText>
+                                                                <MudText><TextValueDisplay Value="@change.DisplayValue" Class="jim-text-code" /></MudText>
                                                             }
                                                         }
                                                     </CellTemplate>
