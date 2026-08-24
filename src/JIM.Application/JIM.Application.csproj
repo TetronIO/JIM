@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="DynamicExpresso.Core" Version="2.19.3" />
+    <PackageReference Include="DynamicExpresso.Core" Version="2.19.5" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.11" />
     <PackageReference Include="NCrontab" Version="3.4.0" />
