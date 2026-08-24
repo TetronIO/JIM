@@ -828,8 +828,12 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
     color: var(--mud-palette-tertiary);
 }
 
+/* The footer's side inset must match the nav pills' own 8px margins above it (see
+   `.jim-nav-menu .mud-nav-link`), or the user menu sits 2px wider than every item it
+   is stacked under. The 8px bottom padding then matches the sides, so the menu is
+   inset equally on all three edges it touches. */
 .jim-drawer-footer {
-    margin: 0 6px;
+    margin: 0 8px;
     margin-top: auto;
     padding: 8px 0;
 }
