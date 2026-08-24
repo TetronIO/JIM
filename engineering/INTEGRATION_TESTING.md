@@ -154,6 +154,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario16-SqlConnectorMatrix` | JIM SQL Connector provider x capability matrix: the connector's capability rows driven against both priority 1 providers (Microsoft SQL Server and Oracle Database). Accepts `-Provider SqlServer\|Oracle\|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import (#170) | sqlserver-hris-a, oracle-hris-b |
 | `Scenario17-InitialPasswordProvisioning` | Initial Password provisioning end to end: an account is provisioned, then the scenario signs in as the account holder with the password JIM set, proves the directory is forcing a change, changes it as the account holder, and signs in again. Samba AD only; `-Template` is ignored | samba-ad-primary |
 | `Scenario18-WritebackToSource` | Whether a value JIM derives is written back into the Connected System it came from ([#1284](https://github.com/TetronIO/JIM/issues/1284)). Two JIM File Connector systems carry identically shaped outbound rules over the same Metaverse Objects, evaluated in one run, differing only in whether the target is the run's source. `-Template` is ignored | file (no directory container) |
+| `Scenario19-PasswordSynchronisation` | Password Synchronisation end to end ([#1119](https://github.com/TetronIO/JIM/issues/1119)): password changes are recorded against identities while the directory is switched off, held rather than discarded, then delivered the moment it is switched on, and the scenario signs in to the directory with each one. Also proves coalescing keeps the newest of three, and that no password value reaches a log. Samba AD only; `-Template` is ignored | samba-ad-primary |
 
 **Available Templates (`-Template` parameter):**
 
@@ -423,6 +424,7 @@ All templates generate realistic enterprise data following normal distribution p
 | Scenario14 AttributePriority | OpenLDAP only | (ignored) | ~2m | fixed six-user; -Template ignored |
 | Scenario16 SqlConnectorMatrix | database (SQL Server, Oracle) | (ignored) | ~25m per provider (default tier); `-FullMatrix` adds ~19m on SQL Server and ~17m on Oracle for the 500,000-row import | its own SQL seeder sizes the data; -Template ignored; see the scale-import table in the Scenario 16 section |
 | Scenario18 WritebackToSource | file (none) | (ignored) | ~8s | three seeded people; the question is per-object, not per-population |
+| Scenario19 PasswordSynchronisation | Samba AD only | (ignored) | not yet measured | three provisioned accounts; the wait is delivery, not population |
 
 **Notes:**
 
@@ -1144,6 +1146,41 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 
 **Bind classification** lives in `Get-LDAPBindOutcome` (`utils/LDAP-Helpers.ps1`), which maps Active Directory's bind sub-codes to names and is covered by `utils/LDAP-Helpers.Tests.ps1` using strings captured verbatim from a live domain controller. Anything unrecognised is reported as `Failed` rather than guessed at, so a new failure mode surfaces as a test failure instead of being folded into an existing category.
 
+---
+
+#### Scenario 19: Password Synchronisation
+
+**Status**: authored against [#1119](https://github.com/TetronIO/JIM/issues/1119) Phase 6. Samba AD only.
+
+**Purpose**: prove that a password change recorded against an identity reaches the account that identity holds in a Connected System, by signing in to the directory with it. Everything else in the feature's coverage stops short of a directory: the unit tests assert against a mocked LDAP executor and an in-memory queue, so they prove JIM emits the right write and moves the right rows, and prove nothing about whether a directory accepts the result.
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario19-PasswordSynchronisation.ps1` and `test/integration/Setup-Scenario19.ps1`.
+
+**The chain, and why each link is needed:**
+
+| Test | Assertion | Why it is not redundant |
+|------|-----------|-------------------------|
+| 1 | All three accounts sign in with the Initial Password they were provisioned with | The baseline every later assertion is read against: each one is "the password changed *from this one*" |
+| 2 | With Password Synchronisation configured but switched **off**, a change is still queued, reported as held, and counted as waiting rather than due | Requirement 2. A switched-off system accumulating rather than discarding is what makes it safe to switch one off for a maintenance window |
+| 2 | Three changes for one person leave exactly one queued change | Only the newest password is ever sent; a second change replaces an undelivered first rather than queueing behind it |
+| 3 | The directory still answers the old password, and refuses the queued one | Without this, "it was queued" says nothing about whether it was also delivered, which would make test 2 meaningless |
+| 4 | Switching Password Synchronisation on delivers everything held, with no retry, run profile or restart | Requirement 3, and the half of the drain that a unit test cannot reach: it depends on a delivery pass being raised by the act of enabling |
+| 4 | The account signs in with the queued password, and no longer with the one it had | Both halves needed: the first proves some password works, the second that it is JIM's |
+| 5 | Of three coalesced passwords, the directory holds the **third**, not the first | A queue that coalesced to one row but kept the oldest would pass test 2's row count and fail the person |
+| 6 | A change made while the system is enabled is delivered unaided | The ordinary path, which the accumulate-and-drain path could mask if it were the only one covered |
+| 7 | Nothing parked, nothing expired, and nothing left waiting | A delivered change leaves nothing behind; a parked one is a directory refusal worth surfacing |
+| 8 | No password value appears in any JIM log, and no queue response carries one | The invariant that lets JIM hold passwords at all. Swept from the containers' own logs, so it covers anything a library wrote on JIM's behalf |
+
+**Why the substrate is Scenario 17's.** The scenario needs accounts that are provisioned, enabled, and holding a password it knows, which is exactly what `Setup-Scenario17.ps1` builds; `Setup-Scenario19.ps1` composes it rather than rebuilding it, as Scenario 17 itself composes `Setup-Scenario1.ps1`. It asks for one thing differently: `-ExpiryBehaviour NeverExpires` rather than must-change-at-next-sign-in. Active Directory answers a correct password on a must-change account with the same result code as a wrong one (49), distinguished only by a sub-code, and the synchronised password is meant to be the only variable under test.
+
+**Why the system starts switched off.** Configured-but-off is the harder half of the behaviour and the one with the worse failure mode, so the scenario starts there and enables the system partway through, making the drain a real one rather than a no-op. It is also how an administrator stages a configuration ahead of a change window (requirement 4).
+
+**Why Samba AD only.** Provisioning enables each account as its Initial Password lands, which is an Active Directory operation; an account left disabled cannot be signed in as, and signing in is the whole proof. The test OpenLDAP container also serves no TLS, so the RFC 3062 Password Modify path JIM would use there cannot be exercised at all. Both the setup and the scenario refuse to run against OpenLDAP rather than silently asserting less, and `Run-IntegrationTests.ps1` skips both this scenario and Scenario 17 on an OpenLDAP sweep.
+
+**`-Template` is ignored.** The scenario asserts against three accounts; a larger template only lengthens the export. It always provisions at Micro.
+
+**Delivery is waited for, not polled into.** A delivery pass is raised the moment work is queued and the moment a system is enabled, so the scenario's 180-second bound is on a directory write and a queue read rather than on a poll interval. Exceeding it means delivery is not happening at all, and the failure prints the rows still queued with their status, held flag, attempt count and the target's own message.
+
 ### Phase 2 - Database Scenarios
 
 > The road-mapped numbers here have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, Attribute Priority (#91) took 14, the SCIM 2.0 Client Connector (#545) took 15, and the JIM SQL Connector matrix ([#170](https://github.com/TetronIO/JIM/issues/170)) takes 16. What was previously listed as "Scenario 16: Database Source/Target" is delivered by the matrix scenario below. Initial Password Provisioning then claimed 17, so the two remaining planned scenarios are now numbered 18 and 19.
@@ -1208,8 +1245,10 @@ What the numbers say: the connector's own work (keyset paging at 1,000 rows a pa
 
 #### Still road-mapped
 
-- **Scenario 18: Multi-Source Aggregation** - two database sources (SQL Server + Oracle) feeding the metaverse, exercising join rules across sources, attribute precedence (each source authoritative for different attributes), and database data-type mapping. Targets Samba AD plus a CSV reporting export. Sequenced after Scenario 16 is green: the matrix is the correctness gate, and this is the cross-technology regression breadth that follows it.
-- **Scenario 19: Performance Baselines** - run each scenario across template scales, measuring import/sync/export time and memory to establish thresholds and identify bottlenecks.
+> Renumbered again, for the reason given at the top of this phase: 18 was claimed by Writeback To Source ([#1284](https://github.com/TetronIO/JIM/issues/1284)) and 19 by Password Synchronisation ([#1119](https://github.com/TetronIO/JIM/issues/1119)), both of which needed a scenario before either of the two below was started. The numbers are file names, not a priority order.
+
+- **Scenario 20: Multi-Source Aggregation** - two database sources (SQL Server + Oracle) feeding the metaverse, exercising join rules across sources, attribute precedence (each source authoritative for different attributes), and database data-type mapping. Targets Samba AD plus a CSV reporting export. Sequenced after Scenario 16 is green: the matrix is the correctness gate, and this is the cross-technology regression breadth that follows it.
+- **Scenario 21: Performance Baselines** - run each scenario across template scales, measuring import/sync/export time and memory to establish thresholds and identify bottlenecks.
 
 ---
 

@@ -42,6 +42,13 @@
 .PARAMETER MaxExportParallelism
     Connected System export parallelism, passed through to Setup-Scenario1.ps1
 
+.PARAMETER ExpiryBehaviour
+    What the directory should do with the Initial Password once it holds it. Defaults to
+    RequireChangeAtNextSignIn, which is what Scenario 17 asserts against and what an administrator would choose
+    for a new starter. Scenario 19 overrides it, because it needs accounts whose Initial Password signs in
+    cleanly: it is proving that a *synchronised* password replaced that one, and a must-change account answers
+    both the old and the new password with the same LDAP result code.
+
 .EXAMPLE
     ./Setup-Scenario17.ps1 -ApiKey "jim_..." -Template Micro
 #>
@@ -63,7 +70,11 @@ param(
     [int]$ExportConcurrency = 1,
 
     [Parameter(Mandatory=$false)]
-    [int]$MaxExportParallelism = 1
+    [int]$MaxExportParallelism = 1,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("RequireChangeAtNextSignIn", "ExpiresAccordingToTargetPolicy", "NeverExpires")]
+    [string]$ExpiryBehaviour = "RequireChangeAtNextSignIn"
 )
 
 Set-StrictMode -Version Latest
@@ -83,8 +94,10 @@ if (-not $DirectoryConfig) {
 # LdapConnectorPassword.BuildNonActiveDirectoryResult). Failing here is better than running a scenario
 # whose central assertion is inapplicable.
 if ($DirectoryConfig.UserObjectClass -ne "user") {
-    throw "Scenario 17 requires Samba AD. 'Must change at next sign-in' has no portable equivalent on " +
-          "$($DirectoryConfig.ConnectedSystemName), so the scenario's central assertion cannot hold there."
+    throw "This setup requires Samba AD: it provisions accounts and enables them as the Initial Password lands, " +
+          "which is an Active Directory operation with no portable equivalent on " +
+          "$($DirectoryConfig.ConnectedSystemName). An account left disabled there cannot be signed in as, so " +
+          "nothing built on this substrate can assert anything about the password."
 }
 
 <#
@@ -300,11 +313,11 @@ try {
         -Enable `
         -Source Static `
         -StaticPassword $securePassword `
-        -ExpiryBehaviour RequireChangeAtNextSignIn `
+        -ExpiryBehaviour $ExpiryBehaviour `
         -EnableAccount $true `
-        -ChangeReason "Scenario 17: prove a provisioned account holder can use the Initial Password" | Out-Null
+        -ChangeReason "Integration test substrate: provisioned accounts carry a known, usable Initial Password" | Out-Null
 
-    Write-Host "  ✓ Initial Password enabled (Source: Static, Expiry: RequireChangeAtNextSignIn, account enabled)" -ForegroundColor Green
+    Write-Host "  ✓ Initial Password enabled (Source: Static, Expiry: $ExpiryBehaviour, account enabled)" -ForegroundColor Green
 
     # Step 4: Read the configuration back
     # The password itself is write-only and is never returned, so what is verified here is that the
@@ -319,8 +332,8 @@ try {
         -Message "Initial Password is enabled on '$exportRuleName'"
     Assert-Equal -Actual $storedConfig.source -Expected "Static" `
         -Message "Initial Password source is Static"
-    Assert-Equal -Actual $storedConfig.expiryBehaviour -Expected "RequireChangeAtNextSignIn" `
-        -Message "Expiry behaviour is RequireChangeAtNextSignIn"
+    Assert-Equal -Actual $storedConfig.expiryBehaviour -Expected $ExpiryBehaviour `
+        -Message "Expiry behaviour is $ExpiryBehaviour"
     Assert-Condition -Condition ($storedConfig.enableAccount -eq $true) `
         -Message "The account is enabled once the password is set"
     Assert-Condition -Condition ($storedConfig.staticPasswordSet -eq $true) `
@@ -335,7 +348,7 @@ finally {
 Write-TestSection "Scenario 17 Setup Complete"
 Write-Host "Export Synchronisation Rule: $exportRuleName (ID: $($exportRule.id))" -ForegroundColor Cyan
 Write-Host "Initial Password source:     Static" -ForegroundColor Cyan
-Write-Host "Expiry behaviour:            RequireChangeAtNextSignIn" -ForegroundColor Cyan
+Write-Host "Expiry behaviour:            $ExpiryBehaviour" -ForegroundColor Cyan
 Write-Host ""
 
 # Return Scenario 1's configuration, plus what the assertions need to reach the directory as the
