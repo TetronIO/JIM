@@ -172,24 +172,40 @@ public static class CausalityLineageModelBuilder
         if (identityColumn == null && hasSourceRecord && hasTargetRecord)
             GetIdentityColumn();
 
-        // ─── Order: source records, the Identity, target records, then the trailing column ───
-        var orderedStates = recordColumns.Where(c => c.IsSourceSide)
+        // ─── Columns: the source side, the Identity, the target side, then the trailing column ───
+        // A side is one column however many records it holds. See CausalityLineageColumn's remarks:
+        // sibling records sit at the same hop, so a column each was spending a track and a gutter on
+        // a relationship the builder had already ruled out, and widened the canvas without bound.
+        List<ColumnState> Side(bool sourceSide) => recordColumns
+            .Where(c => c.IsSourceSide == sourceSide)
             .OrderByDescending(c => c.IsPageRecord).ThenBy(c => c.CreationOrder)
             .ToList();
+
+        var columnStates = new List<List<ColumnState>>();
+        var sourceSide = Side(true);
+        if (sourceSide.Count > 0)
+            columnStates.Add(sourceSide);
         if (identityColumn != null)
-            orderedStates.Add(identityColumn);
-        orderedStates.AddRange(recordColumns.Where(c => !c.IsSourceSide)
-            .OrderByDescending(c => c.IsPageRecord).ThenBy(c => c.CreationOrder));
+            columnStates.Add([identityColumn]);
+        var targetSide = Side(false);
+        if (targetSide.Count > 0)
+            columnStates.Add(targetSide);
         if (unassignedColumn != null)
-            orderedStates.Add(unassignedColumn);
+            columnStates.Add([unassignedColumn]);
 
         var hasProjected = allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
         var hasJoined = allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
 
-        var columns = orderedStates.Select(state => Materialise(state, context, chain)).ToList();
+        var columns = columnStates
+            .Select(states => new CausalityLineageColumn
+            {
+                Kind = states[0].Kind,
+                Objects = states.Select(state => Materialise(state, context, chain)).ToList()
+            })
+            .ToList();
         var joins = new List<CausalityLineageJoin>();
-        for (var i = 0; i < orderedStates.Count - 1; i++)
-            joins.Add(new CausalityLineageJoin(GetJoinLabel(orderedStates[i], orderedStates[i + 1], hasProjected, hasJoined)));
+        for (var i = 0; i < columnStates.Count - 1; i++)
+            joins.Add(new CausalityLineageJoin(GetJoinLabel(columnStates[i], columnStates[i + 1], hasProjected, hasJoined)));
 
         return new CausalityLineageModel
         {
@@ -256,10 +272,10 @@ public static class CausalityLineageModelBuilder
     }
 
     /// <summary>
-    /// Materialises a column: its head, its cards oldest-first (chain hops in time order, then this
+    /// Materialises one object: its head, its cards oldest-first (chain hops in time order, then this
     /// run's events, which are always the newest thing in the story) and its endings.
     /// </summary>
-    private static CausalityLineageColumn Materialise(ColumnState state, CausalityPageContext context, CausalChain? chain)
+    private static CausalityLineageObject Materialise(ColumnState state, CausalityPageContext context, CausalChain? chain)
     {
         var cards = state.Hops
             .OrderBy(h => h.Hop.Occurred).ThenBy(h => h.Sequence)
@@ -289,9 +305,8 @@ public static class CausalityLineageModelBuilder
                 break;
         }
 
-        return new CausalityLineageColumn
+        return new CausalityLineageObject
         {
-            Kind = state.Kind,
             Title = head.Title,
             IsRoleHead = head.IsRoleHead,
             SystemId = state.Kind == CausalityLineageColumnKind.Record ? state.SystemId : null,
@@ -401,34 +416,46 @@ public static class CausalityLineageModelBuilder
     /// <summary>
     /// The relationship label between two adjacent columns. A record feeding the Identity reads as
     /// what this run proved ("projected", "joined") or as the standing "imported" relationship; the
-    /// Identity feeding a record reads "provisioned" where the record was created (this run's
-    /// provisioning event, or the chain's create-staged decision) and "exported" otherwise. Pairs
-    /// touching the trailing column state no relationship.
+    /// Identity feeding records reads "provisioned" where they were created (this run's provisioning
+    /// event, or the chain's create-staged decision) and "exported" otherwise. Pairs touching the
+    /// trailing column state no relationship.
     /// </summary>
-    private static string? GetJoinLabel(ColumnState left, ColumnState right, bool hasProjected, bool hasJoined)
+    /// <remarks>
+    /// One label now covers a whole side, so it may only claim what is true of every record on it:
+    /// "provisioned" needs all of them created, because every provisioned record was also exported
+    /// to but not every exported record was created, and a story where one system gained an account
+    /// while another merely took an update must not read as though both were provisioned.
+    /// </remarks>
+    private static string? GetJoinLabel(
+        IReadOnlyList<ColumnState> left, IReadOnlyList<ColumnState> right, bool hasProjected, bool hasJoined)
     {
-        if (left.Kind == CausalityLineageColumnKind.Unassigned || right.Kind == CausalityLineageColumnKind.Unassigned)
+        if (left[0].Kind == CausalityLineageColumnKind.Unassigned
+            || right[0].Kind == CausalityLineageColumnKind.Unassigned)
             return null;
 
-        if (left.Kind == CausalityLineageColumnKind.Record && right.Kind == CausalityLineageColumnKind.Identity)
+        if (left[0].Kind == CausalityLineageColumnKind.Record && right[0].Kind == CausalityLineageColumnKind.Identity)
         {
-            if (left.IsPageRecord && hasProjected)
+            var hasPageRecord = left.Any(state => state.IsPageRecord);
+            if (hasPageRecord && hasProjected)
                 return "projected";
-            if (left.IsPageRecord && hasJoined)
+            if (hasPageRecord && hasJoined)
                 return "joined";
             return "imported";
         }
 
-        if (left.Kind == CausalityLineageColumnKind.Identity && right.Kind == CausalityLineageColumnKind.Record)
-        {
-            var provisioned = right.ThisRunEvents.Any(e =>
-                    e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)
-                || right.Hops.Any(h => h.Hop.Cohort.ReasonCode == CausalReasonCode.ExportCreateStaged);
-            return provisioned ? "provisioned" : "exported";
-        }
+        if (left[0].Kind == CausalityLineageColumnKind.Identity && right[0].Kind == CausalityLineageColumnKind.Record)
+            return right.All(WasProvisioned) ? "provisioned" : "exported";
 
         return null;
     }
+
+    /// <summary>
+    /// Whether the record this column state stands for was created rather than merely written to:
+    /// this run's own provisioning outcome, or the chain's create-staged decision.
+    /// </summary>
+    private static bool WasProvisioned(ColumnState state) =>
+        state.ThisRunEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)
+        || state.Hops.Any(h => h.Hop.Cohort.ReasonCode == CausalReasonCode.ExportCreateStaged);
 
     /// <summary>
     /// A column under construction: its identity, side, cards-in-progress and endings, before heads

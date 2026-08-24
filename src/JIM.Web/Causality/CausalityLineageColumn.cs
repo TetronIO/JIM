@@ -4,69 +4,33 @@
 namespace JIM.Web.Causality;
 
 /// <summary>
-/// One object in the lineage's story (#1495): a record in a Connected System, or the Identity. The
-/// column is the object, never the system; a record column names its Connected System beneath its
-/// head rather than being headed by it.
+/// One column of the lineage canvas (#1495): a side of the story rather than a single object. A
+/// story has at most four, whatever it involves: the source side's records, the Identity, the
+/// target side's records, and the trailing column for hops the builder cannot place.
 /// </summary>
+/// <remarks>
+/// Objects on the same side share a column because the horizontal axis means "one hop further along
+/// the causal chain", and sibling records all sit at the same hop: the builder returns no
+/// relationship between two of them, so a column each spent a track and a gutter on a relationship
+/// it had already ruled out, and the canvas widened without bound as a deployment gained Connected
+/// Systems. Each object encloses its own events so a shared column still reads as separate stories.
+/// </remarks>
 public sealed class CausalityLineageColumn
 {
     /// <summary>
-    /// What kind of object this column stands for.
+    /// What kind of object this column holds. Uniform within a column: the sides are records and the
+    /// middle is the Identity.
     /// </summary>
     public CausalityLineageColumnKind Kind { get; init; }
 
     /// <summary>
-    /// The column's head: the object's name where the story has a single object here, or its role
-    /// where it speaks for several (see <see cref="IsRoleHead"/>).
+    /// The objects stacked in this column, in display order: the page's own record leads its side,
+    /// and the rest follow in the order the story reached them.
     /// </summary>
-    public string Title { get; init; } = string.Empty;
+    public required IReadOnlyList<CausalityLineageObject> Objects { get; init; }
 
     /// <summary>
-    /// True when <see cref="Title"/> is a role ("Users") rather than a single object's name,
-    /// because the column's story involves several objects and no one name would be honest.
+    /// Whether any of this run's own events landed on any object in this column.
     /// </summary>
-    public bool IsRoleHead { get; init; }
-
-    /// <summary>
-    /// Id of the Connected System a record column's object lives on; null for the Identity.
-    /// </summary>
-    public int? SystemId { get; init; }
-
-    /// <summary>
-    /// Name of the Connected System, shown beneath a record column's head ("record in Yellowstone
-    /// APAC"); null for the Identity. Snapshot-sourced for chain-derived columns, so a renamed or
-    /// deleted system still reads as it was at the time.
-    /// </summary>
-    public string? SystemName { get; init; }
-
-    /// <summary>
-    /// The object's type name, where known: the record's own type ("person") on the page's record
-    /// column, or the Metaverse Object Type ("User") on a single-object Identity column. Null for
-    /// chain-derived record columns (their snapshots do not carry it) and for role heads, whose
-    /// title is already a type noun.
-    /// </summary>
-    public string? ObjectTypeName { get; init; }
-
-    /// <summary>
-    /// Link to the object's own page, or null where it no longer exists or was never resolvable.
-    /// </summary>
-    public string? Href { get; init; }
-
-    /// <summary>
-    /// The events that happened to this object, oldest first: chain cards in time order, then this
-    /// run's cards in outcome order (this run is always the newest thing in the story).
-    /// </summary>
-    public IReadOnlyList<CausalityLineageCard> Cards { get; init; } = [];
-
-    /// <summary>
-    /// The chain endings that close under this column, one per distinct resolution: the walk's
-    /// terminal states rendered as quiet footers, never warnings.
-    /// </summary>
-    public IReadOnlyList<CausalityLineageEnding> Endings { get; init; } = [];
-
-    /// <summary>
-    /// Whether any of this run's own events landed on this column: the lit column is what the item
-    /// did, against the subdued history around it.
-    /// </summary>
-    public bool IsLit => Cards.Any(c => c.IsThisRun);
+    public bool IsLit => Objects.Any(o => o.IsLit);
 }

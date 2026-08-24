@@ -125,6 +125,65 @@ public class CausalityLineageViewTests
         });
     }
 
+    /// <summary>
+    /// The leaver story deprovisions two systems, so its target side holds two records in one column.
+    /// Each has to enclose its own head and events: proximity alone would leave a reader unable to say
+    /// where one record's story ended, and in this story the two records even share a title, so the
+    /// enclosure and the system sub-line are the only things telling them apart.
+    /// </summary>
+    [Test]
+    public void Render_ColumnHoldingSeveralRecords_EnclosesEachWithItsOwnHeadAndEvents()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
+
+        var cut = RenderLineage(lineage);
+
+        var targetColumn = cut.FindAll(".ln-col")[2];
+        var objects = targetColumn.QuerySelectorAll(":scope > .ln-object");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(objects, Has.Length.EqualTo(2));
+            foreach (var enclosure in objects)
+            {
+                Assert.That(enclosure.QuerySelectorAll(":scope > .ln-obj"), Has.Length.EqualTo(1),
+                    "one head per enclosure: the head is what the enclosure belongs to");
+                Assert.That(enclosure.QuerySelectorAll(":scope > .ln-obj-body > .ln-now"), Has.Length.EqualTo(1),
+                    "each record's own events live inside its own enclosure, not loose in the column");
+            }
+
+            Assert.That(objects[0].TextContent, Does.Contain("Glitterband EMEA"));
+            Assert.That(objects[1].TextContent, Does.Contain("Contoso AD"));
+        }
+    }
+
+    /// <summary>
+    /// The canvas is bounded by its sides, so its grid never grows a track per Connected System. This is
+    /// asserted on the inline template because that is where the width actually comes from.
+    /// </summary>
+    [Test]
+    public void Render_ManyTargetSystems_KeepsTheCanvasToItsColumnTracks()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var projected = CausalityTestData.AddOutcome(item,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected, parent: null, ordinal: 0,
+            targetEntityId: Guid.NewGuid(), targetEntityDescription: "Liam Allen");
+        for (var systemId = 2; systemId <= 9; systemId++)
+        {
+            CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                parent: projected, ordinal: systemId, targetEntityId: Guid.NewGuid(),
+                targetEntityDescription: $"System {systemId}", detailMessage: $"{systemId}|person");
+        }
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+
+        var cut = RenderLineage(lineage);
+
+        var template = cut.Find(".ln-canvas").GetAttribute("style")!;
+        Assert.That(template.Split("minmax").Length - 1, Is.LessThanOrEqualTo(4),
+            $"eight target systems must not become eight column tracks: {template}");
+    }
+
     [Test]
     public void Render_ExportCreateStory_HeadsColumnsWithRecordAndIdentityChips()
     {

@@ -801,15 +801,33 @@
 .causality-panel .ln-col {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 20px;
     min-width: 0;
+}
+
+/* A column is a side of the story, not one object, so each object encloses its own head and events:
+   a common region reads as a group wherever the reader is in it, which neither extra spacing nor a
+   rail can claim once the head has scrolled out of view. The enclosure adds no chrome, because the
+   head was already a bordered box; it grows to hold what belongs to it. */
+.causality-panel .ln-object {
+    border: 1px solid var(--cz-line);
+    border-radius: 12px;
+    background: var(--cz-surface);
+    overflow: hidden;
+    min-width: 0;
+}
+
+.causality-panel .ln-obj-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 14px 12px;
 }
 
 /* ─── Column heads: the object, never its system ─── */
 
 .causality-panel .ln-obj {
-    border: 1px solid var(--cz-line);
-    border-radius: 10px;
+    border-bottom: 1px solid var(--cz-line-soft);
     padding: 9px 12px;
     background: var(--cz-inner);
     font-weight: 650;
@@ -1047,7 +1065,6 @@
 .causality-panel .ln-end {
     font-size: 0.8125rem;
     color: var(--cz-text-dim);
-    padding: 0 2px;
 }
 
 .causality-panel .ln-members-toggle:focus-visible,
