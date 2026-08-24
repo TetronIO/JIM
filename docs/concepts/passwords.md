@@ -230,10 +230,10 @@ Four counts sit above the list:
 Filter by Connected System, by state, or by how the last attempt failed, and search by person or system. Two actions apply to whatever the filters are currently showing, as well as to a single row:
 
 - **Retry**<br /> Makes matching changes due immediately and raises a delivery pass. This is what you run once the reason a directory was refusing passwords has been dealt with. It applies to waiting, parked and cancelled changes; an expired one is left alone, because there is no password left to send.
-- **Cancel**<br /> Stops JIM delivering them. The rows stay, marked **Cancelled**, recording who cancelled them and when.
+- **Cancel**<br /> Stops JIM delivering them. The changes stay, marked **Cancelled**, recording who cancelled them and when.
 
 !!! note "Cancelling records an outcome; it does not erase one"
-    A cancelled change is kept for the same reason an expired one is: that person's password on that system is now out of step with the rest, and deleting the row would leave you believing your systems agree when they do not. Retention trims cancelled rows on the same schedule as any other finished change (see [How long any of it is kept](#-how-long-any-of-it-is-kept)), and a cancelled change can be retried, provided it has not expired in the meantime.
+    A cancelled change is kept for the same reason an expired one is: that person's password on that system is now out of step with the rest, and deleting it would leave you believing your systems agree when they do not. Retention removes cancelled changes on the same schedule as any other finished change (see [How long any of it is kept](#-how-long-any-of-it-is-kept)), and a cancelled change can be retried, provided it has not expired in the meantime.
 
 Whatever a retry or a cancel covers, it is recorded as **one** Activity. A retry over a directory that has just come back is a single decision, and a hundred Activities saying so would bury the decision in its own consequences. The Activity is recorded even when nothing matched, so a retry that changed nothing can be told from a retry that never ran.
 
@@ -260,12 +260,12 @@ See [PowerShell: Password Synchronisation](../powershell/password-synchronisatio
 
 A finished password change is not kept for ever. The built-in **History Retention Cleanup** [Schedule](../configuration/schedules.md#built-in-schedules) runs daily and removes two things once they have had the `History.PasswordEventRetentionPeriod` [Service Setting](../administration/configuration.md#service-settings), which defaults to a year:
 
-- **Queue rows that finished**, whether parked, expired or cancelled. A change still owed to a Connected System is never removed, however old it is.
+- **Queued changes that finished**, whether parked, expired or cancelled. A change still owed to a Connected System is never removed, however old it is.
 - **The Activities recording what happened to each change**, including the per-system outcomes behind a person's Password Synchronisation tab.
 
-The two move together on purpose: a person's password history is the outcomes, and a queue row without them says something happened without saying what.
+The two move together on purpose: a person's password history is the outcomes, and a queued change without them says something happened without saying what.
 
-This period is also what bounds how long JIM holds a password. A parked or cancelled row still carries its encrypted value, because both can be retried; shorten the retention period if you would rather JIM stopped holding one sooner. Nothing else ages these rows out, so a target that refuses passwords would otherwise accumulate one permanent row per person.
+This period is also what bounds how long JIM holds a password. A parked or cancelled change still carries its encrypted password, because both can be retried; shorten the retention period if you would rather JIM stopped holding one sooner. Nothing else ages these out, so a target that refuses passwords would otherwise keep one for every person, for ever.
 
 Each pass says what it removed, on its own Activity, so retention is something you can check rather than assume.
 
