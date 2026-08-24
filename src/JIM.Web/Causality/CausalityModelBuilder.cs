@@ -493,11 +493,23 @@ public static class CausalityModelBuilder
             : "/admin/deleted-objects";
     }
 
-    private static string GetMetaverseObjectHref(Guid mvoId, CausalityPageContext context)
+    /// <summary>
+    /// The Metaverse Object's own page, or null where the object's type plural name is unknown and the
+    /// route therefore cannot be built.
+    /// </summary>
+    /// <remarks>
+    /// Null, never a guess. The route is keyed on the plural name (<c>/t/{plural}/v/{id}</c>), and the
+    /// fallback here used to invent <c>/identity/search/{id}</c>, which is not a route in this
+    /// application: on any item whose type the page could not resolve (a synchronisation whose record
+    /// has since been deleted is the common one, since the resolution chain starts at the record's
+    /// object type) every Identity on the panel pointed at a page that does not exist. The caller
+    /// renders an unlinked name for a null, which the deleted-Identity branch beside it already does.
+    /// </remarks>
+    private static string? GetMetaverseObjectHref(Guid mvoId, CausalityPageContext context)
     {
         return !string.IsNullOrEmpty(context.MvoTypePluralName)
             ? JimUtilities.GetMetaverseObjectHref(mvoId, context.MvoTypePluralName)
-            : $"/identity/search/{mvoId}";
+            : null;
     }
 
     /// <summary>

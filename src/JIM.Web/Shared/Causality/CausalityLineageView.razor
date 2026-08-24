@@ -1,16 +1,18 @@
+@using JIM.Utilities
 @using JIM.Web.Causality
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* The causality Lineage view (#1495): the object graph as columns (each record with its Connected
-   System named beneath it, and the Identity), joined by labelled relationships, with every causally
-   relevant event stacked on the column of the object it happened to. This run's events render
-   primary (accent ring and badge) around the shared event card, so tones, entity chips, attribute
-   counts and the shared drawer keep working; earlier runs' events render as subdued chain cards
-   carrying their run kind, timestamp and activity link. Chain endings close their columns as quiet
-   footers. Wide stories scroll horizontally inside the scroller; narrow viewports stack the columns
-   vertically, per the Flow view's existing breakpoint. *@
+@* The causality Lineage view (#1495): the object graph as at most four columns (the source side's
+   records, the Identity, the target side's records, and the trailing column for unplaceable hops),
+   joined by labelled relationships and read source to Identity to target. Each object in a column
+   encloses its own head and events, which is what lets a side hold several records without the
+   reader losing where one record's story ends. This run's events render primary (accent ring and
+   badge) around the shared event card, so tones, entity chips, attribute counts and the shared
+   drawer keep working; earlier runs' events render as subdued chain cards carrying their run kind,
+   timestamp and activity link. Chain endings close their object as quiet footers. Narrow viewports
+   stack the columns vertically, per the Flow view's existing breakpoint. *@
 
 <div class="ln-scroller">
     @if (Model.IsTruncatedByDepth)
@@ -36,56 +38,108 @@
                 </div>
             }
             <div class="ln-col" @key="column">
-                <div class="ln-obj">
-                    @if (column.Kind != CausalityLineageColumnKind.Unassigned)
-                    {
-                        <span class="glyph @(column.Kind == CausalityLineageColumnKind.Identity ? "idn" : "rec")"
-                              aria-hidden="true">@(column.Kind == CausalityLineageColumnKind.Identity ? "ID" : "R")</span>
-                    }
-                    @if (column.Href != null)
-                    {
-                        <a class="ln-obj-title" href="@column.Href">@GetColumnTitle(column)</a>
-                    }
-                    else
-                    {
-                        <span class="ln-obj-title">@GetColumnTitle(column)</span>
-                    }
-                    @if (GetColumnSub(column) is { } columnSub)
-                    {
-                        <span class="ln-obj-sub">@columnSub</span>
-                    }
-                </div>
-                @foreach (var card in column.Cards)
+                @* Each object encloses its own events. A column is a side of the story, not one
+                   object, so without the enclosure a reader could not tell where one record's
+                   events ended and the next record's began. *@
+                @foreach (var lineageObject in column.Objects)
                 {
-                    @if (card.Event is { } thisRunEvent)
-                    {
-                        @* The head names the column's system, so the card's own system chip would
-                           restate it; suppressed exactly as the Flow view's system groups do. *@
-                        <div class="ln-now" @key="card">
-                            @* The badge and the run's time pair up exactly as a chain card's run chip and
-                               time do, so every card on the panel says which run it belongs to and when. *@
-                            <div class="ln-when ln-now-when">
-                                <span class="ln-now-badge">This run</span>
-                                @if (Timestamp is { } timestamp)
+                    <div class="ln-object" @key="lineageObject">
+                        <div class="ln-obj">
+                            @if (column.Kind != CausalityLineageColumnKind.Unassigned)
+                            {
+                                <span class="glyph @(column.Kind == CausalityLineageColumnKind.Identity ? "idn" : "rec")"
+                                      aria-hidden="true">@(column.Kind == CausalityLineageColumnKind.Identity ? "ID" : "R")</span>
+                            }
+                            @if (lineageObject.Href != null)
+                            {
+                                <a class="ln-obj-title" href="@lineageObject.Href">@GetObjectTitle(column, lineageObject)</a>
+                            }
+                            else
+                            {
+                                @* An object JIM cannot address explains itself on hover, and claims nothing
+                                   about existing: it may well still be there, its type simply could not be
+                                   resolved. What has since become of an object is a different fact, and it
+                                   belongs below the events rather than beside the name. *@
+                                <span class="ln-obj-title"
+                                      title="@GetUnlinkedExplanation(column, lineageObject)">@GetObjectTitle(column, lineageObject)</span>
+                            }
+                            @* A record's sub-line names its Connected System, and that name links to
+                               the system like every other mention of it on the panel. Only the name is
+                               the link; "record in" is not part of what is being pointed at. *@
+                            @if (column.Kind == CausalityLineageColumnKind.Record
+                                 && !string.IsNullOrWhiteSpace(lineageObject.SystemName))
+                            {
+                                <span class="ln-obj-sub">
+                                    record in @if (lineageObject.SystemId is { } systemId)
+                                              {
+                                                  <a href="@Utilities.GetConnectedSystemHref(systemId)">@lineageObject.SystemName</a>
+                                              }
+                                              else
+                                              {
+                                                  @lineageObject.SystemName
+                                              }
+                                </span>
+                            }
+                            else if (GetObjectSub(column, lineageObject) is { } objectSub)
+                            {
+                                <span class="ln-obj-sub">@objectSub</span>
+                            }
+                        </div>
+                        @* An object with no events of its own and nothing to note is its head alone (the
+                           Identity that completes a create export's graph); an empty body would add padding
+                           under it with nothing in it. *@
+                        @if (lineageObject.Cards.Count > 0 || lineageObject.Endings.Count > 0
+                             || lineageObject.IsDeletedAfterThisRun)
+                        {
+                            <div class="ln-obj-body">
+                                @foreach (var card in lineageObject.Cards)
                                 {
-                                    var timestampLocal = timestamp.ToLocalTime();
-                                    <span class="ln-time" title="@timestampLocal.ToFriendlyDate()">@timestampLocal.ToRelativeTime()</span>
+                                    @if (card.Event is { } thisRunEvent)
+                                    {
+                                        @* The head names the object's system, so the card's own system
+                                           chip would restate it; suppressed exactly as the Flow view's
+                                           system groups did. *@
+                                        <div class="ln-now" @key="card">
+                                            @* The badge and the run's time pair up exactly as a chain
+                                               card's run chip and time do, so every card on the panel
+                                               says which run it belongs to and when. *@
+                                            <div class="ln-when ln-now-when">
+                                                <span class="ln-now-badge">This run</span>
+                                                @if (Timestamp is { } timestamp)
+                                                {
+                                                    var timestampLocal = timestamp.ToLocalTime();
+                                                    <span class="ln-time" title="@timestampLocal.ToFriendlyDate()">@timestampLocal.ToRelativeTime()</span>
+                                                }
+                                            </div>
+                                            <CausalityEventCard Event="thisRunEvent" TechnicalNames="TechnicalNames"
+                                                                HideSystemChip="true"
+                                                                Selected="ReferenceEquals(SelectedEvent, thisRunEvent)"
+                                                                OnSelect="ToggleSelectionAsync" />
+                                        </div>
+                                    }
+                                    else if (card.Hop is { } hop)
+                                    {
+                                        <CausalityLineageChainCard Hop="hop" @key="card" />
+                                    }
+                                }
+                                @foreach (var ending in lineageObject.Endings)
+                                {
+                                    <div class="ln-end" @key="ending">@ending.Text</div>
+                                }
+                                @* What became of the object afterwards, stated last because it happened
+                                   last: the panel reads top to bottom as time passing, so position carries
+                                   the tense that a marker beside the name could not. Deleted is not a dead
+                                   end; JIM retains the record. *@
+                                @if (lineageObject.DeletedAfterThisRunHref is { } deletedAfterThisRunHref)
+                                {
+                                    <div class="ln-since">
+                                        <span>@GetObjectNoun(column) was deleted after this run.</span>
+                                        <a class="ln-link" href="@deletedAfterThisRunHref">View deletion record</a>
+                                    </div>
                                 }
                             </div>
-                            <CausalityEventCard Event="thisRunEvent" TechnicalNames="TechnicalNames"
-                                                HideSystemChip="true"
-                                                Selected="ReferenceEquals(SelectedEvent, thisRunEvent)"
-                                                OnSelect="ToggleSelectionAsync" />
-                        </div>
-                    }
-                    else if (card.Hop is { } hop)
-                    {
-                        <CausalityLineageChainCard Hop="hop" @key="card" />
-                    }
-                }
-                @foreach (var ending in column.Endings)
-                {
-                    <div class="ln-end" @key="ending">@ending.Text</div>
+                        }
+                    </div>
                 }
             </div>
         }
@@ -124,7 +178,9 @@
 
     /// <summary>
     /// The canvas grid: one flexible track per column with a fixed join track between each adjacent
-    /// pair, so the joins render in the grid flow rather than being absolutely positioned.
+    /// pair, so the joins render in the grid flow rather than being absolutely positioned. The track
+    /// count is bounded by the column count (at most four), so the canvas no longer widens as a
+    /// deployment gains Connected Systems.
     /// </summary>
     private string GridTemplateColumns
     {
@@ -142,25 +198,53 @@
         }
     }
 
-    private static string GetColumnTitle(CausalityLineageColumn column)
+    /// <summary>
+    /// Why an unlinked name has no link, for the hover, or null where the absence needs no explaining: an
+    /// object deleted after this run has the note below it saying so, a role head stands for several objects
+    /// and was never going to link to one, and the trailing column is not an object at all.
+    /// </summary>
+    /// <remarks>
+    /// The wording says what JIM cannot do, never that the object is gone. An unaddressable object is
+    /// usually alive; its type simply could not be resolved, or its snapshots carried no id.
+    /// </remarks>
+    private static string? GetUnlinkedExplanation(CausalityLineageColumn column, CausalityLineageObject lineageObject)
     {
-        return column.Kind == CausalityLineageColumnKind.Record && column.ObjectTypeName != null
-            ? $"{column.ObjectTypeName}: {column.Title}"
-            : column.Title;
+        return lineageObject.IsDeletedAfterThisRun
+               || lineageObject.IsRoleHead
+               || column.Kind == CausalityLineageColumnKind.Unassigned
+            ? null
+            : "JIM cannot open a page for this object.";
     }
 
     /// <summary>
-    /// The head's second line: which system a record lives in, or that the column is the Identity
-    /// (with its Metaverse Object Type where known). The trailing unassigned column explains itself
-    /// instead.
+    /// How a note refers to the object it sits under. The head already names it, so repeating the name
+    /// would read as though a second object were being introduced.
     /// </summary>
-    private static string? GetColumnSub(CausalityLineageColumn column)
+    private static string GetObjectNoun(CausalityLineageColumn column)
+    {
+        return column.Kind == CausalityLineageColumnKind.Identity ? "This Identity" : "This record";
+    }
+
+    private static string GetObjectTitle(CausalityLineageColumn column, CausalityLineageObject lineageObject)
+    {
+        return column.Kind == CausalityLineageColumnKind.Record && lineageObject.ObjectTypeName != null
+            ? $"{lineageObject.ObjectTypeName}: {lineageObject.Title}"
+            : lineageObject.Title;
+    }
+
+    /// <summary>
+    /// The head's second line for everything that is not a record: that the object is the Identity
+    /// (with its Metaverse Object Type where known), or that the trailing column holds what could not
+    /// be placed. A record's sub-line is rendered in the markup instead, because its system name is a
+    /// link and this returns a plain string.
+    /// </summary>
+    private static string? GetObjectSub(CausalityLineageColumn column, CausalityLineageObject lineageObject)
     {
         return column.Kind switch
         {
-            CausalityLineageColumnKind.Record => column.SystemName != null ? $"record in {column.SystemName}" : null,
-            CausalityLineageColumnKind.Identity => column.ObjectTypeName != null
-                ? $"Identity · {column.ObjectTypeName}"
+            CausalityLineageColumnKind.Record => null,
+            CausalityLineageColumnKind.Identity => lineageObject.ObjectTypeName != null
+                ? $"Identity · {lineageObject.ObjectTypeName}"
                 : "Identity",
             _ => "causes this view could not place"
         };

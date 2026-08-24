@@ -125,6 +125,276 @@ public class CausalityLineageViewTests
         });
     }
 
+    /// <summary>
+    /// The leaver story deprovisions two systems, so its target side holds two records in one column.
+    /// Each has to enclose its own head and events: proximity alone would leave a reader unable to say
+    /// where one record's story ended, and in this story the two records even share a title, so the
+    /// enclosure and the system sub-line are the only things telling them apart.
+    /// </summary>
+    [Test]
+    public void Render_ColumnHoldingSeveralRecords_EnclosesEachWithItsOwnHeadAndEvents()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
+
+        var cut = RenderLineage(lineage);
+
+        var targetColumn = cut.FindAll(".ln-col")[2];
+        var objects = targetColumn.QuerySelectorAll(":scope > .ln-object");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(objects, Has.Length.EqualTo(2));
+            foreach (var enclosure in objects)
+            {
+                Assert.That(enclosure.QuerySelectorAll(":scope > .ln-obj"), Has.Length.EqualTo(1),
+                    "one head per enclosure: the head is what the enclosure belongs to");
+                Assert.That(enclosure.QuerySelectorAll(":scope > .ln-obj-body > .ln-now"), Has.Length.EqualTo(1),
+                    "each record's own events live inside its own enclosure, not loose in the column");
+            }
+
+            Assert.That(objects[0].TextContent, Does.Contain("Glitterband EMEA"));
+            Assert.That(objects[1].TextContent, Does.Contain("Contoso AD"));
+        }
+    }
+
+    /// <summary>
+    /// The canvas is bounded by its sides, so its grid never grows a track per Connected System. This is
+    /// asserted on the inline template because that is where the width actually comes from.
+    /// </summary>
+    [Test]
+    public void Render_ManyTargetSystems_KeepsTheCanvasToItsColumnTracks()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var projected = CausalityTestData.AddOutcome(item,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected, parent: null, ordinal: 0,
+            targetEntityId: Guid.NewGuid(), targetEntityDescription: "Liam Allen");
+        for (var systemId = 2; systemId <= 9; systemId++)
+        {
+            CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                parent: projected, ordinal: systemId, targetEntityId: Guid.NewGuid(),
+                targetEntityDescription: $"System {systemId}", detailMessage: $"{systemId}|person");
+        }
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+
+        var cut = RenderLineage(lineage);
+
+        var template = cut.Find(".ln-canvas").GetAttribute("style")!;
+        Assert.That(template.Split("minmax").Length - 1, Is.LessThanOrEqualTo(4),
+            $"eight target systems must not become eight column tracks: {template}");
+    }
+
+    /// <summary>
+    /// The Connected System an object lives in is a link to that system, exactly as its name is
+    /// everywhere else on the panel. The head is where a reader meets the system, and it was the one
+    /// mention of it with nowhere to go.
+    /// </summary>
+    [Test]
+    public void Render_RecordHead_LinksItsConnectedSystem()
+    {
+        var cut = RenderLineage(ExportCreateLineage());
+
+        var sub = cut.FindAll(".ln-obj-sub")[0];
+        var link = sub.QuerySelector("a");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(link, Is.Not.Null);
+            Assert.That(link!.GetAttribute("href"), Is.EqualTo("/admin/connected-systems/1"));
+            Assert.That(link.TextContent.Trim(), Is.EqualTo("Yellowstone APAC"),
+                "only the system's name is the link, not the whole 'record in ...' phrase");
+            Assert.That(sub.TextContent.Trim(), Is.EqualTo("record in Yellowstone APAC"));
+        }
+    }
+
+    /// <summary>
+    /// A system whose id the snapshots did not carry still names itself; it simply does not link.
+    /// </summary>
+    [Test]
+    public void Render_RecordHeadWithNoSystemId_NamesTheSystemWithoutLinkingIt()
+    {
+        var model = new CausalityLineageModel
+        {
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Record,
+                    Objects = [new CausalityLineageObject { Title = "Liam Allen", SystemName = "Retired System" }]
+                }
+            ],
+            Joins = []
+        };
+
+        var cut = RenderLineage(model);
+
+        var sub = cut.Find(".ln-obj-sub");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sub.QuerySelector("a"), Is.Null);
+            Assert.That(sub.TextContent.Trim(), Is.EqualTo("record in Retired System"));
+        }
+    }
+
+    /// <summary>
+    /// The head states what the object is, never what has since become of it. A head carries no time of its
+    /// own, so a state marker sitting beside the name is read as something this run did; the run that created
+    /// an Identity must not appear to have struck it out.
+    /// </summary>
+    [Test]
+    public void Render_ObjectDeletedAfterThisRun_LeavesTheHeadStatingOnlyWhatTheObjectIs()
+    {
+        var cut = RenderLineage(DeletedAfterThisRunModel());
+
+        var head = cut.Find(".ln-obj");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(head.QuerySelector(".ln-obj-title")!.ClassList, Does.Not.Contain("gone"));
+            Assert.That(head.QuerySelector(".evt-badge"), Is.Null);
+            Assert.That(head.QuerySelector(".ln-link"), Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// The fact sits below the run's own events, where the panel already reads top-to-bottom as time
+    /// passing, and says outright that it came afterwards. Position and wording agree, so neither has to
+    /// carry the tense alone.
+    /// </summary>
+    [Test]
+    public void Render_ObjectDeletedAfterThisRun_SaysSoBeneathTheRunsEvents()
+    {
+        var cut = RenderLineage(DeletedAfterThisRunModel());
+
+        var body = cut.Find(".ln-obj-body");
+        var since = body.QuerySelector(".ln-since")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(since.TextContent, Does.Contain("was deleted after this run"));
+            Assert.That(since.QuerySelector("a.ln-link")!.GetAttribute("href"),
+                Is.EqualTo("/admin/deleted-objects?t=deleted-mvos&mvo=abc"));
+            Assert.That(since.QuerySelector("a.ln-link")!.TextContent.Trim(), Is.EqualTo("View deletion record"));
+            Assert.That(body.LastElementChild, Is.SameAs(since),
+                "the deletion happened after everything else on this object, so it renders after it");
+        }
+    }
+
+    /// <summary>
+    /// An object with no events of its own still gets its body, because the note is the only thing it has
+    /// to say. Guarding the body on the cards alone would silently drop it.
+    /// </summary>
+    [Test]
+    public void Render_ObjectDeletedAfterThisRunWithNoEvents_StillSaysSo()
+    {
+        var model = new CausalityLineageModel
+        {
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Identity,
+                    Objects =
+                    [
+                        new CausalityLineageObject
+                        {
+                            Title = "Test Deprov JoinDisc",
+                            DeletedAfterThisRunHref = "/admin/deleted-objects?t=deleted-mvos&mvo=abc"
+                        }
+                    ]
+                }
+            ],
+            Joins = []
+        };
+
+        var cut = RenderLineage(model);
+
+        Assert.That(cut.Find(".ln-since").TextContent, Does.Contain("was deleted after this run"));
+    }
+
+    /// <summary>
+    /// An object this run deleted says nothing about a later deletion: its own card recorded it, and the
+    /// note exists purely for what happened outside this item's story.
+    /// </summary>
+    [Test]
+    public void Render_ObjectDeletedByThisRun_AddsNoAfterThisRunNote()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
+
+        var cut = RenderLineage(lineage);
+
+        Assert.That(cut.FindAll(".ln-since"), Is.Empty);
+    }
+
+    /// <summary>
+    /// An Identity created by this run and deleted afterwards, which is the shape that made the shipped
+    /// treatment read as a contradiction.
+    /// </summary>
+    private static CausalityLineageModel DeletedAfterThisRunModel()
+    {
+        var model = CausalityModelBuilder.Build(
+            CausalityTestData.NewJoinerItem(),
+            CausalityTestData.NewJoinerContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+        var identity = lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity).Objects.Single();
+
+        return new CausalityLineageModel
+        {
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Identity,
+                    Objects =
+                    [
+                        new CausalityLineageObject
+                        {
+                            Title = identity.Title,
+                            ObjectTypeName = identity.ObjectTypeName,
+                            Cards = identity.Cards,
+                            DeletedAfterThisRunHref = "/admin/deleted-objects?t=deleted-mvos&mvo=abc"
+                        }
+                    ]
+                }
+            ],
+            Joins = []
+        };
+    }
+
+    /// <summary>
+    /// An object JIM cannot build a route to explains itself, and says only that: it may well still exist,
+    /// so the wording never claims otherwise. A role head ("Records") is exempt, because it stands for
+    /// several objects and was never going to link to one.
+    /// </summary>
+    [Test]
+    public void Render_UnaddressableObject_ExplainsItselfWithoutClaimingItIsGone()
+    {
+        var model = new CausalityLineageModel
+        {
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Identity,
+                    Objects = [new CausalityLineageObject { Title = "Test Deprov JoinDisc" }]
+                },
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Record,
+                    Objects = [new CausalityLineageObject { Title = "Records", IsRoleHead = true }]
+                }
+            ],
+            Joins = [new CausalityLineageJoin(null)]
+        };
+
+        var cut = RenderLineage(model);
+
+        var titles = cut.FindAll(".ln-obj-title");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(titles[0].GetAttribute("title"), Is.EqualTo("JIM cannot open a page for this object."));
+            Assert.That(titles[1].GetAttribute("title"), Is.Null, "a role head stands for several objects");
+        }
+    }
+
     [Test]
     public void Render_ExportCreateStory_HeadsColumnsWithRecordAndIdentityChips()
     {

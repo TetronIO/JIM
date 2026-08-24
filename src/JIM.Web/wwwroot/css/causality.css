@@ -5,7 +5,9 @@
    Ported from the approved causality redesign mock-up, with every mock-up colour replaced by a
    derivation from the active theme's MudBlazor palette tokens so all themes (light and dark) work
    without per-theme additions. Everything is scoped under .causality-panel to avoid collisions
-   with site.css. Fonts inherit JIM's typography (IBM Plex Sans; IBM Plex Mono for values). */
+   with site.css. Fonts inherit JIM's typography; attribute values take the app's shared code face
+   (.jim-text-code in site.css), the same one the Connected System Object tables and the change history
+   timeline use, rather than a face of this panel's own. */
 
 .causality-panel {
     /* Tone palette: theme-token derivations, one custom property per CausalityTone */
@@ -40,7 +42,6 @@
     --cz-surface: var(--mud-palette-surface);
     --cz-inner: var(--jim-inner-surface, var(--mud-palette-background-grey));
     --cz-chip-bg: color-mix(in srgb, var(--mud-palette-text-primary) 9%, transparent);
-    --cz-mono: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
 
     /* The panel is an ordinary JIM container and must look like every other one on the page: the
        standard border colour and the container radius token, not the mock-up's own 14px and a
@@ -377,15 +378,18 @@
 
 /* ─── Event cards (this run's events, shared with the Timeline's detail) ─── */
 
+/* No tone rail down the left. Every one of these sits inside .ln-now, whose border-color wins on
+   specificity, so the 3px edge had been painting primary rather than the event's tone since the card
+   moved inside its object's enclosure: it read as one thicker side of an otherwise even border and
+   carried no information. The tone still shows where it is legible, on the icon tile and the badge. */
 .causality-panel .evt-card {
     background: var(--cz-inner);
     border: 1px solid var(--cz-line-soft);
     border-radius: 12px;
-    padding: 12px 14px 12px 12px;
+    padding: 12px 14px;
     position: relative;
     cursor: default;
     transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
-    border-left: 3px solid var(--tone, var(--cz-secondary));
 }
 
 .causality-panel .evt-card.clickable {
@@ -399,7 +403,7 @@
 
 .causality-panel .evt-card.selected {
     border-color: var(--cz-primary);
-    box-shadow: 0 0 0 1.5px var(--cz-primary), 0 2px 6px rgba(0, 0, 0, 0.12), 0 10px 28px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 0 0 2px var(--cz-primary), 0 2px 6px rgba(0, 0, 0, 0.12), 0 10px 28px rgba(0, 0, 0, 0.12);
 }
 
 .causality-panel .evt-head {
@@ -801,15 +805,33 @@
 .causality-panel .ln-col {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 20px;
     min-width: 0;
+}
+
+/* A column is a side of the story, not one object, so each object encloses its own head and events:
+   a common region reads as a group wherever the reader is in it, which neither extra spacing nor a
+   rail can claim once the head has scrolled out of view. The enclosure adds no chrome, because the
+   head was already a bordered box; it grows to hold what belongs to it. */
+.causality-panel .ln-object {
+    border: 1px solid var(--cz-line);
+    border-radius: 12px;
+    background: var(--cz-surface);
+    overflow: hidden;
+    min-width: 0;
+}
+
+.causality-panel .ln-obj-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 14px 12px;
 }
 
 /* ─── Column heads: the object, never its system ─── */
 
 .causality-panel .ln-obj {
-    border: 1px solid var(--cz-line);
-    border-radius: 10px;
+    border-bottom: 1px solid var(--cz-line-soft);
     padding: 9px 12px;
     background: var(--cz-inner);
     font-weight: 650;
@@ -867,6 +889,20 @@
     color: var(--cz-text-dim);
 }
 
+/* The Connected System's name links, but the sub-line is a caption rather than a call to action:
+   it keeps the caption's own colour and earns an underline on hover, so the head does not gain a
+   second thing competing with the object's title. */
+.causality-panel .ln-obj-sub a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.causality-panel .ln-obj-sub a:hover,
+.causality-panel .ln-obj-sub a:focus-visible {
+    color: var(--cz-text);
+    text-decoration: underline;
+}
+
 /* ─── Joins: the labelled relationships between adjacent objects ─── */
 
 .causality-panel .ln-join {
@@ -894,10 +930,10 @@
 
 /* ─── Chain cards: earlier runs, subdued via colour tokens ─── */
 
-/* Subdued is quiet chrome (flat surface, soft border, no tone rail), never reduced opacity: the
-   sentence keeps --cz-text so it meets WCAG AA without interaction. This run's cards are the shared
-   .evt-card inside .ln-now, which keeps its recessed surface and gains the accent ring, so the two
-   registers are unmistakable side by side. */
+/* Subdued is quiet chrome (flat surface, soft border), never reduced opacity: the sentence keeps
+   --cz-text so it meets WCAG AA without interaction. This run's cards are the shared .evt-card
+   inside .ln-now, which keeps its recessed surface and takes a primary border, so the two registers
+   are unmistakable side by side. */
 .causality-panel .ln-card {
     border: 1px solid var(--cz-line-soft);
     border-radius: 10px;
@@ -1014,9 +1050,11 @@
 
 /* ─── This run: the primary register ─── */
 
+/* One primary edge, not an edge plus a halo: the card already sits inside its object's enclosure, so
+   a soft outer ring put a third boundary around it and read as a second, weaker border. */
 .causality-panel .ln-now .evt-card {
     border-color: var(--cz-primary);
-    box-shadow: 0 0 0 1px var(--cz-primary), 0 0 0 5px var(--cz-primary-soft);
+    box-shadow: 0 0 0 1px var(--cz-primary);
 }
 
 /* The badge row reuses .ln-when so it lines up with a chain card's run chip and time, but it sits
@@ -1047,7 +1085,20 @@
 .causality-panel .ln-end {
     font-size: 0.8125rem;
     color: var(--cz-text-dim);
-    padding: 0 2px;
+}
+
+/* What became of the object after this run: an ending of a different kind, so it reads like one, but ruled
+   off because it is the one thing under this object that no run on this page did. The rule is the dashed
+   hairline the event card's own footer already uses. */
+.causality-panel .ln-since {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--cz-line-soft);
+    font-size: 0.8125rem;
+    color: var(--cz-text-dim);
 }
 
 .causality-panel .ln-members-toggle:focus-visible,
