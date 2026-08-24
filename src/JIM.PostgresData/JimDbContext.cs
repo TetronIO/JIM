@@ -94,6 +94,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
     public virtual DbSet<PasswordDeliveryWorkerTask> PasswordDeliveryWorkerTasks { get; set; } = null!;
     public virtual DbSet<TemporalScopeReconciliationWorkerTask> TemporalScopeReconciliationWorkerTasks { get; set; } = null!;
+    public virtual DbSet<HistoryRetentionCleanupWorkerTask> HistoryRetentionCleanupWorkerTasks { get; set; } = null!;
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreviewWorkerTask> ConfigurationChangePreviewWorkerTasks { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
@@ -271,6 +272,13 @@ public class JimDbContext : DbContext
             entity.HasIndex(p => new { p.ActivityId, p.Order });
             entity.HasIndex(p => new { p.ActivityId, p.Key }).IsUnique();
         });
+
+        // The causal walk's degraded timeline key (#1495): after a record's deletion nulls
+        // ConnectedSystemObjectId on the items that processed it, the source-import hop is found by the
+        // external ID snapshot within the Activity's Connected System instead, and that lookup must not
+        // scan a table this large.
+        modelBuilder.Entity<ActivityRunProfileExecutionItem>()
+            .HasIndex(rpei => rpei.ExternalIdSnapshot);
 
         // ActivityRunProfileExecutionItemSyncOutcome: cascade delete when parent RPEI is deleted
         modelBuilder.Entity<ActivityRunProfileExecutionItem>()

@@ -19,14 +19,19 @@ Administrators managing complex environments with multiple Synchronisation Rules
 
 ## Current State
 
+Reconciled against `main` in August 2026, after the Attribute Priority (#91) and causality (#1223, #1495) work landed.
+
 | Record | Synchronisation Rule Field | Populated? |
 |--------|----------------|------------|
-| `MetaverseObjectChange` | `SyncRuleId`, `SyncRuleName` (exist) | No; field exists from a prior migration but is never populated by the worker |
+| `MetaverseObjectAttributeValue` | `ContributedBySyncRuleId`, `ContributedBySyncRule` | Yes; the sync engine stamps it on every inbound flow (`SyncEngine.AttributeFlow`), and `MetaverseObjectDto` exposes it over REST |
+| `PendingExport` | `ProvisioningSyncRuleId`, `ProvisioningSyncRule` | Yes, when a create is staged; null for updates and deletes by design |
+| `MetaverseObjectChange` | `SyncRuleId`, `SyncRuleName` (exist) | No; the fields exist from a prior migration and no code path sets them |
 | `MetaverseObjectChangeAttribute` | None | N/A |
-| `PendingExport` | None | N/A |
 | `PendingExportAttributeValueChange` | None | N/A |
 
-The Synchronisation Rule context is available in the worker and application code at the point each record is created; it is simply not being persisted.
+So **"which rule sets this value now" is answerable over REST but nowhere in the portal, and "which rule set it then" is not answerable at all.** Attribute provenance lives only on the current value, so the next flow overwrites it and the change history keeps no record of what drove each historical change. That gap is what remains of this plan.
+
+The Synchronisation Rule context is available in the worker and application code at the point each of the unpopulated records is created; it is simply not being persisted.
 
 ### Already Delivered by Issue #1085 (Outcome-Level Attribution)
 
@@ -36,15 +41,24 @@ Issue [#1085](https://github.com/TetronIO/JIM/issues/1085) delivered outcome-lev
 - `Projected` outcomes: the projecting rule, threaded through `ProjectionDecision`.
 - `Provisioned` outcomes: the export rule that caused the provisioning, threaded through `ExportEvaluationResult.ProvisioningSyncRulesByCsoId`.
 
-Unlike the FK pattern above, the outcome columns are plain snapshot scalars (no FK), matching the table's existing `TargetEntityId`/`TargetEntityDescription` approach. This plan's remaining scope is the per-attribute attribution (`MetaverseObjectChangeAttribute`, `PendingExportAttributeValueChange`), the `MetaverseObjectChange`/`PendingExport` population, and the UI surfacing.
+Unlike the FK pattern above, the outcome columns are plain snapshot scalars (no FK), matching the table's existing `TargetEntityId`/`TargetEntityDescription` approach.
+
+### Already Delivered by Issues #91 and #1223
+
+Two further pieces landed for their own reasons rather than for this plan, and neither needs rebuilding:
+
+- **#91 (Attribute Priority)** added `ContributedBySyncRuleId` and `ContributedBySystemId` to `MetaverseObjectAttributeValue`, because precedence has to know which rule contributed an incumbent value before it can decide whether a new one may replace it. That satisfies goal 2 for the **current** value; it does not satisfy it for the change history, which is where troubleshooting a value that has since moved on actually looks.
+- **#1223 (causal provenance)** added `ProvisioningSyncRuleId` to `PendingExport`, so an export run can name the decision that queued its change. That satisfies goal 3 outright.
+
+This plan's remaining scope is therefore the per-attribute attribution on the two change records (`MetaverseObjectChangeAttribute`, `PendingExportAttributeValueChange`), the `MetaverseObjectChange` population, and the UI surfacing, which now includes surfacing the `MetaverseObjectAttributeValue` provenance that already exists and is invisible in the portal.
 
 ## Goals
 
 1. Know which Synchronisation Rule caused an MVO to be projected (one rule is responsible).
-2. Know which Synchronisation Rule caused each MVO attribute value to be created, updated, or removed.
-3. Know which Synchronisation Rule caused a CSO to be provisioned (one rule is responsible).
+2. Know which Synchronisation Rule caused each MVO attribute value to be created, updated, or removed. Delivered for the current value by #91; outstanding for the change history.
+3. ~~Know which Synchronisation Rule caused a CSO to be provisioned~~ delivered by #1223 (`PendingExport.ProvisioningSyncRuleId`).
 4. Know which Synchronisation Rule caused each Pending Export attribute value change.
-5. Display these causing Synchronisation Rules as icon links (with tooltip) on the causality tree and attribute change tables in the UI.
+5. Display these causing Synchronisation Rules as icon links (with tooltip) in the UI. **Note the target has changed:** the causality tree this plan was written against no longer exists (#1087 replaced it, and #1495 replaced Flow, Graph and Caused by with the Lineage view), so attribution belongs in the attribute drawer shared by Lineage and Timeline, and in the attribute change tables. Per the surface parity rule, the portal, REST and PowerShell ship together.
 
 ## Non-Goals
 

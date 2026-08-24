@@ -1,0 +1,112 @@
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* One chain hop on a lineage column (#1495): an earlier run's event, rendered subdued beneath the
+   object it happened to. Carries the hop's snapshotted sentence (with the reference attribute
+   highlighted), the attribution chips and reason, the run kind and timestamp, the link to the item
+   that recorded it, and the in-place expansion of a plural cohort's members. Subdued is achieved
+   with colour tokens, never bare opacity, so the text meets WCAG AA without interaction. *@
+
+<div class="ln-card">
+    <div class="ln-sentence">
+        @foreach (var part in Hop.SentenceParts)
+        {
+            @if (part.IsAttributeName)
+            {
+                <span class="ln-attr">@part.Text</span>
+            }
+            else
+            {
+                @part.Text
+            }
+        }
+    </div>
+
+    @if (HasMeta)
+    {
+        @* The row is a sentence and the Connected System chip is its subject, so the reason follows
+           the chips; see CausalityCauseWording.Reason. *@
+        <div class="ln-meta">
+            @if (Hop.ShowConnectedSystemChip && Hop.Cohort.ConnectedSystemId is { } connectedSystemId
+                 && Hop.Cohort.HasConnectedSystem)
+            {
+                <CausalityEntityChip Label="@Hop.Cohort.ConnectedSystemName"
+                                     Href="@($"/admin/connected-systems/{connectedSystemId}")"
+                                     Kind="CausalityEntityKind.ConnectedSystem" />
+            }
+            @if (Hop.Cohort.SyncRuleId is { } syncRuleId && !string.IsNullOrWhiteSpace(Hop.Cohort.SyncRuleName))
+            {
+                <CausalityEntityChip Label="@Hop.Cohort.SyncRuleName"
+                                     Href="@($"/admin/sync-rules/{syncRuleId}")"
+                                     Kind="CausalityEntityKind.SynchronisationRule" />
+            }
+            @if (Hop.Reason != null)
+            {
+                <span class="ln-reason">@Hop.Reason</span>
+            }
+        </div>
+    }
+
+    <div class="ln-when">
+        <span class="ln-runchip">@(Hop.RunKind ?? "Earlier run")</span>
+        @if (Hop.Occurred != default)
+        {
+            @* Relative in the text with the full value on hover, matching the summary band above: every time on
+               the panel is written the same way, so two cards can never look like two different kinds of fact. *@
+            var occurredLocal = Hop.Occurred.ToLocalTime();
+            <span class="ln-time" title="@occurredLocal.ToFriendlyDate()">@occurredLocal.ToRelativeTime()</span>
+        }
+    </div>
+
+    @if (Hop.ActivityItemHref != null)
+    {
+        <div class="ln-actions">
+            <a class="ln-link" href="@Hop.ActivityItemHref">View activity item</a>
+        </div>
+    }
+
+    @if (Hop.Members.Count > 0)
+    {
+        <button type="button" class="ln-members-toggle @(_expanded ? "on" : null)"
+                aria-expanded="@(_expanded ? "true" : "false")" @onclick="ToggleMembers">
+            @(_expanded ? CausalityCauseWording.HideMembersLabel(Hop.Cohort) : CausalityCauseWording.MembersLabel(Hop.Cohort))
+        </button>
+        @if (_expanded)
+        {
+            <ul class="ln-members">
+                @foreach (var member in Hop.Members)
+                {
+                    <li class="ln-member" @key="member">
+                        <span class="ln-member-name">@member.DisplayName</span>
+                        @if (member.ActivityItemHref != null)
+                        {
+                            <a class="ln-link" href="@member.ActivityItemHref">View activity item</a>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The prepared chain hop to render.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityLineageChainHop Hop { get; set; } = null!;
+
+    private bool _expanded;
+
+    private bool HasMeta =>
+        Hop.Reason != null
+        || (Hop.ShowConnectedSystemChip && Hop.Cohort.HasConnectedSystem)
+        || (Hop.Cohort.SyncRuleId.HasValue && !string.IsNullOrWhiteSpace(Hop.Cohort.SyncRuleName));
+
+    private void ToggleMembers()
+    {
+        _expanded = !_expanded;
+    }
+}

@@ -28,6 +28,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
 | `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
 | `<AttributeChip Kind="@k" Name="@n" />` | Any attribute shown as belonging to a side of the Metaverse: the `CS` / `MV` / `Ex` avatar chip | "Attribute chips" below |
+| `<ObjectChip Kind="@k" TypeName="@t" Name="@n" Href="@url" />` | Any **object** shown as belonging to a side of the Metaverse: the `CS` / `MV` avatar chip naming a Connected System Object or a Metaverse Object | "Object chips" below |
 | `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
 | `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
 | `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
@@ -64,6 +65,22 @@ The marker is not decoration. Both sides of a flow are just names, and which sid
 - Expression chips render the expression itself with syntax highlighting, not the word "Expression": the expression text is the only thing telling two computed sources apart.
 
 **Known duplicate:** `SyncRuleAttributeFlowTab.razor` still hand-rolls this markup in eleven places, in two clusters that disagree with each other (one wraps the whole chip in a rich type/plurality tooltip, the other tooltips only the avatar with generic text). Migrating it to this component is worth doing, and needs the tooltip inconsistency resolved deliberately rather than folded into an unrelated change. Do not add a twelfth copy.
+
+## Object chips (which side of the Metaverse an object is on)
+
+**A reference to a Connected System Object or a Metaverse Object is an `<ObjectChip />`.** It is the object sibling of `<AttributeChip />` above: the `CS` / `MV` avatar, the object's type as an accented prefix, and its name or identifier.
+
+```razor
+<ObjectChip Kind="ObjectChipKind.ConnectedSystem" TypeName="@cso.Type.Name" Name="@externalId" Href="@url" />
+<ObjectChip Kind="ObjectChipKind.Metaverse" TypeName="@mvo.Type.Name" Name="@displayName" Href="@url" Class="ma-0" />
+```
+
+- **`Href` makes it a link, and only a linked chip gets the hover treatment.** `jim-chip-link` goes on the link wrapper rather than the chip because the link is the hover target; the component owns that, so no call site places the class.
+- **A chip with no `Name` renders the type without a trailing colon.** The colon joins the type to the identifier, so a record with no external ID yet (nothing exported) would otherwise trail punctuation pointing at nothing.
+- **`Class` is the call site's, for the surrounding geometry only:** `ma-0` inside a detail table's cell, nothing in a stack of its own. Do not restyle the chip itself per call site.
+- The avatar colours (`Color.Secondary` for CS, `Color.Primary` for MV) are load-bearing: the hover rule in `site.css` recolours `mud-avatar-filled-secondary` and `mud-avatar-filled-primary` by name, and both must stay in step or a badge stops responding to its own chip's hover.
+
+**Why this is a component.** The markup was duplicated by hand across `ActivityRunProfileExecutionItemDetail` and `PendingExportDetail`, and that duplication is exactly what let a defect live: the avatar hover rule was written for the MV badge only, so every CS badge kept its resting colour when its chip filled. `PendingExportDetail` rendered both badges side by side and still nothing tied them together. It was also measurably wrong for the MV badge it did cover (1.2:1 to 1.7:1 against the fill); see the rule's comment in `site.css` for the palette measurements behind the treatment that replaced it.
 
 ## Form action gating and input immediacy
 

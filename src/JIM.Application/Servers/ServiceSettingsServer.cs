@@ -322,6 +322,27 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets the Password Synchronisation retention period (how long password Activities and terminal Pending
+        /// Password Changes are kept). Changes still owed to a system are never removed. Held separately from the
+        /// general history retention period, as its own retention class. Default: 365 days (~1 year).
+        /// </summary>
+        public async Task<TimeSpan> GetPasswordEventRetentionPeriodAsync()
+        {
+            var retentionPeriod = await GetSettingValueAsync(Constants.SettingKeys.PasswordEventRetentionPeriod, TimeSpan.FromDays(365));
+
+            // Guard against zero or negative retention period, which would remove a password change's history the
+            // moment it stopped being owed. That is the silent divergence Password Synchronisation exists to
+            // prevent: nothing would remain to say the identity's password never reached that system.
+            if (retentionPeriod <= TimeSpan.Zero)
+            {
+                Log.Warning("Password event retention period is {RetentionPeriod}, which would delete all Password Synchronisation history. Using default of 365 days", retentionPeriod);
+                return TimeSpan.FromDays(365);
+            }
+
+            return retentionPeriod;
+        }
+
+        /// <summary>
         /// Gets the cleanup batch size (maximum records to delete per housekeeping cycle).
         /// Default: 100 records.
         /// </summary>

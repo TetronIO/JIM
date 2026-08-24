@@ -1,9 +1,14 @@
 # Causality Visualisation Redesign
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-07-22
 - **Author:** JayVDZ (drafted with Claude Code)
 - **Issue:** [#1087](https://github.com/TetronIO/JIM/issues/1087)
+
+> **Closed 2026-08-23.** Implemented and shipped. The Flow and Graph views this PRD introduced were
+> later replaced by the Object Spine (#1495, `PRD_CAUSALITY_OBJECT_SPINE.md`), which also retired the
+> separate Caused by list; the Timeline, the summary band, the technical-names toggle and the
+> attribute detail drawer continue as designed here.
 
 ## Problem Statement
 

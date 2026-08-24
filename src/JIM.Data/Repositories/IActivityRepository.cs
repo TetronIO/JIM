@@ -255,6 +255,19 @@ public interface IActivityRepository
     public Task<CausalSourceImportEvent?> GetLatestImportItemForCsoAsync(
         Guid connectedSystemObjectId, DateTime atOrBeforeActivityExecuted, Guid excludeRunProfileExecutionItemId);
 
+    /// <summary>
+    /// The import event that last changed the record carrying the given external ID in the given Connected
+    /// System, at or before the given Activity time, excluding the asking item itself: the source-import
+    /// hop's degraded key (#1495). A deletion cascade hard-deletes the Connected System Object and nulls its
+    /// id on every item that processed it, so the id-keyed walk of
+    /// <see cref="GetLatestImportItemForCsoAsync"/> finds nothing exactly where an administrator most needs
+    /// the chain; the external ID snapshotted on each item survives the deletion and reaches the same
+    /// import. Null where no import on the record is retained.
+    /// </summary>
+    public Task<CausalSourceImportEvent?> GetLatestImportItemForExternalIdAsync(
+        int connectedSystemId, string externalIdSnapshot, DateTime atOrBeforeActivityExecuted,
+        Guid excludeRunProfileExecutionItemId);
+
 
     /// <summary>
     /// Gets all activities associated with a schedule execution.
@@ -281,14 +294,7 @@ public interface IActivityRepository
     /// </remarks>
     public Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds);
 
-    /// <summary>
-    /// Gets the creation time of the most recent HistoryRetentionCleanup activity.
-    /// Used by the worker to determine whether the cleanup interval has elapsed since the last run,
-    /// preventing immediate re-execution after worker restarts.
-    /// </summary>
-    public Task<DateTime?> GetLastHistoryCleanupTimeAsync();
-
-    /// <summary>
+        /// <summary>
     /// Whether any Run Profile has ever been executed, in any state (in progress, complete, failed or cancelled).
     /// Backs the home page's "Run your first synchronisation" setup step, which asks only whether an administrator
     /// has run one, never how it turned out. Run Profile configuration changes (create, update, delete) carry the
