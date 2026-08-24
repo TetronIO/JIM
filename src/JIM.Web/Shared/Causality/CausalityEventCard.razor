@@ -21,7 +21,7 @@
         <span class="evt-icon" aria-hidden="true">
             <MudIcon Icon="@Event.Icon" />
         </span>
-        <span class="evt-title">@Title <span class="tech">· @DemotedTitle</span></span>
+        <span class="evt-title">@Title</span>
         @if (Event.Badge != null)
         {
             <span class="evt-badge">@Event.Badge</span>
@@ -116,9 +116,14 @@
     [Parameter]
     public EventCallback<CausalityEvent> OnSelect { get; set; }
 
+    /// <summary>
+    /// The event's name in the vocabulary the reader has asked for, and only that one. The card used to
+    /// render both labels always and merely swap which was emphasised, so "CSO Joined" and "MVO Attribute
+    /// Flow" sat on every card with the technical-names toggle off: a control that governs a vocabulary
+    /// has to be able to remove it, or its label is not true. The summary band and the attribute drawer
+    /// already showed one or the other, so the cards were the anomaly rather than the design.
+    /// </summary>
     private string Title => TechnicalNames ? Event.TechnicalLabel : Event.PlainLabel;
-
-    private string DemotedTitle => TechnicalNames ? Event.PlainLabel : Event.TechnicalLabel;
 
     private bool IsClickable => Event.AttributeRows.Count > 0 && OnSelect.HasDelegate;
 

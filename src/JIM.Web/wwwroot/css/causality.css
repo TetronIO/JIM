@@ -432,12 +432,6 @@
     letter-spacing: -0.005em;
 }
 
-.causality-panel .evt-title .tech {
-    color: var(--cz-text-faint);
-    font-weight: 500;
-    font-size: 0.875rem;
-}
-
 .causality-panel .evt-sub {
     margin-top: 6px;
     font-size: 1rem;
@@ -594,12 +588,6 @@
 
 .causality-panel .tl-line .verb {
     font-weight: 650;
-}
-
-.causality-panel .tl-line .tech {
-    color: var(--cz-text-faint);
-    font-size: 0.875rem;
-    font-weight: 500;
 }
 
 .causality-panel .tl-detail-line {
