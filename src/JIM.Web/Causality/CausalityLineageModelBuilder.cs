@@ -308,7 +308,7 @@ public static class CausalityLineageModelBuilder
         return new CausalityLineageObject
         {
             Title = head.Title,
-            DeletionRecordHref = GetDeletionRecordHref(state, context),
+            DeletedAfterThisRunHref = GetDeletedAfterThisRunHref(state, context),
             IsRoleHead = head.IsRoleHead,
             SystemId = state.Kind == CausalityLineageColumnKind.Record ? state.SystemId : null,
             SystemName = state.Kind == CausalityLineageColumnKind.Record ? state.SystemName : null,
@@ -320,28 +320,29 @@ public static class CausalityLineageModelBuilder
     }
 
     /// <summary>
-    /// The object's deletion record where this run recorded its deletion, or null where nothing here proves
-    /// it is gone. Read off the deletion event's own link rather than rebuilt, so the head and the card can
-    /// never point at different places.
+    /// The deletion record of an object deleted after this run, or null where nothing proves that happened.
+    /// An Identity a *later* run deleted leaves no trace on this item at all, so the only evidence is the
+    /// page having looked it up and found nothing; that is what this reads.
     /// </summary>
     /// <remarks>
-    /// Evidence only. An object with no link is not thereby deleted: its type may simply be unresolvable, or
-    /// its snapshots may have carried no id, and both of those are ordinary. An object deleted by a *later*
-    /// run leaves no trace on this item at all, which is what the page's own lookup is for.
+    /// Evidence only, and about a deletion this run did not perform. An object with no link is not thereby
+    /// deleted: its type may simply be unresolvable, or its snapshots may have carried no id, and both of
+    /// those are ordinary.
     /// </remarks>
-    private static string? GetDeletionRecordHref(ColumnState state, CausalityPageContext context)
+    private static string? GetDeletedAfterThisRunHref(ColumnState state, CausalityPageContext context)
     {
-        var recordedHere = state.ThisRunEvents
+        // A deletion this run performed is this run's own story, told by the card that recorded it and
+        // carrying its own link to the record. The two states always co-occur (an object this run deleted is
+        // necessarily absent by the time the page loads), so without this guard every deprovision item would
+        // report that something else finished its work.
+        var deletedByThisRun = state.ThisRunEvents
             .SelectMany(e => e.Links)
-            .Where(l => l.Kind == CausalityEntityKind.DeletionRecord)
-            .Select(l => l.Href)
-            .FirstOrDefault(href => !string.IsNullOrEmpty(href));
-        if (recordedHere != null)
-            return recordedHere;
+            .Any(l => l.Kind == CausalityEntityKind.DeletionRecord);
+        if (deletedByThisRun)
+            return null;
 
-        // The Identity a later run deleted leaves nothing on this item, so the only evidence is the page
-        // having looked it up and found nothing. That is the common case, and the one with no card to carry
-        // the link: this item's own story is intact and the object it acted on is simply no longer there.
+        // Only the Identity can be known to be gone: the page looks it up, and a record's absence would need
+        // a lookup per Connected System Object that the panel does not do.
         return state.Kind == CausalityLineageColumnKind.Identity
                && context.DeletedMetaverseObjectId is { } deletedMetaverseObjectId
             ? CausalityModelBuilder.GetDeletedMvoHref(deletedMetaverseObjectId)

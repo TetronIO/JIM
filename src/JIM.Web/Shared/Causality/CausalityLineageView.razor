@@ -56,16 +56,12 @@
                             }
                             else
                             {
-                                @* A gone object is struck through and marked; an object JIM merely cannot
-                                   address explains itself on hover and claims nothing about existing. The
-                                   two are different facts, and one wording for both would be false half
-                                   the time. *@
-                                <span class="ln-obj-title @(lineageObject.IsDeleted ? "gone" : null)"
+                                @* An object JIM cannot address explains itself on hover, and claims nothing
+                                   about existing: it may well still be there, its type simply could not be
+                                   resolved. What has since become of an object is a different fact, and it
+                                   belongs below the events rather than beside the name. *@
+                                <span class="ln-obj-title"
                                       title="@GetUnlinkedExplanation(column, lineageObject)">@GetObjectTitle(column, lineageObject)</span>
-                            }
-                            @if (lineageObject.IsDeleted)
-                            {
-                                <span class="evt-badge" style="--tone: var(--cz-warning)">Deleted</span>
                             }
                             @* A record's sub-line names its Connected System, and that name links to
                                the system like every other mention of it on the panel. Only the name is
@@ -88,20 +84,12 @@
                             {
                                 <span class="ln-obj-sub">@objectSub</span>
                             }
-                            @* Deleted is not a dead end: JIM retains the record. The head offers it only
-                               where nothing else on this object does, so the panel names each entity once. *@
-                            @if (lineageObject.DeletionRecordHref is { } deletionRecordHref
-                                 && !lineageObject.DeletionRecordShownOnACard)
-                            {
-                                <div class="ln-actions">
-                                    <a class="ln-link" href="@deletionRecordHref">View deletion record</a>
-                                </div>
-                            }
                         </div>
-                        @* An object with no events of its own is its head alone (the Identity that
-                           completes a create export's graph); an empty body would add padding under it
-                           with nothing in it. *@
-                        @if (lineageObject.Cards.Count > 0 || lineageObject.Endings.Count > 0)
+                        @* An object with no events of its own and nothing to note is its head alone (the
+                           Identity that completes a create export's graph); an empty body would add padding
+                           under it with nothing in it. *@
+                        @if (lineageObject.Cards.Count > 0 || lineageObject.Endings.Count > 0
+                             || lineageObject.IsDeletedAfterThisRun)
                         {
                             <div class="ln-obj-body">
                                 @foreach (var card in lineageObject.Cards)
@@ -137,6 +125,17 @@
                                 @foreach (var ending in lineageObject.Endings)
                                 {
                                     <div class="ln-end" @key="ending">@ending.Text</div>
+                                }
+                                @* What became of the object afterwards, stated last because it happened
+                                   last: the panel reads top to bottom as time passing, so position carries
+                                   the tense that a marker beside the name could not. Deleted is not a dead
+                                   end; JIM retains the record. *@
+                                @if (lineageObject.DeletedAfterThisRunHref is { } deletedAfterThisRunHref)
+                                {
+                                    <div class="ln-since">
+                                        <span>@GetObjectNoun(column) was deleted after this run.</span>
+                                        <a class="ln-link" href="@deletedAfterThisRunHref">View deletion record</a>
+                                    </div>
                                 }
                             </div>
                         }
@@ -200,9 +199,9 @@
     }
 
     /// <summary>
-    /// Why an unlinked name has no link, for the hover, or null where the absence needs no explaining: a
-    /// deleted object already says so in the open, a role head stands for several objects and was never
-    /// going to link to one, and the trailing column is not an object at all.
+    /// Why an unlinked name has no link, for the hover, or null where the absence needs no explaining: an
+    /// object deleted after this run has the note below it saying so, a role head stands for several objects
+    /// and was never going to link to one, and the trailing column is not an object at all.
     /// </summary>
     /// <remarks>
     /// The wording says what JIM cannot do, never that the object is gone. An unaddressable object is
@@ -210,11 +209,20 @@
     /// </remarks>
     private static string? GetUnlinkedExplanation(CausalityLineageColumn column, CausalityLineageObject lineageObject)
     {
-        return lineageObject.IsDeleted
+        return lineageObject.IsDeletedAfterThisRun
                || lineageObject.IsRoleHead
                || column.Kind == CausalityLineageColumnKind.Unassigned
             ? null
             : "JIM cannot open a page for this object.";
+    }
+
+    /// <summary>
+    /// How a note refers to the object it sits under. The head already names it, so repeating the name
+    /// would read as though a second object were being introduced.
+    /// </summary>
+    private static string GetObjectNoun(CausalityLineageColumn column)
+    {
+        return column.Kind == CausalityLineageColumnKind.Identity ? "This Identity" : "This record";
     }
 
     private static string GetObjectTitle(CausalityLineageColumn column, CausalityLineageObject lineageObject)

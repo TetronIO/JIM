@@ -236,49 +236,53 @@ public class CausalityLineageViewTests
     }
 
     /// <summary>
-    /// A gone object says so where the reader meets it: the name struck through with a Deleted marker
-    /// beside it, so the state reads without hovering and without having to notice that a link is missing.
+    /// The head states what the object is, never what has since become of it. A head carries no time of its
+    /// own, so a state marker sitting beside the name is read as something this run did; the run that created
+    /// an Identity must not appear to have struck it out.
     /// </summary>
     [Test]
-    public void Render_DeletedObject_StrikesItsNameAndMarksItDeleted()
+    public void Render_ObjectDeletedAfterThisRun_LeavesTheHeadStatingOnlyWhatTheObjectIs()
     {
-        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
-        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
+        var cut = RenderLineage(DeletedAfterThisRunModel());
 
-        var cut = RenderLineage(lineage);
-
-        var identityHead = cut.FindAll(".ln-col")[1].QuerySelector(".ln-obj")!;
+        var head = cut.Find(".ln-obj");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(identityHead.QuerySelector(".ln-obj-title.gone"), Is.Not.Null);
-            Assert.That(identityHead.QuerySelector(".evt-badge")!.TextContent.Trim(), Is.EqualTo("Deleted"),
-                "the marker reuses the panel's existing state badge rather than a shape of its own");
+            Assert.That(head.QuerySelector(".ln-obj-title")!.ClassList, Does.Not.Contain("gone"));
+            Assert.That(head.QuerySelector(".evt-badge"), Is.Null);
+            Assert.That(head.QuerySelector(".ln-link"), Is.Null);
         }
     }
 
     /// <summary>
-    /// The head does not repeat a link one of its own cards already offers: this run's MVO Deleted card
-    /// carries "View deletion record", so the head states the fact and stops there. Every entity on this
-    /// panel is named once.
+    /// The fact sits below the run's own events, where the panel already reads top-to-bottom as time
+    /// passing, and says outright that it came afterwards. Position and wording agree, so neither has to
+    /// carry the tense alone.
     /// </summary>
     [Test]
-    public void Render_DeletedObjectWhoseCardAlreadyLinksTheRecord_DoesNotRepeatTheLinkOnTheHead()
+    public void Render_ObjectDeletedAfterThisRun_SaysSoBeneathTheRunsEvents()
     {
-        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
-        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
+        var cut = RenderLineage(DeletedAfterThisRunModel());
 
-        var cut = RenderLineage(lineage);
-
-        Assert.That(cut.FindAll(".ln-obj .ln-actions"), Is.Empty);
+        var body = cut.Find(".ln-obj-body");
+        var since = body.QuerySelector(".ln-since")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(since.TextContent, Does.Contain("was deleted after this run"));
+            Assert.That(since.QuerySelector("a.ln-link")!.GetAttribute("href"),
+                Is.EqualTo("/admin/deleted-objects?t=deleted-mvos&mvo=abc"));
+            Assert.That(since.QuerySelector("a.ln-link")!.TextContent.Trim(), Is.EqualTo("View deletion record"));
+            Assert.That(body.LastElementChild, Is.SameAs(since),
+                "the deletion happened after everything else on this object, so it renders after it");
+        }
     }
 
     /// <summary>
-    /// Where nothing else on the panel offers it, the head carries the deletion record itself: a deleted
-    /// object is not a dead end, and this is the case the reader most needs it (an object a later run
-    /// deleted leaves no card here at all).
+    /// An object with no events of its own still gets its body, because the note is the only thing it has
+    /// to say. Guarding the body on the cards alone would silently drop it.
     /// </summary>
     [Test]
-    public void Render_DeletedObjectWithNoCardOfferingTheRecord_LinksItFromTheHead()
+    public void Render_ObjectDeletedAfterThisRunWithNoEvents_StillSaysSo()
     {
         var model = new CausalityLineageModel
         {
@@ -292,7 +296,7 @@ public class CausalityLineageViewTests
                         new CausalityLineageObject
                         {
                             Title = "Test Deprov JoinDisc",
-                            DeletionRecordHref = "/admin/deleted-objects?t=deleted-mvos&mvo=abc"
+                            DeletedAfterThisRunHref = "/admin/deleted-objects?t=deleted-mvos&mvo=abc"
                         }
                     ]
                 }
@@ -302,12 +306,57 @@ public class CausalityLineageViewTests
 
         var cut = RenderLineage(model);
 
-        var link = cut.Find(".ln-obj .ln-actions .ln-link");
-        using (Assert.EnterMultipleScope())
+        Assert.That(cut.Find(".ln-since").TextContent, Does.Contain("was deleted after this run"));
+    }
+
+    /// <summary>
+    /// An object this run deleted says nothing about a later deletion: its own card recorded it, and the
+    /// note exists purely for what happened outside this item's story.
+    /// </summary>
+    [Test]
+    public void Render_ObjectDeletedByThisRun_AddsNoAfterThisRunNote()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
+
+        var cut = RenderLineage(lineage);
+
+        Assert.That(cut.FindAll(".ln-since"), Is.Empty);
+    }
+
+    /// <summary>
+    /// An Identity created by this run and deleted afterwards, which is the shape that made the shipped
+    /// treatment read as a contradiction.
+    /// </summary>
+    private static CausalityLineageModel DeletedAfterThisRunModel()
+    {
+        var model = CausalityModelBuilder.Build(
+            CausalityTestData.NewJoinerItem(),
+            CausalityTestData.NewJoinerContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+        var identity = lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity).Objects.Single();
+
+        return new CausalityLineageModel
         {
-            Assert.That(link.GetAttribute("href"), Is.EqualTo("/admin/deleted-objects?t=deleted-mvos&mvo=abc"));
-            Assert.That(link.TextContent.Trim(), Is.EqualTo("View deletion record"));
-        }
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Identity,
+                    Objects =
+                    [
+                        new CausalityLineageObject
+                        {
+                            Title = identity.Title,
+                            ObjectTypeName = identity.ObjectTypeName,
+                            Cards = identity.Cards,
+                            DeletedAfterThisRunHref = "/admin/deleted-objects?t=deleted-mvos&mvo=abc"
+                        }
+                    ]
+                }
+            ],
+            Joins = []
+        };
     }
 
     /// <summary>
@@ -342,7 +391,6 @@ public class CausalityLineageViewTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(titles[0].GetAttribute("title"), Is.EqualTo("JIM cannot open a page for this object."));
-            Assert.That(titles[0].ClassList, Does.Not.Contain("gone"), "unaddressable is not deleted");
             Assert.That(titles[1].GetAttribute("title"), Is.Null, "a role head stands for several objects");
         }
     }

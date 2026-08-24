@@ -36,25 +36,37 @@ public class CausalityLineageModelBuilderTests
     // ─── Objects the panel knows are gone (#1495) ───
 
     /// <summary>
-    /// An object this run deleted is marked gone and carries its deletion record. "Cannot be linked" is the
-    /// wrong conclusion for it: JIM retains a deletion record, so there is somewhere to go, and the panel
-    /// already deep-links it from the event that recorded the deletion.
+    /// An object this run deleted makes no "after this run" claim: the deletion is part of this run's own
+    /// story, told by the event card that recorded it and carrying its own deletion record. Saying it
+    /// happened afterwards would put this run's work outside its own narrative.
     /// </summary>
     [Test]
-    public void Build_IdentityDeletedByThisRun_IsMarkedGoneAndCarriesItsDeletionRecord()
+    public void Build_IdentityDeletedByThisRun_MakesNoAfterThisRunClaim()
     {
         var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
 
         var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
 
         var identity = Sole(lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity));
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(identity.IsDeleted, Is.True);
-            Assert.That(identity.DeletionRecordHref, Does.StartWith("/admin/deleted-objects"));
-            Assert.That(identity.DeletionRecordShownOnACard, Is.True,
-                "this run's own MVO Deleted card already offers the link, so the head must not repeat it");
-        }
+        Assert.That(identity.IsDeletedAfterThisRun, Is.False);
+    }
+
+    /// <summary>
+    /// This run having deleted the object outranks the page's lookup finding it missing, because the two
+    /// always co-occur: an object this run deleted is necessarily absent by the time the page loads. Reading
+    /// that absence as a later deletion would tell every deprovision item that something else finished its
+    /// work.
+    /// </summary>
+    [Test]
+    public void Build_IdentityDeletedByThisRunAndAbsentAtLookup_StillMakesNoAfterThisRunClaim()
+    {
+        var context = CausalityTestData.NewJoinerContext() with { DeletedMetaverseObjectId = Guid.NewGuid() };
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), context);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
+
+        var identity = Sole(lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity));
+        Assert.That(identity.IsDeletedAfterThisRun, Is.False);
     }
 
     /// <summary>
@@ -69,7 +81,7 @@ public class CausalityLineageModelBuilderTests
 
         var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
 
-        Assert.That(lineage.Columns.SelectMany(c => c.Objects).Select(o => o.IsDeleted), Has.All.False);
+        Assert.That(lineage.Columns.SelectMany(c => c.Objects).Select(o => o.IsDeletedAfterThisRun), Has.All.False);
     }
 
     /// <summary>
@@ -78,7 +90,7 @@ public class CausalityLineageModelBuilderTests
     /// needs: this item's own story is intact, and the object it created no longer exists.
     /// </summary>
     [Test]
-    public void Build_IdentityTheLookupFoundMissing_IsMarkedGoneEvenThoughThisRunDidNotDeleteIt()
+    public void Build_IdentityTheLookupFoundMissing_SaysItWasDeletedAfterThisRun()
     {
         var deletedId = Guid.Parse("2faa1700-a4bf-438d-a987-2a00a5f32794");
         var context = CausalityTestData.NewJoinerContext() with { DeletedMetaverseObjectId = deletedId };
@@ -89,10 +101,9 @@ public class CausalityLineageModelBuilderTests
         var identity = Sole(lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity));
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(identity.IsDeleted, Is.True);
-            Assert.That(identity.DeletionRecordHref, Does.Contain(deletedId.ToString()));
-            Assert.That(identity.DeletionRecordShownOnACard, Is.False,
-                "nothing on this item recorded the deletion, so the head is the only place to offer the record");
+            Assert.That(identity.IsDeletedAfterThisRun, Is.True);
+            Assert.That(identity.DeletedAfterThisRunHref, Does.StartWith("/admin/deleted-objects"));
+            Assert.That(identity.DeletedAfterThisRunHref, Does.Contain(deletedId.ToString()));
         }
     }
 
@@ -108,7 +119,7 @@ public class CausalityLineageModelBuilderTests
         var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
 
         Assert.That(lineage.Columns.Where(c => c.Kind == CausalityLineageColumnKind.Record)
-            .SelectMany(c => c.Objects).Select(o => o.IsDeleted), Has.All.False);
+            .SelectMany(c => c.Objects).Select(o => o.IsDeletedAfterThisRun), Has.All.False);
     }
 
     // ─── Sides holding several records (#1495) ───

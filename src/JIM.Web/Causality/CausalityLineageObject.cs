@@ -67,27 +67,26 @@ public sealed class CausalityLineageObject
     public bool IsLit => Cards.Any(c => c.IsThisRun);
 
     /// <summary>
-    /// The object's durable deletion record, where the panel can prove the object is gone; null where it
-    /// cannot. Non-null is what <see cref="IsDeleted"/> reads, so the two can never disagree.
+    /// The deletion record of an object that was deleted <em>after</em> this run, where the panel can prove
+    /// that happened; null otherwise. A deleted object is not a dead end, so the fact always travels with
+    /// somewhere to go.
     /// </summary>
     /// <remarks>
-    /// "Gone" is only ever claimed from evidence: this run recorded the deletion, or the page looked the
-    /// object up and it was not there. An object JIM simply cannot build a route to is a different fact
-    /// (see <see cref="Href"/> being null while this is too), and saying it no longer exists would be
-    /// false: its type may just be unresolvable.
+    /// The Lineage is a past-tense narrative, so the panel only states what happened, never what an object's
+    /// state is now. A later deletion is the one thing that happened to the object which this item's own
+    /// events cannot show, and it is therefore stated as a note after them rather than as a marker on the
+    /// head, which carries no time of its own and would read as something this run did.
+    ///
+    /// Only ever claimed from evidence, and never for a deletion this run performed itself (that one is
+    /// already told by the card that recorded it). An object JIM simply cannot build a route to is a
+    /// different fact again (see <see cref="Href"/> being null while this is too): saying it no longer
+    /// exists would be false, as its type may just be unresolvable.
     /// </remarks>
-    public string? DeletionRecordHref { get; init; }
+    public string? DeletedAfterThisRunHref { get; init; }
 
     /// <summary>
-    /// Whether the object is known to be gone. A deleted object is not a dead end: JIM retains a deletion
-    /// record for it, which is what <see cref="DeletionRecordHref"/> points at.
+    /// Whether the object is known to have been deleted after this run, which is what the note below its
+    /// events says. Reads <see cref="DeletedAfterThisRunHref"/>, so the two can never disagree.
     /// </summary>
-    public bool IsDeleted => DeletionRecordHref != null;
-
-    /// <summary>
-    /// Whether one of this object's own cards already offers the deletion record, in which case the head
-    /// states the fact but does not repeat the link: every entity is named once on this panel.
-    /// </summary>
-    public bool DeletionRecordShownOnACard =>
-        Cards.Any(c => c.Event?.Links.Any(l => l.Kind == CausalityEntityKind.DeletionRecord) == true);
+    public bool IsDeletedAfterThisRun => DeletedAfterThisRunHref != null;
 }
