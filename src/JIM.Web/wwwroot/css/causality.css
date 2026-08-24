@@ -801,7 +801,7 @@
 .causality-panel .ln-col {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 16px;
     min-width: 0;
 }
 
@@ -1020,9 +1020,13 @@
 }
 
 /* The badge row reuses .ln-when so it lines up with a chain card's run chip and time, but it sits
-   above its card rather than inside one, so it carries the gap below instead of the gap above. */
+   above its card rather than inside one, so it carries the gap below instead of the gap above. The
+   gap belongs to the row and not to the badge: a bottom margin on the badge is part of the margin
+   box the row centres, which pushed the badge up by half of it and left the time reading as though
+   it were aligned to the bottom of the badge rather than to its text. */
 .causality-panel .ln-now-when {
     margin-top: 0;
+    margin-bottom: 8px;
     gap: 6px;
 }
 
@@ -1036,7 +1040,6 @@
     background: var(--cz-primary);
     border-radius: 4px;
     padding: 1px 7px;
-    margin-bottom: 5px;
 }
 
 /* ─── Endings: quiet footers, never warnings ─── */
