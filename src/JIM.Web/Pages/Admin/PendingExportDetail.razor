@@ -107,19 +107,11 @@
                                     @if (_pendingExport.ConnectedSystemObject != null)
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")"
-                                                     Underline="Underline.None" Class="jim-chip-link"
-                                                     Style="margin: 0;">
-                                                <MudChip T="string" Color="Color.Default"
-                                                         Style="margin: 0;">
-                                                    <AvatarContent>
-                                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                                    </AvatarContent>
-                                                    <ChildContent>
-                                                        <b class="jim-cs-chip-prefix">@_pendingExport.ConnectedSystemObject.Type.Name:</b>&nbsp;@GetCsoDisplayName()
-                                                    </ChildContent>
-                                                </MudChip>
-                                            </MudLink>
+                                            <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                                        TypeName="@_pendingExport.ConnectedSystemObject.Type.Name"
+                                                        Name="@GetCsoDisplayName()"
+                                                        Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")"
+                                                        Class="ma-0" />
                                         </MudStack>
                                     }
                                     else
@@ -134,19 +126,11 @@
                                     @if (_pendingExport.SourceMetaverseObject != null)
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)"
-                                                     Underline="Underline.None" Class="jim-chip-link"
-                                                     Style="margin: 0;">
-                                                <MudChip T="string" Color="Color.Default"
-                                                         Style="margin: 0;">
-                                                    <AvatarContent>
-                                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                                    </AvatarContent>
-                                                    <ChildContent>
-                                                        <b class="jim-mv-chip-prefix">@_pendingExport.SourceMetaverseObject.Type.Name:</b>&nbsp;@GetMvoDisplayName()
-                                                    </ChildContent>
-                                                </MudChip>
-                                            </MudLink>
+                                            <ObjectChip Kind="ObjectChipKind.Metaverse"
+                                                        TypeName="@_pendingExport.SourceMetaverseObject.Type.Name"
+                                                        Name="@GetMvoDisplayName()"
+                                                        Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)"
+                                                        Class="ma-0" />
                                         </MudStack>
                                     }
                                     else if (_pendingExport.SourceMetaverseObjectId.HasValue)

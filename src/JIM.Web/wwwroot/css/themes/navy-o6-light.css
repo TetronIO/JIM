@@ -30,8 +30,12 @@ html[lang] {
     --mud-palette-secondary-text: #ffffffff;
 
     /* === Tertiary Palette (slate blue-grey) === */
-    --mud-palette-tertiary: #85782b;
-    --mud-palette-tertiary-rgb: 90, 122, 148;
+    /* One step darker than the olive this was (#85782b), because that shade sits at the luminance where
+       neither label colour works: white measured 4.45:1 and dark 4.28:1, both under the 4.5:1 AA floor.
+       The -rgb beside it described a blue (90,122,148), left behind when the base became olive; it is the
+       same colour as the base by definition, and alpha overlays built on it were tinting the wrong hue. */
+    --mud-palette-tertiary: #786c27;
+    --mud-palette-tertiary-rgb: 120,108,39;
     --mud-palette-tertiary-darken: #4A6A82;
     --mud-palette-tertiary-lighten: #6E8EA6;
     --mud-palette-tertiary-text: #ffffffff;

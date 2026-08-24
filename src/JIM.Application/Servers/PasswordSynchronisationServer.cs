@@ -768,6 +768,36 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
+    /// Removes queued password changes that reached a terminal state (parked, expired, or cancelled) and have
+    /// since had their retention period, and returns how many were removed (requirement 28). Changes still owed
+    /// to a Connected System are never removed, however old.
+    /// <para>
+    /// Parked, expired and cancelled rows are kept on purpose: an identity whose password never reached a system
+    /// must say so rather than disappear, which is the silent divergence this feature exists to prevent. Kept for
+    /// ever, though, they are unbounded growth, and each one still carries an encrypted password. This is the
+    /// other end of that decision, and the retention period is what bounds how long JIM holds a password it can
+    /// no longer deliver.
+    /// </para>
+    /// <para>
+    /// Called by the History Retention Cleanup Schedule under
+    /// <see cref="Constants.SettingKeys.PasswordEventRetentionPeriod"/> and the shared cleanup batch size, in the
+    /// same pass that trims the Activities recording what happened to each change.
+    /// </para>
+    /// </summary>
+    /// <param name="olderThan">The retention cutoff; rows terminal before this are eligible.</param>
+    /// <param name="maxRecords">The most to remove in one pass.</param>
+    public async Task<int> DeleteExpiredQueueRecordsAsync(DateTime olderThan, int maxRecords)
+    {
+        var deleted = await _syncRepo.DeleteTerminalPasswordChangesAsync(olderThan, maxRecords);
+
+        if (deleted > 0)
+            Log.Information("DeleteExpiredQueueRecordsAsync: Removed {Count} queued password change(s) that had been " +
+                "parked, expired or cancelled since before {OlderThan}", deleted, olderThan);
+
+        return deleted;
+    }
+
+    /// <summary>
     /// Records an administrator's action over the queue as one completed Activity.
     /// <para>
     /// Recorded even when nothing matched. An administrator who retried a system and changed nothing needs to be

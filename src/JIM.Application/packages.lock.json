@@ -4,9 +4,9 @@
     "net10.0": {
       "DynamicExpresso.Core": {
         "type": "Direct",
-        "requested": "[2.19.3, )",
-        "resolved": "2.19.3",
-        "contentHash": "84cSMvhcLON2JUQshIvcEAGMtE5rI7FOlcCT0QC42XPZ12A//qDHWKrB5QUfRrQQlDZZZ7TiLAm7mcrywygmpg=="
+        "requested": "[2.19.5, )",
+        "resolved": "2.19.5",
+        "contentHash": "YusirfwxsmkxKLyTTb4deXq0nMs/r6qLWik6pFQtwti1RqlLjpFyewABiUKAlmS7uPdmZO5RZZsv42BBz7prvQ=="
       },
       "Microsoft.AspNetCore.DataProtection": {
         "type": "Direct",

@@ -1,6 +1,6 @@
 # Password Synchronisation (Phase 1: JIM as Password Origin)
 
-- **Status:** Doing (Phases 1 to 3 complete; Phase 4's entry point and secure-transport work done, queue page and reporting surfaces outstanding)
+- **Status:** Doing (Phases 1 to 5 complete; Phase 6 integration, documentation and security review outstanding)
 - **Issue:** [#1119](https://github.com/TetronIO/JIM/issues/1119)
 - **PRD:** [`engineering/prd/doing/PRD_PASSWORD_SYNCHRONISATION.md`](../prd/doing/PRD_PASSWORD_SYNCHRONISATION.md)
 
@@ -155,7 +155,7 @@ Each phase is TDD, red first, and lands with its tests, docs, and changelog entr
 - The setting then moved from `ConnectedSystemPasswordSynchronisation` to `ConnectedSystem` and now governs all three paths that write a password to a system (initial-password provisioning, the administrator set-password path, and the delivery pass), sharing one rule in `PasswordChannelSecurity`. A switch guarding only synchronised passwords left an administrator who turned it on still sending in the clear down the other two, and a system that provisions accounts but receives no synchronised passwords has no Password Synchronisation row to hold it, so it could not be set there at all. Each path responds differently to the refusal: queued changes stay queued, accounts stay owed, and an administrator is told at the time
 - Fixed while here: none of the Password Synchronisation configuration keys were classified in `ConfigurationChangeClassifier`, so saving those settings would have thrown the first time the change was captured. The completeness guard missed it because its sample Connected System carried no Password Synchronisation configuration; it now does
 
-### Phase 4: Surfaces and reporting
+### Phase 4: Surfaces and reporting ✅
 
 - ✅ **Entry point (delivered).** `POST /api/v1/metaverse/objects/{id}/password` queues a synchronised change, with `Sync-JIMMetaverseObjectPassword` and a Synchronise Password action on the Metaverse Object beside it. Deliberately a new operation rather than a change to the existing per-account Set Password, whose own design already settled the point: it preselects nothing, because resetting a forgotten password in one system must not silently reset the others (#1172). The two answer different questions and keep different expiry defaults
 - ✅ **Secure transport on every password endpoint (delivered, requirement 34).** A `RequireSecureTransport` filter refuses a password over a transport JIM cannot confirm is encrypted, with a completeness guard that fails the build if an endpoint binds a password without it. Development over plain HTTP is exempt; the refusal names `JIM_TRUSTED_PROXIES` because TLS terminating at an untrusted proxy is the likeliest legitimate cause
@@ -164,10 +164,13 @@ Each phase is TDD, red first, and lands with its tests, docs, and changelog entr
 - Connected System list: state on `ConnectedSystemHeader` (all three projection sites), indicator chip, `passwordsync` sort arm, filter control (requirement 26)
 - Metaverse Object detail: admin-only Password Synchronisation panel via the `AuthorizeView` tab precedent, listing that identity's password Activities with per-system outcomes (requirement 25)
 
-### Phase 5: Schedule-driven retention
+### Phase 5: Schedule-driven retention ✅
 
-- `History.PasswordEventRetentionPeriod` Service Setting (seeded, typed accessor, classifier entry, History API + DTO)
-- `ScheduleStepType.HistoryRetentionCleanup`, built-in daily Schedule (seeded idempotently, factory-reset restored), step dispatch in `SchedulerServer.QueueStepAsync`, worker execution path; remove the housekeeping history-cleanup timer; absorb the initial-password trim (divergence 6) and add the password queue trim, batched with summary statistics (requirements 28, 29, 30; delivers #1118)
+- `History.PasswordEventRetentionPeriod` Service Setting (seeded, typed accessor with a zero guard, classifier entry, History API + DTO). One period governs both the Password Synchronisation Activities and the terminal queue rows: a queue row without its outcomes says something happened without saying what, so ageing them apart would leave half a record
+- Password Synchronisation Activities spared by the general Activity trim and given their own, mirroring the configuration-change and security-event classes; `DeleteExpiredPasswordEventActivitiesAsync` is the only path that removes them
+- The queue trim itself already existed at the repository layer (`DeleteTerminalPasswordChangesAsync`, built in Phase 2 with its `RequiresPostgres` coverage) but nothing called it. Wired through `PasswordSynchronisationServer.DeleteExpiredQueueRecordsAsync` into the cleanup pass, alongside the initial-password trim it now sits beside (divergence 6 closed: one mechanism, not two)
+- `ScheduleStepType.HistoryRetentionCleanup`, `HistoryRetentionCleanupWorkerTask` and its four registration points, step dispatch in `SchedulerServer.QueueStepAsync`, worker execution path, and the built-in daily Schedule in the catalogue (so it converges into existing deployments and survives a factory reset, per #916's rule). The housekeeping timer and its `GetLastCleanupTimeAsync` supporting query are gone; retention now has an execution history, a next run time, and a summary Activity per run (requirements 28, 29, 30; delivers #1118)
+- Fixed while here: `DeleteExpiredChangeHistoryAsync` took four positional `DateTime` cutoffs, and this phase's addition would have made it five. Replaced with `ChangeHistoryRetentionCutoffs`, built in one place by `GetRetentionCutoffsAsync`, so the scheduled step and the API endpoint cannot drift apart in how they derive them and a transposed pair cannot compile silently
 
 ### Phase 6: Integration, documentation, and security review
 

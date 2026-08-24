@@ -428,6 +428,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemObjectId");
 
+                    b.HasIndex("ExternalIdSnapshot");
+
                     b.ToTable("ActivityRunProfileExecutionItems");
                 });
 
@@ -4118,6 +4120,13 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasDiscriminator().HasValue("ExampleDataTemplateWorkerTask");
+                });
+
+            modelBuilder.Entity("JIM.Models.Tasking.HistoryRetentionCleanupWorkerTask", b =>
+                {
+                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
+
+                    b.HasDiscriminator().HasValue("HistoryRetentionCleanupWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.PasswordDeliveryWorkerTask", b =>

@@ -18,8 +18,10 @@ public enum CausalityTone
 }
 
 /// <summary>
-/// The column a causality event belongs to in the Flow view: what happened (Source), what JIM did
-/// (Identity), and what it caused (Downstream).
+/// Which side of the story a causality event belongs to: what happened (Source), what JIM did
+/// (Identity), and what it caused (Downstream). The lineage builder projects lanes onto object
+/// columns: Identity-lane events land on the Identity, the rest on the record of their owning
+/// system.
 /// </summary>
 public enum CausalityLane
 {
@@ -29,14 +31,27 @@ public enum CausalityLane
 }
 
 /// <summary>
-/// The toggleable causality visualisation views. Timeline ships first; Flow and Graph arrive in
-/// later phases by adding themselves to <c>CausalityPanel</c>'s available-view list.
+/// The toggleable causality visualisation views: the Lineage (the object graph with every causally
+/// relevant event on the object it happened to; the default) and the Timeline (strict chronological
+/// reading). The Flow and Graph views the panel launched with were retired when the Lineage replaced
+/// them (#1495); their stored preference keys fall back to the default.
 /// </summary>
 public enum CausalityView
 {
-    Flow,
     Timeline,
-    Graph
+    Lineage
+}
+
+/// <summary>
+/// The kind of object a lineage column stands for (#1495): a record in a Connected System, the
+/// Identity (the Metaverse side of the story), or the neutral trailing column that holds any chain
+/// hop the builder cannot place, so nothing in the chain is ever silently dropped.
+/// </summary>
+public enum CausalityLineageColumnKind
+{
+    Record,
+    Identity,
+    Unassigned
 }
 
 /// <summary>
