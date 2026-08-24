@@ -286,14 +286,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- 🔒 Values imported from connected systems (Distinguished Names, identifiers, CSV fields) can no longer forge or corrupt service log entries via embedded line breaks; all such values are now sanitised before logging across the import, synchronisation, and export paths. Identity display names are no longer written to service logs at all.
-- 🔒 The expression evaluation engine has been security-reviewed and hardened with defence-in-depth guardrails, with no change to expression functionality.
-- 🔒 Every response from JIM now carries defence-in-depth security headers, including a Content Security Policy, clickjacking denial, and MIME-sniffing protection.
-- 🔒 Every NuGet dependency, including transitive packages, is now locked to exact known-good versions, making JIM's builds reproducible and tamper-evident from source through to container image.
-- 🔒 Sign-ins and API key authentication attempts now appear in the Activity audit log, with successful sign-ins logged individually and failed attempts grouped by key, IP address and reason so the log stays bounded even under a credential-spraying attack. Security events carry their own configurable retention period, defaulting to one year.
-- 🔒 Patched transitive `System.Security.Cryptography.Xml` to 10.0.10 to address four newly published high-severity advisories against 10.0.9 (GHSA-23rf-6693-g89p, GHSA-8q5v-6pqq-x66h, GHSA-cvvh-rhrc-wg4q, GHSA-g8r8-53c2-pm3f); the package is pulled in via ASP.NET Core Data Protection but not used by JIM at runtime.
 - 🔒 Attributes holding credential material, such as `unicodePwd` and `userPassword`, can no longer be imported, selected for management, or used in an Attribute Flow. Any that a deployment had already selected are deselected and locked rather than deleted, leaving Synchronisation Rules intact.
-- 🔒 JIM no longer depends on the third-party DNParser library for LDAP Distinguished Name parsing; DN handling is now performed by a small, self-contained parser built into the LDAP Connector. This removes a Code Project Open License (CPOL) dependency, which software composition scanners commonly flag and which is not OSI-approved, along with an unmaintained package from the supply chain, in keeping with JIM's self-contained, air-gap-deployable design.
 
 ## [0.14.0] - 2026-07-25
 

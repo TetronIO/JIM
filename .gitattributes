@@ -27,7 +27,14 @@
 
 # CHANGELOG: union-merge concurrent [Unreleased] entries so parallel branches and
 # releases combine automatically instead of conflicting on every merge/rebase.
-# Caveat: may leave duplicate section headers or bullets; tidy at release time.
+#
+# The cost is that union merging re-adds lines rather than reconciling them, so a
+# branch that merges or rebases across a release brings the entries it contributed
+# back into [Unreleased], where they read as unshipped work. scripts/Lint-Changelog.ps1
+# fails the build on an entry that has already shipped in a released section, and on
+# two identical entries in one subsection, so the re-add is caught at PR time rather
+# than found in the next release notes. Duplicate ### headers are not detected; eyeball
+# the section after a merge.
 CHANGELOG.md merge=union
 
 # Binary files
