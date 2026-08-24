@@ -184,6 +184,57 @@ public class CausalityLineageViewTests
             $"eight target systems must not become eight column tracks: {template}");
     }
 
+    /// <summary>
+    /// The Connected System an object lives in is a link to that system, exactly as its name is
+    /// everywhere else on the panel. The head is where a reader meets the system, and it was the one
+    /// mention of it with nowhere to go.
+    /// </summary>
+    [Test]
+    public void Render_RecordHead_LinksItsConnectedSystem()
+    {
+        var cut = RenderLineage(ExportCreateLineage());
+
+        var sub = cut.FindAll(".ln-obj-sub")[0];
+        var link = sub.QuerySelector("a");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(link, Is.Not.Null);
+            Assert.That(link!.GetAttribute("href"), Is.EqualTo("/admin/connected-systems/1"));
+            Assert.That(link.TextContent.Trim(), Is.EqualTo("Yellowstone APAC"),
+                "only the system's name is the link, not the whole 'record in ...' phrase");
+            Assert.That(sub.TextContent.Trim(), Is.EqualTo("record in Yellowstone APAC"));
+        }
+    }
+
+    /// <summary>
+    /// A system whose id the snapshots did not carry still names itself; it simply does not link.
+    /// </summary>
+    [Test]
+    public void Render_RecordHeadWithNoSystemId_NamesTheSystemWithoutLinkingIt()
+    {
+        var model = new CausalityLineageModel
+        {
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Record,
+                    Objects = [new CausalityLineageObject { Title = "Liam Allen", SystemName = "Retired System" }]
+                }
+            ],
+            Joins = []
+        };
+
+        var cut = RenderLineage(model);
+
+        var sub = cut.Find(".ln-obj-sub");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sub.QuerySelector("a"), Is.Null);
+            Assert.That(sub.TextContent.Trim(), Is.EqualTo("record in Retired System"));
+        }
+    }
+
     [Test]
     public void Render_ExportCreateStory_HeadsColumnsWithRecordAndIdentityChips()
     {

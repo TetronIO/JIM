@@ -1,3 +1,4 @@
+@using JIM.Utilities
 @using JIM.Web.Causality
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -57,7 +58,24 @@
                             {
                                 <span class="ln-obj-title">@GetObjectTitle(column, lineageObject)</span>
                             }
-                            @if (GetObjectSub(column, lineageObject) is { } objectSub)
+                            @* A record's sub-line names its Connected System, and that name links to
+                               the system like every other mention of it on the panel. Only the name is
+                               the link; "record in" is not part of what is being pointed at. *@
+                            @if (column.Kind == CausalityLineageColumnKind.Record
+                                 && !string.IsNullOrWhiteSpace(lineageObject.SystemName))
+                            {
+                                <span class="ln-obj-sub">
+                                    record in @if (lineageObject.SystemId is { } systemId)
+                                              {
+                                                  <a href="@Utilities.GetConnectedSystemHref(systemId)">@lineageObject.SystemName</a>
+                                              }
+                                              else
+                                              {
+                                                  @lineageObject.SystemName
+                                              }
+                                </span>
+                            }
+                            else if (GetObjectSub(column, lineageObject) is { } objectSub)
                             {
                                 <span class="ln-obj-sub">@objectSub</span>
                             }
@@ -171,16 +189,16 @@
     }
 
     /// <summary>
-    /// The head's second line: which system a record lives in, or that the object is the Identity
-    /// (with its Metaverse Object Type where known). The trailing unassigned column explains itself
-    /// instead.
+    /// The head's second line for everything that is not a record: that the object is the Identity
+    /// (with its Metaverse Object Type where known), or that the trailing column holds what could not
+    /// be placed. A record's sub-line is rendered in the markup instead, because its system name is a
+    /// link and this returns a plain string.
     /// </summary>
     private static string? GetObjectSub(CausalityLineageColumn column, CausalityLineageObject lineageObject)
     {
         return column.Kind switch
         {
-            CausalityLineageColumnKind.Record =>
-                lineageObject.SystemName != null ? $"record in {lineageObject.SystemName}" : null,
+            CausalityLineageColumnKind.Record => null,
             CausalityLineageColumnKind.Identity => lineageObject.ObjectTypeName != null
                 ? $"Identity · {lineageObject.ObjectTypeName}"
                 : "Identity",
