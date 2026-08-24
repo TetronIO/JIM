@@ -831,9 +831,6 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
 .jim-drawer-footer {
     margin: 0 6px;
     margin-top: auto;
-    border-top-style: solid;
-    border-top-width: 1px;
-    border-top-color: var(--jim-drawer-border-color);
     padding: 8px 0;
 }
 
@@ -3825,7 +3822,7 @@ html[lang] .jim-scope-text .mud-input-slot {
     padding-inline-start: 1.25rem;
 }
 
-.jim-scope-text-error-list li + li {
+.jim-scope-text-error-list li+li {
     margin-top: 0.25rem;
 }
 
