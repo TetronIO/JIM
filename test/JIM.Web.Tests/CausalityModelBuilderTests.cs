@@ -357,6 +357,31 @@ public class CausalityModelBuilderTests
         Assert.That(deprovision.AttributeRowsCaption, Is.EqualTo("Target identified by"));
     }
 
+    /// <summary>
+    /// The execution-side sibling of the queued case: when the delete Pending Export is carried out, the
+    /// Deprovisioned item's change snapshot still holds only the target's DN. Counted as a change, the page
+    /// reported the deletion as having "Set" one attribute; the rows identify the deleted entry, so they take
+    /// the same caption as the queueing event.
+    /// </summary>
+    [Test]
+    public void Build_DeprovisionedExecutionOutcome_CaptionsItsRowsAsTargetIdentification()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Deprovisioned,
+            ConnectedSystemObjectChange = CausalityTestData.BuildDeprovisionTargetSnapshot()
+        };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned,
+            parent: null, ordinal: 0);
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var deprovisioned = model.Roots
+            .Single(r => r.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
+
+        Assert.That(deprovisioned.AttributeRowsCaption, Is.EqualTo("Target identified by"));
+    }
+
     [Test]
     public void Build_PendingExportCreatedOutcome_HasNoAttributeRowsCaption()
     {
@@ -787,4 +812,42 @@ public class CausalityModelBuilderTests
     }
 
     #endregion
+
+    /// <summary>
+    /// A Metaverse Object link is only ever built where the object's type plural name is known, because
+    /// that is what the route is keyed on (<c>/t/{plural}/v/{id}</c>). The fallback used to invent
+    /// <c>/identity/search/{id}</c>, which is not a route in this application and never has been, so on
+    /// any item whose type could not be resolved (a synchronisation whose record has since been deleted
+    /// is the common one) every Identity on the panel pointed at a page that does not exist. An unlinked
+    /// name is the honest answer: a link that goes nowhere reads as an affordance and is not one.
+    /// </summary>
+    [Test]
+    public void Build_IdentityLinkWithNoObjectTypePluralName_RendersUnlinkedRatherThanAnInventedRoute()
+    {
+        var context = CausalityTestData.NewJoinerContext() with { MvoTypePluralName = null };
+
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+
+        var identityLinks = model.AllEvents()
+            .SelectMany(e => e.Links)
+            .Where(l => l.Kind == CausalityEntityKind.Identity)
+            .ToList();
+        Assert.That(identityLinks, Is.Not.Empty, "the new joiner story names its Identity");
+        Assert.That(identityLinks.Select(l => l.Href), Has.All.Null);
+    }
+
+    /// <summary>
+    /// The other half: where the plural name is known the link is the real route, so suppressing the
+    /// invented one costs nothing that worked.
+    /// </summary>
+    [Test]
+    public void Build_IdentityLinkWithAnObjectTypePluralName_UsesTheMetaverseObjectRoute()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var identityLink = model.AllEvents()
+            .SelectMany(e => e.Links)
+            .First(l => l.Kind == CausalityEntityKind.Identity && l.Href != null);
+        Assert.That(identityLink.Href, Does.StartWith("/t/people/v/"));
+    }
 }

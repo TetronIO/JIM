@@ -116,20 +116,25 @@ public class CausalityTimelineViewTests
     }
 
     [Test]
-    public async Task Render_PlainNames_EmphasisesPlainLabelWithTechnicalDemotedAsync()
+    public async Task Render_PlainNames_ShowsNoTechnicalVocabularyAtAllAsync()
     {
+        // Same rule as the Lineage view's cards: with the toggle off, no CSO or MVO vocabulary appears.
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         var cut = RenderTimeline(context, model, technicalNames: false);
 
         var projectedRow = cut.FindAll(".tl-row")[1];
-        Assert.That(projectedRow.QuerySelector(".verb")!.TextContent.Trim(), Is.EqualTo("Identity created"));
-        Assert.That(projectedRow.QuerySelector(".tech")!.TextContent, Does.Contain("MVO Projected"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(projectedRow.QuerySelector(".verb")!.TextContent.Trim(), Is.EqualTo("Identity created"));
+            Assert.That(projectedRow.QuerySelector(".tech"), Is.Null);
+            Assert.That(cut.Markup, Does.Not.Contain("MVO Projected"));
+        }
     }
 
     [Test]
-    public async Task Render_TechnicalNames_SwapsTheEmphasisAsync()
+    public async Task Render_TechnicalNames_ShowsTheTechnicalLabelInsteadAsync()
     {
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
@@ -137,8 +142,11 @@ public class CausalityTimelineViewTests
         var cut = RenderTimeline(context, model, technicalNames: true);
 
         var projectedRow = cut.FindAll(".tl-row")[1];
-        Assert.That(projectedRow.QuerySelector(".verb")!.TextContent.Trim(), Is.EqualTo("MVO Projected"));
-        Assert.That(projectedRow.QuerySelector(".tech")!.TextContent, Does.Contain("Identity created"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(projectedRow.QuerySelector(".verb")!.TextContent.Trim(), Is.EqualTo("MVO Projected"));
+            Assert.That(projectedRow.QuerySelector(".tech"), Is.Null);
+        }
     }
 
     [Test]

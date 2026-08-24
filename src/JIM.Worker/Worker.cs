@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Utilities;
+using JIM.Application.Servers;
 using JIM.Data.Repositories;
 using JIM.Application.Interfaces;
 using JIM.Connectors;
@@ -630,6 +631,33 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
+                                case HistoryRetentionCleanupWorkerTask:
+                                {
+                                    Log.Information("ExecuteAsync: HistoryRetentionCleanupWorkerTask received, initiated by: {InitiatedBy}",
+                                        newWorkerTask.InitiatedByName ?? "Unknown");
+
+                                    try
+                                    {
+                                        // Every cutoff is read here rather than carried on the task, so an
+                                        // administrator's change to a retention period takes effect on the next
+                                        // pass without the built-in Schedule needing to be touched.
+                                        var cutoffs = await taskJim.ChangeHistory.GetRetentionCutoffsAsync(DateTime.UtcNow);
+                                        var cleanupResult = await taskJim.ChangeHistory.DeleteExpiredChangeHistoryAsync(newWorkerTask.Activity, cutoffs);
+
+                                        newWorkerTask.Activity.Message = DescribeRetentionCleanup(cleanupResult);
+                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+
+                                        Log.Information("ExecuteAsync: History retention cleanup completed in {ExecutionTime}: {Summary}",
+                                            newWorkerTask.Activity.ExecutionTime, newWorkerTask.Activity.Message);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing History Retention Cleanup.");
+                                    }
+
+                                    break;
+                                }
                             }
                         
                             // Mark the task as complete — unless it was already cancelled by the main loop's
@@ -724,15 +752,6 @@ public class Worker : BackgroundService
     private DateTime _lastHousekeepingRun = DateTime.MinValue;
 
     /// <summary>
-    /// Tracks when the last history retention cleanup occurred.
-    /// History cleanup runs on a longer interval (every 6 hours) as it only
-    /// deals with records that are 90+ days old and doesn't need frequent checks.
-    /// Null until the first housekeeping check, at which point it is initialised
-    /// from the database to survive worker restarts.
-    /// </summary>
-    private DateTime? _lastHistoryCleanupRun;
-
-    /// <summary>
     /// Performs housekeeping tasks during worker idle time.
     /// Currently includes: orphaned MVO cleanup based on deletion rules.
     /// Internal for testability (JIM.Worker.Tests exercises the housekeeping path directly).
@@ -776,28 +795,10 @@ public class Worker : BackgroundService
             Log.Error(ex, "PerformHousekeepingAsync: Error requesting a Password Synchronisation delivery pass");
         }
 
-        // History retention cleanup runs on its own schedule (every 6 hours).
-        // On first check after worker start, query the database for the last cleanup time
-        // so we don't re-run immediately if the interval hasn't elapsed yet.
-        if (_lastHistoryCleanupRun == null)
-        {
-            try
-            {
-                _lastHistoryCleanupRun = await jim.ChangeHistory.GetLastCleanupTimeAsync() ?? DateTime.MinValue;
-                Log.Debug("PerformHousekeepingAsync: Last history cleanup was at {LastCleanupTime}", _lastHistoryCleanupRun);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "PerformHousekeepingAsync: Failed to query last history cleanup time, will run cleanup on next cycle");
-                _lastHistoryCleanupRun = DateTime.MinValue;
-            }
-        }
-
-        if ((DateTime.UtcNow - _lastHistoryCleanupRun.Value).TotalHours >= 6)
-        {
-            _lastHistoryCleanupRun = DateTime.UtcNow;
-            await PerformChangeHistoryCleanupAsync(jim);
-        }
+        // History retention cleanup used to run here, on a six-hourly timer. It now runs as a step on the built-in
+        // History Retention Cleanup Schedule (#1118), which gives it an execution history, a next run time, and the
+        // same cancel and observability affordances every other scheduled step has. Nothing replaces it in
+        // housekeeping: two mechanisms trimming the same tables is exactly the state this change removed.
     }
 
     /// <summary>
@@ -1164,43 +1165,34 @@ public class Worker : BackgroundService
     }
 
     /// <summary>
-    /// Performs change history and activity cleanup based on retention policy.
-    /// Runs as part of housekeeping during worker idle time.
+    /// Summarises one retention pass for its Activity's message (requirement 30): what it removed, per class of
+    /// record, in a form an administrator reading the Activities list can act on. A pass that removed nothing
+    /// says so rather than rendering a row of zeroes, because "there was nothing to remove" and "the pass never
+    /// ran" are the two answers that must not look alike.
     /// </summary>
-    private async Task PerformChangeHistoryCleanupAsync(JimApplication jim)
+    internal static string DescribeRetentionCleanup(ChangeHistoryServer.ChangeHistoryCleanupResult result)
     {
-        try
+        var parts = new List<string>();
+
+        void Add(int count, string singular, string plural)
         {
-            // Get retention settings. Configuration-change Activities carry the versioned configuration snapshots,
-            // and security event Activities (Authentication) are the security audit trail, so each gets its own
-            // (typically much longer) retention period than the general history.
-            var retentionPeriod = await jim.ServiceSettings.GetHistoryRetentionPeriodAsync();
-            var configurationRetentionPeriod = await jim.ServiceSettings.GetConfigurationChangeRetentionPeriodAsync();
-            var securityRetentionPeriod = await jim.ServiceSettings.GetSecurityEventRetentionPeriodAsync();
-            var initialPasswordRetentionPeriod = await jim.ServiceSettings.GetInitialPasswordRetentionPeriodAsync();
-            var batchSize = await jim.ServiceSettings.GetHistoryCleanupBatchSizeAsync();
-
-            var cutoffDate = DateTime.UtcNow - retentionPeriod;
-            var configurationCutoffDate = DateTime.UtcNow - configurationRetentionPeriod;
-            var securityCutoffDate = DateTime.UtcNow - securityRetentionPeriod;
-            var initialPasswordCutoffDate = DateTime.UtcNow - initialPasswordRetentionPeriod;
-
-            // Perform cleanup (creates its own Activity for audit)
-            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, initialPasswordCutoffDate, batchSize);
-
-            // Log results if anything was deleted
-            if (result.CsoChangesDeleted > 0 || result.MvoChangesDeleted > 0 || result.ActivitiesDeleted > 0
-                || result.ConfigurationChangeActivitiesDeleted > 0 || result.SecurityEventActivitiesDeleted > 0
-                || result.InitialPasswordWorkRecordsDeleted > 0)
-            {
-                Log.Information("PerformChangeHistoryCleanupAsync: Deleted {CsoCount} CSO changes, {MvoCount} MVO changes, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {InitialPasswordCount} initial-password records",
-                    result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted);
-            }
+            if (count > 0)
+                parts.Add($"{count} {(count == 1 ? singular : plural)}");
         }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "PerformChangeHistoryCleanupAsync: Error during change history cleanup");
-        }
+
+        Add(result.CsoChangesDeleted, "Connected System Object change", "Connected System Object changes");
+        Add(result.MvoChangesDeleted, "Metaverse Object change", "Metaverse Object changes");
+        Add(result.PreviewsDeleted, "configuration change preview", "configuration change previews");
+        Add(result.ActivitiesDeleted, "Activity", "Activities");
+        Add(result.ConfigurationChangeActivitiesDeleted, "configuration change Activity", "configuration change Activities");
+        Add(result.SecurityEventActivitiesDeleted, "security event Activity", "security event Activities");
+        Add(result.InitialPasswordWorkRecordsDeleted, "initial password record", "initial password records");
+        Add(result.PasswordEventActivitiesDeleted, "Password Synchronisation Activity", "Password Synchronisation Activities");
+        Add(result.PasswordQueueRecordsDeleted, "queued password change", "queued password changes");
+
+        return parts.Count == 0
+            ? "Nothing had reached its retention period."
+            : $"Removed {string.Join(", ", parts)}.";
     }
 
     /// <summary>

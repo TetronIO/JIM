@@ -97,11 +97,6 @@ public class HousekeepingActivityWorkflowTests
                     rpeis.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError));
             });
 
-        // A recent history cleanup time stops the history retention path running during these tests.
-        _mockActivityRepository
-            .Setup(r => r.GetLastHistoryCleanupTimeAsync())
-            .ReturnsAsync(DateTime.UtcNow);
-
         // No settings rows exist, so every Service Setting read falls back to its default
         // (sync outcome tracking: Detailed; CSO and MVO change tracking: enabled).
         _mockServiceSettingsRepository = new Mock<IServiceSettingsRepository>();

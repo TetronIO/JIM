@@ -7,12 +7,17 @@ function Invoke-JIMHistoryCleanup {
         Manually triggers change history cleanup based on retention policy.
 
     .DESCRIPTION
-        Deletes expired CSO changes, MVO changes, and Activities older than the configured
-        retention period. The cleanup is limited by the configured batch size to prevent
-        long-running transactions.
+        Deletes history that has had the retention period set for its kind: Connected System Object
+        changes, Metaverse Object changes, configuration change previews, Activities, initial-password
+        records, and Pending Password Changes that reached a terminal state. Each class of record has
+        its own retention Service Setting, and every trim is limited by the configured batch size to
+        prevent long-running transactions.
 
-        For large volumes of data, call this cmdlet multiple times or rely on the automatic
-        housekeeping cleanup that runs every 60 seconds.
+        Records still being worked are never removed, however old: a Pending Password Change still owed
+        to a Connected System, and an initial-password record still being retried, both survive.
+
+        This runs on its own anyway, daily, on the built-in "History Retention Cleanup" Schedule. Use
+        this cmdlet to run a pass on demand, or to drain a large backlog faster by calling it in a loop.
 
         This operation creates an Activity record to audit the cleanup.
 
@@ -21,13 +26,22 @@ function Invoke-JIMHistoryCleanup {
 
     .OUTPUTS
         If -PassThru is specified, returns a PSCustomObject with cleanup statistics:
-        - csoChangesDeleted: Number of CSO change records deleted
-        - mvoChangesDeleted: Number of MVO change records deleted
-        - activitiesDeleted: Number of Activity records deleted
+        - csoChangesDeleted: Number of Connected System Object change records deleted
+        - mvoChangesDeleted: Number of Metaverse Object change records deleted
+        - activitiesDeleted: Number of general Activity records deleted
+        - configurationChangeActivitiesDeleted: Configuration change Activities deleted, at their own cutoff
+        - securityEventActivitiesDeleted: Security event Activities deleted, at their own cutoff
+        - initialPasswordWorkRecordsDeleted: Terminal initial-password records deleted
+        - passwordEventActivitiesDeleted: Password Synchronisation Activities deleted, at their own cutoff
+        - passwordQueueRecordsDeleted: Terminal Pending Password Changes deleted
         - oldestRecordDeleted: Oldest record timestamp deleted
         - newestRecordDeleted: Newest record timestamp deleted
-        - cutoffDate: Records older than this date were deleted
-        - retentionPeriodDays: Configured retention period
+        - cutoffDate: Records older than this date were deleted, under the general retention period
+        - retentionPeriodDays: Configured general retention period
+        - configurationChangeRetentionPeriodDays: Configured configuration change retention period
+        - securityEventRetentionPeriodDays: Configured security event retention period
+        - initialPasswordRetentionPeriodDays: Configured initial-password record retention period
+        - passwordEventRetentionPeriodDays: Configured Password Synchronisation retention period
         - batchSize: Maximum records deleted per type in this batch
 
     .EXAMPLE
@@ -57,8 +71,18 @@ function Invoke-JIMHistoryCleanup {
 
         Runs cleanup in batches with 2-second pauses until all expired records are deleted.
 
+    .EXAMPLE
+        Invoke-JIMHistoryCleanup -PassThru |
+            Select-Object passwordEventActivitiesDeleted, passwordQueueRecordsDeleted
+
+        Shows what the pass removed from Password Synchronisation history. The queue count is also the
+        number of encrypted passwords JIM stopped holding.
+
     .LINK
         Get-JIMActivity
+
+    .LINK
+        Get-JIMServiceSetting
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]

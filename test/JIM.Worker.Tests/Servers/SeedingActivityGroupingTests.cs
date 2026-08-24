@@ -4,6 +4,7 @@
 using System.Text;
 using JIM.Application;
 using JIM.Application.Interfaces;
+using JIM.Application.Servers;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -113,10 +114,11 @@ public class SeedingActivityGroupingTests
         Assert.That(parent.Message, Is.EqualTo("Applying built-in configuration"));
         Assert.That(parent.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
 
-        var scheduleActivity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.Schedule);
+        var scheduleActivities = _createdActivities.Where(a => a.TargetType == ActivityTargetType.Schedule).ToList();
         var roleActivity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.Role);
-        Assert.That(scheduleActivity.ParentActivityId, Is.EqualTo(parent.Id),
-            "the schedule's Create Activity must be a child of the single seeding parent");
+        Assert.That(scheduleActivities, Is.Not.Empty, "the built-in schedule catalogue must have seeded something");
+        Assert.That(scheduleActivities.Select(a => a.ParentActivityId), Is.All.EqualTo(parent.Id),
+            "every schedule's Create Activity must be a child of the single seeding parent");
         Assert.That(roleActivity.ParentActivityId, Is.EqualTo(parent.Id),
             "the Role's Create Activity must be a child of the same seeding parent, not a second one");
     }
@@ -124,17 +126,7 @@ public class SeedingActivityGroupingTests
     [Test]
     public async Task SeedBuiltInSchedulesAndRoles_NothingToSeed_RecordsNoParentActivityAndCompleteIsNoOpAsync()
     {
-        var existingSchedule = new Schedule
-        {
-            Id = Guid.NewGuid(),
-            Name = "Temporal Scope Reconciliation",
-            BuiltIn = true,
-            Steps = new List<ScheduleStep>
-            {
-                new() { Id = Guid.NewGuid(), StepIndex = 0, Name = "Reconcile Temporal Scope", StepType = ScheduleStepType.TemporalScopeReconciliation }
-            }
-        };
-        _schedulingRepo.Setup(r => r.GetAllSchedulesAsync()).ReturnsAsync(new List<Schedule> { existingSchedule });
+        _schedulingRepo.Setup(r => r.GetAllSchedulesAsync()).ReturnsAsync(AlreadySeededBuiltInSchedules());
 
         var existingRole = new Role { Id = 1, Name = Constants.BuiltInRoles.Administrator, BuiltIn = true };
         _securityRepo.Setup(r => r.GetRoleAsync(Constants.BuiltInRoles.Administrator)).ReturnsAsync(existingRole);
@@ -178,6 +170,16 @@ public class SeedingActivityGroupingTests
     }
 
     // -- helpers -------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The built-in Schedule catalogue as a deployment that already holds every entry would return it. Derived
+    /// from the catalogue rather than named here, so adding a built-in Schedule does not silently turn a
+    /// "nothing to seed" test into one that seeds the new entry.
+    /// </summary>
+    private static List<Schedule> AlreadySeededBuiltInSchedules() =>
+        SeedingServer.BuiltInSchedules()
+            .Select(s => new Schedule { Id = Guid.NewGuid(), Name = s.Name, BuiltIn = true, Steps = s.Steps })
+            .ToList();
 
     private void SetupTrackingSetting(bool enabled) =>
         _settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled))

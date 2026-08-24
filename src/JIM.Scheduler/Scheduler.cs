@@ -110,11 +110,17 @@ public class Scheduler : BackgroundService
                 // to avoid EF context caching issues
                 using var jim = _jimFactory.Create();
 
-                // Step 1: Update next run times for cron-based schedules
-                await jim.Scheduler.UpdateNextRunTimesAsync();
-
-                // Step 2: Check for and start due schedules
+                // Step 1: Check for and start due schedules. This runs BEFORE the next-run-time bootstrap
+                // below, and must keep doing so: both read NextRunTime, and starting a schedule is what
+                // advances it. Bootstrapping first is how every cron-triggered schedule came to be swallowed
+                // on the cycle it became due (the bootstrap query has since been narrowed to rows with no next
+                // run time at all, so the two can no longer claim the same schedule; the order is kept because
+                // "start the work, then fill in what is missing" is the honest reading).
                 await ProcessDueSchedulesAsync(jim);
+
+                // Step 2: Give a next run time to any cron-based schedule that has none yet: newly created,
+                // newly enabled, or newly switched from a manual trigger.
+                await jim.Scheduler.UpdateNextRunTimesAsync();
 
                 // Step 3: Safety net - recover stuck executions where the worker completed a task
                 // but crashed before TryAdvanceScheduleExecutionAsync could run
