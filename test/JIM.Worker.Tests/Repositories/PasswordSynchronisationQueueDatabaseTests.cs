@@ -435,6 +435,17 @@ public class PasswordSynchronisationQueueDatabaseTests
             ExternalIdAttributeId = externalIdAttribute.Id
         };
         seed.Add(cso);
+
+        // Nothing reaches this queue for a system with no Password Synchronisation configuration, so a fixture
+        // seeding changes without one is describing a state the application cannot produce. It matters to what
+        // is read back: a change is due only where the system is enabled, because a delivery pass steps over a
+        // switched-off one, so a configuration-less seed would report every change as waiting and none as due.
+        seed.Add(new ConnectedSystemPasswordSynchronisation
+        {
+            ConnectedSystemId = system.Id,
+            Enabled = true,
+            TargetObjectTypeId = csType.Id
+        });
         await seed.SaveChangesAsync();
 
         return (system.Id, mvo.Id, cso.Id);
@@ -664,6 +675,40 @@ public class PasswordSynchronisationQueueDatabaseTests
             Assert.That(summary.ParkedCount, Is.Zero);
             Assert.That(summary.ExpiredCount, Is.Zero);
             Assert.That(summary.CancelledCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// A change queued for a Connected System that is switched off is waiting but not due. Delivery steps over
+    /// that system without touching its changes, so counting them as due would make the ordinary state of a
+    /// deployment with one system off (requirement 2's accumulate) look like a queue nothing is draining, which
+    /// is precisely the reading the two counts exist to separate.
+    /// </summary>
+    [Test]
+    public async Task GetPasswordQueueSummaryAsync_ASwitchedOffSystemIsWaitingNotDueAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var asOf = new DateTime(2026, 8, 21, 12, 0, 0, DateTimeKind.Utc);
+
+        await SeedChangeAsync(systemId, mvoId, csoId);
+
+        await using (var disable = NewContext())
+        {
+            var configuration = await disable.ConnectedSystemPasswordSynchronisations
+                .SingleAsync(ps => ps.ConnectedSystemId == systemId);
+            configuration.Enabled = false;
+            await disable.SaveChangesAsync();
+        }
+
+        await using var read = NewContext();
+        var summary = await new PostgresDataRepository(read).Sync.GetPasswordQueueSummaryAsync(asOf);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.WaitingCount, Is.EqualTo(1),
+                "the change is still owed to that system, and switching it on is what delivers it");
+            Assert.That(summary.DueCount, Is.Zero,
+                "a delivery pass would step over the system, so nothing about this change is due");
         }
     }
 

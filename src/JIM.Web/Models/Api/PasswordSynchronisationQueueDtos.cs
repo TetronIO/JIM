@@ -55,8 +55,17 @@ public class PendingPasswordChangeResponse
     /// <summary>
     /// Whether a delivery pass would attempt this change right now. Distinguishes a change waiting out a retry
     /// backoff from one that is due and simply has not been reached, which <see cref="Status"/> alone cannot.
+    /// Never true while <see cref="Held"/> is: a pass steps over a system that is switched off.
     /// </summary>
     public bool Due { get; set; }
+
+    /// <summary>
+    /// Whether the change is waiting on somebody switching Password Synchronisation back on for its Connected
+    /// System, rather than on JIM. A configured system that is switched off accumulates queued changes instead of
+    /// discarding them, and enabling it delivers what accumulated; until then nothing is attempted, so the
+    /// remedy is a person's rather than a retry's.
+    /// </summary>
+    public bool Held { get; set; }
 
     /// <summary>
     /// How the last attempt failed, and the target's own words, which is what says where the remedy lives. Both
@@ -119,6 +128,7 @@ public class PendingPasswordChangeResponse
             ConnectedSystemName = header.ConnectedSystemName,
             Status = header.Status,
             Due = header.IsDue(asOf),
+            Held = header.IsHeld,
             FailureReason = header.FailureReason,
             TargetMessage = header.TargetMessage,
             AttemptCount = header.AttemptCount,

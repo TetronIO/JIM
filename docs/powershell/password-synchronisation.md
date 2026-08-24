@@ -64,7 +64,8 @@ In the default and `-All` parameter sets, one `PSCustomObject` per queued change
 | `MetaverseObjectTypePluralName` | Their Metaverse Object Type's plural name, which is what a link to them is built from. |
 | `ConnectedSystemId`, `ConnectedSystemName` | Where it is going. |
 | `Status` | `Pending`, `Parked`, `Expired` or `Cancelled`. |
-| `Due` | Whether a delivery pass would attempt this change right now. A `Pending` change may be waiting out a retry backoff, which `Status` alone cannot tell you. |
+| `Due` | Whether a delivery pass would attempt this change right now. A `Pending` change may be waiting out a retry backoff, or be `Held`, neither of which `Status` alone can tell you. Never `$true` while `Held` is. |
+| `Held` | Whether the change is waiting on Password Synchronisation being switched back on for its Connected System, rather than on JIM. A switched-off system accumulates changes instead of discarding them; switching it on delivers what accumulated. |
 | `FailureReason`, `TargetMessage` | How the last attempt failed, and the target's own words. Both `$null` for a change that has not been attempted. |
 | `AttemptCount` | How many delivery attempts have been made. |
 | `NextRetryAt` | When the next attempt falls due, or `$null` for a change that is due now or is no longer being attempted. |
@@ -94,7 +95,14 @@ Get-JIMConnectedSystem -Name "Corporate AD" | Get-JIMPendingPasswordChange -All
 ```
 
 ```powershell title="Changes waiting out a retry backoff, as opposed to those due now"
-Get-JIMPendingPasswordChange -Status Pending | Where-Object { -not $_.Due }
+Get-JIMPendingPasswordChange -Status Pending | Where-Object { -not $_.Due -and -not $_.Held }
+```
+
+```powershell title="Which systems are holding password changes because they are switched off"
+Get-JIMPendingPasswordChange -Status Pending -All |
+    Where-Object Held |
+    Group-Object ConnectedSystemName |
+    Select-Object Name, Count
 ```
 
 ---

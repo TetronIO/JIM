@@ -25,12 +25,14 @@ public class PendingPasswordChangeDisplayTests
         PendingPasswordChangeStatus status = PendingPasswordChangeStatus.Pending,
         PasswordSetFailureReason? reason = null,
         string? targetMessage = null,
-        string? cancelledByName = null) => new()
+        string? cancelledByName = null,
+        bool takingPasswords = true) => new()
     {
         Status = status,
         FailureReason = reason,
         TargetMessage = targetMessage,
-        CancelledByName = cancelledByName
+        CancelledByName = cancelledByName,
+        ConnectedSystemTakingPasswords = takingPasswords
     };
 
     [Test]
@@ -130,6 +132,70 @@ public class PendingPasswordChangeDisplayTests
 
             Assert.That(text, Does.Not.EqualTo(reason.ToString()),
                 $"{reason} falls through to its enum spelling; a new failure reason needs its own words here");
+        }
+    }
+
+    /// <summary>
+    /// A change queued for a Connected System that is switched off is Pending with no failure against it, so
+    /// without this it reads as "Waiting" and nothing else, which is the one state where what it is waiting for
+    /// is a person rather than a retry. Nothing else on the row says so.
+    /// </summary>
+    [Test]
+    public void Detail_HeldBehindASwitchedOffSystem_SaysWhatItIsWaitingFor()
+    {
+        var detail = PendingPasswordChangeDisplay.Detail(Change(takingPasswords: false));
+
+        Assert.That(detail, Is.EqualTo(
+            "Waiting for Password Synchronisation to be switched on for this Connected System"));
+    }
+
+    /// <summary>
+    /// A system switched off after a delivery attempt already failed carries both facts, and both matter: the
+    /// failure is what an administrator has to fix before switching the system back on is worth doing.
+    /// </summary>
+    [Test]
+    public void Detail_HeldAfterAFailedAttempt_KeepsTheFailureToo()
+    {
+        var detail = PendingPasswordChangeDisplay.Detail(Change(
+            reason: PasswordSetFailureReason.PolicyRejection,
+            targetMessage: "password does not meet complexity requirements",
+            takingPasswords: false));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(detail, Does.StartWith("Waiting for Password Synchronisation to be switched on"));
+            Assert.That(detail, Does.Contain("password does not meet complexity requirements"));
+        }
+    }
+
+    [Test]
+    public void IsHeld_OnlyWhilePendingAndTheSystemIsOff()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Change(takingPasswords: false).IsHeld, Is.True);
+            Assert.That(Change().IsHeld, Is.False, "a live system's change is on its way, not held");
+            Assert.That(Change(PendingPasswordChangeStatus.Parked, takingPasswords: false).IsHeld, Is.False,
+                "a parked change waits on the reason it was refused, whatever the system's enabled state");
+            Assert.That(Change(PendingPasswordChangeStatus.Expired, takingPasswords: false).IsHeld, Is.False,
+                "an expired change carries no password to hold");
+        }
+    }
+
+    /// <summary>
+    /// The reading the queue page depends on: a held change must not show "Due now" beside a summary that
+    /// correctly counts it as waiting and not due. A delivery pass steps over its system without reaching it,
+    /// whatever the retry time says.
+    /// </summary>
+    [Test]
+    public void IsDue_HeldBehindASwitchedOffSystem_IsFalse()
+    {
+        var now = new DateTime(2026, 8, 21, 12, 0, 0, DateTimeKind.Utc);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Change(takingPasswords: false).IsDue(now), Is.False);
+            Assert.That(Change().IsDue(now), Is.True);
         }
     }
 }

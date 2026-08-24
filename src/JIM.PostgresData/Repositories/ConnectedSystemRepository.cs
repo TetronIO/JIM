@@ -5843,13 +5843,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(ps => ps.ConnectedSystemId == connectedSystemId);
     }
 
-    public async Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync()
+    public async Task<List<PasswordSynchronisationTarget>> GetPasswordSynchronisationTargetsAsync()
     {
+        // Every configured system, enabled or not. Filtering to the enabled ones here would discard a password
+        // change for a system that is merely switched off, which is the one thing requirement 2 forbids: it
+        // accumulates while it is off, and requirement 3's drain on enable has nothing to drain otherwise. The
+        // Enabled flag travels with the target instead, and delivery holds those changes back.
+        //
         // Joined and projected in the database rather than loading the Connected Systems: fan-out asks this on
-        // every password change, and it needs three fields per system.
+        // every password change, and it needs four fields per system.
         var targets = await Repository.Database.ConnectedSystemPasswordSynchronisations
             .AsNoTracking()
-            .Where(ps => ps.Enabled)
             .Join(Repository.Database.ConnectedSystems.AsNoTracking(),
                 ps => ps.ConnectedSystemId,
                 cs => cs.Id,
@@ -5858,6 +5862,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     ps.ConnectedSystemId,
                     cs.Name,
                     ps.TargetObjectTypeId,
+                    ps.Enabled,
                     cs.InitialPasswordTimeToLive
                 })
             .ToListAsync();
@@ -5870,6 +5875,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 ConnectedSystemId = t.ConnectedSystemId,
                 ConnectedSystemName = t.Name,
                 TargetObjectTypeId = t.TargetObjectTypeId,
+                Enabled = t.Enabled,
                 TimeToLive = new ConnectedSystem { InitialPasswordTimeToLive = t.InitialPasswordTimeToLive }
                     .EffectiveInitialPasswordTimeToLive
             })

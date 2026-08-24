@@ -208,11 +208,12 @@ What happens to a queued change:
 - **It is delivered, and disappears.** Nothing is kept once the target has the password: there is no value worth retaining and every reason not to.
 - **It is retried.** A target that was unreachable, or that failed in a way another attempt may resolve, gets one. Each wait is twice as long as the one before it, starting from the backoff you configured, and never longer than the time the change has left.
 - **It is parked, and waits for you.** A target that *refused* the password, or that cannot do what was asked at all, will refuse it identically next time; JIM stops rather than burning the attempts. So does a change that has used all of them. Parked work is released, and tried again, the moment you change what would be delivered to that system: switching Password Synchronisation on, or correcting a setting.
+- **It is held, because the system is switched off.** Password Synchronisation being switched off on a Connected System does not stop changes being recorded for it; it stops them being sent. They accumulate, shown as **Held**, and switching the system back on delivers all of them without anything else being done. Nothing about a held change is attempted while it waits, so it does not consume attempts and does not appear in the due count. It still expires on time, which is what bounds how long a change window can last before the passwords made during it are lost.
 - **It expires.** A change that outlives its time to live is retired with its last failure recorded, rather than delivering a password the person may have changed twice since.
 
 A change for someone who changes their password again before the first one is delivered replaces the first, rather than queueing behind it. Only the newest password is ever sent.
 
-Delivery is a Password Delivery task in the Operations queue, so a pass is visible while it runs and its outcome is recorded as an Activity like any other work. A pass is raised when a password change is queued, when you enable Password Synchronisation on a system (to deliver what accumulated), and by JIM itself when a retry falls due.
+Delivery is a Password Delivery task in the Operations queue, so a pass is visible while it runs and its outcome is recorded as an Activity like any other work. A pass is raised when a password change is queued, when you enable Password Synchronisation on a system (to deliver what accumulated), and by JIM itself when a retry falls due. A system that is switched off is never swept for: its changes are held rather than due, so no pass is raised on their account until you switch it on.
 
 ### 🔎 Watching the queue
 
@@ -222,7 +223,7 @@ It never shows a password, and cannot: the queued value is encrypted in the data
 
 Four counts sit above the list:
 
-- **Waiting**<br /> Changes JIM still intends to deliver. The second line says how many of those a delivery pass would attempt right now; the rest are waiting out a retry backoff. A large waiting count with nothing due is a queue working through its backoffs. A large due count is a queue that is not being drained.
+- **Waiting**<br /> Changes JIM still intends to deliver. The second line says how many of those a delivery pass would attempt right now; the rest are waiting out a retry backoff, or are held because their Connected System is switched off. A large waiting count with nothing due is a queue working through its backoffs, or one waiting on a system to be switched back on. A large due count is a queue that is not being drained.
 - **Parked**<br /> The target refused them, or they ran out of attempts. These wait on you.
 - **Expired**<br /> They outlived their time to live. The password each carried is gone, so nothing can deliver them now.
 - **Cancelled**<br /> You stopped them. Counted rather than hidden, because that person's password is still divergent on that system and the count is the only thing that says so.

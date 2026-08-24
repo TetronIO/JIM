@@ -80,7 +80,7 @@ public class MetaverseControllerSynchronisePasswordTests
         metaverseRepo.Setup(r => r.GetMetaverseObjectAsync(It.IsAny<Guid>()))
             .ReturnsAsync(() => new MetaverseObject { Id = _metaverseObjectId, CachedDisplayName = "Ada Lovelace" });
 
-        _connectedSystemRepo.Setup(r => r.GetEnabledPasswordSynchronisationTargetsAsync()).ReturnsAsync([]);
+        _connectedSystemRepo.Setup(r => r.GetPasswordSynchronisationTargetsAsync()).ReturnsAsync([]);
         _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(It.IsAny<Guid>())).ReturnsAsync([]);
 
         repository.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
@@ -126,7 +126,7 @@ public class MetaverseControllerSynchronisePasswordTests
     /// </summary>
     private void ArrangeTargets(params (int Id, string Name)[] systems)
     {
-        _connectedSystemRepo.Setup(r => r.GetEnabledPasswordSynchronisationTargetsAsync())
+        _connectedSystemRepo.Setup(r => r.GetPasswordSynchronisationTargetsAsync())
             .ReturnsAsync(systems.Select(s => new PasswordSynchronisationTarget
             {
                 ConnectedSystemId = s.Id,

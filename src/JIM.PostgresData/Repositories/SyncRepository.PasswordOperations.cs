@@ -82,10 +82,18 @@ public partial class SyncRepository
     /// <inheritdoc />
     public async Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf)
     {
+        // Restricted to systems that are actually taking passwords, because "due" here means "a delivery pass
+        // would attempt this", and a pass steps over a switched-off system without touching its changes. Once a
+        // switched-off system accumulates changes rather than discarding them, leaving that condition out makes
+        // the worker's idle sweep see permanent work: it would raise a delivery pass every minute, for as long
+        // as the system stayed off, each one recording an Activity for having done nothing. The changes are not
+        // hidden by this, they are simply not due; enabling the system asks for a pass of its own.
         return await _context.PendingPasswordChanges
             .AsNoTracking()
             .Where(c => c.Status == PendingPasswordChangeStatus.Pending
-                        && (c.NextRetryAt == null || c.NextRetryAt <= asOf))
+                        && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
+                        && _context.ConnectedSystemPasswordSynchronisations
+                            .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled))
             .Select(c => c.ConnectedSystemId)
             .Distinct()
             .ToListAsync();
@@ -239,6 +247,10 @@ public partial class SyncRepository
                 MetaverseObjectTypePluralName = mvo.Type.PluralName,
                 ConnectedSystemId = change.ConnectedSystemId,
                 ConnectedSystemName = system.Name,
+                // Read per row rather than assumed: a system switched off after its changes were queued holds
+                // them, and a row that said "Due now" for one of those would contradict the summary above it.
+                ConnectedSystemTakingPasswords = _context.ConnectedSystemPasswordSynchronisations
+                    .Any(ps => ps.ConnectedSystemId == change.ConnectedSystemId && ps.Enabled),
                 Status = change.Status,
                 FailureReason = change.FailureReason,
                 TargetMessage = change.TargetMessage,
@@ -303,8 +315,14 @@ public partial class SyncRepository
             .Select(g => new PasswordQueueSummary
             {
                 WaitingCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Pending),
+                // Held changes (those queued for a system that is switched off) are Waiting but not Due, matching
+                // GetConnectedSystemIdsWithDuePasswordChangesAsync and the number's own meaning: a pass would not
+                // attempt them. Counting them here would make a large Due count, which is meant to read as "the
+                // queue is not being drained", the ordinary state of any deployment with a system switched off.
                 DueCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Pending
-                                        && (c.NextRetryAt == null || c.NextRetryAt <= asOf)),
+                                        && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
+                                        && _context.ConnectedSystemPasswordSynchronisations
+                                            .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled)),
                 ParkedCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Parked),
                 ExpiredCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Expired),
                 CancelledCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Cancelled)
