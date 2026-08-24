@@ -33,6 +33,84 @@ public class CausalityLineageModelBuilderTests
     /// </summary>
     private static CausalityLineageObject Sole(CausalityLineageColumn column) => column.Objects.Single();
 
+    // ─── Objects the panel knows are gone (#1495) ───
+
+    /// <summary>
+    /// An object this run deleted is marked gone and carries its deletion record. "Cannot be linked" is the
+    /// wrong conclusion for it: JIM retains a deletion record, so there is somewhere to go, and the panel
+    /// already deep-links it from the event that recorded the deletion.
+    /// </summary>
+    [Test]
+    public void Build_IdentityDeletedByThisRun_IsMarkedGoneAndCarriesItsDeletionRecord()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
+
+        var identity = Sole(lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(identity.IsDeleted, Is.True);
+            Assert.That(identity.DeletionRecordHref, Does.StartWith("/admin/deleted-objects"));
+            Assert.That(identity.DeletionRecordShownOnACard, Is.True,
+                "this run's own MVO Deleted card already offers the link, so the head must not repeat it");
+        }
+    }
+
+    /// <summary>
+    /// An object nothing proves is gone is not claimed to be. A record that simply has no link (its
+    /// snapshots carried no id) is a different fact from a deleted one, and conflating them would tell
+    /// the reader an object had been deleted when it may be perfectly alive.
+    /// </summary>
+    [Test]
+    public void Build_ObjectWithNoDeletionEvidence_IsNotMarkedGone()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+
+        Assert.That(lineage.Columns.SelectMany(c => c.Objects).Select(o => o.IsDeleted), Has.All.False);
+    }
+
+    /// <summary>
+    /// An Identity a *later* run deleted leaves no trace on this item, so the panel only knows it is gone
+    /// because the page looked it up and found nothing. That is the common case, and the one the reader most
+    /// needs: this item's own story is intact, and the object it created no longer exists.
+    /// </summary>
+    [Test]
+    public void Build_IdentityTheLookupFoundMissing_IsMarkedGoneEvenThoughThisRunDidNotDeleteIt()
+    {
+        var deletedId = Guid.Parse("2faa1700-a4bf-438d-a987-2a00a5f32794");
+        var context = CausalityTestData.NewJoinerContext() with { DeletedMetaverseObjectId = deletedId };
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+
+        var identity = Sole(lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(identity.IsDeleted, Is.True);
+            Assert.That(identity.DeletionRecordHref, Does.Contain(deletedId.ToString()));
+            Assert.That(identity.DeletionRecordShownOnACard, Is.False,
+                "nothing on this item recorded the deletion, so the head is the only place to offer the record");
+        }
+    }
+
+    /// <summary>
+    /// The evidence is about the Identity, so it never marks a record gone.
+    /// </summary>
+    [Test]
+    public void Build_IdentityTheLookupFoundMissing_LeavesRecordObjectsAlone()
+    {
+        var context = CausalityTestData.NewJoinerContext() with { DeletedMetaverseObjectId = Guid.NewGuid() };
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+
+        Assert.That(lineage.Columns.Where(c => c.Kind == CausalityLineageColumnKind.Record)
+            .SelectMany(c => c.Objects).Select(o => o.IsDeleted), Has.All.False);
+    }
+
     // ─── Sides holding several records (#1495) ───
 
     /// <summary>

@@ -65,4 +65,29 @@ public sealed class CausalityLineageObject
     /// subdued history around it.
     /// </summary>
     public bool IsLit => Cards.Any(c => c.IsThisRun);
+
+    /// <summary>
+    /// The object's durable deletion record, where the panel can prove the object is gone; null where it
+    /// cannot. Non-null is what <see cref="IsDeleted"/> reads, so the two can never disagree.
+    /// </summary>
+    /// <remarks>
+    /// "Gone" is only ever claimed from evidence: this run recorded the deletion, or the page looked the
+    /// object up and it was not there. An object JIM simply cannot build a route to is a different fact
+    /// (see <see cref="Href"/> being null while this is too), and saying it no longer exists would be
+    /// false: its type may just be unresolvable.
+    /// </remarks>
+    public string? DeletionRecordHref { get; init; }
+
+    /// <summary>
+    /// Whether the object is known to be gone. A deleted object is not a dead end: JIM retains a deletion
+    /// record for it, which is what <see cref="DeletionRecordHref"/> points at.
+    /// </summary>
+    public bool IsDeleted => DeletionRecordHref != null;
+
+    /// <summary>
+    /// Whether one of this object's own cards already offers the deletion record, in which case the head
+    /// states the fact but does not repeat the link: every entity is named once on this panel.
+    /// </summary>
+    public bool DeletionRecordShownOnACard =>
+        Cards.Any(c => c.Event?.Links.Any(l => l.Kind == CausalityEntityKind.DeletionRecord) == true);
 }
