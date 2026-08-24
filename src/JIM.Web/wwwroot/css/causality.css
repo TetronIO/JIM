@@ -888,6 +888,20 @@
     color: var(--cz-text-dim);
 }
 
+/* The Connected System's name links, but the sub-line is a caption rather than a call to action:
+   it keeps the caption's own colour and earns an underline on hover, so the head does not gain a
+   second thing competing with the object's title. */
+.causality-panel .ln-obj-sub a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.causality-panel .ln-obj-sub a:hover,
+.causality-panel .ln-obj-sub a:focus-visible {
+    color: var(--cz-text);
+    text-decoration: underline;
+}
+
 /* ─── Joins: the labelled relationships between adjacent objects ─── */
 
 .causality-panel .ln-join {
