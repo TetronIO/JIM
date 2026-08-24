@@ -1032,9 +1032,11 @@
 
 /* ─── This run: the primary register ─── */
 
+/* One primary edge, not an edge plus a halo: the card already sits inside its object's enclosure, so
+   a soft outer ring put a third boundary around it and read as a second, weaker border. */
 .causality-panel .ln-now .evt-card {
     border-color: var(--cz-primary);
-    box-shadow: 0 0 0 1px var(--cz-primary), 0 0 0 5px var(--cz-primary-soft);
+    box-shadow: 0 0 0 1px var(--cz-primary);
 }
 
 /* The badge row reuses .ln-when so it lines up with a chain card's run chip and time, but it sits
