@@ -3,6 +3,7 @@
 
 using System;
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
@@ -230,6 +231,82 @@ public static class CausalityTestData
         }
 
         return change;
+    }
+
+    /// <summary>
+    /// A fixed base time for causal chain members, so chain card ordering is deterministic and
+    /// asserted against known values rather than wall-clock time.
+    /// </summary>
+    public static readonly DateTime ChainBaseTime = new(2026, 8, 1, 9, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>
+    /// Builds a causal chain for an item, shaped like the walks <c>GetCausalChainAsync</c> produces.
+    /// </summary>
+    public static CausalChain Chain(Guid itemId, bool truncatedByDepth = false, params CausalChainCohort[] cohorts)
+    {
+        return new CausalChain
+        {
+            RunProfileExecutionItemId = itemId,
+            IsTruncatedByDepth = truncatedByDepth,
+            Cohorts = [.. cohorts]
+        };
+    }
+
+    /// <summary>
+    /// Builds a cohort of causes sharing one attribution tuple. Pass
+    /// <paramref name="sourceImportChangeType"/> for the derived source-import hop, which carries no
+    /// edge type of its own.
+    /// </summary>
+    public static CausalChainCohort Cohort(
+        CausalEdgeType edgeType,
+        CausalReasonCode reasonCode = CausalReasonCode.NotSet,
+        int? connectedSystemId = null,
+        string? connectedSystemName = null,
+        int? syncRuleId = null,
+        string? syncRuleName = null,
+        string? objectTypeName = null,
+        string? objectTypePluralName = null,
+        string? attributeName = null,
+        ObjectChangeType? sourceImportChangeType = null,
+        Guid? effectSyncOutcomeId = null,
+        params CausalChainMember[] members)
+    {
+        return new CausalChainCohort
+        {
+            EdgeType = edgeType,
+            ReasonCode = reasonCode,
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystemName = connectedSystemName,
+            SyncRuleId = syncRuleId,
+            SyncRuleName = syncRuleName,
+            ObjectTypeName = objectTypeName,
+            ObjectTypePluralName = objectTypePluralName,
+            AttributeName = attributeName,
+            SourceImportChangeType = sourceImportChangeType,
+            EffectSyncOutcomeId = effectSyncOutcomeId,
+            Members = [.. members]
+        };
+    }
+
+    /// <summary>
+    /// Builds one cause within a cohort. A member handed nested causes resolves; one without keeps the
+    /// terminal resolution it was given, exactly as the walk sets them.
+    /// </summary>
+    public static CausalChainMember Member(
+        string? displayName,
+        Guid? runProfileExecutionItemId = null,
+        CausalChainResolution resolution = CausalChainResolution.NoFurtherCauses,
+        DateTime? occurred = null,
+        params CausalChainCohort[] causes)
+    {
+        return new CausalChainMember
+        {
+            DisplayName = displayName,
+            RunProfileExecutionItemId = runProfileExecutionItemId,
+            Occurred = occurred ?? ChainBaseTime,
+            Resolution = causes.Length > 0 ? CausalChainResolution.Resolved : resolution,
+            Causes = [.. causes]
+        };
     }
 
     /// <summary>

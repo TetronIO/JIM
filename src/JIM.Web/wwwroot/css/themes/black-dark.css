@@ -17,7 +17,8 @@ html[lang] {
     --mud-palette-primary-rgb: 68,136,255;
     --mud-palette-primary-darken: #3070ee;
     --mud-palette-primary-lighten: #66a0ff;
-    --mud-palette-primary-text: #ffffffff;
+    /* Dark, not white: white on this fill measures 3.38:1, below the 4.5:1 AA floor. */
+    --mud-palette-primary-text: #000000dd;
 
     /* === Secondary Palette === */
     --mud-palette-secondary: #b0bec5;
@@ -36,7 +37,8 @@ html[lang] {
     /* === Semantic Colours (brighter shades for dark backgrounds) === */
     --mud-palette-success: #4caf50;
     --mud-palette-success-rgb: 76,175,80;
-    --mud-palette-success-text: #ffffffff;
+    /* Dark, not white: white on this green measures 2.78:1, below the 4.5:1 AA floor. */
+    --mud-palette-success-text: #000000dd;
     --mud-palette-warning: #ffb74d;
     --mud-palette-warning-rgb: 255,183,77;
     --mud-palette-warning-text: #000000dd;

@@ -229,7 +229,7 @@ Filter by Connected System, by state, or by how the last attempt failed, and sea
 - **Cancel**<br /> Stops JIM delivering them. The rows stay, marked **Cancelled**, recording who cancelled them and when.
 
 !!! note "Cancelling records an outcome; it does not erase one"
-    A cancelled change is kept for the same reason an expired one is: that person's password on that system is now out of step with the rest, and deleting the row would leave you believing your systems agree when they do not. Retention trims cancelled rows on the same schedule as any other finished change, and a cancelled change can be retried, provided it has not expired in the meantime.
+    A cancelled change is kept for the same reason an expired one is: that person's password on that system is now out of step with the rest, and deleting the row would leave you believing your systems agree when they do not. Retention trims cancelled rows on the same schedule as any other finished change (see [How long any of it is kept](#-how-long-any-of-it-is-kept)), and a cancelled change can be retried, provided it has not expired in the meantime.
 
 Whatever a retry or a cancel covers, it is recorded as **one** Activity. A retry over a directory that has just come back is a single decision, and a hundred Activities saying so would bury the decision in its own consequences. The Activity is recorded even when nothing matched, so a retry that changed nothing can be told from a retry that never ran.
 
@@ -251,6 +251,19 @@ Resume-JIMPendingPasswordChange -ConnectedSystemId 3
 ```
 
 See [PowerShell: Password Synchronisation](../powershell/password-synchronisation.md) for the full set, and the [API reference](../api/index.md) for `GET /api/v1/password-synchronisation/queue` and its `retry` and `cancel` counterparts.
+
+### 🧹 How long any of it is kept
+
+A finished password change is not kept for ever. The built-in **History Retention Cleanup** [Schedule](../configuration/schedules.md#built-in-schedules) runs daily and removes two things once they have had the `History.PasswordEventRetentionPeriod` [Service Setting](../administration/configuration.md#service-settings), which defaults to a year:
+
+- **Queue rows that finished**, whether parked, expired or cancelled. A change still owed to a Connected System is never removed, however old it is.
+- **The Activities recording what happened to each change**, including the per-system outcomes behind a person's Password Synchronisation tab.
+
+The two move together on purpose: a person's password history is the outcomes, and a queue row without them says something happened without saying what.
+
+This period is also what bounds how long JIM holds a password. A parked or cancelled row still carries its encrypted value, because both can be retried; shorten the retention period if you would rather JIM stopped holding one sooner. Nothing else ages these rows out, so a target that refuses passwords would otherwise accumulate one permanent row per person.
+
+Each pass says what it removed, on its own Activity, so retention is something you can check rather than assume.
 
 !!! warning "Requiring an encrypted connection means refusing to send"
     A Connected System with **Only send passwords over an encrypted connection** on will not have passwords sent to it over a connection JIM cannot confirm is encrypted. It is on the Connected System's Settings tab, under Passwords, and it governs **every** password JIM sends to that system: the first password on an account JIM provisions, one you set by hand, and a synchronised password change alike.

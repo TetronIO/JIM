@@ -55,32 +55,22 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
 
         try
         {
-            // Get retention policy settings. Configuration-change Activities carry the versioned configuration
-            // snapshots, and security event Activities (Authentication) are the security audit trail, so each gets
-            // its own (typically much longer) retention period than the general history.
-            var retentionPeriod = await _application.ServiceSettings.GetHistoryRetentionPeriodAsync();
-            var configurationRetentionPeriod = await _application.ServiceSettings.GetConfigurationChangeRetentionPeriodAsync();
-            var securityRetentionPeriod = await _application.ServiceSettings.GetSecurityEventRetentionPeriodAsync();
-            var initialPasswordRetentionPeriod = await _application.ServiceSettings.GetInitialPasswordRetentionPeriodAsync();
-            var batchSize = await _application.ServiceSettings.GetHistoryCleanupBatchSizeAsync();
-            var cutoffDate = DateTime.UtcNow - retentionPeriod;
-            var configurationCutoffDate = DateTime.UtcNow - configurationRetentionPeriod;
-            var securityCutoffDate = DateTime.UtcNow - securityRetentionPeriod;
-            var initialPasswordCutoffDate = DateTime.UtcNow - initialPasswordRetentionPeriod;
+            // Every retention period is read in one place, shared with the built-in History Retention Cleanup
+            // Schedule, so a manual cleanup and a scheduled one cannot disagree about what is eligible.
+            var asOf = DateTime.UtcNow;
+            var cutoffs = await _application.ChangeHistory.GetRetentionCutoffsAsync(asOf);
 
             // Get current API key for initiator tracking
             var apiKey = await GetCurrentApiKeyAsync();
 
             // Perform cleanup, attributing the activity to the calling API key (or System if no key)
-            ChangeHistoryServer.ChangeHistoryCleanupResult result;
-            if (apiKey != null)
-                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, initialPasswordCutoffDate, batchSize, apiKey);
-            else
-                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, initialPasswordCutoffDate, batchSize);
+            var result = apiKey != null
+                ? await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffs, apiKey)
+                : await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffs);
 
             _logger.LogInformation(
-                "History cleanup completed - CSO: {CsoCount}, MVO: {MvoCount}, Activity: {ActivityCount}, Configuration: {ConfigurationActivityCount}, Security: {SecurityActivityCount}, Initial passwords: {InitialPasswordCount}",
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted);
+                "History cleanup completed - CSO: {CsoCount}, MVO: {MvoCount}, Activity: {ActivityCount}, Configuration: {ConfigurationActivityCount}, Security: {SecurityActivityCount}, Initial passwords: {InitialPasswordCount}, Password activities: {PasswordActivityCount}, Password queue: {PasswordQueueCount}",
+                result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted, result.PasswordEventActivitiesDeleted, result.PasswordQueueRecordsDeleted);
 
             var response = new HistoryCleanupResponse
             {
@@ -90,14 +80,17 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
                 ConfigurationChangeActivitiesDeleted = result.ConfigurationChangeActivitiesDeleted,
                 SecurityEventActivitiesDeleted = result.SecurityEventActivitiesDeleted,
                 InitialPasswordWorkRecordsDeleted = result.InitialPasswordWorkRecordsDeleted,
+                PasswordEventActivitiesDeleted = result.PasswordEventActivitiesDeleted,
+                PasswordQueueRecordsDeleted = result.PasswordQueueRecordsDeleted,
                 OldestRecordDeleted = result.OldestRecordDeleted,
                 NewestRecordDeleted = result.NewestRecordDeleted,
-                CutoffDate = cutoffDate,
-                RetentionPeriodDays = (int)retentionPeriod.TotalDays,
-                ConfigurationChangeRetentionPeriodDays = (int)configurationRetentionPeriod.TotalDays,
-                SecurityEventRetentionPeriodDays = (int)securityRetentionPeriod.TotalDays,
-                InitialPasswordRetentionPeriodDays = (int)initialPasswordRetentionPeriod.TotalDays,
-                BatchSize = batchSize
+                CutoffDate = cutoffs.General,
+                RetentionPeriodDays = (int)(asOf - cutoffs.General).TotalDays,
+                ConfigurationChangeRetentionPeriodDays = (int)(asOf - cutoffs.ConfigurationChange).TotalDays,
+                SecurityEventRetentionPeriodDays = (int)(asOf - cutoffs.SecurityEvent).TotalDays,
+                InitialPasswordRetentionPeriodDays = (int)(asOf - cutoffs.InitialPassword).TotalDays,
+                PasswordEventRetentionPeriodDays = (int)(asOf - cutoffs.PasswordEvent).TotalDays,
+                BatchSize = cutoffs.MaxRecordsPerType
             };
 
             return Ok(response);

@@ -24,12 +24,18 @@ html[lang] {
     --mud-palette-secondary-rgb: 232,117,10;
     --mud-palette-secondary-darken: #C96208;
     --mud-palette-secondary-lighten: #F09030;
-    --mud-palette-secondary-text: #ffffffff;
+    /* Dark, not white: white on this orange measures 3.01:1, below the 4.5:1 AA floor. */
+    --mud-palette-secondary-text: #000000dd;
 
     /* === Tertiary Palette === */
-    --mud-palette-tertiary: #00897B;
-    --mud-palette-tertiary-rgb: 0,137,123;
-    --mud-palette-tertiary-darken: #00766A;
+    /* One step darker than the teal this was (#00897B), because that shade sits at the luminance where
+       neither label colour works: white measured 4.32:1 and dark 4.44:1, both under the 4.5:1 AA floor.
+       Darkening the fill is the only fix that leaves a label legible, and this is the next Material teal. */
+    --mud-palette-tertiary: #00796B;
+    --mud-palette-tertiary-rgb: 0,121,107;
+    /* Moved down with the base: #00766A was only three points darker than the new fill, so a hover built
+       on it would have been indistinguishable from the resting state. */
+    --mud-palette-tertiary-darken: #00695C;
     --mud-palette-tertiary-lighten: #26A69A;
     --mud-palette-tertiary-text: #ffffffff;
 

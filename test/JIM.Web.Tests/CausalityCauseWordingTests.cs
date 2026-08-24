@@ -237,7 +237,7 @@ public class CausalityCauseWordingTests
     }
 
     [TestCase(CausalChainResolution.Resolved, null)]
-    [TestCase(CausalChainResolution.NoFurtherCauses, "End of the recorded causality chain")]
+    [TestCase(CausalChainResolution.NoFurtherCauses, "No earlier causes recorded")]
     [TestCase(CausalChainResolution.CauseNotRetained, "What caused this is no longer retained")]
     [TestCase(CausalChainResolution.DepthLimitReached, "More causes exist beyond this point")]
     public void Ending_EveryTerminalState_SaysSomethingDifferent(CausalChainResolution resolution, string? expected)

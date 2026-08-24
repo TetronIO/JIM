@@ -979,9 +979,8 @@ public class UserPreferenceServiceTests
     #region GetCausalityViewAsync tests
 
     [Test]
-    [TestCase("flow")]
     [TestCase("timeline")]
-    [TestCase("graph")]
+    [TestCase("lineage")]
     public async Task GetCausalityViewAsync_WhenValidValueStored_ReturnsStoredValueAsync(string storedValue)
     {
         // Arrange
@@ -1001,6 +1000,10 @@ public class UserPreferenceServiceTests
     [TestCase("")]
     [TestCase("tree")]
     [TestCase("Timeline")]
+    // The retired Flow and Graph views' keys read as null deliberately, so a preference stored
+    // before their retirement resolves to the panel's default (#1495).
+    [TestCase("flow")]
+    [TestCase("graph")]
     public async Task GetCausalityViewAsync_WhenInvalidOrMissingValueStored_ReturnsNullAsync(string? storedValue)
     {
         // Arrange
@@ -1050,9 +1053,8 @@ public class UserPreferenceServiceTests
     #region SetCausalityViewAsync tests
 
     [Test]
-    [TestCase("flow")]
     [TestCase("timeline")]
-    [TestCase("graph")]
+    [TestCase("lineage")]
     public async Task SetCausalityViewAsync_WithValidValue_StoresValueAsync(string view)
     {
         // Arrange
@@ -1077,6 +1079,8 @@ public class UserPreferenceServiceTests
     [TestCase("")]
     [TestCase("tree")]
     [TestCase("Timeline")]
+    [TestCase("flow")]
+    [TestCase("graph")]
     public async Task SetCausalityViewAsync_WithInvalidValue_DoesNotStoreAsync(string invalidValue)
     {
         // Act

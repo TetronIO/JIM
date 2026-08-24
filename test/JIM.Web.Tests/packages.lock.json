@@ -133,8 +133,8 @@
       },
       "DynamicExpresso.Core": {
         "type": "Transitive",
-        "resolved": "2.19.3",
-        "contentHash": "84cSMvhcLON2JUQshIvcEAGMtE5rI7FOlcCT0QC42XPZ12A//qDHWKrB5QUfRrQQlDZZZ7TiLAm7mcrywygmpg=="
+        "resolved": "2.19.5",
+        "contentHash": "YusirfwxsmkxKLyTTb4deXq0nMs/r6qLWik6pFQtwti1RqlLjpFyewABiUKAlmS7uPdmZO5RZZsv42BBz7prvQ=="
       },
       "Humanizer.Core": {
         "type": "Transitive",
@@ -634,8 +634,8 @@
       },
       "Microsoft.OpenApi": {
         "type": "Transitive",
-        "resolved": "2.12.0",
-        "contentHash": "0xB/be+f6qYOhvQPUrVsLrau+fkowYv6gt9RIkajMhwT7sZnqtcA797yW3bS5kgSje+AQW4xZgyLnW641YFioQ=="
+        "resolved": "2.12.2",
+        "contentHash": "ZkT7qiJe0Kj0+DTZOZo+xrDy1kNmdsWFQVPIQLNx9ZJ0T9cB2LG7r+Bi60so8/+yg1nkS7QCPadrzsTG4VPKrA=="
       },
       "Microsoft.SqlServer.Server": {
         "type": "Transitive",
@@ -888,7 +888,7 @@
       "jim.application": {
         "type": "Project",
         "dependencies": {
-          "DynamicExpresso.Core": "[2.19.3, )",
+          "DynamicExpresso.Core": "[2.19.5, )",
           "JIM.Connectors": "[0.14.0, )",
           "JIM.Data": "[0.14.0, )",
           "JIM.Models": "[0.14.0, )",
@@ -970,7 +970,7 @@
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.11, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.11, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.11, )",
-          "Microsoft.OpenApi": "[2.12.0, )",
+          "Microsoft.OpenApi": "[2.12.2, )",
           "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": "[1.23.0, )",
           "MudBlazor": "[9.8.0, )",
           "Scalar.AspNetCore": "[2.17.1, )",
