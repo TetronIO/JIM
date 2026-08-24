@@ -48,7 +48,7 @@
       "version": "20"
     },
     // GitHub CLI
-    "ghcr.io/devcontainers/features/github-cli:1.1.0": {
+    "ghcr.io/devcontainers/features/github-cli:1.1.1": {
       "version": "latest"
     }
     // PowerShell is NOT a Feature. The base image already bundles PowerShell
