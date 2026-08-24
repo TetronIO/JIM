@@ -161,7 +161,7 @@ phase, bUnit coverage of every projection rule, runtime verification on live Sce
 |------|------------|
 | Subdued cards fail WCAG AA (opacity dimming fails contrast by construction) | Dim via colour tokens, not opacity; per-theme contrast check is an acceptance criterion |
 | A chain shape the spine cannot place (unexpected edge type / missing snapshot) | Builder places unassignable hops on a neutral trailing column rather than dropping them; a test pins that nothing in the chain is ever silently omitted |
-| Wide stories (many systems) become unreadable | Horizontal scroll inside the canvas (decided in the PRD); revisit a "+n more" collapse only on real data |
+| Wide stories (many systems) become unreadable | Horizontal scroll inside the canvas (decided in the PRD); revisit a "+n more" collapse only on real data. **Revisited and resolved:** real data showed a two-system story already truncating record names and a three-system one overflowing 1,090px of panel width, so records on the same side of the Identity now share a column and a story is at most four columns wide. Neither a column cap nor a wrap was needed; the axis was the problem, since sibling records sit at the same hop and the builder returns no relationship between them. |
 | Losing behaviour users rely on from Flow/Graph (attribute drawer, event selection) | The drawer and selection model are panel-level and carried over; bUnit tests assert parity before retirement |
 | Stored view preferences point at retired views | The panel's existing unknown-view fallback; pinned by test |
 | Timeline and spine drift in vocabulary | Both read `OutcomeDisplayMap` and `CausalityCauseWording`; the decision captions land in the shared map |
