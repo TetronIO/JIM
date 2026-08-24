@@ -12,14 +12,14 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Tests for <see cref="CausalitySpineModelBuilder"/>: the projection of a Run Profile Execution
-/// Item's causality model and causal chain onto the object spine's columns (#1495). Covers column
+/// Tests for <see cref="CausalityLineageModelBuilder"/>: the projection of a Run Profile Execution
+/// Item's causality model and causal chain onto the object lineage's columns (#1495). Covers column
 /// derivation and order per item type, lit-column selection, chain-hop assignment (including the
 /// derived source-import hop and the deprovision chain built from snapshots), cohort collapse, the
 /// three endings, join labels and role heads.
 /// </summary>
 [TestFixture]
-public class CausalitySpineModelBuilderTests
+public class CausalityLineageModelBuilderTests
 {
     private static readonly Guid SyncItemId = Guid.Parse("55555555-5555-5555-5555-555555555555");
     private static readonly Guid ImportItemId = Guid.Parse("66666666-6666-6666-6666-666666666666");
@@ -35,20 +35,20 @@ public class CausalitySpineModelBuilderTests
             parent: null, ordinal: 0);
         var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain: null, ObjectChangeType.Added);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Added);
 
-        Assert.That(spine.Columns, Has.Count.EqualTo(1));
-        var column = spine.Columns[0];
+        Assert.That(lineage.Columns, Has.Count.EqualTo(1));
+        var column = lineage.Columns[0];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(column.Kind, Is.EqualTo(CausalitySpineColumnKind.Record));
+            Assert.That(column.Kind, Is.EqualTo(CausalityLineageColumnKind.Record));
             Assert.That(column.Title, Is.EqualTo("Liam Allen"));
             Assert.That(column.SystemName, Is.EqualTo("Yellowstone APAC"));
             Assert.That(column.ObjectTypeName, Is.EqualTo("person"));
             Assert.That(column.IsLit, Is.True);
             Assert.That(column.Cards, Has.Count.EqualTo(1));
             Assert.That(column.Cards[0].IsThisRun, Is.True);
-            Assert.That(spine.Joins, Is.Empty);
+            Assert.That(lineage.Joins, Is.Empty);
         }
     }
 
@@ -58,19 +58,19 @@ public class CausalitySpineModelBuilderTests
         var item = CausalityTestData.NewJoinerItem();
         var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
 
-        Assert.That(spine.Columns, Has.Count.EqualTo(3));
-        var source = spine.Columns[0];
-        var identity = spine.Columns[1];
-        var target = spine.Columns[2];
+        Assert.That(lineage.Columns, Has.Count.EqualTo(3));
+        var source = lineage.Columns[0];
+        var identity = lineage.Columns[1];
+        var target = lineage.Columns[2];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(source.Kind, Is.EqualTo(CausalitySpineColumnKind.Record));
+            Assert.That(source.Kind, Is.EqualTo(CausalityLineageColumnKind.Record));
             Assert.That(source.SystemName, Is.EqualTo("Yellowstone APAC"));
             Assert.That(source.IsLit, Is.False, "the sync run's events happen to the Identity and the target, not the source record");
 
-            Assert.That(identity.Kind, Is.EqualTo(CausalitySpineColumnKind.Identity));
+            Assert.That(identity.Kind, Is.EqualTo(CausalityLineageColumnKind.Identity));
             Assert.That(identity.Title, Is.EqualTo("Liam Allen"));
             Assert.That(identity.ObjectTypeName, Is.EqualTo("Person"));
             Assert.That(identity.IsLit, Is.True);
@@ -80,7 +80,7 @@ public class CausalitySpineModelBuilderTests
                 ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
             }));
 
-            Assert.That(target.Kind, Is.EqualTo(CausalitySpineColumnKind.Record));
+            Assert.That(target.Kind, Is.EqualTo(CausalityLineageColumnKind.Record));
             Assert.That(target.SystemName, Is.EqualTo("Glitterband EMEA"));
             Assert.That(target.Title, Is.EqualTo("Liam Allen"));
             Assert.That(target.IsLit, Is.True);
@@ -90,7 +90,7 @@ public class CausalitySpineModelBuilderTests
                 ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
             }));
 
-            Assert.That(spine.Joins.Select(j => j.Label), Is.EqualTo(new[] { "projected", "provisioned" }));
+            Assert.That(lineage.Joins.Select(j => j.Label), Is.EqualTo(new[] { "projected", "provisioned" }));
         }
     }
 
@@ -119,16 +119,16 @@ public class CausalitySpineModelBuilderTests
                             occurred: CausalityTestData.ChainBaseTime)))));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
 
-        Assert.That(spine.Columns, Has.Count.EqualTo(3));
-        var source = spine.Columns[0];
-        var identity = spine.Columns[1];
-        var target = spine.Columns[2];
+        Assert.That(lineage.Columns, Has.Count.EqualTo(3));
+        var source = lineage.Columns[0];
+        var identity = lineage.Columns[1];
+        var target = lineage.Columns[2];
         using (Assert.EnterMultipleScope())
         {
             // The source record column comes from the derived source-import hop's snapshot.
-            Assert.That(source.Kind, Is.EqualTo(CausalitySpineColumnKind.Record));
+            Assert.That(source.Kind, Is.EqualTo(CausalityLineageColumnKind.Record));
             Assert.That(source.SystemName, Is.EqualTo("Yellowstone APAC"));
             Assert.That(source.Title, Is.EqualTo("Liam Allen"));
             Assert.That(source.IsLit, Is.False);
@@ -141,12 +141,12 @@ public class CausalitySpineModelBuilderTests
 
             // The Identity column exists because the graph never joins two records directly, even
             // though no loaded event happened to it on a create export.
-            Assert.That(identity.Kind, Is.EqualTo(CausalitySpineColumnKind.Identity));
+            Assert.That(identity.Kind, Is.EqualTo(CausalityLineageColumnKind.Identity));
             Assert.That(identity.Title, Is.EqualTo("Liam Allen"));
             Assert.That(identity.Cards, Is.Empty);
 
             // The provisioning decision lands on the record it created; this run's export follows it.
-            Assert.That(target.Kind, Is.EqualTo(CausalitySpineColumnKind.Record));
+            Assert.That(target.Kind, Is.EqualTo(CausalityLineageColumnKind.Record));
             Assert.That(target.SystemName, Is.EqualTo("Glitterband EMEA"));
             Assert.That(target.IsLit, Is.True);
             Assert.That(target.Cards, Has.Count.EqualTo(2));
@@ -155,8 +155,8 @@ public class CausalitySpineModelBuilderTests
             Assert.That(target.Cards[0].Hop!.ActivityItemHref, Is.EqualTo($"/activity/item/{SyncItemId}"));
             Assert.That(target.Cards[1].IsThisRun, Is.True);
 
-            Assert.That(spine.Joins.Select(j => j.Label), Is.EqualTo(new[] { "imported", "provisioned" }));
-            Assert.That(spine.IsTruncatedByDepth, Is.False);
+            Assert.That(lineage.Joins.Select(j => j.Label), Is.EqualTo(new[] { "imported", "provisioned" }));
+            Assert.That(lineage.IsTruncatedByDepth, Is.False);
         }
     }
 
@@ -175,19 +175,19 @@ public class CausalitySpineModelBuilderTests
                     CausalChainResolution.CauseNotRetained)));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
 
-        Assert.That(spine.Columns, Has.Count.EqualTo(2));
-        var identity = spine.Columns[0];
-        var target = spine.Columns[1];
+        Assert.That(lineage.Columns, Has.Count.EqualTo(2));
+        var identity = lineage.Columns[0];
+        var target = lineage.Columns[1];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(identity.Kind, Is.EqualTo(CausalitySpineColumnKind.Identity));
+            Assert.That(identity.Kind, Is.EqualTo(CausalityLineageColumnKind.Identity));
             Assert.That(identity.Cards, Has.Count.EqualTo(1), "the Identity's change is what caused an update export");
             Assert.That(identity.Endings.Select(e => e.Resolution),
                 Is.EqualTo(new[] { CausalChainResolution.CauseNotRetained }));
             Assert.That(target.IsLit, Is.True);
-            Assert.That(spine.Joins.Select(j => j.Label), Is.EqualTo(new[] { "exported" }));
+            Assert.That(lineage.Joins.Select(j => j.Label), Is.EqualTo(new[] { "exported" }));
         }
     }
 
@@ -206,15 +206,15 @@ public class CausalitySpineModelBuilderTests
                     CausalChainResolution.CauseNotRetained)));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Deprovisioned);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Deprovisioned);
 
-        Assert.That(spine.Columns, Has.Count.EqualTo(2));
-        var identity = spine.Columns[0];
-        var target = spine.Columns[1];
+        Assert.That(lineage.Columns, Has.Count.EqualTo(2));
+        var identity = lineage.Columns[0];
+        var target = lineage.Columns[1];
         using (Assert.EnterMultipleScope())
         {
             // The deleted Identity's column is built entirely from the edge's snapshots.
-            Assert.That(identity.Kind, Is.EqualTo(CausalitySpineColumnKind.Identity));
+            Assert.That(identity.Kind, Is.EqualTo(CausalityLineageColumnKind.Identity));
             Assert.That(identity.Title, Is.EqualTo("Erin Byrne"));
             Assert.That(identity.Cards, Has.Count.EqualTo(1));
             Assert.That(identity.Cards[0].Hop!.SentenceParts.Select(p => p.Text).First(),
@@ -252,13 +252,13 @@ public class CausalitySpineModelBuilderTests
                         members: deletedUsers))));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
 
-        var identity = spine.Columns.Single(c => c.Kind == CausalitySpineColumnKind.Identity);
+        var identity = lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity);
         using (Assert.EnterMultipleScope())
         {
             // One card per cohort, never one column or card per member.
-            Assert.That(spine.Columns, Has.Count.EqualTo(2));
+            Assert.That(lineage.Columns, Has.Count.EqualTo(2));
             Assert.That(identity.Cards, Has.Count.EqualTo(2));
             var cohortCard = identity.Cards.Single(c => c.Hop?.Cohort.MemberCount == 10);
             Assert.That(cohortCard.Hop!.Members, Has.Count.EqualTo(10));
@@ -298,9 +298,9 @@ public class CausalitySpineModelBuilderTests
                 ]));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
 
-        var identity = spine.Columns.Single(c => c.Kind == CausalitySpineColumnKind.Identity);
+        var identity = lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(identity.Title, Is.EqualTo("Users"));
@@ -329,14 +329,14 @@ public class CausalitySpineModelBuilderTests
                             CausalChainResolution.DepthLimitReached)))));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
 
-        var source = spine.Columns.First(c => c.Kind == CausalitySpineColumnKind.Record && c.SystemName == "Yellowstone APAC");
+        var source = lineage.Columns.First(c => c.Kind == CausalityLineageColumnKind.Record && c.SystemName == "Yellowstone APAC");
         using (Assert.EnterMultipleScope())
         {
             Assert.That(source.Endings.Single().Resolution, Is.EqualTo(CausalChainResolution.DepthLimitReached));
             Assert.That(source.Endings.Single().Text, Is.EqualTo("More causes exist beyond this point"));
-            Assert.That(spine.IsTruncatedByDepth, Is.True);
+            Assert.That(lineage.IsTruncatedByDepth, Is.True);
         }
     }
 
@@ -353,16 +353,16 @@ public class CausalitySpineModelBuilderTests
                     CausalChainResolution.NoFurtherCauses)));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
 
-        var trailing = spine.Columns[^1];
+        var trailing = lineage.Columns[^1];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(trailing.Kind, Is.EqualTo(CausalitySpineColumnKind.Unassigned));
+            Assert.That(trailing.Kind, Is.EqualTo(CausalityLineageColumnKind.Unassigned));
             Assert.That(trailing.Cards, Has.Count.EqualTo(1));
-            var chainCardCount = spine.Columns.Sum(c => c.Cards.Count(card => !card.IsThisRun));
+            var chainCardCount = lineage.Columns.Sum(c => c.Cards.Count(card => !card.IsThisRun));
             Assert.That(chainCardCount, Is.EqualTo(1), "nothing in the chain is ever silently omitted");
-            Assert.That(spine.Joins[^1].Label, Is.Null);
+            Assert.That(lineage.Joins[^1].Label, Is.Null);
         }
     }
 
@@ -382,13 +382,13 @@ public class CausalitySpineModelBuilderTests
                     CausalChainResolution.NoFurtherCauses)));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext(), chain: chain);
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.PendingExportConfirmed);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.PendingExportConfirmed);
 
-        Assert.That(spine.Columns, Has.Count.EqualTo(1));
-        var record = spine.Columns[0];
+        Assert.That(lineage.Columns, Has.Count.EqualTo(1));
+        var record = lineage.Columns[0];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(record.Kind, Is.EqualTo(CausalitySpineColumnKind.Record));
+            Assert.That(record.Kind, Is.EqualTo(CausalityLineageColumnKind.Record));
             Assert.That(record.Cards, Has.Count.EqualTo(2));
             Assert.That(record.Cards[0].Hop!.RunKind, Is.EqualTo("Export run"));
             Assert.That(record.Cards[1].IsThisRun, Is.True);
@@ -410,9 +410,9 @@ public class CausalitySpineModelBuilderTests
                     CausalChainResolution.NoFurtherCauses)));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
 
-        var hop = spine.Columns.SelectMany(c => c.Cards).Single(c => !c.IsThisRun).Hop!;
+        var hop = lineage.Columns.SelectMany(c => c.Cards).Single(c => !c.IsThisRun).Hop!;
         Assert.That(hop.ActivityItemHref, Is.Null, "a link back to the page being read is noise");
     }
 
@@ -436,9 +436,9 @@ public class CausalitySpineModelBuilderTests
                             CausalChainResolution.CauseNotRetained)))));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
 
-        var identity = spine.Columns.Single(c => c.Kind == CausalitySpineColumnKind.Identity);
+        var identity = lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity);
         var removalHop = identity.Cards.Single(c => c.Hop?.Cohort.AttributeName == "Static Members").Hop!;
         var sentence = string.Concat(removalHop.SentenceParts.Select(p => p.Text));
         Assert.That(sentence, Does.Contain("Project Diamond"),
@@ -453,13 +453,13 @@ public class CausalitySpineModelBuilderTests
         var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
         var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
 
-        var spine = CausalitySpineModelBuilder.Build(model, chain: null, ObjectChangeType.NotSet);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.NotSet);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(spine.Columns, Has.Count.EqualTo(1));
-            Assert.That(spine.Columns[0].Kind, Is.EqualTo(CausalitySpineColumnKind.Record));
-            Assert.That(spine.Columns[0].IsLit, Is.False);
+            Assert.That(lineage.Columns, Has.Count.EqualTo(1));
+            Assert.That(lineage.Columns[0].Kind, Is.EqualTo(CausalityLineageColumnKind.Record));
+            Assert.That(lineage.Columns[0].IsLit, Is.False);
         }
     }
 

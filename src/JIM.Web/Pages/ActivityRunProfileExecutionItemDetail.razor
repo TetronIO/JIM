@@ -167,28 +167,17 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
                             @if (_externalIdAttributeValue != null)
                             {
-                                <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))"
-                                         Underline="Underline.None" Class="jim-chip-link">
-                                    <MudChip T="string" Color="Color.Default">
-                                        <AvatarContent>
-                                            <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                        </AvatarContent>
-                                        <ChildContent>
-                                            <b class="jim-cs-chip-prefix">@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name:</b>&nbsp;@_externalIdAttributeValue.ToStringNoName()
-                                        </ChildContent>
-                                    </MudChip>
-                                </MudLink>
+                                <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                            TypeName="@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name"
+                                            Name="@_externalIdAttributeValue.ToStringNoName()"
+                                            Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))" />
                             }
                             else
                             {
-                                <MudChip T="string" Color="Color.Default">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent>
-                                        <b class="jim-cs-chip-prefix">@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</b>
-                                    </ChildContent>
-                                </MudChip>
+                                @* No external ID to identify the record by yet, so the chip carries the type alone
+                                   and the link stands beside it rather than wrapping it. *@
+                                <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                            TypeName="@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name" />
                                 <MudLink
                                     Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
                                     View Object

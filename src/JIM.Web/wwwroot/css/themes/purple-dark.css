@@ -18,7 +18,10 @@ html[lang] {
     --mud-palette-primary-rgb: 0,180,255;
     --mud-palette-primary-darken: #009ce0;
     --mud-palette-primary-lighten: #40c6ff;
-    --mud-palette-primary-text: #ffffffff;
+    /* Dark, not white: this primary is a bright cyan, and white on it measures 2.34:1, well below the
+       4.5:1 AA floor for the button labels, filled chips and hovered chip links that use this pairing.
+       The same reasoning already governs this theme's secondary and tertiary below. */
+    --mud-palette-primary-text: #000000dd;
 
     /* === Secondary Palette === */
     --mud-palette-secondary: #FFB347;
@@ -37,7 +40,8 @@ html[lang] {
     /* === Semantic Colours (brighter shades for dark backgrounds) === */
     --mud-palette-success: #4caf50;
     --mud-palette-success-rgb: 76,175,80;
-    --mud-palette-success-text: #ffffffff;
+    /* Dark, not white: white on this green measures 2.78:1, below the 4.5:1 AA floor. */
+    --mud-palette-success-text: #000000dd;
     --mud-palette-warning: #ffb74d;
     --mud-palette-warning-rgb: 255,183,77;
     --mud-palette-warning-text: #000000dd;

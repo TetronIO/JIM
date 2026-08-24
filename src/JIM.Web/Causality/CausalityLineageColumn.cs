@@ -4,16 +4,16 @@
 namespace JIM.Web.Causality;
 
 /// <summary>
-/// One object in the spine's story (#1495): a record in a Connected System, or the Identity. The
+/// One object in the lineage's story (#1495): a record in a Connected System, or the Identity. The
 /// column is the object, never the system; a record column names its Connected System beneath its
 /// head rather than being headed by it.
 /// </summary>
-public sealed class CausalitySpineColumn
+public sealed class CausalityLineageColumn
 {
     /// <summary>
     /// What kind of object this column stands for.
     /// </summary>
-    public CausalitySpineColumnKind Kind { get; init; }
+    public CausalityLineageColumnKind Kind { get; init; }
 
     /// <summary>
     /// The column's head: the object's name where the story has a single object here, or its role
@@ -56,13 +56,13 @@ public sealed class CausalitySpineColumn
     /// The events that happened to this object, oldest first: chain cards in time order, then this
     /// run's cards in outcome order (this run is always the newest thing in the story).
     /// </summary>
-    public IReadOnlyList<CausalitySpineCard> Cards { get; init; } = [];
+    public IReadOnlyList<CausalityLineageCard> Cards { get; init; } = [];
 
     /// <summary>
     /// The chain endings that close under this column, one per distinct resolution: the walk's
     /// terminal states rendered as quiet footers, never warnings.
     /// </summary>
-    public IReadOnlyList<CausalitySpineEnding> Endings { get; init; } = [];
+    public IReadOnlyList<CausalityLineageEnding> Endings { get; init; } = [];
 
     /// <summary>
     /// Whether any of this run's own events landed on this column: the lit column is what the item

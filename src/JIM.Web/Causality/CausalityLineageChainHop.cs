@@ -6,13 +6,13 @@ using JIM.Models.Activities.DTOs;
 namespace JIM.Web.Causality;
 
 /// <summary>
-/// A chain cohort prepared for rendering as a spine card (#1495): the snapshotted sentence and
+/// A chain cohort prepared for rendering as a lineage card (#1495): the snapshotted sentence and
 /// attribution from <see cref="CausalityCauseWording"/>, the derived run kind, the link to the item
 /// that recorded the cause, and the cohort's members for in-place expansion. Everything here is
 /// precomputed so the builder stays the single owner of the projection rules and the view renders
 /// without deriving anything.
 /// </summary>
-public sealed class CausalitySpineChainHop
+public sealed class CausalityLineageChainHop
 {
     /// <summary>
     /// The cohort this card speaks for, kept for its counts, nouns and disclosure labels.
@@ -58,5 +58,5 @@ public sealed class CausalitySpineChainHop
     /// The individual causes, for in-place expansion of a plural cohort. Empty for a sole-cause
     /// cohort, which is already named in its sentence.
     /// </summary>
-    public IReadOnlyList<CausalitySpineChainHopMember> Members { get; init; } = [];
+    public IReadOnlyList<CausalityLineageChainHopMember> Members { get; init; } = [];
 }

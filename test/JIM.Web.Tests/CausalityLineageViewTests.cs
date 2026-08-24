@@ -4,6 +4,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using AngleSharp.Dom;
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -15,14 +16,14 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// bUnit tests for <see cref="CausalitySpineView"/> (#1495): column heads carrying the R/ID chip
+/// bUnit tests for <see cref="CausalityLineageView"/> (#1495): column heads carrying the R/ID chip
 /// vocabulary with the system named beneath, this-run cards rendered primary (ring and badge) around
 /// the shared event card, chain cards rendered subdued with their run kind, timestamp and activity
 /// link, cohort expansion in place, endings as quiet footers, the technical-names cascade and the
 /// selection callback for the shared attribute drawer.
 /// </summary>
 [TestFixture]
-public class CausalitySpineViewTests
+public class CausalityLineageViewTests
 {
     private static readonly Guid SyncItemId = Guid.Parse("55555555-5555-5555-5555-555555555555");
     private static readonly Guid ImportItemId = Guid.Parse("66666666-6666-6666-6666-666666666666");
@@ -46,7 +47,7 @@ public class CausalitySpineViewTests
     /// The create-export story: source record (chain import hop and an ending), Identity (empty,
     /// completing the graph), target record (queueing hop plus this run's export).
     /// </summary>
-    private static CausalitySpineModel ExportCreateSpine(bool truncated = false)
+    private static CausalityLineageModel ExportCreateLineage(bool truncated = false)
     {
         var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
         CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
@@ -67,13 +68,13 @@ public class CausalitySpineViewTests
                             CausalChainResolution.NoFurtherCauses,
                             occurred: CausalityTestData.ChainBaseTime)))));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
-        return CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        return CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
     }
 
     /// <summary>
     /// The cohort story: a group's update export caused by ten deleted Users.
     /// </summary>
-    private static CausalitySpineModel CohortSpine()
+    private static CausalityLineageModel CohortLineage()
     {
         var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
         CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
@@ -96,27 +97,29 @@ public class CausalitySpineViewTests
                         attributeName: "Static Members",
                         members: deletedUsers))));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
-        return CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        return CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
     }
 
     /// <summary>
     /// The sync new-joiner story, whose staged export card carries attribute rows and is therefore
     /// clickable for the drawer.
     /// </summary>
-    private static CausalitySpineModel NewJoinerSpine()
+    private static CausalityLineageModel NewJoinerLineage()
     {
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-        return CausalitySpineModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+        return CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
     }
 
-    private IRenderedComponent<CausalitySpineView> RenderSpine(
-        CausalitySpineModel model, bool technicalNames = false,
-        Action<CausalityEvent?>? onSelectionChanged = null)
+    private IRenderedComponent<CausalityLineageView> RenderLineage(
+        CausalityLineageModel model, bool technicalNames = false,
+        Action<CausalityEvent?>? onSelectionChanged = null,
+        DateTime? timestamp = null)
     {
-        return _context.Render<CausalitySpineView>(ps =>
+        return _context.Render<CausalityLineageView>(ps =>
         {
             ps.Add(c => c.Model, model);
             ps.Add(c => c.TechnicalNames, technicalNames);
+            ps.Add(c => c.Timestamp, timestamp);
             if (onSelectionChanged != null)
                 ps.Add(c => c.SelectedEventChanged, onSelectionChanged);
         });
@@ -125,9 +128,9 @@ public class CausalitySpineViewTests
     [Test]
     public void Render_ExportCreateStory_HeadsColumnsWithRecordAndIdentityChips()
     {
-        var cut = RenderSpine(ExportCreateSpine());
+        var cut = RenderLineage(ExportCreateLineage());
 
-        var heads = cut.FindAll(".sp-obj");
+        var heads = cut.FindAll(".ln-obj");
         using (Assert.EnterMultipleScope())
         {
             Assert.That(heads, Has.Count.EqualTo(3));
@@ -145,80 +148,131 @@ public class CausalitySpineViewTests
     [Test]
     public void Render_ThisRunCard_IsPrimaryWithBadgeAroundTheSharedEventCard()
     {
-        var cut = RenderSpine(ExportCreateSpine());
+        var cut = RenderLineage(ExportCreateLineage());
 
-        var thisRun = cut.Find(".sp-now");
+        var thisRun = cut.Find(".ln-now");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(thisRun.QuerySelector(".sp-now-badge")!.TextContent.Trim(), Is.EqualTo("This run"));
+            Assert.That(thisRun.QuerySelector(".ln-now-badge")!.TextContent.Trim(), Is.EqualTo("This run"));
             Assert.That(thisRun.QuerySelector(".evt-card"), Is.Not.Null,
                 "this-run cards reuse the shared event card so tones, links and the drawer keep working");
             Assert.That(cut.FindComponents<CausalityEventCard>(), Has.Count.EqualTo(1));
         }
     }
 
+    /// <summary>
+    /// This run's cards say when they happened too. Leaving them bare while every chain card carried a time
+    /// made the panel look as though it recorded a time for some events and not others, when in truth the run's
+    /// time was simply somewhere else (the summary band, at the top left of a left-to-right story).
+    /// </summary>
+    [Test]
+    public void Render_ThisRunCard_CarriesTheRunsTimeBesideItsBadge()
+    {
+        var executed = new DateTime(2026, 8, 1, 9, 30, 0, DateTimeKind.Utc);
+
+        var cut = RenderLineage(ExportCreateLineage(), timestamp: executed);
+
+        var time = cut.Find(".ln-now .ln-time");
+        AssertRelativeTimeWithFullDateTooltip(time, executed);
+    }
+
+    /// <summary>
+    /// A run this panel does not know the time of renders no time at all, rather than the epoch.
+    /// </summary>
+    [Test]
+    public void Render_ThisRunCard_WithNoTimestamp_RendersNoTime()
+    {
+        var cut = RenderLineage(ExportCreateLineage());
+
+        Assert.That(cut.FindAll(".ln-now .ln-time"), Is.Empty);
+    }
+
     [Test]
     public void Render_ChainCard_IsSubduedWithRunKindTimestampAndActivityLink()
     {
-        var cut = RenderSpine(ExportCreateSpine());
+        var cut = RenderLineage(ExportCreateLineage());
 
-        var chainCards = cut.FindAll(".sp-card");
+        var chainCards = cut.FindAll(".ln-card");
         using (Assert.EnterMultipleScope())
         {
             Assert.That(chainCards, Has.Count.EqualTo(2));
             var importCard = chainCards.Single(c => c.TextContent.Contains("Import run"));
             Assert.That(importCard.QuerySelector($"a[href='/activity/item/{ImportItemId}']"), Is.Not.Null);
-            Assert.That(importCard.TextContent, Does.Contain("2026"), "the card carries its timestamp");
+            Assert.That(importCard.QuerySelector(".ln-time"), Is.Not.Null, "the card carries its timestamp");
             var syncCard = chainCards.Single(c => c.TextContent.Contains("Synchronisation run"));
             Assert.That(syncCard.TextContent, Does.Contain("provisioned"));
+        }
+    }
+
+    /// <summary>
+    /// One treatment for every time on the panel: relative in the text, the full value on hover, matching the
+    /// summary band above. The chain cards used to print the absolute date instead, so the same kind of fact
+    /// was written two ways on one screen.
+    /// </summary>
+    [Test]
+    public void Render_ChainCard_ShowsRelativeTimeWithTheFullDateInItsTooltip()
+    {
+        var cut = RenderLineage(ExportCreateLineage());
+
+        var importCard = cut.FindAll(".ln-card").Single(c => c.TextContent.Contains("Import run"));
+        AssertRelativeTimeWithFullDateTooltip(importCard.QuerySelector(".ln-time")!, CausalityTestData.ChainBaseTime);
+    }
+
+    private static void AssertRelativeTimeWithFullDateTooltip(IElement time, DateTime utc)
+    {
+        var local = utc.ToLocalTime();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(time.TextContent.Trim(), Is.EqualTo(local.ToRelativeTime()));
+            Assert.That(time.GetAttribute("title"), Is.EqualTo(local.ToFriendlyDate()));
         }
     }
 
     [Test]
     public void Render_PluralCohort_CollapsesToOneCardAndExpandsInPlace()
     {
-        var cut = RenderSpine(CohortSpine());
+        var cut = RenderLineage(CohortLineage());
 
-        var toggle = cut.Find(".sp-members-toggle");
+        var toggle = cut.Find(".ln-members-toggle");
         Assert.That(toggle.TextContent.Trim(), Is.EqualTo("Show the 10 Users"));
-        Assert.That(cut.FindAll(".sp-member"), Is.Empty);
+        Assert.That(cut.FindAll(".ln-member"), Is.Empty);
 
         toggle.Click();
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.FindAll(".sp-member"), Has.Count.EqualTo(10));
-            Assert.That(cut.Find(".sp-members-toggle").TextContent.Trim(), Is.EqualTo("Hide the 10 Users"));
-            Assert.That(cut.FindAll(".sp-member").Select(m => m.TextContent), Has.Some.Contains("User 3"));
+            Assert.That(cut.FindAll(".ln-member"), Has.Count.EqualTo(10));
+            Assert.That(cut.Find(".ln-members-toggle").TextContent.Trim(), Is.EqualTo("Hide the 10 Users"));
+            Assert.That(cut.FindAll(".ln-member").Select(m => m.TextContent), Has.Some.Contains("User 3"));
         }
     }
 
     [Test]
     public void Render_ChainEnding_RendersAsAQuietColumnFooter()
     {
-        var cut = RenderSpine(ExportCreateSpine());
+        var cut = RenderLineage(ExportCreateLineage());
 
-        var endings = cut.FindAll(".sp-end");
+        var endings = cut.FindAll(".ln-end");
         using (Assert.EnterMultipleScope())
         {
             Assert.That(endings, Has.Count.EqualTo(1));
-            Assert.That(endings[0].TextContent.Trim(), Is.EqualTo("End of the recorded causality chain"));
+            Assert.That(endings[0].TextContent.Trim(), Is.EqualTo("No earlier causes recorded"));
         }
     }
 
     [Test]
     public void Render_TruncatedChain_SaysSomeBranchesGoFurtherBack()
     {
-        var cut = RenderSpine(ExportCreateSpine(truncated: true));
+        var cut = RenderLineage(ExportCreateLineage(truncated: true));
 
-        Assert.That(cut.Find(".sp-truncated").TextContent,
+        Assert.That(cut.Find(".ln-truncated").TextContent,
             Does.Contain("Some branches go further back than shown"));
     }
 
     [Test]
     public void Render_TechnicalNames_FlowThroughToTheEventCards()
     {
-        var cut = RenderSpine(NewJoinerSpine(), technicalNames: true);
+        var cut = RenderLineage(NewJoinerLineage(), technicalNames: true);
 
         Assert.That(cut.FindComponents<CausalityEventCard>(),
             Has.All.Matches<IRenderedComponent<CausalityEventCard>>(card => card.Instance.TechnicalNames));
@@ -228,7 +282,7 @@ public class CausalitySpineViewTests
     public void Render_ClickingAClickableEventCard_RaisesSelectionChanged()
     {
         CausalityEvent? selected = null;
-        var cut = RenderSpine(NewJoinerSpine(), onSelectionChanged: e => selected = e);
+        var cut = RenderLineage(NewJoinerLineage(), onSelectionChanged: e => selected = e);
 
         cut.Find(".evt-card.clickable").Click();
 
@@ -240,9 +294,9 @@ public class CausalitySpineViewTests
     [Test]
     public void Render_JoinLabels_RenderBetweenColumns()
     {
-        var cut = RenderSpine(ExportCreateSpine());
+        var cut = RenderLineage(ExportCreateLineage());
 
-        Assert.That(cut.FindAll(".sp-join-label").Select(l => l.TextContent.Trim()),
+        Assert.That(cut.FindAll(".ln-join-label").Select(l => l.TextContent.Trim()),
             Is.EqualTo(new[] { "imported", "provisioned" }));
     }
 
@@ -258,17 +312,17 @@ public class CausalitySpineViewTests
                 members: CausalityTestData.Member("Mystery cause", Guid.NewGuid(),
                     CausalChainResolution.NoFurtherCauses)));
         var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
-        var spine = CausalitySpineModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
 
-        var cut = RenderSpine(spine);
+        var cut = RenderLineage(lineage);
 
         // The record column and the trailing unassigned column are adjacent but unrelated: an arrow
         // between them would claim a relationship the model does not state.
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.FindAll(".sp-join"), Has.Count.EqualTo(1));
-            Assert.That(cut.FindAll(".sp-join-arrow"), Is.Empty);
-            Assert.That(cut.FindAll(".sp-join-label"), Is.Empty);
+            Assert.That(cut.FindAll(".ln-join"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll(".ln-join-arrow"), Is.Empty);
+            Assert.That(cut.FindAll(".ln-join-label"), Is.Empty);
         }
     }
 }

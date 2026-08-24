@@ -46,12 +46,12 @@ The Overview tab opens with a causality panel that answers "what happened to thi
 
 Below the summary, the story can be explored in two switchable views; the view you choose is remembered for your next visit:
 
-- **Spine**<br /> The default: the object graph itself, as columns. Each record involved is a column with its Connected System named beneath it, the Identity is a column of its own, and the columns are joined by the relationships between them (imported, projected, joined, provisioned, exported), reading source to Identity to target. Every causally relevant event is a card on the column of the object it happened to: this run's own events stand out with an accent ring and a **This run** marker, while events from earlier runs render subdued beneath them, each carrying the kind of run that recorded it, its timestamp and a link to that run's own execution item. One canvas answers "what happened and why".
+- **Lineage**<br /> The default: the object graph itself, as columns. Each record involved is a column with its Connected System named beneath it, the Identity is a column of its own, and the columns are joined by the relationships between them (imported, projected, joined, provisioned, exported), reading source to Identity to target. Every causally relevant event is a card on the column of the object it happened to: this run's own events stand out with an accent ring and a **This run** marker, while events from earlier runs render subdued beneath them, each carrying the kind of run that recorded it and a link to that run's own execution item. Every card says when it happened, relative to now, with the exact date and time on hover. One canvas answers "what happened and why".
 - **Timeline**<br /> A vertical narrative read from top to bottom, with attribute change detail expanding inline beneath each event. Useful when you want the whole story, every attribute included, in one scroll.
 
 The same layout serves every kind of item by lighting a different column: an import lights the source record, a synchronisation lights the Identity (and any target records it staged exports for), and an export lights the target record. Wide stories scroll horizontally within the canvas, and on a narrow screen the columns stack vertically.
 
-Every event is named in plain language first (for example "Identity created") with the technical term alongside ("MVO Projected"); a technical-names toggle swaps the emphasis for practitioners who prefer the underlying vocabulary. Attribute change detail is built for scanning: each change carries a Set, Add or Remove operation badge and a monospace value (with the previous value struck through where one existed), and a search box plus count-annotated filter chips narrow large change sets quickly.
+Every event is named in plain language (for example "Identity created"). A **Technical names** toggle switches the whole panel to the underlying vocabulary instead ("MVO Projected") for practitioners who prefer it; with the toggle off, no CSO or MVO wording appears anywhere in the panel. Attribute change detail is built for scanning: each change carries a Set, Add or Remove operation badge and a monospace value (with the previous value struck through where one existed), and a search box plus count-annotated filter chips narrow large change sets quickly.
 
 Everything mentioned links to its detail page: Connected Systems, Connected System Objects, Identities, Synchronisation Rules and Pending Exports are all one click away. A **Pending Export** outcome links to the individual Pending Export it created, not to the target Connected System's whole queue, which matters on a deprovisioning cascade where that queue can hold thousands of rows. Destructive outcomes keep their story even after the object is gone: when a disconnection triggers a Metaverse Object Deletion Rule, the resulting **MVO Deleted** or **MVO Deletion Scheduled** event shows the deleted Identity's display name (captured before deletion), why the Deletion Rule fired (for example "last connector disconnected"), the grace period for scheduled deletions, and a link to the deletion record browser, so the full story of a deleted Identity survives the deletion itself. **View deletion record** opens that object's own change history directly, rather than the unfiltered browser, and a **CSO Deleted** event offers the same link for the record that was removed.
 
@@ -70,7 +70,7 @@ A Deletion Rule that evaluates and decides *not* to delete records nothing, beca
 
 ### Why it happened
 
-The Spine's subdued cards are the item's causal chain: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it, each cause placed on the column of the object it happened to rather than listed separately.
+The Lineage's subdued cards are the item's causal chain: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it, each cause placed on the column of the object it happened to rather than listed separately.
 
 Each cause is a sentence rather than a diagram, for example "10 Users were deleted, so they were removed from Project Diamond's Static Members", with the relationship the cascade acted through picked out in colour. Objects removed for the same reason, on the same Connected System, through the same Synchronisation Rule read as one card carrying a count instead of as ten near-identical cards; expanding it in place names each of them individually. Two independent causes converging on one effect stay as two, because a hidden second cause is precisely what an administrator needs to see.
 
@@ -80,7 +80,7 @@ Everything a cause says was captured at the moment it happened: the causing obje
 
 The chain always says why it ends, as a quiet footer under the column it closes, because the three reasons mean entirely different things:
 
-- **End of the recorded causality chain**: nothing caused this. It is the whole story.
+- **No earlier causes recorded**: nothing caused this. It is the whole story.
 - **What caused this is no longer retained**: the causing record has aged out of Activity retention. This is expected rather than exceptional on a deployment that has been live longer than one retention window, and is shown calmly rather than as an error; the cause itself is still named, from the wording recorded at the time.
 - **More causes exist beyond this point**: the walk stopped at its depth bound, not at a real end. A chain that hit the bound anywhere says so above the canvas as well.
 

@@ -12,4 +12,4 @@ namespace JIM.Web.Causality;
 /// </summary>
 /// <param name="Resolution">Why the walk stopped here.</param>
 /// <param name="Text">The phrase for it, from <see cref="CausalityCauseWording.Ending"/>.</param>
-public sealed record CausalitySpineEnding(CausalChainResolution Resolution, string Text);
+public sealed record CausalityLineageEnding(CausalChainResolution Resolution, string Text);

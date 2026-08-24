@@ -357,6 +357,31 @@ public class CausalityModelBuilderTests
         Assert.That(deprovision.AttributeRowsCaption, Is.EqualTo("Target identified by"));
     }
 
+    /// <summary>
+    /// The execution-side sibling of the queued case: when the delete Pending Export is carried out, the
+    /// Deprovisioned item's change snapshot still holds only the target's DN. Counted as a change, the page
+    /// reported the deletion as having "Set" one attribute; the rows identify the deleted entry, so they take
+    /// the same caption as the queueing event.
+    /// </summary>
+    [Test]
+    public void Build_DeprovisionedExecutionOutcome_CaptionsItsRowsAsTargetIdentification()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Deprovisioned,
+            ConnectedSystemObjectChange = CausalityTestData.BuildDeprovisionTargetSnapshot()
+        };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned,
+            parent: null, ordinal: 0);
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var deprovisioned = model.Roots
+            .Single(r => r.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
+
+        Assert.That(deprovisioned.AttributeRowsCaption, Is.EqualTo("Target identified by"));
+    }
+
     [Test]
     public void Build_PendingExportCreatedOutcome_HasNoAttributeRowsCaption()
     {

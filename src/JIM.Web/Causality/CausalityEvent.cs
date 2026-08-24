@@ -56,7 +56,7 @@ public sealed class CausalityEvent
     public string Icon { get; init; } = string.Empty;
 
     /// <summary>
-    /// Which side of the story this event belongs to, driving its spine column assignment.
+    /// Which side of the story this event belongs to, driving its lineage column assignment.
     /// </summary>
     public CausalityLane Lane { get; init; }
 
@@ -113,13 +113,16 @@ public sealed class CausalityEvent
     /// What this event's <see cref="AttributeRows"/> are, when they are not attribute changes; null for
     /// every event whose rows genuinely are changes, which then label themselves by count ("3 attributes").
     ///
-    /// A queued deprovision is the one case: its rows are the target's secondary external ID (the DN, for
-    /// LDAP), carried on the delete Pending Export so the connector can still resolve the entry after the
-    /// Connected System Object is disconnected. Counted as changes, a deprovisioning cascade announced
-    /// itself as "1 attribute", which read as an attribute update rather than an account being removed.
+    /// Deprovisioning is the one case, at both of its stages: the delete Pending Export's rows are the
+    /// target's secondary external ID (the DN, for LDAP), carried so the connector can still resolve the
+    /// entry after the Connected System Object is disconnected, and the executed deletion's change snapshot
+    /// holds the same rows. Counted as changes, a deprovision announced itself as "1 attribute" and its
+    /// drawer reported the DN as "Set", which read as an attribute update rather than an account being
+    /// removed.
     /// </summary>
     public string? AttributeRowsCaption =>
-        OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
+        OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned
             ? "Target identified by"
             : null;
 

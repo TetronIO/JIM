@@ -7,11 +7,11 @@
        blocks and cards, plus anything hand-built that joins one of them into a single box. This is
        the only place the figure appears; nothing else should write a container radius as a literal.
        Held as a token because the alternative is what it replaced: a status bar hard-coded to 4px
-       sitting on top of a paper the container rule had already moved to 8px, so the box was rounder
-       at the bottom than at the top, and the two literals were written months apart with nothing
-       tying them together. Deliberately not --mud-default-borderradius, which is smaller because it
-       also drives buttons, inputs and other interactive controls. */
-    --jim-container-radius: 8px;
+       sitting on top of a paper the container rule had already moved to a larger figure, so the box
+       was rounder at the bottom than at the top, and the two literals were written months apart with
+       nothing tying them together. Deliberately not --mud-default-borderradius, which is smaller
+       because it also drives buttons, inputs and other interactive controls. */
+    --jim-container-radius: 10px;
 }
 
 /* App.razor's <FocusOnNavigate Selector="h1" /> (standard Blazor Web App template
@@ -218,7 +218,7 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     font-size: 1rem;
 }
 
-/* Consistent 8px border radius for container elements (papers, tables, alerts, expansion panels).
+/* Consistent border radius for container elements (papers, tables, alerts, expansion panels).
    Applied directly rather than via --mud-default-borderradius to avoid affecting
    buttons, inputs, and other interactive controls that should keep their default radius. */
 .mud-paper,
@@ -546,7 +546,7 @@ html[lang] .mud-paper .mud-tabs-tabbar {
    grey strip behind the content. */
 html[lang] .mud-paper .mud-tabs.mud-paper-outlined .mud-tabs-panels {
     background-color: var(--jim-inner-surface, transparent);
-    border-radius: 0 0 8px 8px;
+    border-radius: 0 0 var(--jim-container-radius) var(--jim-container-radius);
 }
 
 html[lang] .mud-paper .mud-paper {
@@ -570,13 +570,13 @@ html[lang] .mud-paper .mud-card::after {
     border-right-color: var(--jim-inner-surface, var(--mud-palette-surface)) !important;
 }
 
-/* Match the tabs container radius to our 8px standard and clip child content so
+/* Match the tabs container radius to our container standard and clip child content so
    the first/last tab's active highlight doesn't overflow the rounded corners. */
 .mud-tabs-rounded {
     border-radius: var(--jim-container-radius) !important;
 }
 
-/* Ensure the rounded outlined tabbar uses our 8px radius on all corners and clips
+/* Ensure the rounded outlined tabbar uses our container radius on all corners and clips
    child content so tab highlights respect the rounded shape. */
 html[lang] .mud-tabs-tabbar.mud-tabs-rounded.mud-paper-outlined {
     border-radius: var(--jim-container-radius) !important;
@@ -2029,11 +2029,27 @@ html[lang] .jim-schema-change-table td {
     color: var(--mud-palette-primary-text);
 }
 
-/* On hover the chip background becomes primary, so a Color.Primary avatar
-   (e.g. the MV badge) loses contrast. Darken its background to keep the
-   circle distinct from the surrounding chip fill. */
-.jim-chip-link:hover .mud-chip .mud-avatar.mud-avatar-filled-primary {
-    background-color: var(--mud-palette-primary-darken);
+/* On hover the chip fills with the primary colour, so both avatar badges have to respond or they
+   read as a leftover from the resting state: the MV badge is Color.Primary and the CS badge is
+   Color.Secondary, and only the first was ever handled.
+
+   Inverting the chip's own hover pairing is what makes one rule work across all twelve themes: the
+   badge takes the hover text colour as its fill and the hover fill as its letters, so its legibility
+   is exactly the pairing the theme already guarantees for the chip's own label, whether that text
+   colour is light or dark. The two obvious alternatives were measured against every theme's palette
+   and both fail. Darkening the badge (what the MV badge did) leaves it between 1.2:1 and 1.7:1
+   against the fill, so the circle all but disappears. Using --mud-palette-secondary-darken for the CS
+   badge is no better (1.0:1 to 3.7:1) and drops its letters below 4.5:1 in four themes. Anything
+   built on "darker" also breaks outright in the themes whose primary text is dark rather than white
+   (navy-o5-dark), where a darker badge and dark letters converge. */
+.jim-chip-link .mud-chip .mud-avatar {
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.jim-chip-link:hover .mud-chip .mud-avatar.mud-avatar-filled-primary,
+.jim-chip-link:hover .mud-chip .mud-avatar.mud-avatar-filled-secondary {
+    background-color: var(--mud-palette-primary-text);
+    color: var(--mud-palette-primary);
 }
 
 /* Schedule Step Drag and Drop Styles */

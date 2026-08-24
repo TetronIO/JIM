@@ -8,14 +8,14 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The causality visualisation panel for a Run Profile Execution Item. Owns the current view, the
-   technical-names toggle, the Timeline's expanded event and the Spine's selected event (whose
-   attribute detail renders in the shared bottom drawer); builds the causality and spine models and
+   technical-names toggle, the Timeline's expanded event and the Lineage's selected event (whose
+   attribute detail renders in the shared bottom drawer); builds the causality and lineage models and
    the summary once per (Item, Context, Chain) tuple and renders the summary band (whose head row
    carries the view switcher and technical-names toggle in its Actions slot), the active view and
    the drawer. Persisted view and technical-names preferences load on first render per the
-   TableDensityToggle idiom; the Spine is the default, and a stored preference for an unknown or
+   TableDensityToggle idiom; the Lineage is the default, and a stored preference for an unknown or
    retired view (the old Flow and Graph keys included) falls back to it without being overwritten.
-   The causal chain renders on the Spine itself (#1495); the separate Caused by list retired with
+   The causal chain renders on the Lineage itself (#1495); the separate Caused by list retired with
    the Flow and Graph views. *@
 
 <div class="causality-panel">
@@ -55,9 +55,9 @@
         <div class="canvas-wrap">
             @switch (_view)
             {
-                case CausalityView.Spine when _spineModel is { } spineModel:
-                    <CausalitySpineView Model="spineModel" TechnicalNames="_technicalNames"
-                                        @bind-SelectedEvent="_selectedEvent" />
+                case CausalityView.Lineage when _lineageModel is { } lineageModel:
+                    <CausalityLineageView Model="lineageModel" TechnicalNames="_technicalNames"
+                                        Timestamp="Timestamp" @bind-SelectedEvent="_selectedEvent" />
                     break;
                 case CausalityView.Timeline:
                 default:
@@ -67,7 +67,7 @@
             }
         </div>
 
-        @* ─── Bottom drawer: attribute detail for the Spine's selected event ─── *@
+        @* ─── Bottom drawer: attribute detail for the Lineage's selected event ─── *@
         @if (_view != CausalityView.Timeline && _selectedEvent is { } selectedEvent && selectedEvent.AttributeRows.Count > 0)
         {
             <div class="drawer">
@@ -95,7 +95,7 @@
     /// when its view appears here.
     /// </summary>
     private static readonly IReadOnlyList<CausalityView> AvailableViews =
-        [CausalityView.Spine, CausalityView.Timeline];
+        [CausalityView.Lineage, CausalityView.Timeline];
 
     /// <summary>
     /// The Run Profile Execution Item whose causality is visualised.
@@ -130,7 +130,7 @@
     /// The upward causal walk for this item, or null when the host page did not resolve one. Owned by
     /// the page rather than fetched here: the panel is a rendering component with no data access of
     /// its own, and the walk is one query the page already has an application scope open for. Feeds
-    /// the Spine's chain cards and the export decision captions (#1495).
+    /// the Lineage's chain cards and the export decision captions (#1495).
     /// </summary>
     [Parameter]
     public CausalChain? Chain { get; set; }
@@ -152,8 +152,8 @@
 
     private CausalityModel? _model;
     private CausalitySummary? _summary;
-    private CausalitySpineModel? _spineModel;
-    private CausalityView _view = CausalityView.Spine;
+    private CausalityLineageModel? _lineageModel;
+    private CausalityView _view = CausalityView.Lineage;
     private bool _technicalNames;
     private CausalityEvent? _expandedEvent;
     private CausalityEvent? _selectedEvent;
@@ -166,7 +166,7 @@
     {
         // Build once per (Item, Context, Chain) tuple; parent re-renders with unchanged values must
         // not discard the expanded/selected-event state by rebuilding the model. The chain is an
-        // input (#1495): it supplies the export decision captions and the Spine's chain cards, and
+        // input (#1495): it supplies the export decision captions and the Lineage's chain cards, and
         // the page resolves it after the first render, so its arrival must rebuild.
         if (ReferenceEquals(Item, _builtItem) && Equals(Context, _builtContext)
             && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds)
@@ -180,7 +180,7 @@
         _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds,
             DeletionPolicySnapshot, IsSynchronisationRun, Chain);
         _summary = CausalitySummaryBuilder.Build(_model);
-        _spineModel = CausalitySpineModelBuilder.Build(_model, Chain, Item.ObjectChangeType);
+        _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType);
         _expandedEvent = null;
         _selectedEvent = null;
     }
@@ -244,7 +244,7 @@
     {
         return view switch
         {
-            CausalityView.Spine => "Spine",
+            CausalityView.Lineage => "Lineage",
             _ => "Timeline"
         };
     }

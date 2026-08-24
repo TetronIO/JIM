@@ -272,6 +272,13 @@ public class JimDbContext : DbContext
             entity.HasIndex(p => new { p.ActivityId, p.Key }).IsUnique();
         });
 
+        // The causal walk's degraded timeline key (#1495): after a record's deletion nulls
+        // ConnectedSystemObjectId on the items that processed it, the source-import hop is found by the
+        // external ID snapshot within the Activity's Connected System instead, and that lookup must not
+        // scan a table this large.
+        modelBuilder.Entity<ActivityRunProfileExecutionItem>()
+            .HasIndex(rpei => rpei.ExternalIdSnapshot);
+
         // ActivityRunProfileExecutionItemSyncOutcome: cascade delete when parent RPEI is deleted
         modelBuilder.Entity<ActivityRunProfileExecutionItem>()
             .HasMany(rpei => rpei.SyncOutcomes)

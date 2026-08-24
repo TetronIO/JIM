@@ -18,7 +18,7 @@ namespace JIM.Web.Tests;
 
 /// <summary>
 /// bUnit tests for <see cref="CausalityPanel"/>: rendering across the PRD scenarios, the view
-/// switcher (Spine default; Timeline selectable; stored preferences honoured, with legacy Flow and
+/// switcher (Lineage default; Timeline selectable; stored preferences honoured, with legacy Flow and
 /// Graph values falling back silently), the technical-names toggle persisting via a stubbed
 /// <see cref="JIM.Web.Services.IUserPreferenceService"/>, the shared attribute drawer, and the
 /// empty (not-tracked) state.
@@ -61,12 +61,12 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void Render_NewJoinerScenario_RendersSummaryBandAndSpineByDefault()
+    public void Render_NewJoinerScenario_RendersSummaryBandAndLineageByDefault()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.FindAll(".summary-sentence"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".sp-canvas"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".tl"), Is.Empty);
         Assert.That(cut.FindAll(".oc-pill"), Is.Not.Empty);
     }
@@ -98,16 +98,16 @@ public class CausalityPanelTests
         var cut = RenderPanel(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.Markup, Does.Contain("Outcome tracking was not enabled"));
-        Assert.That(cut.FindAll(".sp-canvas"), Is.Empty);
+        Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
     }
 
     [Test]
-    public void Render_ViewSwitcher_OffersSpineAndTimelineWithSpineOn()
+    public void Render_ViewSwitcher_OffersLineageAndTimelineWithLineageOn()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         var buttons = cut.FindAll(".seg button");
-        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Spine", "Timeline" }));
+        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Lineage", "Timeline" }));
         Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
         Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Not.Contain("on"));
     }
@@ -120,7 +120,7 @@ public class CausalityPanelTests
         cut.FindAll(".seg button")[1].Click();
 
         Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".sp-canvas"), Is.Empty);
+        Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
         Assert.That(_preferences.CausalityViewWrites, Is.EqualTo(new[] { "timeline" }));
     }
 
@@ -132,33 +132,35 @@ public class CausalityPanelTests
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".sp-canvas"), Is.Empty);
+        Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
         Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Contain("on"));
     }
 
     [Test]
-    public void Render_PersistedSpinePreference_StartsOnTheSpineWithoutRewritingIt()
+    public void Render_PersistedLineagePreference_StartsOnTheLineageWithoutRewritingIt()
     {
-        _preferences.StoredCausalityView = "spine";
+        _preferences.StoredCausalityView = "lineage";
 
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        Assert.That(cut.FindAll(".sp-canvas"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
         Assert.That(_preferences.CausalityViewWrites, Is.Empty);
     }
 
     [TestCase("flow")]
     [TestCase("graph")]
+    [TestCase("spine")]
     [TestCase("constellation")]
-    public void Render_PersistedRetiredOrUnknownPreference_FallsBackToSpineWithoutOverwritingIt(string stored)
+    public void Render_PersistedRetiredOrUnknownPreference_FallsBackToLineageWithoutOverwritingIt(string stored)
     {
-        // Stored Flow and Graph preferences outlive their views (#1495); they must resolve to the
-        // default Spine without being clobbered, exactly as an unknown value always has.
+        // Stored Flow and Graph preferences outlive their views, and "spine" outlives the name the
+        // Lineage view shipped under in development (#1495); all must resolve to the default Lineage
+        // without being clobbered, exactly as an unknown value always has.
         _preferences.StoredCausalityView = stored;
 
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        Assert.That(cut.FindAll(".sp-canvas"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
         Assert.That(_preferences.CausalityViewWrites, Is.Empty);
         Assert.That(_preferences.StoredCausalityView, Is.EqualTo(stored));
@@ -196,7 +198,7 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void SpineCardSelection_OpensTheDrawerWithTheEventAttributeRows()
+    public void LineageCardSelection_OpensTheDrawerWithTheEventAttributeRows()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
@@ -224,7 +226,7 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void SwitchingToTimeline_ClosesTheSpineDrawer()
+    public void SwitchingToTimeline_ClosesTheLineageDrawer()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
         cut.Find(".evt-card.clickable").Click();
@@ -259,11 +261,11 @@ public class CausalityPanelTests
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        Assert.That(cut.FindAll(".sp-card"), Is.Empty);
+        Assert.That(cut.FindAll(".ln-card"), Is.Empty);
     }
 
     [Test]
-    public void CausalChain_Supplied_RendersOnTheSpineAndReadsTheRecordAsTheEffect()
+    public void CausalChain_Supplied_RendersOnTheLineageAndReadsTheRecordAsTheEffect()
     {
         var item = CausalityTestData.NewJoinerItem();
         var chain = new CausalChain
@@ -296,7 +298,7 @@ public class CausalityPanelTests
 
         // The record's display name, not its label: the label carries the external id in parentheses,
         // which reads as nonsense inside a possessive.
-        Assert.That(cut.Find(".sp-sentence").TextContent.Trim(), Is.EqualTo(
+        Assert.That(cut.Find(".ln-sentence").TextContent.Trim(), Is.EqualTo(
             "Tina Adams was deleted, so they were removed from Liam Allen's Static Members"));
     }
 }

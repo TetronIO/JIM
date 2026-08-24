@@ -164,7 +164,10 @@ public static class CausalityCauseWording
     {
         return resolution switch
         {
-            CausalChainResolution.NoFurtherCauses => "End of the recorded causality chain",
+            // "No earlier", not "end of the chain": the footer sits under the story's furthest-back column,
+            // which in the reader's left-to-right time order is where the story STARTS, so a phrase about
+            // ending read backwards there.
+            CausalChainResolution.NoFurtherCauses => "No earlier causes recorded",
             CausalChainResolution.CauseNotRetained => "What caused this is no longer retained",
             CausalChainResolution.DepthLimitReached => "More causes exist beyond this point",
             _ => null

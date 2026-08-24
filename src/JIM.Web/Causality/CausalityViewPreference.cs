@@ -5,9 +5,11 @@ namespace JIM.Web.Causality;
 
 /// <summary>
 /// Converts between <see cref="CausalityView"/> values and the lowercase string keys the user
-/// preference store persists ("spine" | "timeline"). The retired Flow and Graph views' keys
-/// ("flow", "graph") deliberately map to null, so a preference stored before their retirement
-/// resolves to the panel's default without being overwritten.
+/// preference store persists ("lineage" | "timeline"). The retired Flow and Graph views' keys
+/// ("flow", "graph"), and "spine", the name the Lineage view carried in development, deliberately
+/// map to null, so a preference stored before the retirement or the rename resolves to the panel's
+/// default without being overwritten. That is the right answer for "spine" either way, since the
+/// view it named is the default.
 /// </summary>
 public static class CausalityViewPreference
 {
@@ -18,7 +20,7 @@ public static class CausalityViewPreference
     {
         return view switch
         {
-            CausalityView.Spine => "spine",
+            CausalityView.Lineage => "lineage",
             _ => "timeline"
         };
     }
@@ -31,7 +33,7 @@ public static class CausalityViewPreference
         return key switch
         {
             "timeline" => CausalityView.Timeline,
-            "spine" => CausalityView.Spine,
+            "lineage" => CausalityView.Lineage,
             _ => null
         };
     }

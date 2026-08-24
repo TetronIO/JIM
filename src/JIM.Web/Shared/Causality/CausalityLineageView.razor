@@ -3,7 +3,7 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* The causality Spine view (#1495): the object graph as columns (each record with its Connected
+@* The causality Lineage view (#1495): the object graph as columns (each record with its Connected
    System named beneath it, and the Identity), joined by labelled relationships, with every causally
    relevant event stacked on the column of the object it happened to. This run's events render
    primary (accent ring and badge) around the shared event card, so tones, entity chips, attribute
@@ -12,12 +12,12 @@
    footers. Wide stories scroll horizontally inside the scroller; narrow viewports stack the columns
    vertically, per the Flow view's existing breakpoint. *@
 
-<div class="sp-scroller">
+<div class="ln-scroller">
     @if (Model.IsTruncatedByDepth)
     {
-        <div class="sp-truncated">Some branches go further back than shown</div>
+        <div class="ln-truncated">Some branches go further back than shown</div>
     }
-    <div class="sp-canvas" style="grid-template-columns: @GridTemplateColumns">
+    <div class="ln-canvas" style="grid-template-columns: @GridTemplateColumns">
         @for (var i = 0; i < Model.Columns.Count; i++)
         {
             var column = Model.Columns[i];
@@ -27,32 +27,32 @@
                 @* A join with no relationship (the trailing column, or two records adjacent with no
                    Identity between them) is an empty gutter: an arrow would claim a relationship the
                    model does not state. *@
-                <div class="sp-join" @key="@($"join-{i}")">
+                <div class="ln-join" @key="@($"join-{i}")">
                     @if (join.Label != null)
                     {
-                        <span class="sp-join-arrow" aria-hidden="true">&rarr;</span>
-                        <span class="sp-join-label">@join.Label</span>
+                        <span class="ln-join-arrow" aria-hidden="true">&rarr;</span>
+                        <span class="ln-join-label">@join.Label</span>
                     }
                 </div>
             }
-            <div class="sp-col" @key="column">
-                <div class="sp-obj">
-                    @if (column.Kind != CausalitySpineColumnKind.Unassigned)
+            <div class="ln-col" @key="column">
+                <div class="ln-obj">
+                    @if (column.Kind != CausalityLineageColumnKind.Unassigned)
                     {
-                        <span class="glyph @(column.Kind == CausalitySpineColumnKind.Identity ? "idn" : "rec")"
-                              aria-hidden="true">@(column.Kind == CausalitySpineColumnKind.Identity ? "ID" : "R")</span>
+                        <span class="glyph @(column.Kind == CausalityLineageColumnKind.Identity ? "idn" : "rec")"
+                              aria-hidden="true">@(column.Kind == CausalityLineageColumnKind.Identity ? "ID" : "R")</span>
                     }
                     @if (column.Href != null)
                     {
-                        <a class="sp-obj-title" href="@column.Href">@GetColumnTitle(column)</a>
+                        <a class="ln-obj-title" href="@column.Href">@GetColumnTitle(column)</a>
                     }
                     else
                     {
-                        <span class="sp-obj-title">@GetColumnTitle(column)</span>
+                        <span class="ln-obj-title">@GetColumnTitle(column)</span>
                     }
                     @if (GetColumnSub(column) is { } columnSub)
                     {
-                        <span class="sp-obj-sub">@columnSub</span>
+                        <span class="ln-obj-sub">@columnSub</span>
                     }
                 </div>
                 @foreach (var card in column.Cards)
@@ -61,8 +61,17 @@
                     {
                         @* The head names the column's system, so the card's own system chip would
                            restate it; suppressed exactly as the Flow view's system groups do. *@
-                        <div class="sp-now" @key="card">
-                            <span class="sp-now-badge">This run</span>
+                        <div class="ln-now" @key="card">
+                            @* The badge and the run's time pair up exactly as a chain card's run chip and
+                               time do, so every card on the panel says which run it belongs to and when. *@
+                            <div class="ln-when ln-now-when">
+                                <span class="ln-now-badge">This run</span>
+                                @if (Timestamp is { } timestamp)
+                                {
+                                    var timestampLocal = timestamp.ToLocalTime();
+                                    <span class="ln-time" title="@timestampLocal.ToFriendlyDate()">@timestampLocal.ToRelativeTime()</span>
+                                }
+                            </div>
                             <CausalityEventCard Event="thisRunEvent" TechnicalNames="TechnicalNames"
                                                 HideSystemChip="true"
                                                 Selected="ReferenceEquals(SelectedEvent, thisRunEvent)"
@@ -71,12 +80,12 @@
                     }
                     else if (card.Hop is { } hop)
                     {
-                        <CausalitySpineChainCard Hop="hop" @key="card" />
+                        <CausalityLineageChainCard Hop="hop" @key="card" />
                     }
                 }
                 @foreach (var ending in column.Endings)
                 {
-                    <div class="sp-end" @key="ending">@ending.Text</div>
+                    <div class="ln-end" @key="ending">@ending.Text</div>
                 }
             </div>
         }
@@ -85,16 +94,23 @@
 
 @code {
     /// <summary>
-    /// The spine model to render.
+    /// The lineage model to render.
     /// </summary>
     [Parameter, EditorRequired]
-    public CausalitySpineModel Model { get; set; } = null!;
+    public CausalityLineageModel Model { get; set; } = null!;
 
     /// <summary>
     /// When true, technical labels (MVO/CSO vocabulary) are emphasised and plain language demoted.
     /// </summary>
     [Parameter]
     public bool TechnicalNames { get; set; }
+
+    /// <summary>
+    /// When this run executed (UTC), shown beside each of its cards' "This run" badge. Null where the host
+    /// does not know it, in which case those cards carry no time rather than the epoch.
+    /// </summary>
+    [Parameter]
+    public DateTime? Timestamp { get; set; }
 
     /// <summary>
     /// The currently selected event (whose attribute detail the panel shows in the drawer); null
@@ -126,9 +142,9 @@
         }
     }
 
-    private static string GetColumnTitle(CausalitySpineColumn column)
+    private static string GetColumnTitle(CausalityLineageColumn column)
     {
-        return column.Kind == CausalitySpineColumnKind.Record && column.ObjectTypeName != null
+        return column.Kind == CausalityLineageColumnKind.Record && column.ObjectTypeName != null
             ? $"{column.ObjectTypeName}: {column.Title}"
             : column.Title;
     }
@@ -138,12 +154,12 @@
     /// (with its Metaverse Object Type where known). The trailing unassigned column explains itself
     /// instead.
     /// </summary>
-    private static string? GetColumnSub(CausalitySpineColumn column)
+    private static string? GetColumnSub(CausalityLineageColumn column)
     {
         return column.Kind switch
         {
-            CausalitySpineColumnKind.Record => column.SystemName != null ? $"record in {column.SystemName}" : null,
-            CausalitySpineColumnKind.Identity => column.ObjectTypeName != null
+            CausalityLineageColumnKind.Record => column.SystemName != null ? $"record in {column.SystemName}" : null,
+            CausalityLineageColumnKind.Identity => column.ObjectTypeName != null
                 ? $"Identity · {column.ObjectTypeName}"
                 : "Identity",
             _ => "causes this view could not place"
