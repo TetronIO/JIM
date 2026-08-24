@@ -874,6 +874,10 @@ public class ActivityServer
                     RunProfileExecutionItemId = importEvent.RunProfileExecutionItemId,
                     ConnectedSystemObjectId = summary.ConnectedSystemObjectId,
                     DisplayName = importEvent.DisplayName,
+                    // Every other member takes its time from the stored edge; this one is built by hand, so
+                    // omitting it left the hop with default(DateTime), which the Lineage reads as "no time
+                    // recorded" and renders without one. It also orders the column's cards.
+                    Occurred = importEvent.Occurred,
                     Resolution = CausalChainResolution.Resolved
                 }
             ]

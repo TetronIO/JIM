@@ -62,7 +62,16 @@
                         @* The head names the column's system, so the card's own system chip would
                            restate it; suppressed exactly as the Flow view's system groups do. *@
                         <div class="ln-now" @key="card">
-                            <span class="ln-now-badge">This run</span>
+                            @* The badge and the run's time pair up exactly as a chain card's run chip and
+                               time do, so every card on the panel says which run it belongs to and when. *@
+                            <div class="ln-when ln-now-when">
+                                <span class="ln-now-badge">This run</span>
+                                @if (Timestamp is { } timestamp)
+                                {
+                                    var timestampLocal = timestamp.ToLocalTime();
+                                    <span class="ln-time" title="@timestampLocal.ToFriendlyDate()">@timestampLocal.ToRelativeTime()</span>
+                                }
+                            </div>
                             <CausalityEventCard Event="thisRunEvent" TechnicalNames="TechnicalNames"
                                                 HideSystemChip="true"
                                                 Selected="ReferenceEquals(SelectedEvent, thisRunEvent)"
@@ -95,6 +104,13 @@
     /// </summary>
     [Parameter]
     public bool TechnicalNames { get; set; }
+
+    /// <summary>
+    /// When this run executed (UTC), shown beside each of its cards' "This run" badge. Null where the host
+    /// does not know it, in which case those cards carry no time rather than the epoch.
+    /// </summary>
+    [Parameter]
+    public DateTime? Timestamp { get; set; }
 
     /// <summary>
     /// The currently selected event (whose attribute detail the panel shows in the drawer); null

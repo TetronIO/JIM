@@ -57,7 +57,7 @@
             {
                 case CausalityView.Lineage when _lineageModel is { } lineageModel:
                     <CausalityLineageView Model="lineageModel" TechnicalNames="_technicalNames"
-                                        @bind-SelectedEvent="_selectedEvent" />
+                                        Timestamp="Timestamp" @bind-SelectedEvent="_selectedEvent" />
                     break;
                 case CausalityView.Timeline:
                 default:

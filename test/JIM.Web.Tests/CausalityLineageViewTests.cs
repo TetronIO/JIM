@@ -4,6 +4,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using AngleSharp.Dom;
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -111,12 +112,14 @@ public class CausalityLineageViewTests
 
     private IRenderedComponent<CausalityLineageView> RenderLineage(
         CausalityLineageModel model, bool technicalNames = false,
-        Action<CausalityEvent?>? onSelectionChanged = null)
+        Action<CausalityEvent?>? onSelectionChanged = null,
+        DateTime? timestamp = null)
     {
         return _context.Render<CausalityLineageView>(ps =>
         {
             ps.Add(c => c.Model, model);
             ps.Add(c => c.TechnicalNames, technicalNames);
+            ps.Add(c => c.Timestamp, timestamp);
             if (onSelectionChanged != null)
                 ps.Add(c => c.SelectedEventChanged, onSelectionChanged);
         });
@@ -157,6 +160,33 @@ public class CausalityLineageViewTests
         }
     }
 
+    /// <summary>
+    /// This run's cards say when they happened too. Leaving them bare while every chain card carried a time
+    /// made the panel look as though it recorded a time for some events and not others, when in truth the run's
+    /// time was simply somewhere else (the summary band, at the top left of a left-to-right story).
+    /// </summary>
+    [Test]
+    public void Render_ThisRunCard_CarriesTheRunsTimeBesideItsBadge()
+    {
+        var executed = new DateTime(2026, 8, 1, 9, 30, 0, DateTimeKind.Utc);
+
+        var cut = RenderLineage(ExportCreateLineage(), timestamp: executed);
+
+        var time = cut.Find(".ln-now .ln-time");
+        AssertRelativeTimeWithFullDateTooltip(time, executed);
+    }
+
+    /// <summary>
+    /// A run this panel does not know the time of renders no time at all, rather than the epoch.
+    /// </summary>
+    [Test]
+    public void Render_ThisRunCard_WithNoTimestamp_RendersNoTime()
+    {
+        var cut = RenderLineage(ExportCreateLineage());
+
+        Assert.That(cut.FindAll(".ln-now .ln-time"), Is.Empty);
+    }
+
     [Test]
     public void Render_ChainCard_IsSubduedWithRunKindTimestampAndActivityLink()
     {
@@ -168,9 +198,33 @@ public class CausalityLineageViewTests
             Assert.That(chainCards, Has.Count.EqualTo(2));
             var importCard = chainCards.Single(c => c.TextContent.Contains("Import run"));
             Assert.That(importCard.QuerySelector($"a[href='/activity/item/{ImportItemId}']"), Is.Not.Null);
-            Assert.That(importCard.TextContent, Does.Contain("2026"), "the card carries its timestamp");
+            Assert.That(importCard.QuerySelector(".ln-time"), Is.Not.Null, "the card carries its timestamp");
             var syncCard = chainCards.Single(c => c.TextContent.Contains("Synchronisation run"));
             Assert.That(syncCard.TextContent, Does.Contain("provisioned"));
+        }
+    }
+
+    /// <summary>
+    /// One treatment for every time on the panel: relative in the text, the full value on hover, matching the
+    /// summary band above. The chain cards used to print the absolute date instead, so the same kind of fact
+    /// was written two ways on one screen.
+    /// </summary>
+    [Test]
+    public void Render_ChainCard_ShowsRelativeTimeWithTheFullDateInItsTooltip()
+    {
+        var cut = RenderLineage(ExportCreateLineage());
+
+        var importCard = cut.FindAll(".ln-card").Single(c => c.TextContent.Contains("Import run"));
+        AssertRelativeTimeWithFullDateTooltip(importCard.QuerySelector(".ln-time")!, CausalityTestData.ChainBaseTime);
+    }
+
+    private static void AssertRelativeTimeWithFullDateTooltip(IElement time, DateTime utc)
+    {
+        var local = utc.ToLocalTime();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(time.TextContent.Trim(), Is.EqualTo(local.ToRelativeTime()));
+            Assert.That(time.GetAttribute("title"), Is.EqualTo(local.ToFriendlyDate()));
         }
     }
 

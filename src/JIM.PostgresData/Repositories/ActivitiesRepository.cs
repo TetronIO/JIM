@@ -1866,6 +1866,7 @@ public class ActivityRepository : IActivityRepository
                 RunProfileExecutionItemId = r.Id,
                 ChangeType = r.ObjectChangeType,
                 DisplayName = r.DisplayNameSnapshot,
+                Occurred = r.Activity.Executed,
                 ConnectedSystemId = r.Activity.ConnectedSystemId,
                 // The Activity model carries the system by id alone; resolve the name live. Unlike the edge
                 // snapshots this is a derived hop, so a deleted system degrades the sentence rather than

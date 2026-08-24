@@ -1019,6 +1019,13 @@
     box-shadow: 0 0 0 1px var(--cz-primary), 0 0 0 5px var(--cz-primary-soft);
 }
 
+/* The badge row reuses .ln-when so it lines up with a chain card's run chip and time, but it sits
+   above its card rather than inside one, so it carries the gap below instead of the gap above. */
+.causality-panel .ln-now-when {
+    margin-top: 0;
+    gap: 6px;
+}
+
 .causality-panel .ln-now-badge {
     display: inline-block;
     font-size: 0.66rem;

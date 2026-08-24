@@ -53,8 +53,10 @@
         <span class="ln-runchip">@(Hop.RunKind ?? "Earlier run")</span>
         @if (Hop.Occurred != default)
         {
+            @* Relative in the text with the full value on hover, matching the summary band above: every time on
+               the panel is written the same way, so two cards can never look like two different kinds of fact. *@
             var occurredLocal = Hop.Occurred.ToLocalTime();
-            <span class="ln-time">@occurredLocal.ToFriendlyDate()</span>
+            <span class="ln-time" title="@occurredLocal.ToFriendlyDate()">@occurredLocal.ToRelativeTime()</span>
         }
     </div>
 

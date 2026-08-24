@@ -421,6 +421,12 @@ public class CausalChainWalkTests
         return csoId;
     }
 
+    /// <summary>
+    /// When the import in <see cref="SeedImportEvent"/> ran: before the synchronisation that consumed it, as a
+    /// real timeline always is.
+    /// </summary>
+    private static readonly DateTime ImportExecuted = new(2026, 8, 15, 6, 30, 0, DateTimeKind.Utc);
+
     private Guid SeedImportEvent(Guid csoId, ObjectChangeType changeType = ObjectChangeType.Added)
     {
         var importItemId = Guid.NewGuid();
@@ -431,7 +437,8 @@ public class CausalChainWalkTests
             ChangeType = changeType,
             DisplayName = "Mia Young (S8-352)",
             ConnectedSystemId = 1,
-            ConnectedSystemName = "Yellowstone APAC"
+            ConnectedSystemName = "Yellowstone APAC",
+            Occurred = ImportExecuted
         };
         return importItemId;
     }
@@ -465,6 +472,25 @@ public class CausalChainWalkTests
             Assert.That(sourceHop.Members.Single().Resolution, Is.EqualTo(CausalChainResolution.NoFurtherCauses),
                 "an import with no edges of its own is the true root: data arrived from the source system");
         }
+    }
+
+    /// <summary>
+    /// The hop carries when its import ran. Every other cohort's members take their time from the stored edge,
+    /// and this one is built by hand outside that path, so it silently arrived with no time at all: the Lineage
+    /// suppresses a timestamp it does not have, which is why source-import cards were the only cards on the
+    /// panel with no "when" (and why they sorted to the top of their column by default(DateTime) rather than by
+    /// having happened first).
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_SourceImportHop_CarriesWhenTheImportRanAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var csoId = SeedSyncCauseSummary(itemId);
+        SeedImportEvent(csoId, ObjectChangeType.Updated);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        Assert.That(chain.Cohorts[0].Members.Single().Occurred, Is.EqualTo(ImportExecuted));
     }
 
     /// <summary>
