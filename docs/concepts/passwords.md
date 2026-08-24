@@ -160,6 +160,10 @@ It also means JIM writes passwords the way each directory expects rather than wr
 
 Everything above concerns setting a password on one account, at the moment you ask. Password Synchronisation is the other half: one password change reaching **every** system that person has an account in, durably, without you standing over it.
 
+--8<-- "assets/diagrams/password-synchronisation.svg"
+
+<p class="jim-diagram-caption">Each system gets its own queued change, so none of them waits on another and one unavailable system cannot fail the rest.<span class="jimdg-caption-motion"> Moving dots trace one password change fanning out.</span></p>
+
 You configure it per Connected System, on the **Passwords** tab of the Connected System, and it appears only on systems whose connector can set passwords at all. Two settings, and one deliberate separation between them:
 
 - **The configuration** says which Object Type holds the accounts, how many delivery attempts to make before JIM stops and asks you to look, how long to wait before the first retry, and whether to refuse to transmit over a connection JIM cannot confirm is encrypted.

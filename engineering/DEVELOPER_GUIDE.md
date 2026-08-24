@@ -68,6 +68,26 @@ Key components:
 - **Discovered policy values are a floor, not a contract.** Null means "could not read", never "no such rule". Most systems publish nothing, fine-grained policies are detected rather than enumerated, and a custom password filter is discoverable by nothing at all, so the rejection path is a required feature rather than a fallback.
 - **Credential attributes stay denylisted** from import and Attribute Flow selection, including on upgrade (deselect and lock, never delete, so referencing Synchronisation Rules survive).
 
+### 3c. Password Synchronisation (#1119)
+
+The channel above delivers **one** password to **one** account, synchronously, at the moment something asks it to. Password Synchronisation is the fan-out built on top: a password change for a person, delivered to every Connected System they have an account in, durably and asynchronously. It shares the connector contracts, the generator, the policy reconciliation and every invariant in 3b, and adds a queue. Public documentation: [Passwords](../docs/concepts/passwords.md).
+
+**Where the pieces live**
+
+- **The queue** (`JIM.Models/Transactional`): `PendingPasswordChange` is one row per (Metaverse Object, Connected System), and the unique index on that pair is what makes coalescing a database guarantee rather than a convention. `PendingPasswordChangeStatus` has four states: `Pending` (JIM will try again), `Parked` (only a person can resolve it), `Expired` (it outlived its time to live) and `Cancelled` (an administrator stopped it). `PendingPasswordChangeBulkColumns` is guarded by `BulkInsertColumnCompletenessTests`.
+- **Fan-out and the queue actions** (`JIM.Application/Servers/PasswordSynchronisationServer`, exposed as `JimApplication.PasswordSynchronisation`): queueing with coalescing, the retry and cancel actions, the per-identity history read, and the retention trim.
+- **Delivery** (`JIM.Worker/Processors`, driven by `PasswordDeliveryWorkerTask`): expiry first, then the due work per system, with a doubling backoff. Raised whenever work is queued, whenever a system is enabled, and by the worker's idle tick when a retry falls due with nothing else happening.
+- **Retention** (`JIM.Application/Servers/ChangeHistoryServer`, on the built-in History Retention Cleanup Schedule): terminal rows and the Activities recording them, under `History.PasswordEventRetentionPeriod`.
+
+**Rules that are easy to get wrong**
+
+- **This is the only place JIM holds a synchronised password, and it holds it encrypted.** `PendingPasswordChange.EncryptedPassword` is protected under its own purpose. The header DTO the portal, REST API and PowerShell all bind to has **nowhere to put it**, which is the mechanism rather than a convention: a surface cannot leak what its type cannot carry. `PasswordSynchronisationControllerQueueTests` serialises a response and asserts the value is absent.
+- **Success deletes the row; every other outcome keeps it.** The queue is work outstanding and the Activity is the history, so a delivered row would hold an encrypted password long after anything needed it. An expiry or a cancellation is recorded instead of deleted, because the identity's password stays divergent on that system either way and a row that vanishes reports the opposite.
+- **A newer password supersedes an older one rather than queueing behind it.** Replaying the older one would leave the person with a password they have already replaced. `Supersede()` is that transition; the unique index plus `ON CONFLICT DO UPDATE` makes it atomic, with no application-side read-modify-write.
+- **A policy rejection parks and never regenerates.** This is where the channel diverges from 3b: there, a refused password can be regenerated under corrected settings. Here the password is the person's own and JIM has no other to send, so the remedy is outside JIM entirely. Requirement 13; do not "fix" a parked synchronised change by generating one.
+- **Retention is what bounds how long JIM holds a password it can no longer deliver.** A parked or cancelled row still carries its encrypted value, because both can be retried. Shortening `History.PasswordEventRetentionPeriod` is the supported way to shorten that window.
+- **The never-log invariant binds the PowerShell module too** (#1516). `Invoke-JIMApi` renders bodies through `Get-JIMRedactedBody`, and every HTTP call in a credential-carrying file passes `-Debug:$false` so PowerShell's own request dump cannot undo it.
+
 ### 4. Architecture Diagrams
 
 JIM's architecture is documented with C4 model diagrams (System Context, Container, Component levels) on the [architecture docs page](../docs/developer/architecture.md).
