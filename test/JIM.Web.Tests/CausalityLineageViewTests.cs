@@ -235,6 +235,118 @@ public class CausalityLineageViewTests
         }
     }
 
+    /// <summary>
+    /// A gone object says so where the reader meets it: the name struck through with a Deleted marker
+    /// beside it, so the state reads without hovering and without having to notice that a link is missing.
+    /// </summary>
+    [Test]
+    public void Render_DeletedObject_StrikesItsNameAndMarksItDeleted()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
+
+        var cut = RenderLineage(lineage);
+
+        var identityHead = cut.FindAll(".ln-col")[1].QuerySelector(".ln-obj")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(identityHead.QuerySelector(".ln-obj-title.gone"), Is.Not.Null);
+            Assert.That(identityHead.QuerySelector(".evt-badge")!.TextContent.Trim(), Is.EqualTo("Deleted"),
+                "the marker reuses the panel's existing state badge rather than a shape of its own");
+        }
+    }
+
+    /// <summary>
+    /// The head does not repeat a link one of its own cards already offers: this run's MVO Deleted card
+    /// carries "View deletion record", so the head states the fact and stops there. Every entity on this
+    /// panel is named once.
+    /// </summary>
+    [Test]
+    public void Render_DeletedObjectWhoseCardAlreadyLinksTheRecord_DoesNotRepeatTheLinkOnTheHead()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Disconnected);
+
+        var cut = RenderLineage(lineage);
+
+        Assert.That(cut.FindAll(".ln-obj .ln-actions"), Is.Empty);
+    }
+
+    /// <summary>
+    /// Where nothing else on the panel offers it, the head carries the deletion record itself: a deleted
+    /// object is not a dead end, and this is the case the reader most needs it (an object a later run
+    /// deleted leaves no card here at all).
+    /// </summary>
+    [Test]
+    public void Render_DeletedObjectWithNoCardOfferingTheRecord_LinksItFromTheHead()
+    {
+        var model = new CausalityLineageModel
+        {
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Identity,
+                    Objects =
+                    [
+                        new CausalityLineageObject
+                        {
+                            Title = "Test Deprov JoinDisc",
+                            DeletionRecordHref = "/admin/deleted-objects?t=deleted-mvos&mvo=abc"
+                        }
+                    ]
+                }
+            ],
+            Joins = []
+        };
+
+        var cut = RenderLineage(model);
+
+        var link = cut.Find(".ln-obj .ln-actions .ln-link");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(link.GetAttribute("href"), Is.EqualTo("/admin/deleted-objects?t=deleted-mvos&mvo=abc"));
+            Assert.That(link.TextContent.Trim(), Is.EqualTo("View deletion record"));
+        }
+    }
+
+    /// <summary>
+    /// An object JIM cannot build a route to explains itself, and says only that: it may well still exist,
+    /// so the wording never claims otherwise. A role head ("Records") is exempt, because it stands for
+    /// several objects and was never going to link to one.
+    /// </summary>
+    [Test]
+    public void Render_UnaddressableObject_ExplainsItselfWithoutClaimingItIsGone()
+    {
+        var model = new CausalityLineageModel
+        {
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Identity,
+                    Objects = [new CausalityLineageObject { Title = "Test Deprov JoinDisc" }]
+                },
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Record,
+                    Objects = [new CausalityLineageObject { Title = "Records", IsRoleHead = true }]
+                }
+            ],
+            Joins = [new CausalityLineageJoin(null)]
+        };
+
+        var cut = RenderLineage(model);
+
+        var titles = cut.FindAll(".ln-obj-title");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(titles[0].GetAttribute("title"), Is.EqualTo("JIM cannot open a page for this object."));
+            Assert.That(titles[0].ClassList, Does.Not.Contain("gone"), "unaddressable is not deleted");
+            Assert.That(titles[1].GetAttribute("title"), Is.Null, "a role head stands for several objects");
+        }
+    }
+
     [Test]
     public void Render_ExportCreateStory_HeadsColumnsWithRecordAndIdentityChips()
     {

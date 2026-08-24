@@ -308,6 +308,7 @@ public static class CausalityLineageModelBuilder
         return new CausalityLineageObject
         {
             Title = head.Title,
+            DeletionRecordHref = GetDeletionRecordHref(state, context),
             IsRoleHead = head.IsRoleHead,
             SystemId = state.Kind == CausalityLineageColumnKind.Record ? state.SystemId : null,
             SystemName = state.Kind == CausalityLineageColumnKind.Record ? state.SystemName : null,
@@ -316,6 +317,35 @@ public static class CausalityLineageModelBuilder
             Cards = cards,
             Endings = endings
         };
+    }
+
+    /// <summary>
+    /// The object's deletion record where this run recorded its deletion, or null where nothing here proves
+    /// it is gone. Read off the deletion event's own link rather than rebuilt, so the head and the card can
+    /// never point at different places.
+    /// </summary>
+    /// <remarks>
+    /// Evidence only. An object with no link is not thereby deleted: its type may simply be unresolvable, or
+    /// its snapshots may have carried no id, and both of those are ordinary. An object deleted by a *later*
+    /// run leaves no trace on this item at all, which is what the page's own lookup is for.
+    /// </remarks>
+    private static string? GetDeletionRecordHref(ColumnState state, CausalityPageContext context)
+    {
+        var recordedHere = state.ThisRunEvents
+            .SelectMany(e => e.Links)
+            .Where(l => l.Kind == CausalityEntityKind.DeletionRecord)
+            .Select(l => l.Href)
+            .FirstOrDefault(href => !string.IsNullOrEmpty(href));
+        if (recordedHere != null)
+            return recordedHere;
+
+        // The Identity a later run deleted leaves nothing on this item, so the only evidence is the page
+        // having looked it up and found nothing. That is the common case, and the one with no card to carry
+        // the link: this item's own story is intact and the object it acted on is simply no longer there.
+        return state.Kind == CausalityLineageColumnKind.Identity
+               && context.DeletedMetaverseObjectId is { } deletedMetaverseObjectId
+            ? CausalityModelBuilder.GetDeletedMvoHref(deletedMetaverseObjectId)
+            : null;
     }
 
     /// <summary>

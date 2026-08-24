@@ -56,7 +56,16 @@
                             }
                             else
                             {
-                                <span class="ln-obj-title">@GetObjectTitle(column, lineageObject)</span>
+                                @* A gone object is struck through and marked; an object JIM merely cannot
+                                   address explains itself on hover and claims nothing about existing. The
+                                   two are different facts, and one wording for both would be false half
+                                   the time. *@
+                                <span class="ln-obj-title @(lineageObject.IsDeleted ? "gone" : null)"
+                                      title="@GetUnlinkedExplanation(column, lineageObject)">@GetObjectTitle(column, lineageObject)</span>
+                            }
+                            @if (lineageObject.IsDeleted)
+                            {
+                                <span class="evt-badge" style="--tone: var(--cz-warning)">Deleted</span>
                             }
                             @* A record's sub-line names its Connected System, and that name links to
                                the system like every other mention of it on the panel. Only the name is
@@ -78,6 +87,15 @@
                             else if (GetObjectSub(column, lineageObject) is { } objectSub)
                             {
                                 <span class="ln-obj-sub">@objectSub</span>
+                            }
+                            @* Deleted is not a dead end: JIM retains the record. The head offers it only
+                               where nothing else on this object does, so the panel names each entity once. *@
+                            @if (lineageObject.DeletionRecordHref is { } deletionRecordHref
+                                 && !lineageObject.DeletionRecordShownOnACard)
+                            {
+                                <div class="ln-actions">
+                                    <a class="ln-link" href="@deletionRecordHref">View deletion record</a>
+                                </div>
                             }
                         </div>
                         @* An object with no events of its own is its head alone (the Identity that
@@ -179,6 +197,24 @@
 
             return string.Join(" ", parts);
         }
+    }
+
+    /// <summary>
+    /// Why an unlinked name has no link, for the hover, or null where the absence needs no explaining: a
+    /// deleted object already says so in the open, a role head stands for several objects and was never
+    /// going to link to one, and the trailing column is not an object at all.
+    /// </summary>
+    /// <remarks>
+    /// The wording says what JIM cannot do, never that the object is gone. An unaddressable object is
+    /// usually alive; its type simply could not be resolved, or its snapshots carried no id.
+    /// </remarks>
+    private static string? GetUnlinkedExplanation(CausalityLineageColumn column, CausalityLineageObject lineageObject)
+    {
+        return lineageObject.IsDeleted
+               || lineageObject.IsRoleHead
+               || column.Kind == CausalityLineageColumnKind.Unassigned
+            ? null
+            : "JIM cannot open a page for this object.";
     }
 
     private static string GetObjectTitle(CausalityLineageColumn column, CausalityLineageObject lineageObject)

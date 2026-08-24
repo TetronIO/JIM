@@ -882,6 +882,17 @@
     text-decoration: underline;
 }
 
+/* A gone object: the name struck through, so the state reads at a glance rather than being inferred from
+   a link that is not there. The marker beside it is the panel's existing .evt-badge carrying the warning
+   tone, and the deletion record uses the existing .ln-actions/.ln-link pair, so nothing new is introduced
+   for a state the panel already had a vocabulary for. Warning, never error: a deleted object is an
+   ordinary outcome of synchronisation, not a fault. */
+.causality-panel .ln-obj-title.gone {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    color: var(--cz-text-dim);
+}
+
 .causality-panel .ln-obj-sub {
     width: 100%;
     font-weight: 400;
