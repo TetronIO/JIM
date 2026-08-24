@@ -80,7 +80,9 @@ function Export-JIMCertificate {
             }
 
             # Use Invoke-WebRequest to get binary data
-            $response = Invoke-WebRequest -Uri $uri -Headers $headers -Method Get
+            # -Debug:$false: the debug record would print the X-API-Key header verbatim.
+            # See the same guard in Invoke-JIMApi.
+            $response = Invoke-WebRequest -Uri $uri -Headers $headers -Method Get -Debug:$false
 
             if ($PassThru) {
                 return $response.Content

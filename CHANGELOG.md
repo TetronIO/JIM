@@ -299,6 +299,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 The PowerShell module no longer writes your API key to the debug stream. Running any cmdlet with `-Debug`, or in a session with `$DebugPreference` set, made PowerShell's own `Invoke-RestMethod` emit a "WebRequest Detail" record dumping the request headers and body verbatim, and JIM sends its API key as a header on every authenticated call. A long-lived credential was therefore going into whatever captured that output: a transcript, a CI job log, a screen share, a troubleshooting dump pasted to someone else. The same record carried the password on the four cmdlets that set one, and both halves of the OAuth token exchange. `-Debug` is what an operator reaches for when a cmdlet is not behaving, so the leak happened at the moment they were most likely to be sharing their output. JIM's own diagnostics under `-Debug` are unchanged. (#1516)
 - 🔒 Attributes holding credential material, such as `unicodePwd` and `userPassword`, can no longer be imported, selected for management, or used in an Attribute Flow. Any that a deployment had already selected are deselected and locked rather than deleted, leaving Synchronisation Rules intact.
 
 ## [0.14.0] - 2026-07-25
