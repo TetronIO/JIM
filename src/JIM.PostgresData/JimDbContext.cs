@@ -94,6 +94,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
     public virtual DbSet<PasswordDeliveryWorkerTask> PasswordDeliveryWorkerTasks { get; set; } = null!;
     public virtual DbSet<TemporalScopeReconciliationWorkerTask> TemporalScopeReconciliationWorkerTasks { get; set; } = null!;
+    public virtual DbSet<HistoryRetentionCleanupWorkerTask> HistoryRetentionCleanupWorkerTasks { get; set; } = null!;
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreviewWorkerTask> ConfigurationChangePreviewWorkerTasks { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;

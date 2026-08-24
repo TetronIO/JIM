@@ -111,7 +111,8 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     /// carrying a versioned configuration snapshot) are spared: they ARE the configuration change history and are
     /// governed by their own, longer retention period via <see cref="DeleteExpiredConfigurationChangeActivitiesAsync"/>.
     /// Authentication (security event) Activities are likewise spared, governed by their own retention period via
-    /// <see cref="DeleteExpiredSecurityEventActivitiesAsync"/>.
+    /// <see cref="DeleteExpiredSecurityEventActivitiesAsync"/>, as are Password Synchronisation Activities, via
+    /// <see cref="DeleteExpiredPasswordEventActivitiesAsync"/>.
     /// </summary>
     /// <param name="olderThan">Delete records with Created date older than this date</param>
     /// <param name="maxRecords">Maximum number of records to delete in this batch</param>
@@ -120,7 +121,9 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     {
         var recordsToDelete = await _database.Activities
             .AsTracking()
-            .Where(a => a.Created < olderThan && a.ConfigurationChangeVersion == null && a.TargetType != ActivityTargetType.Authentication)
+            .Where(a => a.Created < olderThan && a.ConfigurationChangeVersion == null &&
+                        a.TargetType != ActivityTargetType.Authentication &&
+                        a.TargetType != ActivityTargetType.PasswordSynchronisation)
             .OrderBy(a => a.Created)
             .Take(maxRecords)
             .ToListAsync();
@@ -171,6 +174,35 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
         var recordsToDelete = await _database.Activities
             .AsTracking()
             .Where(a => a.Created < olderThan && a.TargetType == ActivityTargetType.Authentication)
+            .OrderBy(a => a.Created)
+            .Take(maxRecords)
+            .ToListAsync();
+
+        if (recordsToDelete.Count == 0)
+            return 0;
+
+        _database.Activities.RemoveRange(recordsToDelete);
+        await _database.SaveChangesAsync();
+
+        return recordsToDelete.Count;
+    }
+
+    /// <summary>
+    /// Deletes expired Password Synchronisation Activities (TargetType PasswordSynchronisation) older than the
+    /// specified date. This is the only path that removes Password Synchronisation history.
+    /// </summary>
+    /// <param name="olderThan">Delete records with Created date older than this date</param>
+    /// <param name="maxRecords">Maximum number of records to delete in this batch</param>
+    /// <returns>Count of deleted records</returns>
+    public async Task<int> DeleteExpiredPasswordEventActivitiesAsync(DateTime olderThan, int maxRecords)
+    {
+        // Oldest-first, like every other trim here, which also keeps a fan-out parent and its per-system outcome
+        // children close together in the ordering: they are created within moments of one another, so a batch
+        // boundary rarely falls between them, and ParentActivityId is a plain column rather than a foreign key,
+        // so one crossing it leaves no broken reference behind.
+        var recordsToDelete = await _database.Activities
+            .AsTracking()
+            .Where(a => a.Created < olderThan && a.TargetType == ActivityTargetType.PasswordSynchronisation)
             .OrderBy(a => a.Created)
             .Take(maxRecords)
             .ToListAsync();

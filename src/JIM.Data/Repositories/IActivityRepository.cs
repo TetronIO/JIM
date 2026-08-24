@@ -281,14 +281,7 @@ public interface IActivityRepository
     /// </remarks>
     public Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds);
 
-    /// <summary>
-    /// Gets the creation time of the most recent HistoryRetentionCleanup activity.
-    /// Used by the worker to determine whether the cleanup interval has elapsed since the last run,
-    /// preventing immediate re-execution after worker restarts.
-    /// </summary>
-    public Task<DateTime?> GetLastHistoryCleanupTimeAsync();
-
-    /// <summary>
+        /// <summary>
     /// Whether any Run Profile has ever been executed, in any state (in progress, complete, failed or cancelled).
     /// Backs the home page's "Run your first synchronisation" setup step, which asks only whether an administrator
     /// has run one, never how it turned out. Run Profile configuration changes (create, update, delete) carry the

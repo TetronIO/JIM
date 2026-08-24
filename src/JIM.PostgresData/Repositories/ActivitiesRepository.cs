@@ -835,20 +835,6 @@ public class ActivityRepository : IActivityRepository
             .ToListAsync();
     }
 
-    // -----------------------------------------------------------------------------------------------------------------
-    // History retention cleanup queries
-    // -----------------------------------------------------------------------------------------------------------------
-
-    public async Task<DateTime?> GetLastHistoryCleanupTimeAsync()
-    {
-        return await Repository.Database.Activities
-
-            .Where(a => a.TargetType == ActivityTargetType.HistoryRetentionCleanup)
-            .OrderByDescending(a => a.Created)
-            .Select(a => (DateTime?)a.Created)
-            .FirstOrDefaultAsync();
-    }
-
     /// <inheritdoc />
     public async Task<bool> HasAnyRunProfileExecutionAsync()
     {

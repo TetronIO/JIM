@@ -35,8 +35,8 @@ public interface IChangeHistoryRepository
 
     /// <summary>
     /// Deletes expired Activity records older than the specified date, sparing configuration-change Activities
-    /// (those carrying a versioned configuration snapshot) and Authentication (security event) Activities, both of
-    /// which are governed by their own, separate retention periods.
+    /// (those carrying a versioned configuration snapshot), Authentication (security event) Activities, and
+    /// Password Synchronisation Activities, each of which is governed by its own, separate retention period.
     /// </summary>
     Task<int> DeleteExpiredActivitiesAsync(DateTime olderThan, int maxRecords);
 
@@ -53,6 +53,17 @@ public interface IChangeHistoryRepository
     /// these; this is the only path that removes security event history.
     /// </summary>
     Task<int> DeleteExpiredSecurityEventActivitiesAsync(DateTime olderThan, int maxRecords);
+
+    /// <summary>
+    /// Deletes expired Password Synchronisation Activities (TargetType PasswordSynchronisation: the delivery
+    /// passes, the fan-out records, and the per-system outcome children) older than the specified date. The
+    /// general Activity cleanup never touches these; this is the only path that removes password history.
+    /// <para>
+    /// Its own retention class because the question these answer ("was this person's password ever set in that
+    /// system, and if not, why?") is asked long after the sync history around them stops being interesting.
+    /// </para>
+    /// </summary>
+    Task<int> DeleteExpiredPasswordEventActivitiesAsync(DateTime olderThan, int maxRecords);
 
     /// <summary>
     /// Gets the count of CSO change records for a specific Connected System.

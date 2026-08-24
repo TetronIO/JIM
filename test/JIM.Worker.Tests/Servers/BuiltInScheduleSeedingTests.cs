@@ -4,6 +4,7 @@
 using System.Text;
 using JIM.Application;
 using JIM.Application.Interfaces;
+using JIM.Application.Servers;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -32,6 +33,7 @@ public class BuiltInScheduleSeedingTests
     private FakeProtection _protection = null!;
     private JimApplication _jim = null!;
     private Schedule? _createdSchedule;
+    private List<Schedule> _createdSchedules = null!;
     private Activity? _createdActivity;
     private Activity? _completedActivity;
     private List<Activity> _createdActivities = null!;
@@ -50,6 +52,7 @@ public class BuiltInScheduleSeedingTests
         _repo.Setup(r => r.Scheduling).Returns(_schedulingRepo.Object);
 
         _createdSchedule = null;
+        _createdSchedules = new List<Schedule>();
         _createdActivity = null;
         _completedActivity = null;
         _createdActivities = new List<Activity>();
@@ -67,7 +70,11 @@ public class BuiltInScheduleSeedingTests
         _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.Schedule, It.IsAny<Guid>()))
             .ReturnsAsync(0);
         _schedulingRepo.Setup(r => r.CreateScheduleAsync(It.IsAny<Schedule>()))
-            .Callback<Schedule>(s => _createdSchedule = s)
+            .Callback<Schedule>(s =>
+            {
+                _createdSchedule = s;
+                _createdSchedules.Add(s);
+            })
             .Returns(Task.CompletedTask);
         _schedulingRepo.Setup(r => r.GetScheduleWithStepsAsync(It.IsAny<Guid>()))
             .ReturnsAsync(() => _createdSchedule);
@@ -89,11 +96,17 @@ public class BuiltInScheduleSeedingTests
 
         await _jim.Seeding.SeedBuiltInSchedulesAsync();
 
-        Assert.That(_createdSchedule, Is.Not.Null, "the built-in schedule must be created");
-        Assert.That(_createdSchedule!.BuiltIn, Is.True);
-        Assert.That(_createdSchedule.IsEnabled, Is.True, "the built-in schedule must be seeded enabled");
-        Assert.That(_createdSchedule.CreatedByType, Is.EqualTo(ActivityInitiatorType.System));
-        Assert.That(_createdSchedule.Steps.Any(s => s.StepType == ScheduleStepType.TemporalScopeReconciliation), Is.True);
+        Assert.That(_createdSchedules.Select(s => s.Name),
+            Is.EquivalentTo(SeedingServer.BuiltInSchedules().Select(s => s.Name)),
+            "every entry in the built-in catalogue must be created on a virgin database");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_createdSchedules.Select(s => s.BuiltIn), Is.All.True);
+            Assert.That(_createdSchedules.Select(s => s.IsEnabled), Is.All.True, "built-in schedules are seeded enabled");
+            Assert.That(_createdSchedules.Select(s => s.CreatedByType), Is.All.EqualTo(ActivityInitiatorType.System));
+            Assert.That(_createdSchedules.SelectMany(s => s.Steps).Select(s => s.StepType),
+                Is.EquivalentTo(new[] { ScheduleStepType.TemporalScopeReconciliation, ScheduleStepType.HistoryRetentionCleanup }));
+        }
 
         // The creation must be auditable: a Create Activity attributed to System, so the portal's change
         // history shows how the schedule came to exist rather than starting at the first later update.
@@ -112,34 +125,66 @@ public class BuiltInScheduleSeedingTests
 
         // The seeded creation must be grouped under a single System Initialisation parent Activity, so a fresh
         // deployment's built-in configuration appears as one top-level Activity, not one row per seeded object.
-        var scheduleActivity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.Schedule);
+        var scheduleActivities = _createdActivities.Where(a => a.TargetType == ActivityTargetType.Schedule).ToList();
         var parentActivity = _createdActivities.SingleOrDefault(a => a.TargetType == ActivityTargetType.SystemInitialisation);
         Assert.That(parentActivity, Is.Not.Null,
-            "seeding must record a parent System Initialisation Activity when it creates the built-in schedule");
-        Assert.That(scheduleActivity.ParentActivityId, Is.EqualTo(parentActivity!.Id));
+            "seeding must record a parent System Initialisation Activity when it creates the built-in schedules");
+        Assert.That(scheduleActivities.Select(a => a.ParentActivityId), Is.All.EqualTo(parentActivity!.Id));
     }
 
     [Test]
     public async Task SeedBuiltInSchedulesAsync_ScheduleAlreadyExists_DoesNothingAsync()
     {
-        var existing = new Schedule
-        {
-            Id = Guid.NewGuid(),
-            Name = "Temporal Scope Reconciliation",
-            BuiltIn = true,
-            IsEnabled = false, // an administrator's choice to disable it must be respected across restarts
-            Steps = new List<ScheduleStep>
-            {
-                new() { Id = Guid.NewGuid(), StepIndex = 0, Name = "Reconcile Temporal Scope", StepType = ScheduleStepType.TemporalScopeReconciliation }
-            }
-        };
-        _schedulingRepo.Setup(r => r.GetAllSchedulesAsync()).ReturnsAsync(new List<Schedule> { existing });
+        // Disabled on purpose: an administrator's choice to turn a built-in schedule off must be respected
+        // across restarts, so convergence may only create what is missing, never re-create or re-enable.
+        var existing = SeedingServer.BuiltInSchedules()
+            .Select(s => new Schedule { Id = Guid.NewGuid(), Name = s.Name, BuiltIn = true, IsEnabled = false, Steps = s.Steps })
+            .ToList();
+        _schedulingRepo.Setup(r => r.GetAllSchedulesAsync()).ReturnsAsync(existing);
 
         await _jim.Seeding.SeedBuiltInSchedulesAsync();
 
         _schedulingRepo.Verify(r => r.CreateScheduleAsync(It.IsAny<Schedule>()), Times.Never,
             "seeding is idempotent: an existing built-in schedule must not be recreated");
         _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never);
+    }
+
+    [Test]
+    public async Task SeedBuiltInSchedulesAsync_DeploymentPredatesACatalogueEntry_CreatesOnlyTheMissingOneAsync()
+    {
+        // The convergence case issue #916 exists for: a deployment that has been running since before a built-in
+        // Schedule was added must gain it on the next startup, without the ones it already has being disturbed.
+        var catalogue = SeedingServer.BuiltInSchedules().ToList();
+        var alreadyPresent = catalogue.First();
+        var expectedNew = catalogue.Skip(1).Single();
+        _schedulingRepo.Setup(r => r.GetAllSchedulesAsync()).ReturnsAsync(new List<Schedule>
+        {
+            new() { Id = Guid.NewGuid(), Name = alreadyPresent.Name, BuiltIn = true, Steps = alreadyPresent.Steps }
+        });
+
+        await _jim.Seeding.SeedBuiltInSchedulesAsync();
+
+        Assert.That(_createdSchedules.Select(s => s.Name), Is.EqualTo(new[] { expectedNew.Name }),
+            "only the catalogue entry the deployment lacks is created");
+    }
+
+    [Test]
+    public void BuiltInSchedules_HistoryRetentionCleanup_RunsDailyOffPeakWithOneCleanupStep()
+    {
+        // The retention pass is bounded by the cleanup batch size rather than by how much has accumulated, so
+        // running it more often would not drain a backlog faster; daily and off-peak keeps it away from the
+        // synchronisation hot path, which competes for the same tables.
+        var schedule = SeedingServer.BuiltInSchedules().Single(s => s.Name == "History Retention Cleanup");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(schedule.BuiltIn, Is.True);
+            Assert.That(schedule.IsEnabled, Is.True);
+            Assert.That(schedule.CronExpression, Is.EqualTo("30 2 * * *"));
+            Assert.That(schedule.DaysOfWeek, Is.EqualTo("0,1,2,3,4,5,6"), "retention must not skip a day of the week");
+            Assert.That(schedule.Steps, Has.Count.EqualTo(1));
+            Assert.That(schedule.Steps.Single().StepType, Is.EqualTo(ScheduleStepType.HistoryRetentionCleanup));
+        }
     }
 
     // -- helpers -------------------------------------------------------------------------------------------------------
