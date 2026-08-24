@@ -5,7 +5,9 @@
    Ported from the approved causality redesign mock-up, with every mock-up colour replaced by a
    derivation from the active theme's MudBlazor palette tokens so all themes (light and dark) work
    without per-theme additions. Everything is scoped under .causality-panel to avoid collisions
-   with site.css. Fonts inherit JIM's typography (IBM Plex Sans; IBM Plex Mono for values). */
+   with site.css. Fonts inherit JIM's typography; attribute values take the app's shared code face
+   (.jim-text-code in site.css), the same one the Connected System Object tables and the change history
+   timeline use, rather than a face of this panel's own. */
 
 .causality-panel {
     /* Tone palette: theme-token derivations, one custom property per CausalityTone */
@@ -40,7 +42,6 @@
     --cz-surface: var(--mud-palette-surface);
     --cz-inner: var(--jim-inner-surface, var(--mud-palette-background-grey));
     --cz-chip-bg: color-mix(in srgb, var(--mud-palette-text-primary) 9%, transparent);
-    --cz-mono: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
 
     /* The panel is an ordinary JIM container and must look like every other one on the page: the
        standard border colour and the container radius token, not the mock-up's own 14px and a
