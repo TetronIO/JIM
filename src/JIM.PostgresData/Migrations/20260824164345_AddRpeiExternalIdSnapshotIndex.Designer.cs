@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20260823120311_AddRpeiExternalIdSnapshotIndex")]
+    [Migration("20260824164345_AddRpeiExternalIdSnapshotIndex")]
     partial class AddRpeiExternalIdSnapshotIndex
     {
         /// <inheritdoc />
@@ -3955,6 +3955,15 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CancelledById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CancelledByName")
+                        .HasColumnType("text");
+
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
@@ -4114,6 +4123,13 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasDiscriminator().HasValue("ExampleDataTemplateWorkerTask");
+                });
+
+            modelBuilder.Entity("JIM.Models.Tasking.HistoryRetentionCleanupWorkerTask", b =>
+                {
+                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
+
+                    b.HasDiscriminator().HasValue("HistoryRetentionCleanupWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.PasswordDeliveryWorkerTask", b =>
