@@ -1,8 +1,8 @@
-# Causality Object Spine — Implementation Plan
+# Causality Object Spine: Implementation Plan
 
-- **Status:** Doing (Phases 1-3 complete on `feature/causality-object-spine`; Phase 4 runtime verification in progress. Stack layer PR #1502, merged, carried the record-system fallback fix; a second layer, `feature/causality-object-spine-stack-chain-fidelity`, carries three further fixes from user review of the deprovision item: the executed deprovision's DN captioned as target identification, the complete-story footer reworded to read forwards, and the deleted record's timeline walked by its external ID snapshot.)
+- **Status:** Done
 - **Issue:** [#1495](https://github.com/TetronIO/JIM/issues/1495)
-- **PRD:** [`engineering/prd/doing/PRD_CAUSALITY_OBJECT_SPINE.md`](../../prd/doing/PRD_CAUSALITY_OBJECT_SPINE.md)
+- **PRD:** [`engineering/prd/done/PRD_CAUSALITY_OBJECT_SPINE.md`](../../prd/done/PRD_CAUSALITY_OBJECT_SPINE.md)
 
 > **Naming:** the view ships as **Lineage**, not "Spine". "Spine" described the layout's shape (a
 > backbone with events hanging off it), which is an implementation metaphor rather than something the
