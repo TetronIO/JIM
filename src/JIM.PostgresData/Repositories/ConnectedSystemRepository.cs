@@ -6513,6 +6513,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
+        // 12b. Delete the Password Synchronisation configuration. It must go before the Object Types below:
+        //      ConnectedSystemPasswordSynchronisations.TargetObjectTypeId is RESTRICT on purpose, so that deleting
+        //      the Object Type holding a system's accounts cannot leave the configuration aimed at nothing. Deleting
+        //      the whole Connected System is the case that RESTRICT is not meant to stop, and the configuration
+        //      cascades from ConnectedSystems, but the cascade only fires at step 16; without this statement the
+        //      Object Type delete below is refused and the entire deletion rolls back.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemPasswordSynchronisations"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
         // 13. Delete Object Types
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0}",
