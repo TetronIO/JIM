@@ -633,36 +633,6 @@ delete: roomNumber
     if ($lastStepIndex -ge 4) {
         Write-TestSection "Test 5: CarrierProvisioning (an auxiliary-typed object is created as carrier + class)"
 
-        # Gina (S19-6) exists in Yellowstone only, so she is the one Metaverse Object with no
-        # Target presence to provision.
-        Write-Host "Adding Gina (S19-6, badge carrier) to the Source suffix..." -ForegroundColor Gray
-        $ginaLdif = @"
-dn: uid=gina19,$($sourceLdapConfig.UserContainer)
-objectClass: jimPerson
-objectClass: jimBadgeHolder
-uid: gina19
-cn: Gina Grant (S19)
-sn: Grant
-givenName: Gina
-displayName: Gina Grant (S19)
-mail: gina19@yellowstone.local
-employeeNumber: S19-6
-jimBadgeNumber: B19-6
-jimBadgeColour: Gold
-userPassword: Test@123!
-
-"@
-        Invoke-Scenario19LdapAdd -ContainerName $sourceLdapConfig.ContainerName -LdapUri $sourceLdapUri `
-            -BindDN $sourceLdapConfig.BindDN -BindPassword $sourceLdapConfig.BindPassword -Ldif $ginaLdif
-
-        Write-Host "Running Full Import + Full Synchronisation (Source)..." -ForegroundColor Gray
-        $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullImport.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Source) with Gina present"
-        $syncResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSync.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Source) with Gina present"
-        $ginaMvoId = Get-Scenario19MvoId -EmployeeId "S19-6"
-        Assert-MvoAttributeValue -MvoId $ginaMvoId -AttributeName "Badge Number" -ExpectedValue "B19-6" -Name "Gina's Badge Number imported"
-
         # Select jimBadgeHolder as its own Object Type on Target and name its Structural Carrier
         # Class: an entry carries exactly one structural class, so JIM has to be told what to
         # write alongside the auxiliary one. 'account' is the classic carrier here (the
@@ -721,13 +691,43 @@ userPassword: Test@123!
             -SourceMetaverseAttributeId $mvBadgeColour.id | Out-Null
         Write-Host "  OK Provisioning export rule created with DN expression + uid + badge mappings" -ForegroundColor Green
 
-        # Precondition, then provision.
+        # Gina (S19-6) arrives in Yellowstone only AFTER the provisioning rule exists: export
+        # evaluation stages when a Metaverse Object changes, and an unjoined Metaverse Object is
+        # not re-evaluated by the Target's own synchronisation, so a rule created after her
+        # projection would sit idle until she next changed.
+        Write-Host "Adding Gina (S19-6, badge carrier) to the Source suffix..." -ForegroundColor Gray
+        $ginaLdif = @"
+dn: uid=gina19,$($sourceLdapConfig.UserContainer)
+objectClass: jimPerson
+objectClass: jimBadgeHolder
+uid: gina19
+cn: Gina Grant (S19)
+sn: Grant
+givenName: Gina
+displayName: Gina Grant (S19)
+mail: gina19@yellowstone.local
+employeeNumber: S19-6
+jimBadgeNumber: B19-6
+jimBadgeColour: Gold
+userPassword: Test@123!
+
+"@
+        Invoke-Scenario19LdapAdd -ContainerName $sourceLdapConfig.ContainerName -LdapUri $sourceLdapUri `
+            -BindDN $sourceLdapConfig.BindDN -BindPassword $sourceLdapConfig.BindPassword -Ldif $ginaLdif
+
+        # Precondition read before anything can have provisioned her.
         $ginaBefore = @(Get-Scenario19LdapAttributeValues -LdapConfig $targetLdapConfig -Uid "gina19" -AttributeName "objectClass" -AllowMissingEntry)
         Assert-Equal -Expected 0 -Actual $ginaBefore.Count -Message "Gina has no Target entry before provisioning"
 
-        Write-Host "Running Full Synchronisation (Target) + Export (Target)..." -ForegroundColor Gray
-        $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSync.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Target) staging Gina's provisioning"
+        Write-Host "Running Full Import + Full Synchronisation (Source) to project Gina and stage her provisioning..." -ForegroundColor Gray
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullImport.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Source) with Gina present"
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSync.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Source) with Gina present"
+        $ginaMvoId = Get-Scenario19MvoId -EmployeeId "S19-6"
+        Assert-MvoAttributeValue -MvoId $ginaMvoId -AttributeName "Badge Number" -ExpectedValue "B19-6" -Name "Gina's Badge Number imported"
+
+        Write-Host "Running Export (Target) to provision Gina..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExport.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "Export (Target) provisioning Gina"
 
