@@ -1080,7 +1080,8 @@
     padding: 1px 7px;
 }
 
-/* ─── Endings: quiet footers, never warnings ─── */
+/* ─── Endings: quiet, never warnings. They head the object's body rather than closing it, because they
+   describe what lies behind its oldest card and the body runs oldest to newest downwards. ─── */
 
 .causality-panel .ln-end {
     font-size: 0.8125rem;

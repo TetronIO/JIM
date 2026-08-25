@@ -1837,6 +1837,30 @@ public class ActivityRepository : IActivityRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<Dictionary<Guid, Guid>> GetExportExecutionItemIdsByPendingExportIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+    {
+        if (pendingExportIds.Count == 0)
+            return [];
+
+        var ids = pendingExportIds as List<Guid> ?? pendingExportIds.ToList();
+        var rows = await Repository.Database.CausalEdges
+            .AsNoTracking()
+            .Where(e => e.EdgeType == CausalEdgeType.PendingExportQueueingCausedExportExecution &&
+                        e.CausePendingExportId.HasValue &&
+                        ids.Contains(e.CausePendingExportId.Value))
+            .OrderBy(e => e.Created)
+            .Select(e => new { PendingExportId = e.CausePendingExportId!.Value, e.EffectRunProfileExecutionItemId })
+            .ToListAsync();
+
+        // A Pending Export is executed once and deleted, so one row per id is the shape. Grouping rather than
+        // keying directly is defensive only: a duplicate must not throw and take the whole panel with it, and
+        // the earliest edge is the one that executed the export the confirmation is about.
+        return rows
+            .GroupBy(r => r.PendingExportId)
+            .ToDictionary(g => g.Key, g => g.First().EffectRunProfileExecutionItemId);
+    }
+
     /// <summary>
     /// Summarises the given Run Profile Execution Items for the causal walk (#1223); presence in the result is
     /// the retention check.
