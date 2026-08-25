@@ -112,10 +112,22 @@ function Set-JIMApiKey {
                 return
             }
 
+            # Assigned through a typed variable in a plain statement: an if-expression's output is
+            # enumerated on assignment, which collapses a one-element array to a scalar and @() to
+            # $null, and ConvertTo-Json then sends {"roleIds":3} / null instead of [3] / [] (#1531).
+            # Named distinctly from the $RoleIds parameter: variable names are case-insensitive, so
+            # a local $roleIds would overwrite the bound value.
+            [int[]]$roleIdsToSend = @()
+            if ($PSBoundParameters.ContainsKey('RoleIds')) {
+                $roleIdsToSend = $RoleIds
+            } else {
+                $roleIdsToSend = @($existing.roles | ForEach-Object { $_.id })
+            }
+
             $body = @{
                 name = if ($Name) { $Name } else { $existing.name }
                 description = if ($PSBoundParameters.ContainsKey('Description')) { $Description } else { $existing.description }
-                roleIds = if ($PSBoundParameters.ContainsKey('RoleIds')) { $RoleIds } else { @($existing.roles | ForEach-Object { $_.id }) }
+                roleIds = $roleIdsToSend
                 isEnabled = $existing.isEnabled
             }
 
