@@ -205,14 +205,14 @@ function Get-Scenario19LdapAttributeValues {
     $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.Port `
         -BaseDN $LdapConfig.UserContainer -BindDN $LdapConfig.BindDN -BindPassword $LdapConfig.BindPassword `
         -Filter "(uid=$Uid)" -Attributes @($AttributeName)
-    if ($null -eq $raw) {
-        throw "ldapsearch for uid=$Uid under $($LdapConfig.UserContainer) returned nothing; the directory is unreachable."
-    }
 
-    $rawText = $raw -join "`n"
+    # ldapsearch -LLL prints nothing at all for a search matching no entries, so an empty result and a
+    # missing entry are the same observation here (a failed search also returns null from the helper,
+    # which the -AllowMissingEntry caller accepts as the price of expressing "not there yet").
+    $rawText = if ($null -eq $raw) { "" } else { ($raw -join "`n") }
     if ($rawText -notmatch "(?m)^dn:") {
         if ($AllowMissingEntry) { return @() }
-        throw "No entry found for uid=$Uid under $($LdapConfig.UserContainer)."
+        throw "No entry found for uid=$Uid under $($LdapConfig.UserContainer) (or the search failed)."
     }
 
     $values = @()
