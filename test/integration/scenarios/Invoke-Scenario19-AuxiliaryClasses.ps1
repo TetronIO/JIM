@@ -568,14 +568,17 @@ try {
         Write-Host "Running Export (Target), expecting Dora's export to be refused..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExport.id -Wait -PassThru
         $executionItems = @(Get-JIMActivity -Id $exportResult.activityId -ExecutionItems)
-        $refusals = @($executionItems | Where-Object {
-            $itemError = $_.PSObject.Properties['errorMessage']?.Value
-            $itemError -and $itemError -match 'jimBadgeNumber'
-        })
-        Assert-Equal -Expected 1 -Actual $refusals.Count -Message "Exactly one export was refused naming jimBadgeNumber"
-        Assert-Condition -Condition ($refusals[0].errorMessage -match 'jimBadgeHolder') `
+        $refusals = @($executionItems | Where-Object { "$($_.errorType)" -eq 'ClassMembershipRequirementsNotMet' })
+        Assert-Equal -Expected 1 -Actual $refusals.Count -Message "Exactly one export was refused for unmet class membership requirements"
+
+        # The header DTO does not carry the message, so read it where it is stored, per the established
+        # psql pattern for state the API does not expose (see Assert-MvoAttributeValue's history).
+        $refusalMessage = docker exec jim.database psql -U jim -d jim -t -A -c "SELECT ""ErrorMessage"" FROM ""ActivityRunProfileExecutionItems"" WHERE ""ActivityId"" = '$($exportResult.activityId)' AND ""ErrorMessage"" IS NOT NULL LIMIT 1;"
+        Assert-Condition -Condition ("$refusalMessage" -match 'jimBadgeNumber') `
+            -Message "The refusal names the missing attribute (jimBadgeNumber)"
+        Assert-Condition -Condition ("$refusalMessage" -match 'jimBadgeHolder') `
             -Message "The refusal names the class being added (jimBadgeHolder)"
-        Write-Host "    Refusal: $($refusals[0].errorMessage)" -ForegroundColor Gray
+        Write-Host "    Refusal: $refusalMessage" -ForegroundColor Gray
 
         # The directory was never touched: the refusal happened in JIM, not at OpenLDAP.
         $doraClasses = @(Get-Scenario19LdapAttributeValues -LdapConfig $targetLdapConfig -Uid "dora19" -AttributeName "objectClass")

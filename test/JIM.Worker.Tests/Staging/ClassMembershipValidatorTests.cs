@@ -38,6 +38,9 @@ public class ClassMembershipValidatorTests
             Assert.That(result.ErrorMessage, Does.Contain("posixAccount"));
             Assert.That(result.ErrorMessage, Does.Not.Contain("uidNumber"),
                 "naming an attribute that is being written would send an administrator after the wrong thing");
+            Assert.That(result.ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.ClassMembershipRequirementsNotMet),
+                "a deliberate, administrator-actionable refusal must not be classified as a general error: " +
+                "downstream that reads as an unhandled JIM defect and fails the whole Activity");
         }
     }
 

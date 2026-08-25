@@ -74,7 +74,10 @@ public static class ClassMembershipValidator
                       "nor finds a value already on the object. Add an Attribute Flow for the missing attribute(s), or " +
                       "withdraw the auxiliary class selection that brought the class in.";
 
-        return ConnectedSystemExportResult.Failed(message, ConnectedSystemExportErrorType.General);
+        // A dedicated error type, not General: downstream the general bucket reads as an unhandled JIM
+        // defect and fails the whole Activity, and this refusal is configuration for an administrator to
+        // act on.
+        return ConnectedSystemExportResult.Failed(message, ConnectedSystemExportErrorType.ClassMembershipRequirementsNotMet);
     }
 
     /// <summary>

@@ -451,6 +451,9 @@ public class SyncExportTaskProcessor
                 executionItem.ErrorType = exportItem.ErrorType switch
                 {
                     ConnectedSystemExportErrorType.InvalidGeneratedExternalId => ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId,
+                    // A refusal JIM made deliberately (#492), naming configuration an administrator has to
+                    // act on; the UnhandledError bucket would read as a JIM defect and fail the Activity.
+                    ConnectedSystemExportErrorType.ClassMembershipRequirementsNotMet => ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet,
                     _ => ActivityRunProfileExecutionItemErrorType.UnhandledError,
                 };
                 executionItem.ErrorMessage = exportItem.ErrorCount > 1
