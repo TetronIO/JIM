@@ -726,6 +726,23 @@ Describe 'Add-JIMScheduleStep' {
                 $script:capturedBody.steps[0].executionMode | Should -BeExactly 'Sequential'
             }
         }
+
+        It 'Serialises a lone new step as a JSON array when the schedule had no steps' {
+            InModuleScope JIM {
+                # $existingSteps is assigned from an if-expression (the #1531 shape), which
+                # collapses its output; the steps array is rebuilt through array concatenation
+                # before serialisation, so the collapse is currently harmless. This pins that:
+                # the first step added to an empty schedule must send steps as [ {...} ], not
+                # a bare object.
+                $script:testSchedule.steps = @()
+
+                Add-JIMScheduleStep -ScheduleId $script:testScheduleId -StepType RunProfile -ConnectedSystemId 1 -RunProfileId 2 -Confirm:$false
+
+                $script:capturedBody.steps -is [System.Collections.ICollection] | Should -BeTrue
+                (ConvertTo-Json -InputObject $script:capturedBody.steps -Depth 5 -Compress) | Should -Match '^\[\{'
+                $script:capturedBody.steps.Count | Should -Be 1
+            }
+        }
     }
 
     Context 'Help Documentation' {
@@ -789,6 +806,67 @@ Describe 'Remove-JIMScheduleStep' {
 
         It 'Should throw when not connected' {
             { Remove-JIMScheduleStep -ScheduleId ([guid]::NewGuid()) -StepIndex 0 -Force -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'The request it builds' {
+
+        BeforeEach {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:testScheduleId = [guid]::NewGuid()
+
+                $step = {
+                    param($index)
+                    [PSCustomObject]@{
+                        id = [guid]::NewGuid(); stepIndex = $index; stepType = 'RunProfile'
+                        executionMode = 'Sequential'; continueOnFailure = $false
+                        connectedSystemId = 1; runProfileId = $index + 1
+                        name = $null; scriptPath = $null; arguments = $null
+                        executablePath = $null; workingDirectory = $null
+                    }
+                }
+                $script:testSchedule = [PSCustomObject]@{
+                    id = $script:testScheduleId; name = 'Test Schedule'; description = $null
+                    triggerType = 'Cron'; patternType = $null; isEnabled = $true
+                    daysOfWeek = $null; runTimes = $null; intervalValue = $null
+                    intervalUnit = $null; intervalWindowStart = $null; intervalWindowEnd = $null
+                    cronExpression = '0 1 * * *'
+                    steps = @((& $step 0), (& $step 1))
+                }
+
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'PUT') { $script:capturedBody = $Body }
+                    $script:testSchedule
+                }
+            }
+        }
+
+        It 'Keeps a single remaining step a JSON array at the serialisation boundary' {
+            InModuleScope JIM {
+                # $existingSteps is assigned from an if-expression (the #1531 shape), which
+                # collapses its output; the remaining steps are rebuilt through array
+                # concatenation before serialisation, so the collapse is currently harmless.
+                # This pins that: a schedule reduced to one step must send [ {...} ], not a
+                # bare object.
+                Remove-JIMScheduleStep -ScheduleId $script:testScheduleId -StepIndex 1 -Force
+
+                $script:capturedBody.steps -is [System.Collections.ICollection] | Should -BeTrue
+                (ConvertTo-Json -InputObject $script:capturedBody.steps -Depth 5 -Compress) | Should -Match '^\[\{'
+                $script:capturedBody.steps.Count | Should -Be 1
+            }
+        }
+
+        It 'Sends an empty steps array, not null, when the last step is removed' {
+            InModuleScope JIM {
+                $script:testSchedule.steps = @($script:testSchedule.steps[0])
+
+                Remove-JIMScheduleStep -ScheduleId $script:testScheduleId -StepIndex 0 -Force
+
+                $script:capturedBody.ContainsKey('steps') | Should -BeTrue
+                (ConvertTo-Json -InputObject $script:capturedBody.steps -Compress) | Should -Be '[]'
+            }
         }
     }
 
