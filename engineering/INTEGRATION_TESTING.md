@@ -1179,6 +1179,8 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 
 **`-Template` is ignored.** The scenario asserts against three accounts; a larger template only lengthens the export. It always provisions at Micro.
 
+**It needs a reset between runs.** The scenario changes the passwords of the accounts it selects, and Test 1's baseline is "these accounts still sign in with the Initial Password they were provisioned with". A second run against the same directory therefore fails at Test 1, correctly: the accounts hold the passwords the previous run delivered. Run it through `Run-IntegrationTests.ps1` without `-SkipReset`, or wipe the directory's volumes, rather than re-running it in place. (Provisioning is what sets an Initial Password, and provisioning only happens on a Create export, so accounts that already exist do not get a fresh one.)
+
 **Delivery is waited for, not polled into.** A delivery pass is raised the moment work is queued and the moment a system is enabled, so the scenario's 180-second bound is on a directory write and a queue read rather than on a poll interval. Exceeding it means delivery is not happening at all, and the failure prints the rows still queued with their status, held flag, attempt count and the target's own message.
 
 ### Phase 2 - Database Scenarios
