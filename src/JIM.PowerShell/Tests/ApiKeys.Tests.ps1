@@ -196,6 +196,79 @@ Describe 'Set-JIMApiKey' {
         }
     }
 
+    Context 'The request it builds' {
+
+        BeforeEach {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:testKeyId = [guid]'11111111-1111-1111-1111-111111111111'
+            }
+        }
+
+        It 'Keeps a single explicit -RoleIds value an array, so it serialises as one and not as a scalar' {
+            InModuleScope JIM {
+                # Assigning from an if-expression enumerates its output, which collapses a
+                # one-element array to a scalar Int32; ConvertTo-Json then sends {"roleIds":3}
+                # and the API's List<int> binding rejects it. The value must still be an array
+                # at the serialisation boundary (#1531).
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'PUT') { $script:capturedBody = $Body; return }
+                    [PSCustomObject]@{
+                        id = $script:testKeyId; name = 'Automation Key'; description = 'existing'
+                        roles = @([PSCustomObject]@{ id = 1 }, [PSCustomObject]@{ id = 2 })
+                        isEnabled = $true; expiresAt = $null
+                    }
+                }
+
+                Set-JIMApiKey -Id $script:testKeyId -RoleIds 3 -Confirm:$false
+
+                $script:capturedBody.roleIds -is [System.Collections.ICollection] | Should -BeTrue
+                (ConvertTo-Json -InputObject $script:capturedBody.roleIds -Compress) | Should -Be '[3]'
+            }
+        }
+
+        It 'Preserves an existing single role as an array when the update does not touch roles' {
+            InModuleScope JIM {
+                # An API Key with exactly one role is the common case, so a rename that should
+                # preserve the role must send [7], not the scalar 7 (#1531).
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'PUT') { $script:capturedBody = $Body; return }
+                    [PSCustomObject]@{
+                        id = $script:testKeyId; name = 'Automation Key'; description = 'existing'
+                        roles = @([PSCustomObject]@{ id = 7 })
+                        isEnabled = $true; expiresAt = $null
+                    }
+                }
+
+                Set-JIMApiKey -Id $script:testKeyId -Name 'Renamed Key' -Confirm:$false
+
+                $script:capturedBody.roleIds -is [System.Collections.ICollection] | Should -BeTrue
+                (ConvertTo-Json -InputObject $script:capturedBody.roleIds -Compress) | Should -Be '[7]'
+            }
+        }
+
+        It 'Preserves zero roles as an empty JSON array, not null' {
+            InModuleScope JIM {
+                # The same if-expression enumeration turns @() into $null, which serialises as
+                # {"roleIds":null} rather than the empty set the key actually holds (#1531).
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'PUT') { $script:capturedBody = $Body; return }
+                    [PSCustomObject]@{
+                        id = $script:testKeyId; name = 'Automation Key'; description = 'existing'
+                        roles = @()
+                        isEnabled = $true; expiresAt = $null
+                    }
+                }
+
+                Set-JIMApiKey -Id $script:testKeyId -Name 'Renamed Key' -Confirm:$false
+
+                $script:capturedBody.ContainsKey('roleIds') | Should -BeTrue
+                (ConvertTo-Json -InputObject $script:capturedBody.roleIds -Compress) | Should -Be '[]'
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
