@@ -1038,7 +1038,7 @@ public class JimDbContext : DbContext
         // whenever the owner is deleted outside a change-tracked graph, and it makes the factory reset's
         // "DELETE ... WHERE ""BuiltIn"" = false" statements fail with 23503 for any custom object holding the child
         // rows it ordinarily holds; since the whole wipe is one transaction, the reset then rolls back entirely.
-        // SystemResetForeignKeyCoverageTests asserts this property across the whole schema, so a child table added
+        // DeletePathForeignKeyCoverageTests asserts this property across the whole schema, so a child table added
         // later cannot silently reintroduce the fault.
 
         // A Predefined Search owns its top-level criteria groups; a group is how the search filters.
