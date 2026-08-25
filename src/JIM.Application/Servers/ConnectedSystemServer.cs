@@ -6646,6 +6646,94 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The rejection message for a second Attribute Flow targeting an attribute the Synchronisation Rule already
+    /// flows to (#1532). Names the sanctioned alternatives, so the administrator is told how to express the
+    /// intent rather than merely refused.
+    /// </summary>
+    private static string BuildDuplicateMappingTargetMessage(string? syncRuleName, string targetAttributeName)
+    {
+        var ruleDescription = string.IsNullOrWhiteSpace(syncRuleName)
+            ? "This Synchronisation Rule"
+            : $"Synchronisation Rule '{syncRuleName}'";
+        return $"{ruleDescription} already has an Attribute Flow targeting '{targetAttributeName}'; only one mapping per " +
+               "target attribute is supported, and a disabled mapping still counts. To fall back between source attributes " +
+               "within one rule, use a single expression mapping (for example attribute_1 ?? attribute_2). To arbitrate " +
+               "between sources with Attribute Priority, define the second flow on a separate, differently-scoped " +
+               "Synchronisation Rule.";
+    }
+
+    /// <summary>
+    /// Validates that no other mapping on the same Synchronisation Rule already targets this mapping's target
+    /// attribute (#1532). The engine evaluates one mapping per target attribute, so a same-rule duplicate is
+    /// representable in configuration but never honoured: the lower-priority mapping silently never contributes.
+    /// Refusing the configuration is the honest answer. Disabled mappings count as duplicates too, because a
+    /// disabled duplicate re-enabled later would recreate the trap.
+    /// </summary>
+    /// <param name="mapping">The mapping being created or updated; excluded from the collision check by its id.</param>
+    /// <exception cref="ArgumentException">Another mapping on the rule already targets the same attribute.</exception>
+    private async Task ValidateNoDuplicateMappingTargetAsync(SyncRuleMapping mapping)
+    {
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
+        if (syncRuleId == 0)
+            return; // a rule still being composed has no persisted mappings; the whole-rule save path validates its collection
+
+        var targetMetaverseAttributeId = mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id;
+        var targetConnectedSystemAttributeId = mapping.TargetConnectedSystemAttributeId ?? mapping.TargetConnectedSystemAttribute?.Id;
+        if (targetMetaverseAttributeId == null && targetConnectedSystemAttributeId == null)
+            return; // no target yet; the model's own validation owns that problem
+
+        var existingMappings = await Application.Repository.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
+        var duplicate = existingMappings.FirstOrDefault(existing =>
+            existing.Id != mapping.Id &&
+            ((targetMetaverseAttributeId != null &&
+              (existing.TargetMetaverseAttributeId ?? existing.TargetMetaverseAttribute?.Id) == targetMetaverseAttributeId) ||
+             (targetConnectedSystemAttributeId != null &&
+              (existing.TargetConnectedSystemAttributeId ?? existing.TargetConnectedSystemAttribute?.Id) == targetConnectedSystemAttributeId)));
+        if (duplicate == null)
+            return;
+
+        var targetAttributeName = mapping.TargetMetaverseAttribute?.Name
+            ?? mapping.TargetConnectedSystemAttribute?.Name
+            ?? duplicate.TargetMetaverseAttribute?.Name
+            ?? duplicate.TargetConnectedSystemAttribute?.Name
+            ?? $"ID {targetMetaverseAttributeId ?? targetConnectedSystemAttributeId}";
+        var message = BuildDuplicateMappingTargetMessage(mapping.SyncRule?.Name, targetAttributeName);
+        Log.Warning("ValidateNoDuplicateMappingTargetAsync: rejecting mapping; {Message}", LogSanitiser.Sanitise(message));
+        throw new ArgumentException(message);
+    }
+
+    /// <summary>
+    /// The whole-rule-save sibling of <see cref="ValidateNoDuplicateMappingTargetAsync"/> (#1532): rejects a
+    /// Synchronisation Rule whose Attribute Flow collection targets the same attribute twice, since the portal
+    /// composes mappings in-memory and saves the whole rule. The collection is validated rather than the
+    /// database, because the save replaces the collection.
+    /// </summary>
+    /// <exception cref="ArgumentException">Two mappings on the rule target the same attribute.</exception>
+    private static void ValidateNoDuplicateMappingTargets(SyncRule syncRule)
+    {
+        var duplicateTargetGroup = syncRule.AttributeFlowRules
+            .Select(mapping => new
+            {
+                Mapping = mapping,
+                MetaverseTargetId = mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id,
+                ConnectedSystemTargetId = mapping.TargetConnectedSystemAttributeId ?? mapping.TargetConnectedSystemAttribute?.Id
+            })
+            .Where(candidate => candidate.MetaverseTargetId != null || candidate.ConnectedSystemTargetId != null)
+            .GroupBy(candidate => (candidate.MetaverseTargetId, candidate.ConnectedSystemTargetId))
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateTargetGroup == null)
+            return;
+
+        var targetAttributeName = duplicateTargetGroup
+            .Select(candidate => candidate.Mapping.TargetMetaverseAttribute?.Name ?? candidate.Mapping.TargetConnectedSystemAttribute?.Name)
+            .FirstOrDefault(name => name != null)
+            ?? $"ID {duplicateTargetGroup.Key.MetaverseTargetId ?? duplicateTargetGroup.Key.ConnectedSystemTargetId}";
+        var message = BuildDuplicateMappingTargetMessage(syncRule.Name, targetAttributeName);
+        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
+        throw new ArgumentException(message);
+    }
+
+    /// <summary>
     /// Creates a new Synchronisation Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to create.</param>
@@ -6657,6 +6745,7 @@ public class ConnectedSystemServer
 
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
+        await ValidateNoDuplicateMappingTargetAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId}", mapping.SyncRule?.Id);
 
@@ -6695,6 +6784,7 @@ public class ConnectedSystemServer
 
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
+        await ValidateNoDuplicateMappingTargetAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
@@ -6735,6 +6825,7 @@ public class ConnectedSystemServer
 
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
+        await ValidateNoDuplicateMappingTargetAsync(mapping);
 
         Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 
@@ -8239,6 +8330,10 @@ public class ConnectedSystemServer
         // can never satisfy, which would silently drop objects out of scope.
         ValidateScopingCriteriaOperators(syncRule);
 
+        // reject two Attribute Flows targeting the same attribute (#1532): the engine evaluates one mapping per
+        // target attribute, so the second would be representable but silently never honoured.
+        ValidateNoDuplicateMappingTargets(syncRule);
+
         // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
         // re-enabled rule would carry a stale claim about a state that no longer holds.
         if (syncRule.Enabled)
@@ -8395,6 +8490,10 @@ public class ConnectedSystemServer
         // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
         // can never satisfy, which would silently drop objects out of scope.
         ValidateScopingCriteriaOperators(syncRule);
+
+        // reject two Attribute Flows targeting the same attribute (#1532): the engine evaluates one mapping per
+        // target attribute, so the second would be representable but silently never honoured.
+        ValidateNoDuplicateMappingTargets(syncRule);
 
         // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
         // re-enabled rule would carry a stale claim about a state that no longer holds.

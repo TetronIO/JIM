@@ -721,7 +721,18 @@ else if (_syncRule != null)
         // applied" is auditable); a stale one is not claimed.
         var previewActivityId = confirming.IsStale ? null : confirming.ActivityId;
         var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
-        var wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user, changeReason: changeReason, previewActivityId: previewActivityId);
+        bool wasSuccessful;
+        try
+        {
+            wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user, changeReason: changeReason, previewActivityId: previewActivityId);
+        }
+        catch (ArgumentException ex)
+        {
+            // the Application layer refuses configurations the engine cannot honour, such as two Attribute Flows
+            // targeting the same attribute (#1532); surface its message rather than an unhandled error.
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
         switch (wasSuccessful)
         {
             // send the user to the existing-sync-rule view.

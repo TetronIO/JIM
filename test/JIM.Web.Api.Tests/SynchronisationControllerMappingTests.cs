@@ -64,6 +64,12 @@ public class SynchronisationControllerMappingTests
             .Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync(new List<SyncRuleMapping>());
 
+        // The duplicate-target check (#1532) reads the Synchronisation Rule's existing mappings on every
+        // mapping create/update. Default to none; the duplicate-target tests override this per-test.
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<SyncRuleMapping>());
+
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
         _mockCredentialProtection = new Mock<ICredentialProtectionService>();
         _expressionEvaluator = new DynamicExpressoEvaluator();
@@ -642,6 +648,114 @@ public class SynchronisationControllerMappingTests
         Assert.That(captured, Is.Not.Null);
         Assert.That(captured!.InitialExportOnly, Is.False,
             "Initial Export Only must be ignored for import mappings");
+    }
+
+    #endregion
+
+    #region Duplicate target rejection (#1532)
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ImportMapping_TargetAlreadyMapped_ReturnsBadRequestAsync()
+    {
+        const int syncRuleId = 1;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Import Rule", Direction = SyncRuleDirection.Import, ConnectedSystemObjectTypeId = objectTypeId };
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+
+        // The rule already flows another source to the same target Metaverse Attribute.
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingsAsync(syncRuleId))
+            .ReturnsAsync(new List<SyncRuleMapping>
+            {
+                new()
+                {
+                    Id = 50,
+                    SyncRuleId = syncRuleId,
+                    TargetMetaverseAttribute = mvAttr,
+                    TargetMetaverseAttributeId = mvAttr.Id
+                }
+            });
+
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetMetaverseAttributeId = 5,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, ConnectedSystemAttributeId = 20 }
+            }
+        };
+
+        var result = await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = ((BadRequestObjectResult)result).Value as ApiErrorResponse;
+        Assert.That(error, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(error!.Message, Does.Contain("displayName"), "the body must name the target attribute");
+            Assert.That(error.Message, Does.Contain("Import Rule"), "the body must name the Synchronisation Rule");
+            Assert.That(error.Message, Does.Contain("??"), "the body must offer the expression-mapping fallback");
+        }
+        _mockConnectedSystemRepo.Verify(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ExportMapping_TargetAlreadyMapped_ReturnsBadRequestAsync()
+    {
+        const int syncRuleId = 2;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Export Rule", Direction = SyncRuleDirection.Export, ConnectedSystemObjectTypeId = objectTypeId };
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingsAsync(syncRuleId))
+            .ReturnsAsync(new List<SyncRuleMapping>
+            {
+                new()
+                {
+                    Id = 51,
+                    SyncRuleId = syncRuleId,
+                    TargetConnectedSystemAttribute = csAttr,
+                    TargetConnectedSystemAttributeId = csAttr.Id
+                }
+            });
+
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetConnectedSystemAttributeId = 20,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, MetaverseAttributeId = 5 }
+            }
+        };
+
+        var result = await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = ((BadRequestObjectResult)result).Value as ApiErrorResponse;
+        Assert.That(error, Is.Not.Null);
+        Assert.That(error!.Message, Does.Contain("cn"), "the body must name the target attribute");
+        _mockConnectedSystemRepo.Verify(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Never);
     }
 
     #endregion

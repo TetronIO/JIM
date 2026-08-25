@@ -61,6 +61,10 @@ public class ConfigurationChangeCaptureGranularTests
         _csRepo.Setup(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
         _csRepo.Setup(r => r.DeleteSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
 
+        // The duplicate-target check (#1532) reads the Synchronisation Rule's existing mappings on every
+        // mapping create/update; these tests exercise change capture, so default the list to empty.
+        _csRepo.Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>())).ReturnsAsync(new List<SyncRuleMapping>());
+
         _protection = new FakeProtection();
         _jim = new JimApplication(_repo.Object) { CredentialProtection = _protection };
 
