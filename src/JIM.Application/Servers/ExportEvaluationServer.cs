@@ -2176,6 +2176,13 @@ public class ExportEvaluationServer
             await AddSecondaryExternalIdToCsoAsync(csoForExport, attributeChanges, exportRule, deferSave);
         }
 
+        // The class membership values this export obliges (#492), added after the empty-check above so a
+        // fully no-net-change update never stages a bare class add, and before the merge paths below so an
+        // existing Pending Export gaining its first merged-class attribute gains the class with it. This is
+        // the overload the synchronisation engine's per-page path stages through; without this call, exports
+        // went out carrying a merged class's attributes with no class add, and the directory refused them.
+        AddClassMembershipChanges(exportRule, existingCso, changeType, attributeChanges);
+
         var csoId = csoForExport?.Id;
 
         // Check if a Pending Export already exists for this CSO in the in-memory batch list

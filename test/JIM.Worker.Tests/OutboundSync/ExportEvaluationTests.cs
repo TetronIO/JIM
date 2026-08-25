@@ -351,6 +351,67 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
+    /// The delta-convergence half of #492: an update that first flows a merged auxiliary class's attribute to
+    /// an object lacking the class must add the class in the same export, or the directory refuses the whole
+    /// modify with an objectClassViolation. This staging overload is the one the synchronisation engine's
+    /// per-page path uses, and it was the only one of the three not calling AddClassMembershipChanges: found
+    /// live by Scenario 19, whose convergence export went out carrying jimBadgeNumber with no class add.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_FirstFlowOfAMergedClassesAttribute_AddsTheClassInTheSameExportAsync()
+    {
+        // Arrange - the writeback fixture, made class-membership-aware: the Connected System composes
+        // objectClass, the flowed attribute is a merged auxiliary class's contribution, and the object
+        // carries only its structural class (imported, per the documented configuration).
+        var (mvo, _, exportRule, csEmployeeIdAttr, cso, cache) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: null);
+        var targetUserType = exportRule.ConnectedSystemObjectType!;
+
+        var objectClassAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 7900, Name = "objectClass", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued, ClassName = targetUserType.Name
+        };
+        targetUserType.Attributes.Add(objectClassAttr);
+        targetUserType.Tags.Add(new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassMembershipAttribute, Value = "objectClass" });
+        var badgeHolder = new ConnectedSystemObjectType { Id = 7901, Name = "badgeHolder", ConnectedSystemId = targetUserType.ConnectedSystemId };
+        targetUserType.Extensions.Add(new ConnectedSystemObjectTypeExtension
+        {
+            BaseObjectTypeId = targetUserType.Id,
+            ExtensionObjectTypeId = badgeHolder.Id,
+            ExtensionObjectType = badgeHolder
+        });
+        csEmployeeIdAttr.ClassName = "badgeHolder";
+
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = objectClassAttr,
+            AttributeId = objectClassAttr.Id,
+            StringValue = targetUserType.Name
+        });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, cache);
+
+        // Assert - one export carrying the attribute AND the class it obliges
+        Assert.That(result.PendingExports, Has.Count.EqualTo(1));
+        var classChanges = result.PendingExports[0].AttributeValueChanges
+            .Where(avc => avc.AttributeId == objectClassAttr.Id)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(classChanges.Select(avc => avc.StringValue), Is.EqualTo(new[] { "badgeHolder" }),
+                "the first flow of a merged class's attribute must add that class, and only that class, in the same export");
+            Assert.That(classChanges.Single().ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Add),
+                "class membership is multi-valued, and the object's existing classes must not be restated");
+        }
+    }
+
+    /// <summary>
     /// The deprovisioning face of #1284: a Metaverse Object that falls out of an outbound rule's scope
     /// must be deprovisioned from the rule's target system even when that system is the one being
     /// synchronised. The whole-system Q3 skip silently suppressed scope-out deprovisioning too.
