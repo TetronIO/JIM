@@ -2,7 +2,11 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Application.Staging;
+using JIM.Connectors;
+using JIM.Models.Core;
+using JIM.Models.Security;
 using JIM.Models.Activities;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -228,6 +232,148 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
 
         await using var readContext = NewContext();
         Assert.That(await readContext.ConnectedSystemObjectTypeExtensions.CountAsync(), Is.Zero);
+    }
+
+    #endregion
+
+    #region Schema refresh persistence
+
+    [Test]
+    public async Task UpdateConnectedSystemSchemaAsync_RefreshOfATrackedGraphWithAMergedClass_PersistsTheContributionAsync()
+    {
+        // The exact flow of the import-schema endpoint: the Connected System is loaded with change tracking
+        // (the schema import mutates and saves it), the merge contributes the selected auxiliary class's
+        // attributes as new rows, and the repository persists the same graph on the same context. The
+        // repository's reconcile pass was written for a detached incoming graph; handed the tracked one, it
+        // re-keyed tracked instances and collided in the identity map ("cannot be tracked because another
+        // instance with the same key value is already being tracked"), which is what failed Scenario 19's
+        // Merge step live. The in-memory provider cannot see this: it tracks by default, so the load and the
+        // reconcile's re-load agree in ways real PostgreSQL under JIM.Web's NoTracking default does not.
+        var seeded = await SeedWithAttributesAndSelectionAsync();
+
+        var apiKey = new ApiKey { Id = Guid.NewGuid(), Name = "Repro Key", KeyHash = "hash", KeyPrefix = "jim_ak_repro" };
+        await using (var seedCtx = NewContext())
+        {
+            seedCtx.ApiKeys.Add(apiKey);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        var schema = new ConnectorSchema();
+        var person = new ConnectorSchemaObjectType("inetOrgPerson");
+        person.Attributes.Add(new ConnectorSchemaAttribute("cn", AttributeDataType.Text, AttributePlurality.SingleValued,
+            required: true, className: "inetOrgPerson", writability: AttributeWritability.Writable));
+        // Two contributed attributes, deliberately: one masks the defect, because the first detached Id 0
+        // instance files in the identity map without conflict and only the second collides.
+        var posixAccount = new ConnectorSchemaObjectType("posixAccount");
+        posixAccount.Attributes.Add(new ConnectorSchemaAttribute("uidNumber", AttributeDataType.Number, AttributePlurality.SingleValued,
+            required: true, className: "posixAccount", writability: AttributeWritability.Writable));
+        posixAccount.Attributes.Add(new ConnectorSchemaAttribute("gidNumber", AttributeDataType.Number, AttributePlurality.SingleValued,
+            required: true, className: "posixAccount", writability: AttributeWritability.Writable));
+        schema.ObjectTypes = [person, posixAccount];
+
+        await using var ctx = NewContext();
+        using var jim = new JimApplication(new PostgresDataRepository(ctx));
+        jim.ConnectedSystems.ConnectorFactory = new StubSchemaConnectorFactory(schema);
+        var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(seeded.ConnectedSystemId, withChangeTracking: true);
+        Assert.That(connectedSystem, Is.Not.Null);
+
+        await jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem!, apiKey);
+
+        await using var readContext = NewContext();
+        var personAttributes = await readContext.ConnectedSystemAttributes
+            .Where(attribute => EF.Property<int?>(attribute, "ConnectedSystemObjectTypeId") == seeded.PersonId)
+            .ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(personAttributes.Select(attribute => attribute.Name), Does.Contain("uidNumber"),
+                "the merged class's attributes must land on the structural type");
+            Assert.That(personAttributes.Select(attribute => attribute.Name), Does.Contain("gidNumber"));
+            Assert.That(personAttributes.Single(attribute => attribute.Name == "uidNumber").ClassName, Is.EqualTo("posixAccount"));
+            Assert.That(personAttributes.Count(attribute => attribute.Name == "cn"), Is.EqualTo(1), "no duplicated rows");
+        }
+    }
+
+    /// <summary>
+    /// As <see cref="SeedAsync"/>, but with attributes on both types and posixAccount already merged into
+    /// inetOrgPerson, which is the state the import-schema endpoint refreshes from.
+    /// </summary>
+    private async Task<SeededSchema> SeedWithAttributesAndSelectionAsync()
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector Yellowstone", BuiltIn = true };
+        var dummySetting = new ConnectorDefinitionSetting { Name = "Dummy Setting", Type = ConnectedSystemSettingType.Text };
+        connectorDefinition.Settings.Add(dummySetting);
+        var person = new ConnectedSystemObjectType
+        {
+            Name = "inetOrgPerson",
+            Selected = true,
+            Attributes =
+            [
+                new ConnectedSystemObjectTypeAttribute
+                {
+                    Name = "cn", ClassName = "inetOrgPerson", Type = AttributeDataType.Text,
+                    AttributePlurality = AttributePlurality.SingleValued, Selected = true
+                }
+            ]
+        };
+        var posixAccount = new ConnectedSystemObjectType
+        {
+            Name = "posixAccount",
+            Attributes =
+            [
+                new ConnectedSystemObjectTypeAttribute
+                {
+                    Name = "uidNumber", ClassName = "posixAccount", Type = AttributeDataType.Number,
+                    AttributePlurality = AttributePlurality.SingleValued
+                },
+                new ConnectedSystemObjectTypeAttribute
+                {
+                    Name = "gidNumber", ClassName = "posixAccount", Type = AttributeDataType.Number,
+                    AttributePlurality = AttributePlurality.SingleValued
+                }
+            ]
+        };
+        var system = new ConnectedSystem
+        {
+            Name = "Yellowstone",
+            ConnectorDefinition = connectorDefinition,
+            ObjectTypes = [person, posixAccount],
+            SettingValues = [new ConnectedSystemSettingValue { Setting = dummySetting, StringValue = "value" }]
+        };
+
+        seed.ConnectorDefinitions.Add(connectorDefinition);
+        seed.ConnectedSystems.Add(system);
+        await seed.SaveChangesAsync();
+
+        seed.ConnectedSystemObjectTypeExtensions.Add(new ConnectedSystemObjectTypeExtension
+        {
+            BaseObjectTypeId = person.Id,
+            ExtensionObjectTypeId = posixAccount.Id
+        });
+        await seed.SaveChangesAsync();
+
+        return new SeededSchema(system.Id, person.Id, posixAccount.Id);
+    }
+
+    /// <summary>
+    /// A schema-only connector returning the schema the test supplies, so the real import path runs end to end
+    /// against real PostgreSQL without a live directory.
+    /// </summary>
+    private sealed class StubSchemaConnector(ConnectorSchema schema) : IConnector, IConnectorSchema
+    {
+        public string Name => "Stub Schema Connector";
+        public string? Description => null;
+        public string? Url => null;
+
+        public Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settings, ILogger logger) =>
+            Task.FromResult(schema);
+    }
+
+    private sealed class StubSchemaConnectorFactory(ConnectorSchema schema) : IConnectorFactory
+    {
+        public IConnector Create(string connectorName, ICredentialProtection? credentialProtection = null, ICertificateProvider? certificateProvider = null) =>
+            new StubSchemaConnector(schema);
     }
 
     #endregion

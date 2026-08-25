@@ -623,12 +623,47 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             if (trackedByName.TryGetValue(incomingAttribute.Name, out var trackedAttribute))
             {
-                // SetValues copies every scalar including the key, and EF throws if a tracked entity's key
-                // would change. A name-matched incoming attribute is not guaranteed to carry the tracked
-                // attribute's Id (a caller may legitimately supply a freshly built incoming graph with
-                // Id == 0), so align the key first; when they already match this is a no-op.
-                incomingAttribute.Id = trackedAttribute.Id;
-                Repository.Database.Entry(trackedAttribute).CurrentValues.SetValues(incomingAttribute);
+                // A name-matched attribute still carrying Id == 0 is a pending insert, not a persisted row.
+                // This happens because the incoming graph can BE the tracked graph: the schema import mutates
+                // a change-tracked Connected System in place, and the auxiliary class merge adds its
+                // contributed attributes (Id == 0) directly to the tracked type's collection, so they arrive
+                // here through trackedByName rather than through the else branch below. Entry() on a detached
+                // instance does not track it, and SetValues would file each such instance in the identity map
+                // at key 0, throwing an identity conflict from the second new attribute onwards (found live
+                // by Scenario 19's Merge step, #492). Register it for insertion instead.
+                if (trackedAttribute.Id == 0 &&
+                    Repository.Database.Entry(trackedAttribute).State == EntityState.Detached)
+                {
+                    trackedAttribute.ConnectedSystemObjectType = trackedType;
+                    Repository.Database.ConnectedSystemAttributes.Add(trackedAttribute);
+                }
+
+                // Same instance reached through both graphs: it is already reconciled by definition, and
+                // "copying it onto itself" via SetValues is what re-keyed entries at Id 0 above.
+                if (ReferenceEquals(trackedAttribute, incomingAttribute))
+                    continue;
+
+                if (trackedAttribute.Id != 0)
+                {
+                    // SetValues copies every scalar including the key, and EF throws if a tracked entity's key
+                    // would change. A name-matched incoming attribute is not guaranteed to carry the tracked
+                    // attribute's Id (a caller may legitimately supply a freshly built incoming graph with
+                    // Id == 0), so align the key first; when they already match this is a no-op.
+                    incomingAttribute.Id = trackedAttribute.Id;
+                    Repository.Database.Entry(trackedAttribute).CurrentValues.SetValues(incomingAttribute);
+                }
+                else
+                {
+                    // The pending insert's entry carries a temporary key (see the Add above and the else branch
+                    // below). SetValues would overwrite it with the incoming Id and stop it being
+                    // store-generated, so mirror the temporary value into the copy and restore the temporary
+                    // marking afterwards; the row still gets its real key on save.
+                    var trackedEntry = Repository.Database.Entry(trackedAttribute);
+                    var keyProperty = trackedEntry.Property(a => a.Id);
+                    incomingAttribute.Id = (int)keyProperty.CurrentValue!;
+                    trackedEntry.CurrentValues.SetValues(incomingAttribute);
+                    keyProperty.IsTemporary = true;
+                }
             }
             else
             {
