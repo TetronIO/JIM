@@ -68,6 +68,24 @@ public interface ISyncEngine
         AttributePriorityContext? priorityContext = null);
 
     /// <summary>
+    /// Recalls Metaverse Object attribute values whose contribution no longer has a live Attribute Flow mapping
+    /// behind it (#1533): the value's provenance names this Connected System and a Synchronisation Rule, but the
+    /// priority contributor cache holds no enabled import mapping from that rule targeting the attribute (the
+    /// mapping was deleted, the mapping was disabled, or the whole rule was disabled). Such values are staged on
+    /// the MVO's PendingAttributeValueRemovals, so the caller's withdrawal re-election pass can re-elect the next
+    /// surviving contributor or genuinely clear the attribute. Call AFTER the CSO's in-scope import rules have
+    /// flowed, so a live mapping that re-flowed or took over the attribute this pass is seen as the owner.
+    /// Values stamped by another system, values without Synchronisation Rule provenance, and values already
+    /// staged for removal are never touched.
+    /// </summary>
+    /// <param name="cso">The joined CSO being re-evaluated (must have MetaverseObject with its Type loaded).</param>
+    /// <param name="priorityContext">The per-run attribute priority contributor cache (#91).</param>
+    /// <returns>The values staged for removal, empty if none.</returns>
+    List<MetaverseObjectAttributeValue> RecallOrphanedContributions(
+        ConnectedSystemObject cso,
+        AttributePriorityContext priorityContext);
+
+    /// <summary>
     /// Evaluates whether Pending Exports have been confirmed by a CSO's current attribute state.
     /// Confirmed exports are marked for deletion; partially confirmed exports are updated.
     /// </summary>

@@ -61,6 +61,8 @@ Re-election covers every attribute type, including references: a manager or grou
 
 The same hand-over applies when the winning source stays connected but simply stops supplying a value, without "Null is a value" set: for example, an expression that starts evaluating to null, or a source attribute that becomes unpopulated. The next-priority contributor takes over in the same synchronisation run, exactly as it would if the winning source had disconnected. Only when no other source contributes is the attribute cleared.
 
+Removing the flow itself behaves the same way. When the Attribute Flow mapping that contributed a value is deleted or disabled, or its whole Synchronisation Rule is disabled, nothing asserts that value any more: the next Full Synchronisation of the contributing Connected System recalls the values the mapping contributed and re-elects the next contributor in the same run, or clears the attribute (reported as an **MVO No Contributor** outcome) when no contributor survives. An administrator removing a flow can therefore expect its effects to stop being asserted at the next Full Synchronisation, rather than lingering until the source data happens to change.
+
 ## 🔍 Seeing resolution decisions
 
 Synchronisation Activities record notable resolution outcomes against each object, visible on the Activity detail page (with detailed outcome tracking enabled, the default):
