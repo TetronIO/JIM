@@ -6,6 +6,7 @@ using JIM.Application.Servers;
 using JIM.Application.Staging;
 using JIM.Connectors;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Security;
 using JIM.Models.Activities;
 using JIM.Models.Interfaces;
@@ -374,6 +375,77 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
     {
         public IConnector Create(string connectorName, ICredentialProtection? credentialProtection = null, ICertificateProvider? certificateProvider = null) =>
             new StubSchemaConnector(schema);
+    }
+
+    [Test]
+    public async Task GetAllSyncRules_LoadsTheClassMembershipGraphOnTheRulesObjectTypeAsync()
+    {
+        // The worker's export evaluation loads every rule through the parameterless GetSyncRulesAsync overload,
+        // and the class membership planner reads the object type's tag, its merged auxiliary classes and its
+        // structural carrier from that graph. Any of them not fetched is class membership silently not computed:
+        // Scenario 19's convergence export went out carrying jimBadgeNumber with no class add, and OpenLDAP
+        // refused it with an objectClassViolation. Only real PostgreSQL can see this; the in-memory provider
+        // populates navigations from its change tracker whether or not the query included them.
+        var seeded = await SeedWithAttributesAndSelectionAsync();
+
+        await using (var setupCtx = NewContext())
+        {
+            var setupRepository = new PostgresDataRepository(setupCtx);
+            await setupRepository.ConnectedSystems.SetStructuralCarrierObjectTypeAsync(seeded.PosixAccountId, seeded.PersonId);
+
+            var person = await setupCtx.ConnectedSystemObjectTypes.AsTracking()
+                .SingleAsync(objectType => objectType.Id == seeded.PersonId);
+            person.Tags.Add(new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassMembershipAttribute, Value = "objectClass" });
+            setupCtx.SyncRules.Add(new SyncRule
+            {
+                Name = "Export rule under test",
+                ConnectedSystemId = seeded.ConnectedSystemId,
+                ConnectedSystemObjectTypeId = seeded.PersonId,
+                MetaverseObjectType = new MetaverseObjectType { Name = "GraphUser", PluralName = "GraphUsers" },
+                Direction = SyncRuleDirection.Export,
+                Enabled = true
+            });
+            await setupCtx.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var rules = await new PostgresDataRepository(ctx).ConnectedSystems.GetSyncRulesAsync();
+        var rule = rules.Single(r => r.Name == "Export rule under test");
+        var objectType = rule.ConnectedSystemObjectType;
+
+        Assert.That(objectType, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(objectType!.Tags.Any(tag => tag.Key == ObjectTypeTags.Keys.ClassMembershipAttribute), Is.True,
+                "without the tag, the planner thinks the Connected System has no class membership concept");
+            Assert.That(objectType.Extensions, Has.Count.EqualTo(1),
+                "without the extensions, no merged class is ever added to an entry");
+            Assert.That(objectType.Extensions.Single().ExtensionObjectType, Is.Not.Null,
+                "the planner names classes from the extension's navigation");
+        }
+
+        var auxiliaryRule = rules.SingleOrDefault(r => r.ConnectedSystemObjectTypeId == seeded.PosixAccountId);
+        // No rule targets posixAccount here, so assert the carrier through the person rule's graph instead:
+        // load posixAccount's carrier via a rule targeting it.
+        await using (var carrierSetupCtx = NewContext())
+        {
+            carrierSetupCtx.SyncRules.Add(new SyncRule
+            {
+                Name = "Carrier rule under test",
+                ConnectedSystemId = seeded.ConnectedSystemId,
+                ConnectedSystemObjectTypeId = seeded.PosixAccountId,
+                MetaverseObjectType = new MetaverseObjectType { Name = "GraphUser2", PluralName = "GraphUser2s" },
+                Direction = SyncRuleDirection.Export,
+                Enabled = true
+            });
+            await carrierSetupCtx.SaveChangesAsync();
+        }
+        await using var carrierCtx = NewContext();
+        var carrierRules = await new PostgresDataRepository(carrierCtx).ConnectedSystems.GetSyncRulesAsync();
+        var carrierRule = carrierRules.Single(r => r.Name == "Carrier rule under test");
+        Assert.That(carrierRule.ConnectedSystemObjectType!.StructuralCarrierObjectType, Is.Not.Null,
+            "without the carrier, an auxiliary-typed create cannot state its structural class");
+        Assert.That(auxiliaryRule, Is.Null, "guard: the first listing had no posixAccount rule yet");
     }
 
     #endregion

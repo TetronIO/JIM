@@ -129,6 +129,8 @@ JIM composes `objectClass` itself and refuses it as an Attribute Flow target, in
 
 An auxiliary class's MUST appears as **Optional** in the attribute table, deliberately: entries that do not carry the class legitimately lack it.
 
+**Select `objectClass` for import on any Object Type carrying merged classes.** JIM decides what an update must add by comparing the classes an entry already carries against the ones its outgoing attributes imply, and the entry's current classes come from the imported `objectClass` values. Without them, an update re-asserts classes the entry already has, and the directory refuses the modify. The attribute is read-only, so selecting it affects imports alone.
+
 **Only some entries should carry a class?** Scope it with Synchronisation Rules. The class is only ever added where flows produce its attributes, so no second Connected System and no split container scoping is needed.
 
 ### Objects whose identity is an auxiliary class

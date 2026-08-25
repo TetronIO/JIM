@@ -204,9 +204,12 @@ Write-TestStep "Step 5" "Importing LDAP schema"
 # roomNumber: the MustEnforcement step's badge-free Badge Colour source (Source side only, but
 # selecting it on both is harmless and keeps the two systems symmetric).
 # distinguishedName: required for LDAP provisioning (CarrierProvisioning step, Target side).
+# objectClass: read-only, but selecting it is what lets JIM import which classes each entry
+# already carries, so a convergence export adds only the class an entry lacks rather than
+# re-asserting one it has (which the directory would refuse).
 $requiredAttributes = @(
     "uid", "entryUUID", "givenName", "sn", "cn", "displayName", "mail", "employeeNumber",
-    "roomNumber", "distinguishedName"
+    "roomNumber", "distinguishedName", "objectClass"
 )
 
 function Import-Scenario19Schema {
