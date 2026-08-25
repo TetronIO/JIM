@@ -703,8 +703,8 @@ public class SynchronisationControllerMappingTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(error!.Message, Does.Contain("displayName"), "the body must name the target attribute");
-            Assert.That(error.Message, Does.Contain("Import Rule"), "the body must name the Synchronisation Rule");
-            Assert.That(error.Message, Does.Contain("??"), "the body must offer the expression-mapping fallback");
+            Assert.That(error!.Message, Does.Contain("Import Rule"), "the body must name the Synchronisation Rule");
+            Assert.That(error!.Message, Does.Contain("??"), "the body must offer the expression-mapping fallback");
         }
         _mockConnectedSystemRepo.Verify(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Never);
     }
