@@ -212,15 +212,15 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0-dev.20260818.604, )"
+          "JIM.Models": "[0.14.0, )"
         }
       },
       "jim.inmemorydata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.14.0-dev.20260818.604, )",
-          "JIM.Models": "[0.14.0-dev.20260818.604, )",
-          "JIM.Utilities": "[0.14.0-dev.20260818.604, )"
+          "JIM.Data": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )"
         }
       },
       "jim.models": {
@@ -240,7 +240,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0-dev.20260818.604, )",
+          "JIM.Models": "[0.14.0, )",
           "Serilog": "[4.4.0, )"
         }
       }

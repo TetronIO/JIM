@@ -356,4 +356,26 @@ public class CausalityAttributeDetailTests : JimComponentTestContext
                 "whichever half is clipped stays readable");
         }
     }
+
+    /// <summary>
+    /// Attribute values are data, not prose, so they render in the app's code face, the same
+    /// <c>.jim-text-code</c> the Connected System Object tables and the change history timeline already
+    /// use. The causality panel was the one value table not using it: its stylesheet header claimed
+    /// "IBM Plex Mono for values" and declared a token for the purpose, but never applied it to anything,
+    /// so these values had rendered in the body face since the panel shipped.
+    /// </summary>
+    [Test]
+    public void Render_ValueCell_UsesTheSharedCodeFace()
+    {
+        var cut = RenderDetail();
+
+        var values = cut.FindAll(".jim-text-code");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(values, Has.Count.EqualTo(SampleRows().Count), "one value cell per row");
+            // The previous value sits inside the same cell, so it takes the face with it rather than
+            // rendering a struck-through sans string beside a monospace one.
+            Assert.That(values.Any(v => v.QuerySelector(".attr-previous-value") != null), Is.True);
+        }
+    }
 }

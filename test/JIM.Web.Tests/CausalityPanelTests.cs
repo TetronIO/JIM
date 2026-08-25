@@ -18,8 +18,8 @@ namespace JIM.Web.Tests;
 
 /// <summary>
 /// bUnit tests for <see cref="CausalityPanel"/>: rendering across the PRD scenarios, the view
-/// switcher (Flow default; Timeline and Graph selectable; stored preferences honoured with graceful
-/// fallback for unknown values), the technical-names toggle persisting via a stubbed
+/// switcher (Lineage default; Timeline selectable; stored preferences honoured, with legacy Flow and
+/// Graph values falling back silently), the technical-names toggle persisting via a stubbed
 /// <see cref="JIM.Web.Services.IUserPreferenceService"/>, the shared attribute drawer, and the
 /// empty (not-tracked) state.
 /// </summary>
@@ -61,12 +61,12 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void Render_NewJoinerScenario_RendersSummaryBandAndFlowViewByDefault()
+    public void Render_NewJoinerScenario_RendersSummaryBandAndLineageByDefault()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.FindAll(".summary-sentence"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".flow-cols"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".tl"), Is.Empty);
         Assert.That(cut.FindAll(".oc-pill"), Is.Not.Empty);
     }
@@ -98,19 +98,18 @@ public class CausalityPanelTests
         var cut = RenderPanel(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.Markup, Does.Contain("Outcome tracking was not enabled"));
-        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
+        Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
     }
 
     [Test]
-    public void Render_ViewSwitcher_ShowsAllThreeViewsWithFlowOn()
+    public void Render_ViewSwitcher_OffersLineageAndTimelineWithLineageOn()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         var buttons = cut.FindAll(".seg button");
-        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Flow", "Timeline", "Graph" }));
+        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Lineage", "Timeline" }));
         Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
         Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Not.Contain("on"));
-        Assert.That(cut.FindAll(".seg button")[2].ClassList, Does.Not.Contain("on"));
     }
 
     [Test]
@@ -121,7 +120,7 @@ public class CausalityPanelTests
         cut.FindAll(".seg button")[1].Click();
 
         Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
+        Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
         Assert.That(_preferences.CausalityViewWrites, Is.EqualTo(new[] { "timeline" }));
     }
 
@@ -133,48 +132,38 @@ public class CausalityPanelTests
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
+        Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
         Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Contain("on"));
     }
 
     [Test]
-    public void Render_PersistedFlowPreference_StartsOnTheFlowView()
+    public void Render_PersistedLineagePreference_StartsOnTheLineageWithoutRewritingIt()
     {
-        _preferences.StoredCausalityView = "flow";
+        _preferences.StoredCausalityView = "lineage";
 
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        Assert.That(cut.FindAll(".flow-cols"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
         Assert.That(_preferences.CausalityViewWrites, Is.Empty);
     }
 
-    [Test]
-    public void Render_PersistedGraphPreference_StartsOnTheGraphView()
+    [TestCase("flow")]
+    [TestCase("graph")]
+    [TestCase("spine")]
+    [TestCase("constellation")]
+    public void Render_PersistedRetiredOrUnknownPreference_FallsBackToLineageWithoutOverwritingIt(string stored)
     {
-        // Phase 2/3 stored "graph" preferences were held without taking effect; now the Graph view
-        // exists, the stored preference must resolve to it
-        _preferences.StoredCausalityView = "graph";
+        // Stored Flow and Graph preferences outlive their views, and "spine" outlives the name the
+        // Lineage view shipped under in development (#1495); all must resolve to the default Lineage
+        // without being clobbered, exactly as an unknown value always has.
+        _preferences.StoredCausalityView = stored;
 
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        Assert.That(cut.FindAll(".graph-svg"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
-        Assert.That(cut.FindAll(".seg button")[2].ClassList, Does.Contain("on"));
+        Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
         Assert.That(_preferences.CausalityViewWrites, Is.Empty);
-    }
-
-    [Test]
-    public void Render_PersistedUnknownViewPreference_FallsBackToFlowWithoutOverwritingIt()
-    {
-        _preferences.StoredCausalityView = "constellation";
-
-        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-
-        // An unknown stored value renders the default Flow view without clobbering the stored
-        // preference, so it takes effect if that view ever ships
-        Assert.That(cut.FindAll(".flow-cols"), Has.Count.EqualTo(1));
-        Assert.That(_preferences.CausalityViewWrites, Is.Empty);
-        Assert.That(_preferences.StoredCausalityView, Is.EqualTo("constellation"));
+        Assert.That(_preferences.StoredCausalityView, Is.EqualTo(stored));
     }
 
     [Test]
@@ -209,7 +198,7 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void FlowCardSelection_OpensTheDrawerWithTheEventAttributeRows()
+    public void LineageCardSelection_OpensTheDrawerWithTheEventAttributeRows()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
@@ -237,52 +226,7 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void ViewSwitcher_SelectingGraph_SwitchesTheViewAndPersistsThePreference()
-    {
-        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-
-        cut.FindAll(".seg button")[2].Click();
-
-        Assert.That(cut.FindAll(".graph-svg"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
-        Assert.That(_preferences.CausalityViewWrites, Is.EqualTo(new[] { "graph" }));
-    }
-
-    [Test]
-    public void GraphNodeSelection_AttributeBearingNode_OpensTheDrawerWithItsRows()
-    {
-        _preferences.StoredCausalityView = "graph";
-        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-        Assert.That(cut.FindAll(".drawer"), Is.Empty);
-
-        // Only the Export queued event carries attribute rows (its persisted CSO change snapshot)
-        cut.FindAll(".g-node").Single(g => g.TextContent.Contains("3 attributes")).Click();
-
-        Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
-        Assert.That(cut.Find(".drawer-title").TextContent.Trim(), Is.EqualTo("Export queued"));
-        Assert.That(AttributeRowCount(cut.FindAll(".drawer tbody tr")), Is.EqualTo(3));
-    }
-
-    [Test]
-    public void GraphNodeSelection_NonAttributeNode_IsInertRatherThanSelectable()
-    {
-        _preferences.StoredCausalityView = "graph";
-        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-
-        // The drawer is the only thing selection drives, so a node with no attribute rows must not
-        // invite a click: selecting it would highlight the node and open nothing, which reads as the
-        // click having failed.
-        var node = cut.FindAll(".g-node").Single(g => g.TextContent.Contains("Identity created"));
-        Assert.That(node.GetAttribute("role"), Is.Null);
-
-        node.Click();
-
-        Assert.That(cut.FindAll(".g-node.selected"), Is.Empty);
-        Assert.That(cut.FindAll(".drawer"), Is.Empty);
-    }
-
-    [Test]
-    public void SwitchingToTimeline_ClosesTheFlowDrawer()
+    public void SwitchingToTimeline_ClosesTheLineageDrawer()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
         cut.Find(".evt-card.clickable").Click();
@@ -313,15 +257,15 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void CausalChain_NotResolvedByThePage_RendersNoCausedBySection()
+    public void CausalChain_NotResolvedByThePage_RendersNoChainCards()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        Assert.That(cut.FindAll(".caused-by"), Is.Empty);
+        Assert.That(cut.FindAll(".ln-card"), Is.Empty);
     }
 
     [Test]
-    public void CausalChain_Supplied_RendersBeneathTheCanvasAndReadsTheRecordAsTheEffect()
+    public void CausalChain_Supplied_RendersOnTheLineageAndReadsTheRecordAsTheEffect()
     {
         var item = CausalityTestData.NewJoinerItem();
         var chain = new CausalChain
@@ -354,7 +298,7 @@ public class CausalityPanelTests
 
         // The record's display name, not its label: the label carries the external id in parentheses,
         // which reads as nonsense inside a possessive.
-        Assert.That(cut.Find(".cb-sentence").TextContent.Trim(), Is.EqualTo(
+        Assert.That(cut.Find(".ln-sentence").TextContent.Trim(), Is.EqualTo(
             "Tina Adams was deleted, so they were removed from Liam Allen's Static Members"));
     }
 }

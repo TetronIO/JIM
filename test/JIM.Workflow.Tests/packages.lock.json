@@ -85,8 +85,8 @@
       },
       "DynamicExpresso.Core": {
         "type": "Transitive",
-        "resolved": "2.19.3",
-        "contentHash": "84cSMvhcLON2JUQshIvcEAGMtE5rI7FOlcCT0QC42XPZ12A//qDHWKrB5QUfRrQQlDZZZ7TiLAm7mcrywygmpg=="
+        "resolved": "2.19.5",
+        "contentHash": "YusirfwxsmkxKLyTTb4deXq0nMs/r6qLWik6pFQtwti1RqlLjpFyewABiUKAlmS7uPdmZO5RZZsv42BBz7prvQ=="
       },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
@@ -729,11 +729,11 @@
       "jim.application": {
         "type": "Project",
         "dependencies": {
-          "DynamicExpresso.Core": "[2.19.3, )",
-          "JIM.Connectors": "[0.14.0-dev.20260818.604, )",
-          "JIM.Data": "[0.14.0-dev.20260818.604, )",
-          "JIM.Models": "[0.14.0-dev.20260818.604, )",
-          "JIM.Utilities": "[0.14.0-dev.20260818.604, )",
+          "DynamicExpresso.Core": "[2.19.5, )",
+          "JIM.Connectors": "[0.14.0, )",
+          "JIM.Data": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.11, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.11, )",
           "NCrontab": "[3.4.0, )",
@@ -745,9 +745,9 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.14.0-dev.20260818.604, )",
-          "JIM.Scim": "[0.14.0-dev.20260818.604, )",
-          "JIM.Utilities": "[0.14.0-dev.20260818.604, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Scim": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "Microsoft.Data.SqlClient": "[7.0.2, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.300, )",
           "System.DirectoryServices.Protocols": "[10.0.11, )"
@@ -756,15 +756,15 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0-dev.20260818.604, )"
+          "JIM.Models": "[0.14.0, )"
         }
       },
       "jim.inmemorydata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.14.0-dev.20260818.604, )",
-          "JIM.Models": "[0.14.0-dev.20260818.604, )",
-          "JIM.Utilities": "[0.14.0-dev.20260818.604, )"
+          "JIM.Data": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )"
         }
       },
       "jim.models": {
@@ -777,9 +777,9 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.14.0-dev.20260818.604, )",
-          "JIM.Models": "[0.14.0-dev.20260818.604, )",
-          "JIM.Utilities": "[0.14.0-dev.20260818.604, )",
+          "JIM.Data": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.11, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Serilog": "[4.4.0, )"
@@ -788,8 +788,8 @@
       "jim.scim": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0-dev.20260818.604, )",
-          "JIM.Utilities": "[0.14.0-dev.20260818.604, )"
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )"
         }
       },
       "jim.testsupport": {
@@ -802,17 +802,17 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0-dev.20260818.604, )",
+          "JIM.Models": "[0.14.0, )",
           "Serilog": "[4.4.0, )"
         }
       },
       "jim.worker": {
         "type": "Project",
         "dependencies": {
-          "JIM.Application": "[0.14.0-dev.20260818.604, )",
-          "JIM.Models": "[0.14.0-dev.20260818.604, )",
-          "JIM.PostgresData": "[0.14.0-dev.20260818.604, )",
-          "JIM.Utilities": "[0.14.0-dev.20260818.604, )",
+          "JIM.Application": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.PostgresData": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.11, )",
           "Microsoft.Extensions.Hosting": "[10.0.11, )",
           "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": "[1.23.0, )",

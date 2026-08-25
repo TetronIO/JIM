@@ -255,6 +255,19 @@ public interface IActivityRepository
     public Task<CausalSourceImportEvent?> GetLatestImportItemForCsoAsync(
         Guid connectedSystemObjectId, DateTime atOrBeforeActivityExecuted, Guid excludeRunProfileExecutionItemId);
 
+    /// <summary>
+    /// The import event that last changed the record carrying the given external ID in the given Connected
+    /// System, at or before the given Activity time, excluding the asking item itself: the source-import
+    /// hop's degraded key (#1495). A deletion cascade hard-deletes the Connected System Object and nulls its
+    /// id on every item that processed it, so the id-keyed walk of
+    /// <see cref="GetLatestImportItemForCsoAsync"/> finds nothing exactly where an administrator most needs
+    /// the chain; the external ID snapshotted on each item survives the deletion and reaches the same
+    /// import. Null where no import on the record is retained.
+    /// </summary>
+    public Task<CausalSourceImportEvent?> GetLatestImportItemForExternalIdAsync(
+        int connectedSystemId, string externalIdSnapshot, DateTime atOrBeforeActivityExecuted,
+        Guid excludeRunProfileExecutionItemId);
+
 
     /// <summary>
     /// Gets all activities associated with a schedule execution.

@@ -1,0 +1,104 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The one way JIM renders a reference to an OBJECT that belongs to a side of the Metaverse: a chip carrying a  *@
+@* CS or MV avatar, the object's type, and its name or identifier. The sibling of AttributeChip, which does the *@
+@* same job for attributes; both exist because CS and MV are abbreviations, and which side something sits on is *@
+@* the fact a reader most needs and can least infer from a name or a GUID.                                     *@
+@*                                                                                                             *@
+@* This markup was duplicated by hand across two pages before it was extracted, and the duplication is what let *@
+@* a defect live: the hover rule that recolours the avatar against the filled chip was written for the MV badge *@
+@* only, so every CS badge kept its resting colour on hover. Pending Export Detail rendered both, side by side, *@
+@* with nothing tying them together. See JIM.Web/CLAUDE.md "Shared UI components".                              *@
+
+@* The tooltip wraps the LINK rather than the chip, and that nesting is load-bearing: MudTooltip renders an  *@
+@* inline-flex box of its own, and putting that between the link and the chip would sit a new box across the *@
+@* hover treatment's descendant selectors. Wrapping the whole link leaves jim-chip-link's subtree intact.    *@
+<MudTooltip Text="@EffectiveTooltip" Arrow="true" Placement="Placement.Top">
+    @if (!string.IsNullOrEmpty(Href))
+    {
+        <MudLink Href="@Href" Underline="Underline.None" Class="jim-chip-link">
+            @Chip
+        </MudLink>
+    }
+    else
+    {
+        @Chip
+    }
+</MudTooltip>
+
+@code {
+    /// <summary>
+    /// Which side of the Metaverse the object sits on, which decides the avatar and its colour.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ObjectChipKind Kind { get; set; }
+
+    /// <summary>
+    /// The object's type name (the Connected System Object Type, or the Metaverse Object Type), rendered as the
+    /// chip's accented prefix. A type is what makes a bare identifier readable, so it leads.
+    /// </summary>
+    [Parameter]
+    public string? TypeName { get; set; }
+
+    /// <summary>
+    /// How the object is identified: its name, external ID or display name. Optional, because a record that has
+    /// not been exported yet has no identifier to show and the type alone is still worth saying.
+    /// </summary>
+    [Parameter]
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// Optional destination, making the chip a link. A linked chip additionally gets the hover treatment, which
+    /// is why the link wrapper carries <c>jim-chip-link</c> rather than the chip itself.
+    /// </summary>
+    [Parameter]
+    public string? Href { get; set; }
+
+    /// <summary>
+    /// Additional CSS classes for the chip. The call site owns the surrounding geometry: a chip in a detail
+    /// table's cell wants <c>ma-0</c>, one in a stack of its own does not.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>
+    /// Optional tooltip. Defaults to naming the side the object sits on, which is the fact the avatar is
+    /// abbreviating and the one a reader cannot infer from a name or a GUID; pass a richer one where the call
+    /// site knows more (which Connected System the record lives in, say).
+    /// </summary>
+    [Parameter]
+    public string? Tooltip { get; set; }
+
+    private string EffectiveTooltip => Tooltip ??
+        (Kind == ObjectChipKind.Metaverse ? "Metaverse Object" : "Connected System Object");
+
+    /// <summary>
+    /// The avatar's colour by side. These are the two colours the hover rule in site.css recolours; changing one
+    /// here without the other leaves a badge that does not respond to its own chip's hover state.
+    /// </summary>
+    private Color AvatarColour => Kind == ObjectChipKind.Metaverse ? Color.Primary : Color.Secondary;
+
+    private string AvatarText => Kind == ObjectChipKind.Metaverse ? "MV" : "CS";
+
+    private string PrefixClass => Kind == ObjectChipKind.Metaverse ? "jim-mv-chip-prefix" : "jim-cs-chip-prefix";
+
+    /// <summary>
+    /// The colon joins the type to the identifier, so it belongs to the pair rather than to the type: a chip
+    /// showing a type and nothing else would otherwise trail a colon with nothing after it.
+    /// </summary>
+    private string Prefix => string.IsNullOrEmpty(Name) ? (TypeName ?? string.Empty) : $"{TypeName}:";
+
+    private RenderFragment Chip => @<MudChip T="string" Color="Color.Default" Class="@Class">
+        <AvatarContent>
+            <MudAvatar Color="@AvatarColour">@AvatarText</MudAvatar>
+        </AvatarContent>
+        <ChildContent>
+            <b class="@PrefixClass">@Prefix</b>@if (!string.IsNullOrEmpty(Name))
+            {
+                @((MarkupString)"&nbsp;")
+                @Name
+            }
+        </ChildContent>
+    </MudChip>;
+}

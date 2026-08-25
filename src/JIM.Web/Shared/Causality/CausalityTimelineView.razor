@@ -114,8 +114,9 @@
                body and the last of them already provides the trailing gap. *@
             <div class="tl-body @(causalityEvent.Children.Count > 0 ? "has-children" : null)">
                 <div class="tl-line">
+                    @* One vocabulary, the one the reader asked for: with the technical-names toggle off,
+                       no CSO or MVO wording appears at all. See CausalityEventCard.Title. *@
                     <span class="verb">@(TechnicalNames ? causalityEvent.TechnicalLabel : causalityEvent.PlainLabel)</span>
-                    <span class="tech">@(TechnicalNames ? causalityEvent.PlainLabel : causalityEvent.TechnicalLabel)</span>
                     @if (causalityEvent.Badge != null)
                     {
                         <span class="evt-badge" style="--tone: @toneVar">@causalityEvent.Badge</span>

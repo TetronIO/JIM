@@ -43,7 +43,10 @@
                     <VirtualisedSortHeader Title="Claim Value" Name="value" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    @context.Item.Value
+                    @* A claim value is a literal an identity provider asserted (a GUID, a SID, an email,
+                       a URI), so it takes the app's shared code face like every other verbatim value
+                       JIM shows. *@
+                    <span class="jim-text-code">@context.Item.Value</span>
                 </CellTemplate>
             </TemplateColumn>
         </Columns>
@@ -95,11 +98,13 @@
                 <CellTemplate>
                     @if (string.IsNullOrEmpty(context.Item.Value))
                     {
+                        @* "(not set)" is prose standing in for an absent value, not a value, so it keeps
+                           the ordinary face; only the setting's actual value takes the code face. *@
                         <MudText Typo="Typo.body2" Color="Color.Secondary"><em>(not set)</em></MudText>
                     }
                     else
                     {
-                        @context.Item.Value
+                        <span class="jim-text-code">@context.Item.Value</span>
                     }
                 </CellTemplate>
             </TemplateColumn>

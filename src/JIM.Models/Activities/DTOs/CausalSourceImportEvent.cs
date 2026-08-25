@@ -39,4 +39,11 @@ public class CausalSourceImportEvent
 
     /// <inheritdoc cref="ConnectedSystemId"/>
     public string? ConnectedSystemName { get; init; }
+
+    /// <summary>
+    /// When the import's Activity ran (UTC), which is what the Lineage shows on the hop's card and orders the
+    /// column's cards by. This is the same value the lookup already sorts on to pick the latest import, so it
+    /// costs nothing to carry.
+    /// </summary>
+    public DateTime Occurred { get; init; }
 }

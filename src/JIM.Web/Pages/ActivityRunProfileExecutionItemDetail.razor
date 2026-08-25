@@ -167,28 +167,17 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
                             @if (_externalIdAttributeValue != null)
                             {
-                                <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))"
-                                         Underline="Underline.None" Class="jim-chip-link">
-                                    <MudChip T="string" Color="Color.Default">
-                                        <AvatarContent>
-                                            <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                        </AvatarContent>
-                                        <ChildContent>
-                                            <b class="jim-cs-chip-prefix">@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name:</b>&nbsp;@_externalIdAttributeValue.ToStringNoName()
-                                        </ChildContent>
-                                    </MudChip>
-                                </MudLink>
+                                <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                            TypeName="@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name"
+                                            Name="@_externalIdAttributeValue.ToStringNoName()"
+                                            Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))" />
                             }
                             else
                             {
-                                <MudChip T="string" Color="Color.Default">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent>
-                                        <b class="jim-cs-chip-prefix">@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</b>
-                                    </ChildContent>
-                                </MudChip>
+                                @* No external ID to identify the record by yet, so the chip carries the type alone
+                                   and the link stands beside it rather than wrapping it. *@
+                                <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                            TypeName="@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name" />
                                 <MudLink
                                     Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
                                     View Object
@@ -299,7 +288,11 @@
                is the rule that decided it, which most readers never need to open. *@
             @if (_deletionPolicySnapshot != null)
             {
-                <MudExpansionPanels Class="mb-5" Elevation="0" Outlined="true">
+                @* `jim-expansion-panel` is the house treatment (border and the container radius token),
+                   which is what makes this sit with the causality panel above it. MudBlazor's own
+                   `Outlined` styles the inner panels rather than this container, so it produced no border
+                   at all here and left the default 4px radius against the panel above's 10px. *@
+                <MudExpansionPanels Class="mb-5 jim-expansion-panel" Elevation="0">
                     <MudExpansionPanel Text="Deletion Rule in force at the time">
                         <DeletionPolicySnapshotView Snapshot="_deletionPolicySnapshot"
                                                     ObjectTypeName="@_metaverseObjectType?.Name" />
@@ -460,6 +453,12 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private ConnectedSystemObjectAttributeValue? _externalIdAttributeValue;
     private PendingExport? _pendingExport;
     private MetaverseObjectType? _metaverseObjectType;
+
+    // The Identity this item acted on, looked up once by id (#1495). A header answers both of the panel's
+    // questions in one read: it carries the type plural name the Metaverse Object route is keyed on, and its
+    // absence is what proves the Identity has since been deleted.
+    private MetaverseObjectHeader? _identityHeader;
+    private Guid? _deletedIdentityId;
     private IReadOnlySet<Guid>? _livePendingExportIds;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
 
@@ -495,8 +494,52 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                        ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot,
         CsoObjectTypeName: _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type?.Name
                            ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot,
-        MvoTypeName: _metaverseObjectType?.Name,
-        MvoTypePluralName: _metaverseObjectType?.PluralName);
+        MvoTypeName: _metaverseObjectType?.Name ?? _identityHeader?.TypeName,
+        MvoTypePluralName: _metaverseObjectType?.PluralName ?? _identityHeader?.TypePluralName,
+        DeletedMetaverseObjectId: _deletedIdentityId);
+
+    /// <summary>
+    /// The outcome types whose <c>TargetEntityId</c> is the Metaverse Object's own id. Only these are used to
+    /// look the Identity up, because a null lookup is read as proof the object is gone, and reading it off an
+    /// outcome that targets something else would badge a live object as deleted.
+    /// </summary>
+    private static readonly ActivityRunProfileExecutionItemSyncOutcomeType[] IdentityTargetingOutcomes =
+    [
+        ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+        ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+        ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected,
+        ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
+        ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
+        ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled
+    ];
+
+    /// <summary>
+    /// Looks the item's Identity up once, by id, and records what came back.
+    /// </summary>
+    /// <remarks>
+    /// One header read answers both of the causality panel's questions about the Identity. Found: it carries
+    /// the type plural name the Metaverse Object route is keyed on, so the panel can link it even where the
+    /// type resolution below fails (which it does whenever the item's record has since been deleted, because
+    /// that is where the chain starts). Not found: the Identity has been deleted, by this run or a later one,
+    /// so the panel can say so and offer its deletion record instead of a name that merely does not link.
+    /// A header is the light read for this; the object's full graph is not needed to answer either question.
+    /// </remarks>
+    private async Task ResolveIdentityAsync(JimApplication jim)
+    {
+        if (_activityRunProfileExecutionItem == null)
+            return;
+
+        var identityId = _activityRunProfileExecutionItem.SyncOutcomes
+            .Where(o => IdentityTargetingOutcomes.Contains(o.OutcomeType))
+            .Select(o => o.TargetEntityId)
+            .FirstOrDefault(id => id.HasValue && id.Value != Guid.Empty);
+        if (identityId is not { } id)
+            return;
+
+        _identityHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(id);
+        if (_identityHeader == null)
+            _deletedIdentityId = id;
+    }
 
     /// <summary>
     /// Removes the "Eligible for deletion: ..." segment from a deletion outcome's detail message, for
@@ -615,6 +658,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         // without outcomes has nowhere to show a chain and the walk is not worth paying for.
         if (_activityRunProfileExecutionItem.SyncOutcomes.Count > 0)
             _causalChain = await jim.Activities.GetCausalChainAsync(Id);
+
+        await ResolveIdentityAsync(jim);
 
         // Resolve the MVO type for headings and deletion rule display
         {
