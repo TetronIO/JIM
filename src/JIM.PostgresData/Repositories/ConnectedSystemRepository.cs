@@ -5954,6 +5954,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         //     relies on EF's change tracker to detect property modifications, collection
         //     adds (e.g. new ObjectScopingCriteriaGroup) and collection removals on
         //     SaveChanges. With NoTracking, those mutations are invisible to EF.
+        //   - DeleteSyncRuleAsync depends on it, and on the Includes below, for correctness
+        //     rather than convenience: SyncRuleMappings.SyncRuleId and
+        //     SyncRuleScopingCriteriaGroups.SyncRuleId are both NO ACTION in the database,
+        //     so nothing there deletes them when the rule goes. What removes them is EF's
+        //     client-side fixup over the tracked graph this method loads. Drop either
+        //     Include for performance and every Synchronisation Rule delete starts failing
+        //     with 23503, from a change made in a read method with no delete test in sight.
+        //     (ObjectMatchingRules is no longer in that set: it cascades in the database as
+        //     of CascadeObjectMatchingRuleOwnership, so it is safe however it is loaded.)
         return await Repository.Database.SyncRules
             .AsTracking()
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
@@ -6493,8 +6502,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 10. Delete Object Matching Rules for this system before the Synchronisation Rules and Object Types they reference
-        //     (those foreign keys do not cascade). Their Sources are removed automatically via ON DELETE CASCADE.
+        // 10. Delete Object Matching Rules for this system. Both ownership foreign keys now cascade
+        //     (CascadeObjectMatchingRuleOwnership), so this statement is no longer what stops the deletes below
+        //     failing; it is kept because the sequence deletes rows explicitly and in a stated order rather than
+        //     relying on cascades it cannot see, and because it removes the rules in one statement instead of
+        //     twice over from two later ones. Their Sources are removed automatically via ON DELETE CASCADE.
         //     An OMR belongs to this system when it is scoped to one of its object types or one of its Synchronisation Rules.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ObjectMatchingRules""

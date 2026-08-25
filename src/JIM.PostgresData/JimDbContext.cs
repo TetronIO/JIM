@@ -523,16 +523,25 @@ public class JimDbContext : DbContext
             .Property(rp => rp.VerifyImportContentHashes)
             .HasDefaultValue(false);
 
-        // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
+        // An ObjectMatchingRule belongs to either a SyncRule or a ConnectedSystemObjectType, never both, and which
+        // one decides what the rule is: owned by an Object Type it matches every account of that type (Simple
+        // mode), owned by a Synchronisation Rule it matches only what that rule brings in (Advanced mode). Either
+        // way it is contained by its owner and means nothing without it, so both relationships cascade. Left to
+        // convention they were ClientSetNull, and the rule survived its owner's deletion with a null owner:
+        // configuration belonging to nothing, reachable from nowhere, and reported as a clean delete. Its Sources
+        // already cascade from the rule, so they go too. See the "Configuration ownership (issue #1477)" block
+        // below for why an optional foreign key gets this treatment by default.
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.ObjectMatchingRules)
             .WithOne(omr => omr.SyncRule)
-            .HasForeignKey(omr => omr.SyncRuleId);
+            .HasForeignKey(omr => omr.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.ObjectMatchingRules)
             .WithOne(omr => omr.ConnectedSystemObjectType)
-            .HasForeignKey(omr => omr.ConnectedSystemObjectTypeId);
+            .HasForeignKey(omr => omr.ConnectedSystemObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ObjectMatchingRule>()
             .HasOne(omr => omr.MetaverseObjectType)
