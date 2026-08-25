@@ -6438,10 +6438,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 @"UPDATE ""ConnectedSystemObjectChanges"" SET ""DeletedObjectTypeId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
                 connectedSystemId);
 
-        // 3. Delete Containers (child of Partition)
+        // 3. Delete Containers. Both ownership paths are covered: a Container belongs to this system either through
+        //    its Partition or directly, and deleting only the Partition-owned ones stranded the rest. Descendants
+        //    need no statement of their own; ParentContainerId cascades (see JimDbContext, "A Container owns the
+        //    Containers discovered beneath it"), which is what lets a nested hierarchy go in one delete. Keyed on
+        //    the top of each branch rather than walked recursively, because the database does the walking.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemContainers""
-              WHERE ""PartitionId"" IN (SELECT ""Id"" FROM ""ConnectedSystemPartitions"" WHERE ""ConnectedSystemId"" = {0})",
+              WHERE ""PartitionId"" IN (SELECT ""Id"" FROM ""ConnectedSystemPartitions"" WHERE ""ConnectedSystemId"" = {0})
+                 OR ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
         // 4. Delete Run Profiles. Must be before Partitions: ConnectedSystemRunProfiles.PartitionId is a

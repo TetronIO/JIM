@@ -1063,6 +1063,18 @@ public class JimDbContext : DbContext
             .HasForeignKey(c => c.PredefinedSearchCriteriaGroupId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // A Container owns the Containers discovered beneath it. Exactly the nested-group case above, and it bit
+        // the same way: deleting a Connected System removes its Containers with one statement keyed on PartitionId,
+        // but a Container discovered below another carries no PartitionId of its own, so that statement deleted
+        // the top of each branch and left every descendant pointing at a row that had just gone. PostgreSQL
+        // refused on this foreign key and the whole delete rolled back, so a Connected System that had ever
+        // imported a nested hierarchy could not be deleted at all.
+        modelBuilder.Entity<ConnectedSystemContainer>()
+            .HasMany(c => c.ChildContainers)
+            .WithOne(c => c.ParentContainer)
+            .HasForeignKey(c => c.ParentContainerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // A Connector Definition owns the settings it declares.
         modelBuilder.Entity<ConnectorDefinition>()
             .HasMany(cd => cd.Settings)
