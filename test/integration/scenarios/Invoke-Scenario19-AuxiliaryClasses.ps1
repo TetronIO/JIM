@@ -591,10 +591,9 @@ try {
         # recalled and the refused Pending Export is withdrawn; later steps then run their
         # exports clean rather than re-tripping this refusal.
         Write-Host "Removing the roomNumber mapping and re-synchronising..." -ForegroundColor Gray
-        # Shrink the priority list back to the surviving contributor first, so the mapping being
-        # removed is no longer referenced by an Attribute Priority entry.
-        Set-JIMMetaverseAttributePriority -AttributeId $mvBadgeColour.id -ObjectTypeId $mvUserType.id `
-            -MappingId @($jimBadgeColourMapping.id) | Out-Null
+        # Remove the mapping itself; the priority order cannot be shrunk first, because the API
+        # requires the order to list every contributing mapping, and removal takes the mapping's
+        # priority entry with it.
         Remove-JIMSyncRuleMapping -SyncRuleId $targetImportRule.id -MappingId $roomNumberMapping.id -Confirm:$false | Out-Null
         $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSync.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Target) after mapping removal"
