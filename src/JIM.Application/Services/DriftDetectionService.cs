@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Staging;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Core;
@@ -798,6 +799,13 @@ public class DriftDetectionService
             if (attributeChanges.Count == 0)
                 continue;
 
+            // The class membership values this correction obliges (#492): a corrective export whose drifted
+            // attribute is a merged auxiliary class's contribution must add the class in the same export,
+            // exactly as ordinary export staging does, or the Connected System refuses the whole modify.
+            // Enforce State is on by default, so this is the path most exports to an already-joined object
+            // stage through.
+            AddClassMembershipCorrections(exportRule, cso, attributes, attributeChanges);
+
             // Check if any attribute changes have unresolved reference values
             // This is used to defer exports with reference attributes until the referenced objects have been exported
             var hasUnresolvedReferences = attributeChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
@@ -830,6 +838,74 @@ public class DriftDetectionService
         }
 
         return pendingExports;
+    }
+
+    /// <summary>
+    /// Adds the class membership values a corrective export must write, where the Connected System has the
+    /// concept (#492). The drift path's changes carry attribute ids without navigations, so the plan is
+    /// computed from the drifted attributes themselves rather than from the changes.
+    /// </summary>
+    private static void AddClassMembershipCorrections(
+        SyncRule exportRule,
+        ConnectedSystemObject cso,
+        List<DriftedAttribute> driftedAttributes,
+        List<PendingExportAttributeValueChange> attributeChanges)
+    {
+        var objectType = exportRule.ConnectedSystemObjectType;
+        if (objectType == null)
+            return;
+
+        // The names the object already holds values for, and the classes it already carries, both read by
+        // attribute id: the drift path loads Connected System Object attribute values without their attribute
+        // navigations, so a name-based read would see nothing.
+        var attributeNamesById = (objectType.Attributes ?? []).ToDictionary(a => a.Id, a => a.Name);
+        var attributesAlreadyOnTheObject = cso.AttributeValues
+            .Select(value => attributeNamesById.GetValueOrDefault(value.AttributeId))
+            .OfType<string>()
+            .ToList();
+
+        var classAttributeName = objectType.Tags
+            .FirstOrDefault(tag => tag.Key == ObjectTypeTags.Keys.ClassMembershipAttribute)?.Value;
+        if (string.IsNullOrEmpty(classAttributeName))
+            return;
+
+        var classAttribute = (objectType.Attributes ?? [])
+            .FirstOrDefault(a => a.Name.Equals(classAttributeName, StringComparison.OrdinalIgnoreCase));
+        if (classAttribute == null)
+        {
+            Log.Error("AddClassMembershipCorrections: Object Type '{ObjectType}' declares '{AttributeName}' as its class membership attribute, but no such attribute is in its schema. Class membership cannot be corrected; refresh the schema.",
+                objectType.Name, classAttributeName);
+            return;
+        }
+
+        var currentClasses = cso.AttributeValues
+            .Where(value => value.AttributeId == classAttribute.Id && !string.IsNullOrEmpty(value.StringValue))
+            .Select(value => value.StringValue!)
+            .ToList();
+
+        var plan = ClassMembershipPlanner.Plan(
+            objectType,
+            currentClasses,
+            attributesBeingWritten: driftedAttributes.Select(drifted => drifted.Attribute.Name),
+            isCreate: false,
+            attributesAlreadyOnTheObject: attributesAlreadyOnTheObject);
+
+        foreach (var className in plan.ClassesToWrite)
+        {
+            attributeChanges.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = classAttribute.Id,
+                StringValue = className,
+
+                // Add rather than Update: class membership is multi-valued, and restating the classes the
+                // object already carries is a change the Connected System has no reason to accept.
+                ChangeType = PendingExportAttributeChangeType.Add
+            });
+
+            Log.Debug("AddClassMembershipCorrections: Corrective export for Object Type '{ObjectType}' will write {AttributeName}: {ClassName}",
+                objectType.Name, classAttributeName, className);
+        }
     }
 
     /// <summary>

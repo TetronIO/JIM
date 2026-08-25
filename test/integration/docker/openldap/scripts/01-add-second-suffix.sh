@@ -61,6 +61,18 @@ done
 #     relative-date scoping criteria can target it - Scenario 8 LeaverCohort step, #908)
 #   - jimLeaverCohort (Boolean marker identifying the Scenario 8 leaver-cohort users; read
 #     by the test harness over LDAP, never selected into JIM)
+# Defines jimBadgeHolder (SUP top AUXILIARY), a JIM-owned auxiliary class so auxiliary class
+# testing (issue #492, Scenario 19) does not depend on whichever schemas the base image loads:
+#   - jimBadgeNumber (MUST; exercises the export-side required-attribute enforcement path)
+#   - jimBadgeColour, jimBadgeIssued (MAYs; the ordinary merge/flow path)
+#   - uid (MAY, from cosine): lets a jimBadgeHolder-typed object satisfy the 'account' carrier
+#     class's MUST (userid) and its own uid= RDN when JIM provisions it, the same shape as the
+#     classic account + posixAccount pairing
+# A DIT Content Rule on jimPerson names jimBadgeHolder as permitted, giving the schema
+# discovery's "suggested by DIT Content Rule" path something real to read; this is the only
+# fixture in the estate exercising the parser's dITContentRules support against a live
+# directory. NOTE: with the rule in place slapd enforces it, so jimPerson entries may only
+# carry auxiliary classes the rule permits.
 # OIDs use the 1.3.6.1.4.1.99999 test arc (integration tests only).
 # Schema is global (cn=config), so both Yellowstone and Glitterband suffixes can use these classes.
 echo "[openldap-init] Loading JIM schema extensions..."
@@ -72,8 +84,13 @@ olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.1 NAME 'jimGroupType' DESC 'Group typ
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.2 NAME 'jimGroupStatus' DESC 'Group lifecycle status' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.3 NAME 'jimEmployeeEndDate' DESC 'Employment end date' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE )
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.4 NAME 'jimLeaverCohort' DESC 'Scenario 8 leaver-cohort marker' EQUALITY booleanMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.7 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.5 NAME 'jimBadgeNumber' DESC 'Badge number (required by jimBadgeHolder)' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.6 NAME 'jimBadgeColour' DESC 'Badge colour' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.7 NAME 'jimBadgeIssued' DESC 'Badge issue date' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE )
 olcObjectClasses: ( 1.3.6.1.4.1.99999.1.2.1 NAME 'jimGroup' DESC 'Extended group with type, status, and mail' SUP groupOfNames STRUCTURAL MAY ( mail $ jimGroupType $ jimGroupStatus ) )
 olcObjectClasses: ( 1.3.6.1.4.1.99999.1.2.2 NAME 'jimPerson' DESC 'Extended person with employment end date' SUP inetOrgPerson STRUCTURAL MAY ( jimEmployeeEndDate $ jimLeaverCohort ) )
+olcObjectClasses: ( 1.3.6.1.4.1.99999.1.2.3 NAME 'jimBadgeHolder' DESC 'JIM-owned auxiliary class for badge details' SUP top AUXILIARY MUST jimBadgeNumber MAY ( jimBadgeColour $ jimBadgeIssued $ uid ) )
+olcDitContentRules: ( 1.3.6.1.4.1.99999.1.2.2 NAME 'jimPersonContent' DESC 'Permits jimBadgeHolder on jimPerson entries' AUX jimBadgeHolder )
 SCHEMA
 echo "[openldap-init] JIM schema extensions loaded"
 

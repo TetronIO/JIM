@@ -502,6 +502,265 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// List the auxiliary classes offered against an Object Type
+    /// </summary>
+    /// <remarks>
+    /// Every auxiliary class the Connected System's schema defines, marked with whether it is merged into this
+    /// Object Type, what merging would contribute, and why JIM thinks it relevant: a DIT Content Rule permitting
+    /// it, and how many entries the last discovery run saw carrying it.
+    ///
+    /// Suggestions are never configuration. A class is listed whether or not anything suggests it, and only what
+    /// is merged is persisted, so a schema refresh cannot silently change what an Object Type carries.
+    ///
+    /// The list is empty for an Object Type whose Connected System does not let JIM compose class membership
+    /// (Active Directory resolves its own auxiliary classes into each structural class), and for an auxiliary
+    /// Object Type, which cannot carry another.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">The unique identifier of the Object Type.</param>
+    /// <returns>The auxiliary classes on offer, merged first, then suggested, then the rest by name.</returns>
+    /// <response code="200">The auxiliary classes on offer.</response>
+    /// <response code="404">Connected System or Object Type not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/auxiliary-classes", Name = "GetObjectTypeAuxiliaryClasses")]
+    [ProducesResponseType(typeof(List<AuxiliaryClassOfferDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectTypeAuxiliaryClassesAsync(int connectedSystemId, int objectTypeId)
+    {
+        _logger.LogTrace("Requested auxiliary classes for object type {ObjectTypeId} in Connected System {SystemId}", objectTypeId, connectedSystemId);
+
+        var objectType = await GetObjectTypeInConnectedSystemAsync(connectedSystemId, objectTypeId);
+        if (objectType == null)
+            return ObjectTypeNotFound(connectedSystemId, objectTypeId);
+
+        var schema = await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
+        var latestRun = await _application.ConnectedSystems.GetLatestAuxiliaryClassDiscoveryRunAsync(connectedSystemId);
+
+        var offers = AuxiliaryClassOfferBuilder.Build(objectType, schema, latestRun);
+        return Ok(offers.Select(AuxiliaryClassOfferDto.FromEntity).ToList());
+    }
+
+    /// <summary>
+    /// Set which auxiliary classes an Object Type carries
+    /// </summary>
+    /// <remarks>
+    /// Replaces the whole set: classes named here that were not merged are merged, and classes merged that are not
+    /// named here are withdrawn. An empty list withdraws every selection.
+    ///
+    /// Merged classes contribute their attributes to the Object Type at the next schema refresh, and JIM writes
+    /// the class onto an entry when a flow first gives that entry one of the class's attributes.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">The unique identifier of the Object Type the classes are merged into.</param>
+    /// <param name="request">The auxiliary classes it should carry, by their own Object Type ids.</param>
+    /// <returns>The updated Object Type.</returns>
+    /// <response code="200">The auxiliary class selections were applied.</response>
+    /// <response code="400">A named Object Type is not an auxiliary class, is in another Connected System, or the target cannot carry one.</response>
+    /// <response code="404">Connected System or Object Type not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/auxiliary-classes", Name = "SetObjectTypeAuxiliaryClasses")]
+    [ProducesResponseType(typeof(ConnectedSystemObjectTypeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetObjectTypeAuxiliaryClassesAsync(
+        int connectedSystemId,
+        int objectTypeId,
+        [FromBody] SetObjectTypeAuxiliaryClassesRequest request)
+    {
+        _logger.LogInformation("Setting auxiliary classes for object type {ObjectTypeId} in Connected System {SystemId}", objectTypeId, connectedSystemId);
+
+        var unauthorised = await RejectIfUnidentifiedAsync("auxiliary class selection");
+        if (unauthorised != null)
+            return unauthorised;
+
+        var objectType = await GetObjectTypeInConnectedSystemAsync(connectedSystemId, objectTypeId);
+        if (objectType == null)
+            return ObjectTypeNotFound(connectedSystemId, objectTypeId);
+
+        var result = await _application.ConnectedSystems.SetObjectTypeExtensionsAsync(
+            objectTypeId, request.ObjectTypeIds ?? []);
+
+        if (!result.Success)
+            return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage!));
+
+        var updated = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
+        return Ok(ConnectedSystemObjectTypeDto.FromEntity(updated!));
+    }
+
+    /// <summary>
+    /// Set the Structural Carrier Class of an auxiliary Object Type
+    /// </summary>
+    /// <remarks>
+    /// An entry carries exactly one structural class, so an Object Type that is itself an auxiliary class has to
+    /// name the structural class JIM writes alongside it when creating an entry. Until one is named, JIM can
+    /// import objects of the type but cannot create them.
+    ///
+    /// Send a null id to clear the carrier.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">The unique identifier of the auxiliary Object Type.</param>
+    /// <param name="request">The structural Object Type to carry it, or null to clear.</param>
+    /// <returns>The updated Object Type.</returns>
+    /// <response code="200">The Structural Carrier Class was set or cleared.</response>
+    /// <response code="400">The Object Type is not an auxiliary class, or the named carrier is not a structural class in the same Connected System.</response>
+    /// <response code="404">Connected System or Object Type not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/structural-carrier", Name = "SetObjectTypeStructuralCarrier")]
+    [ProducesResponseType(typeof(ConnectedSystemObjectTypeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetObjectTypeStructuralCarrierAsync(
+        int connectedSystemId,
+        int objectTypeId,
+        [FromBody] SetObjectTypeStructuralCarrierRequest request)
+    {
+        _logger.LogInformation("Setting the structural carrier for object type {ObjectTypeId} in Connected System {SystemId}", objectTypeId, connectedSystemId);
+
+        var unauthorised = await RejectIfUnidentifiedAsync("structural carrier selection");
+        if (unauthorised != null)
+            return unauthorised;
+
+        var objectType = await GetObjectTypeInConnectedSystemAsync(connectedSystemId, objectTypeId);
+        if (objectType == null)
+            return ObjectTypeNotFound(connectedSystemId, objectTypeId);
+
+        var result = await _application.ConnectedSystems.SetStructuralCarrierObjectTypeAsync(
+            objectTypeId, request.StructuralCarrierObjectTypeId);
+
+        if (!result.Success)
+            return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage!));
+
+        var updated = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
+        return Ok(ConnectedSystemObjectTypeDto.FromEntity(updated!));
+    }
+
+    /// <summary>
+    /// Get the last auxiliary class discovery run
+    /// </summary>
+    /// <remarks>
+    /// Discovery reads a Connected System's entries to find which auxiliary classes they actually carry. The run
+    /// returned is the most recent one, whatever its outcome: a cancelled run keeps the partial results it did
+    /// gather, because a class it observed is genuinely in use.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>The most recent discovery run and its results.</returns>
+    /// <response code="200">The most recent discovery run.</response>
+    /// <response code="404">Connected System not found, or no discovery run has been started for it.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/auxiliary-class-discovery", Name = "GetAuxiliaryClassDiscoveryRun")]
+    [ProducesResponseType(typeof(AuxiliaryClassDiscoveryRunDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAuxiliaryClassDiscoveryRunAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested the latest auxiliary class discovery run for Connected System {SystemId}", connectedSystemId);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var run = await _application.ConnectedSystems.GetLatestAuxiliaryClassDiscoveryRunAsync(connectedSystemId);
+        if (run == null)
+            return NotFound(ApiErrorResponse.NotFound($"No auxiliary class discovery run has been started for Connected System {connectedSystemId}."));
+
+        return Ok(AuxiliaryClassDiscoveryRunDto.FromEntity(run));
+    }
+
+    /// <summary>
+    /// Start an auxiliary class discovery run
+    /// </summary>
+    /// <remarks>
+    /// Reads the Connected System's entries to find which auxiliary classes they carry, and records the counts as
+    /// suggestions against each Object Type. It changes no configuration: what an Object Type carries stays
+    /// whatever an administrator has merged.
+    ///
+    /// A quick sample reads a fixed number of entries per Object Type. It is fast, and enough to find the classes
+    /// a population uses consistently, but a directory returns entries in its own order, so it cannot prove a
+    /// class unused. A full scan reads every entry in scope, requesting only class membership.
+    ///
+    /// One run at a time per Connected System, because a full scan reads every object and two would double the
+    /// load on a directory that is probably still serving authentication.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The scope to read at, and the per-Object-Type sample size for a quick sample.</param>
+    /// <returns>The queued task and the Activity carrying its progress.</returns>
+    /// <response code="202">The discovery run was queued.</response>
+    /// <response code="400">No scope was given, a quick sample had no sample size, or a run is already in progress.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/auxiliary-class-discovery", Name = "StartAuxiliaryClassDiscovery")]
+    [ProducesResponseType(typeof(AuxiliaryClassDiscoveryStartedDto), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartAuxiliaryClassDiscoveryAsync(
+        int connectedSystemId,
+        [FromBody] StartAuxiliaryClassDiscoveryRequest request)
+    {
+        _logger.LogInformation("Starting auxiliary class discovery for Connected System {SystemId} at scope {Scope}", connectedSystemId, request.Scope);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for auxiliary class discovery");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var result = await _application.ConnectedSystems.StartAuxiliaryClassDiscoveryAsync(
+            connectedSystemId, request.Scope, request.SampleSizePerObjectType, initiatedBy);
+
+        if (!result.Success)
+            return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage!));
+
+        return Accepted(new AuxiliaryClassDiscoveryStartedDto
+        {
+            WorkerTaskId = result.WorkerTaskId,
+            ActivityId = result.ActivityId
+        });
+    }
+
+    /// <summary>
+    /// The Object Type, only when it belongs to the named Connected System. Null otherwise, so a caller cannot
+    /// reach one Connected System's schema through another's route.
+    /// </summary>
+    private async Task<ConnectedSystemObjectType?> GetObjectTypeInConnectedSystemAsync(int connectedSystemId, int objectTypeId)
+    {
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return null;
+
+        var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
+        return objectType?.ConnectedSystemId == connectedSystemId ? objectType : null;
+    }
+
+    private IActionResult ObjectTypeNotFound(int connectedSystemId, int objectTypeId)
+    {
+        return NotFound(ApiErrorResponse.NotFound(
+            $"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
+    }
+
+    /// <summary>
+    /// Refuses the request when neither a user nor an API key can be identified from it, matching how the other
+    /// schema writes on this controller attribute a change.
+    /// </summary>
+    private async Task<IActionResult?> RejectIfUnidentifiedAsync(string operation)
+    {
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy != null || IsApiKeyAuthenticated())
+            return null;
+
+        _logger.LogWarning("Could not identify user from JWT claims for {Operation}", operation);
+        return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+    }
+
+    /// <summary>
     /// Get a Connected System Object
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>

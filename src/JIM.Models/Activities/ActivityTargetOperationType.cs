@@ -67,5 +67,13 @@ public enum ActivityTargetOperationType
     /// <summary>
     /// An administrator stopped queued password changes being delivered (#1119, requirement 22).
     /// </summary>
-    CancelPasswordDelivery = 15
+    CancelPasswordDelivery = 15,
+
+    /// <summary>
+    /// Reads a Connected System's objects to find out which auxiliary classes they carry (#492). Used with
+    /// <see cref="ActivityTargetType.ConnectedSystem"/>. Distinct from <see cref="ImportSchema"/> because it reads
+    /// objects rather than schema, and changes nothing: what it finds is recorded as suggestions an administrator
+    /// may act on, never as configuration.
+    /// </summary>
+    DiscoverAuxiliaryClasses = 16
 }

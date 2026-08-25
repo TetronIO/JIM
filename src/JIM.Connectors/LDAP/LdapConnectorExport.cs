@@ -1078,12 +1078,14 @@ internal class LdapConnectorExport
     {
         var addRequest = new AddRequest(dn);
 
-        // Get the object class from the Pending Export
-        var objectClass = GetObjectClass(pendingExport);
-        if (!string.IsNullOrEmpty(objectClass))
-        {
-            addRequest.Attributes.Add(new DirectoryAttribute("objectClass", objectClass));
-        }
+        // The classes JIM worked out this entry belongs to, stated in one multi-valued attribute: its structural
+        // class, and every auxiliary class whose attributes this add carries. See ClassMembershipPlanner.
+        var objectClasses = GetObjectClasses(pendingExport);
+        if (objectClasses.Count > 0)
+            addRequest.Attributes.Add(new DirectoryAttribute("objectClass", [.. objectClasses]));
+
+        // The structural class comes first, and is what the entry fundamentally is; the checks below are about it.
+        var objectClass = objectClasses.FirstOrDefault();
 
         // Consolidate attribute changes by name so multi-valued attributes (e.g. member) are
         // grouped into a single list per attribute name before applying batch size limits.
@@ -1908,22 +1910,34 @@ internal class LdapConnectorExport
         return dnFromAttrChanges;
     }
 
-    private static string? GetObjectClass(PendingExport pendingExport)
+    /// <summary>
+    /// The object classes this entry is to be created with, in the order JIM stated them: the structural class
+    /// first, then every auxiliary class the entry belongs to.
+    /// </summary>
+    /// <remarks>
+    /// JIM computes these and puts them on the Pending Export, because which auxiliary classes an entry belongs to
+    /// follows from the values that entry actually has, not from the configuration; see ClassMembershipPlanner. The
+    /// Object Type's name is the fallback for a Connected System that predates this, or one whose schema has not
+    /// been refreshed since: it is what this connector always used, and it remains correct for an entry with no
+    /// auxiliary classes.
+    /// </remarks>
+    private static List<string> GetObjectClasses(PendingExport pendingExport)
     {
-        // Try to get object class from attribute changes
-        var objectClassAttr = pendingExport.AttributeValueChanges
-            .FirstOrDefault(a => a.Attribute?.Name.Equals("objectClass", StringComparison.OrdinalIgnoreCase) == true);
+        var stated = pendingExport.AttributeValueChanges
+            .Where(change => change.Attribute?.Name.Equals(LdapConnectorConstants.ObjectClassAttributeName, StringComparison.OrdinalIgnoreCase) == true)
+            .Select(change => change.StringValue)
+            .Where(value => !string.IsNullOrEmpty(value))
+            .Select(value => value!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        if (objectClassAttr?.StringValue != null)
-            return objectClassAttr.StringValue;
+        if (stated.Count > 0)
+            return stated;
 
-        // Try to get from CSO type
-        if (pendingExport.ConnectedSystemObject?.Type?.Name != null)
-            return pendingExport.ConnectedSystemObject.Type.Name;
+        var typeName = pendingExport.ConnectedSystemObject?.Type?.Name
+                       ?? pendingExport.AttributeValueChanges.FirstOrDefault()?.Attribute?.ConnectedSystemObjectType?.Name;
 
-        // Try to derive from attribute metadata
-        var firstAttr = pendingExport.AttributeValueChanges.FirstOrDefault();
-        return firstAttr?.Attribute?.ConnectedSystemObjectType?.Name;
+        return string.IsNullOrEmpty(typeName) ? [] : [typeName];
     }
 
     /// <summary>
@@ -1970,7 +1984,11 @@ internal class LdapConnectorExport
         PendingExport pendingExport,
         List<ConsolidatedModification> consolidatedModifications)
     {
-        var objectClass = GetObjectClass(pendingExport);
+        // The class that demands members, whichever position it sits in: an entry may carry auxiliary classes
+        // alongside its structural one.
+        var objectClass = GetObjectClasses(pendingExport)
+            .FirstOrDefault(className => LdapConnectorConstants.MUST_MEMBER_OBJECT_CLASSES.Contains(className));
+
         if (string.IsNullOrEmpty(objectClass))
             return;
 
@@ -2100,8 +2118,8 @@ internal class LdapConnectorExport
         if (_directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD)
             return false;
 
-        var objectClass = GetObjectClass(pendingExport);
-        return objectClass != null && LdapConnectorConstants.MUST_MEMBER_OBJECT_CLASSES.Contains(objectClass);
+        return GetObjectClasses(pendingExport)
+            .Any(className => LdapConnectorConstants.MUST_MEMBER_OBJECT_CLASSES.Contains(className));
     }
 
     /// <summary>

@@ -93,6 +93,17 @@ public class ExportExecutionResult
     /// </summary>
     public List<string> CreatedContainerExternalIds { get; set; } = [];
 
+    /// <summary>
+    /// Number of Pending Exports refused before being sent, because a class they add to an object has required
+    /// attributes that nothing satisfies.
+    /// </summary>
+    /// <remarks>
+    /// Counted apart from other failures because it points at a configuration gap an administrator can close (an
+    /// Attribute Flow is missing, or an auxiliary class selection should be withdrawn), rather than at something
+    /// that went wrong at the Connected System.
+    /// </remarks>
+    public int ClassMembershipRefusedCount { get; set; }
+
     #region Optimistic Export Apply (issue #1079)
 
     /// <summary>

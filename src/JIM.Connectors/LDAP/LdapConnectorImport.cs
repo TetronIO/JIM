@@ -1191,7 +1191,8 @@ internal class LdapConnectorImport
 
         // Use NotSet for Full Imports - JIM will determine Create vs Update based on CSO existence.
         // Only delta imports with change tracking should specify explicit Create/Update/Delete.
-        connectedSystemImportResult.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries, ObjectChangeType.NotSet));
+        connectedSystemImportResult.ImportObjects.AddRange(
+            ConvertLdapResults(searchResponse.Entries, ObjectChangeType.NotSet, connectedSystemObjectType));
         stopwatch.Stop();
         _logger.Debug($"GetFisoResults: Executed for object type '{connectedSystemObjectType.Name}' within container '{connectedSystemContainer.Name}' in {stopwatch.Elapsed}");
     }
@@ -1271,7 +1272,7 @@ internal class LdapConnectorImport
 
         // USN-based delta imports cannot distinguish Create vs Update, only that something changed.
         // Use NotSet so JIM determines the actual change type based on CSO existence.
-        result.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries, ObjectChangeType.NotSet));
+        result.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries, ObjectChangeType.NotSet, objectType));
 
         stopwatch.Stop();
         _logger.Debug("GetDeltaResultsUsingUsn: Found {Count} changed objects for type '{ObjectType}' in container '{Container}' (USN > {Usn}) in {Elapsed}",
@@ -1383,15 +1384,7 @@ internal class LdapConnectorImport
             }
 
             // Find the matching object type from our schema
-            ConnectedSystemObjectType? objectType = null;
-            foreach (var objectClass in objectClasses)
-            {
-                objectType = _connectedSystem.ObjectTypes.FirstOrDefault(ot =>
-                    ot.Selected && ot.Name.Equals(objectClass, StringComparison.OrdinalIgnoreCase));
-                if (objectType != null)
-                    break;
-            }
-
+            var objectType = LdapObjectTypeMatcher.Match(objectClasses, _connectedSystem.ObjectTypes);
             if (objectType == null)
             {
                 // This tombstone is for an object type we're not importing - skip it
@@ -1769,32 +1762,24 @@ internal class LdapConnectorImport
         var entryUuid = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqEntryUUID");
 
         // Extract objectClass from reqOld values (format: "attributeName: value")
-        var reqOldValues = LdapConnectorUtilities.GetEntryAttributeStringValues(accesslogEntry, "reqOld");
-        string? objectClassName = null;
+        var reqOldValues = LdapConnectorUtilities.GetEntryAttributeStringValues(accesslogEntry, "reqOld") ?? [];
 
-        if (reqOldValues != null)
-        {
-            foreach (var oldValue in reqOldValues)
-            {
-                if (oldValue.StartsWith("objectClass: ", StringComparison.OrdinalIgnoreCase))
-                {
-                    var className = oldValue["objectClass: ".Length..].Trim();
-                    // Find the most specific matching object type (skip generic ones like 'top')
-                    var matchedType = _connectedSystem.ObjectTypes
-                        .FirstOrDefault(ot => ot.Selected && ot.Name.Equals(className, StringComparison.OrdinalIgnoreCase));
-                    if (matchedType != null)
-                        objectClassName = matchedType.Name;
-                }
+        const string objectClassPrefix = "objectClass: ";
+        var objectClasses = reqOldValues
+            .Where(oldValue => oldValue.StartsWith(objectClassPrefix, StringComparison.OrdinalIgnoreCase))
+            .Select(oldValue => oldValue[objectClassPrefix.Length..].Trim());
 
-                // Also try to get entryUUID from reqOld if not found via reqEntryUUID
-                if (entryUuid == null && oldValue.StartsWith("entryUUID: ", StringComparison.OrdinalIgnoreCase))
-                {
-                    entryUuid = oldValue["entryUUID: ".Length..].Trim();
-                }
-            }
-        }
+        // The same precedence as a live entry gets, so a deletion is recorded against the Object Type the object
+        // was imported as.
+        var objectType = LdapObjectTypeMatcher.Match(objectClasses, _connectedSystem.ObjectTypes);
 
-        if (string.IsNullOrEmpty(objectClassName))
+        // Also try to get entryUUID from reqOld if not found via reqEntryUUID
+        const string entryUuidPrefix = "entryUUID: ";
+        entryUuid ??= reqOldValues
+            .FirstOrDefault(oldValue => oldValue.StartsWith(entryUuidPrefix, StringComparison.OrdinalIgnoreCase))?
+            [entryUuidPrefix.Length..].Trim();
+
+        if (objectType == null)
         {
             var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
             _logger.Warning("BuildDeleteImportObjectFromAccesslog: Could not determine object type for deleted object. " +
@@ -1812,14 +1797,12 @@ internal class LdapConnectorImport
 
         var importObject = new ConnectedSystemImportObject
         {
-            ObjectType = objectClassName,
+            ObjectType = objectType.Name,
             ChangeType = ObjectChangeType.Deleted,
         };
 
         // Add entryUUID as an attribute so the import processor can match to the existing CSO
-        var externalIdAttribute = _connectedSystem.ObjectTypes
-            .First(ot => ot.Name.Equals(objectClassName, StringComparison.OrdinalIgnoreCase))
-            .Attributes.FirstOrDefault(a => a.IsExternalId);
+        var externalIdAttribute = objectType.Attributes.FirstOrDefault(a => a.IsExternalId);
 
         if (externalIdAttribute != null)
         {
@@ -1842,7 +1825,7 @@ internal class LdapConnectorImport
         }
 
         _logger.Debug("BuildDeleteImportObjectFromAccesslog: Built delete import for {ObjectType} with entryUUID {Uuid}, DN: {Dn}",
-            objectClassName, LogSanitiser.Sanitise(entryUuid), LogSanitiser.Sanitise(reqDnValue));
+            objectType.Name, LogSanitiser.Sanitise(entryUuid), LogSanitiser.Sanitise(reqDnValue));
         return importObject;
     }
 
@@ -1880,7 +1863,13 @@ internal class LdapConnectorImport
         }
     }
 
-    private IEnumerable<ConnectedSystemImportObject> ConvertLdapResults(SearchResultEntryCollection searchResults, ObjectChangeType changeType)
+    /// <param name="searchedObjectType">The Object Type whose search produced these results, so that an entry
+    /// carrying more than one selected class is emitted by one search only. Null when the caller is not searching
+    /// per Object Type, i.e. fetching a single object by its DN.</param>
+    private IEnumerable<ConnectedSystemImportObject> ConvertLdapResults(
+        SearchResultEntryCollection searchResults,
+        ObjectChangeType changeType,
+        ConnectedSystemObjectType? searchedObjectType = null)
     {
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("_connectedSystem.ObjectTypes is null. Cannot continue.");
@@ -1910,17 +1899,8 @@ internal class LdapConnectorImport
             };
 
             // work out what JIM object type this result is
-            // AD returns objectClass values from most specific to most general (e.g., user, organizationalPerson, person, top)
-            // We need to find the most specific object type that we have selected in our schema
             var objectClasses = (string[])searchResult.Attributes["objectclass"].GetValues(typeof(string));
-            ConnectedSystemObjectType? objectType = null;
-            foreach (var objectClass in objectClasses)
-            {
-                objectType = _connectedSystem.ObjectTypes.FirstOrDefault(ot =>
-                    ot.Selected && ot.Name.Equals(objectClass, StringComparison.OrdinalIgnoreCase));
-                if (objectType != null)
-                    break;
-            }
+            var objectType = LdapObjectTypeMatcher.Match(objectClasses, _connectedSystem.ObjectTypes);
             if (objectType == null)
             {
                 importObject.ErrorType = ConnectedSystemImportObjectError.CouldNotDetermineObjectType;
@@ -1928,10 +1908,13 @@ internal class LdapConnectorImport
                 importObjects.Add(importObject);
                 continue;
             }
-            else
-            {
-                importObject.ObjectType = objectType.Name;
-            }
+
+            // Leave an entry that resolved to another Object Type to that type's own search, which returns it too.
+            // Emitting it here as well would stage one directory entry as two Connected System Objects.
+            if (!LdapObjectTypeMatcher.OwnsEntry(objectType, searchedObjectType))
+                continue;
+
+            importObject.ObjectType = objectType.Name;
 
             // start populating import object attribute values from the search result
             foreach (string attributeName in searchResult.Attributes.AttributeNames)

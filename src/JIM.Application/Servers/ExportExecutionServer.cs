@@ -4,6 +4,7 @@
 using System.Globalization;
 using JIM.Application.Diagnostics;
 using JIM.Application.Services;
+using JIM.Application.Staging;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
@@ -186,6 +187,16 @@ public class ExportExecutionServer
             Log.Information("ExecuteExportsAsync: Initial password summary for {SystemName}: {StagedCount} newly provisioned accounts " +
                 "recorded as owed an initial password, {FailedCount} that could not be recorded",
                 connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordStagingFailedCount);
+        }
+
+        // Only when it happened: a Connected System with no class membership would otherwise carry a zero on every
+        // export, and this points at a configuration gap rather than at a Connected System failure.
+        if (result.ClassMembershipRefusedCount > 0)
+        {
+            Log.Warning("ExecuteExportsAsync: Class membership summary for {SystemName}: {RefusedCount} export(s) refused because a class being added has " +
+                "required attributes with no value. Each names the attributes on its own Pending Export; add an Attribute Flow for them, or withdraw the " +
+                "auxiliary class selection that brought the class in.",
+                connectedSystem.Name, result.ClassMembershipRefusedCount);
         }
 
         // Report completion
@@ -551,7 +562,8 @@ public class ExportExecutionServer
                                 .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
                                 .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
                             {
-                                exportResults = await connector.ExportAsync(immediateExports.Select(ForConnector).ToList(), cancellationToken, connectorProgress);
+                                (exportResults, var immediateRefused) = await ExportBatchAsync(connector, connectedSystem, immediateExports, cancellationToken, connectorProgress);
+                                result.ClassMembershipRefusedCount += immediateRefused;
                             }
 
                             // Process results
@@ -886,7 +898,7 @@ public class ExportExecutionServer
             }
             else
             {
-                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback, passTotal,
+                await ProcessDeferredBatchesSequentiallyAsync(connector, connectedSystem, deferredBatches, result, cancellationToken, progressCallback, passTotal,
                     connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes);
             }
         }
@@ -1069,6 +1081,7 @@ public class ExportExecutionServer
     /// </param>
     private async Task ProcessDeferredBatchesSequentiallyAsync(
         IConnectorExportUsingCalls connector,
+        ConnectedSystem connectedSystem,
         List<List<PendingExport>> batches,
         ExportExecutionResult result,
         CancellationToken cancellationToken,
@@ -1120,7 +1133,8 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                 .SetTag("batchSize", batch.Count))
             {
-                exportResults = await connector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress);
+                (exportResults, var deferredRefused) = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
+                result.ClassMembershipRefusedCount += deferredRefused;
             }
 
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
@@ -1242,10 +1256,10 @@ public class ExportExecutionServer
                     // Execute batch via connector. The batch was re-loaded from persisted state above,
                     // which is why the reference resolutions and the writable/unresolved split (issue
                     // #1398) are persisted before this path runs: ForConnector decides from what it reads.
-                    var exportResults = await batchConnector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress);
+                    var (exportResults, batchRefused) = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
 
                     // Process results using the batch's own repository
-                    var batchResult = new ExportExecutionResult();
+                    var batchResult = new ExportExecutionResult { ClassMembershipRefusedCount = batchRefused };
                     await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes);
 
                     // Capture created containers from this batch's connector
@@ -1270,6 +1284,7 @@ public class ExportExecutionServer
                         result.OptimisticApplyUnresolvedReferenceCount += batchResult.OptimisticApplyUnresolvedReferenceCount;
                         result.InitialPasswordsStagedCount += batchResult.InitialPasswordsStagedCount;
                         result.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
+                        result.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
                         if (batchCompletedCallback == null)
                             result.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
                         if (batchContainerIds != null)
@@ -1393,6 +1408,58 @@ public class ExportExecutionServer
     private static async Task MarkBatchAsExecutingAsync(List<PendingExport> batch, ISyncRepository repository)
     {
         await repository.MarkPendingExportsAsExecutingAsync(batch);
+    }
+
+    /// <summary>
+    /// Sends a batch to the Connector, holding back any export that would leave an object invalid at the Connected
+    /// System and failing it with the attributes named. Results come back in the batch's own order either way.
+    /// </summary>
+    /// <remarks>
+    /// Refusing here rather than letting the Connected System reject the change gives an administrator something
+    /// they can act on: "posixAccount requires gidNumber" rather than whichever error the directory chose to
+    /// return. It is the same reasoning as the managed-scope refusal in the LDAP Connector.
+    /// </remarks>
+    internal static async Task<(List<ConnectedSystemExportResult> Results, int Refused)> ExportBatchAsync(
+        IConnectorExportUsingCalls connector,
+        ConnectedSystem connectedSystem,
+        List<PendingExport> batch,
+        CancellationToken cancellationToken,
+        IConnectorProgress connectorProgress)
+    {
+        var refusals = new Dictionary<int, ConnectedSystemExportResult>();
+        var sendable = new List<PendingExport>();
+
+        for (var i = 0; i < batch.Count; i++)
+        {
+            var refusal = ClassMembershipValidator.Check(batch[i], connectedSystem);
+            if (refusal == null)
+                sendable.Add(batch[i]);
+            else
+                refusals[i] = refusal;
+        }
+
+        if (refusals.Count == 0)
+            return (await connector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress), 0);
+
+        Log.Warning("ExportBatchAsync: Refused {RefusedCount} of {BatchCount} export(s) on '{ConnectedSystem}' because a class being added has required attributes with no value.",
+            refusals.Count, batch.Count, connectedSystem.Name);
+
+        var sentResults = sendable.Count > 0
+            ? await connector.ExportAsync(sendable.Select(ForConnector).ToList(), cancellationToken, connectorProgress)
+            : [];
+
+        // Rebuild in the batch's order, because the caller pairs results with exports by index.
+        var results = new List<ConnectedSystemExportResult>(batch.Count);
+        var sentIndex = 0;
+        for (var i = 0; i < batch.Count; i++)
+        {
+            if (refusals.TryGetValue(i, out var refusal))
+                results.Add(refusal);
+            else
+                results.Add(sentIndex < sentResults.Count ? sentResults[sentIndex++] : ConnectedSystemExportResult.Succeeded());
+        }
+
+        return (results, refusals.Count);
     }
 
     /// <summary>
