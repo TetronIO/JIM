@@ -587,17 +587,42 @@ try {
         $doraColour = @(Get-Scenario19LdapAttributeValues -LdapConfig $targetLdapConfig -Uid "dora19" -AttributeName "jimBadgeColour")
         Assert-Equal -Expected 0 -Actual $doraColour.Count -Message "Dora's Target entry was not given the colour"
 
-        # Restore: remove the roomNumber mapping and re-synchronise, so Dora's Badge Colour is
-        # recalled and the refused Pending Export is withdrawn; later steps then run their
-        # exports clean rather than re-tripping this refusal.
-        Write-Host "Removing the roomNumber mapping and re-synchronising..." -ForegroundColor Gray
-        # Remove the mapping itself; the priority order cannot be shrunk first, because the API
-        # requires the order to list every contributing mapping, and removal takes the mapping's
+        # Restore: withdraw Dora's roomNumber at the directory and re-synchronise while the
+        # mapping still exists, so the in-place value withdrawal recalls her Badge Colour (the
+        # same recall shape Scenario 14's WithdrawalReElection proves) and the refused Pending
+        # Export is withdrawn; later steps then run their exports clean rather than re-tripping
+        # this refusal. The mapping itself is removed last, as configuration hygiene: removing it
+        # first would orphan the contributed value rather than recall it (#1533).
+        Write-Host "Withdrawing Dora's roomNumber and re-synchronising..." -ForegroundColor Gray
+        $withdrawLdif = @"
+dn: uid=dora19,$($targetLdapConfig.UserContainer)
+changetype: modify
+delete: roomNumber
+
+"@
+        $ldifPath = [System.IO.Path]::GetTempFileName()
+        Set-Content -Path $ldifPath -Value $withdrawLdif -NoNewline
+        try {
+            $withdrawResult = bash -c "cat '$ldifPath' | docker exec -i $($targetLdapConfig.ContainerName) ldapmodify -x -H 'ldap://localhost:$($targetLdapConfig.Port)' -D '$($targetLdapConfig.BindDN)' -w '$($targetLdapConfig.BindPassword)' -c" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "ldapmodify failed withdrawing Dora's roomNumber (exit code $LASTEXITCODE): $withdrawResult"
+            }
+        }
+        finally {
+            Remove-Item -Path $ldifPath -Force -ErrorAction SilentlyContinue
+        }
+
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullImport.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Target) after roomNumber withdrawal"
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSync.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Target) after roomNumber withdrawal"
+        Assert-MvoAttributeValue -MvoId $doraMvoId -AttributeName "Badge Colour" -ExpectNoValue -Name "Dora's Badge Colour recalled after the withdrawal"
+
+        # Now the value is gone, the mapping can go too. The priority order cannot be shrunk
+        # first (the API requires every contributing mapping listed); removal takes the mapping's
         # priority entry with it.
         Remove-JIMSyncRuleMapping -SyncRuleId $targetImportRule.id -MappingId $roomNumberMapping.id -Confirm:$false | Out-Null
-        $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSync.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Target) after mapping removal"
-        Assert-MvoAttributeValue -MvoId $doraMvoId -AttributeName "Badge Colour" -ExpectNoValue -Name "Dora's Badge Colour recalled after mapping removal"
+        Write-Host "  OK roomNumber withdrawn, Badge Colour recalled, mapping removed" -ForegroundColor Green
 
         $testResults.Steps += @{ Name = "MustEnforcement"; Success = $true }
     }
