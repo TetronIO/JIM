@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Activities;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
@@ -275,7 +276,11 @@ public class PasswordDeliveryReadsDatabaseTests
         var connectorDefinition = new ConnectorDefinition { Name = $"{name} Connector", SupportsPasswordSet = true };
         var system = new ConnectedSystem { Name = name, ConnectorDefinition = connectorDefinition };
         var objectType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
-        seed.AddRange(connectorDefinition, system, objectType);
+        // A real identity, because PendingPasswordChange.MetaverseObjectId is a foreign key: a fabricated Guid is
+        // refused by the database, which is the whole reason these reads are covered against a real provider.
+        var metaverseObjectType = new MetaverseObjectType { Name = $"User {name}", PluralName = $"Users {name}" };
+        var metaverseObject = new MetaverseObject { Type = metaverseObjectType };
+        seed.AddRange(connectorDefinition, system, objectType, metaverseObjectType, metaverseObject);
         await seed.SaveChangesAsync();
 
         seed.Add(new ConnectedSystemPasswordSynchronisation
@@ -286,7 +291,7 @@ public class PasswordDeliveryReadsDatabaseTests
         });
         seed.Add(new PendingPasswordChange
         {
-            MetaverseObjectId = Guid.NewGuid(),
+            MetaverseObjectId = metaverseObject.Id,
             ConnectedSystemId = system.Id,
             EncryptedPassword = "protected",
             CreatedAt = DateTime.UtcNow.AddMinutes(-5),
