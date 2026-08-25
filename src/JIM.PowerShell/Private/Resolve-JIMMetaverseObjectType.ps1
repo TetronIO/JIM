@@ -25,10 +25,9 @@ function Resolve-JIMMetaverseObjectType {
 
     Write-Verbose "Resolving Metaverse Object Type name: $Name"
 
-    $response = Invoke-JIMApi -Endpoint "/api/v1/metaverse/object-types"
-
-    # Handle paginated response
-    $objectTypes = if ($response.items) { $response.items } else { $response }
+    # The list endpoint is paginated with a server-side default page size, so read every page;
+    # a name beyond the first page could otherwise never resolve (#894).
+    $objectTypes = Get-JIMPagedItems -Endpoint "/api/v1/metaverse/object-types"
 
     # Find by name (exact match)
     $matches = @($objectTypes | Where-Object { $_.name -eq $Name })

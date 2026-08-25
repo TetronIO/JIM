@@ -53,4 +53,49 @@ public class ConnectedSystemAttributeDtoTests
             }
         }
     }
+
+    [Test]
+    public void FromEntity_ADeclaredReferenceTarget_CarriesItsIdAndNameForApiClients()
+    {
+        // The declared target decides which Object Type a reference resolves within (#1285);
+        // an API client inspecting a schema needs to see it, read-only.
+        var targetObjectType = new ConnectedSystemObjectType { Id = 9, Name = "Department" };
+        var entity = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1,
+            Name = "DEPARTMENT_ID",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.SingleValued,
+            ReferencedObjectTypeId = 9,
+            ReferencedObjectType = targetObjectType
+        };
+
+        var dto = ConnectedSystemAttributeDto.FromEntity(entity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ReferencedObjectTypeId, Is.EqualTo(9));
+            Assert.That(dto.ReferencedObjectTypeName, Is.EqualTo("Department"));
+        }
+    }
+
+    [Test]
+    public void FromEntity_AnUndeclaredReferenceTarget_CarriesNulls()
+    {
+        var entity = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1,
+            Name = "MANAGER",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.SingleValued
+        };
+
+        var dto = ConnectedSystemAttributeDto.FromEntity(entity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ReferencedObjectTypeId, Is.Null);
+            Assert.That(dto.ReferencedObjectTypeName, Is.Null);
+        }
+    }
 }

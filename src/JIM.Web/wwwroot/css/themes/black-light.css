@@ -26,8 +26,11 @@ html[lang] {
     --mud-palette-secondary-text: #ffffffff;
 
     /* === Tertiary Palette === */
-    --mud-palette-tertiary: #00897b;
-    --mud-palette-tertiary-rgb: 0,137,123;
+    /* One step darker than the teal this was (#00897b), because that shade sits at the luminance where
+       neither label colour works: white measured 4.32:1 and dark 4.44:1, both under the 4.5:1 AA floor.
+       Darkening the fill is the only fix that leaves a label legible, and this is the next Material teal. */
+    --mud-palette-tertiary: #00796b;
+    --mud-palette-tertiary-rgb: 0,121,107;
     --mud-palette-tertiary-darken: #00695c;
     --mud-palette-tertiary-lighten: #26a69a;
     --mud-palette-tertiary-text: #ffffffff;

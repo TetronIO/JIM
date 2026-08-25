@@ -177,6 +177,8 @@ Each Connected System has an **Unresolved Reference Handling** setting that cont
 | **Warn** | No per-object errors are raised. The Activity completes with a warning carrying a summary of how many references could not be resolved. Choose this when unresolved references are worth a glance but should not read as failures. |
 | **Ignore** | No per-object errors and no Activity warning; the import completes successfully. Choose this when unresolved references are expected and benign. |
 
+The same setting also governs **ambiguous references**: a reference value that matches objects of more than one Object Type, where the attribute does not declare which Object Type it points at. Two Object Types may legitimately share an anchor value space (a view over a table has the table's keys by construction), so JIM never resolves such a reference by guessing; it is reported per the mode above, with a message naming the candidate Object Types. Where the Connector's schema can declare the reference's target Object Type (the [SQL Connector](../connectors/jim-sql-connector.md)'s `referencesObjectType`), declaring it removes the ambiguity entirely: the reference resolves within the declared Object Type alone.
+
 Whichever mode is selected, genuine data-quality issues remain discoverable:
 
 - **Connected System Objects**<br /> Unresolved reference values stay stored on the affected objects, so they can be inspected on the object's detail page at any time.
@@ -184,6 +186,91 @@ Whichever mode is selected, genuine data-quality issues remain discoverable:
 - **Service log**<br /> Every unresolved reference is logged (at Warning level in Warn mode, Debug level in Ignore mode), along with a summary count at the end of reference resolution.
 
 Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
+
+### On export
+
+The same setting governs the export side. When JIM writes a reference attribute (a manager, a group's members) it needs the referenced object's own identifier in the target Connected System, which it can only have once that object exists there. A Pending Export whose references cannot all be resolved yet is not held back whole: everything that can be written is written now (a Create inserts the row without the reference columns; a group gains the members that can be resolved), and the Pending Export stays pending, carrying only the reference values still owed, until they resolve. It is retried on the deferred cadence and finished when the referenced objects can be addressed.
+
+JIM tells two situations apart at export time:
+
+| Situation | What it means | What happens |
+|-----------|---------------|--------------|
+| **Awaiting anchor** | The referenced object has a Connected System Object in this Connected System, but its own export has not been executed or confirmed yet, so it has no anchor to point at. | Ordinary ordering. Nothing is reported; the reference is written on a later run. |
+| **Not in this Connected System** | The referenced object has no Connected System Object in this Connected System at all: it is out of scope for every Synchronisation Rule into the system, or has not been provisioned. | The reference cannot be written as things stand, and is reported per the mode above: **Error** marks the referring object's Run Profile execution item with an Unresolved Reference error naming the attribute and the referenced object, and the Activity completes with a warning; **Warn** completes the Activity with a warning carrying a summary count; **Ignore** logs only. |
+
+An export that wrote in part is counted as succeeded on the Activity ("43 succeeded (4 written in part, awaiting references)"), because something was written; the Pending Export detail page lists each reference still owed with its reason, and the same detail is available from `Get-JIMPendingExport -Id` and the REST API as `unresolvedReferences`. A partial write that the target refuses (a reference column declared `NOT NULL`, say) fails that object with an ordinary export error, and is retried like any other failure.
+
+## What deselecting means
+
+The Schema tab's ticks decide what JIM **reads**. That is narrower than it looks, and worth being precise about, because deselecting has no visible effect at all: nothing fails, nothing is deleted, and nothing is disconnected.
+
+| What you deselect | What actually happens |
+|---|---|
+| An **Object Type** | JIM stops importing it. The Connected System Objects already imported from it are left exactly as they are: still joined to their Metaverse Objects, and still contributing the values they last imported, which stop being refreshed. Nothing is obsoleted and nothing is deprovisioned. |
+| An **attribute** | JIM stops fetching it. The values already held for it stay on the Connected System Objects, and any Attribute Flow reading it goes on flowing them, without them ever being refreshed again. |
+
+Neither is the same as deselecting a partition or a container. Those take objects out of an import that still runs, so the next Full Import does not find them, marks them obsolete, and the following synchronisation disconnects them. Deselecting an Object Type removes it from that comparison altogether, so its objects are never looked for.
+
+Selection is also an **import-side** idea only. Synchronisation and export do not consult it: an export Attribute Flow whose target attribute is deselected still writes it.
+
+So if your intent is to take a type genuinely out of management, deselecting it is not sufficient on its own. Disable or delete the Synchronisation Rules that manage it too, or its objects will go on contributing stale values indefinitely.
+
+### Obsoletion and contributed values
+
+Each Object Type carries **Remove Contributed Attributes On Obsoletion**, which decides what happens to the Metaverse values one of its objects contributed when that object is obsoleted:
+
+- **On** (the default) withdraws them. Where another Connected System still contributes the attribute it is handed over to that source; where none does, the value is cleared. A [deletion grace period](metaverse.md#deletion-behaviour) preserves a value with no surviving contributor until the grace window resolves.
+- **Off** leaves them on the Metaverse Object. They stop tracking anything from that point, and nothing reports them as stale.
+
+### Previewing a schema change
+
+The Schema tab offers a **Preview Changes** button beside **Save Changes**, which answers what your edited selection would do without saving it.
+
+The preview reports:
+
+| Transition | What it means |
+|---|---|
+| Stops being imported, stays joined | Connected System Objects that would stop being imported. Where the row names an attribute, only that attribute freezes; otherwise the whole object does. |
+| Imported again | Objects, or attribute values, that would start tracking the Connected System again. |
+| Contributed values withdrawn | Metaverse Objects that would have this system's contributed values withdrawn when their obsolete objects are next synchronised. |
+| Contributed values kept | The inverse: values that would be left in place instead. |
+
+Two things the preview is deliberately careful about:
+
+- **Only the objects that hold a value are counted for an attribute.** An object with nothing stored for a deselected attribute has nothing to freeze, so counting it would inflate the answer with objects the change does not touch.
+- **The obsoletion toggle is counted against the objects already obsolete and still joined**, which are the only ones whose fate it changes now. Objects obsoleted in future are governed by the setting too, but there is no population to count yet.
+
+Validation names what would go on running over the frozen data: Synchronisation Rules still bound to an Object Type you are deselecting, and Attribute Flow mappings still reading an attribute you are deselecting. Deselecting an External ID is refused outright.
+
+Save after previewing and the confirmation opens with the preview's own sentence, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
+
+The same evaluation is available to automation: [`New-JIMConfigurationChangePreview -ConnectedSystemId -SchemaObjectType`](../powershell/previews.md) in PowerShell, or `POST connected-systems/{id}/schema-selection/preview` in the [REST API](../../api/reference/). Every omission means "leave this as it stands", so a request changing one flag cannot accidentally propose deselecting a whole Object Type.
+
+See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
+
+## Refreshing the schema
+
+The Schema tab's **Refresh Schema** button retrieves the latest object types and attributes from the Connected System. The first retrieval simply records what it finds; a refresh with a schema already in place shows you a **preview** of what changed before anything is applied, so a source system that has drifted never rewrites JIM's configuration behind your back.
+
+The preview reports, per object type:
+
+| Change | What applying it does |
+|---|---|
+| Object types or attributes **added** | Recorded and available for selection. Additions cannot affect anything that already works. |
+| Object types or attributes **no longer reported** | **Retained** in JIM; nothing is deleted by a refresh. Their values stop refreshing from that point, and any Synchronisation Rule or Attribute Flow reading them works from stale data, so the preview flags them for your attention. |
+| Attribute **definitions changed** (data type or plurality) | The new definition is recorded. A mapping validated against the old definition may no longer behave as intended, so these are flagged too. A data type you [overrode yourself](#overriding-an-inferred-type) is never overwritten, and never appears here. |
+
+Where the diff carries destructive changes, the review also names the configuration that depends on them: Synchronisation Rules bound to a removed object type, Attribute Flow mappings reading a removed or redefined attribute (including attributes consumed inside an expression), and Object Matching Rules that match on a removed attribute, each deep-linking to its page so you can inspect a dependent without losing the review.
+
+A destructive diff pauses on a three-way decision (an additions-only diff keeps the plain **Apply Schema Changes** action, since additions cannot affect anything):
+
+- **Cancel** applies nothing, with the honest warning: cancelling does not preserve the status quo. The next Full Import finds no objects of a removed object type and obsoletes them regardless, and the source now sends redefined attributes in their new form. Cancelling an additions-only diff needs no confirmation, because the next refresh simply finds them again.
+- **Apply &amp; Disable Dependents** records the refresh and then disables everything it invalidated: each named Synchronisation Rule and [mapping](synchronisation-rules.md#disabling-a-single-mapping) is disabled with the refresh recorded as the reason, under child Activities of the refresh, so nothing runs against entries the source no longer reports while you rework the configuration. No objects or values are touched, and re-enabling is a manual choice per rule or mapping. Object Matching Rules have no disabled state, so the review lists any needing your attention separately.
+- **Apply &amp; Remove** is the full commitment, for a genuinely decommissioned object type or attribute. Its plan dialog leads with the consequence, because this deletes configuration and identity data: the named Synchronisation Rules and mappings are **deleted** (under child Activities of the refresh), and the data goes with them through a background worker task you can follow from the Operations tab. Connected System Objects of a removed object type are marked Obsolete and deprovision through the standard pipeline on the next synchronisation run, with disconnection, attribute recall, grace periods and [Metaverse Deletion Rules](metaverse.md#deletion-behaviour) all applying as configured; stored values of a removed attribute are deleted. The dialog counts both before you confirm, per object type and per attribute, and the task's Activity records every object it obsoleted.
+
+Watch the preview's **discovery warnings** before applying: a Connected System identity without permission to read the full schema produces a partial read, which can make object types or attributes appear removed when they are not.
+
+The same flow is available to automation: `Import-JIMConnectedSystemSchema -Preview` in [PowerShell](../powershell/connected-systems.md#import-jimconnectedsystemschema) returns the preview result (its `HasRemovalsOrDefinitionChanges` property flags the changes that matter, its `Dependents` property names the invalidated configuration and its `RemovalImpact` property counts what a removal would take), and committing with `-DisableDependents` or `-RemoveDependents` takes the matching posture. The REST API offers `POST connected-systems/{id}/import-schema/preview` beside the committing `import-schema` endpoint, whose body accepts `disableDependents` or `removeDependents`; see the [REST API reference](../../api/reference/).
 
 ## Attribute writability
 
@@ -367,6 +454,33 @@ Every account gets its own Activity, grouped under one parent so the whole actio
 
 For automation, `Set-JIMMetaverseObjectPassword` does the same thing over the per-account REST endpoint. You must name the Connected Systems, or pass `-AllAccounts`; there is no default, for the same reason the portal preselects nothing.
 
+## Password Synchronisation
+
+Setting a password, above, is something you ask for one account at a time. Password Synchronisation is the standing arrangement: one password change for a person reaching every system they have an account in.
+
+It is configured on the Connected System's **Passwords** tab, which appears only where the connector can set passwords at all. Systems whose connector has no password channel do not show the tab, because there is nothing to configure rather than something to switch on later.
+
+| Setting | What it does |
+|---|---|
+| **Deliver password changes to this Connected System** | Whether queued password changes are delivered. Separate from the configuration existing, so a system can be set up ahead of a change window and switched on during one. |
+| **Object Type holding user accounts** | Which Connected System Object Type receives passwords. Only Object Types you have selected for synchronisation are offered: an unselected one holds no objects, so choosing it would queue passwords for accounts that never appear. |
+| **Maximum attempts** | How many delivery attempts JIM makes before it stops and asks you to look. Leave it at 0 to use JIM's default of five. |
+| **First retry after** | How long to wait before the first retry. Each further attempt waits twice as long as the one before. |
+
+Two things follow from the enable toggle being separate from the configuration:
+
+- **Switching a system off does not discard anything.** Password changes for identities with an account there accumulate, and switching it back on delivers what accumulated. That is what makes it safe to switch off for a maintenance window.
+- **There is no way to remove a configuration, only to disable it.** Removing one would throw away everything queued against it, so JIM does not offer that. This is true of the REST API and PowerShell too.
+
+Two settings that govern delivery here live on the **Settings** tab instead, under Passwords, because they govern every password JIM sends to this system rather than only synchronised ones:
+
+- **Only send passwords over an encrypted connection.** JIM cannot always tell an encrypted connection from an unencrypted one; a signed and sealed bind is encrypted but does not look it from the system's settings, which is why JIM warns rather than refusing by default. Turn this on, once you know the connection is encrypted, to have JIM refuse to send instead. Nothing is discarded when it refuses: queued password changes wait, and accounts stay owed their first password. It applies equally to the initial password on an account JIM provisions and to a password you set by hand.
+- **Give up after.** How long a queued change waits before JIM expires it rather than delivering a password that has since been superseded. Shared with initial password provisioning deliberately: the question both are asking is how long this system may be unavailable before JIM stops trying, and the answer is a property of the system rather than of the deployment.
+
+Every change to these settings reaches the Connected System's configuration change history, so switching Password Synchronisation on or off is attributable afterwards.
+
+For automation, `Get-JIMConnectedSystemPasswordSynchronisation` and `Set-JIMConnectedSystemPasswordSynchronisation` do the same over the REST API; `ConnectorSupportsPasswordSet` on the response tells you whether a system can be configured at all.
+
 ## Directory Capabilities
 
 The Details tab carries a Directory Capabilities card: read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing the card never opens a new connection. Before the first successful connection, the card shows a hint rather than an error.
@@ -395,7 +509,7 @@ classes that alter outcomes are counted:
 | Class | Examples | How it shows |
 |-------|----------|--------------|
 | Sync-affecting | Scoping criteria, Attribute Flow, Object Matching Rules, schema selection | Amber, with the number of changes |
-| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
+| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning, or leave objects joined and contributing values that never refresh |
 
 **Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose
 Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises

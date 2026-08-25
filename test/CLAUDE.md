@@ -259,10 +259,14 @@ These flags are for human developer iteration only. Claude must not use them bec
 
 When the sandbox has a working Docker daemon (the SessionStart hook starts one where the environment supports it; `docker info` confirms), the full `Run-IntegrationTests.ps1` path works, including the Docker image builds, with ONE bridge: `dotnet restore` inside the build stages fails with `NU1301 ... UntrustedRoot` because the egress proxy re-terminates TLS and the build containers do not trust its CA.
 
-**Set one environment variable; do not edit the Dockerfiles.** All three build stages already accept an `EXTRA_CA_CERTS_BASE64` build argument for exactly this case (corporate TLS inspection), and `docker-compose.yml` wires it to `JIM_BUILD_EXTRA_CA_BASE64` for `jim.web`, `jim.worker` and `jim.scheduler`:
+**Set one environment variable; do not edit the Dockerfiles.** All three build stages already accept an `EXTRA_CA_CERTS_BASE64` build argument for exactly this case (corporate TLS inspection), and `docker-compose.yml` wires it to `JIM_BUILD_EXTRA_CA_BASE64` for `jim.web`, `jim.worker` and `jim.scheduler`. **Do NOT base64 the whole of `/root/.ccr/ca-bundle.crt` into it**: at ~310KB encoded it exceeds the kernel's 128KB per-argument `execve` limit, so every child process in the pipeline dies with "Argument list too long" before Docker is even reached. And `agent-proxy-ca.crt` alone is not enough either: containers cannot reach the local agent proxy on 127.0.0.1, so their traffic is intercepted by the **outer egress gateway**, which signs with a different CA ("Egress Gateway SDS Issuing CA") that only appears inside the big bundle. Capture the gateway's own chain from inside a container and use that (verified 2026-08-18):
 
 ```bash
-export JIM_BUILD_EXTRA_CA_BASE64=$(base64 -w0 /root/.ccr/ca-bundle.crt)
+docker run --rm mcr.microsoft.com/dotnet/sdk:10.0-noble bash -c \
+  'echo | openssl s_client -connect api.nuget.org:443 -servername api.nuget.org -showcerts 2>/dev/null' \
+  | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/' | awk 'BEGIN{c=-1} /BEGIN CERTIFICATE/{c++} c>=1' > /tmp/egress-cas.pem
+cat /root/.ccr/agent-proxy-ca.crt >> /tmp/egress-cas.pem   # ~9KB base64 total; well under the limit
+export JIM_BUILD_EXTRA_CA_BASE64=$(base64 -w0 /tmp/egress-cas.pem)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario14-AttributePriority -DirectoryType OpenLDAP
 ```
 
@@ -271,6 +275,27 @@ OpenLDAP is the sensible directory type here; Samba AD images may not be cached.
 (This section previously prescribed copying the CA bundle into the repo root and hand-editing a `COPY`/`ENV SSL_CERT_FILE` pair into each Dockerfile, with a warning to revert it all before committing. That predates the `EXTRA_CA_CERTS_BASE64` argument and is no longer necessary; the build arg installs the CA properly via `update-ca-certificates` instead of overriding `SSL_CERT_FILE` wholesale.)
 
 Mind host resources: a Small-template Scenario 8 run fits in a 15 GB sandbox; the Scale templates do not.
+
+**The proxy's port changes when a session resumes, and `.env` remembers the old one.** A previous session may have written `JIM_BUILD_HTTPS_PROXY=http://127.0.0.1:<port>` (and `JIM_BUILD_NETWORK=host`) into `.env`, which `docker-compose.yml` passes to every build stage. On resume the agent proxy comes back on a **different** port, so the stored value points at nothing and `dotnet restore` fails inside the build with:
+
+```
+error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json.
+error NU1301: Connection refused (127.0.0.1:42447)
+```
+
+Note this is `Connection refused`, **not** the `UntrustedRoot` failure the CA bridge above fixes; reaching for `JIM_BUILD_EXTRA_CA_BASE64` here will not help. Re-point the stored value at the live port before blaming anything else:
+
+```bash
+PORT=$(curl -sS "$HTTPS_PROXY/__agentproxy/status" | grep -o '"port": *[0-9]*' | grep -o '[0-9]*')
+sed -i -E "s#^JIM_BUILD_HTTPS_PROXY=http://127\.0\.0\.1:[0-9]+#JIM_BUILD_HTTPS_PROXY=http://127.0.0.1:$PORT#" .env
+```
+
+`.env` is gitignored, so this never reaches a commit. **Re-run that on every resume, not once per session**: it bit twice within an hour of first being written down, because each resume moves the port again (42447, then 42933, then 44067), and a value corrected earlier in the same session is stale by the next resume. Two further things make the failure hard to recognise:
+
+- **It hides until the build cache goes cold.** The restore layer depends only on the `.csproj`/`packages.lock.json` files, so a cached one is reused and the stale proxy is never contacted; builds keep working for hours. When the disk fills, buildkit's GC evicts that layer, restore runs for real, and the "new" failure looks like something the session just changed.
+- **`JIM_BUILD_NETWORK=host` is required and is already set.** The agent proxy binds loopback only, so a build container cannot reach it via the bridge gateway or `host.docker.internal` (both time out); only host networking works, and `docker-compose.yml` already parameterises `network: ${JIM_BUILD_NETWORK:-default}` for this. Do not add a network override to a compose file.
+
+Related, from the same class of "believe the tooling, not the warning": the SessionStart hook prints `WARNING: Docker daemon failed to start` when its wait expires, and the daemon frequently comes up moments later. **Run `docker info` before accepting that warning** (root `CLAUDE.md` says the same); treating a working sandbox as Docker-less costs an entire session.
 
 ### Running a scenario in the Claude Code cloud sandbox (native stack; no Docker daemon)
 

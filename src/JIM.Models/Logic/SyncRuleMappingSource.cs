@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Expressions;
 using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
@@ -38,6 +39,13 @@ public class SyncRuleMappingSource
     /// Example: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"
     /// </summary>
     public string? Expression { get; set; }
+
+    /// <summary>
+    /// For expression sources only: what to do when an attribute the Expression reads has no value on the object
+    /// being synchronised. Defaults to <see cref="MissingInputBehaviour.EvaluateAnyway"/>, which is the behaviour
+    /// JIM has always had. Ignored by attribute sources, which have no inputs to be missing.
+    /// </summary>
+    public MissingInputBehaviour MissingInputBehaviour { get; set; } = MissingInputBehaviour.EvaluateAnyway;
 
     /// <summary>
     /// Validates that the source is correctly configured.

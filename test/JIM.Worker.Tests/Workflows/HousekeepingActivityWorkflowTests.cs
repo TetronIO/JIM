@@ -97,11 +97,6 @@ public class HousekeepingActivityWorkflowTests
                     rpeis.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError));
             });
 
-        // A recent history cleanup time stops the history retention path running during these tests.
-        _mockActivityRepository
-            .Setup(r => r.GetLastHistoryCleanupTimeAsync())
-            .ReturnsAsync(DateTime.UtcNow);
-
         // No settings rows exist, so every Service Setting read falls back to its default
         // (sync outcome tracking: Detailed; CSO and MVO change tracking: enabled).
         _mockServiceSettingsRepository = new Mock<IServiceSettingsRepository>();
@@ -152,11 +147,12 @@ public class HousekeepingActivityWorkflowTests
         // Act
         await WorkerInstance.PerformHousekeepingAsync(Jim);
 
-        // Assert: the batch is recorded as a system-initiated Metaverse Object Housekeeping Activity.
+        // Assert: the batch is recorded as a system-initiated Scheduled Identity Deletion Activity. The enum
+        // member keeps its original name (persisted by ordinal, append-only); only the display name changed.
         var activity = _createdActivities.SingleOrDefault(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
         Assert.That(activity, Is.Not.Null,
-            "A housekeeping batch that deletes Metaverse Objects must record a Metaverse Object Housekeeping Activity");
-        Assert.That(activity!.TargetName, Is.EqualTo("Metaverse Object Housekeeping"));
+            "A housekeeping batch that deletes Metaverse Objects must record a Scheduled Identity Deletion Activity");
+        Assert.That(activity!.TargetName, Is.EqualTo("Scheduled Identity Deletion"));
         Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Execute));
         Assert.That(activity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
         Assert.That(activity.InitiatedByName, Is.EqualTo("System"));
@@ -189,6 +185,86 @@ public class HousekeepingActivityWorkflowTests
             "TotalPendingExports must reflect the staged recall Pending Export");
         Assert.That(activity.TotalDeleted, Is.EqualTo(1),
             "TotalDeleted must count MvoDeleted outcomes so list views show what the batch deleted");
+    }
+
+    /// <summary>
+    /// Causal provenance (#1223): the group's recall item must record which deleted object caused its removal.
+    ///
+    /// This is the grace-period path, and it is the case with no other answer available. Housekeeping runs in
+    /// its own Activity, minutes or weeks after the run that scheduled the deletion; the removal is recorded
+    /// against the referencing group, not against anything deleted; and deletion has already nulled the
+    /// reference foreign keys that connected them. Without the edge, an administrator looking at "Team Alpha
+    /// lost a member" has nothing at all to go on, which is the exact defect the feature exists to fix.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoReferencedByGroup_RecordsWhatCausedTheRecallAsync()
+    {
+        var (memberMvo, memberDn) = SeedEligibleMemberWithTargetCso("Lena Leaver");
+        // The decision-time snapshot rides across from the run that scheduled the deletion, and is the only
+        // surviving source of the reason and the system that triggered it.
+        memberMvo.DeletionPolicySnapshotJson = new MvoDeletionPolicySnapshot
+        {
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
+            TriggeringSystemId = 9,
+            TriggeringSystemName = "Yellowstone APAC"
+        }.ToJson();
+        var groupMvo = SeedGroupMvoReferencing("Team Alpha", memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberMvo.Id, memberDn);
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([memberMvo]);
+
+        await WorkerInstance.PerformHousekeepingAsync(Jim);
+
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var recallRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id
+            && r.ObjectChangeType == ObjectChangeType.PendingExport
+            && r.ConnectedSystemObjectId == groupTargetCso.Id);
+
+        var edge = recallRpei.CausalEdges.SingleOrDefault();
+        Assert.That(edge, Is.Not.Null,
+            "the group's removal item is the only record of the change and nothing on it says why; the edge is what supplies the cause");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(edge!.EdgeType, Is.EqualTo(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval));
+            Assert.That(edge!.CauseMetaverseObjectId, Is.EqualTo(memberMvo.Id));
+            Assert.That(edge!.CauseDisplayName, Is.EqualTo("Lena Leaver"),
+                "the deleted object is already gone, so the chain can only name it from the snapshot");
+            Assert.That(edge!.ReasonCode, Is.EqualTo(CausalReasonCode.AuthoritativeSourceDisconnected),
+                "the reason comes from the decision-time snapshot; the deciding run ended in a previous Activity");
+            Assert.That(edge!.ConnectedSystemId, Is.EqualTo(9));
+            Assert.That(edge!.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
+            Assert.That(edge!.CauseSyncOutcome, Is.Not.Null,
+                "the cause must point at the deletion outcome recorded in this same batch, not just at the object");
+        }
+    }
+
+    /// <summary>
+    /// The queueing-provenance stamp (#1223): housekeeping's recall item is what queued the group's removal
+    /// export, and the Pending Export must record it, or the export run that carries the removal out has
+    /// nothing to walk back along and the removal reads as having no cause at all.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoReferencedByGroup_StampsTheRecallItemOnItsPendingExportAsync()
+    {
+        var (memberMvo, memberDn) = SeedEligibleMemberWithTargetCso("Lena Leaver");
+        var groupMvo = SeedGroupMvoReferencing("Team Alpha", memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberMvo.Id, memberDn);
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([memberMvo]);
+
+        await WorkerInstance.PerformHousekeepingAsync(Jim);
+
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var recallRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id
+            && r.ObjectChangeType == ObjectChangeType.PendingExport
+            && r.ConnectedSystemObjectId == groupTargetCso.Id);
+        var recallPendingExport = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+
+        Assert.That(recallPendingExport.QueuedByRunProfileExecutionItemId, Is.EqualTo(recallRpei.Id));
     }
 
     /// <summary>

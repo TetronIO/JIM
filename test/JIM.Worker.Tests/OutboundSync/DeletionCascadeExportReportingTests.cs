@@ -120,6 +120,58 @@ public class DeletionCascadeExportReportingTests
     }
 
     /// <summary>
+    /// The queueing-provenance stamp (#1223): the deletion RPEI that reports a staged delete Pending Export is
+    /// the item that queued it, and the Pending Export must record that, or the export run that carries it out
+    /// days later has nothing to walk back along. Both cause identifiers a delete Pending Export used to rely
+    /// on are gone by export time: SourceMetaverseObjectId is nulled by the deletion's SET NULL cascade, and no
+    /// queueing item was ever stamped, which is why deprovisioned items rendered no "Caused by" whatsoever.
+    /// </summary>
+    [Test]
+    public async Task FlushPendingMvoDeletions_NestedCascadeExport_StampsTheDeletionItemAsItsQueueingItemAsync()
+    {
+        SeedExportSyncRule(OutboundDeprovisionAction.Delete);
+        var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        var processor = await CreateProcessorAsync();
+        var (deletionRpei, _) = processor.RecordSourceDisconnection(mvo);
+        processor.QueueMvoDeletion(mvo);
+
+        await processor.CallFlushPendingMvoDeletionsAsync();
+
+        var deletePendingExport = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletionRpei.Id, Is.Not.EqualTo(Guid.Empty),
+                "the deletion item must be given its id at stamp time; the RPEI flush runs too late for this");
+            Assert.That(deletePendingExport.QueuedByRunProfileExecutionItemId, Is.EqualTo(deletionRpei.Id));
+        }
+    }
+
+    /// <summary>
+    /// The standalone fallback item is the queueing item for its Pending Export, exactly as the nested case's
+    /// deletion item is for its own.
+    /// </summary>
+    [Test]
+    public async Task FlushPendingMvoDeletions_StandaloneCascadeExport_StampsTheStandaloneItemAsItsQueueingItemAsync()
+    {
+        SeedExportSyncRule(OutboundDeprovisionAction.Delete);
+        var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        Activity activity = null!;
+        var processor = await CreateProcessorAsync(a => activity = a);
+        // No RecordSourceDisconnection: with no MvoDeleted outcome to nest under, the flush falls back to a
+        // standalone Pending Export item.
+        processor.QueueMvoDeletion(mvo);
+
+        await processor.CallFlushPendingMvoDeletionsAsync();
+
+        var deletePendingExport = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
+        var standaloneItem = activity.RunProfileExecutionItems
+            .Single(r => r.ObjectChangeType == ObjectChangeType.PendingExport);
+        Assert.That(deletePendingExport.QueuedByRunProfileExecutionItemId, Is.EqualTo(standaloneItem.Id));
+    }
+
+    /// <summary>
     /// Each deleted Metaverse Object's cascade lands on its own deletion, not pooled onto the first:
     /// the graph must attribute every downstream deprovisioning to the identity that caused it.
     /// </summary>
@@ -205,6 +257,68 @@ public class DeletionCascadeExportReportingTests
         Assert.That(pendingExportRpeis[0].ExternalIdSnapshot, Is.EqualTo("lena-leaver-guid"),
             "The standalone item must snapshot the target object's external ID so it stays identifiable after deletion");
         Assert.That(pendingExportRpeis[0].ObjectTypeSnapshot, Is.EqualTo("user"));
+    }
+
+    /// <summary>
+    /// Causal provenance (#1223): the standalone item above is the one deprovisioning case an outcome tree
+    /// cannot explain, so it is the one that needs an edge.
+    ///
+    /// Where the export nests under an <c>MvoDeleted</c> outcome, the tree already says what caused it and an
+    /// edge would duplicate a link that is already persisted. The standalone fallback has no such parent by
+    /// definition: it exists precisely because no deletion outcome could be found. Without the edge, the item
+    /// says an account is being deprovisioned and nothing at all about why.
+    /// </summary>
+    [Test]
+    public async Task FlushPendingMvoDeletions_StandaloneItem_RecordsWhatCausedTheDeprovisioningAsync()
+    {
+        SeedExportSyncRule(OutboundDeprovisionAction.Delete);
+        var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        mvo.DeletionTriggeredBySystemId = 9;
+        mvo.DeletionTriggeredBySystemName = "Yellowstone APAC";
+        Activity activity = null!;
+        var processor = await CreateProcessorAsync(a => activity = a);
+        processor.SetOutcomeTracking(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None);
+        processor.QueueMvoDeletion(mvo);
+
+        await processor.CallFlushPendingMvoDeletionsAsync();
+
+        var standaloneItem = activity.RunProfileExecutionItems
+            .Single(r => r.ObjectChangeType == ObjectChangeType.PendingExport);
+        var edge = standaloneItem.CausalEdges.SingleOrDefault();
+
+        Assert.That(edge, Is.Not.Null,
+            "with no deletion outcome to nest under, the edge is the only thing that can say why this account is being deprovisioned");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(edge!.EdgeType, Is.EqualTo(CausalEdgeType.MetaverseObjectDeletionCausedDeprovision));
+            Assert.That(edge!.CauseMetaverseObjectId, Is.EqualTo(mvo.Id));
+            Assert.That(edge!.CauseDisplayName, Is.EqualTo("Lena Leaver"));
+            Assert.That(edge!.ConnectedSystemId, Is.EqualTo(9),
+                "cohorts group on the system whose disconnection triggered the deletion");
+            Assert.That(edge!.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
+        }
+    }
+
+    /// <summary>
+    /// The nested case must NOT get an edge. The Pending Export outcome is already a child of the MvoDeleted
+    /// outcome, so the tree states the cause; writing an edge as well would duplicate a persisted link, which
+    /// is what the PRD forbids, and would make the "Caused by" affordance restate what is on screen above it.
+    /// </summary>
+    [Test]
+    public async Task FlushPendingMvoDeletions_NestedUnderMvoDeleted_WritesNoEdgeAsync()
+    {
+        SeedExportSyncRule(OutboundDeprovisionAction.Delete);
+        var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        Activity activity = null!;
+        var processor = await CreateProcessorAsync(a => activity = a);
+        var (deletionRpei, _) = processor.RecordSourceDisconnection(mvo);
+        processor.QueueMvoDeletion(mvo);
+
+        await processor.CallFlushPendingMvoDeletionsAsync();
+
+        Assert.That(deletionRpei.CausalEdges, Is.Empty,
+            "the outcome tree already parents the export under the deletion; an edge would duplicate it");
+        Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.CausalEdges), Is.Empty);
     }
 
     /// <summary>
@@ -369,7 +483,7 @@ public class DeletionCascadeExportReportingTests
         /// concrete processors do at run start (source system 0: deletions consider every target system).
         /// </summary>
         public async Task PrepareRecallExportEvaluationCacheAsync() =>
-            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync();
 
         /// <summary>
         /// Records what Pass 1 or Pass 2 records when a disconnection triggers an immediate deletion: an

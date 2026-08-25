@@ -230,7 +230,7 @@ public class ReferenceRecallDeduplicationTests
     /// Rule whose ConnectedSystem navigation resolves <paramref name="connectedSystemId"/> to
     /// <paramref name="connectedSystemName"/>. Mirrors the shape SyncFullSyncTaskProcessor /
     /// SyncDeltaSyncTaskProcessor build once per run into _recallExportEvaluationCache via
-    /// BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0).
+    /// BuildExportEvaluationCacheAsync().
     /// </summary>
     private static ExportEvaluationCache BuildRecallExportEvaluationCache(int connectedSystemId, string connectedSystemName)
     {
@@ -294,7 +294,9 @@ public class ReferenceRecallDeduplicationTests
 
         public void SetRecallExportEvaluationCache(ExportEvaluationCache cache) => _recallExportEvaluationCache = cache;
 
-        public void CallStageDeferredRecallRpei(PendingExport pendingExport, string? displayName) => StageDeferredRecallRpei(pendingExport, displayName);
+        // No causes: these tests are about deduplication and emission, which must hold whether or not
+        // provenance was captured. Causal capture has its own fixture (ReferenceRecallCausalEdgeTests).
+        public void CallStageDeferredRecallRpei(PendingExport pendingExport, string? displayName) => StageDeferredRecallRpei(pendingExport, displayName, []);
 
         public Task CallFlushDeferredRecallRpeisAsync() => FlushDeferredRecallRpeisAsync();
     }

@@ -77,6 +77,17 @@ public class ConnectedSystem : IAuditable
     public ConnectedSystemPasswordPolicy? PasswordPolicy { get; set; }
 
     /// <summary>
+    /// Whether, and how, this Connected System receives synchronised passwords (#1119). Null means Password
+    /// Synchronisation has never been configured here, which is where every system starts and stays until an
+    /// administrator decides otherwise.
+    /// <para>
+    /// Distinct from <see cref="PasswordPolicy"/>, which is what JIM discovered about the target's own rules.
+    /// This is what JIM has been told to do.
+    /// </para>
+    /// </summary>
+    public ConnectedSystemPasswordSynchronisation? PasswordSynchronisation { get; set; }
+
+    /// <summary>
     /// Determines where Object Matching Rules are configured for this Connected System.
     /// ConnectedSystem (default): Rules are defined per object type and shared across Synchronisation Rules.
     /// SyncRule: Rules are defined per Synchronisation Rule for advanced scenarios.
@@ -129,8 +140,40 @@ public class ConnectedSystem : IAuditable
     /// service for a fortnight expires every account provisioned against it under the default; raising the value
     /// here beforehand is what prevents that, and it should not raise it for every other system too.
     /// </para>
+    /// <para>
+    /// Password Synchronisation (#1119) reads the same value for its queued password changes rather than adding a
+    /// second window beside it. The question both are asking is identical, "how long can this system be
+    /// unavailable before JIM stops trying", and the answer is a property of the system either way. The name
+    /// predates the second use.
+    /// </para>
     /// </summary>
     public TimeSpan? InitialPasswordTimeToLive { get; set; }
+
+    /// <summary>
+    /// Whether JIM must refuse to send a password to this Connected System over a connection it cannot confirm
+    /// is encrypted. Off by default.
+    /// <para>
+    /// Held on the Connected System rather than on any one feature's configuration, because it governs every
+    /// password JIM sends here: the initial password on an account it provisions, a password an administrator
+    /// sets by hand, and a synchronised password change (#1119). A switch that guarded only one of those would
+    /// leave an administrator who turned it on still sending passwords in the clear down the other two, which is
+    /// worse than not offering it. It also has to be settable on a system that provisions accounts but receives
+    /// no synchronised passwords, and such a system has no Password Synchronisation configuration to hold it.
+    /// </para>
+    /// <para>
+    /// Off by default is a considered position rather than laxity. The LDAP Connector warns on an unencrypted
+    /// connection instead of blocking, because a signed and sealed bind is a legitimate encrypted alternative
+    /// that JIM cannot detect from the Connected System's settings alone, so refusing on the settings would
+    /// refuse a valid configuration. This is how an administrator who knows their deployment closes that gap.
+    /// </para>
+    /// <para>
+    /// The Connector reports whether its channel is encrypted
+    /// (<see cref="JIM.Models.Interfaces.IConnectorPasswordManagement.IsPasswordChannelSecure"/>); the refusal is
+    /// JIM's, applied here, because a Connector cannot know whether a given deployment is an isolated network
+    /// with a directory that cannot serve TLS.
+    /// </para>
+    /// </summary>
+    public bool RequireSecureTransport { get; set; }
 
     /// <summary>
     /// The time to live actually applied to a new <see cref="PendingInitialPassword"/> for this Connected System.

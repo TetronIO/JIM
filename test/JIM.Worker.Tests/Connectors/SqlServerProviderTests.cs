@@ -79,6 +79,31 @@ public class SqlServerProviderTests
         Assert.That(parameter.Value, Is.EqualTo(DBNull.Value), "ADO.NET represents a SQL NULL as DBNull, never as a CLR null.");
     }
 
+    [Test]
+    public void CreateParameter_DateTimeValue_BindsAsDateTime2()
+    {
+        // Left to infer the type, SqlClient binds a DateTime as the legacy datetime, which rounds to a
+        // 1/300-second grid (.000, .003, .007). A datetime2 watermark or keyset value bound that way is
+        // silently moved by up to two milliseconds, so a Delta Import re-reads the row at the top of the
+        // last run (its value rounded down) or, worse, skips rows committed inside the gap (rounded up),
+        // and an exported value loses its precision on the way in.
+        var parameter = (SqlParameter)_provider.CreateParameter("watermark", new DateTime(2026, 7, 15, 12, 0, 0, 124, DateTimeKind.Utc));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parameter.SqlDbType, Is.EqualTo(SqlDbType.DateTime2));
+            Assert.That(parameter.Value, Is.EqualTo(new DateTime(2026, 7, 15, 12, 0, 0, 124, DateTimeKind.Utc)));
+        }
+    }
+
+    [Test]
+    public void CreateParameter_DateTimeOffsetValue_BindsAsDateTimeOffset()
+    {
+        var parameter = (SqlParameter)_provider.CreateParameter("watermark", new DateTimeOffset(2026, 7, 15, 12, 0, 0, 124, TimeSpan.FromHours(10)));
+
+        Assert.That(parameter.SqlDbType, Is.EqualTo(SqlDbType.DateTimeOffset), "An offset-carrying value keeps its offset and its precision.");
+    }
+
     #endregion
 
     #region Identifier quoting

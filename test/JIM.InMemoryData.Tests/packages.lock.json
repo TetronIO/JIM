@@ -196,6 +196,14 @@
           "Microsoft.TestPlatform.ObjectModel": "18.9.0"
         }
       },
+      "Npgsql": {
+        "type": "Transitive",
+        "resolved": "10.0.3",
+        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w==",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
+        }
+      },
       "Serilog": {
         "type": "Transitive",
         "resolved": "4.4.0",
@@ -225,7 +233,8 @@
       "jim.testsupport": {
         "type": "Project",
         "dependencies": {
-          "NUnit": "[4.6.1, )"
+          "NUnit": "[4.6.1, )",
+          "Npgsql": "[10.0.3, )"
         }
       },
       "jim.utilities": {

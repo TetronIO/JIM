@@ -326,19 +326,21 @@ public class WorkflowTestHarness : IDisposable
     /// </summary>
     public async Task ExecuteExportEvaluationAsync(string sourceSystemName)
     {
-        var sourceSystem = GetConnectedSystem(sourceSystemName);
+        // The source system no longer bears on evaluation: rules targeting it are evaluated like any
+        // other (#1284). The parameter is retained so workflow tests keep reading naturally.
+        _ = GetConnectedSystem(sourceSystemName);
 
         // Get all MVOs from InMemoryData (where processors write)
         var mvos = _syncRepo.MetaverseObjects.Values.ToList();
 
         // Build export evaluation cache (uses ISyncRepository internally via JimApplication)
-        var cache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync(sourceSystem.Id);
+        var cache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync();
 
         foreach (var mvo in mvos)
         {
             // For initial export evaluation, treat all attributes as "changed"
             var allAttributes = mvo.AttributeValues.ToList();
-            await _jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, allAttributes, sourceSystem, cache);
+            await _jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, allAttributes, cache);
         }
     }
 

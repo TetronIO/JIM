@@ -347,6 +347,11 @@ public class SynchronisationControllerSetPasswordTests
         public IReadOnlyCollection<PasswordExpiryBehaviour> SupportedExpiryBehaviours =>
             [PasswordExpiryBehaviour.RequireChangeAtNextSignIn, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy];
 
+        /// <summary>
+        /// This double stands in for an ordinary, properly configured target, so its channel is secure.
+        /// </summary>
+        public bool IsPasswordChannelSecure => true;
+
         public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings)
         {
             if (ThrowOnOpen != null)

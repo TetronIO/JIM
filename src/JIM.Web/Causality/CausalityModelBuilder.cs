@@ -2,9 +2,12 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
+using MudBlazor;
 using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Causality;
@@ -30,10 +33,27 @@ public static class CausalityModelBuilder
     /// target system's queue instead of promising a row that no longer exists. Null means "not
     /// resolved", NOT "none are live": a caller that cannot run the lookup keeps the precise links.
     /// </param>
+    /// <param name="deletionPolicySnapshot">
+    /// The decision-time Metaverse Object deletion policy recorded on the item, where one was captured. Supplies
+    /// the synthetic "Identity not deleted" event; see <see cref="BuildDeclinedDeletionEvent"/>.
+    /// </param>
+    /// <param name="isSynchronisationRun">
+    /// Whether the Run Profile that produced this item was a Full or Delta Synchronisation. Only a
+    /// Synchronisation evaluates a Deletion Rule, so only a Synchronisation can report that one declined.
+    /// </param>
+    /// <param name="chain">
+    /// The item's upward causal walk, or null when the caller did not resolve one. Supplies the one
+    /// fact this run cannot know about itself: what an export execution's staged change actually was
+    /// (create, update or delete), carried on the queueing edge's reason code, so an Exported outcome
+    /// can state its decision rather than a bare "Exported" (#1495). Null keeps the bare label.
+    /// </param>
     public static CausalityModel Build(
         ActivityRunProfileExecutionItem item,
         CausalityPageContext context,
-        IReadOnlySet<Guid>? livePendingExportIds = null)
+        IReadOnlySet<Guid>? livePendingExportIds = null,
+        MvoDeletionPolicySnapshot? deletionPolicySnapshot = null,
+        bool isSynchronisationRun = false,
+        CausalChain? chain = null)
     {
         var outcomes = item.SyncOutcomes;
         var outcomeIds = outcomes.Select(o => o.Id).ToHashSet();
@@ -60,10 +80,80 @@ public static class CausalityModelBuilder
             .Where(o => !attachedChildIds.Contains(o.Id))
             .OrderBy(o => o.Ordinal)
             .Select(o => BuildEvent(o, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
-                livePendingExportIds))
+                livePendingExportIds, chain))
             .ToList();
 
+        if (BuildDeclinedDeletionEvent(item, deletionPolicySnapshot, isSynchronisationRun) is { } declined)
+            roots.Add(declined);
+
         return new CausalityModel { Context = context, Roots = roots };
+    }
+
+    /// <summary>
+    /// The synthetic Identity-lane event saying the Deletion Rule evaluated and declined, or null where that is
+    /// not what happened.
+    /// </summary>
+    /// <remarks>
+    /// A Deletion Rule that declines records no outcome, because nothing happened. That leaves the most
+    /// consequential fact about a disconnection ("the Identity survived, and here is why") as the one thing the
+    /// causality views structurally cannot show, which is why it lived in a separate "Metaverse Impact" section
+    /// until this replaced it.
+    ///
+    /// Every condition below is a claim the event would otherwise make falsely:
+    /// only a Synchronisation evaluates the rule at all, so an import has no decision to report; a
+    /// disconnection is the only change that triggers an evaluation; an item with no outcomes did no work to
+    /// explain; a recorded deletion means the rule fired, and a synthetic card would contradict it; and the
+    /// snapshot is the only supported source of the explanation, since the object type's current configuration
+    /// may have changed since the decision.
+    /// </remarks>
+    private static CausalityEvent? BuildDeclinedDeletionEvent(
+        ActivityRunProfileExecutionItem item,
+        MvoDeletionPolicySnapshot? snapshot,
+        bool isSynchronisationRun)
+    {
+        if (!isSynchronisationRun || snapshot == null)
+            return null;
+
+        if (item.ObjectChangeType != ObjectChangeType.Disconnected || item.SyncOutcomes.Count == 0)
+            return null;
+
+        var deletionRecorded = item.SyncOutcomes.Any(o =>
+            o.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+                or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
+        if (deletionRecorded)
+            return null;
+
+        return new CausalityEvent
+        {
+            IsSynthetic = true,
+            Lane = CausalityLane.Identity,
+            // Neutral, not success: whether an Identity surviving a disconnection is the wanted outcome depends
+            // entirely on the deployment's intent, and the panel does not know it.
+            Tone = CausalityTone.Secondary,
+            Icon = Icons.Material.Filled.ShieldMoon,
+            PlainLabel = "Identity not deleted",
+            TechnicalLabel = "Metaverse Object not deleted",
+            DetailMessage = DeclinedDeletionDetail(snapshot)
+        };
+    }
+
+    /// <summary>
+    /// The one-line reason the rule declined, derived from the decision-time snapshot.
+    /// </summary>
+    private static string DeclinedDeletionDetail(MvoDeletionPolicySnapshot snapshot)
+    {
+        if (snapshot.DeletionRule == MetaverseObjectDeletionRule.Manual)
+            return "This object type's Deletion Rule is Manual, so a disconnection never deletes the Identity.";
+
+        if (snapshot.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+            && snapshot.TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
+            && snapshot.RemainingConnectedSourceSystemNames.Count > 0)
+        {
+            var remaining = string.Join(", ", snapshot.RemainingConnectedSourceSystemNames);
+            return $"An authoritative source is still connected ({remaining}), and this object type deletes only when all of them disconnect.";
+        }
+
+        return "The Deletion Rule in force at the time was evaluated and did not delete the Identity.";
     }
 
     private static CausalityEvent BuildEvent(
@@ -72,9 +162,10 @@ public static class CausalityModelBuilder
         CausalityPageContext context,
         IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
         IReadOnlyList<CausalityAttributeRow> identityAttributeRows,
-        IReadOnlySet<Guid>? livePendingExportIds)
+        IReadOnlySet<Guid>? livePendingExportIds,
+        CausalChain? chain)
     {
-        var display = OutcomeDisplayMap.Get(outcome.OutcomeType);
+        var display = GetEventDisplay(outcome, chain);
         var parsedDetail = OutcomeDetailMessageParser.Parse(outcome.DetailMessage);
         var usesIdChannel = UsesDetailMessageIdChannel(outcome.OutcomeType);
         var lane = GetLane(outcome.OutcomeType);
@@ -105,9 +196,51 @@ public static class CausalityModelBuilder
             AttributeRows = GetAttributeRows(outcome, recordAttributeRows, identityAttributeRows),
             Children = childOutcomes
                 .Select(c => BuildEvent(c, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
-                    livePendingExportIds))
+                    livePendingExportIds, chain))
                 .ToList()
         };
+    }
+
+    /// <summary>
+    /// The display mapping for an outcome, decision-aware for export executions (#1495): an Exported
+    /// outcome states what the export did (record created, changes applied, record deleted) when the
+    /// chain's queueing edge recorded the staged change's kind, and stays the bare "Exported" when it
+    /// did not (pre-edge history, or no chain resolved).
+    /// </summary>
+    private static OutcomeDisplay GetEventDisplay(
+        ActivityRunProfileExecutionItemSyncOutcome outcome,
+        CausalChain? chain)
+    {
+        if (outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
+            return OutcomeDisplayMap.Get(outcome.OutcomeType);
+
+        return FindQueueingReason(chain, outcome.Id) is { } reasonCode
+            ? OutcomeDisplayMap.GetExportDecision(reasonCode)
+            : OutcomeDisplayMap.Get(outcome.OutcomeType);
+    }
+
+    /// <summary>
+    /// The queueing edge's staged-change reason for an export outcome, or null where the chain does
+    /// not carry one. An exact <see cref="CausalChainCohort.EffectSyncOutcomeId"/> match wins; a
+    /// cohort attached to the item as a whole covers the rest, which is the ordinary single-export
+    /// item.
+    /// </summary>
+    private static CausalReasonCode? FindQueueingReason(CausalChain? chain, Guid outcomeId)
+    {
+        if (chain == null)
+            return null;
+
+        var queueingCohorts = chain.Cohorts
+            .Where(c => c.SourceImportChangeType == null
+                && c.EdgeType == CausalEdgeType.PendingExportQueueingCausedExportExecution
+                && c.ReasonCode is CausalReasonCode.ExportCreateStaged
+                    or CausalReasonCode.ExportUpdateStaged
+                    or CausalReasonCode.ExportDeleteStaged)
+            .ToList();
+
+        var match = queueingCohorts.FirstOrDefault(c => c.EffectSyncOutcomeId == outcomeId)
+            ?? queueingCohorts.FirstOrDefault(c => c.EffectSyncOutcomeId == null);
+        return match?.ReasonCode;
     }
 
     /// <summary>
@@ -124,21 +257,31 @@ public static class CausalityModelBuilder
     {
         return outcomeType switch
         {
-            // Import-side record events: what came in
+            // Import-side record events: what happened
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded
                 or ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated
                 or ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
                 or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected
+                // Preview-only (#1475): whether an object or an attribute is imported at all is a statement about
+                // what comes in, which is this lane, even though the harm it describes lands on the Metaverse.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported
                 => CausalityLane.Source,
 
-            // Provisioning and export-side events: what it caused
+            // Provisioning and export-side events: what it caused. WouldStageDeleteExport is preview-only but
+            // describes the same export-side event as DeprovisionQueued, so it lives in the same lane.
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
                 or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
                 or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned
+                // Preview-only (#1462): an account that would not be created, and an object that would be left to
+                // diverge, are both statements about the target system rather than about the Metaverse.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift
                 => CausalityLane.Downstream,
 
             // Metaverse-side events: what JIM did
@@ -350,11 +493,23 @@ public static class CausalityModelBuilder
             : "/admin/deleted-objects";
     }
 
-    private static string GetMetaverseObjectHref(Guid mvoId, CausalityPageContext context)
+    /// <summary>
+    /// The Metaverse Object's own page, or null where the object's type plural name is unknown and the
+    /// route therefore cannot be built.
+    /// </summary>
+    /// <remarks>
+    /// Null, never a guess. The route is keyed on the plural name (<c>/t/{plural}/v/{id}</c>), and the
+    /// fallback here used to invent <c>/identity/search/{id}</c>, which is not a route in this
+    /// application: on any item whose type the page could not resolve (a synchronisation whose record
+    /// has since been deleted is the common one, since the resolution chain starts at the record's
+    /// object type) every Identity on the panel pointed at a page that does not exist. The caller
+    /// renders an unlinked name for a null, which the deleted-Identity branch beside it already does.
+    /// </remarks>
+    private static string? GetMetaverseObjectHref(Guid mvoId, CausalityPageContext context)
     {
         return !string.IsNullOrEmpty(context.MvoTypePluralName)
             ? JimUtilities.GetMetaverseObjectHref(mvoId, context.MvoTypePluralName)
-            : $"/identity/search/{mvoId}";
+            : null;
     }
 
     /// <summary>

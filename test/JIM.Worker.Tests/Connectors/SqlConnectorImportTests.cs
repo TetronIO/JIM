@@ -368,6 +368,46 @@ public class SqlConnectorImportTests
     }
 
     [Test]
+    public async Task ImportAsync_ZonelessDateTimeInTheDaylightSavingGap_IsReadWithTheOffsetInForceBeforeTheClocksMoved()
+    {
+        // Sydney moves its clocks forward at 02:00 AEST on 2020-10-04, so 02:30 that morning is a
+        // wall-clock time that never happened. A last-modified column can still hold it (a default of
+        // "now" written by a server whose own clock is UTC, say), and one row in every 8,760 of a
+        // minute-granular series lands in the gap. Refusing the row is not an option; the value is read
+        // as PostgreSQL and Java read it, with the offset in force just before the transition (+10:00),
+        // so it lands where the clock jumped to (03:30 AEDT), which is 16:30 UTC the day before.
+        var inTheGap = new DateTime(2020, 10, 4, 2, 30, 0, DateTimeKind.Unspecified);
+
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID", "STARTED"], [1, inTheGap]);
+
+        var run = await RunImportAsync(provider, PersonDocument, DateSystem(), pageSize: 10, databaseTimeZone: "Australia/Sydney");
+        var imported = Attribute(run.ImportObjects.Single(), "STARTED");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.ImportObjects.Single().ErrorType, Is.Null, "A skipped hour is not an error in the row.");
+            Assert.That(imported.DateTimeValue, Is.EqualTo(new DateTime(2020, 10, 3, 16, 30, 0, DateTimeKind.Utc)));
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_ZonelessDateTimeInTheAmbiguousHour_IsReadAsStandardTime()
+    {
+        // The clocks go back at 03:00 AEDT on 2020-04-05, so 02:30 that morning happens twice: first at
+        // +11:00 and again at +10:00. .NET's own convention (and PostgreSQL's) is the later, standard-time
+        // reading, and JIM keeps to it: 02:30 +10:00 is 16:30 UTC the day before.
+        var ambiguous = new DateTime(2020, 4, 5, 2, 30, 0, DateTimeKind.Unspecified);
+
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID", "STARTED"], [1, ambiguous]);
+
+        var run = await RunImportAsync(provider, PersonDocument, DateSystem(), pageSize: 10, databaseTimeZone: "Australia/Sydney");
+
+        Assert.That(Attribute(run.ImportObjects.Single(), "STARTED").DateTimeValue, Is.EqualTo(new DateTime(2020, 4, 4, 16, 30, 0, DateTimeKind.Utc)));
+    }
+
+    [Test]
     public async Task ImportAsync_ZonelessDateTimeWithUtcConfigured_IsTakenAsUtcUnchanged()
     {
         var zoneless = new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Unspecified);

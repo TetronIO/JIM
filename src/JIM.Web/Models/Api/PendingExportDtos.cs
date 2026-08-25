@@ -49,6 +49,13 @@ public class PendingExportDetailDto
     /// </summary>
     public List<AttributeChangeSummaryDto>? AttributeChangeSummaries { get; set; }
 
+    /// <summary>
+    /// The reference changes (among <see cref="AttributeChanges"/>) that have not been written yet, each with
+    /// the reason, computed against the target's current state when the detail is read. Empty when the
+    /// Pending Export has no unresolved references.
+    /// </summary>
+    public List<PendingExportUnresolvedReferenceDto> UnresolvedReferences { get; set; } = new();
+
     public static PendingExportDetailDto FromDetailResult(PendingExportDetailResult result)
     {
         var pe = result.PendingExport;
@@ -76,6 +83,9 @@ public class PendingExportDetailDto
             SourceMetaverseObjectTypeName = pe.SourceMetaverseObject?.Type?.Name,
             AttributeChanges = pe.AttributeValueChanges
                 .Select(PendingExportAttributeValueChangeDto.FromEntity)
+                .ToList(),
+            UnresolvedReferences = result.UnresolvedReferences
+                .Select(PendingExportUnresolvedReferenceDto.FromModel)
                 .ToList()
         };
 
@@ -99,6 +109,49 @@ public class PendingExportDetailDto
 
         return dto;
     }
+}
+
+/// <summary>
+/// One reference change on a Pending Export that has not been written yet, and why.
+/// </summary>
+public class PendingExportUnresolvedReferenceDto
+{
+    /// <summary>
+    /// The attribute value change (see <see cref="PendingExportDetailDto.AttributeChanges"/>) carrying the reference.
+    /// </summary>
+    public Guid AttributeChangeId { get; set; }
+
+    /// <summary>
+    /// The reference attribute's name in the Connected System.
+    /// </summary>
+    public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// The Metaverse Object the change refers to.
+    /// </summary>
+    public Guid ReferencedMetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// The referenced Metaverse Object's display name, when it has one.
+    /// </summary>
+    public string? ReferencedMetaverseObjectDisplayName { get; set; }
+
+    /// <summary>
+    /// Why the reference has not been written yet: <c>Resolvable</c> (the referenced object has an anchor in this
+    /// Connected System and the reference is written on the next export run), <c>AwaitingAnchor</c> (the referenced
+    /// object exists in this Connected System but has no anchor yet), or <c>NotInTargetSystem</c> (the referenced
+    /// object has no Connected System Object in this Connected System at all).
+    /// </summary>
+    public UnresolvedReferenceReason Reason { get; set; }
+
+    public static PendingExportUnresolvedReferenceDto FromModel(PendingExportUnresolvedReference model) => new()
+    {
+        AttributeChangeId = model.AttributeChangeId,
+        AttributeName = model.AttributeName,
+        ReferencedMetaverseObjectId = model.ReferencedMetaverseObjectId,
+        ReferencedMetaverseObjectDisplayName = model.ReferencedMetaverseObjectDisplayName,
+        Reason = model.Reason
+    };
 }
 
 /// <summary>

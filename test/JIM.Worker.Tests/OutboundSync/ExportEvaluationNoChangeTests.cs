@@ -970,6 +970,176 @@ public class ExportEvaluationNoChangeTests
     }
 
     /// <summary>
+    /// A change skipped because the target already holds the value is counted today, and the value it was skipped
+    /// for is discarded. That value is the target's CURRENT state for the attribute, and it is the only thing that
+    /// can put an old-to-new pair on an export preview (#1443): a preview diffs what two configurations would stage,
+    /// and where the stored configuration stages nothing because the target is already correct, the pair has no old
+    /// side at all and the framework's pattern detectors cannot fire.
+    ///
+    /// Opt-in via a collector, matching the flowErrors parameter beside it, so the export hot path allocates
+    /// nothing and behaves identically when no caller asks.
+    /// </summary>
+    [Test]
+    public void CreateAttributeValueChanges_TargetAlreadyHoldsTheValue_ReportsTheSkippedChangeToACollector()
+    {
+        // Arrange - one mapping whose value the target CSO already holds, so it is skipped as no-net-change
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var displayNameMvAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName);
+        var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportSyncRule.ConnectedSystemId = targetSystem.Id;
+        exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.AttributeFlowRules.Clear();
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 110,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 210,
+                Order = 0,
+                MetaverseAttribute = displayNameMvAttr,
+                MetaverseAttributeId = displayNameMvAttr.Id
+            }}
+        });
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        var displayName = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameMvAttr,
+            AttributeId = displayNameMvAttr.Id,
+            StringValue = "Joe Bloggs"
+        };
+        mvo.AttributeValues.Add(displayName);
+
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+        var csoAttributeCache = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = targetDisplayNameAttr.Id,
+                StringValue = "Joe Bloggs",
+                ConnectedSystemObject = existingCso
+            }
+        }.ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+
+        // Act
+        var skipped = new List<PendingExportAttributeValueChange>();
+        var changes = Jim.ExportEvaluation.CreateAttributeValueChanges(
+            mvo,
+            exportSyncRule,
+            [displayName],
+            PendingExportChangeType.Update,
+            existingCso: existingCso,
+            csoAttributeCache: csoAttributeCache,
+            csoAlreadyCurrentCount: out var skippedCount,
+            noNetChangeSkipped: skipped);
+
+        // Assert - nothing staged, and the skipped change carries the value the target already holds
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changes, Is.Empty, "the target already holds the value, so nothing is staged");
+            Assert.That(skippedCount, Is.EqualTo(1), "the existing count keeps its meaning");
+            Assert.That(skipped, Has.Count.EqualTo(1));
+            Assert.That(skipped[0].AttributeId, Is.EqualTo(targetDisplayNameAttr.Id));
+            Assert.That(skipped[0].StringValue, Is.EqualTo("Joe Bloggs"),
+                "the skipped change carries the value it was skipped for, which is the target's current state");
+        }
+    }
+
+    /// <summary>
+    /// The collector is opt-in: a caller that does not ask still gets the count, and the hot path allocates nothing.
+    /// </summary>
+    [Test]
+    public void CreateAttributeValueChanges_NoCollectorSupplied_StillCountsTheSkip()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var displayNameMvAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName);
+        var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportSyncRule.ConnectedSystemId = targetSystem.Id;
+        exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.AttributeFlowRules.Clear();
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 111,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 211,
+                Order = 0,
+                MetaverseAttribute = displayNameMvAttr,
+                MetaverseAttributeId = displayNameMvAttr.Id
+            }}
+        });
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        var displayName = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameMvAttr,
+            AttributeId = displayNameMvAttr.Id,
+            StringValue = "Joe Bloggs"
+        };
+        mvo.AttributeValues.Add(displayName);
+
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+        var csoAttributeCache = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = targetDisplayNameAttr.Id,
+                StringValue = "Joe Bloggs",
+                ConnectedSystemObject = existingCso
+            }
+        }.ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+
+        var changes = Jim.ExportEvaluation.CreateAttributeValueChanges(
+            mvo, exportSyncRule, [displayName], PendingExportChangeType.Update,
+            existingCso: existingCso, csoAttributeCache: csoAttributeCache,
+            csoAlreadyCurrentCount: out var skippedCount);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changes, Is.Empty);
+            Assert.That(skippedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
     /// Tests the full export evaluation flow for removed attributes. When attributes are removed
     /// from the MVO, null-clearing Pending Exports should be created so the target system clears
     /// the attribute values. The removed attributes flow through as null-valued changes, which
@@ -1098,7 +1268,7 @@ public class ExportEvaluationNoChangeTests
 
         // Act: evaluate export rules with removed attributes
         var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-            mvo, changedAttributes, sourceSystem, cache,
+            mvo, changedAttributes, cache,
             removedAttributes: removedAttributes);
 
         // Assert: a Pending Export should be created with null-clearing attribute changes

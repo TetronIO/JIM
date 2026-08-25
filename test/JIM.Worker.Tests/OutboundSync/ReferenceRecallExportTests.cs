@@ -723,7 +723,7 @@ public class ReferenceRecallExportTests
         var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
         var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
         SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
-        var recallCache = await Jim.ExportEvaluation.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+        var recallCache = await Jim.ExportEvaluation.BuildExportEvaluationCacheAsync();
         var ruleLoadsAfterCacheBuild = SyncRepo.GetAllSyncRulesCallCount;
 
         // Act

@@ -39,8 +39,13 @@ public class CausalityEventCardTests
     }
 
     [Test]
-    public async Task Render_PlainNames_EmphasisesPlainTitleWithTechnicalDemotedAsync()
+    public async Task Render_PlainNames_ShowsNoTechnicalVocabularyAtAllAsync()
     {
+        // The toggle is labelled "Technical names"; off has to mean the technical vocabulary is not on
+        // screen. The card used to render both labels always and merely swap which was emphasised, so
+        // "CSO Joined" and "MVO Attribute Flow" sat on every card with the toggle off, contradicting the
+        // control that governs them. The summary band and the attribute drawer always showed one or the
+        // other; the cards were the odd ones out.
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
         var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
@@ -48,12 +53,16 @@ public class CausalityEventCardTests
         var cut = RenderCard(context, projected);
 
         var title = cut.Find(".evt-title");
-        Assert.That(title.TextContent.Trim(), Does.StartWith("Identity created"));
-        Assert.That(title.QuerySelector(".tech")!.TextContent, Does.Contain("MVO Projected"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(title.TextContent.Trim(), Is.EqualTo("Identity created"));
+            Assert.That(cut.Markup, Does.Not.Contain("MVO"));
+            Assert.That(title.QuerySelector(".tech"), Is.Null);
+        }
     }
 
     [Test]
-    public async Task Render_TechnicalNames_SwapsTheEmphasisAsync()
+    public async Task Render_TechnicalNames_ShowsTheTechnicalLabelInsteadAsync()
     {
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
@@ -62,8 +71,11 @@ public class CausalityEventCardTests
         var cut = RenderCard(context, projected, technicalNames: true);
 
         var title = cut.Find(".evt-title");
-        Assert.That(title.TextContent.Trim(), Does.StartWith("MVO Projected"));
-        Assert.That(title.QuerySelector(".tech")!.TextContent, Does.Contain("Identity created"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(title.TextContent.Trim(), Is.EqualTo("MVO Projected"));
+            Assert.That(cut.Markup, Does.Not.Contain("Identity created"));
+        }
     }
 
     [Test]

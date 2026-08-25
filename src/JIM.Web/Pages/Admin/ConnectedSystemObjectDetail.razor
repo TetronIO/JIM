@@ -221,7 +221,7 @@
 
     <div class="mt-6">
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync"
-                      Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
+                      TabPanelsClass="pa-0 mt-6">
         <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
             @* One row per attribute, as before; the object's attribute values were loaded with the rest of the
                page (capped per multi-valued attribute), so windows are sliced from that list in memory rather
@@ -764,9 +764,11 @@
             .SelectMany(sr => sr.AttributeFlowRules)
             .Where(m => m.TargetConnectedSystemAttributeId.HasValue);
 
+        // A disabled mapping (#1485) manages nothing, so an attribute whose every mapping is Initial Export
+        // Only or disabled is unmanaged on this object.
         result.UnionWith(exportMappings
             .GroupBy(m => m.TargetConnectedSystemAttributeId!.Value)
-            .Where(g => g.All(m => m.InitialExportOnly))
+            .Where(g => g.All(m => m.InitialExportOnly || !m.Enabled))
             .Select(g => g.Key));
 
         return result;

@@ -49,9 +49,6 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
     private const string InScope = "In import scope";
     private const string OutOfScope = "Out of import scope";
     private const string ScopeAttributeName = "Import scope";
-    private const string DeletionEligibilityAttributeName = "Deletion eligibility";
-    private const string NotDeletionEligible = "Not eligible for deletion";
-    private const string DeletionEligible = "Eligible for deletion";
 
     public ConnectedSystemScopeSelectionPreviewAdapter(JimApplication application, ISyncEngine syncEngine)
     {
@@ -233,104 +230,12 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
 
         // The Metaverse consequence, evaluated only once the disconnections are known, because whether an object
         // becomes eligible for deletion depends on how many of its connectors survive and this system may hold more
-        // than one of them.
-        await foreach (var delta in EvaluateDeletionEligibilityAsync(
-                           connectedSystem.Id, disconnectionsByMetaverseObject, cancellationToken))
+        // than one of them. Shared with the other disconnecting adapters so no two previews can disagree about
+        // whether an object dies.
+        await foreach (var delta in PreviewDeletionEligibilityEvaluator.EvaluateAsync(
+                           _application, _syncEngine, connectedSystem.Id, disconnectionsByMetaverseObject, cancellationToken))
             yield return delta;
     }
-
-    /// <summary>
-    /// The Metaverse Objects that would become eligible for automatic deletion once the proposed disconnections
-    /// land, decided by putting the question to the synchronisation engine's own deletion rule.
-    /// </summary>
-    /// <remarks>
-    /// The rule is intricate: two trigger modes, a fallback when the authoritative-source rule names no sources, and
-    /// an exemption for internal objects. Reimplementing it here would produce a preview that eventually disagreed
-    /// with the engine about whether an object dies, so the engine is asked instead, with the state the proposal
-    /// would leave behind.
-    /// </remarks>
-    private async IAsyncEnumerable<PreviewDelta> EvaluateDeletionEligibilityAsync(
-        int connectedSystemId,
-        Dictionary<Guid, int> disconnectionsByMetaverseObject,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        if (disconnectionsByMetaverseObject.Count == 0)
-            yield break;
-
-        var candidates = await _application.Metaverse.GetMetaverseObjectDisconnectionCandidatesAsync(
-            disconnectionsByMetaverseObject.Keys);
-
-        foreach (var candidate in candidates)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var remaining = RemainingConnectorsAfterDisconnection(
-                candidate, connectedSystemId, disconnectionsByMetaverseObject[candidate.Id]);
-
-            var decision = _syncEngine.EvaluateMvoDeletionRule(ToEvaluableObject(candidate), connectedSystemId, remaining);
-            if (decision.Fate == MvoDeletionFate.NotDeleted)
-                continue;
-
-            yield return new PreviewDelta(
-                ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible,
-                ObjectDisplayName: candidate.DisplayName,
-                ObjectTypeName: candidate.TypeName,
-                MetaverseObjectTypeId: candidate.TypeId,
-                MetaverseObjectId: candidate.Id,
-                ConnectedSystemId: connectedSystemId,
-                AttributeName: DeletionEligibilityAttributeName,
-                OldValue: NotDeletionEligible,
-                NewValue: DescribeDeletionOutcome(decision));
-        }
-    }
-
-    /// <summary>
-    /// The Connected Systems that would still hold an object joined to this Metaverse Object, one entry per joined
-    /// object because that is what the engine counts.
-    /// </summary>
-    private static List<int> RemainingConnectorsAfterDisconnection(
-        MetaverseObjectDisconnectionCandidate candidate, int disconnectingSystemId, int disconnectingCount)
-    {
-        var remaining = new List<int>(candidate.JoinedConnectedSystemIds.Count);
-        var stillToRemove = disconnectingCount;
-
-        foreach (var systemId in candidate.JoinedConnectedSystemIds)
-        {
-            // Only the disconnecting system's entries are removed, and only as many as actually leave scope: a
-            // system holding two joined objects where one stays is still a connector.
-            if (systemId == disconnectingSystemId && stillToRemove > 0)
-                stillToRemove--;
-            else
-                remaining.Add(systemId);
-        }
-
-        return remaining;
-    }
-
-    /// <summary>
-    /// The candidate as the shape the engine's deletion rule reads: its origin, and its type's deletion settings.
-    /// Nothing is persisted and nothing is loaded; this exists so the preview and a synchronisation run put the
-    /// identical question to the identical code.
-    /// </summary>
-    private static MetaverseObject ToEvaluableObject(MetaverseObjectDisconnectionCandidate candidate) => new()
-    {
-        Id = candidate.Id,
-        Origin = candidate.Origin,
-        Type = new MetaverseObjectType
-        {
-            Id = candidate.TypeId,
-            Name = candidate.TypeName,
-            DeletionRule = candidate.DeletionRule,
-            DeletionTriggerMode = candidate.DeletionTriggerMode,
-            DeletionGracePeriod = candidate.DeletionGracePeriod,
-            DeletionTriggerConnectedSystemIds = [.. candidate.DeletionTriggerConnectedSystemIds]
-        }
-    };
-
-    private static string DescribeDeletionOutcome(MvoDeletionDecision decision) =>
-        decision is { Fate: MvoDeletionFate.DeletionScheduled, GracePeriod: { } grace }
-            ? $"{DeletionEligible} after {grace.ToFriendlyDuration()}"
-            : $"{DeletionEligible} immediately";
 
     private static PreviewDelta ScopeDelta(
         Models.Staging.DTOs.ConnectedSystemObjectScopeCandidate candidate,

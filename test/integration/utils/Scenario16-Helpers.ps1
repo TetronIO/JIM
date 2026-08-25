@@ -203,6 +203,9 @@ function Invoke-Scenario16Row {
         'MultiValued.Import'               { return Test-S16MultiValuedImport -Context $Context -Config $Config }
         'Reference.Import'                 { return Test-S16ReferenceImport -Context $Context -Config $Config }
         'Delta.ChangeLogTable'             { return Test-S16DeltaChangeLog -Context $Context -Config $Config }
+        'Delta.WatermarkColumn'            { return Test-S16DeltaWatermarkColumn -Context $Context -Config $Config }
+        'Delta.Fallback'                   { return Test-S16DeltaFallback -Context $Context -Config $Config }
+        'Delta.RowversionWatermark'        { return Test-S16DeltaRowversionWatermark -Context $Context -Config $Config }
         'DriverShape.DateTimeNonUtc'       { return Test-S16DateTimeNonUtc -Context $Context -Config $Config }
         'DriverShape.OffsetVersusZoneless' { return Test-S16OffsetVersusZoneless -Context $Context -Config $Config }
         'DriverShape.LocalTimeZone'        { return Test-S16LocalTimeZone -Context $Context -Config $Config }
@@ -217,13 +220,6 @@ function Invoke-Scenario16Row {
         'Export.NaturalKey'                { return Test-S16ExportNaturalKey -Context $Context -Config $Config }
         'Reference.Export'                 { return Test-S16ReferenceExport -Context $Context -Config $Config }
         'TypeMapping.RoundTrip'            { return Test-S16TypeMappingRoundTrip -Context $Context -Config $Config }
-
-        # Both delta rows remain unimplemented, and for a different reason from the export rows: they need
-        # the Connected System's Delta Import Mode changed and its persisted watermark cleared mid-run,
-        # neither of which the matrix has a mechanism for. Reported as skipped with the reason rather than
-        # passed; see this file's header on why a green cell nobody ran is worse than an amber one.
-        'Delta.WatermarkColumn'  { return @{ Status = 'skip'; Detail = 'Not implemented: needs a second Connected System configured for Watermark Column delta mode.' } }
-        'Delta.Fallback'         { return @{ Status = 'skip'; Detail = 'Not implemented: needs the persisted watermark to be cleared between runs.' } }
 
         default { return @{ Status = 'skip'; Detail = "No implementation is registered for matrix row '$($Row.name)'." } }
     }
@@ -315,15 +311,410 @@ function Test-S16ReferenceImport {
     return @{ Status = 'pass'; Detail = "Reference resolved: employee 12 points at manager $expectedManager." }
 }
 
+# ─── Delta rows ────────────────────────────────────────────────────────────────
+#
+# One shape, run once per mode: baseline with a Full Import, mutate the source in every way a Delta
+# Import can observe (a row inserted, a row updated, a related-table row added, a row deleted), run a
+# Delta Import and assert on what reached the connector space, then run a second Delta Import and
+# assert it read nothing. Every mutation is undone before the row returns, because the rows after these
+# derive their expectations from the seeded population (Get-S16ExpectedCount) and would otherwise be
+# asserting against residue.
+#
+# The employees these rows touch are chosen to be nobody else's: 40 (updated), 41 (gains a phone), 48
+# (deleted in Watermark Column mode, where the deletion must go unseen), and 51 to 54, which do not exist
+# in the seed and are inserted here, each by one row only, so an object left obsolete by one row is never
+# what the next row asserts on. The rows that read specific employees use 1, 3, 12 and 20.
+
+function Set-S16DeltaImportMode {
+    <#
+    .SYNOPSIS
+        Change the identity system's Delta Import Mode, and optionally its Object Types document.
+    .DESCRIPTION
+        The setting save is what runs the mode's validation (every Object Type must carry what the mode
+        needs) and the live connectivity test, so a refused save fails the row here with the API's own
+        message rather than four steps later.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Context,
+        [Parameter(Mandatory=$true)][ValidateSet('Change-Log Table', 'Watermark Column')][string]$Mode,
+        [Parameter(Mandatory=$false)][string]$ObjectTypesJson
+    )
+
+    $settings = @{ ($Context.SettingIds.DeltaImportMode) = @{ stringValue = $Mode } }
+    if ($ObjectTypesJson) {
+        $settings[$Context.SettingIds.ObjectTypes] = @{ stringValue = $ObjectTypesJson }
+    }
+    Set-JIMConnectedSystem -Id $Context.ConnectedSystemId -SettingValues $settings -ErrorAction Stop | Out-Null
+    $Context['DeltaImportMode'] = $Mode
+}
+
+function Get-S16ObjectTypesJsonWithWatermark {
+    <#
+    .SYNOPSIS
+        The identity system's Object Types document with Person and its related table watermarked on a
+        different column, everything else untouched.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Context,
+        [Parameter(Mandatory=$true)][string]$WatermarkColumn
+    )
+
+    $document = $Context.ObjectTypesJson | ConvertFrom-Json
+    $person = $document.objectTypes | Where-Object { $_.name -eq 'Person' }
+    if (-not $person) { throw "The Object Types document has no 'Person' Object Type to re-watermark." }
+    $person.watermarkColumn = $WatermarkColumn
+    foreach ($related in @($person.relatedTables)) { $related.watermarkColumn = $WatermarkColumn }
+    return ($document | ConvertTo-Json -Depth 20)
+}
+
+function Invoke-S16DeltaImport {
+    <#
+    .SYNOPSIS
+        Run the identity system's Delta Import and return its Activity, asserting the outcome asked for.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Context,
+        [Parameter(Mandatory=$true)][string]$Purpose,
+        # The Delta Import that follows a mode change is expected to fall back to a Full Import and say so.
+        [Parameter(Mandatory=$false)][switch]$ExpectFallback
+    )
+
+    $result = Start-JIMRunProfile -ConnectedSystemId $Context.ConnectedSystemId -RunProfileName "Delta Import" -Wait -PassThru
+    if ($ExpectFallback) {
+        Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 Delta Import, $Purpose ($($Context.Provider))" `
+            -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
+        $activity = Get-JIMActivity -Id $result.activityId
+        if ($activity.status -ne 'CompleteWithWarning') {
+            throw "The Delta Import ($Purpose) should have fallen back to a Full Import with a warning saying so; it completed with status '$($activity.status)'."
+        }
+    }
+    else {
+        Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 Delta Import, $Purpose ($($Context.Provider))"
+    }
+    return $result
+}
+
+function Get-S16DeltaReadCount {
+    <#
+    .SYNOPSIS
+        How many objects a Delta Import's Activity says it processed, plus its adds, updates and deletes.
+    #>
+    param([Parameter(Mandatory=$true)][string]$ActivityId)
+
+    $activity = Get-JIMActivity -Id $ActivityId
+    $stats = Get-JIMActivityStats -ActivityId $ActivityId
+    return @{
+        Processed = [int]$activity.objectsProcessed
+        Adds      = [int]$stats.totalCsoAdds
+        Updates   = [int]$stats.totalCsoUpdates
+        Deletes   = [int]$stats.totalCsoDeletes
+    }
+}
+
+function Get-S16NewEmployeeInsert {
+    <#
+    .SYNOPSIS
+        The INSERT that adds one employee the seed does not know, shaped from an existing row.
+    .DESCRIPTION
+        Cloned from employee 40 rather than written out, so every typed column arrives in the same shape
+        the seed produced (the offset-carrying date, the RAW(16) identifier); only the identity, the
+        name and the address are the new person's. No manager, so the row raises no reference. The
+        last-modified column is left to its default, which is what the watermark guide relies on.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][int]$EmployeeId
+    )
+
+    $number = Get-S16EmployeeNumber -Config $Config -EmployeeId $EmployeeId
+    $guidHex = ('{0:D8}' -f $EmployeeId) + '000040008000000000000000'
+    if ($Config.Provider -eq 'SqlServer') {
+        $guid = ('{0:D8}' -f $EmployeeId) + '-0000-4000-8000-000000000000'
+        return "INSERT INTO $($Config.Schema).EMPLOYEES (EMPLOYEE_ID, EMPLOYEE_NUMBER, FIRST_NAME, LAST_NAME, EMAIL, DEPARTMENT, MANAGER_EMPLOYEE_ID, HEADCOUNT, FTE, IS_ACTIVE, START_DATE, HIRED_AT, EMPLOYEE_GUID, PHOTO) " +
+               "SELECT $EmployeeId, '$number', 'Ivy', 'Delta', 'user$EmployeeId@panoply.local', DEPARTMENT, NULL, HEADCOUNT, FTE, 1, START_DATE, HIRED_AT, CAST('$guid' AS uniqueidentifier), NULL " +
+               "FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = 40;"
+    }
+    return "INSERT INTO $($Config.Schema).EMPLOYEES (EMPLOYEE_ID, EMPLOYEE_NUMBER, FIRST_NAME, LAST_NAME, EMAIL, DEPARTMENT, MANAGER_EMPLOYEE_ID, HEADCOUNT, FTE, IS_ACTIVE, START_DATE, HIRED_AT, HIRED_AT_LOCAL, EMPLOYEE_GUID, PHOTO) " +
+           "SELECT $EmployeeId, '$number', 'Ivy', 'Delta', 'user$EmployeeId@panoply.local', DEPARTMENT, NULL, HEADCOUNT, FTE, 1, START_DATE, HIRED_AT, HIRED_AT_LOCAL, HEXTORAW('$guidHex'), NULL " +
+           "FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = 40;"
+}
+
+function Get-S16PhoneCount {
+    param([Parameter(Mandatory=$true)][hashtable]$Context, [Parameter(Mandatory=$true)]$Cso)
+    return @(Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId $Context.ConnectedSystemId -CsoId $Cso.id -AttributeName 'PhoneNumbers' -All -Force).Count
+}
+
+function Get-S16CsoText {
+    param([Parameter(Mandatory=$true)][hashtable]$Context, [Parameter(Mandatory=$true)]$Cso, [Parameter(Mandatory=$true)][string]$AttributeName)
+    $value = @(Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId $Context.ConnectedSystemId -CsoId $Cso.id -AttributeName $AttributeName -All -Force) | Select-Object -First 1
+    if (-not $value) { return $null }
+    return Get-S16AttributeValueText -Value $value
+}
+
+function Invoke-S16DeltaMutations {
+    <#
+    .SYNOPSIS
+        Change the source in the four ways a Delta Import can observe, and return how to undo them.
+    .DESCRIPTION
+        Inserts employee $NewEmployeeId, renames employee 40, gives employee 41 a phone number, and, when
+        asked, deletes employee $DeleteEmployeeId (phones first, for the foreign key). The deletion is
+        optional because the change-log row deletes an employee it created itself in an earlier step,
+        so the deletion can be observed as such, while the watermark row deletes a seeded one to prove
+        the deletion is NOT observed.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][int]$NewEmployeeId,
+        [Parameter(Mandatory=$false)][int]$DeleteEmployeeId = 0
+    )
+
+    $schema = $Config.Schema
+    Invoke-Scenario16NonQuery -Config $Config -Statement (Get-S16NewEmployeeInsert -Config $Config -EmployeeId $NewEmployeeId)
+    Invoke-Scenario16NonQuery -Config $Config -Statement "UPDATE $schema.EMPLOYEES SET LAST_NAME = 'Renamed' WHERE EMPLOYEE_ID = 40;"
+    Invoke-Scenario16NonQuery -Config $Config -Statement "INSERT INTO $schema.EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER) VALUES (41, '+44 113 496 4141');"
+    if ($DeleteEmployeeId -gt 0) {
+        Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $schema.EMPLOYEE_PHONES WHERE EMPLOYEE_ID = $DeleteEmployeeId;"
+        Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $schema.EMPLOYEES WHERE EMPLOYEE_ID = $DeleteEmployeeId;"
+    }
+}
+
+function Undo-S16DeltaMutations {
+    <#
+    .SYNOPSIS
+        Put the source back exactly as the seed left it, so the rows after this one meet the population
+        they derive their expectations from.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][int[]]$NewEmployeeIds,
+        # A seeded employee deleted by the row, restored from the seed's own arithmetic.
+        [Parameter(Mandatory=$false)][int]$RestoreEmployeeId = 0
+    )
+
+    $schema = $Config.Schema
+    foreach ($id in $NewEmployeeIds) {
+        Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $schema.EMPLOYEE_PHONES WHERE EMPLOYEE_ID = $id;"
+        Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $schema.EMPLOYEES WHERE EMPLOYEE_ID = $id;"
+    }
+    Invoke-Scenario16NonQuery -Config $Config -Statement "UPDATE $schema.EMPLOYEES SET LAST_NAME = 'Ellery' WHERE EMPLOYEE_ID = 40;"
+    Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $schema.EMPLOYEE_PHONES WHERE EMPLOYEE_ID = 41 AND PHONE_NUMBER = '+44 113 496 4141';"
+
+    if ($RestoreEmployeeId -gt 0) {
+        # The seed's own derivation for one row (see New-Scenario16TestDatabase.ps1): the names cycle on
+        # n modulo 8 and 6, the department on n modulo 4, the manager is (n modulo 10) + 1, and every third
+        # employee has two phone numbers. Written out here for the one row rather than reaching into the
+        # seeder, whose set-based statement cannot author a single row.
+        $n = $RestoreEmployeeId
+        $number = Get-S16EmployeeNumber -Config $Config -EmployeeId $n
+        $first = @('Ada', 'Bram', 'Cleo', 'Dara', 'Emil', 'Fern', 'Gita', 'Hugo')[$n % 8]
+        $last = @('Ashcroft', 'Brandt', 'Calder', 'Duquesne', 'Ellery', 'Fairhurst')[$n % 6]
+        $department = @('Engineering', 'Finance', 'Operations', 'Research')[$n % 4]
+        $manager = if ($n -gt 10) { ($n % 10) + 1 } else { 'NULL' }
+        $fte = 0.25 + (($n % 4) * 0.25)
+        $active = if (($n % 7) -eq 0) { 0 } else { 1 }
+        $guidHex = ('{0:D8}' -f $n) + '000040008000000000000000'
+        if ($Config.Provider -eq 'SqlServer') {
+            $guid = ('{0:D8}' -f $n) + '-0000-4000-8000-000000000000'
+            Invoke-Scenario16NonQuery -Config $Config -Statement ("INSERT INTO $schema.EMPLOYEES (EMPLOYEE_ID, EMPLOYEE_NUMBER, FIRST_NAME, LAST_NAME, EMAIL, DEPARTMENT, MANAGER_EMPLOYEE_ID, HEADCOUNT, FTE, IS_ACTIVE, START_DATE, HIRED_AT, EMPLOYEE_GUID, PHOTO) VALUES " +
+                "($n, '$number', '$first', '$last', 'user$n@panoply.local', '$department', $manager, CAST($n AS bigint) * 1000000000, $fte, $active, DATEADD(day, $n, CAST('2020-01-06' AS datetime2(3))), TODATETIMEOFFSET(DATEADD(minute, $n, CAST('2020-01-06' AS datetime2(3))), '-05:00'), CAST('$guid' AS uniqueidentifier), CAST($n AS varbinary(64)));")
+            Invoke-Scenario16NonQuery -Config $Config -Statement "INSERT INTO $schema.EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER) VALUES ($n, CONCAT('+44 20 7000 ', RIGHT(CONCAT('0000', CAST($n AS varchar(20))), 4)));"
+            if (($n % 3) -eq 0) {
+                Invoke-Scenario16NonQuery -Config $Config -Statement "INSERT INTO $schema.EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER) VALUES ($n, CONCAT('+44 161 496 ', RIGHT(CONCAT('0000', CAST($n AS varchar(20))), 4)));"
+            }
+        }
+        else {
+            Invoke-Scenario16NonQuery -Config $Config -Statement ("INSERT INTO $schema.EMPLOYEES (EMPLOYEE_ID, EMPLOYEE_NUMBER, FIRST_NAME, LAST_NAME, EMAIL, DEPARTMENT, MANAGER_EMPLOYEE_ID, HEADCOUNT, FTE, IS_ACTIVE, START_DATE, HIRED_AT, HIRED_AT_LOCAL, EMPLOYEE_GUID, PHOTO) VALUES " +
+                "($n, '$number', '$first', '$last', 'user$n@panoply.local', '$department', $manager, $n * 1000000000, $fte, $active, TIMESTAMP '2020-01-06 00:00:00' + NUMTODSINTERVAL($n, 'DAY'), FROM_TZ(TIMESTAMP '2020-01-06 00:00:00' + NUMTODSINTERVAL($n, 'MINUTE'), '-05:00'), TIMESTAMP '2020-01-06 00:00:00' + NUMTODSINTERVAL($n, 'MINUTE'), HEXTORAW('$guidHex'), UTL_RAW.CAST_FROM_NUMBER($n));")
+            Invoke-Scenario16NonQuery -Config $Config -Statement "INSERT INTO $schema.EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER) VALUES ($n, '+44 20 7000 ' || LPAD(TO_CHAR($n), 4, '0'));"
+            if (($n % 3) -eq 0) {
+                Invoke-Scenario16NonQuery -Config $Config -Statement "INSERT INTO $schema.EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER) VALUES ($n, '+44 161 496 ' || LPAD(TO_CHAR($n), 4, '0'));"
+            }
+        }
+    }
+}
+
+function Assert-S16DeltaLanded {
+    <#
+    .SYNOPSIS
+        The assertions both delta modes share after their first Delta Import: the insert, the update
+        and the related-table change reached the connector space. Returns a failure detail or $null.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Context,
+        [Parameter(Mandatory=$true)][int]$NewEmployeeId,
+        [Parameter(Mandatory=$true)][string]$Mode
+    )
+
+    $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
+
+    $created = Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue "$NewEmployeeId"
+    if (-not $created) { return "$Mode Delta Import: employee $NewEmployeeId was inserted after the baseline but no Connected System Object was created for it." }
+
+    $updated = Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue '40'
+    $lastName = Get-S16CsoText -Context $Context -Cso $updated -AttributeName 'LAST_NAME'
+    if ($lastName -ne 'Renamed') { return "$Mode Delta Import: employee 40 was renamed after the baseline but the Connected System Object still reads LAST_NAME '$lastName'." }
+
+    $parent = Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue '41'
+    $phones = Get-S16PhoneCount -Context $Context -Cso $parent
+    if ($phones -ne 2) { return "$Mode Delta Import: employee 41 gained a phone number in the related table after the baseline, so its Connected System Object should carry 2; it carries $phones. A related-table change must select its parent." }
+
+    return $null
+}
+
 function Test-S16DeltaChangeLog {
     param([hashtable]$Context, [hashtable]$Config)
 
-    # A Delta Import straight after a Full Import should read the change log from the persisted
-    # watermark and find nothing new, which is what proves the watermark was persisted at all.
-    $result = Start-JIMRunProfile -ConnectedSystemId $Context.ConnectedSystemId -RunProfileName "Delta Import" -Wait -PassThru
-    Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 Delta Import ($($Context.Provider))"
+    if ($Context.DeltaImportMode -ne 'Change-Log Table') {
+        Set-S16DeltaImportMode -Context $Context -Mode 'Change-Log Table' -ObjectTypesJson $Context.ObjectTypesJson
+    }
 
-    return @{ Status = 'pass'; Detail = "Delta Import completed against the change-log table and persisted its watermark." }
+    # The baseline. A Full Import records the change log's high-water mark before it reads a row, so
+    # every change made from here on is what the Delta Import will find.
+    Invoke-S16RunProfile -Context $Context -Name "Full Import" | Out-Null
+
+    try {
+        # Employee 52 is inserted, imported, then deleted, so its deletion is one the connector space can
+        # observe; 51 stays until the row cleans up.
+        Invoke-S16DeltaMutations -Config $Config -NewEmployeeId 51
+        Invoke-Scenario16NonQuery -Config $Config -Statement (Get-S16NewEmployeeInsert -Config $Config -EmployeeId 52)
+
+        $first = Invoke-S16DeltaImport -Context $Context -Purpose "creates, an update and a related-table change"
+        $failure = Assert-S16DeltaLanded -Context $Context -NewEmployeeId 51 -Mode 'Change-Log Table'
+        if ($failure) { return @{ Status = 'fail'; Detail = $failure } }
+
+        $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
+        if (-not (Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue '52')) {
+            return @{ Status = 'fail'; Detail = "Employee 52 was inserted after the baseline but the first Delta Import created no Connected System Object for it." }
+        }
+
+        # The deletion, which only this mode can see: the trigger logs a 'D' row and JIM imports the anchor
+        # alone, which is what marks the object as gone.
+        Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $($Config.Schema).EMPLOYEE_PHONES WHERE EMPLOYEE_ID = 52;"
+        Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = 52;"
+        $second = Invoke-S16DeltaImport -Context $Context -Purpose "a deletion"
+        $deleted = Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue '52'
+        if ($deleted -and $deleted.status -ne 'Obsolete') {
+            return @{ Status = 'fail'; Detail = "Employee 52 was deleted at source and the change log recorded it, but its Connected System Object is still '$($deleted.status)' after the Delta Import; a change-log Delta Import must observe a deletion." }
+        }
+        $secondCounts = Get-S16DeltaReadCount -ActivityId $second.activityId
+        if ($secondCounts.Deletes -lt 1) {
+            return @{ Status = 'fail'; Detail = "The Delta Import that carried employee 52's deletion recorded $($secondCounts.Deletes) deletion(s) on its Activity." }
+        }
+
+        # Nothing has changed since, so the watermark saved by the last run must leave the next one with
+        # nothing to read.
+        $third = Invoke-S16DeltaImport -Context $Context -Purpose "nothing"
+        $counts = Get-S16DeltaReadCount -ActivityId $third.activityId
+        if ($counts.Processed -ne 0 -or ($counts.Adds + $counts.Updates + $counts.Deletes) -ne 0) {
+            return @{ Status = 'fail'; Detail = "A Delta Import with nothing new in the change log processed $($counts.Processed) object(s) ($($counts.Adds) added, $($counts.Updates) updated, $($counts.Deletes) deleted); the persisted watermark is not being honoured." }
+        }
+
+        return @{ Status = 'pass'; Detail = "Change log observed an insert, an update, a related-table change and a deletion in $($first.activityId.ToString().Substring(0, 8))/$($second.activityId.ToString().Substring(0, 8)); the following Delta Import read nothing." }
+    }
+    finally {
+        Undo-S16DeltaMutations -Config $Config -NewEmployeeIds @(51)
+    }
+}
+
+function Test-S16DeltaWatermarkColumn {
+    param([hashtable]$Context, [hashtable]$Config)
+
+    Set-S16DeltaImportMode -Context $Context -Mode 'Watermark Column' -ObjectTypesJson $Context.ObjectTypesJson
+
+    # The guide's baseline: a Full Import after choosing the mode, which records every watermark column's
+    # high value before it reads a row.
+    Invoke-S16RunProfile -Context $Context -Name "Full Import" | Out-Null
+
+    try {
+        # Employee 48 is deleted here, and it is a seeded employee that the baseline imported: the point is
+        # that a last-modified column has no row left to move, so the deletion must NOT reach JIM.
+        Invoke-S16DeltaMutations -Config $Config -NewEmployeeId 53 -DeleteEmployeeId 48
+
+        $first = Invoke-S16DeltaImport -Context $Context -Purpose "creates, an update and a related-table change"
+        $failure = Assert-S16DeltaLanded -Context $Context -NewEmployeeId 53 -Mode 'Watermark Column'
+        if ($failure) { return @{ Status = 'fail'; Detail = $failure } }
+
+        $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
+        $unseen = Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue '48'
+        if (-not $unseen -or $unseen.status -ne 'Normal') {
+            return @{ Status = 'fail'; Detail = "Employee 48 was deleted at source, which Watermark Column mode is documented NOT to observe, yet its Connected System Object is $(if ($unseen) { "'$($unseen.status)'" } else { 'gone' }) after the Delta Import." }
+        }
+        $firstCounts = Get-S16DeltaReadCount -ActivityId $first.activityId
+        if ($firstCounts.Deletes -ne 0) {
+            return @{ Status = 'fail'; Detail = "The Watermark Column Delta Import recorded $($firstCounts.Deletes) deletion(s); this mode cannot see one." }
+        }
+
+        $second = Invoke-S16DeltaImport -Context $Context -Purpose "nothing"
+        $counts = Get-S16DeltaReadCount -ActivityId $second.activityId
+        if ($counts.Processed -ne 0 -or ($counts.Adds + $counts.Updates + $counts.Deletes) -ne 0) {
+            return @{ Status = 'fail'; Detail = "A Delta Import with no watermark column moved processed $($counts.Processed) object(s) ($($counts.Adds) added, $($counts.Updates) updated, $($counts.Deletes) deleted); the persisted watermarks are not being honoured." }
+        }
+
+        return @{ Status = 'pass'; Detail = "Watermark columns observed an insert, an update and a related-table change, left the deletion unseen as documented, and the following Delta Import read nothing." }
+    }
+    finally {
+        Undo-S16DeltaMutations -Config $Config -NewEmployeeIds @(53) -RestoreEmployeeId 48
+    }
+}
+
+function Test-S16DeltaFallback {
+    param([hashtable]$Context, [hashtable]$Config)
+
+    # The watermark JIM holds was written in Watermark Column mode by the row before this one. Switching
+    # the mode back makes that watermark meaningless, and the guide says what happens next: the Delta
+    # Import performs a Full Import in its place, warns, and establishes the watermark for the new mode.
+    Set-S16DeltaImportMode -Context $Context -Mode 'Change-Log Table' -ObjectTypesJson $Context.ObjectTypesJson
+
+    Invoke-S16DeltaImport -Context $Context -Purpose "after the mode changed" -ExpectFallback | Out-Null
+
+    # Baseline established by the fallback, so the next Delta Import runs normally and, nothing having
+    # changed, reads nothing and warns about nothing.
+    $next = Invoke-S16DeltaImport -Context $Context -Purpose "after the fallback"
+    $counts = Get-S16DeltaReadCount -ActivityId $next.activityId
+    if ($counts.Processed -ne 0 -or ($counts.Adds + $counts.Updates + $counts.Deletes) -ne 0) {
+        return @{ Status = 'fail'; Detail = "The Delta Import after the fallback processed $($counts.Processed) object(s); the fallback Full Import should have established the watermark it needed." }
+    }
+
+    return @{ Status = 'pass'; Detail = "A Delta Import with an unusable watermark fell back to a Full Import with the standard warning; the next Delta Import ran normally and read nothing." }
+}
+
+function Test-S16DeltaRowversionWatermark {
+    param([hashtable]$Context, [hashtable]$Config)
+
+    if ($Config.Provider -ne 'SqlServer') {
+        return @{ Status = 'skip'; Detail = "rowversion is SQL Server's own type; $($Config.DisplayName) has no equivalent." }
+    }
+
+    # ROW_VERSION as the watermark for Person and its related table. JIM discovers a rowversion column as
+    # Binary, so the watermark it captures is a Binary value carried between runs as text; a Delta
+    # Import then has to bind that text back as bytes and compare it the way SQL Server compares a
+    # rowversion. Nothing in the unit suite reaches a live rowversion, which is why this row exists.
+    $document = Get-S16ObjectTypesJsonWithWatermark -Context $Context -WatermarkColumn 'ROW_VERSION'
+    Set-S16DeltaImportMode -Context $Context -Mode 'Watermark Column' -ObjectTypesJson $document
+
+    Invoke-S16RunProfile -Context $Context -Name "Full Import" | Out-Null
+
+    try {
+        Invoke-S16DeltaMutations -Config $Config -NewEmployeeId 54
+
+        Invoke-S16DeltaImport -Context $Context -Purpose "against a rowversion watermark" | Out-Null
+        $failure = Assert-S16DeltaLanded -Context $Context -NewEmployeeId 54 -Mode 'Rowversion watermark'
+        if ($failure) { return @{ Status = 'fail'; Detail = $failure } }
+
+        $second = Invoke-S16DeltaImport -Context $Context -Purpose "nothing, against a rowversion watermark"
+        $counts = Get-S16DeltaReadCount -ActivityId $second.activityId
+        if ($counts.Processed -ne 0 -or ($counts.Adds + $counts.Updates + $counts.Deletes) -ne 0) {
+            return @{ Status = 'fail'; Detail = "A Delta Import with no rowversion moved processed $($counts.Processed) object(s); the Binary watermark did not round-trip as a boundary." }
+        }
+
+        return @{ Status = 'pass'; Detail = "A rowversion column served as the watermark: the Binary value round-tripped, the changed rows and only they were read, and the following Delta Import read nothing." }
+    }
+    finally {
+        Undo-S16DeltaMutations -Config $Config -NewEmployeeIds @(54)
+        # Back to the document and mode the setup saved, so the rows after this one meet the configuration
+        # they were written against.
+        Set-S16DeltaImportMode -Context $Context -Mode 'Change-Log Table' -ObjectTypesJson $Context.ObjectTypesJson
+    }
 }
 
 # ─── Shared machinery for the synchronisation and export rows ──────────────────
@@ -371,7 +762,20 @@ function Invoke-S16RunProfile {
     }
 
     $result = Start-JIMRunProfile -ConnectedSystemId $systemId -RunProfileName $Name -Wait -PassThru
-    Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($label)"
+
+    # The app users export is the one run allowed a warning, and only one kind. Every employee past the
+    # tenth has a manager among the first ten, and employee 7 is disabled, so the four people who report
+    # to employee 7 reference someone the outbound rule never provisions. JIM writes their rows without
+    # the manager and reports the reference it cannot resolve on each of them, under the Connected
+    # System's default (Error) handling; that warning is the surfacing being exercised, not a defect,
+    # and Test-S16ExportCreate asserts on the Pending Exports it leaves behind. Anything else that warns
+    # or errors on the run still fails it.
+    if ($System -eq 'AppUsers' -and $Name -eq 'Export') {
+        Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($label)" -AllowWarnings -AllowedWarningTypes @('UnresolvedReference')
+    }
+    else {
+        Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($label)"
+    }
     return $result
 }
 
@@ -582,7 +986,30 @@ function Test-S16ExportCreate {
         return @{ Status = 'fail'; Detail = "$($unusable.Count) exported object(s) carry an external ID that is not the integer the IDENTITY column generates: '$(($unusable | Select-Object -First 5) -join "', '")'." }
     }
 
-    return @{ Status = 'pass'; Detail = "$expected row(s) inserted with a database-generated key, and the confirming import composed the same anchor token for every one." }
+    # The people whose manager is disabled employee 7 (issue #1398). Their rows were inserted without the
+    # manager, and each carries a Pending Export holding only the reference still owed, explained as a
+    # reference to an object that has no Connected System Object in this system. Derived arithmetically:
+    # employee n past the tenth reports to (n modulo 10) + 1, and only employee 7 of the first ten is
+    # disabled, so it is every enabled n with n modulo 10 equal to 6.
+    $expectedWaiting = @(11..$Context.RowCount | Where-Object { ($_ % 10) -eq 6 -and ($_ % 7) -ne 0 })
+    $waitingExports = @(Get-JIMPendingExport -ConnectedSystemId $appUserSystemId -All)
+    if ($waitingExports.Count -ne $expectedWaiting.Count) {
+        return @{ Status = 'fail'; Detail = "$($expectedWaiting.Count) employee(s) report to disabled employee 7, whose account is never provisioned, so $($expectedWaiting.Count) Pending Export(s) should remain for the manager reference each still owes; found $($waitingExports.Count)." }
+    }
+    foreach ($waiting in $waitingExports) {
+        $detail = Get-JIMPendingExport -Id $waiting.id
+        $owed = @($detail.unresolvedReferences)
+        if ($owed.Count -ne 1 -or $owed[0].attributeName -ne 'MANAGER_ID' -or $owed[0].reason -ne 'NotInTargetSystem') {
+            $described = ($owed | ForEach-Object { "$($_.attributeName)=$($_.reason)" }) -join ', '
+            return @{ Status = 'fail'; Detail = "Pending Export $($waiting.id) should owe exactly the MANAGER_ID reference, explained as NotInTargetSystem; it reports [$described]." }
+        }
+        $writtenElsewhere = @($detail.attributeChanges | Where-Object { $_.attributeName -ne 'MANAGER_ID' })
+        if ($writtenElsewhere.Count -gt 0) {
+            return @{ Status = 'fail'; Detail = "Pending Export $($waiting.id) still carries $($writtenElsewhere.Count) non-reference change(s) after the confirming import; everything but the owed reference should have been written and confirmed." }
+        }
+    }
+
+    return @{ Status = 'pass'; Detail = "$expected row(s) inserted with a database-generated key, and the confirming import composed the same anchor token for every one; $($expectedWaiting.Count) row(s) whose manager is not provisioned were inserted without the reference and remain pending for it, explained as such." }
 }
 
 function Test-S16ExportUpdate {
@@ -1192,6 +1619,86 @@ function Test-S16ConfigurationValidation {
 
 # ─── Scale ─────────────────────────────────────────────────────────────────────
 
+function Start-S16MemorySampler {
+    <#
+    .SYNOPSIS
+        Samples `docker stats` for the named containers until stopped, keeping only the peak memory seen.
+    .DESCRIPTION
+        A background job, not the runner's whole-run docker-stats CSV: the scale row wants the peak over
+        exactly its own Full Import, per container, without knowing where the runner put its file. Every
+        sample is a `docker stats --no-stream` call, which is why the interval is seconds rather than
+        milliseconds; a 500,000-row import lasts long enough that a two-second grain misses nothing that
+        matters. Stop-S16MemorySampler returns the peaks in bytes, keyed by container name.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string[]]$Containers,
+        [int]$IntervalSeconds = 2
+    )
+
+    $stopFile = Join-Path ([System.IO.Path]::GetTempPath()) "s16-memory-sampler-$([guid]::NewGuid().ToString('N')).stop"
+    $job = Start-Job -ScriptBlock {
+        param($containers, $intervalSeconds, $stopFile)
+
+        function ConvertTo-Bytes {
+            param([string]$Value)
+            $m = [regex]::Match($Value.Trim(), '^\s*([0-9.]+)\s*([KMGT]?i?B)\s*$', 'IgnoreCase')
+            if (-not $m.Success) { return [long]0 }
+            $num = [double]$m.Groups[1].Value
+            switch ($m.Groups[2].Value.ToLowerInvariant()) {
+                'b'   { return [long]$num }
+                'kb'  { return [long]($num * 1000) }
+                'kib' { return [long]($num * 1024) }
+                'mb'  { return [long]($num * 1000 * 1000) }
+                'mib' { return [long]($num * 1024 * 1024) }
+                'gb'  { return [long]($num * 1000 * 1000 * 1000) }
+                'gib' { return [long]($num * 1024 * 1024 * 1024) }
+                'tb'  { return [long]($num * 1000 * 1000 * 1000 * 1000) }
+                'tib' { return [long]($num * 1024 * 1024 * 1024 * 1024) }
+                default { return [long]0 }
+            }
+        }
+
+        $peaks = @{}
+        foreach ($c in $containers) { $peaks[$c] = [long]0 }
+        while (-not (Test-Path $stopFile)) {
+            $lines = docker stats --no-stream --format '{{.Name}}|{{.MemUsage}}' @containers 2>$null
+            foreach ($line in @($lines)) {
+                $parts = "$line".Split('|')
+                if ($parts.Count -lt 2) { continue }
+                $used = ConvertTo-Bytes -Value ($parts[1].Split('/')[0])
+                if ($peaks.ContainsKey($parts[0]) -and $used -gt $peaks[$parts[0]]) { $peaks[$parts[0]] = $used }
+            }
+            Start-Sleep -Seconds $intervalSeconds
+        }
+        return $peaks
+    } -ArgumentList @($Containers, $IntervalSeconds, $stopFile)
+
+    return @{ Job = $job; StopFile = $stopFile }
+}
+
+function Stop-S16MemorySampler {
+    param([Parameter(Mandatory=$true)][hashtable]$Sampler)
+
+    New-Item -ItemType File -Path $Sampler.StopFile -Force | Out-Null
+    try {
+        $peaks = Receive-Job -Job $Sampler.Job -Wait -AutoRemoveJob
+    }
+    finally {
+        Remove-Item $Sampler.StopFile -Force -ErrorAction SilentlyContinue
+    }
+    # Receive-Job hands back the hashtable as a PSObject-wrapped Hashtable; a plain copy keeps callers simple.
+    $result = @{}
+    if ($peaks) { foreach ($key in $peaks.Keys) { $result[$key] = [long]$peaks[$key] } }
+    return $result
+}
+
+function Format-S16Bytes {
+    param([long]$Bytes)
+    if ($Bytes -ge 1GB) { return "$(($Bytes / 1GB).ToString('F2')) GiB" }
+    if ($Bytes -ge 1MB) { return "$(($Bytes / 1MB).ToString('F0')) MiB" }
+    return "$Bytes B"
+}
+
 function Test-S16ScaleImport {
     param([hashtable]$Context, [hashtable]$Config)
 
@@ -1199,16 +1706,58 @@ function Test-S16ScaleImport {
         return @{ Status = 'skip'; Detail = "The database is seeded with $($Context.RowCount) row(s); the scale row needs 500,000." }
     }
 
+    # Peak memory is sampled for the whole import on the three containers that do the work: JIM's worker
+    # (the product under test), JIM's own database (where the 500,000 Connected System Objects land) and
+    # the source database server being read.
+    $sampler = Start-S16MemorySampler -Containers @('jim.worker', 'jim.database', $Config.ContainerName)
     $started = Get-Date
-    Invoke-S16FullImport -Context $Context | Out-Null
-    $elapsed = (Get-Date) - $started
-
-    $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
-    $imported = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $personTypeId -Count
-
-    if ([int]$imported -ne $Context.RowCount) {
-        return @{ Status = 'fail'; Detail = "Expected $($Context.RowCount) object(s) at scale, found $imported after $($elapsed.TotalMinutes.ToString('F1')) minute(s)." }
+    try {
+        $run = Invoke-S16FullImport -Context $Context
+    }
+    finally {
+        $elapsed = (Get-Date) - $started
+        $peaks = Stop-S16MemorySampler -Sampler $sampler
     }
 
-    return @{ Status = 'pass'; Detail = "$imported object(s) imported in $($elapsed.TotalMinutes.ToString('F1')) minute(s)." }
+    $activity = Get-JIMActivity -Id $run.activityId
+    $activityExecutionTime = if ($activity.executionTime) { "$($activity.executionTime)" } else { 'n/a' }
+    $objectsProcessed = [int]$activity.objectsProcessed
+
+    # The identity Connected System imports the table (Person) and the view over it (PersonView), so a
+    # 500,000-row database is a 1,000,000-object Full Import; both counts are asserted and the throughput
+    # is per object read, which is what the connector actually did.
+    $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
+    $viewTypeId   = Get-Scenario16ObjectTypeId -Context $Context -Name 'PersonView'
+    $imported     = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $personTypeId -Count)
+    $importedView = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $viewTypeId -Count)
+    $expectedObjects = $Context.RowCount * 2
+
+    $rowsPerSecond = if ($elapsed.TotalSeconds -gt 0) { [double]$objectsProcessed / $elapsed.TotalSeconds } else { 0 }
+    $wallClock = $elapsed.ToString('hh\:mm\:ss')
+
+    $metrics = [ordered]@{
+        Provider                 = $Context.Provider
+        Rows                     = [int]$Context.RowCount
+        Objects                  = $objectsProcessed
+        WallClock                = $wallClock
+        RowsPerSecond            = [math]::Round($rowsPerSecond, 0)
+        ActivityId               = $run.activityId
+        ActivityExecutionTime    = $activityExecutionTime
+        PageSize                 = $Context.PageSize
+        WorkerPeakMemory         = Format-S16Bytes -Bytes $peaks['jim.worker']
+        DatabasePeakMemory       = Format-S16Bytes -Bytes $peaks['jim.database']
+        SourceContainer          = $Config.ContainerName
+        SourcePeakMemory         = Format-S16Bytes -Bytes $peaks[$Config.ContainerName]
+    }
+
+    $summary = "$($Context.RowCount.ToString('N0')) source rows read as $($objectsProcessed.ToString('N0')) object(s) (Person + PersonView) in $wallClock ($($metrics.RowsPerSecond.ToString('N0')) objects/s, page size $($Context.PageSize)); Activity execution time $activityExecutionTime; peak memory: worker $($metrics.WorkerPeakMemory), JIM database $($metrics.DatabasePeakMemory), $($Config.ContainerName) $($metrics.SourcePeakMemory)."
+
+    if ($imported -ne $Context.RowCount -or $importedView -ne $Context.RowCount) {
+        return @{ Status = 'fail'; Detail = "Expected $($Context.RowCount) Person and $($Context.RowCount) PersonView object(s) at scale, found $imported and $importedView. $summary"; Metrics = $metrics }
+    }
+    if ($objectsProcessed -ne $expectedObjects) {
+        return @{ Status = 'fail'; Detail = "The Activity reports $objectsProcessed object(s) processed, expected $expectedObjects. $summary"; Metrics = $metrics }
+    }
+
+    return @{ Status = 'pass'; Detail = $summary; Metrics = $metrics }
 }

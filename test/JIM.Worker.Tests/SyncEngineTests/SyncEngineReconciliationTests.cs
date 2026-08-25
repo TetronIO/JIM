@@ -513,6 +513,26 @@ public class SyncEngineReconciliationTests
     }
 
     [Test]
+    public void UpdatePendingExportStatus_OnlyNeverExportedChangesRemain_KeepsPending()
+    {
+        // ExportNotConfirmed means something was sent and did not stick. A change that has not been
+        // sent at all (a reference still owed after a partial write, #1398) leaves the export Pending.
+        var pe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            Status = PendingExportStatus.Pending,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange { Status = PendingExportAttributeChangeStatus.Pending }
+            ]
+        };
+
+        SyncEngine.UpdatePendingExportStatus(pe);
+
+        Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Pending));
+    }
+
+    [Test]
     public void UpdatePendingExportStatus_SomeFailedNoPending_SetsExported()
     {
         var pe = new PendingExport
@@ -563,6 +583,64 @@ public class SyncEngineReconciliationTests
         _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
 
         Assert.That(result.HasChanges, Is.False);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_PendingStatusWithWrittenHalfAwaitingConfirmation_ConfirmsTheWrittenHalf()
+    {
+        // #1398: a partially written export (the row went, the reference is still owed) sits Pending
+        // while awaiting the reference, but its written changes still need confirming. The Pending
+        // status must not hide them from the confirming import.
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "Report");
+        var written = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update, stringValue: "Report");
+        written.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var owed = CreateAttrChange(2, AttributeDataType.Reference, PendingExportAttributeChangeType.Update, unresolvedReferenceValue: Guid.NewGuid().ToString());
+
+        var pe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            Status = PendingExportStatus.Pending,
+            HasUnresolvedReferences = true,
+            ChangeType = PendingExportChangeType.Update,
+            AttributeValueChanges = [written, owed]
+        };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ConfirmedChanges, Is.EquivalentTo(new[] { written }));
+            Assert.That(pe.AttributeValueChanges, Is.EquivalentTo(new[] { owed }), "Only the owed reference remains.");
+            Assert.That(result.PendingExportDeleted, Is.False);
+            Assert.That(result.PendingExportToUpdate, Is.SameAs(pe));
+            Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Pending),
+                "The remaining change was never exported, so the export is Pending, not ExportNotConfirmed.");
+            Assert.That(pe.HasUnresolvedReferences, Is.True);
+        }
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_PendingStatusWithNothingAwaitingConfirmation_StillSkipped()
+    {
+        // The relaxation is exactly as wide as it needs to be: an export that has written nothing yet
+        // has nothing to confirm and must be left alone, status included.
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "Report");
+        var pe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            Status = PendingExportStatus.Pending,
+            AttributeValueChanges = [CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update, stringValue: "Report")]
+        };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasChanges, Is.False);
+            Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Pending));
+        }
     }
 
     [Test]

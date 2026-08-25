@@ -24,8 +24,8 @@ Expanding the range of systems JIM can connect to out of the box. The SCIM 2.0 C
 | Connector | Description | Status |
 |---|---|---|
 | [JIM SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md) | SCIM 2.0 endpoints | ✅ Available |
-| JIM SQL Connector | Microsoft SQL Server and Oracle Database | ✅ Available |
-| JIM SQL Connector: PostgreSQL and MySQL | The same connector, extended to two further engines | 🚧 In development |
+| [JIM SQL Connector](../connectors/jim-sql-connector.md) | Microsoft SQL Server and Oracle Database | ✅ Available |
+| JIM SQL Connector: PostgreSQL and MySQL | The same connector, extended to two further engines | Planned |
 | JIM PowerShell Connector | PowerShell Core scripts | Planned |
 | JIM REST Connector | REST API web services | Planned |
 

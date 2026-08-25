@@ -15,7 +15,7 @@
 
 @* TabPanelsClass is pa-0 rather than pt-5 because the Schedules tab opens straight onto a virtualised grid, which
    supplies its own top margin; stacking both double-counts the gap. Each tab's own first block carries it. *@
-<NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0" Class="mt-5">
+<NavigableMudTabs TabPanelsClass="pa-0" Class="mt-5">
     <MudTabPanel Text="Queue" Icon="@Icons.Material.Filled.Queue">
         <OperationsQueueTab />
     </MudTabPanel>

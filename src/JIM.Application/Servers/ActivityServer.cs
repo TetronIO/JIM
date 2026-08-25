@@ -568,6 +568,16 @@ public class ActivityServer
         return await Application.Repository.Activity.GetWorkerTaskActivityFilterOptionsAsync();
     }
 
+    /// <summary>
+    /// Whether any Run Profile has ever been executed, in any state. Backs the home page's "Run your first
+    /// synchronisation" setup step: an administrator who ran a Run Profile by hand has run their first
+    /// synchronisation, whether or not a Schedule has ever fired.
+    /// </summary>
+    public async Task<bool> HasAnyRunProfileExecutionAsync()
+    {
+        return await Application.Repository.Activity.HasAnyRunProfileExecutionAsync();
+    }
+
     #region synchronisation related
     /// <summary>
     /// Retrieves a page's worth of sync execution item headers for a specific activity.
@@ -661,6 +671,287 @@ public class ActivityServer
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
     {
         return await Application.Repository.Activity.GetActivityRunProfileExecutionItemAsync(id);
+    }
+
+    /// <summary>
+    /// Walks upward from a Run Profile Execution Item through the causal edges recorded against it, returning
+    /// what caused the changes it describes as a tree of cohorts (#1223).
+    /// </summary>
+    /// <param name="runProfileExecutionItemId">The item to explain.</param>
+    /// <param name="maxDepth">How many levels to follow. Bounded because a cascade can chain arbitrarily far,
+    /// and hitting the bound is reported rather than presented as the end of the story.</param>
+    /// <remarks>
+    /// Two properties matter more than the shape of the result.
+    ///
+    /// <b>It costs one round trip per level, not one per cause.</b> Each level resolves every branch at once:
+    /// a cohort can hold thousands of members, and a walk that queried per member would issue thousands of
+    /// round trips to render one panel.
+    ///
+    /// <b>Every ending is named.</b> An unresolvable ancestor produces an explicit
+    /// <see cref="CausalChainResolution"/>, never a gap and never an exception. "Nothing caused this" and "the
+    /// cause is no longer retained" are indistinguishable as an absence and mean opposite things to the person
+    /// reading; presenting the second as the first would tell them they had the whole story when the chain had
+    /// actually been cut short by retention.
+    /// </remarks>
+    public async Task<CausalChain> GetCausalChainAsync(Guid runProfileExecutionItemId, int maxDepth = 5)
+    {
+        var rootEdges = await Application.Repository.Activity
+            .GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync([runProfileExecutionItemId]);
+
+        var cohorts = GroupIntoCohorts(rootEdges);
+
+        // The viewed item's own timeline continues behind it too: a synchronisation item opened directly gets
+        // its source-import hop at the root, exactly as it would nested under an export's chain.
+        var rootSummaries = await Application.Repository.Activity
+            .GetRunProfileExecutionItemCausalSummariesAsync([runProfileExecutionItemId]);
+        if (rootSummaries.TryGetValue(runProfileExecutionItemId, out var rootSummary))
+        {
+            var rootSourceHop = await TryBuildSourceImportCohortAsync(rootSummary);
+            if (rootSourceHop != null)
+                cohorts.Add(rootSourceHop);
+        }
+
+        if (cohorts.Count == 0)
+            return new CausalChain { RunProfileExecutionItemId = runProfileExecutionItemId };
+
+        var truncatedByDepth = await ExpandLevelsAsync(cohorts, maxDepth);
+
+        return new CausalChain
+        {
+            RunProfileExecutionItemId = runProfileExecutionItemId,
+            Cohorts = cohorts,
+            IsTruncatedByDepth = truncatedByDepth
+        };
+    }
+
+    /// <summary>
+    /// Resolves each member of <paramref name="cohorts"/> level by level, breadth-first, until the depth bound
+    /// or until no member has anywhere further to go. Returns whether any branch stopped at the bound.
+    /// </summary>
+    private async Task<bool> ExpandLevelsAsync(List<CausalChainCohort> cohorts, int maxDepth)
+    {
+        // The frontier is every member at the current level that names a causing item. Members that name none
+        // are already terminal and never enter it.
+        var frontier = cohorts.SelectMany(c => c.Members)
+            .Where(m => m.RunProfileExecutionItemId.HasValue)
+            .ToList();
+
+        for (var depth = 1; frontier.Count > 0; depth++)
+        {
+            if (depth >= maxDepth)
+            {
+                foreach (var member in frontier)
+                    member.Resolution = CausalChainResolution.DepthLimitReached;
+
+                return true;
+            }
+
+            // Distinct, because a cohort of many members routinely points at one causing item, and a level of
+            // a large cascade would otherwise ask about the same item thousands of times.
+            var causeItemIds = frontier.Select(m => m.RunProfileExecutionItemId!.Value).Distinct().ToList();
+            var summaries = await Application.Repository.Activity.GetRunProfileExecutionItemCausalSummariesAsync(causeItemIds);
+            var retainedIds = causeItemIds.Where(summaries.ContainsKey).ToList();
+
+            var edgesByEffect = retainedIds.Count > 0
+                ? (await Application.Repository.Activity.GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(retainedIds))
+                    .GroupBy(e => e.EffectRunProfileExecutionItemId)
+                    .ToDictionary(g => g.Key, g => g.ToList())
+                : [];
+
+            var nextFrontier = new List<CausalChainMember>();
+            foreach (var member in frontier)
+            {
+                var causeItemId = member.RunProfileExecutionItemId!.Value;
+
+                if (!summaries.TryGetValue(causeItemId, out var summary))
+                {
+                    // Expected rather than exceptional: causes are always older than their effects, so past
+                    // one retention window this is the normal end of a long chain.
+                    member.Resolution = CausalChainResolution.CauseNotRetained;
+                    continue;
+                }
+
+                var memberCohorts = edgesByEffect.TryGetValue(causeItemId, out var edges)
+                    ? GroupIntoCohorts(edges)
+                    : [];
+
+                // The record's own timeline continues behind a synchronisation item to the import that fed
+                // it, whether or not the item also carries edges: the source data's arrival is a cause in its
+                // own right, and it is the hop that reaches the chain's true root.
+                var sourceHop = await TryBuildSourceImportCohortAsync(summary);
+                if (sourceHop != null)
+                    memberCohorts.Add(sourceHop);
+
+                if (memberCohorts.Count == 0)
+                {
+                    // A synchronisation-side item was fed by an import by definition, so where its record's
+                    // deletion has nulled the id the timeline is walked on and the snapshot fallback reached
+                    // no import either, the story was cut short rather than completed: report the loss, as
+                    // the not-retained ending, instead of presenting it as the whole story. An import-side
+                    // item, and a synchronisation whose record is still live with no retained import, keep
+                    // the complete-story ending they always had (#1495).
+                    member.Resolution = IsTimelineSevered(summary)
+                        ? CausalChainResolution.CauseNotRetained
+                        : CausalChainResolution.NoFurtherCauses;
+                    continue;
+                }
+
+                member.Resolution = CausalChainResolution.Resolved;
+                member.Causes.AddRange(memberCohorts);
+                nextFrontier.AddRange(member.Causes.SelectMany(c => c.Members)
+                    .Where(m => m.RunProfileExecutionItemId.HasValue));
+            }
+
+            frontier = nextFrontier;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Groups edges into cohorts on the attribution tuple, plus the effect outcome they explain.
+    /// </summary>
+    /// <remarks>
+    /// The effect outcome is part of the key, not incidental: an item carrying several outcomes has several
+    /// independent stories, and merging their causes would attribute a change on one outcome to a cause
+    /// belonging to another. This is the PRD's edge-granularity resolution, applied.
+    ///
+    /// The reason element is the code, never the rendered sentence. Grouping on prose would be redundant with
+    /// the Connected System name the tuple already carries, and would change behaviour silently whenever the
+    /// wording changed.
+    /// </remarks>
+    /// <summary>
+    /// The Run Profile Execution Item types behind which a record's own timeline continues to the import that
+    /// fed it: a synchronisation processed the Connected System Object, so whatever import last changed that
+    /// object is where its data (or its disappearance) came from. Import-side items are themselves the far
+    /// end, and a <see cref="ObjectChangeType.PendingExport"/> staging item's causes are its recorded edges,
+    /// not its object's timeline: its Connected System Object is the effect's, never the cause's.
+    /// </summary>
+    private static readonly HashSet<ObjectChangeType> SourceImportHopItemTypes =
+    [
+        ObjectChangeType.Projected,
+        ObjectChangeType.Joined,
+        ObjectChangeType.AttributeFlow,
+        ObjectChangeType.Disconnected,
+        ObjectChangeType.DisconnectedOutOfScope,
+        ObjectChangeType.OutOfScopeRetainJoin,
+        ObjectChangeType.DriftCorrection
+    ];
+
+    /// <summary>
+    /// Builds the source-import hop behind a synchronisation item, or null where none applies: the item is not
+    /// synchronisation-side, processed no Connected System Object, or no import on the record is retained.
+    /// </summary>
+    /// <remarks>
+    /// Derived from the record's timeline rather than a stored edge, which is the PRD's requirement 4 applied:
+    /// per-object timelines are the free join, used wherever "what else happened to this object" is the answer.
+    /// The alternative, capturing an edge at synchronisation time, was rejected because it would put a
+    /// change-history lookup per object on the full-synchronisation hot path to record what this join already
+    /// yields at read time.
+    ///
+    /// The hop's member carries the import item's id, so the walk continues through it: an import that was
+    /// itself an export confirmation resolves its own edges at the next level, and times move strictly
+    /// backwards along the timeline, so the recursion terminates at the depth bound or the true root.
+    /// </remarks>
+    private async Task<CausalChainCohort?> TryBuildSourceImportCohortAsync(CausalChainItemSummary summary)
+    {
+        if (!SourceImportHopItemTypes.Contains(summary.ObjectChangeType))
+            return null;
+
+        var importEvent = await FindSourceImportEventAsync(summary);
+        if (importEvent == null)
+            return null;
+
+        return new CausalChainCohort
+        {
+            SourceImportChangeType = importEvent.ChangeType,
+            ConnectedSystemId = importEvent.ConnectedSystemId,
+            ConnectedSystemName = importEvent.ConnectedSystemName,
+            Members =
+            [
+                new CausalChainMember
+                {
+                    RunProfileExecutionItemId = importEvent.RunProfileExecutionItemId,
+                    ConnectedSystemObjectId = summary.ConnectedSystemObjectId,
+                    DisplayName = importEvent.DisplayName,
+                    // Every other member takes its time from the stored edge; this one is built by hand, so
+                    // omitting it left the hop with default(DateTime), which the Lineage reads as "no time
+                    // recorded" and renders without one. It also orders the column's cards.
+                    Occurred = importEvent.Occurred,
+                    Resolution = CausalChainResolution.Resolved
+                }
+            ]
+        };
+    }
+
+    /// <summary>
+    /// Finds the import that last changed the item's record: by the record's id while it exists, and by the
+    /// external ID snapshotted on the item once the record's deletion has nulled the id on every item that
+    /// processed it (#1495). The degraded key is bounded exactly as the id is (latest at or before the
+    /// synchronisation, within the Activity's Connected System) and reaches the same import, which matters
+    /// most on precisely these chains: a deletion cascade is where the timeline used to go dark.
+    /// </summary>
+    private async Task<CausalSourceImportEvent?> FindSourceImportEventAsync(CausalChainItemSummary summary)
+    {
+        if (summary.ConnectedSystemObjectId is { } connectedSystemObjectId)
+            return await Application.Repository.Activity.GetLatestImportItemForCsoAsync(
+                connectedSystemObjectId, summary.ActivityExecuted, summary.Id);
+
+        if (summary.ConnectedSystemId is { } connectedSystemId && !string.IsNullOrEmpty(summary.ExternalIdSnapshot))
+            return await Application.Repository.Activity.GetLatestImportItemForExternalIdAsync(
+                connectedSystemId, summary.ExternalIdSnapshot, summary.ActivityExecuted, summary.Id);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whether the record's timeline behind a synchronisation-side item is known to be lost rather than
+    /// complete: the item was fed by an import by definition, but its record's deletion nulled the id the
+    /// timeline is walked on. Only meaningful once hop-building has already failed; where the snapshot
+    /// fallback reached the import, the member resolved and this is never asked.
+    /// </summary>
+    private static bool IsTimelineSevered(CausalChainItemSummary summary) =>
+        SourceImportHopItemTypes.Contains(summary.ObjectChangeType) && !summary.ConnectedSystemObjectId.HasValue;
+
+    private static List<CausalChainCohort> GroupIntoCohorts(List<CausalEdge> edges)
+    {
+        return edges
+            // The object type and the attribute join the key so the rendered sentence is always correct for
+            // every member: a cohort that mixed a User and a Contractor would have no right noun, and one
+            // that mixed Static Members with Owners would name the wrong relationship for half its members.
+            .GroupBy(e => (e.EffectSyncOutcomeId, e.EdgeType, e.ReasonCode, e.ConnectedSystemId, e.SyncRuleId,
+                e.CauseObjectTypeName, e.EffectAttributeName))
+            .Select(g => new CausalChainCohort
+            {
+                EffectSyncOutcomeId = g.Key.EffectSyncOutcomeId,
+                EdgeType = g.Key.EdgeType,
+                ReasonCode = g.Key.ReasonCode,
+                ConnectedSystemId = g.Key.ConnectedSystemId,
+                ObjectTypeName = g.Key.CauseObjectTypeName,
+                ObjectTypePluralName = g.First().CauseObjectTypePluralName,
+                AttributeName = g.Key.EffectAttributeName,
+                // Names come off the first edge in the group: they are snapshots of the same system and rule,
+                // so any member carries the same value, and taking one avoids implying they could differ.
+                ConnectedSystemName = g.First().ConnectedSystemName,
+                SyncRuleId = g.Key.SyncRuleId,
+                SyncRuleName = g.First().SyncRuleName,
+                Members = g.Select(e => new CausalChainMember
+                {
+                    MetaverseObjectId = e.CauseMetaverseObjectId,
+                    ConnectedSystemObjectId = e.CauseConnectedSystemObjectId,
+                    PendingExportId = e.CausePendingExportId,
+                    RunProfileExecutionItemId = e.CauseRunProfileExecutionItemId,
+                    SyncOutcomeId = e.CauseSyncOutcomeId,
+                    DisplayName = e.CauseDisplayName,
+                    Occurred = e.Created,
+                    // A cause that named no item has nowhere to walk to, and nothing was lost in getting here,
+                    // so it is a complete ending rather than a truncated one.
+                    Resolution = e.CauseRunProfileExecutionItemId.HasValue
+                        ? CausalChainResolution.Resolved
+                        : CausalChainResolution.NoFurtherCauses
+                }).ToList()
+            })
+            .ToList();
     }
     #endregion
 }

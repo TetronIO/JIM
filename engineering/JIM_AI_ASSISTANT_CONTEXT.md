@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 1.7
+> **Document Version**: 1.8
 >
-> **Last Updated**: 2026-04-22
+> **Last Updated**: 2026-08-17
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -189,13 +189,14 @@ Grace periods allow time before actual deletion (e.g., 30 days).
 | **LDAP/Active Directory** | ✓ | ✓ | Full CRUD, includes Samba AD, SSL/TLS, container creation |
 | **OpenLDAP/RFC 4512** | ✓ | ✓ | OpenLDAP, 389 Directory Server, RFC 4512-compliant directories; parallel imports, accesslog delta import, partition-scoped imports |
 | **File (CSV/Text)** | ✓ | ✓ | Configurable delimiters, auto-confirm export |
+| **SCIM 2.0 Client** | ✓ | ✓ | Any RFC 7643/7644 service provider; last-modified delta import, optional bulk operations, rate-limit aware |
+| **SQL** | ✓ | ✓ | Microsoft SQL Server and Oracle Database through managed ADO.NET drivers; one Connected System per database with an Object Types document naming tables/views, anchors, references and related tables; keyset-paged full import; delta import from a change-log table or a watermark column; transactional export with generated-key capture; auto-confirm export |
 
-### Planned Connectors (Post-MVP)
+### Planned Connectors
 
 | Connector | Notes |
 |-----------|-------|
-| **SCIM 2.0** | Standard protocol (design doc exists) |
-| **SQL** | Database connector (SQL Server, PostgreSQL, MySQL, Oracle) |
+| **SQL: PostgreSQL and MySQL** | Further dialects of the same SQL Connector |
 | **PowerShell** | Custom scripts |
 | **Web Services/REST** | OAuth2/API key auth |
 
@@ -449,7 +450,7 @@ Development follows sequenced milestones (see [GitHub Milestones](https://github
 |-----------|-------|
 | **v0.9-STABILISATION** | Configuration controls, identity fusing, lifecycle state management (JML triggers), sync engine refinement, architectural foundation for extensibility |
 | **v1.0-ILM-COMPLETE** | First production-ready release: robust Synchronisation Rules, lifecycle automation, scheduling, error handling, operational monitoring |
-| **v1.x-CONNECTORS** | Expanding connector coverage: broader LDAP support, SQL databases, SCIM endpoints, HR systems, connector framework improvements |
+| **v1.x-CONNECTORS** | Expanding connector coverage: SQL Connector shipped for SQL Server and Oracle (PostgreSQL and MySQL dialects next), SCIM 2.0 Client shipped, HR systems, connector framework improvements |
 | **v2.0-IGA-FOUNDATION** | Direct in-JIM management of MVOs (no longer dependent on Source-of-Record systems): Entitlement Management (group management + governance: reviews/attestation, delegated admin, dynamic & time-based memberships, self-service, approvals, etc.), Identity Lifecycle Management (user management, self-service for locally-managed attributes, lifecycle workflows), and fine-grained RBAC for custom permission models |
 
 ---

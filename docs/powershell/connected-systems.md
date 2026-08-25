@@ -116,6 +116,76 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordPolicy
     `CouldNotDetermine`, the figures are a floor rather than a guarantee, because some accounts may be governed
     by a stricter policy.
 
+### Get-JIMConnectedSystemPasswordSynchronisation
+
+Reports whether a Connected System receives synchronised passwords, and the settings governing how hard JIM
+tries to deliver them. A system that has never been configured is reported with `configured` set to `$false`
+and JIM's defaults in the remaining fields, so a script comparing systems does not have to special-case the
+untouched ones.
+
+```powershell
+Get-JIMConnectedSystemPasswordSynchronisation -Id 3
+Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordSynchronisation
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `configured` | `bool` | Whether Password Synchronisation has been configured here at all |
+| `connectorSupportsPasswordSet` | `bool` | Whether this Connector can set passwords; `$false` means it cannot be configured |
+| `enabled` | `bool` | Whether queued password changes are delivered |
+| `targetObjectTypeId` | `int` | The Connected System Object Type that receives passwords |
+| `targetObjectTypeName` | `string` | Its name |
+| `maxRetries` | `int` | Attempts before a change is parked; `0` means use JIM's default |
+| `effectiveMaxRetries` | `int` | The retry count actually applied |
+| `retryBackoffBase` | `timespan` | The first retry interval; `0` means use JIM's default |
+| `effectiveRetryBackoffBase` | `timespan` | The backoff base actually applied |
+| `requireSecureTransport` | `bool` | Whether an unconfirmed-encryption connection is refused. Reported here, set on the Connected System with `Set-JIMConnectedSystem` |
+| `effectiveTimeToLive` | `timespan` | How long a queued change waits before JIM expires it |
+
+Auditing which systems are switched on:
+
+```powershell
+Get-JIMConnectedSystem -All | ForEach-Object {
+    $p = Get-JIMConnectedSystemPasswordSynchronisation -Id $_.Id
+    [PSCustomObject]@{ System = $_.Name; Configured = $p.configured; Enabled = $p.enabled }
+}
+```
+
+### Set-JIMConnectedSystemPasswordSynchronisation
+
+Creates or updates the configuration. Omitted parameters leave the stored value unchanged; `-TargetObjectType`
+is required when creating one.
+
+```powershell
+# Stage the configuration without switching it on
+Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -TargetObjectType 7 -Enabled $false
+
+# Switch it on during the change window, delivering everything queued while it was off
+Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -Enabled $true -ChangeReason 'CHG0041288'
+
+# Allow ten attempts before a change is parked
+Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `-Id` | `int` | The Connected System (required; also accepts a Connected System from the pipeline as `-InputObject`) |
+| `-Enabled` | `bool` | Whether to deliver queued password changes. Enabling delivers what accumulated while it was off |
+| `-TargetObjectType` | `int` | The Object Type holding user accounts; must be selected for synchronisation. Alias: `-TargetObjectTypeId` |
+| `-MaxRetries` | `int` | Attempts before parking a change; `0` uses JIM's default |
+| `-RetryBackoffBase` | `timespan` | The first retry interval; `0` uses JIM's default |
+| `-ChangeReason` | `string` | Recorded against the Connected System's configuration change history |
+| `-PassThru` | `switch` | Return the updated configuration |
+
+!!! note "Require Secure Transport is set on the Connected System"
+    It governs every password JIM sends to the system, not only synchronised ones, so it is set with
+    `Set-JIMConnectedSystem -Id 3 -RequireSecureTransport` and turned off with
+    `-RequireSecureTransport:$false`. It is reported here as well, because it governs this feature too.
+
+!!! note "There is no Remove cmdlet, and that is deliberate"
+    Removing a configuration would discard every password change queued against it. Disabling it keeps them,
+    and is reversible, so `-Enabled $false` is the supported way to stop delivery.
+
 #### Initial password attention (ById only)
 
 How many accounts in the Connected System are waiting on a person over their initial password.
@@ -199,14 +269,14 @@ Updates the configuration of an existing Connected System.
 # ById (default)
 Set-JIMConnectedSystem -Id <int> [-Name <string>] [-Description <string>]
     [-SettingValues <hashtable>] [-MaxExportParallelism <int>]
-    [-InitialPasswordTimeToLive <timespan>]
+    [-RequireSecureTransport] [-InitialPasswordTimeToLive <timespan>]
     [-UnresolvedReferenceHandling <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
     [-Description <string>] [-SettingValues <hashtable>]
-    [-MaxExportParallelism <int>] [-InitialPasswordTimeToLive <timespan>]
-    [-UnresolvedReferenceHandling <string>]
+    [-MaxExportParallelism <int>] [-RequireSecureTransport]
+    [-InitialPasswordTimeToLive <timespan>] [-UnresolvedReferenceHandling <string>]
     [-ChangeReason <string>] [-PassThru]
 ```
 
@@ -220,6 +290,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
 | `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16). Leave unset to let the connector recommend a conservative value (the LDAP Connector recommends 2 for capable directories, those tuned to a high Export Concurrency); JIM stays sequential (1) if the connector offers no recommendation. An explicitly set value always takes precedence. |
+| `RequireSecureTransport` | `switch` | No | `$false` | Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted. Governs every password JIM sends here: the first password on an account it provisions, one set by hand, and a synchronised password change. Nothing is discarded when JIM refuses; queued changes wait and accounts stay owed their first password. Turn it off with `-RequireSecureTransport:$false`. See [Passwords](../concepts/passwords.md#password-synchronisation). |
 | `InitialPasswordTimeToLive` | `timespan` | No | 7 days | How long an account provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Raise it ahead of a planned outage longer than the current window; accounts provisioned meanwhile otherwise expire without a password. See [Passwords](../concepts/passwords.md#how-long-jim-keeps-trying). |
 | `UnresolvedReferenceHandling` | `string` | No | `Error` | How import-time reference values that cannot be resolved to a Connected System Object are treated: `Error`, `Warn`, or `Ignore`. See [Unresolved reference handling](../configuration/connected-systems.md#unresolved-reference-handling). |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
@@ -315,10 +386,10 @@ Imports (or re-imports) the schema from the connected data source. This discover
 
 ```powershell
 # ById (default)
-Import-JIMConnectedSystemSchema -Id <int> [-PassThru]
+Import-JIMConnectedSystemSchema -Id <int> [-Preview] [-DisableDependents] [-RemoveDependents] [-PassThru]
 
 # ByInputObject
-Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-PassThru]
+Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-DisableDependents] [-RemoveDependents] [-PassThru]
 ```
 
 ### Parameters
@@ -327,16 +398,44 @@ Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-PassThru]
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById) | | Connected System identifier |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
-| `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after schema import |
+| `Preview` | `switch` | No | `$false` | Retrieves the schema and returns what a refresh would change, without persisting anything |
+| `DisableDependents` | `switch` | No | `$false` | Applies the refresh and disables everything it invalidated: Synchronisation Rules bound to a removed object type and mappings reading a removed or redefined attribute, each with a recorded reason. Preview first; the preview's `Dependents` property names what this disables. Cannot be combined with `RemoveDependents` |
+| `RemoveDependents` | `switch` | No | `$false` | Applies the refresh and removes everything it invalidated. This deletes configuration and identity data: the named Synchronisation Rules and mappings are deleted, and a background worker task marks every Connected System Object of a removed object type Obsolete (deprovisioning through the standard pipeline) and deletes every stored value of a removed attribute. Always preview first; the preview's `Dependents` and `RemovalImpact` properties show exactly what this takes. Cannot be combined with `DisableDependents` |
+| `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after schema import (not needed with `-Preview`, which always returns its result) |
 
 ### Output
 
-When `-PassThru` is specified, returns the Connected System Object. Otherwise, no output.
+With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `Dependents` (what the destructive changes invalidate: `InvalidatedSyncRules`, `InvalidatedMappings` and `ReferencedObjectMatchingRules`, each entry carrying its `Reason`), `RemovalImpact` (what committing with `RemoveDependents` would take: `RemovedObjectTypes` with a `ConnectedSystemObjectCount` each, and `RemovedAttributes` with a `StoredValueCount` each), `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output.
 
 ### Examples
 
 ```powershell title="Import schema for a Connected System"
 Import-JIMConnectedSystemSchema -Id 3
+```
+
+```powershell title="Preview a refresh, then apply only when nothing was removed or redefined"
+$preview = Import-JIMConnectedSystemSchema -Id 3 -Preview
+if (-not $preview.HasRemovalsOrDefinitionChanges) {
+    Import-JIMConnectedSystemSchema -Id 3 -Confirm:$false
+}
+```
+
+```powershell title="Apply a destructive refresh with its dependents disabled"
+$preview = Import-JIMConnectedSystemSchema -Id 3 -Preview
+$preview.Dependents.InvalidatedSyncRules | Select-Object SyncRuleName, Reason
+Import-JIMConnectedSystemSchema -Id 3 -DisableDependents -Confirm:$false
+```
+
+```powershell title="Apply a destructive refresh with its dependents removed, deleting the previewed configuration and data"
+# Inspect what the removal would delete before committing: every named rule and mapping is deleted,
+# every counted object is obsoleted and deprovisioned, and every counted stored value is deleted.
+$preview = Import-JIMConnectedSystemSchema -Id 3 -Preview
+$preview.Dependents.InvalidatedSyncRules | Select-Object SyncRuleName, Reason
+$preview.RemovalImpact.RemovedObjectTypes | Select-Object ObjectTypeName, ConnectedSystemObjectCount
+$preview.RemovalImpact.RemovedAttributes | Select-Object AttributeName, StoredValueCount
+
+Import-JIMConnectedSystemSchema -Id 3 -RemoveDependents
+Get-JIMWorkerTask   # the data removal runs as a background worker task
 ```
 
 ```powershell title="Pipeline: create a system, then import its schema"
@@ -346,9 +445,10 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 
 ### Notes
 
-- This operation is **destructive**: it replaces the existing schema. Any object type or attribute selections that no longer match the new schema are removed.
+- A refresh never deletes on its own: additions and attribute definition updates are applied, while object types and attributes the Connected System no longer reports are retained in JIM and flagged in the result. Deletion only happens when you explicitly choose `-RemoveDependents`, and only across what the preview listed. See [Refreshing the schema](../configuration/connected-systems.md#refreshing-the-schema).
+- Check the preview's `DiscoveryWarnings` before applying: a partial schema read (for example, missing permissions) can make entries appear removed when they are not.
 - Schema import is required before creating Synchronisation Rules for a Connected System.
-- Supports `ShouldProcess` (Medium impact).
+- Supports `ShouldProcess` (Medium impact). `-Preview` bypasses it; a preview changes nothing, so there is nothing to confirm.
 
 ---
 
@@ -583,6 +683,8 @@ Each Object Type also carries `Tags`, the classification key/value pairs the Con
 
 Each attribute carries `writability`, one of `Writable`, `ReadOnly` or `WritableOnCreate`. See [Attribute writability](../configuration/connected-systems.md#attribute-writability) for what each one means for Attribute Flow.
 
+A Reference attribute additionally carries `referencedObjectTypeId` and `referencedObjectTypeName` when the Connected System's schema declares which Object Type the reference points at (the SQL Connector's `referencesObjectType`); import reference resolution then resolves the reference within that Object Type alone. Both are `null` when the schema does not say. Read-only: discovered from the schema, never settable.
+
 ### Examples
 
 ```powershell title="Get object types for a Connected System"
@@ -650,6 +752,7 @@ Set-JIMConnectedSystemObjectType -ConnectedSystemId 3 -ObjectTypeId 2 -Selected 
 ### Notes
 
 - Supports `ShouldProcess` (Medium impact).
+- Selecting an Object Type is refused, with the Connector's own message, when the Connected System's settings cannot serve it: for the JIM SQL Connector, selecting an Object Type that lacks a `watermarkColumn` or a `changeLog` while the matching Delta Import Mode is set. Deselecting is always accepted.
 
 ---
 
@@ -701,7 +804,7 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeI
 ```
 
 ```powershell title="Correct the data type of an Oracle NUMBER column"
-# Oracle has one numeric type, so a NUMBER(10) employee identifier is read as a Decimal by default.
+# Oracle has one numeric type, so a NUMBER(10) employee identifier is read as a Long Number by default.
 # Recording it as a whole number lets it flow into the built-in Employee Number Metaverse Attribute.
 Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 5 -Type Integer
 ```
@@ -1370,7 +1473,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All 
 ### Output
 
 - **List / ListAll**: Pending Export operations with export type (Add, Update, Delete) and summary of changes.
-- **ById**: Detailed view of a single Pending Export, including all attribute changes.
+- **ById**: Detailed view of a single Pending Export, including all attribute changes. `UnresolvedReferences` lists each reference change not yet written (`AttributeName`, `ReferencedMetaverseObjectId`, `ReferencedMetaverseObjectDisplayName`) with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object exists in this Connected System but has no anchor yet) or `NotInTargetSystem` (the referenced object has no Connected System Object in this Connected System). See [Unresolved reference handling on export](../configuration/connected-systems.md#on-export).
 - **AttributeChanges / AttributeChangesAll**: Paged or complete list of changes for a specific multi-valued attribute.
 
 ### Examples

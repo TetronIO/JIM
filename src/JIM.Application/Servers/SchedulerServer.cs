@@ -915,6 +915,10 @@ public class SchedulerServer
                 await QueueTemporalScopeReconciliationStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
                 break;
 
+            case ScheduleStepType.HistoryRetentionCleanup:
+                await QueueHistoryRetentionCleanupStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
+                break;
+
             case ScheduleStepType.PowerShell:
             case ScheduleStepType.Executable:
             case ScheduleStepType.SqlScript:
@@ -1006,6 +1010,42 @@ public class SchedulerServer
         }
 
         Log.Debug("QueueTemporalScopeReconciliationStepAsync: Created worker task {TaskId} for step {StepId} with status {Status}",
+            result.WorkerTaskId, step.Id, initialStatus);
+    }
+
+    /// <summary>
+    /// Queues a History Retention Cleanup step (issue #1118) by creating a HistoryRetentionCleanupWorkerTask.
+    /// The task carries no per-step configuration; the worker reads every retention period from its Service
+    /// Setting at run time, so changing one takes effect on the next pass without the Schedule being touched.
+    /// </summary>
+    private async Task QueueHistoryRetentionCleanupStepAsync(
+        ScheduleExecution execution,
+        ScheduleStep step,
+        bool isParallelGroup,
+        WorkerTaskStatus initialStatus,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName)
+    {
+        var workerTask = new HistoryRetentionCleanupWorkerTask
+        {
+            Status = initialStatus,
+            InitiatedByType = initiatorType,
+            InitiatedById = initiatorId,
+            InitiatedByName = initiatorName,
+            ScheduleExecutionId = execution.Id,
+            ScheduleStepIndex = step.StepIndex,
+            ContinueOnFailure = step.ContinueOnFailure,
+            ExecutionMode = isParallelGroup ? WorkerTaskExecutionMode.Parallel : WorkerTaskExecutionMode.Sequential
+        };
+
+        var result = await Application.Tasking.CreateWorkerTaskAsync(workerTask);
+        if (!result.Success)
+        {
+            throw new InvalidOperationException($"Failed to create worker task for step {step.Id}: {result.ErrorMessage}");
+        }
+
+        Log.Debug("QueueHistoryRetentionCleanupStepAsync: Created worker task {TaskId} for step {StepId} with status {Status}",
             result.WorkerTaskId, step.Id, initialStatus);
     }
 

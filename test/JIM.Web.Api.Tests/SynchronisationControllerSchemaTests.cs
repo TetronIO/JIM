@@ -11,6 +11,8 @@ using JIM.Application.Interfaces;
 using JIM.Application.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Application.Services;
+using JIM.Connectors;
+using JIM.Connectors.Sql;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -184,6 +186,54 @@ public class SynchronisationControllerSchemaTests
         var result = await _controller.UpdateConnectedSystemObjectTypeAsync(connectedSystemId, objectTypeId, request);
 
         Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task UpdateObjectTypeAsync_SelectingAnObjectTypeTheConnectorSettingsCannotServe_ReturnsBadRequestWithTheConnectorsMessage()
+    {
+        // The JIM SQL Connector in Watermark Column mode, with an Object Types document in which AppUser (a table
+        // JIM only writes to) has no watermark column. Selecting AppUser is refused at the point of selection (#1424).
+        var connectedSystemId = 1;
+        var objectTypeId = 5;
+        const string objectTypesDocument = """
+            {
+              "objectTypes": [
+                { "name": "Person", "table": "EMPLOYEES", "anchorColumns": [ "EMPLOYEE_ID" ], "watermarkColumn": "LAST_MODIFIED" },
+                { "name": "AppUser", "table": "APP_USERS", "anchorColumns": [ "ID" ] }
+              ]
+            }
+            """;
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = connectedSystemId,
+            Name = "HR Database",
+            ConnectorDefinition = new ConnectorDefinition { Name = ConnectorConstants.SqlConnectorName },
+            SettingValues =
+            [
+                new ConnectedSystemSettingValue { Setting = new ConnectorDefinitionSetting { Name = SqlConnectorConstants.SettingObjectTypes, Type = ConnectedSystemSettingType.Text }, StringValue = objectTypesDocument },
+                new ConnectedSystemSettingValue { Setting = new ConnectorDefinitionSetting { Name = SqlConnectorConstants.SettingDeltaImportMode, Type = ConnectedSystemSettingType.DropDown }, StringValue = SqlConnectorConstants.DeltaImportModeWatermarkColumn }
+            ]
+        };
+        var objectType = new ConnectedSystemObjectType { Id = objectTypeId, Name = "AppUser", Selected = false, ConnectedSystemId = connectedSystemId, ConnectedSystem = connectedSystem };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId)).ReturnsAsync(objectType);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypesAsync(connectedSystemId)).ReturnsAsync(
+        [
+            new ConnectedSystemObjectType { Id = 4, Name = "Person", Selected = true, ConnectedSystemId = connectedSystemId },
+            new ConnectedSystemObjectType { Id = objectTypeId, Name = "AppUser", Selected = false, ConnectedSystemId = connectedSystemId }
+        ]);
+
+        var result = await _controller.UpdateConnectedSystemObjectTypeAsync(connectedSystemId, objectTypeId, new UpdateConnectedSystemObjectTypeRequest { Selected = true });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+            var error = ((BadRequestObjectResult)result).Value as ApiErrorResponse;
+            Assert.That(error?.Message, Does.Contain("AppUser").And.Contain("watermarkColumn"),
+                "The refusal is the Connector's own message, so a script author sees which Object Type and what it lacks.");
+            _mockConnectedSystemRepo.Verify(r => r.UpdateObjectTypeAsync(It.IsAny<ConnectedSystemObjectType>()), Times.Never);
+        }
     }
 
     [Test]

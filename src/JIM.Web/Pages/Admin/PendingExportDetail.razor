@@ -107,19 +107,11 @@
                                     @if (_pendingExport.ConnectedSystemObject != null)
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")"
-                                                     Underline="Underline.None" Class="jim-chip-link"
-                                                     Style="margin: 0;">
-                                                <MudChip T="string" Color="Color.Default"
-                                                         Style="margin: 0;">
-                                                    <AvatarContent>
-                                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                                    </AvatarContent>
-                                                    <ChildContent>
-                                                        <b class="jim-cs-chip-prefix">@_pendingExport.ConnectedSystemObject.Type.Name:</b>&nbsp;@GetCsoDisplayName()
-                                                    </ChildContent>
-                                                </MudChip>
-                                            </MudLink>
+                                            <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                                        TypeName="@_pendingExport.ConnectedSystemObject.Type.Name"
+                                                        Name="@GetCsoDisplayName()"
+                                                        Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")"
+                                                        Class="ma-0" />
                                         </MudStack>
                                     }
                                     else
@@ -134,19 +126,11 @@
                                     @if (_pendingExport.SourceMetaverseObject != null)
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)"
-                                                     Underline="Underline.None" Class="jim-chip-link"
-                                                     Style="margin: 0;">
-                                                <MudChip T="string" Color="Color.Default"
-                                                         Style="margin: 0;">
-                                                    <AvatarContent>
-                                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                                    </AvatarContent>
-                                                    <ChildContent>
-                                                        <b class="jim-mv-chip-prefix">@_pendingExport.SourceMetaverseObject.Type.Name:</b>&nbsp;@GetMvoDisplayName()
-                                                    </ChildContent>
-                                                </MudChip>
-                                            </MudLink>
+                                            <ObjectChip Kind="ObjectChipKind.Metaverse"
+                                                        TypeName="@_pendingExport.SourceMetaverseObject.Type.Name"
+                                                        Name="@GetMvoDisplayName()"
+                                                        Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)"
+                                                        Class="ma-0" />
                                         </MudStack>
                                     }
                                     else if (_pendingExport.SourceMetaverseObjectId.HasValue)
@@ -211,6 +195,65 @@
                         </tbody>
                     </MudSimpleTable>
                 </MudAlert>
+            </MudItem>
+        }
+
+        @if (_unresolvedReferences.Count > 0)
+        {
+            @* ─── Unresolved References ─── *@
+            @* Each reference change that has not been written yet, and why, computed against the target's
+               current state when the page loaded (#1398). The three reasons call for three different
+               responses from an administrator, which is why they are told apart rather than lumped as
+               "unresolved": one needs nothing, one needs the referenced object's own export to land, and one
+               needs the referenced object brought into scope or provisioned. *@
+            <MudItem xs="12">
+                <MudCard Outlined="true" Elevation="0">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Unresolved References</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudText Typo="Typo.body1" Class="mb-3">
+                            These reference values have not been written to the Connected System yet. Everything else on this Pending Export is written
+                            as soon as it can be; each reference is written when the object it refers to can be addressed in this Connected System.
+                        </MudText>
+                        <MudSimpleTable Hover="true" Dense="true" Elevation="0">
+                            <thead>
+                                <tr>
+                                    <th>Attribute</th>
+                                    <th>Referenced Object</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var reference in _unresolvedReferences)
+                                {
+                                    <tr @key="reference.AttributeChangeId">
+                                        <td><MudText Typo="Typo.body1" Class="mud-text-secondary">@reference.AttributeName</MudText></td>
+                                        <td>
+                                            <MudTooltip Text="@reference.ReferencedMetaverseObjectId.ToString()" Arrow="true" Placement="Placement.Top">
+                                                <MudText Typo="Typo.body1">@(reference.ReferencedMetaverseObjectDisplayName ?? reference.ReferencedMetaverseObjectId.ToString())</MudText>
+                                            </MudTooltip>
+                                        </td>
+                                        <td>
+                                            <MudTooltip Arrow="true" Placement="Placement.Top">
+                                                <TooltipContent>
+                                                    <TooltipText Text="@GetUnresolvedReferenceExplanation(reference.Reason)" />
+                                                </TooltipContent>
+                                                <ChildContent>
+                                                    <MudChip T="string" Variant="Variant.Text" Color="@GetUnresolvedReferenceReasonColour(reference.Reason)">
+                                                        @GetUnresolvedReferenceReasonLabel(reference.Reason)
+                                                    </MudChip>
+                                                </ChildContent>
+                                            </MudTooltip>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudCardContent>
+                </MudCard>
             </MudItem>
         }
 
@@ -369,6 +412,8 @@ else
     private PendingExport? _pendingExport;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private Dictionary<string, int> _attributeChangeTotalCounts = new();
+    private List<PendingExportUnresolvedReference> _unresolvedReferences = new();
+    private Dictionary<Guid, PendingExportUnresolvedReference> _unresolvedReferencesByChangeId = new();
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _notFound;
     private List<AttributeChangeGroup> _attributeChangeGroups = new();
@@ -386,6 +431,8 @@ else
         var detailResult = await jim.ConnectedSystems.GetPendingExportDetailAsync(Id);
         _pendingExport = detailResult?.PendingExport;
         _attributeChangeTotalCounts = detailResult?.AttributeChangeTotalCounts ?? new();
+        _unresolvedReferences = detailResult?.UnresolvedReferences ?? new();
+        _unresolvedReferencesByChangeId = _unresolvedReferences.ToDictionary(r => r.AttributeChangeId);
         if (_pendingExport == null)
         {
             _notFound = true;
@@ -437,7 +484,13 @@ else
     private string GetAttributeValue(PendingExportAttributeValueChange change)
     {
         if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
+        {
+            // Named and explained where the detail could work it out; the raw identifier is the fallback for a
+            // change loaded some other way (the paged multi-valued dialog reads the same helper).
+            if (_unresolvedReferencesByChangeId.TryGetValue(change.Id, out var reference))
+                return $"{reference.ReferencedMetaverseObjectDisplayName ?? reference.ReferencedMetaverseObjectId.ToString()} [{GetUnresolvedReferenceReasonLabel(reference.Reason).ToLowerInvariant()}]";
             return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
+        }
 
         if (change.StringValue != null)
             return change.StringValue;
@@ -453,6 +506,30 @@ else
 
         return "[null]";
     }
+
+    private static string GetUnresolvedReferenceReasonLabel(UnresolvedReferenceReason reason) => reason switch
+    {
+        UnresolvedReferenceReason.Resolvable => "Resolvable on next export",
+        UnresolvedReferenceReason.AwaitingAnchor => "Awaiting anchor",
+        UnresolvedReferenceReason.NotInTargetSystem => "Not in this Connected System",
+        _ => reason.ToString()
+    };
+
+    private static MudBlazor.Color GetUnresolvedReferenceReasonColour(UnresolvedReferenceReason reason) => reason switch
+    {
+        UnresolvedReferenceReason.Resolvable => MudBlazor.Color.Info,
+        UnresolvedReferenceReason.AwaitingAnchor => MudBlazor.Color.Warning,
+        UnresolvedReferenceReason.NotInTargetSystem => MudBlazor.Color.Error,
+        _ => MudBlazor.Color.Default
+    };
+
+    private static string GetUnresolvedReferenceExplanation(UnresolvedReferenceReason reason) => reason switch
+    {
+        UnresolvedReferenceReason.Resolvable => "The referenced object now has an anchor in this Connected System. The reference is written on the next export run.",
+        UnresolvedReferenceReason.AwaitingAnchor => "The referenced object exists in this Connected System but does not carry an anchor yet. Its own export has not been executed or confirmed. The reference is written once it has.",
+        UnresolvedReferenceReason.NotInTargetSystem => "The referenced object has no Connected System Object in this Connected System. It is out of scope for every Synchronisation Rule into this system, or has not been provisioned. The reference cannot be written until it is.",
+        _ => string.Empty
+    };
 
     private static MudBlazor.Color GetAttributeChangeTypeColor(PendingExportAttributeChangeType changeType)
     {

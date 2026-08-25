@@ -71,7 +71,7 @@
             <CellTemplate>
                 @* Same one-line rule: an attribute value is unbounded text, and a struck-through previous value
                    beside it doubles what has to fit, so the pair is clipped rather than wrapped. *@
-                <span class="jim-one-line" title="@(string.IsNullOrEmpty(context.Item.PreviousValue) ? context.Item.Value : $"{context.Item.PreviousValue} -> {context.Item.Value}")">
+                <span class="jim-one-line jim-text-code" title="@(string.IsNullOrEmpty(context.Item.PreviousValue) ? context.Item.Value : $"{context.Item.PreviousValue} -> {context.Item.Value}")">
                     @if (!string.IsNullOrEmpty(context.Item.PreviousValue))
                     {
                         <span class="mud-text-secondary attr-previous-value">@context.Item.PreviousValue</span>

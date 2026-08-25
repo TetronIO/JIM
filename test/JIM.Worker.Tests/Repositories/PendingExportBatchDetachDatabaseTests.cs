@@ -231,4 +231,42 @@ public class PendingExportBatchDetachDatabaseTests
             .Select(pe => pe.Status).SingleAsync();
         Assert.That(persisted, Is.EqualTo(PendingExportStatus.Exported));
     }
+
+    /// <summary>
+    /// Issue #1398: a Create written in part becomes an Update at execution time, and the export-result
+    /// raw update is the only thing that persists that. Before it carried ChangeType, the flip lived in
+    /// memory only and the next run would have inserted the row a second time.
+    /// </summary>
+    [Test]
+    public async Task UpdatePendingExportsAsync_ChangeTypeFlippedFromCreateToUpdate_PersistsTheFlipAsync()
+    {
+        var (csoId, pendingExportId) = await SeedCsoWithPendingExportAsync();
+
+        await using var ctx = NewContext();
+        await ctx.Database.ExecuteSqlRawAsync(@"UPDATE ""PendingExports"" SET ""ChangeType"" = {0} WHERE ""Id"" = {1}",
+            (int)PendingExportChangeType.Create, pendingExportId);
+        var repository = new PostgresDataRepository(ctx);
+        var pe = await ctx.PendingExports
+            .AsNoTracking()
+            .Include(p => p.AttributeValueChanges)
+            .SingleAsync(p => p.ConnectedSystemObjectId == csoId);
+        Assume.That(pe.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+
+        pe.ChangeType = PendingExportChangeType.Update;
+        pe.Status = PendingExportStatus.Pending;
+        pe.HasUnresolvedReferences = true;
+        pe.NextRetryAt = DateTime.UtcNow.AddMinutes(5);
+        await repository.Sync.UpdatePendingExportsAsync([pe]);
+
+        await using var verify = NewContext();
+        var persisted = await verify.PendingExports.Where(p => p.Id == pendingExportId)
+            .Select(p => new { p.ChangeType, p.Status, p.HasUnresolvedReferences, p.NextRetryAt }).SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(persisted.Status, Is.EqualTo(PendingExportStatus.Pending));
+            Assert.That(persisted.HasUnresolvedReferences, Is.True);
+            Assert.That(persisted.NextRetryAt, Is.Not.Null);
+        }
+    }
 }

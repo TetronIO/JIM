@@ -289,6 +289,11 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",
+            // One error type covering two outcomes: Fail this mapping costs the object one attribute and nothing
+            // else, Fail the object costs it the whole synchronisation. "Failed" would overstate the first and
+            // "Attribute Not Flowed" would understate the second, so the heading names what actually happened and
+            // the message says which behaviour was configured.
+            [ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput] = "Expression Not Evaluated",
             // Raised while evaluating outbound exports during synchronisation, before anything is exported,
             // so it belongs with the synchronisation phase rather than "Export Failed".
             [ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject] = "Synchronisation Failed",

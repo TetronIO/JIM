@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data;
@@ -21,6 +21,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<Activity> Activities { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItemSyncOutcome> ActivityRunProfileExecutionItemSyncOutcomes { get; set; } = null!;
+    public virtual DbSet<CausalEdge> CausalEdges { get; set; } = null!;
     public virtual DbSet<ActivityStatCounter> ActivityStatCounters { get; set; } = null!;
     public virtual DbSet<ActivityPhase> ActivityPhases { get; set; } = null!;
     public virtual DbSet<ClearConnectedSystemObjectsWorkerTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
@@ -39,6 +40,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<AuxiliaryClassDiscoveryResult> AuxiliaryClassDiscoveryResults { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
+    public virtual DbSet<ConnectedSystemPasswordSynchronisation> ConnectedSystemPasswordSynchronisations { get; set; } = null!;
     public virtual DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
     public virtual DbSet<ConnectedSystemSettingValue> ConnectedSystemSettingValues { get; set; } = null!;
     public virtual DbSet<ConnectorContainer> ConnectorContainers { get; set; } = null!;
@@ -70,6 +72,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<DeferredReference> DeferredReferences { get; set; } = null!;
     public virtual DbSet<PendingExport> PendingExports { get; set; } = null!;
     public virtual DbSet<PendingInitialPassword> PendingInitialPasswords { get; set; } = null!;
+    public virtual DbSet<PendingPasswordChange> PendingPasswordChanges { get; set; } = null!;
     public virtual DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; } = null!;
     public virtual DbSet<PredefinedSearch> PredefinedSearches { get; set; } = null!;
     public virtual DbSet<PredefinedSearchAttribute> PredefinedSearchAttributes {  get; set; } = null!;
@@ -90,8 +93,11 @@ public class JimDbContext : DbContext
     public virtual DbSet<SyncRuleMappingSource> SyncRuleMappingSources { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
+    public virtual DbSet<SchemaRefreshRemovalWorkerTask> SchemaRefreshRemovalWorkerTasks { get; set; } = null!;
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
+    public virtual DbSet<PasswordDeliveryWorkerTask> PasswordDeliveryWorkerTasks { get; set; } = null!;
     public virtual DbSet<TemporalScopeReconciliationWorkerTask> TemporalScopeReconciliationWorkerTasks { get; set; } = null!;
+    public virtual DbSet<HistoryRetentionCleanupWorkerTask> HistoryRetentionCleanupWorkerTasks { get; set; } = null!;
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreviewWorkerTask> ConfigurationChangePreviewWorkerTasks { get; set; } = null!;
     public virtual DbSet<AuxiliaryClassDiscoveryWorkerTask> AuxiliaryClassDiscoveryWorkerTasks { get; set; } = null!;
@@ -195,6 +201,30 @@ public class JimDbContext : DbContext
             // CreateExecutionStrategy().ExecuteAsync() before retry can be enabled.
             // See issue #408 for the tracking item.
             // Transient failures are handled at the API level by GlobalExceptionHandler (HTTP 503).
+            // Both suppressions below are load-bearing; neither is a leftover. Removing either
+            // one has a specific, immediate consequence.
+            //
+            // PendingModelChangesWarning: JIM's runtime model permanently disagrees with its own
+            // migrations, by exactly the 99 DateTime columns in the schema. PostgresDataRepository's
+            // constructor sets the Npgsql.EnableLegacyTimestampBehavior AppContext switch, under
+            // which DateTime maps to "timestamp without time zone". The EF tooling never constructs
+            // that repository, so every migration and JimDbContextModelSnapshot.cs was scaffolded
+            // with the switch off and declares "timestamp with time zone", which is also what the
+            // database actually holds. Every service process therefore starts up carrying 99
+            // AlterColumn differences, and MigrateAsync() throws on the first boot without this
+            // line (verified by removing it: JIM.Worker fails InitialiseDatabaseAsync immediately).
+            // The cost is that a genuine model change is invisible here too, so the checks that do
+            // still bite are the design-time ones, which run with the switch off: the
+            // 'dotnet ef migrations has-pending-model-changes' command, and
+            // MigrationDesignerChainTests in JIM.Worker.Tests. Retiring this suppression means
+            // retiring the legacy switch and normalising DateTime.Kind to Utc at every write; the
+            // schema itself already needs no change.
+            //
+            // MultipleCollectionIncludeWarning: AsSplitQuery() was deliberately removed from the
+            // sync paths because of the EF Core materialisation bug (dotnet/efcore#33826) that
+            // silently drops navigation properties during concurrent writes. The remaining
+            // single-query includes are intentional; the warning is the price of not reintroducing
+            // a data integrity risk.
             optionsBuilder.UseNpgsql(_connectionString)
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
                 .ConfigureWarnings(warnings => warnings.Ignore(
@@ -246,6 +276,13 @@ public class JimDbContext : DbContext
             entity.HasIndex(p => new { p.ActivityId, p.Order });
             entity.HasIndex(p => new { p.ActivityId, p.Key }).IsUnique();
         });
+
+        // The causal walk's degraded timeline key (#1495): after a record's deletion nulls
+        // ConnectedSystemObjectId on the items that processed it, the source-import hop is found by the
+        // external ID snapshot within the Activity's Connected System instead, and that lookup must not
+        // scan a table this large.
+        modelBuilder.Entity<ActivityRunProfileExecutionItem>()
+            .HasIndex(rpei => rpei.ExternalIdSnapshot);
 
         // ActivityRunProfileExecutionItemSyncOutcome: cascade delete when parent RPEI is deleted
         modelBuilder.Entity<ActivityRunProfileExecutionItem>()
@@ -309,6 +346,16 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);
+
+        // The Object Type a Reference attribute declares as its target (#1285). Distinct from the owning
+        // relationship above, so it is configured explicitly. SetNull: removing an Object Type must not take
+        // attributes of other Object Types with it; the reference simply loses its declared target and
+        // resolution falls back to searching every Object Type.
+        modelBuilder.Entity<ConnectedSystemObjectTypeAttribute>()
+            .HasOne(csa => csa.ReferencedObjectType)
+            .WithMany()
+            .HasForeignKey(csa => csa.ReferencedObjectTypeId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // Classification tags have no meaning without the object type they classify, so they go with it. The unique
         // index enforces the same rule schema import applies in memory: a type is classified a given way once.
@@ -407,6 +454,33 @@ public class JimDbContext : DbContext
             .WithOne(pp => pp.ConnectedSystem)
             .HasForeignKey<ConnectedSystemPasswordPolicy>(pp => pp.ConnectedSystemId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // A Connected System has at most one Password Synchronisation configuration, declared explicitly for the
+        // same reason as the policy above. Cascade: a system that no longer exists cannot receive passwords, and
+        // the queued changes aimed at it cascade away with it.
+        modelBuilder.Entity<ConnectedSystem>()
+            .HasOne(cs => cs.PasswordSynchronisation)
+            .WithOne()
+            .HasForeignKey<ConnectedSystemPasswordSynchronisation>(ps => ps.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Restrict rather than cascade: deleting the Object Type that receives passwords must not silently delete
+        // the configuration naming it and leave the system quietly not synchronising. The delete fails, and the
+        // administrator repoints or removes the configuration deliberately.
+        // Declared without a navigation on either end: the Object Type is already reachable through the
+        // Connected System, and a navigation here would close a cycle the OpenAPI schema generator cannot
+        // collapse (see ConnectedSystemPasswordSynchronisation.TargetObjectTypeId).
+        modelBuilder.Entity<ConnectedSystemPasswordSynchronisation>()
+            .HasOne<ConnectedSystemObjectType>()
+            .WithMany()
+            .HasForeignKey(ps => ps.TargetObjectTypeId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Answers "which systems are enabled for Password Synchronisation?", which fan-out asks on every password
+        // change, without loading the Connected Systems themselves.
+        modelBuilder.Entity<ConnectedSystemPasswordSynchronisation>()
+            .HasIndex(ps => ps.Enabled)
+            .HasDatabaseName("IX_ConnectedSystemPasswordSynchronisations_Enabled");
 
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mo => mo.Roles)
@@ -509,6 +583,12 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<SyncRuleMapping>()
             .Property(srm => srm.InitialExportOnly)
             .HasDefaultValue(false);
+
+        // Per-mapping enable/disable (#1485). Defaults to true so every mapping persisted before this field
+        // existed keeps flowing exactly as it always has; the store-level default backfills existing rows.
+        modelBuilder.Entity<SyncRuleMapping>()
+            .Property(srm => srm.Enabled)
+            .HasDefaultValue(true);
 
         // SPEC-1082 D10: Run Profile Verification Mode defaults to false (no behavioural change for
         // existing Run Profiles); the store-level default backfills existing rows on migration.
@@ -681,6 +761,49 @@ public class JimDbContext : DbContext
             .HasIndex(pip => new { pip.ConnectedSystemId, pip.Status })
             .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemId_Status");
 
+        // The Password Synchronisation queue (#1119). Foreign keys with no navigations on either end, following
+        // ConnectedSystemPasswordSynchronisation: nothing needs to walk from a queue row back to the identity or
+        // the system, and a navigation would close a schema cycle the OpenAPI document build cannot collapse.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasOne<MetaverseObject>()
+            .WithMany()
+            .HasForeignKey(ppc => ppc.MetaverseObjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasOne<ConnectedSystem>()
+            .WithMany()
+            .HasForeignKey(ppc => ppc.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Set null rather than cascade: an account being deleted and recreated must not take the password change
+        // with it. The change re-resolves its account on the next attempt, which is the same path a change queued
+        // before the account existed takes.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasOne<ConnectedSystemObject>()
+            .WithMany()
+            .HasForeignKey(ppc => ppc.ConnectedSystemObjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Requirement 8's coalescing, enforced by the database rather than by the code that writes it. The
+        // fan-out UPSERTs on this key, so two near-simultaneous password changes for one identity cannot both
+        // insert: the second updates the first in place, and last-write-wins is atomic. Application-side
+        // read-modify-write would leave that race open.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => new { ppc.MetaverseObjectId, ppc.ConnectedSystemId })
+            .IsUnique()
+            .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId_ConnectedSystemId_Unique");
+
+        // What the delivery pass asks for: the changes owed to this system, in this state, that have come due.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => new { ppc.ConnectedSystemId, ppc.Status, ppc.NextRetryAt })
+            .HasDatabaseName("IX_PendingPasswordChanges_ConnectedSystemId_Status_NextRetryAt");
+
+        // What the Metaverse Object's password panel asks for: everything outstanding for this identity.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => ppc.MetaverseObjectId)
+            .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId");
+
         // Only one Pending Export should exist per CSO at any time. The filter excludes rows where
         // ConnectedSystemObjectId is NULL (e.g., PEs for unresolved references not yet matched to a CSO).
         modelBuilder.Entity<PendingExport>()
@@ -832,6 +955,30 @@ public class JimDbContext : DbContext
             .HasIndex(o => new { o.ActivityRunProfileExecutionItemId, o.OutcomeType })
             .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_RpeiId_OutcomeType");
 
+        // Causal provenance (#1223). The effect side cascades from the Run Profile Execution Item, so purging an
+        // Activity takes its edges with it; the cause side is deliberately unconstrained scalars so purging a cause
+        // leaves intact the edge that records it was once the cause. See the CausalEdge type remarks.
+        modelBuilder.Entity<CausalEdge>()
+            .HasOne(e => e.EffectRunProfileExecutionItem)
+            .WithMany()
+            .HasForeignKey(e => e.EffectRunProfileExecutionItemId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("FK_CausalEdges_ActivityRunProfileExecutionItems");
+
+        // Traversal runs in both directions (upward in Phase 1, downward in Phase 2), so both ends are indexed;
+        // an index that serves one direction and table-scans the other fails half of what this feature is for.
+        modelBuilder.Entity<CausalEdge>()
+            .HasIndex(e => e.EffectRunProfileExecutionItemId)
+            .HasDatabaseName("IX_CausalEdges_EffectRunProfileExecutionItemId");
+
+        modelBuilder.Entity<CausalEdge>()
+            .HasIndex(e => e.CauseRunProfileExecutionItemId)
+            .HasDatabaseName("IX_CausalEdges_CauseRunProfileExecutionItemId");
+
+        modelBuilder.Entity<CausalEdge>()
+            .HasIndex(e => e.CauseMetaverseObjectId)
+            .HasDatabaseName("IX_CausalEdges_CauseMetaverseObjectId");
+
         // Configuration change preview (#827). All three tables hang off the preview's Activity and cascade from it,
         // so the existing history-retention housekeeping removes preview results with the Activity that owns them;
         // no separate cleanup, and no way for preview data (which holds attribute values) to outlive its retention.
@@ -954,5 +1101,69 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<WorkerTask>()
             .HasIndex(wt => wt.ScheduleExecutionId)
             .HasDatabaseName("IX_WorkerTasks_ScheduleExecutionId");
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Configuration ownership (issue #1477)
+        // ---------------------------------------------------------------------------------------------------------
+        // Each relationship below is containment: the child has no meaning once its owner is gone. They were all
+        // left to convention, and because every one of these foreign keys is optional, the convention is
+        // ClientSetNull, which becomes NO ACTION in the database. That is wrong twice over. It orphans child rows
+        // whenever the owner is deleted outside a change-tracked graph, and it makes the factory reset's
+        // "DELETE ... WHERE ""BuiltIn"" = false" statements fail with 23503 for any custom object holding the child
+        // rows it ordinarily holds; since the whole wipe is one transaction, the reset then rolls back entirely.
+        // SystemResetForeignKeyCoverageTests asserts this property across the whole schema, so a child table added
+        // later cannot silently reintroduce the fault.
+
+        // A Predefined Search owns its top-level criteria groups; a group is how the search filters.
+        modelBuilder.Entity<PredefinedSearch>()
+            .HasMany(ps => ps.CriteriaGroups)
+            .WithOne()
+            .HasForeignKey(g => g.PredefinedSearchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A criteria group owns its nested groups. Without this the cascade above stops at the top level and a
+        // nested group holds the whole delete up.
+        modelBuilder.Entity<PredefinedSearchCriteriaGroup>()
+            .HasMany(g => g.ChildGroups)
+            .WithOne(g => g.ParentGroup)
+            .HasForeignKey(g => g.ParentGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A criteria group owns its criteria.
+        modelBuilder.Entity<PredefinedSearchCriteriaGroup>()
+            .HasMany(g => g.Criteria)
+            .WithOne()
+            .HasForeignKey(c => c.PredefinedSearchCriteriaGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A Connector Definition owns the settings it declares.
+        modelBuilder.Entity<ConnectorDefinition>()
+            .HasMany(cd => cd.Settings)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // An Example Data Set owns its values; the set is nothing but its values.
+        modelBuilder.Entity<ExampleDataSet>()
+            .HasMany(ds => ds.Values)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // An Example Data Template owns the Object Types it covers, each of which owns the attributes it
+        // generates, each of which owns its weighted values. The whole chain has to cascade: stopping part way
+        // down leaves the delete blocked one level deeper instead of at the top.
+        modelBuilder.Entity<ExampleDataTemplate>()
+            .HasMany(t => t.ObjectTypes)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ExampleDataObjectType>()
+            .HasMany(ot => ot.TemplateAttributes)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ExampleDataTemplateAttribute>()
+            .HasMany(ta => ta.WeightedStringValues)
+            .WithOne()
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

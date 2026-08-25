@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -122,6 +123,27 @@ public class PendingExport
     public SyncRule? ProvisioningSyncRule { get; set; }
 
     public int? ProvisioningSyncRuleId { get; set; }
+
+    /// <summary>
+    /// The Run Profile Execution Item of the synchronisation that staged this export, so the export run that
+    /// later carries it out can say what caused it (#1223).
+    /// <para>
+    /// Recorded here for the same reason as <see cref="ProvisioningSyncRuleId"/> above: it is knowable exactly
+    /// once, when the change is staged, and is needed much later by a different run. The export run has only a
+    /// queue of changes to make; the decision that put this one in the queue was taken in another Activity, and
+    /// no other column links the two. Its own Run Profile Execution Item cannot supply it either;
+    /// <see cref="ActivityRunProfileExecutionItem.PendingExportId"/> is populated only on a
+    /// <see cref="Enums.ObjectChangeType.PendingExport"/>-type item and is null on every ordinary
+    /// <see cref="Enums.ObjectChangeType.Exported"/> one.
+    /// </para>
+    /// <para>
+    /// Not a foreign key, matching the cause side of <see cref="CausalEdge"/>: the causing Activity ages out of
+    /// history long before the effects it explains, and a cascade would delete the very link that answers "why
+    /// did this export happen". Null for an export staged before this was recorded, and for the paths that
+    /// stage one with no execution item in hand.
+    /// </para>
+    /// </summary>
+    public Guid? QueuedByRunProfileExecutionItemId { get; set; }
 
     /// <summary>
     /// When this Pending Export was created.

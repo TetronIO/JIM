@@ -65,7 +65,7 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
     /// <param name="id">The unique identifier of the predefined search.</param>
     /// <returns>The predefined search; 404 Not Found if no search has that ID.</returns>
     [HttpGet("{id:int}", Name = "GetPredefinedSearchById")]
-    [ProducesResponseType(typeof(PredefinedSearch), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PredefinedSearchDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -77,7 +77,7 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (search == null)
             return NotFound(ApiErrorResponse.NotFound($"Predefined search with ID {id} not found."));
 
-        return Ok(search);
+        return Ok(PredefinedSearchDetailDto.FromEntity(search));
     }
 
     /// <summary>
@@ -91,7 +91,7 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
     /// <param name="uri">The URI slug of the predefined search.</param>
     /// <returns>The predefined search; 404 Not Found if no search has that URI.</returns>
     [HttpGet("by-uri/{uri}", Name = "GetPredefinedSearchByUri")]
-    [ProducesResponseType(typeof(PredefinedSearch), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PredefinedSearchDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -107,7 +107,7 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (search == null)
             return NotFound(ApiErrorResponse.NotFound($"Predefined search with URI '{uri}' not found."));
 
-        return Ok(search);
+        return Ok(PredefinedSearchDetailDto.FromEntity(search));
     }
 
     /// <summary>

@@ -3,6 +3,7 @@
 
 using JIM.Application.Interfaces;
 using JIM.Application.Services;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
@@ -54,7 +55,9 @@ public partial class SyncEngine : ISyncEngine
             return errors;
         }
 
-        foreach (var syncRuleMapping in syncRule.AttributeFlowRules)
+        // A disabled mapping is skipped without an error: disabling is a deliberate choice (an administrator's,
+        // or the schema refresh decision's), so nothing flows and nothing is reported against the object (#1485).
+        foreach (var syncRuleMapping in syncRule.AttributeFlowRules.Where(m => m.Enabled))
         {
             if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
@@ -192,7 +195,7 @@ public partial class SyncEngine : ISyncEngine
                         mvo.Id, remainingCsoCount);
                     return MvoDeletionDecision.NotDeleted($"{remainingCsoCount} remaining connector(s)");
                 }
-                return EvaluateGracePeriod(mvo, "last connector disconnected");
+                return EvaluateGracePeriod(mvo, "last connector disconnected", CausalReasonCode.LastConnectorDisconnected);
 
             case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
                 var triggerIds = mvo.Type.DeletionTriggerConnectedSystemIds;
@@ -201,7 +204,8 @@ public partial class SyncEngine : ISyncEngine
                     Log.Warning("EvaluateMvoDeletionRule: MVO {MvoId} has DeletionRule=WhenAuthoritativeSourceDisconnected but no DeletionTriggerConnectedSystemIds configured. " +
                         "Falling back to WhenLastConnectorDisconnected behaviour.", mvo.Id);
                     if (remainingCsoCount == 0)
-                        return EvaluateGracePeriod(mvo, "last connector disconnected (no authoritative sources configured)");
+                        return EvaluateGracePeriod(mvo, "last connector disconnected (no authoritative sources configured)",
+                            CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured);
                     return MvoDeletionDecision.NotDeleted($"{remainingCsoCount} remaining connector(s), no authoritative sources configured");
                 }
 
@@ -233,14 +237,16 @@ public partial class SyncEngine : ISyncEngine
                         "authoritative sources remain connected (All sources mode). Triggering deletion even though {Count} connector(s) remain.",
                         disconnectingSystemId, mvo.Id, remainingCsoCount);
                     return EvaluateGracePeriod(mvo,
-                        $"All sources mode: authoritative source {systemLabel} disconnected and no sources remain connected");
+                        $"All sources mode: authoritative source {systemLabel} disconnected and no sources remain connected",
+                        CausalReasonCode.AllAuthoritativeSourcesDisconnected);
                 }
 
                 // Specific sources mode: any listed source disconnecting triggers deletion (pre-#119 behaviour).
                 Log.Information("EvaluateMvoDeletionRule: Authoritative source (system ID {SystemId}) disconnected from MVO {MvoId} (Specific sources mode). " +
                     "Triggering deletion even though {Count} connector(s) remain.",
                     disconnectingSystemId, mvo.Id, remainingCsoCount);
-                return EvaluateGracePeriod(mvo, $"Specific sources mode: authoritative source {systemLabel} disconnected");
+                return EvaluateGracePeriod(mvo, $"Specific sources mode: authoritative source {systemLabel} disconnected",
+                    CausalReasonCode.AuthoritativeSourceDisconnected);
 
             default:
                 Log.Warning("EvaluateMvoDeletionRule: Unknown DeletionRule {Rule} for MVO {MvoId}.", mvo.Type.DeletionRule, mvo.Id);
@@ -351,7 +357,7 @@ public partial class SyncEngine : ISyncEngine
     /// <summary>
     /// Evaluates the grace period for an MVO deletion decision.
     /// </summary>
-    private static MvoDeletionDecision EvaluateGracePeriod(MetaverseObject mvo, string reason)
+    private static MvoDeletionDecision EvaluateGracePeriod(MetaverseObject mvo, string reason, CausalReasonCode reasonCode)
     {
         var gracePeriod = mvo.Type!.DeletionGracePeriod;
 
@@ -359,11 +365,11 @@ public partial class SyncEngine : ISyncEngine
         {
             Log.Information("EvaluateMvoDeletionRule: MVO {MvoId} queued for immediate deletion ({Reason}). No grace period configured.",
                 mvo.Id, reason);
-            return MvoDeletionDecision.DeleteImmediately(reason);
+            return MvoDeletionDecision.DeleteImmediately(reason, reasonCode);
         }
 
         Log.Information("EvaluateMvoDeletionRule: MVO {MvoId} marked for deletion ({Reason}). Eligible after {GracePeriod}.",
             mvo.Id, reason, gracePeriod.Value);
-        return MvoDeletionDecision.ScheduleDeletion(gracePeriod.Value, reason);
+        return MvoDeletionDecision.ScheduleDeletion(gracePeriod.Value, reason, reasonCode);
     }
 }

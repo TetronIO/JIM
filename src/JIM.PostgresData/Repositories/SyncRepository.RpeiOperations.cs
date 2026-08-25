@@ -53,6 +53,20 @@ public partial class SyncRepository
         // Flatten sync outcomes upfront (before any persistence) so we can count them.
         var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();
 
+        // Causal edges buffered on the RPEIs by the cascade seams (#1223). Collected here, after the RPEI and
+        // outcome ids have been assigned, because a seam knows neither: an RPEI is created without an id and an
+        // outcome likewise, so the edge names its effect by reference and the flush resolves both. Doing it in
+        // one place covers both flush paths, mirroring how an outcome's own ConnectedSystemObjectChangeId is
+        // resolved below.
+        var allEdges = new List<CausalEdge>();
+        foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
+        {
+            foreach (var edge in rpei.CausalEdges)
+                edge.ResolveTransientReferences(rpei.Id);
+
+            allEdges.AddRange(rpei.CausalEdges);
+        }
+
         // Persist CSO change records linked to sync outcomes (PendingExportCreated snapshots)
         // on the main EF connection — this is a small subset and needs EF AddRange.
         var outcomeCsoChanges = allOutcomes
@@ -120,7 +134,14 @@ public partial class SyncRepository
                     });
             }
 
-            // Step 4: Upsert the batch's stat counter deltas on the main EF connection. Not
+            // Step 4: Insert causal edges on the main EF connection. Their only foreign key is to the RPEIs,
+            // which step 1 has already committed, so the targets exist. Like the counter upsert below, this is
+            // not transactional with the COPY partitions; a crash between the two loses provenance for the
+            // batch, which degrades an explanation rather than corrupting synchronisation state.
+            if (allEdges.Count > 0)
+                await BulkInsertCausalEdgesAsync(allEdges);
+
+            // Step 5: Upsert the batch's stat counter deltas on the main EF connection. Not
             // transactional with the COPY partitions (which have already committed); a crash
             // between the two leaves advisory drift that completion-time finalisation reconciles.
             await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
@@ -148,6 +169,9 @@ public partial class SyncRepository
                 if (allOutcomes.Count > 0)
                     await BulkInsertSyncOutcomesRawAsync(allOutcomes);
 
+                if (allEdges.Count > 0)
+                    await BulkInsertCausalEdgesAsync(allEdges);
+
                 await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
 
                 if (transaction != null)
@@ -158,6 +182,15 @@ public partial class SyncRepository
                 if (transaction != null)
                     await transaction.DisposeAsync();
             }
+        }
+
+        // Empty the edge buffers now they are written, so a later flush of the same RPEI objects (confirming
+        // imports revisit them) cannot re-insert the same edges and fail on the primary key. Only reached on
+        // success: a throw above leaves the buffers intact, which is what a retry needs.
+        if (allEdges.Count > 0)
+        {
+            foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
+                rpei.CausalEdges.Clear();
         }
 
         _context.Database.SetCommandTimeout(previousTimeout);
@@ -451,8 +484,28 @@ public partial class SyncRepository
                     _context, ActivityStatCounterCalculator.CalculateOutcomeInsertDeltas(rpeis, newOutcomes));
             }
 
+            // Drain any causal edges buffered on these items (#1223). Confirming imports merge their outcomes
+            // onto already-persisted items through here rather than through either insert path, so an edge
+            // written at the export-confirmation seam reaches the database only if this path writes it. The
+            // items already have ids; the outcomes were assigned theirs above.
+            var edges = new List<CausalEdge>();
+            foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
+            {
+                foreach (var edge in rpei.CausalEdges)
+                    edge.ResolveTransientReferences(rpei.Id);
+
+                edges.AddRange(rpei.CausalEdges);
+            }
+
+            if (edges.Count > 0)
+                await BulkInsertCausalEdgesAsync(edges);
+
             if (transaction != null)
                 await transaction.CommitAsync();
+
+            // Emptied only once committed, so a rolled-back update leaves them to be retried.
+            foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
+                rpei.CausalEdges.Clear();
         }
         finally
         {
@@ -721,6 +774,60 @@ public partial class SyncRepository
     /// Bulk inserts ActivityRunProfileExecutionItem rows using parameterised multi-row INSERT.
     /// Chunks automatically to stay within the PostgreSQL parameter limit.
     /// </summary>
+    /// <summary>
+    /// Bulk inserts causal edges (#1223) using parameterised multi-row INSERT, chunked to stay within the
+    /// PostgreSQL parameter limit. Edges are append-only, so there is no matching update path.
+    /// </summary>
+    public async Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges)
+    {
+        if (edges.Count == 0)
+            return;
+
+        const int columnsPerRow = 19;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+
+        // One builder reused across chunks rather than one per iteration; a deletion cascade can produce many.
+        var sql = new System.Text.StringBuilder();
+
+        foreach (var chunk in BulkSqlHelpers.ChunkList(edges, chunkSize))
+        {
+            sql.Clear();
+            // Parameter order below MUST match CausalEdgeBulkColumns.CausalEdges exactly.
+            sql.Append($@"INSERT INTO ""CausalEdges"" ({BulkSqlHelpers.ToQuotedList(CausalEdgeBulkColumns.CausalEdges)}) VALUES ");
+
+            var parameters = new List<NpgsqlParameter>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13}, @p{offset + 14}, @p{offset + 15}, @p{offset + 16}, @p{offset + 17}, @p{offset + 18})");
+
+                var edge = chunk[i];
+                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = edge.Id });
+                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = edge.EffectRunProfileExecutionItemId });
+                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.EffectSyncOutcomeId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseRunProfileExecutionItemId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseSyncOutcomeId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseMetaverseObjectId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseConnectedSystemObjectId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CausePendingExportId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.CauseDisplayName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.CauseObjectTypeName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.CauseObjectTypePluralName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.EffectAttributeName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.EdgeType });
+                parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.ReasonCode });
+                parameters.Add(new NpgsqlParameter($"p{offset + 14}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.ConnectedSystemId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 15}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.ConnectedSystemName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 16}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.SyncRuleId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 17}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.SyncRuleName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 18}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = edge.Created });
+            }
+
+            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
     private async Task BulkInsertRpeisRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
         const int columnsPerRow = 15;

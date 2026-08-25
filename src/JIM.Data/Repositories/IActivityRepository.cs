@@ -1,10 +1,11 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Scheduling;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -55,6 +56,24 @@ public interface IActivityRepository
         int count,
         string? searchQuery = null,
         bool includeTotalCount = true);
+
+    /// <summary>
+    /// One identity's most recent password changes and what each Connected System did with them (#1119,
+    /// requirement 25), newest change first.
+    /// <para>
+    /// A purpose-built read rather than another set of filters on the general Activity list: that list already
+    /// takes nineteen, none of them an identity, and this panel asks a single narrow question. It also needs the
+    /// parents and their children together, which the general list cannot express at all.
+    /// </para>
+    /// <para>
+    /// Read from Activities rather than from the queue because the queue row is deleted the moment the password
+    /// arrives; the queue alone would show an identity's failures and none of its successes.
+    /// </para>
+    /// </summary>
+    /// <param name="metaverseObjectId">The identity whose password changes are wanted.</param>
+    /// <param name="maximumEvents">How many changes to return, newest first. The panel shows recent history, not
+    /// an archive; the Activities list is where the whole record lives.</param>
+    public Task<List<PasswordSynchronisationEvent>> GetPasswordSynchronisationEventsAsync(Guid metaverseObjectId, int maximumEvents);
 
     /// <summary>
     /// Returns a dictionary mapping each activity ID (from the provided set) to its direct child activity count.
@@ -201,6 +220,56 @@ public interface IActivityRepository
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id);
 
     /// <summary>
+    /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223), so the
+    /// upward walk can resolve a whole level of a cascade in one round trip.
+    /// </summary>
+    /// <remarks>
+    /// Batched by design: a cohort can hold thousands of members, and a walk that queried per member would
+    /// issue thousands of round trips to render one panel.
+    /// </remarks>
+    public Task<List<CausalEdge>> GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> effectRunProfileExecutionItemIds);
+
+    /// <summary>
+    /// Summarises the given Run Profile Execution Items for the causal walk (#1223): which still exist, and
+    /// what each did to which Connected System Object.
+    /// </summary>
+    /// <remarks>
+    /// Presence in the result is the retention check. The walk needs it to tell two situations apart that are
+    /// otherwise identical: a cause with no edges above it is a genuine root and the chain is complete, whereas
+    /// a cause whose item has aged out of history is a chain that was cut short. Both produce no further edges;
+    /// only one of them lost information, and reporting the second as the first would tell an administrator
+    /// they had the whole story when they did not.
+    ///
+    /// The change type, Connected System Object and Activity time carried per item are what let the walk
+    /// continue past a synchronisation to the import that fed it, via
+    /// <see cref="GetLatestImportItemForCsoAsync"/>.
+    /// </remarks>
+    public Task<Dictionary<Guid, CausalChainItemSummary>> GetRunProfileExecutionItemCausalSummariesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
+    /// <summary>
+    /// The import event that last changed a Connected System Object at or before the given Activity time,
+    /// excluding the asking item itself: the causal walk's source-import hop (#1223). Null where no import on
+    /// the record is retained, in which case the chain ends at the synchronisation instead.
+    /// </summary>
+    public Task<CausalSourceImportEvent?> GetLatestImportItemForCsoAsync(
+        Guid connectedSystemObjectId, DateTime atOrBeforeActivityExecuted, Guid excludeRunProfileExecutionItemId);
+
+    /// <summary>
+    /// The import event that last changed the record carrying the given external ID in the given Connected
+    /// System, at or before the given Activity time, excluding the asking item itself: the source-import
+    /// hop's degraded key (#1495). A deletion cascade hard-deletes the Connected System Object and nulls its
+    /// id on every item that processed it, so the id-keyed walk of
+    /// <see cref="GetLatestImportItemForCsoAsync"/> finds nothing exactly where an administrator most needs
+    /// the chain; the external ID snapshotted on each item survives the deletion and reaches the same
+    /// import. Null where no import on the record is retained.
+    /// </summary>
+    public Task<CausalSourceImportEvent?> GetLatestImportItemForExternalIdAsync(
+        int connectedSystemId, string externalIdSnapshot, DateTime atOrBeforeActivityExecuted,
+        Guid excludeRunProfileExecutionItemId);
+
+
+    /// <summary>
     /// Gets all activities associated with a schedule execution.
     /// Used by the scheduler to determine step outcomes after worker tasks have been deleted.
     /// </summary>
@@ -225,12 +294,14 @@ public interface IActivityRepository
     /// </remarks>
     public Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds);
 
-    /// <summary>
-    /// Gets the creation time of the most recent HistoryRetentionCleanup activity.
-    /// Used by the worker to determine whether the cleanup interval has elapsed since the last run,
-    /// preventing immediate re-execution after worker restarts.
+        /// <summary>
+    /// Whether any Run Profile has ever been executed, in any state (in progress, complete, failed or cancelled).
+    /// Backs the home page's "Run your first synchronisation" setup step, which asks only whether an administrator
+    /// has run one, never how it turned out. Run Profile configuration changes (create, update, delete) carry the
+    /// same <see cref="ActivityTargetType.ConnectedSystemRunProfile"/> target type as executions, so implementations
+    /// must additionally require <see cref="ActivityTargetOperationType.Execute"/>.
     /// </summary>
-    public Task<DateTime?> GetLastHistoryCleanupTimeAsync();
+    public Task<bool> HasAnyRunProfileExecutionAsync();
 
     /// <summary>
     /// Gets the highest configuration-change version recorded for a configuration object, identified by its activity

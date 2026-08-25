@@ -145,7 +145,10 @@ internal sealed class SqlConnectorSchema
                 className: null,
                 writability: isAnchor ? anchorWritability : writability)
             {
-                Description = DescribeSourceColumn(column)
+                Description = DescribeSourceColumn(column),
+                // The document names the Object Type every reference points at; carry it through so the
+                // schema merge can persist it and import resolution can use it (#1285).
+                ReferencesObjectTypeName = isReference ? referenceColumns[column.Name].ReferencesObjectType : null
             });
         }
 
@@ -237,7 +240,11 @@ internal sealed class SqlConnectorSchema
                 AttributePlurality.MultiValued,
                 required: false,
                 className: Describe(relatedTable.SchemaName, relatedTable.TableName),
-                writability: writability));
+                writability: writability)
+            {
+                // As for reference columns above: the declared target travels with the attribute (#1285).
+                ReferencesObjectTypeName = relatedTable.ReferencesObjectType
+            });
         }
     }
 

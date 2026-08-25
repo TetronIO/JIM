@@ -137,6 +137,10 @@ nav:
       - JIM File Connector: connectors/jim-file-connector.md
       - JIM LDAP Connector: connectors/jim-ldap-connector.md
       - JIM SCIM 2.0 Client Connector: connectors/jim-scim-connector.md
+      - JIM SQL Connector:
+          - connectors/jim-sql-connector.md
+          - Delta Import with a change-log table: connectors/jim-sql-connector-delta-import-change-log.md
+          - Delta Import with a watermark column: connectors/jim-sql-connector-delta-import-watermark.md
   - API:
       - api/index.md
       - Authentication: api/authentication.md
@@ -149,6 +153,7 @@ nav:
       - Run Profiles: powershell/run-profiles.md
       - Synchronisation Rule: powershell/synchronisation-rules.md
       - Metaverse: powershell/metaverse.md
+      - Password Synchronisation: powershell/password-synchronisation.md
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md
       - Activities: powershell/activities.md

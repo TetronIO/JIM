@@ -1,4 +1,5 @@
 @using JIM.Models.Core
+@using JIM.Models.Expressions
 @using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Models.Utility
@@ -177,6 +178,13 @@
                                                    Name="@connectedSystemTarget.Name"
                                                    Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, connectedSystemTarget.Type, connectedSystemTarget.AttributePlurality)" />
                                 </span>
+                                @if (!context.Item.Enabled)
+                                {
+                                    <MudTooltip Arrow="true" Placement="Placement.Top">
+                                        <TooltipContent><TooltipText Text="@DescribeDisabledMapping(context.Item)" /></TooltipContent>
+                                        <ChildContent><MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Disabled</MudChip></ChildContent>
+                                    </MudTooltip>
+                                }
                                 @if (context.Item.InitialExportOnly)
                                 {
                                     <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
@@ -343,6 +351,13 @@
                                            Name="@attributeFlowRule.TargetConnectedSystemAttribute?.Name"
                                            Tooltip="@DescribeConnectedSystemAttribute(attributeFlowRule.TargetConnectedSystemAttribute)" />
 
+                            @if (!attributeFlowRule.Enabled)
+                            {
+                                <MudTooltip Arrow="true" Placement="Placement.Top">
+                                    <TooltipContent><TooltipText Text="@DescribeDisabledMapping(attributeFlowRule)" /></TooltipContent>
+                                    <ChildContent><MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Disabled</MudChip></ChildContent>
+                                </MudTooltip>
+                            }
                             @if (attributeFlowRule.InitialExportOnly)
                             {
                                 <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
@@ -427,6 +442,62 @@
                         Label="Expression" Placeholder="e.g. IIF(mv[&quot;Active&quot;] == true, Upper(cs[&quot;Name&quot;]), null)"
                         Required="true" Class="mt-5" Variant="Variant.Outlined"
                         Lines="3" MaxLines="10" Sizing="InputSizing.Auto" Immediate="true" />
+
+                    @* Expression tester (#1405): the Expression field is where an administrator finds out whether
+                       their Expression does what they meant, and until now the answer only arrived from a
+                       Synchronisation. Immediate="true" above is what lets the tester follow the text as it is typed. *@
+                    <ExpressionTester Expression="@_attributeFlowMappingSource.Expression" />
+
+                    @* Missing Input Behaviour (#1361): an Expression whose input is absent does not fail, it
+                       produces a structurally broken value. Whether that matters is the administrator's call. *@
+                    <div class="mt-5">
+                        <MudText Typo="Typo.subtitle2" Class="mb-1">Missing Input Behaviour</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                            What to do when an attribute this Expression reads has no value on the object being synchronised.
+                        </MudText>
+                        <MudRadioGroup T="MissingInputBehaviour" @bind-Value="_attributeFlowMappingSource.MissingInputBehaviour">
+                            <MudStack Spacing="1">
+                                <MudRadio Value="MissingInputBehaviour.EvaluateAnyway" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">Evaluate anyway</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Run the Expression with the input absent and contribute whatever it returns. Correct for a
+                                        null-aware Expression built on IIF or IsNullOrEmpty. This is the default.
+                                    </MudText>
+                                </MudRadio>
+                                <MudRadio Value="MissingInputBehaviour.ContributeNoValue" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">Contribute no value</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Do not evaluate. The mapping contributes nothing, resolved by Attribute Priority and
+                                        "Null is a value" like any other no-value outcome, so a lower-priority contributor can
+                                        still win the attribute. Nothing is reported as an error.
+                                    </MudText>
+                                </MudRadio>
+                                <MudRadio Value="MissingInputBehaviour.FailMapping" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">Fail this mapping</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Do not evaluate, and record an error against the object. Every other Attribute Flow on this
+                                        Synchronisation Rule still runs, and the target attribute keeps whatever it already held.
+                                    </MudText>
+                                </MudRadio>
+                                <MudRadio Value="MissingInputBehaviour.FailObject" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">Fail the object</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Do not evaluate anything for this object: no Attribute Flow on this Synchronisation Rule
+                                        runs, nothing flows and nothing is exported. For an input feeding identity-critical output,
+                                        such as a Distinguished Name or an account name.
+                                    </MudText>
+                                </MudRadio>
+                            </MudStack>
+                        </MudRadioGroup>
+                        @if (_attributeFlowMappingSource.MissingInputBehaviour == MissingInputBehaviour.FailObject)
+                        {
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                                While this is set, an object missing any attribute this Expression reads will not synchronise at
+                                all: none of its attributes flow, and it is reported as an error on every run until the missing
+                                value is supplied.
+                            </MudAlert>
+                        }
+                    </div>
                     break;
             }
 
@@ -604,6 +675,21 @@
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
                         Only flow this attribute when JIM creates the object in the Connected System. Once provisioned, the attribute becomes unmanaged: Metaverse changes are not exported and Drift Correction leaves it alone, allowing the Connected System to own the value. Objects that join to pre-existing Connected System objects never receive the value.
                     </MudText>
+                }
+
+                @* ─── Enabled (#1485): applies to both directions, so it sits outside the import/export branches ─── *@
+                <MudCheckBox T="bool" Dense="true" Class="mt-5"
+                    @bind-Value="_attributeFlowMapping.Enabled"
+                    Label="Enabled" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    A disabled Attribute Flow is skipped by synchronisation in both directions until it is re-enabled, without touching the rest of the Synchronisation Rule.
+                </MudText>
+                @if (!string.IsNullOrWhiteSpace(_attributeFlowMapping.DisabledReason))
+                {
+                    var disabledReason = _attributeFlowMapping.DisabledReason;
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2">
+                        @disabledReason
+                    </MudAlert>
                 }
 
                 @* ─── Multi-Valued to Single-Valued warning (#435) ─── *@
@@ -1065,6 +1151,16 @@
     /// Reference sources are excluded because the runtime guard does not apply to them; on export, every data
     /// type is in scope.
     /// </summary>
+    /// <summary>
+    /// The Disabled chip's tooltip: what disabled means, plus the recorded reason where something disabled the
+    /// mapping on the administrator's behalf. Written as sentences so <c>TooltipText</c> renders one per line.
+    /// </summary>
+    private static string DescribeDisabledMapping(SyncRuleMapping mapping)
+    {
+        const string baseText = "This Attribute Flow is disabled and skipped by synchronisation until it is re-enabled.";
+        return string.IsNullOrWhiteSpace(mapping.DisabledReason) ? baseText : $"{baseText} {mapping.DisabledReason}";
+    }
+
     private bool DialogMappingIsMvaToSva()
     {
         if (_attributeFlowMappingSourceType != "Attribute" || _attributeFlowMapping == null || _attributeFlowMappingSource == null)

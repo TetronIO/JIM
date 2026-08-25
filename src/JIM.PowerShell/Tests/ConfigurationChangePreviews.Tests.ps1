@@ -150,6 +150,425 @@ Describe 'New-JIMConfigurationChangePreview' {
         }
     }
 
+    Context 'Synchronisation Rule destructive toggles (#1115)' {
+        It 'Targets the Synchronisation Rule endpoint and omits the toggles the caller did not supply' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 | Out-Null
+
+                # An empty body previews the stored toggles; sending defaults instead would ask about a
+                # change the caller did not propose.
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/42/destructive-toggles/preview'
+                $script:capturedBody.Keys.Count | Should -Be 0
+            }
+        }
+
+        It 'Sends the proposed toggles as their enum names (the API rejects numeric enum values)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 `
+                    -OutboundDeprovisionAction Delete -InboundOutOfScopeAction Disconnect | Out-Null
+
+                $script:capturedBody.outboundDeprovisionAction | Should -BeExactly 'Delete'
+                $script:capturedBody.inboundOutOfScopeAction | Should -BeExactly 'Disconnect'
+            }
+        }
+
+        It 'Restricts the toggles to the actions the model defines' {
+            $command = Get-Command New-JIMConfigurationChangePreview
+            $outbound = $command.Parameters['OutboundDeprovisionAction'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $outbound.ValidValues | Should -Be @('Disconnect', 'Delete')
+            $inbound = $command.Parameters['InboundOutOfScopeAction'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $inbound.ValidValues | Should -Be @('RemainJoined', 'Disconnect')
+        }
+
+        It 'Accepts SyncRuleId from the pipeline by property name' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['SyncRuleId']
+            ($parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName
+            }) | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Synchronisation Rule Scoping Criteria' {
+        It 'Posts the proposed criteria to the scoping-criteria preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $group = @{
+                    Type = 'All'
+                    Criteria = @(
+                        @{ ConnectedSystemAttributeId = 101; ComparisonType = 'Equals'; StringValue = 'Sales' }
+                    )
+                }
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup $group | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/42/scoping-criteria/preview'
+                $script:capturedBody.criteriaGroups.Count | Should -Be 1
+                $script:capturedBody.criteriaGroups[0].Criteria[0].StringValue | Should -BeExactly 'Sales'
+            }
+        }
+
+        It 'Sends an empty array as an empty array, because that proposes removing every criterion' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup @() | Out-Null
+
+                # Omitting the field would preview the stored criteria; an empty array is the opposite question,
+                # and dropping it would silently turn the widest proposal available into no proposal at all.
+                $script:capturedBody.ContainsKey('criteriaGroups') | Should -BeTrue
+                @($script:capturedBody.criteriaGroups).Count | Should -Be 0
+            }
+        }
+
+        It 'Keeps a nested group intact on the way to the API' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $group = @{
+                    Type = 'All'
+                    Criteria = @(@{ ConnectedSystemAttributeId = 101; ComparisonType = 'Equals'; StringValue = 'Sales' })
+                    ChildGroups = @(
+                        @{
+                            Type = 'Any'
+                            Criteria = @(
+                                @{ ConnectedSystemAttributeId = 102; ComparisonType = 'Equals'; StringValue = 'UK' },
+                                @{ ConnectedSystemAttributeId = 102; ComparisonType = 'Equals'; StringValue = 'IE' }
+                            )
+                        }
+                    )
+                }
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup $group | Out-Null
+
+                $script:capturedBody.criteriaGroups[0].ChildGroups[0].Type | Should -BeExactly 'Any'
+                $script:capturedBody.criteriaGroups[0].ChildGroups[0].Criteria.Count | Should -Be 2
+            }
+        }
+
+        It 'Requires the criteria to be stated rather than inferred from silence' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['ScopingCriteriaGroup']
+            $mandatory = $parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'SyncRuleScopingCriteria'
+            }
+            $mandatory.Mandatory | Should -BeTrue
+        }
+
+        It 'Allows the empty collection its mandatory parameter would otherwise reject' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['ScopingCriteriaGroup']
+            ($parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.AllowEmptyCollectionAttribute]
+            }) | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Synchronisation Rule Attribute Flow' {
+        It 'Posts the proposed mappings to the Attribute Flow preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $mapping = @{
+                    TargetMetaverseAttributeId = 201
+                    Priority = 1
+                    Sources = @(
+                        @{ Order = 1; ConnectedSystemAttributeId = 101 }
+                    )
+                }
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/42/mappings/preview'
+                $script:capturedBody.mappings.Count | Should -Be 1
+                $script:capturedBody.mappings[0].TargetMetaverseAttributeId | Should -Be 201
+                $script:capturedBody.mappings[0].Priority | Should -Be 1
+            }
+        }
+
+        It 'Sends an empty array as an empty array, because that proposes a rule that flows nothing' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping @() | Out-Null
+
+                # Omitting the field would preview the stored mappings; an empty array is the opposite question.
+                $script:capturedBody.ContainsKey('mappings') | Should -BeTrue
+                @($script:capturedBody.mappings).Count | Should -Be 0
+            }
+        }
+
+        It 'Keeps an Expression source and its Missing Input Behaviour intact on the way to the API' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $mapping = @{
+                    TargetMetaverseAttributeId = 201
+                    Sources = @(
+                        @{ Order = 1; Expression = 'cs["givenName"] + "." + cs["sn"] + "@corp.local"'; MissingInputBehaviour = 'FailMapping' }
+                    )
+                }
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping | Out-Null
+
+                # Missing Input Behaviour decides whether the Expression runs at all for an object with a value
+                # missing, which is exactly the population this preview exists to find.
+                $script:capturedBody.mappings[0].Sources[0].MissingInputBehaviour | Should -BeExactly 'FailMapping'
+                $script:capturedBody.mappings[0].Sources[0].Expression | Should -Match 'givenName'
+            }
+        }
+
+        It 'Requires the mappings to be stated rather than inferred from silence' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['AttributeFlowMapping']
+            $mandatory = $parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'SyncRuleAttributeFlow'
+            }
+            $mandatory.Mandatory | Should -BeTrue
+        }
+
+        It 'Allows the empty collection its mandatory parameter would otherwise reject' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['AttributeFlowMapping']
+            ($parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.AllowEmptyCollectionAttribute]
+            }) | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Object Matching previews' {
+        It 'Posts the proposed rules to the Object Matching preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $rule = @{
+                    Order = 2
+                    ConnectedSystemObjectTypeId = 9
+                    MetaverseObjectTypeId = 3
+                    TargetMetaverseAttributeId = 201
+                    CaseSensitive = $true
+                    Sources = @(
+                        @{ Order = 0; ConnectedSystemAttributeId = 101 }
+                    )
+                }
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule $rule | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/connected-systems/5/matching-rules/preview'
+                $script:capturedBody.rules.Count | Should -Be 1
+                # Order and case sensitivity each decide which identity an account joins to, so both have to
+                # reach the API rather than being dropped as decoration.
+                $script:capturedBody.rules[0].Order | Should -Be 2
+                $script:capturedBody.rules[0].CaseSensitive | Should -BeTrue
+                $script:capturedBody.rules[0].Sources[0].ConnectedSystemAttributeId | Should -Be 101
+            }
+        }
+
+        It 'Sends an empty array as an empty array, because that proposes a system that joins nothing' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule @() | Out-Null
+
+                # Omitting the field would preview the stored rules; an empty array is the opposite question.
+                $script:capturedBody.ContainsKey('rules') | Should -BeTrue
+                @($script:capturedBody.rules).Count | Should -Be 0
+            }
+        }
+
+        It 'Sends the mode only when the caller is changing it' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule @() | Out-Null
+                $script:capturedBody.ContainsKey('mode') | Should -BeFalse
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule @() -ObjectMatchingRuleMode SyncRule | Out-Null
+                $script:capturedBody.mode | Should -BeExactly 'SyncRule'
+            }
+        }
+
+        It 'Requires the rules to be stated rather than inferred from silence' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['MatchingRule']
+            $mandatory = $parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'ObjectMatching'
+            }
+            $mandatory.Mandatory | Should -BeTrue
+        }
+
+        It 'Allows the empty collection its mandatory parameter would otherwise reject' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['MatchingRule']
+            ($parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.AllowEmptyCollectionAttribute]
+            }) | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Synchronisation Rule behaviour previews' {
+        It 'Posts the proposed toggles to the behaviour preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -RuleState Disabled | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/sync-rules/42/behaviour/preview'
+                $script:capturedBody.enabled | Should -BeFalse
+            }
+        }
+
+        It 'Sends only the toggles the caller stated, so silence never proposes switching one off' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -SyncRuleId 42 -RuleState Enabled -EnforceState $false | Out-Null
+
+                # The boolean trap: an unstated toggle must be absent from the body so the API merges it with the
+                # stored rule, rather than present as $false and read as a proposal to turn it off.
+                $script:capturedBody.enabled | Should -BeTrue
+                $script:capturedBody.enforceState | Should -BeFalse
+                $script:capturedBody.ContainsKey('projectToMetaverse') | Should -BeFalse
+                $script:capturedBody.ContainsKey('provisionToConnectedSystem') | Should -BeFalse
+            }
+        }
+
+        It 'Requires the rule state to be stated rather than inferred from silence' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['RuleState']
+            $mandatory = $parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'SyncRuleBehaviour'
+            }
+            $mandatory.Mandatory | Should -BeTrue
+        }
+    }
+
+    Context 'Connected System schema selection previews' {
+        It 'Posts the proposed Object Types to the schema selection preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $types = @(@{ objectTypeId = 9; selected = $false })
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -SchemaObjectType $types | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/connected-systems/5/schema-selection/preview'
+                $script:capturedBody.objectTypes.Count | Should -Be 1
+                $script:capturedBody.objectTypes[0].objectTypeId | Should -Be 9
+                $script:capturedBody.objectTypes[0].selected | Should -BeFalse
+            }
+        }
+
+        It 'Sends only the keys the caller set, so silence never proposes deselecting a whole Object Type' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $types = @(@{ objectTypeId = 9; removeContributedAttributesOnObsoletion = $false })
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -SchemaObjectType $types | Out-Null
+
+                # Every type default on this surface is the destructive answer, so an unstated key has to be
+                # ABSENT from the body for the API to merge it with the stored Object Type. Present as $false,
+                # 'selected' proposes taking the whole Type out of management.
+                $script:capturedBody.objectTypes[0].removeContributedAttributesOnObsoletion | Should -BeFalse
+                $script:capturedBody.objectTypes[0].ContainsKey('selected') | Should -BeFalse
+                $script:capturedBody.objectTypes[0].ContainsKey('selectedAttributeIds') | Should -BeFalse
+            }
+        }
+
+        It 'Requires the Object Types to be stated rather than inferred from silence' {
+            $parameter = (Get-Command New-JIMConfigurationChangePreview).Parameters['SchemaObjectType']
+            $mandatory = $parameter.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute] -and
+                $_.ParameterSetName -eq 'ConnectedSystemSchema'
+            }
+            $mandatory.Mandatory | Should -BeTrue
+        }
+    }
+
     Context 'Waiting' {
         It 'Returns the start result without polling when the proposal is blocked' {
             InModuleScope JIM {
@@ -340,6 +759,40 @@ Describe 'Stop-JIMConfigurationChangePreview' {
 
     It 'Supports ShouldProcess so a preview is not stopped by a dry run' {
         (Get-Command Stop-JIMConfigurationChangePreview).Parameters.ContainsKey('WhatIf') | Should -BeTrue
+    }
+}
+
+Describe 'Set-JIMSyncRule preview linkage' {
+    It 'Sends previewActivityId so the change records the preview that informed it' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $previewActivityId = [guid]::NewGuid()
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ id = 42 }
+            }
+
+            Set-JIMSyncRule -Id 42 -OutboundDeprovisionAction Delete `
+                -PreviewActivityId $previewActivityId -Confirm:$false | Out-Null
+
+            $script:capturedBody.previewActivityId | Should -Be $previewActivityId
+        }
+    }
+
+    It 'Omits previewActivityId when no preview was run' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ id = 42 }
+            }
+
+            Set-JIMSyncRule -Id 42 -OutboundDeprovisionAction Delete -Confirm:$false | Out-Null
+
+            $script:capturedBody.ContainsKey('previewActivityId') | Should -BeFalse
+        }
     }
 }
 

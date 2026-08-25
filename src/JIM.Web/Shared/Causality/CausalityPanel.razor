@@ -1,4 +1,6 @@
 @using JIM.Models.Activities
+@using JIM.Models.Activities.DTOs
+@using JIM.Models.Sync
 @using JIM.Web.Causality
 @inject IUserPreferenceService PreferenceService
 
@@ -6,13 +8,15 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The causality visualisation panel for a Run Profile Execution Item. Owns the current view, the
-   technical-names toggle, the Timeline's expanded event and the Flow and Graph views' selected
-   event (whose attribute detail renders in the shared bottom drawer); builds the causality model
-   and summary once per (Item, Context) pair and renders the summary band (whose head row carries
-   the view switcher and technical-names toggle in its Actions slot), the active view and the
-   drawer. Persisted view and technical-names preferences load on first render per the
-   TableDensityToggle idiom; the Flow view is the default, and a stored preference for an unknown
-   view falls back to it without being overwritten. *@
+   technical-names toggle, the Timeline's expanded event and the Lineage's selected event (whose
+   attribute detail renders in the shared bottom drawer); builds the causality and lineage models and
+   the summary once per (Item, Context, Chain) tuple and renders the summary band (whose head row
+   carries the view switcher and technical-names toggle in its Actions slot), the active view and
+   the drawer. Persisted view and technical-names preferences load on first render per the
+   TableDensityToggle idiom; the Lineage is the default, and a stored preference for an unknown or
+   retired view (the old Flow and Graph keys included) falls back to it without being overwritten.
+   The causal chain renders on the Lineage itself (#1495); the separate Caused by list retired with
+   the Flow and Graph views. *@
 
 <div class="causality-panel">
     @if (Item.SyncOutcomes.Count == 0)
@@ -26,7 +30,8 @@
     }
     else if (_model != null && _summary != null)
     {
-        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()">
+        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()"
+                              TechnicalNames="_technicalNames">
             <Actions>
                 @if (AvailableViews.Count > 1)
                 {
@@ -50,13 +55,9 @@
         <div class="canvas-wrap">
             @switch (_view)
             {
-                case CausalityView.Flow:
-                    <CausalityFlowView Model="_model" TechnicalNames="_technicalNames"
-                                       @bind-SelectedEvent="_selectedEvent" />
-                    break;
-                case CausalityView.Graph:
-                    <CausalityGraphView Model="_model" TechnicalNames="_technicalNames"
-                                        @bind-SelectedEvent="_selectedEvent" />
+                case CausalityView.Lineage when _lineageModel is { } lineageModel:
+                    <CausalityLineageView Model="lineageModel" TechnicalNames="_technicalNames"
+                                        Timestamp="Timestamp" @bind-SelectedEvent="_selectedEvent" />
                     break;
                 case CausalityView.Timeline:
                 default:
@@ -66,7 +67,7 @@
             }
         </div>
 
-        @* ─── Bottom drawer: attribute detail for the Flow/Graph views' selected event ─── *@
+        @* ─── Bottom drawer: attribute detail for the Lineage's selected event ─── *@
         @if (_view != CausalityView.Timeline && _selectedEvent is { } selectedEvent && selectedEvent.AttributeRows.Count > 0)
         {
             <div class="drawer">
@@ -94,7 +95,7 @@
     /// when its view appears here.
     /// </summary>
     private static readonly IReadOnlyList<CausalityView> AvailableViews =
-        [CausalityView.Flow, CausalityView.Timeline, CausalityView.Graph];
+        [CausalityView.Lineage, CausalityView.Timeline];
 
     /// <summary>
     /// The Run Profile Execution Item whose causality is visualised.
@@ -125,29 +126,61 @@
     [Parameter]
     public DateTime? Timestamp { get; set; }
 
+    /// <summary>
+    /// The upward causal walk for this item, or null when the host page did not resolve one. Owned by
+    /// the page rather than fetched here: the panel is a rendering component with no data access of
+    /// its own, and the walk is one query the page already has an application scope open for. Feeds
+    /// the Lineage's chain cards and the export decision captions (#1495).
+    /// </summary>
+    [Parameter]
+    public CausalChain? Chain { get; set; }
+
+    /// <summary>
+    /// The decision-time Metaverse Object deletion policy recorded on the item, where one was captured. Supplies
+    /// the synthetic "Identity not deleted" event, which is the one thing a Deletion Rule's decision leaves no
+    /// outcome to render.
+    /// </summary>
+    [Parameter]
+    public MvoDeletionPolicySnapshot? DeletionPolicySnapshot { get; set; }
+
+    /// <summary>
+    /// Whether the Run Profile behind this item was a Full or Delta Synchronisation. Only a Synchronisation
+    /// evaluates a Deletion Rule, so only a Synchronisation can report that one declined.
+    /// </summary>
+    [Parameter]
+    public bool IsSynchronisationRun { get; set; }
+
     private CausalityModel? _model;
     private CausalitySummary? _summary;
-    private CausalityView _view = CausalityView.Flow;
+    private CausalityLineageModel? _lineageModel;
+    private CausalityView _view = CausalityView.Lineage;
     private bool _technicalNames;
     private CausalityEvent? _expandedEvent;
     private CausalityEvent? _selectedEvent;
     private ActivityRunProfileExecutionItem? _builtItem;
     private CausalityPageContext? _builtContext;
     private IReadOnlySet<Guid>? _builtLivePendingExportIds;
+    private CausalChain? _builtChain;
 
     protected override void OnParametersSet()
     {
-        // Build once per (Item, Context) pair; parent re-renders with unchanged values must not
-        // discard the expanded/selected-event state by rebuilding the model
+        // Build once per (Item, Context, Chain) tuple; parent re-renders with unchanged values must
+        // not discard the expanded/selected-event state by rebuilding the model. The chain is an
+        // input (#1495): it supplies the export decision captions and the Lineage's chain cards, and
+        // the page resolves it after the first render, so its arrival must rebuild.
         if (ReferenceEquals(Item, _builtItem) && Equals(Context, _builtContext)
-            && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds))
+            && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds)
+            && ReferenceEquals(Chain, _builtChain))
             return;
 
         _builtItem = Item;
         _builtContext = Context;
         _builtLivePendingExportIds = LivePendingExportIds;
-        _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds);
+        _builtChain = Chain;
+        _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds,
+            DeletionPolicySnapshot, IsSynchronisationRun, Chain);
         _summary = CausalitySummaryBuilder.Build(_model);
+        _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType);
         _expandedEvent = null;
         _selectedEvent = null;
     }
@@ -161,8 +194,8 @@
         var storedView = CausalityViewPreference.FromKey(await PreferenceService.GetCausalityViewAsync());
         var storedTechNames = await PreferenceService.GetCausalityTechNamesAsync();
 
-        // A stored preference for a view that has not shipped keeps the default without
-        // overwriting the stored value, so it takes effect if that view becomes available
+        // A stored preference for an unknown or retired view keeps the default without overwriting
+        // the stored value; the old Flow and Graph keys land here deliberately (#1495)
         if (storedView.HasValue && AvailableViews.Contains(storedView.Value))
             _view = storedView.Value;
 
@@ -211,8 +244,7 @@
     {
         return view switch
         {
-            CausalityView.Flow => "Flow",
-            CausalityView.Graph => "Graph",
+            CausalityView.Lineage => "Lineage",
             _ => "Timeline"
         };
     }

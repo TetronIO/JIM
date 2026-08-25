@@ -227,7 +227,6 @@ public interface ISyncServer
     /// Call this once at the start of sync, then pass the cache to evaluation methods.
     /// </summary>
     Task<ExportEvaluationCache> BuildExportEvaluationCacheAsync(
-        int sourceConnectedSystemId,
         List<SyncRule>? preloadedSyncRules = null);
 
     /// <summary>
@@ -244,7 +243,6 @@ public interface ISyncServer
     Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> changedAttributes,
-        ConnectedSystem? sourceSystem,
         ExportEvaluationCache cache,
         bool deferSave = false,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
@@ -257,8 +255,8 @@ public interface ISyncServer
     /// </summary>
     Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
-        ConnectedSystem? sourceSystem,
-        ExportEvaluationCache cache);
+        ExportEvaluationCache cache,
+        ExportEvaluationWorkingSet? workingSet = null);
 
     /// <summary>
     /// Evaluates export rules for an MVO being deleted. Creates delete exports for CSOs matched by
@@ -266,13 +264,15 @@ public interface ISyncServer
     /// disconnects every joined CSO. Pass the run-scoped cache where one exists; otherwise the
     /// enabled export rules are loaded from the repository.
     /// </summary>
-    Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null);
+    Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null,
+        ExportEvaluationWorkingSet? workingSet = null);
 
     /// <summary>
     /// Set-based form of <see cref="EvaluateMvoDeletionAsync"/> (issue #993): one CSO fetch,
     /// Pending Export ensure and CSO disconnect pass for the whole batch of MVOs.
     /// </summary>
-    Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos, ExportEvaluationCache? exportEvaluationCache = null);
+    Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos, ExportEvaluationCache? exportEvaluationCache = null,
+        ExportEvaluationWorkingSet? workingSet = null);
 
     /// <summary>
     /// Captures the referencing-object and resolution state reference recall needs before Metaverse
@@ -283,8 +283,8 @@ public interface ISyncServer
     /// <summary>
     /// Stages membership-removal Pending Exports for Metaverse Objects that referenced now-deleted
     /// Metaverse Objects (reference recall, issue #908). Call after the deletions have been performed.
-    /// Pass a run-scoped <paramref name="recallCache"/> (built with sourceConnectedSystemId 0) to
-    /// avoid a per-call Synchronisation Rule reload (#1003); when null, the cache is built ad hoc.
+    /// Pass a run-scoped <paramref name="recallCache"/> to avoid a per-call Synchronisation Rule
+    /// reload (#1003); when null, the cache is built ad hoc.
     /// </summary>
     Task<ReferenceRecallResult> StageReferenceRecallExportsAsync(ReferenceRecallContext context, IReadOnlyCollection<Guid> deletedMvoIds,
         ExportEvaluationCache? recallCache = null);

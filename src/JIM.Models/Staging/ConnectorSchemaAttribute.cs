@@ -39,6 +39,15 @@ public class ConnectorSchemaAttribute
     /// </summary>
     public AttributeWritability Writability { get; set; }
 
+    /// <summary>
+    /// For a <see cref="AttributeDataType.Reference"/> attribute, the name of the Object Type in this schema
+    /// that the reference points at, when the Connected System's schema states one (the SQL Connector's
+    /// <c>referencesObjectType</c>). Null when the schema cannot or does not say, which is the norm for
+    /// LDAP (a DN attribute's target class is unconstrained by directory schemas) and for connectors without
+    /// reference metadata; resolution then falls back to searching every Object Type (#1285).
+    /// </summary>
+    public string? ReferencesObjectTypeName { get; set; }
+
     public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null, AttributeWritability writability = AttributeWritability.Writable)
     {
         Name = name;

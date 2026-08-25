@@ -325,7 +325,20 @@ public class ConfigurationChangeClassificationCompletenessTests
             Name = "Payroll",
             Description = "Everything populated.",
             ConnectorDefinitionId = 1,
-            MaxExportParallelism = 4
+            MaxExportParallelism = 4,
+            RequireSecureTransport = true,
+            // Without a configuration here the snapshot emits no Password Synchronisation keys at all, and this
+            // guard silently covers less than it claims: that is exactly how every one of them went unclassified,
+            // which would have thrown the first time an administrator saved those settings (#1119).
+            PasswordSynchronisation = new ConnectedSystemPasswordSynchronisation
+            {
+                Id = 70,
+                ConnectedSystemId = 3,
+                Enabled = true,
+                TargetObjectTypeId = 10,
+                MaxRetries = 5,
+                RetryBackoffBase = TimeSpan.FromMinutes(5)
+            }
         };
         // Setting values, plain and encrypted. Their absence here is what let the connector-named-key gap through:
         // every Connected System settings save failed to classify and was recorded unclassified.

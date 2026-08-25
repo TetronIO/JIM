@@ -1422,7 +1422,7 @@ internal sealed class SqlConnectorImport
                 {
                     DateTimeKind.Utc => dateTime,
                     DateTimeKind.Local => dateTime.ToUniversalTime(),
-                    _ => DateTime.SpecifyKind(TimeZoneInfo.ConvertTimeToUtc(dateTime, _databaseTimeZone), DateTimeKind.Utc)
+                    _ => ZonelessToUtc(dateTime)
                 };
 
             default:
@@ -1430,6 +1430,33 @@ internal sealed class SqlConnectorImport
                 // interpreted exactly as a zoneless column is.
                 return ToUtc(DateTime.SpecifyKind(Convert.ToDateTime(value, CultureInfo.InvariantCulture), DateTimeKind.Unspecified));
         }
+    }
+
+    /// <summary>
+    /// Interprets a zoneless date and time in the Connected System's Database Time Zone.
+    /// </summary>
+    /// <remarks>
+    /// Two wall-clock times a year need a decision the framework does not make for us. A time in the
+    /// hour the clocks skip when daylight saving starts never happened, and <see cref="TimeZoneInfo.ConvertTimeToUtc(DateTime, TimeZoneInfo)"/>
+    /// throws for it; but a column can hold one all the same (a default of "now" written by a server
+    /// whose own clock is UTC, a value migrated from another zone), and one row in every 8,760 of a
+    /// minute-granular series lands in the gap. Refusing those rows is not an answer, so the value is
+    /// read the way PostgreSQL and Java read it: with the offset in force just before the transition,
+    /// which puts it where the clock jumped to. A time in the hour the clocks repeat when daylight
+    /// saving ends happens twice, and the framework's own convention, kept here, is the later,
+    /// standard-time reading.
+    /// </remarks>
+    private DateTime ZonelessToUtc(DateTime zoneless)
+    {
+        if (_databaseTimeZone.IsInvalidTime(zoneless))
+        {
+            // The offset in force a day earlier is the one that applied before the clocks moved: no
+            // transition skips as much as a day, and a day earlier is a valid time by construction.
+            var offsetBeforeTheTransition = _databaseTimeZone.GetUtcOffset(zoneless.AddDays(-1));
+            return new DateTimeOffset(zoneless, offsetBeforeTheTransition).UtcDateTime;
+        }
+
+        return DateTime.SpecifyKind(TimeZoneInfo.ConvertTimeToUtc(zoneless, _databaseTimeZone), DateTimeKind.Utc);
     }
 
     /// <summary>

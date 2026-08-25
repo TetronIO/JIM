@@ -361,6 +361,12 @@ public class SyncExportTaskProcessor
         if (result.CouldNotOpenPasswordConnection)
             return $"Initial passwords: the password connection could not be opened; {result.PasswordConnectionErrorMessage}";
 
+        // Lead with this rather than reporting nothing delivered: the accounts are owed passwords and are not
+        // getting them, and the fix is a Connected System setting rather than anything about the accounts.
+        if (result.PasswordChannelNotSecure)
+            return "Initial passwords: this Connected System requires a secure transport for passwords and the " +
+                   "password connection is not encrypted, so none were sent";
+
         var parts = new List<string> { $"{result.DeliveredCount:N0} delivered" };
         if (result.ParkedCount > 0)
             parts.Add($"{result.ParkedCount:N0} needing attention");
@@ -372,6 +378,25 @@ public class SyncExportTaskProcessor
             parts.Add($"{result.ExpiredCount:N0} expired without one");
 
         return $"Initial passwords: {string.Join(", ", parts)}";
+    }
+
+    /// <summary>
+    /// The name behind each provisioning Synchronisation Rule id met this run, so a create's causal edge can
+    /// snapshot it (#1223). Loaded once, on the first create that names a rule: most export runs stage only
+    /// updates and never pay for the lookup. Includes disabled rules deliberately; the decision was made when
+    /// the rule was enabled, and the chain must still name it.
+    /// </summary>
+    private Dictionary<int, string>? _provisioningRuleNames;
+
+    private async Task<string?> ResolveProvisioningRuleNameAsync(int? provisioningSyncRuleId)
+    {
+        if (!provisioningSyncRuleId.HasValue)
+            return null;
+
+        _provisioningRuleNames ??= (await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, includeDisabled: true))
+            .ToDictionary(rule => rule.Id, rule => rule.Name);
+
+        return _provisioningRuleNames.GetValueOrDefault(provisioningSyncRuleId.Value);
     }
 
     /// <summary>
@@ -390,11 +415,16 @@ public class SyncExportTaskProcessor
             {
                 Activity = _activity,
                 ActivityId = _activity.Id,
-                ObjectChangeType = exportItem.ChangeType switch
-                {
-                    PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
-                    _ => ObjectChangeType.Exported
-                },
+                // An export that wrote nothing this run (deferred whole, issue #1398) is a Pending Export
+                // still staged, not something exported; its item exists to carry why it is waiting.
+                ObjectChangeType = exportItem.Deferred
+                    ? ObjectChangeType.PendingExport
+                    : exportItem.ChangeType switch
+                    {
+                        PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
+                        _ => ObjectChangeType.Exported
+                    },
+                PendingExportId = exportItem.Deferred ? exportItem.PendingExportId : null
             };
 
             // Link to the Connected System Object if available.
@@ -416,7 +446,7 @@ public class SyncExportTaskProcessor
                 ObjectNaming.ConnectedSystemNameRank);
 
             // Set error information if the export failed
-            if (!exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
+            if (!exportItem.Deferred && !exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
                 executionItem.ErrorType = exportItem.ErrorType switch
                 {
@@ -429,18 +459,35 @@ public class SyncExportTaskProcessor
                         ? $"Export failed: {exportItem.ErrorMessage}"
                         : exportItem.ErrorMessage;
             }
+            else if (!string.IsNullOrEmpty(exportItem.UnresolvedReferenceMessage))
+            {
+                // Issue #1398: the export (written in part, or deferred whole) refers to an object that has
+                // no Connected System Object in this system. Reported as the import side reports its own
+                // unresolved references: an Unresolved Reference error on the object, which completes the
+                // Activity with a warning. Only raised under Error handling; see
+                // ExportExecutionServer.BuildUnresolvedReferenceNotesAsync.
+                executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+                executionItem.ErrorMessage = exportItem.UnresolvedReferenceMessage;
+            }
 
-            // Build sync outcome
-            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            // Build sync outcome. A deferred item wrote nothing, so there is no export outcome to record.
+            ActivityRunProfileExecutionItemSyncOutcome? exportOutcome = null;
+            if (!exportItem.Deferred && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var outcomeType = exportItem.ChangeType switch
                 {
                     PendingExportChangeType.Delete => ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned,
                     _ => ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 };
-                SyncOutcomeBuilder.AddRootOutcome(executionItem, outcomeType,
+                exportOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem, outcomeType,
                     detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null);
             }
+
+            // Record why this export happened (#1223). An export run knows only that it had a queue of changes
+            // to make; the synchronisation that put this one in the queue ran in a different Activity, and the
+            // Pending Export carrying the link is deleted moments from now.
+            ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, exportOutcome, _connectedSystem,
+                await ResolveProvisioningRuleNameAsync(exportItem.ProvisioningSyncRuleId));
 
             // Create CSO change record for export change history
             if (_csoChangeTrackingEnabled && exportItem.AttributeValueChanges.Count > 0)
@@ -519,6 +566,18 @@ public class SyncExportTaskProcessor
         // Update activity progress
         _activity.ObjectsProcessed = result.TotalPendingExports;
 
+        // Issue #1398: under Warn handling, references that could not be written because the referenced
+        // object has no Connected System Object in this system are summarised on the Activity rather than
+        // marked per object; under Error handling the per-object items above carry them, and under Ignore
+        // they are logged only. Mirrors the import side's Warn summary.
+        if (_connectedSystem.UnresolvedReferenceHandling == UnresolvedReferenceHandling.Warn && result.UnresolvableReferenceCount > 0)
+        {
+            var warningSummary = $"{result.UnresolvableReferenceCount} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System. The referenced objects are out of scope for every Synchronisation Rule into this system, or have not been provisioned yet; view the affected Pending Exports for details.";
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+                ? warningSummary
+                : $"{_activity.WarningMessage}\n{warningSummary}";
+        }
+
         // Set completion message based on mode and results
         string completionMessage;
         if (_runMode == SyncRunMode.PreviewOnly)
@@ -529,7 +588,8 @@ public class SyncExportTaskProcessor
         {
             var processed = result.SuccessCount + result.FailedCount + result.DeferredCount;
             completionMessage = ExportOutcomeMessage.ForExport(
-                result.SuccessCount, result.FailedCount, result.DeferredCount, throughput.FormatCompletion(processed));
+                result.SuccessCount, result.FailedCount, result.DeferredCount, throughput.FormatCompletion(processed),
+                result.PartiallyExportedCount);
         }
 
         await _syncRepo.UpdateActivityAsync(_activity);

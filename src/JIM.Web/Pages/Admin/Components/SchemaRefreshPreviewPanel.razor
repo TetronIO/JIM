@@ -1,0 +1,384 @@
+@using JIM.Models.Staging.DTOs
+@inject IDialogService DialogService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<MudAlert Severity="@PanelSeverity"
+          Variant="Variant.Outlined"
+          Icon="@Icons.Material.Filled.Preview"
+          Class="mt-5 jim-alert-schema-refresh-preview">
+    <MudText Typo="Typo.subtitle1" Class="mb-2">
+        <strong>Schema Refresh Preview</strong>
+    </MudText>
+
+    @if (!Result.HasChanges)
+    {
+        <MudText Class="mb-2">
+            Found <strong>@Result.TotalObjectTypes.ToString("N0")</strong> object type(s) with <strong>@Result.TotalAttributes.ToString("N0")</strong> attribute(s).
+        </MudText>
+        <MudText Color="Color.Success">No changes detected. The schema is up to date.</MudText>
+        <MudButton data-testid="jim-close-schema-refresh"
+                   Variant="Variant.Text"
+                   Color="Color.Inherit"
+                   DropShadow="false"
+                   Class="mt-3"
+                   OnClick="@(() => OnDiscard.InvokeAsync())">Close</MudButton>
+    }
+    else
+    {
+        <MudText Class="mb-2">
+            The Connected System reported the changes below. <strong>Nothing has been applied yet</strong>; review them, then decide how to proceed.
+        </MudText>
+
+        @if (Result.DiscoveryWarnings.Count > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                <strong>Discovery warnings:</strong> the Connector could not discover everything and worked around the gaps below. A partial read can make Object Types or Attributes appear removed when they are not; check these before applying.
+                <ul class="mt-1 mb-0">
+                    @foreach (var warning in Result.DiscoveryWarnings)
+                    {
+                        <li>@warning</li>
+                    }
+                </ul>
+            </MudAlert>
+        }
+
+        @if (Result.BlockedCredentialAttributeCount > 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                <strong>@Result.BlockedCredentialAttributeCount credential attribute(s) blocked:</strong>
+                @(string.Join(", ", Result.BlockedCredentialAttributes.SelectMany(kvp => kvp.Value).Distinct())).
+                These hold credential material and are never managed by JIM.
+            </MudAlert>
+        }
+
+        @if (HasAdditions)
+        {
+            <MudText Typo="Typo.body1" Class="mt-3" Style="font-weight:600" Color="Color.Success">Additions: safe to apply</MudText>
+            <SchemaChangeTable Result="Result" Section="SchemaChangeTable.SchemaChangeSection.Additions" />
+        }
+
+        @if (Result.HasRemovalsOrDefinitionChanges)
+        {
+            <MudText Typo="Typo.body1" Class="mt-4" Style="font-weight:600" Color="Color.Error">Destructive: review before proceeding</MudText>
+            <SchemaChangeTable Result="Result" Section="SchemaChangeTable.SchemaChangeSection.Destructive" />
+
+            @if (Dependents is { HasAny: true })
+            {
+                <MudText Typo="Typo.body1" Class="mt-3" Style="font-weight:600">Configuration that depends on these changes</MudText>
+                <ul class="mt-1 mb-0">
+                    @foreach (var rule in Dependents.InvalidatedSyncRules)
+                    {
+                        <li>
+                            Synchronisation Rule <MudLink Href="@SyncRuleUrl(rule.SyncRuleId)" Target="_blank">@rule.SyncRuleName</MudLink>
+                            is bound to Object Type <span class="jim-text-code">@rule.ObjectTypeName</span>, with @rule.MappingCount mapping(s).
+                        </li>
+                    }
+                    @foreach (var mapping in Dependents.InvalidatedMappings)
+                    {
+                        <li>
+                            Mapping <span class="jim-text-code">@mapping.Description</span> on
+                            <MudLink Href="@SyncRuleUrl(mapping.SyncRuleId)" Target="_blank">@mapping.SyncRuleName</MudLink>@(mapping.ViaExpression ? " (read by its Expression)" : "").
+                        </li>
+                    }
+                    @foreach (var matchingRule in Dependents.ReferencedObjectMatchingRules)
+                    {
+                        <li>Object Matching Rule on @matchingRule.Context: @matchingRule.Reason</li>
+                    }
+                </ul>
+            }
+
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                Object Types and Attributes the Connected System no longer reports are <strong>retained</strong> in JIM when you apply; nothing is deleted, but their values stop refreshing, and objects of a removed Object Type will be obsoleted by the next Full Import whether or not you apply. Attribute definition changes are applied, and a mapping validated against the old definition may no longer behave as intended.
+            </MudAlert>
+        }
+
+        @if (Result.ActionRequired)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                <strong>Action Required:</strong> Some attributes that are no longer reported are still referenced by Synchronisation Rules.
+                Please update your Synchronisation Rules to remove references to these attributes.
+            </MudAlert>
+        }
+
+        <div class="d-flex mt-4 flex-wrap" style="gap: 8px">
+            <MudButton data-testid="jim-discard-schema-refresh"
+                       Variant="Variant.Text"
+                       Color="Color.Inherit"
+                       DropShadow="false"
+                       Disabled="@Busy"
+                       OnClick="HandleDiscardAsync">Cancel</MudButton>
+            <MudSpacer />
+            @if (Result.HasRemovalsOrDefinitionChanges)
+            {
+                @* A destructive diff pauses on the three-way decision (#1485): Cancel, Apply & Disable
+                   Dependents, or Apply & Remove. A plain apply that leaves invalidated configuration running
+                   is deliberately not one of the choices. *@
+                @if (Dependents is { HasAny: true })
+                {
+                    <MudButton data-testid="jim-apply-disable-schema-refresh"
+                               Variant="Variant.Outlined"
+                               Color="Color.Warning"
+                               DropShadow="false"
+                               Disabled="@Busy"
+                               OnClick="@(() => _disablePlanDialogVisible = true)">Apply &amp; Disable Dependents…</MudButton>
+                }
+                <MudButton data-testid="jim-apply-remove-schema-refresh"
+                           Variant="Variant.Filled"
+                           Color="Color.Error"
+                           DropShadow="false"
+                           Disabled="@Busy"
+                           OnClick="@(() => _removePlanDialogVisible = true)">Apply &amp; Remove…</MudButton>
+            }
+            else
+            {
+                <MudButton data-testid="jim-apply-schema-refresh"
+                           Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           DropShadow="false"
+                           Disabled="@Busy"
+                           OnClick="@(() => OnApply.InvokeAsync())">Apply Schema Changes</MudButton>
+            }
+        </div>
+    }
+</MudAlert>
+
+@* ─── Apply & Disable Dependents plan (#1485) ─── *@
+<MudDialog @bind-Visible="_disablePlanDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Shield" Class="mr-3" /> Apply schema and disable dependents?
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Class="mb-2">
+            The new schema is recorded, and everything below is <strong>disabled</strong> with the stated reason so nothing runs against entries the Connected System no longer reports. No objects or values are touched. Re-enabling is a manual choice per rule or mapping.
+        </MudText>
+        @if (Dependents != null)
+        {
+            <ul class="mb-0">
+                @foreach (var rule in Dependents.InvalidatedSyncRules)
+                {
+                    <li class="mb-1">
+                        <strong><MudLink Href="@SyncRuleUrl(rule.SyncRuleId)" Target="_blank">@rule.SyncRuleName</MudLink></strong> disabled, with its @rule.MappingCount mapping(s).
+                        <br /><span class="mud-text-secondary">@rule.Reason</span>
+                    </li>
+                }
+                @foreach (var mapping in Dependents.InvalidatedMappings)
+                {
+                    <li class="mb-1">
+                        Mapping <span class="jim-text-code">@mapping.Description</span> on <MudLink Href="@SyncRuleUrl(mapping.SyncRuleId)" Target="_blank">@mapping.SyncRuleName</MudLink> disabled.
+                        <br /><span class="mud-text-secondary">@mapping.Reason</span>
+                    </li>
+                }
+            </ul>
+            @if (Dependents.ReferencedObjectMatchingRules.Count > 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+                    Object Matching has no disabled state, so these need your attention separately:
+                    <ul class="mt-1 mb-0">
+                        @foreach (var matchingRule in Dependents.ReferencedObjectMatchingRules)
+                        {
+                            <li>@matchingRule.Context: @matchingRule.Reason</li>
+                        }
+                    </ul>
+                </MudAlert>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton DropShadow="false" Variant="Variant.Text" OnClick="@(() => _disablePlanDialogVisible = false)" Class="ma-4">Back</MudButton>
+        <MudButton data-testid="jim-confirm-apply-disable"
+                   DropShadow="false"
+                   Variant="Variant.Filled"
+                   Color="Color.Warning"
+                   Disabled="@Busy"
+                   OnClick="HandleConfirmApplyWithDisablesAsync"
+                   Class="ma-4">Apply &amp; Disable</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* ─── Apply & Remove plan (#1485) ─── *@
+<MudDialog @bind-Visible="_removePlanDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.DeleteForever" Class="mr-3" /> Apply schema and remove dependents?
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3">
+            <strong>This deletes configuration and identity data.</strong> The configuration below is deleted, and the data removal runs as a background task you can follow from the Operations queue.
+        </MudAlert>
+        @if (Dependents is { HasAny: true })
+        {
+            <MudText Typo="Typo.body1" Style="font-weight:600">Configuration deleted</MudText>
+            <ul class="mt-1 mb-3">
+                @foreach (var rule in Dependents.InvalidatedSyncRules)
+                {
+                    <li class="mb-1">
+                        Synchronisation Rule <strong><MudLink Href="@SyncRuleUrl(rule.SyncRuleId)" Target="_blank">@rule.SyncRuleName</MudLink></strong> deleted, with its @rule.MappingCount mapping(s).
+                        <br /><span class="mud-text-secondary">@rule.Reason</span>
+                    </li>
+                }
+                @foreach (var mapping in Dependents.InvalidatedMappings)
+                {
+                    <li class="mb-1">
+                        Mapping <span class="jim-text-code">@mapping.Description</span> on <MudLink Href="@SyncRuleUrl(mapping.SyncRuleId)" Target="_blank">@mapping.SyncRuleName</MudLink> deleted.
+                        <br /><span class="mud-text-secondary">@mapping.Reason</span>
+                    </li>
+                }
+            </ul>
+        }
+        @if (RemovalImpact != null && (RemovalImpact.RemovedObjectTypes.Count > 0 || RemovalImpact.RemovedAttributes.Count > 0))
+        {
+            <MudText Typo="Typo.body1" Style="font-weight:600">Data removed</MudText>
+            <ul class="mt-1 mb-2">
+                @foreach (var type in RemovalImpact.RemovedObjectTypes)
+                {
+                    <li class="mb-1">
+                        <strong>@type.ConnectedSystemObjectCount.ToString("N0")</strong> Connected System Object(s) of Object Type <span class="jim-text-code">@type.ObjectTypeName</span> marked Obsolete.
+                    </li>
+                }
+                @foreach (var attributeImpact in RemovalImpact.RemovedAttributes)
+                {
+                    <li class="mb-1">
+                        <strong>@attributeImpact.StoredValueCount.ToString("N0")</strong> stored value(s) of attribute <span class="jim-text-code">@attributeImpact.AttributeName</span> on <span class="jim-text-code">@attributeImpact.ObjectTypeName</span> deleted.
+                    </li>
+                }
+            </ul>
+            <MudText Class="mb-2 mud-text-secondary">
+                Obsoleted objects flow through the standard deprovisioning pipeline on the next synchronisation run: disconnection, attribute recall, grace periods and Metaverse Deletion Rules all apply as configured.
+            </MudText>
+        }
+        @if (Dependents is { ReferencedObjectMatchingRules.Count: > 0 })
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+                Object Matching Rules are not deleted by this option, so these need your attention separately:
+                <ul class="mt-1 mb-0">
+                    @foreach (var matchingRule in Dependents.ReferencedObjectMatchingRules)
+                    {
+                        <li>@matchingRule.Context: @matchingRule.Reason</li>
+                    }
+                </ul>
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton DropShadow="false" Variant="Variant.Text" OnClick="@(() => _removePlanDialogVisible = false)" Class="ma-4">Back</MudButton>
+        <MudButton data-testid="jim-confirm-apply-remove"
+                   DropShadow="false"
+                   Variant="Variant.Filled"
+                   Color="Color.Error"
+                   Disabled="@Busy"
+                   OnClick="HandleConfirmApplyWithRemovalsAsync"
+                   Class="ma-4">Apply &amp; Remove</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+    private bool _disablePlanDialogVisible;
+    private bool _removePlanDialogVisible;
+
+    /// <summary>
+    /// The refresh being previewed. Nothing it describes has been persisted.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public SchemaRefreshResult Result { get; set; } = null!;
+
+    /// <summary>
+    /// What the refresh's destructive changes invalidate: the dependents named on the review, and the plan the
+    /// Apply &amp; Disable Dependents option commits (#1485). Null or empty hides that option.
+    /// </summary>
+    [Parameter]
+    public SchemaRefreshDependents? Dependents { get; set; }
+
+    /// <summary>
+    /// Raised when the administrator chooses to persist the previewed refresh as-is.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnApply { get; set; }
+
+    /// <summary>
+    /// Raised when the administrator confirms applying the refresh with the dependents disabled.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnApplyWithDisables { get; set; }
+
+    /// <summary>
+    /// What the "Apply and Remove" option would remove, counted before anything is committed (#1485). Shown in
+    /// that option's plan dialog beside the configuration deletions.
+    /// </summary>
+    [Parameter]
+    public SchemaRefreshRemovalImpact? RemovalImpact { get; set; }
+
+    /// <summary>
+    /// Raised when the administrator confirms applying the refresh with the dependents removed: configuration
+    /// deleted and the data removal queued.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnApplyWithRemovals { get; set; }
+
+    /// <summary>
+    /// Raised when the administrator discards the previewed refresh (after confirmation, where discarding leaves
+    /// JIM's schema adrift of the Connected System's).
+    /// </summary>
+    [Parameter]
+    public EventCallback OnDiscard { get; set; }
+
+    /// <summary>
+    /// True while an apply is running, so the buttons cannot be pressed twice.
+    /// </summary>
+    [Parameter]
+    public bool Busy { get; set; }
+
+    private Severity PanelSeverity => Result.HasRemovalsOrDefinitionChanges ? Severity.Warning : Severity.Info;
+
+    private bool HasAdditions =>
+        Result.AddedObjectTypes.Count > 0 ||
+        Result.UpdatedObjectTypes.Count > 0 ||
+        Result.AddedAttributes.Values.Sum(v => v.Count) > 0;
+
+    private static string SyncRuleUrl(int syncRuleId) => $"/admin/sync-rules/{syncRuleId}";
+
+    private async Task HandleConfirmApplyWithDisablesAsync()
+    {
+        _disablePlanDialogVisible = false;
+        await OnApplyWithDisables.InvokeAsync();
+    }
+
+    private async Task HandleConfirmApplyWithRemovalsAsync()
+    {
+        _removePlanDialogVisible = false;
+        await OnApplyWithRemovals.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Additions discard for free (the next refresh finds them again). Removals and definition changes do not:
+    /// cancelling does not preserve the status quo, so the administrator confirms with the concrete
+    /// consequences in front of them.
+    /// </summary>
+    private async Task HandleDiscardAsync()
+    {
+        if (Result.HasRemovalsOrDefinitionChanges)
+        {
+            var options = new MessageBoxOptions
+            {
+                Title = "Cancel without applying?",
+                MarkupMessage = (MarkupString)(
+                    "Cancelling does not preserve the status quo. The next Full Import will find no objects of a removed Object Type and obsolete them regardless, " +
+                    "and the source now sends redefined attributes in their new form, so mappings validated against the old definition may misbehave. " +
+                    "You can re-run the refresh at any time to decide."),
+                YesText = "Cancel Refresh",
+                CancelText = "Keep Reviewing"
+            };
+
+            var confirmed = await DialogService.ShowMessageBoxAsync(options);
+            if (confirmed != true)
+                return;
+        }
+
+        await OnDiscard.InvokeAsync();
+    }
+}

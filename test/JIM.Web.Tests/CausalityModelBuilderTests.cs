@@ -8,6 +8,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Web.Causality;
 using NUnit.Framework;
 
@@ -92,7 +93,30 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] = CausalityLane.Identity,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = CausalityLane.Identity
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = CausalityLane.Identity,
+            // WouldStageDeleteExport describes the same export-side event as DeprovisionQueued, so it shares
+            // its Downstream lane; the other two destructive-toggle preview transitions are Metaverse-side.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = CausalityLane.Identity,
+            // A mapping that would not evaluate leaves a Metaverse Object attribute unwritten, so it belongs beside
+            // the other Metaverse-side transitions rather than in the export-side Downstream lane.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = CausalityLane.Identity,
+            // Every Object Matching transition decides which Metaverse Object an account belongs to, which is the
+            // Identity lane's whole subject.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously] = CausalityLane.Identity,
+            // Projecting decides whether an identity exists at all, so it is Metaverse-side; the other two are
+            // about what reaches, or stops reaching, the target system.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] = CausalityLane.Source,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] = CausalityLane.Source,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = CausalityLane.Identity
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
@@ -331,6 +355,31 @@ public class CausalityModelBuilderTests
             .First(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
 
         Assert.That(deprovision.AttributeRowsCaption, Is.EqualTo("Target identified by"));
+    }
+
+    /// <summary>
+    /// The execution-side sibling of the queued case: when the delete Pending Export is carried out, the
+    /// Deprovisioned item's change snapshot still holds only the target's DN. Counted as a change, the page
+    /// reported the deletion as having "Set" one attribute; the rows identify the deleted entry, so they take
+    /// the same caption as the queueing event.
+    /// </summary>
+    [Test]
+    public void Build_DeprovisionedExecutionOutcome_CaptionsItsRowsAsTargetIdentification()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Deprovisioned,
+            ConnectedSystemObjectChange = CausalityTestData.BuildDeprovisionTargetSnapshot()
+        };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned,
+            parent: null, ordinal: 0);
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var deprovisioned = model.Roots
+            .Single(r => r.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
+
+        Assert.That(deprovisioned.AttributeRowsCaption, Is.EqualTo("Target identified by"));
     }
 
     [Test]
@@ -659,5 +708,146 @@ public class CausalityModelBuilderTests
         Assert.That(rows, Has.Count.EqualTo(1));
         Assert.That(rows[0].Operation, Is.EqualTo(CausalityAttributeOperation.Remove));
         Assert.That(rows[0].Value, Is.EqualTo("0700 900123"));
+    }
+
+    #region the Deletion Rule that declined (#1223 Phase 1e)
+
+    /// <summary>
+    /// An item whose Deletion Rule evaluated on a disconnection: outcomes were recorded, but none of them is a
+    /// Metaverse Object deletion.
+    /// </summary>
+    private static ActivityRunProfileExecutionItem DisconnectedItem()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        item.ObjectChangeType = ObjectChangeType.Disconnected;
+        return item;
+    }
+
+    private static MvoDeletionPolicySnapshot Snapshot() => new()
+    {
+        DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+        TriggerMode = AuthoritativeSourceTriggerMode.AllSourcesDisconnect,
+        SelectedSourceSystemNames = ["HR", "Payroll"],
+        RemainingConnectedSourceSystemNames = ["Payroll"]
+    };
+
+    /// <summary>
+    /// The one thing the causality views structurally cannot derive from outcomes. A Deletion Rule that
+    /// evaluates and declines records nothing, because nothing happened; without a synthetic event the page
+    /// says only that the record disconnected and leaves the reader to wonder what became of the Identity.
+    /// </summary>
+    [Test]
+    public void Build_SyncDisconnectionWhereTheDeletionRuleDeclined_AddsASyntheticIdentityEvent()
+    {
+        var model = CausalityModelBuilder.Build(DisconnectedItem(), CausalityTestData.NewJoinerContext(),
+            deletionPolicySnapshot: Snapshot(), isSynchronisationRun: true);
+
+        var synthetic = model.AllEvents().SingleOrDefault(e => e.IsSynthetic);
+
+        Assert.That(synthetic, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(synthetic!.Lane, Is.EqualTo(CausalityLane.Identity));
+            Assert.That(synthetic!.OutcomeType, Is.Null, "nothing was recorded, so there is no outcome to name");
+            Assert.That(synthetic!.PlainLabel, Is.EqualTo("Identity not deleted"));
+            Assert.That(synthetic!.TechnicalLabel, Is.EqualTo("Metaverse Object not deleted"));
+        }
+    }
+
+    [Test]
+    public void Build_ImportDisconnection_AddsNoSyntheticEvent()
+    {
+        // Only a Synchronisation evaluates the Deletion Rule. An import detects the deletion and stops, so
+        // there is no decision yet to report and claiming one would be a lie about what the run did.
+        var model = CausalityModelBuilder.Build(DisconnectedItem(), CausalityTestData.NewJoinerContext(),
+            deletionPolicySnapshot: Snapshot(), isSynchronisationRun: false);
+
+        Assert.That(model.AllEvents().Any(e => e.IsSynthetic), Is.False);
+    }
+
+    [Test]
+    public void Build_WithNoPolicySnapshot_AddsNoSyntheticEvent()
+    {
+        // The snapshot is the only supported source of the explanation: it records the rule as it was in force
+        // at decision time, and there is deliberately no fallback to the object type's current configuration.
+        var model = CausalityModelBuilder.Build(DisconnectedItem(), CausalityTestData.NewJoinerContext(),
+            deletionPolicySnapshot: null, isSynchronisationRun: true);
+
+        Assert.That(model.AllEvents().Any(e => e.IsSynthetic), Is.False);
+    }
+
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled)]
+    public void Build_WhereTheDeletionRuleFired_AddsNoSyntheticEvent(
+        ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        var item = DisconnectedItem();
+        item.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            Id = Guid.NewGuid(),
+            OutcomeType = outcomeType,
+            Ordinal = item.SyncOutcomes.Count
+        });
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext(),
+            deletionPolicySnapshot: Snapshot(), isSynchronisationRun: true);
+
+        Assert.That(model.AllEvents().Any(e => e.IsSynthetic), Is.False,
+            "the deletion happened, so the recorded outcome is the answer and a synthetic one would contradict it");
+    }
+
+    [Test]
+    public void Build_SyntheticEvent_IsExcludedFromTheOutcomePills()
+    {
+        // The strip counts what the run recorded. A pill for something it decided not to do would read as an
+        // outcome, and the count beside it would be a count of non-events.
+        var model = CausalityModelBuilder.Build(DisconnectedItem(), CausalityTestData.NewJoinerContext(),
+            deletionPolicySnapshot: Snapshot(), isSynchronisationRun: true);
+
+        var summary = CausalitySummaryBuilder.Build(model);
+
+        Assert.That(summary.Pills.Count, Is.EqualTo(
+            CausalitySummaryBuilder.Build(CausalityModelBuilder.Build(
+                DisconnectedItem(), CausalityTestData.NewJoinerContext())).Pills.Count));
+    }
+
+    #endregion
+
+    /// <summary>
+    /// A Metaverse Object link is only ever built where the object's type plural name is known, because
+    /// that is what the route is keyed on (<c>/t/{plural}/v/{id}</c>). The fallback used to invent
+    /// <c>/identity/search/{id}</c>, which is not a route in this application and never has been, so on
+    /// any item whose type could not be resolved (a synchronisation whose record has since been deleted
+    /// is the common one) every Identity on the panel pointed at a page that does not exist. An unlinked
+    /// name is the honest answer: a link that goes nowhere reads as an affordance and is not one.
+    /// </summary>
+    [Test]
+    public void Build_IdentityLinkWithNoObjectTypePluralName_RendersUnlinkedRatherThanAnInventedRoute()
+    {
+        var context = CausalityTestData.NewJoinerContext() with { MvoTypePluralName = null };
+
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+
+        var identityLinks = model.AllEvents()
+            .SelectMany(e => e.Links)
+            .Where(l => l.Kind == CausalityEntityKind.Identity)
+            .ToList();
+        Assert.That(identityLinks, Is.Not.Empty, "the new joiner story names its Identity");
+        Assert.That(identityLinks.Select(l => l.Href), Has.All.Null);
+    }
+
+    /// <summary>
+    /// The other half: where the plural name is known the link is the real route, so suppressing the
+    /// invented one costs nothing that worked.
+    /// </summary>
+    [Test]
+    public void Build_IdentityLinkWithAnObjectTypePluralName_UsesTheMetaverseObjectRoute()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var identityLink = model.AllEvents()
+            .SelectMany(e => e.Links)
+            .First(l => l.Kind == CausalityEntityKind.Identity && l.Href != null);
+        Assert.That(identityLink.Href, Does.StartWith("/t/people/v/"));
     }
 }

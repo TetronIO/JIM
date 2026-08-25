@@ -1070,6 +1070,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     private LdapConnectorPassword? _passwordChannel;
 
     /// <summary>
+    /// Whether the open password channel is encrypted, recorded when it opens so JIM can apply the Connected
+    /// System's "Require Secure Transport" setting to it.
+    /// </summary>
+    private bool _passwordChannelSecure;
+
+    /// <summary>
     /// The password channel binds its own connection rather than sharing the import and export one.
     /// <para>
     /// Delivering an initial password happens partway through an export session, so borrowing that session's
@@ -1108,6 +1114,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// alternative that JIM cannot detect from the settings alone.
     /// </para>
     /// </summary>
+    public bool IsPasswordChannelSecure => _passwordChannelSecure;
+
     public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings)
     {
         var useSecureConnection = settings.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection);
@@ -1128,6 +1136,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         var supportsPasswordModifyExtension = DirectorySupportsPasswordModifyExtension(connection);
 
         _passwordChannel = new LdapConnectorPassword(new LdapOperationExecutor(connection), Log.Logger, directoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
+        _passwordChannelSecure = isConnectionEncrypted;
 
         Log.Debug("OpenPasswordConnection: Password channel open. DirectoryType={DirectoryType}, PasswordModifyExtensionSupported={Supported}, Encrypted={Encrypted}",
             directoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
@@ -1152,6 +1161,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     public void ClosePasswordConnection()
     {
         _passwordChannel = null;
+        _passwordChannelSecure = false;
         _passwordConnection?.Dispose();
         _passwordConnection = null;
     }

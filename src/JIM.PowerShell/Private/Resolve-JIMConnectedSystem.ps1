@@ -25,8 +25,9 @@ function Resolve-JIMConnectedSystem {
 
     Write-Verbose "Resolving Connected System name: $Name"
 
-    $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems"
-    $systems = if ($response.items) { $response.items } else { $response }
+    # The list endpoint is paginated with a server-side default page size, so read every page;
+    # a name beyond the first page could otherwise never resolve (#894).
+    $systems = Get-JIMPagedItems -Endpoint "/api/v1/synchronisation/connected-systems"
 
     # Exact match only for resolution
     $matches = @($systems | Where-Object { $_.name -eq $Name })

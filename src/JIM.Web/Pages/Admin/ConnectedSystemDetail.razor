@@ -90,7 +90,7 @@ else if (_drift is { TrackingDisabled: true })
 
 @if (_connectedSystem != null)
 {
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true">
+    <NavigableMudTabs TabPanelsClass="pt-5" Class="mt-2">
 
         <MudTabPanel Text="Details">
             <ConnectedSystemDetailsTab ConnectedSystem="_connectedSystem" />
@@ -120,12 +120,23 @@ else if (_drift is { TrackingDisabled: true })
 
         <MudTabPanel Text="Matching" Disabled="@IsObjectMatchingTabDisabled()">
             <ConnectedSystemObjectMatchingTab ConnectedSystem="_connectedSystem"
-                                              MetaverseAttributes="_metaverseAttributes!" />
+                                              MetaverseAttributes="_metaverseAttributes!"
+                                              MetaverseObjectTypes="_metaverseObjectTypes!" />
         </MudTabPanel>
 
         <MudTabPanel Text="Run Profiles" Disabled="@IsRunProfilesTabDisabled()">
             <ConnectedSystemRunProfilesTab ConnectedSystem="_connectedSystem" />
         </MudTabPanel>
+
+        @* Hidden rather than disabled where the Connector has no password channel: there is nothing here to
+            configure at all, and a disabled tab reads as something that could be switched on. *@
+        @if (_connectedSystem.ConnectorDefinition.SupportsPasswordSet)
+        {
+            <MudTabPanel Text="Passwords" Disabled="@AreSettingDependentTabsDisabled()">
+                <ConnectedSystemPasswordSynchronisationTab ConnectedSystem="_connectedSystem"
+                                                           OnConnectedSystemChanged="ReloadConnectedSystemAsync" />
+            </MudTabPanel>
+        }
 
         <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
             <ConfigurationChangesTab TargetType="ActivityTargetType.ConnectedSystem" ObjectId="_connectedSystem.Id" ObjectTypeLabel="Connected System" />
@@ -157,6 +168,10 @@ else if (_drift is { TrackingDisabled: true })
     private IList<MetaverseAttribute>? _metaverseAttributes;
 
     private AuxiliaryClassDiscoveryRun? _latestAuxiliaryClassDiscoveryRun;
+
+    // A Simple mode Object Matching Rule has to name the Metaverse Object Type it searches, so the Matching tab
+    // needs the list to offer (#1458).
+    private IList<MetaverseObjectType>? _metaverseObjectTypes;
 
 
     protected override async Task OnInitializedAsync()
@@ -205,6 +220,7 @@ else if (_drift is { TrackingDisabled: true })
         _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(Id);
         _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, Id, 1, 1)).TotalResults;
         _metaverseAttributes ??= await jim.Metaverse.GetMetaverseAttributesAsync();
+        _metaverseObjectTypes ??= await jim.Metaverse.GetMetaverseObjectTypesAsync(false);
 
         // Loaded here rather than by the Schema tab's Auxiliary Classes panel, which is rendered once per Object
         // Type: the run belongs to the whole Connected System, and a panel that fetched it for itself would query

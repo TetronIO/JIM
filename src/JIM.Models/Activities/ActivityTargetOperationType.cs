@@ -52,10 +52,28 @@ public enum ActivityTargetOperationType
     /// </summary>
     SetPassword = 12,
     /// <summary>
+    /// The data-removal task of the schema refresh decision's "Apply and Remove" option (#1485): Connected
+    /// System Objects of removed Object Types marked Obsolete and stored values of removed attributes deleted,
+    /// executed by the worker under this Activity with per-object results.
+    /// </summary>
+    SchemaRefreshRemoval = 13,
+
+    /// <summary>
+    /// An administrator asked JIM to attempt queued password changes again, having fixed whatever stopped them
+    /// (#1119, requirement 22).
+    /// </summary>
+    RetryPasswordDelivery = 14,
+
+    /// <summary>
+    /// An administrator stopped queued password changes being delivered (#1119, requirement 22).
+    /// </summary>
+    CancelPasswordDelivery = 15,
+
+    /// <summary>
     /// Reads a Connected System's objects to find out which auxiliary classes they carry (#492). Used with
     /// <see cref="ActivityTargetType.ConnectedSystem"/>. Distinct from <see cref="ImportSchema"/> because it reads
     /// objects rather than schema, and changes nothing: what it finds is recorded as suggestions an administrator
     /// may act on, never as configuration.
     /// </summary>
-    DiscoverAuxiliaryClasses = 13
+    DiscoverAuxiliaryClasses = 16
 }

@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
@@ -648,6 +648,13 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
 
+    /// <summary>
+    /// The names of a Connected System's Object Types, keyed by id: a lightweight projection for resolving
+    /// a Reference attribute's declared target name (#1285) without loading the ReferencedObjectType
+    /// navigation into an entity graph a mutating path might attach.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetObjectTypeNamesAsync(int connectedSystemId);
+
     public Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
@@ -794,6 +801,14 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="id">The unique identifier of the mapping.</param>
     Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id);
+
+    /// <summary>
+    /// Gets a specific Synchronisation Rule mapping by ID, tracked, so that a caller mutating and saving it
+    /// actually persists the change. Use this only on write paths; ordinary reads take
+    /// <see cref="GetSyncRuleMappingAsync"/>.
+    /// </summary>
+    /// <param name="id">The unique identifier of the mapping.</param>
+    Task<SyncRuleMapping?> GetSyncRuleMappingForUpdateAsync(int id);
 
     /// <summary>
     /// Creates a new Synchronisation Rule mapping.
@@ -1000,6 +1015,52 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(int connectedSystemId);
 
     /// <summary>
+    /// Gets a Connected System's Password Synchronisation configuration (#1119), or null where Password
+    /// Synchronisation has never been configured on it.
+    /// <para>
+    /// Read on its own for the same reason as the discovered policy above: the callers that need it (the
+    /// configuration editor, the API, and the comparison that decides whether saving releases parked work) do not
+    /// all arrive holding a fully loaded Connected System, and a navigation nobody loaded is indistinguishable
+    /// from a system nobody has configured.
+    /// </para>
+    /// </summary>
+    public Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Every Connected System configured and enabled to receive synchronised passwords (#1119), flattened to what
+    /// fan-out needs.
+    /// <para>
+    /// Asked on every password change, so it is a projection rather than a graph load: the alternative would
+    /// materialise every configured Connected System to read three fields off each.
+    /// </para>
+    /// </summary>
+    public Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync();
+
+    /// <summary>
+    /// Where each of the named Connected Systems stands on Password Synchronisation (#1119, requirement 26).
+    /// <para>
+    /// Batched because the caller is a list: asking per row would be an N+1 over a page that already loads its
+    /// drift and initial-password indicators in one call each. Systems whose Connector cannot set passwords are
+    /// reported as <see cref="PasswordSynchronisationState.NotSupported"/> rather than omitted, so a row that has
+    /// no answer is distinguishable from one whose answer has not arrived.
+    /// </para>
+    /// </summary>
+    public Task<Dictionary<int, PasswordSynchronisationState>> GetPasswordSynchronisationStatesAsync(IReadOnlyCollection<int> connectedSystemIds);
+
+    /// <summary>
+    /// Loads a Connected System with exactly what a Password Synchronisation delivery pass needs (#1119): its
+    /// Connector Definition, its settings, and its Password Synchronisation configuration.
+    /// <para>
+    /// Purpose-built rather than one of the named weights, because neither fits. Core omits the Password
+    /// Synchronisation configuration, which delivery always needs, and loads Run Profiles, which delivery never
+    /// reads; Full adds the partition and container tree on top of that. A delivery pass runs whenever somebody
+    /// changes a password, so it materialises what it uses and nothing else.
+    /// </para>
+    /// </summary>
+    /// <returns>The Connected System, or null where it no longer exists.</returns>
+    public Task<ConnectedSystem?> GetConnectedSystemForPasswordDeliveryAsync(int connectedSystemId);
+
+    /// <summary>
     /// Returns the count of all Connected System Objects across all Connected Systems.
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountAsync();
@@ -1033,6 +1094,135 @@ public interface IConnectedSystemRepository
     /// </remarks>
     /// <param name="connectedSystemId">The Connected System whose objects to stream.</param>
     public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId);
+
+    /// <summary>
+    /// Streams the joined Connected System Objects of one type in a Connected System, with the attribute values
+    /// and type loaded that Synchronisation Rule scope evaluation reads, for previewing what a destructive
+    /// Synchronisation Rule toggle would do to the objects the rule stands over (#1115).
+    /// </summary>
+    /// <remarks>
+    /// Streamed and untracked for the same reason as <see cref="StreamConnectedSystemObjectScopeCandidates"/>:
+    /// previews run over whole connector spaces. Only joined objects are streamed because both destructive
+    /// toggles decide the fate of a join; an unjoined object has nothing to disconnect, keep or delete. Ordered
+    /// so a preview re-run over unchanged data produces its groups in the same order.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose objects to stream.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type the rule targets.</param>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamJoinedConnectedSystemObjects(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// Streams every Connected System Object of one type in a Connected System, joined or not, with the attribute
+    /// values a Scoping Criteria evaluation reads.
+    /// </summary>
+    /// <remarks>
+    /// The unjoined objects are the point of this over
+    /// <see cref="StreamJoinedConnectedSystemObjects"/>: a scope change decides which objects a rule manages at
+    /// all, so the objects a widened scope would newly project are exactly the ones that have no Metaverse Object
+    /// yet. Streamed and untracked for the same reason as the other scope reads.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System to stream from.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type to stream.</param>
+    public IAsyncEnumerable<ConnectedSystemObject> StreamConnectedSystemObjectsOfType(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many Connected System Objects of one type a Connected System holds, joined or not. The cheap cost
+    /// estimate behind a scope-change preview.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to count in.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type to count.</param>
+    public Task<int> GetConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's live, unjoined objects of one type: the population a
+    /// synchronisation would put to Object Matching on its next run.
+    /// </summary>
+    /// <remarks>
+    /// Identifiers rather than objects, and a list rather than a stream, because the caller queries the database
+    /// per object it evaluates. Holding a result-set reader open across those queries is what Npgsql refuses (one
+    /// command per connection), so the population is read once and the objects are fetched in batches behind it.
+    /// </remarks>
+    public Task<List<Guid>> GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many live, unjoined objects of one type a Connected System holds. The count behind
+    /// <see cref="GetUnjoinedConnectedSystemObjectIdsOfTypeAsync"/>, for callers that need the size before
+    /// deciding whether to read the population at all.
+    /// </summary>
+    public Task<int> GetUnjoinedConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type, joined or not: the population that stops
+    /// being imported when the type is deselected (#1475).
+    /// </summary>
+    /// <remarks>
+    /// Identifiers rather than objects, for the reason
+    /// <see cref="GetUnjoinedConnectedSystemObjectIdsOfTypeAsync"/> gives: the caller fetches in batches behind the
+    /// population read, because Npgsql allows one command per connection.
+    /// </remarks>
+    public Task<List<Guid>> GetLiveConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's live objects of one type that hold at least one value for a given
+    /// attribute: the population whose values freeze when that attribute is deselected (#1475). Objects holding no
+    /// value for it have nothing to freeze, so reporting them would inflate the count with objects the change does
+    /// not touch.
+    /// </summary>
+    public Task<List<Guid>> GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId, int attributeId);
+
+    /// <summary>
+    /// The identifiers of a Connected System's obsolete objects of one type that are still joined to a Metaverse
+    /// Object: the objects awaiting the synchronisation that will disconnect them, and therefore the population
+    /// whose fate changes when Remove Contributed Attributes On Obsoletion is toggled (#1475).
+    /// </summary>
+    public Task<List<Guid>> GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(int connectedSystemId,
+        int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// Returns the count of joined Connected System Objects of one type in a Connected System: the population a
+    /// destructive Synchronisation Rule toggle preview walks, counted set-based for the dispatch decision (#1115).
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type the rule targets.</param>
+    public Task<int> GetJoinedConnectedSystemObjectCountAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many live (Normal-status) Connected System Objects of one type a Connected System holds: the count
+    /// behind <see cref="GetLiveConnectedSystemObjectIdsOfTypeAsync"/>, and the "would be marked Obsolete"
+    /// figure on the schema refresh removal preview (#1485).
+    /// </summary>
+    public Task<int> GetLiveConnectedSystemObjectCountOfTypeAsync(int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// How many stored attribute value rows a Connected System holds for one attribute, across all of its
+    /// objects: the "stored values that would be deleted" figure on the schema refresh removal preview (#1485).
+    /// </summary>
+    public Task<int> GetConnectedSystemAttributeValueCountAsync(int connectedSystemId, int attributeId);
+
+    /// <summary>
+    /// Marks the given Connected System Objects Obsolete (set-based; only Normal-status rows are touched) so
+    /// they flow through disconnection, attribute recall, grace periods and Metaverse Deletion Rules on the
+    /// next synchronisation run. The schema refresh removal task's bulk sibling of the per-object obsoletion
+    /// an import performs when an object disappears from the feed (#1485).
+    /// </summary>
+    /// <returns>How many objects were marked Obsolete.</returns>
+    public Task<int> ObsoleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Deletes the Pending Exports (and their attribute value changes) targeting the given Connected System
+    /// Objects, exactly as import-detected deletions delete them: an export against an object the source no
+    /// longer holds must never run (#1485).
+    /// </summary>
+    /// <returns>How many Pending Exports were deleted.</returns>
+    public Task<int> DeletePendingExportsForConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Deletes every stored attribute value of the given attributes across a Connected System's objects: the
+    /// schema refresh removal task's disposal of values whose attribute the Connected System no longer reports
+    /// (#1485). References from change history to the deleted values are cleared first.
+    /// </summary>
+    /// <returns>How many attribute value rows were deleted.</returns>
+    public Task<int> DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.

@@ -30,9 +30,30 @@ New-JIMConfigurationChangePreview -ConnectedSystemId <int>
     [-SelectedPartitionIds <int[]>] [-SelectedContainerIds <int[]>]
     [-ExcludedContainerIds <int[]>]
     [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -SyncRuleId <int>
+    [-OutboundDeprovisionAction <string>] [-InboundOutOfScopeAction <string>]
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -SyncRuleId <int> -ScopingCriteriaGroup <hashtable[]>
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -SyncRuleId <int> -AttributeFlowMapping <hashtable[]>
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -SyncRuleId <int> -RuleState <string>
+    [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>] [-EnforceState <bool>]
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -ConnectedSystemId <int> -MatchingRule <hashtable[]>
+    [-ObjectMatchingRuleMode <string>]
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -ConnectedSystemId <int> -SchemaObjectType <hashtable[]>
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
 ```
 
-Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews that type's deletion settings, `-ConnectedSystemId` previews that system's partition and container selection.
+Which identifier you pass selects the entity, and the parameters beside it select the surface. `-MetaverseObjectTypeId` previews that type's deletion settings. `-ConnectedSystemId` previews that system's partition and container selection, or, with `-MatchingRule`, its Object Matching Rules, or, with `-SchemaObjectType`, its schema selection. `-SyncRuleId` previews a Synchronisation Rule's destructive toggles, or, with `-ScopingCriteriaGroup`, its Scoping Criteria, or, with `-AttributeFlowMapping`, its Attribute Flow, or, with `-RuleState`, its behaviour toggles.
 
 ### Parameters
 
@@ -47,13 +68,31 @@ Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews
 | `DeletionGracePeriod` | `TimeSpan` | No | stored value | The proposed grace period. `[TimeSpan]::Zero` previews no grace period. |
 | `DeletionTriggerConnectedSystemIds` | `int[]` | No | stored value | The proposed authoritative sources. |
 | `DeletionTriggerMode` | `string` | No | stored value | `AllSourcesDisconnect` or `SpecificSourcesDisconnect`. |
+| `SyncRuleId` | `int` | Yes | | The Synchronisation Rule whose destructive toggles are being proposed. Accepts pipeline input by property name. |
+| `OutboundDeprovisionAction` | `string` | No | stored value | `Disconnect` or `Delete`: what happens to a joined target object when its Metaverse Object leaves this export rule's scope. |
+| `InboundOutOfScopeAction` | `string` | No | stored value | `RemainJoined` or `Disconnect`: what happens to a joined Connected System Object that leaves this import rule's scope or is obsoleted. |
+| `ScopingCriteriaGroup` | `hashtable[]` | Yes | | The proposed Scoping Criteria, one hashtable per top-level group. Groups are combined with OR. Each takes a `Type` of `All` or `Any`, a `Criteria` array, and an optional `ChildGroups` array of further groups. Each criterion names one attribute by id (`ConnectedSystemAttributeId` on an import rule, `MetaverseAttributeId` on an export rule), a `ComparisonType`, and the value in the field matching the attribute's data type. |
+| `AttributeFlowMapping` | `hashtable[]` | Yes | | The proposed Attribute Flow, one hashtable per mapping. Each names the attribute it writes (`TargetMetaverseAttributeId` on an import rule, `TargetConnectedSystemAttributeId` on an export rule) and a `Sources` array; a source takes an `Order` and either an attribute id (`ConnectedSystemAttributeId` on an import rule, `MetaverseAttributeId` on an export rule) or an `Expression` with an optional `MissingInputBehaviour`. A mapping may also carry `Priority`, `NullIsValue`, `InitialExportOnly`, `InboundValueProcessing` and `CaseNormalisation`. |
+| `RuleState` | `string` | Yes | | `Enabled` or `Disabled`: whether the rule would run at all. Mandatory because the toggle it sets is a boolean, so a caller who left it out could not be told apart from one proposing to switch the rule off. |
+| `ProjectToMetaverse` | `bool` | No | stored value | Whether the rule would create Metaverse Objects for the in-scope objects that match none. |
+| `ProvisionToConnectedSystem` | `bool` | No | stored value | Whether the rule would create objects in the target Connected System for the in-scope Metaverse Objects that have none. |
+| `EnforceState` | `bool` | No | stored value | Whether the rule would go on correcting drift in the target Connected System. |
+| `MatchingRule` | `hashtable[]` | Yes | | The proposed Object Matching Rules, one hashtable per rule. Each takes an `Order`, the parent it belongs to (`ConnectedSystemObjectTypeId` in Simple mode, `SyncRuleId` in Advanced), a `MetaverseObjectTypeId`, a `TargetMetaverseAttributeId`, `CaseSensitive`, and a `Sources` array of `Order` and `ConnectedSystemAttributeId`. |
+| `ObjectMatchingRuleMode` | `string` | No | stored mode | `ConnectedSystem` (Simple) or `SyncRule` (Advanced). Pass it to preview the switch between them. |
+| `SchemaObjectType` | `hashtable[]` | Yes | | The proposed schema selection, one hashtable per Connected System Object Type being changed. Each needs `objectTypeId`, and then only the keys being changed: `selected`, `removeContributedAttributesOnObsoletion`, and `selectedAttributeIds`. |
 | `FullDataSet` | `switch` | No | off | Keep every object-level detail row rather than the per-group cap's worth. Summary counts are exact either way. |
 | `Wait` | `switch` | No | off | Poll until the preview finishes and return the finished preview. |
 | `TimeoutSeconds` | `int` | No | `300` | How long `-Wait` polls before giving up. The preview keeps running; read it later with `Get-JIMConfigurationChangePreview`. |
 
-`MetaverseObjectTypeId` and `ConnectedSystemId` are mutually exclusive: each is mandatory in its own parameter set.
+`MetaverseObjectTypeId`, `ConnectedSystemId` and `SyncRuleId` are mutually exclusive: each is mandatory in its own parameter set.
 
-An omitted deletion setting previews the stored value, exactly as [`Set-JIMMetaverseObjectType`](metaverse.md#set-jimmetaverseobjecttype) treats an omitted parameter. Pass the same parameters to both and the preview describes precisely what the change will do.
+An omitted deletion setting previews the stored value, exactly as [`Set-JIMMetaverseObjectType`](metaverse.md#set-jimmetaverseobjecttype) treats an omitted parameter. Pass the same parameters to both and the preview describes precisely what the change will do. The destructive toggles work the same way against [`Set-JIMSyncRule`](synchronisation-rules.md#set-jimsyncrule): an omitted toggle previews the stored action.
+
+`ScopingCriteriaGroup` is mandatory, and `@()` is a valid and deliberate value: it proposes removing every criterion, which puts every object of the rule's type in scope. That is the widest change the Scope tab can make, so the cmdlet requires it to be asked for rather than arrived at by omitting a parameter.
+
+`AttributeFlowMapping` is mandatory for the same reason, and `@()` likewise proposes removing every mapping, so the rule flows nothing. Pass `Priority` deliberately on an import mapping: it defaults to the lowest, so a mapping proposed for an attribute another rule already contributes to would be evaluated and then write nothing, and the preview reports that as a validation finding rather than as values that would never be written.
+
+`SchemaObjectType` is mandatory, and every omission inside it means "leave this as it stands", at both levels: an Object Type not named is left alone, and a key not set keeps that Type's stored value. That matters more here than on the other surfaces, because every type default is the destructive answer: an absent `selected` read as `$false` would propose taking a whole Object Type out of management on a request that meant to change one attribute. Send the whole attribute set for a Type rather than the attributes that changed; External IDs are selected implicitly and need not be listed, and deselecting one is refused with a blocking finding.
 
 An omitted selection list likewise previews the stored selection. Pass the whole selection rather than one flag, because what a deselection costs depends on the rest of it: an object leaves import scope only when nothing else still covers it. An **empty** list is a real proposal and is sent as one, so `-SelectedContainerIds @()` previews deselecting every container, and `-ExcludedContainerIds @()` previews lifting every exclusion, which brings those branches back into scope.
 
@@ -98,6 +137,60 @@ $preview.ImpactCounts | Format-Table TransitionType, ObjectCount
 ```powershell title="Check what a narrowed scope would put on course for deletion"
 $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedPartitionIds 5 -Wait
 $preview.ImpactCounts | Where-Object TransitionType -eq 'WouldBecomeDeletionEligible'
+```
+
+```powershell title="Preview flipping an export rule's Deprovisioning Action to Delete"
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -OutboundDeprovisionAction Delete -Wait
+$preview.ImpactCounts | Format-Table TransitionType, ObjectCount
+```
+
+```powershell
+$group = @{
+    Type = 'All'
+    Criteria = @(
+        @{ ConnectedSystemAttributeId = 101; ComparisonType = 'Equals'; StringValue = 'Sales' }
+    )
+}
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup $group -Wait
+$preview.ImpactCounts
+```
+
+Reports what narrowing an import Synchronisation Rule to the Sales department would do: how many joined objects would leave scope and disconnect from their Metaverse Objects, how many unjoined ones simply stop matching, and how many objects would newly enter scope and be projected.
+
+```powershell
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -ScopingCriteriaGroup @() -Wait
+$preview.ImpactCounts | Where-Object transitionType -eq 'Projected'
+```
+
+Reports what removing every Scoping Criterion would do, which puts every object of the rule's type in scope. The `Projected` count is how many Metaverse Objects that would create.
+
+```powershell
+$mapping = @{
+    TargetMetaverseAttributeId = 201
+    Priority = 1
+    Sources = @(
+        @{ Order = 1; Expression = 'cs["givenName"] + "." + cs["sn"] + "@corp.local"'; MissingInputBehaviour = 'FailMapping' }
+    )
+}
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping -Wait
+$preview.ImpactCounts
+```
+
+Reports what an email cutover would write: how many identities' addresses change, and how many objects the Expression could not be evaluated for at all because a required input is missing.
+
+```powershell
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -AttributeFlowMapping $mapping -FullDataSet -Wait
+Get-JIMConfigurationChangePreviewDelta -ActivityId $preview.ActivityId |
+    Where-Object transitionType -eq 'WouldFailAttributeFlow'
+```
+
+Keeps every detail row and lists the objects the proposed Expression would not evaluate for, which is the handful the cutover would otherwise leave without an address.
+
+```powershell title="Apply a tightened Out-of-Scope Action only when nothing disconnects today"
+$preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -InboundOutOfScopeAction Disconnect -Wait
+if (-not $preview.HasFailed -and ($preview.ImpactCounts | Measure-Object ObjectCount -Sum).Sum -eq 0) {
+    Set-JIMSyncRule -Id 42 -InboundOutOfScopeAction Disconnect -PreviewActivityId $preview.ActivityId
+}
 ```
 
 ---
@@ -239,5 +332,7 @@ Stop-JIMConfigurationChangePreview -ActivityId "019fc824-f8c6-7588-8d9a-24a295e7
 
 - [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it) -- what previews are and how to read them
 - [Metaverse](../configuration/metaverse.md#previewing-a-deletion-settings-change) -- what a deletion settings preview evaluates
+- [Synchronisation Rules](../configuration/synchronisation-rules.md#previewing-a-destructive-toggle-change) -- what a destructive toggle preview evaluates
 - [Metaverse cmdlets](metaverse.md#set-jimmetaverseobjecttype) -- applying a previewed change with `-PreviewActivityId`
+- [Synchronisation Rule cmdlets](synchronisation-rules.md#set-jimsyncrule) -- applying a previewed toggle change with `-PreviewActivityId`
 - [Activities](activities.md) -- the Activity a preview runs as, and the one the change it informed is recorded under

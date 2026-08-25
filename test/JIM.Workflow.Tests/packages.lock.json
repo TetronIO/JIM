@@ -85,8 +85,8 @@
       },
       "DynamicExpresso.Core": {
         "type": "Transitive",
-        "resolved": "2.19.3",
-        "contentHash": "84cSMvhcLON2JUQshIvcEAGMtE5rI7FOlcCT0QC42XPZ12A//qDHWKrB5QUfRrQQlDZZZ7TiLAm7mcrywygmpg=="
+        "resolved": "2.19.5",
+        "contentHash": "YusirfwxsmkxKLyTTb4deXq0nMs/r6qLWik6pFQtwti1RqlLjpFyewABiUKAlmS7uPdmZO5RZZsv42BBz7prvQ=="
       },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
@@ -729,7 +729,7 @@
       "jim.application": {
         "type": "Project",
         "dependencies": {
-          "DynamicExpresso.Core": "[2.19.3, )",
+          "DynamicExpresso.Core": "[2.19.5, )",
           "JIM.Connectors": "[0.14.0, )",
           "JIM.Data": "[0.14.0, )",
           "JIM.Models": "[0.14.0, )",
@@ -795,7 +795,8 @@
       "jim.testsupport": {
         "type": "Project",
         "dependencies": {
-          "NUnit": "[4.6.1, )"
+          "NUnit": "[4.6.1, )",
+          "Npgsql": "[10.0.3, )"
         }
       },
       "jim.utilities": {

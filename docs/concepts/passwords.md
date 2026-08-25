@@ -156,8 +156,124 @@ The practical consequence is that **attributes holding credentials cannot be man
 
 It also means JIM writes passwords the way each directory expects rather than writing an attribute: for Active Directory it sets `unicodePwd` with the correct encoding, and elsewhere it uses the standard LDAP Password Modify operation. It never writes a password attribute directly, because directories store a directly written value exactly as supplied, which would leave the password readable in the directory.
 
-!!! note "Synchronising passwords between systems is a separate capability"
-    Everything on this page concerns JIM writing a password **to** a system. Capturing a password change in one system and replaying it into others is not yet available.
+## 🔁 Password Synchronisation
+
+Everything above concerns setting a password on one account, at the moment you ask. Password Synchronisation is the other half: one password change reaching **every** system that person has an account in, durably, without you standing over it.
+
+You configure it per Connected System, on the **Passwords** tab of the Connected System, and it appears only on systems whose connector can set passwords at all. Two settings, and one deliberate separation between them:
+
+- **The configuration** says which Object Type holds the accounts, how many delivery attempts to make before JIM stops and asks you to look, how long to wait before the first retry, and whether to refuse to transmit over a connection JIM cannot confirm is encrypted.
+- **The enable toggle** is separate from the configuration existing, so you can set a system up ahead of a change window and switch it on during one. A configured system that is switched **off** does not discard password changes: they accumulate, and switching it on delivers what accumulated.
+
+That is also why there is no way to remove a configuration, only to disable it. Removing one would throw away everything queued against it.
+
+How long a change waits before JIM gives up on it is the Connected System's **initial password time to live** setting, shared with initial password provisioning: the question both are asking is how long that system may be unavailable before JIM stops trying, and the answer is a property of the system.
+
+### ▶️ Starting a synchronised password change
+
+JIM has two ways to give somebody a password, and they answer different questions.
+
+| | **Set Password** | **Synchronise Password** |
+|---|---|---|
+| Answers | "Change this person's password in the systems I choose" | "This person's password changed; every system should hold it" |
+| Reaches | The accounts you tick | Every Connected System enabled for Password Synchronisation |
+| When | Immediately, while you wait | Recorded now, delivered on its own clock |
+| If a system is down | That account fails, and you are told | Queued and retried until it works or the window closes |
+| Told to you | Success or failure per account | Which systems it was queued for |
+
+Use **Set Password** when you are choosing the password yourself and applying it to systems you name: onboarding somebody, or putting right an account whose password was refused or forgotten. Use **Synchronise Password** when they have already changed their own password somewhere and the rest should catch up.
+
+Both are on the Metaverse Object's Actions tab, and both are available to automation:
+
+```powershell
+# Change the password on chosen accounts, now
+Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId 3 -Password $password
+
+# Propagate a password change everywhere it belongs
+Sync-JIMMetaverseObjectPassword -Id $id -Password $password
+```
+
+Over REST, that is `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password` and `POST /api/v1/metaverse/objects/{id}/password` respectively. Every endpoint that accepts a password refuses the request unless JIM can confirm the connection is encrypted; if TLS terminates at a reverse proxy, set `JIM_TRUSTED_PROXIES` so JIM reads the forwarded scheme rather than the hop it can see.
+
+### 📬 How a password change reaches a system
+
+A password change is recorded first and delivered afterwards, never in the same breath. The person changing their password must not be held waiting on a directory, and their new password must not fail to take because one of the systems they have an account in happens to be down. So JIM writes one queued change per target system, encrypted, and returns; delivery runs on its own.
+
+What happens to a queued change:
+
+- **It is delivered, and disappears.** Nothing is kept once the target has the password: there is no value worth retaining and every reason not to.
+- **It is retried.** A target that was unreachable, or that failed in a way another attempt may resolve, gets one. Each wait is twice as long as the one before it, starting from the backoff you configured, and never longer than the time the change has left.
+- **It is parked, and waits for you.** A target that *refused* the password, or that cannot do what was asked at all, will refuse it identically next time; JIM stops rather than burning the attempts. So does a change that has used all of them. Parked work is released, and tried again, the moment you change what would be delivered to that system: switching Password Synchronisation on, or correcting a setting.
+- **It expires.** A change that outlives its time to live is retired with its last failure recorded, rather than delivering a password the person may have changed twice since.
+
+A change for someone who changes their password again before the first one is delivered replaces the first, rather than queueing behind it. Only the newest password is ever sent.
+
+Delivery is a Password Delivery task in the Operations queue, so a pass is visible while it runs and its outcome is recorded as an Activity like any other work. A pass is raised when a password change is queued, when you enable Password Synchronisation on a system (to deliver what accumulated), and by JIM itself when a retry falls due.
+
+### 🔎 Watching the queue
+
+Delivery works on its own, which is exactly why you need somewhere to look when it does not. The **Password Synchronisation** page under Administration lists every change on its way to a Connected System, one row per person per system, with what the target said about it.
+
+It never shows a password, and cannot: the queued value is encrypted in the database and has no representation on any page, in any API response, or in any log line.
+
+Four counts sit above the list:
+
+- **Waiting**<br /> Changes JIM still intends to deliver. The second line says how many of those a delivery pass would attempt right now; the rest are waiting out a retry backoff. A large waiting count with nothing due is a queue working through its backoffs. A large due count is a queue that is not being drained.
+- **Parked**<br /> The target refused them, or they ran out of attempts. These wait on you.
+- **Expired**<br /> They outlived their time to live. The password each carried is gone, so nothing can deliver them now.
+- **Cancelled**<br /> You stopped them. Counted rather than hidden, because that person's password is still divergent on that system and the count is the only thing that says so.
+
+Filter by Connected System, by state, or by how the last attempt failed, and search by person or system. Two actions apply to whatever the filters are currently showing, as well as to a single row:
+
+- **Retry**<br /> Makes matching changes due immediately and raises a delivery pass. This is what you run once the reason a directory was refusing passwords has been dealt with. It applies to waiting, parked and cancelled changes; an expired one is left alone, because there is no password left to send.
+- **Cancel**<br /> Stops JIM delivering them. The rows stay, marked **Cancelled**, recording who cancelled them and when.
+
+!!! note "Cancelling records an outcome; it does not erase one"
+    A cancelled change is kept for the same reason an expired one is: that person's password on that system is now out of step with the rest, and deleting the row would leave you believing your systems agree when they do not. Retention trims cancelled rows on the same schedule as any other finished change (see [How long any of it is kept](#-how-long-any-of-it-is-kept)), and a cancelled change can be retried, provided it has not expired in the meantime.
+
+Whatever a retry or a cancel covers, it is recorded as **one** Activity. A retry over a directory that has just come back is a single decision, and a hundred Activities saying so would bury the decision in its own consequences. The Activity is recorded even when nothing matched, so a retry that changed nothing can be told from a retry that never ran.
+
+You are also told where the work is without going looking for it. The **Connected Systems** list carries a Password Synchronisation column showing each system's state, with parked and expired counts beside it, sortable and filterable, including a **Needs attention** filter that cuts across the states. And each person's own page has an administrator-only **Password Synchronisation** tab: what is still owed to which of their systems, and what their recent password changes actually did on each one.
+
+That last view reads from the Activities rather than from the queue, deliberately. A delivered change leaves the queue, so a view built on the queue alone would show a person's failures and none of their successes.
+
+Everything on the page is scriptable, because a recovery across a directory that has just come back is not a job for a browser:
+
+```powershell
+# What needs a person right now
+Get-JIMPendingPasswordChange -Summary
+
+# Which systems the parked work is piling up behind
+Get-JIMPendingPasswordChange -Status Parked | Group-Object ConnectedSystemName | Select-Object Name, Count
+
+# Once the cause is dealt with: one request, one Activity
+Resume-JIMPendingPasswordChange -ConnectedSystemId 3
+```
+
+See [PowerShell: Password Synchronisation](../powershell/password-synchronisation.md) for the full set, and the [API reference](../api/index.md) for `GET /api/v1/password-synchronisation/queue` and its `retry` and `cancel` counterparts.
+
+### 🧹 How long any of it is kept
+
+A finished password change is not kept for ever. The built-in **History Retention Cleanup** [Schedule](../configuration/schedules.md#built-in-schedules) runs daily and removes two things once they have had the `History.PasswordEventRetentionPeriod` [Service Setting](../administration/configuration.md#service-settings), which defaults to a year:
+
+- **Queue rows that finished**, whether parked, expired or cancelled. A change still owed to a Connected System is never removed, however old it is.
+- **The Activities recording what happened to each change**, including the per-system outcomes behind a person's Password Synchronisation tab.
+
+The two move together on purpose: a person's password history is the outcomes, and a queue row without them says something happened without saying what.
+
+This period is also what bounds how long JIM holds a password. A parked or cancelled row still carries its encrypted value, because both can be retried; shorten the retention period if you would rather JIM stopped holding one sooner. Nothing else ages these rows out, so a target that refuses passwords would otherwise accumulate one permanent row per person.
+
+Each pass says what it removed, on its own Activity, so retention is something you can check rather than assume.
+
+!!! warning "Requiring an encrypted connection means refusing to send"
+    A Connected System with **Only send passwords over an encrypted connection** on will not have passwords sent to it over a connection JIM cannot confirm is encrypted. It is on the Connected System's Settings tab, under Passwords, and it governs **every** password JIM sends to that system: the first password on an account JIM provisions, one you set by hand, and a synchronised password change alike.
+
+    Nothing is discarded when JIM refuses. Queued password changes wait and are delivered once the connection is encrypted or the setting is turned off; accounts stay owed their first password and get one on the next export; an administrator setting a password by hand is told outright, at the time, rather than having it go out in the clear.
+
+    Leave it off only where the target genuinely cannot offer an encrypted connection, and understand what that costs: a password sent over an unencrypted one is readable by anyone on the network path.
+
+!!! note "Capturing a password changed in another system is a separate capability"
+    Everything here concerns a password change JIM knows about: one an administrator makes, or one sent to JIM's API. Capturing a change made **in** another system, such as a user changing their own password in Active Directory, and replaying it into the others needs a capture agent running on the domain controllers, because no directory will disclose a password when JIM reads from it.
 
 ## Where to go next
 
@@ -166,5 +282,7 @@ It also means JIM writes passwords the way each directory expects rather than wr
 | Switch on initial passwords for a rule | [Synchronisation Rules: Initial password](../configuration/synchronisation-rules.md#initial-password) |
 | See a discovered policy, or run the channel check | [Connected Systems: Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel) |
 | Set a password on one account, or on a person | [Connected Systems: Setting the password on one account](../configuration/connected-systems.md#setting-the-password-on-one-account) |
+| Configure Password Synchronisation on a system | [Connected Systems: Password Synchronisation](../configuration/connected-systems.md#password-synchronisation) |
 | Directory specifics: encryption, mechanisms, permissions | [LDAP Connector: Setting Passwords](../connectors/jim-ldap-connector.md#setting-passwords) |
+| See what is queued, and retry or cancel it | [PowerShell: Password Synchronisation](../powershell/password-synchronisation.md) |
 | Do any of it from a script | [PowerShell: Connected Systems](../powershell/connected-systems.md#set-jimconnectedsystemobjectpassword), [Metaverse](../powershell/metaverse.md#set-jimmetaverseobjectpassword), [Synchronisation Rules](../powershell/synchronisation-rules.md#initial-password) |

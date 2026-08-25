@@ -195,7 +195,7 @@ public class MvoDeletionSamePageReconnectTests
         /// concrete processors do at run start (source system 0: deletions consider every target system).
         /// </summary>
         public async Task PrepareRecallExportEvaluationCacheAsync() =>
-            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync();
 
         public Task CallFlushPendingMvoDeletionsAsync() => FlushPendingMvoDeletionsAsync();
     }

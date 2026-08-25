@@ -24,7 +24,7 @@
 @* TabPanelsClass is pa-0 rather than pt-5 because both tabs host a virtualised grid, and the grid supplies its
    own mt-5 (see the tab content spacing rule in JIM.Web/CLAUDE.md: never stack panel padding on top of content
    margin). *@
-<NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0" Class="mt-5">
+<NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" TabPanelsClass="pa-0" Class="mt-5">
     <MudTabPanel Text="Object Types" Icon="@Icons.Material.Filled.Category">
         @* Same shared grid as the Attributes tab, but windowed in memory: Object Types are a small configuration
            list, loaded whole once, so search and sort are applied in the page rather than each becoming a

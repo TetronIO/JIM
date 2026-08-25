@@ -1,11 +1,15 @@
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Logic
+@using JIM.Models.Preview
 @using JIM.Models.Staging
 @using JIM.Web.Models
+@using JIM.Web.Services
 @using Serilog
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IConfigurationChangePreviewStarter PreviewStarter
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -119,6 +123,16 @@ else
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="@(() => _modeSwitchDialogVisible = false)" DropShadow="false" Disabled="_modeSwitchInProgress">Cancel</MudButton>
+        @* The switch changes which rules apply without editing a rule, so what it costs is only answerable by
+           evaluating it. Offered rather than required: the switch destroys nothing by itself, and an administrator
+           who has already reasoned it through should not be made to wait for an answer they have. *@
+        <MudButton StartIcon="@Icons.Material.Filled.Preview"
+                   DropShadow="false"
+                   Disabled="@(_modeSwitchInProgress || _startingPreview)"
+                   OnClick="PreviewModeSwitchAsync"
+                   data-testid="jim-preview-matching-mode-switch">
+            Preview Impact
+        </MudButton>
         <MudButton
             Color="Color.Primary"
             Variant="Variant.Filled"
@@ -138,12 +152,27 @@ else
     </DialogActions>
 </MudDialog>
 
+@if (_previewActivityId.HasValue)
+{
+    <ConfigurationChangePreviewPanel ActivityId="@_previewActivityId.Value"
+                                     Title="Preview: Object Matching Impact"
+                                     Class="mt-6" />
+}
+
 @code {
     [Parameter, EditorRequired]
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
 
     [Parameter, EditorRequired]
     public IList<MetaverseAttribute> MetaverseAttributes { get; set; } = null!;
+
+    /// <summary>
+    /// The Metaverse Object Types a Simple mode rule can search. Required rather than optional: a rule that names
+    /// none has nowhere to look, so the matching engine skips it and the objects that should have joined project
+    /// duplicate identities instead (#1458).
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IList<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
@@ -152,12 +181,19 @@ else
     private int _selectedMatchingRuleTabIndex;
     private ConnectedSystemObjectTypeAttribute? _newMatchingRuleSourceAttribute;
     private MetaverseAttribute? _newMatchingRuleTargetAttribute;
+    private MetaverseObjectType? _newMatchingRuleMetaverseObjectType;
     private bool _newMatchingRuleCaseSensitive = false;
     // Track the currently active object type for the matching rules form state
     private ConnectedSystemObjectType? _currentMatchingRuleObjectType;
     // One grid per Object Type, because a Connected System with several selected types renders one table per tab.
     // Keyed by Object Type id so a handler can refresh the grid belonging to the type it just changed.
     private readonly Dictionary<int, VirtualisedDataGrid<ObjectMatchingRule>> _matchingRuleGrids = new();
+    // Configuration Change Preview (#1457). Object Matching Rules are saved as they are edited here, so the
+    // preview is offered at the two points where a change is still only proposed: the rule being composed in the
+    // add form, and the Simple/Advanced switch waiting in its dialog.
+    private Guid? _previewActivityId;
+    private bool _startingPreview;
+
     // Mode switch dialog
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
     private bool _modeSwitchDialogVisible;
@@ -190,15 +226,116 @@ else
     /// Refreshes the grid belonging to an Object Type after its rules have been added to, removed from or
     /// reordered. The totals are invalidated because the change may have altered how many rules there are.
     /// </summary>
+    /// <summary>
+    /// Previews the matching configuration as it would stand with the rule currently in the add form appended to
+    /// this Object Type's rules.
+    /// </summary>
+    /// <remarks>
+    /// The proposed rule is built unsaved, exactly as the form holds it, and takes the next Order because that is
+    /// where adding it would put it. Order is not decoration: rules are evaluated in ascending order until one
+    /// matches, so a rule appended last decides only the objects the rules above it do not already claim, and
+    /// previewing it anywhere else would answer a question nobody asked.
+    /// </remarks>
+    private async Task PreviewProposedRuleAsync(ConnectedSystemObjectType objectType)
+    {
+        if (!CanAddMatchingRule)
+            return;
+
+        var existing = objectType.ObjectMatchingRules;
+        var proposedRule = new ObjectMatchingRuleProposal(
+            existing.Count == 0 ? 0 : existing.Max(rule => rule.Order) + 1,
+            objectType.Id,
+            null,
+            _newMatchingRuleMetaverseObjectType!.Id,
+            _newMatchingRuleTargetAttribute!.Id,
+            _newMatchingRuleCaseSensitive,
+            [new ObjectMatchingRuleSourceProposal(0, _newMatchingRuleSourceAttribute!.Id)]);
+
+        var stored = await BuildStoredProposalAsync();
+        await StartPreviewAsync(stored with { Rules = [.. stored.Rules, proposedRule] });
+    }
+
+    /// <summary>
+    /// Previews the Simple to Advanced switch, or back: the same rules, evaluated from the other side.
+    /// </summary>
+    private async Task PreviewModeSwitchAsync()
+    {
+        var stored = await BuildStoredProposalAsync();
+        await StartPreviewAsync(stored with
+        {
+            Mode = _switchingToAdvancedMode ? ObjectMatchingRuleMode.SyncRule : ObjectMatchingRuleMode.ConnectedSystem
+        });
+    }
+
+    /// <summary>
+    /// The matching configuration as it currently stands, read fresh so a proposal is never built against a page
+    /// that has drifted from the database.
+    /// </summary>
+    private async Task<ObjectMatchingProposal> BuildStoredProposalAsync()
+    {
+        using var jim = JimFactory.Create();
+        var objectTypes = await jim.ConnectedSystems.GetObjectTypesAsync(ConnectedSystem.Id);
+        var syncRules = await jim.ConnectedSystems.GetSyncRulesAsync(ConnectedSystem.Id, false);
+        return ObjectMatchingProposal.FromCurrentConfiguration(ConnectedSystem, objectTypes, syncRules);
+    }
+
+    private async Task StartPreviewAsync(ObjectMatchingProposal proposal)
+    {
+        if (_startingPreview)
+            return;
+
+        _startingPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.ObjectMatching,
+                TargetId = ConnectedSystem.Id,
+                TargetName = ConnectedSystem.Name,
+                ProposedConfiguration = proposal,
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user?.Id,
+                InitiatedByName = user?.Name
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _previewActivityId = activityId;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            _previewActivityId = null;
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingPreview = false;
+        }
+    }
+
     private async Task RefreshMatchingRuleGridAsync(ConnectedSystemObjectType objectType)
     {
         if (_matchingRuleGrids.TryGetValue(objectType.Id, out var grid))
             await grid.RefreshAsync(invalidateTotals: true);
     }
 
+    /// <summary>
+    /// Whether the form describes a rule that could actually match. The Metaverse Object Type is as required as the
+    /// two attributes: a rule missing it is stored happily and never matches (#1458).
+    /// </summary>
+    private bool CanAddMatchingRule =>
+        _newMatchingRuleSourceAttribute != null
+        && _newMatchingRuleTargetAttribute != null
+        && _newMatchingRuleMetaverseObjectType != null;
+
     private async Task HandleAddMatchingRuleAsync(ConnectedSystemObjectType objectType)
     {
-        if (_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)
+        if (!CanAddMatchingRule)
             return;
 
         using var jim = JimFactory.Create();
@@ -214,7 +351,9 @@ else
             Order = nextOrder,
             ConnectedSystemObjectTypeId = objectType.Id,
             ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttributeId = _newMatchingRuleTargetAttribute.Id,
+            MetaverseObjectTypeId = _newMatchingRuleMetaverseObjectType!.Id,
+            MetaverseObjectType = _newMatchingRuleMetaverseObjectType,
+            TargetMetaverseAttributeId = _newMatchingRuleTargetAttribute!.Id,
             TargetMetaverseAttribute = _newMatchingRuleTargetAttribute,
             CaseSensitive = _newMatchingRuleCaseSensitive,
             Sources = new List<ObjectMatchingRuleSource>
@@ -222,7 +361,7 @@ else
                 new()
                 {
                     Order = 0,
-                    ConnectedSystemAttributeId = _newMatchingRuleSourceAttribute.Id,
+                    ConnectedSystemAttributeId = _newMatchingRuleSourceAttribute!.Id,
                     ConnectedSystemAttribute = _newMatchingRuleSourceAttribute
                 }
             }
@@ -238,6 +377,7 @@ else
             // Reset the form
             _newMatchingRuleSourceAttribute = null;
             _newMatchingRuleTargetAttribute = null;
+            _newMatchingRuleMetaverseObjectType = null;
             _newMatchingRuleCaseSensitive = false;
 
             Snackbar.Add("Matching rule has been created.", Severity.Success);
@@ -451,6 +591,24 @@ else
                         }
                     </MudSelect>
                 </MudItem>
+                <MudItem xs="12" md="4">
+                    @* Where the rule looks. A Simple mode rule has no Synchronisation Rule to take this from, so
+                       one that names no type searches nothing and silently matches nothing (#1458). *@
+                    <MudSelect T="MetaverseObjectType"
+                               @bind-Value="_newMatchingRuleMetaverseObjectType"
+                               Label="Metaverse Object Type"
+                               Variant="Variant.Outlined"
+                               ToStringFunc="@(t => t?.Name ?? string.Empty)"
+                               HelperText="The type of Metaverse Object this rule searches">
+                        @if (MetaverseObjectTypes != null)
+                        {
+                            @foreach (var objectTypeOption in MetaverseObjectTypes.OrderBy(t => t.Name))
+                            {
+                                <MudSelectItem Value="@objectTypeOption">@objectTypeOption.Name</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
             </MudGrid>
 
             <MudCheckBox T="bool" @bind-Value="_newMatchingRuleCaseSensitive"
@@ -462,17 +620,53 @@ else
             </MudText>
 
             <div class="mt-3">
-                <MudButton Variant="Variant.Filled"
-                           Color="Color.Primary"
-                           DropShadow="false"
-                           Disabled="@(_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)"
-                           OnClick="() => HandleAddMatchingRuleAsync(objectType)">
-                    Add Matching Rule
-                </MudButton>
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               DropShadow="false"
+                               Disabled="@(!CanAddMatchingRule)"
+                               OnClick="() => HandleAddMatchingRuleAsync(objectType)">
+                        Add Matching Rule
+                    </MudButton>
+                    @* Adding a rule takes effect on the next synchronisation, and what it does is invisible until
+                       then: an account that joined nothing may now join an identity, or a different one from the
+                       one it would have. The preview answers before the rule is saved. *@
+                    <MudButton StartIcon="@Icons.Material.Filled.Preview"
+                               DropShadow="false"
+                               Disabled="@(!CanAddMatchingRule || _startingPreview)"
+                               OnClick="() => PreviewProposedRuleAsync(objectType)"
+                               data-testid="jim-preview-matching-rule">
+                        Preview Impact
+                    </MudButton>
+                </MudStack>
             </div>
         </MudPaper>
 
         <MudText Typo="Typo.h6">Matching Rules for <span class="jim-title-accent">@objectType.Name</span></MudText>
+
+        @* Rules already stored in an unworkable shape are named rather than quietly ignored. They were storable
+           before the create path validated them (#1458), and the matching engine skips them without saying so, so
+           an administrator looking at a full grid has no way to tell the working rules from the dead ones. *@
+        var unworkableRules = objectType.ObjectMatchingRules
+            .Select(rule => new { Rule = rule, Reason = rule.DescribeInvalidity() })
+            .Where(candidate => candidate.Reason != null)
+            .ToList();
+
+        if (unworkableRules.Count > 0)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-2 mb-2"
+                      data-testid="jim-matching-rules-unworkable">
+                <strong>@unworkableRules.Count matching @(unworkableRules.Count == 1 ? "rule" : "rules") cannot match anything.</strong>
+                Objects that should join an existing Metaverse Object will project a new one instead. Remove and
+                recreate @(unworkableRules.Count == 1 ? "it" : "them"):
+                <ul class="mt-2 mb-0">
+                    @foreach (var unworkable in unworkableRules)
+                    {
+                        <li>Rule @(unworkable.Rule.Order + 1): @unworkable.Reason</li>
+                    }
+                </ul>
+            </MudAlert>
+        }
 
         @* Object Matching Rules are an ordered, short list held on the Object Type the page already loaded, so the
            grid's windows are sliced from it in memory. The columns carry no sort headers, deliberately: the order

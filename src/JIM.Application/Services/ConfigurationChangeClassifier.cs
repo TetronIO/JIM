@@ -138,15 +138,30 @@ public static class ConfigurationChangeClassifier
         ["objectMatchingRuleMode"] = B,
         ["unresolvedReferenceHandling"] = B,
         ["maxExportParallelism"] = C,
-        // How long an account provisioned into this system stays owed an initial password. It changes how long
-        // JIM keeps trying, never what it synchronises, so no Full Synchronisation is implied.
+        // How long an account provisioned into this system stays owed an initial password, and how long a queued
+        // password change waits. It changes how long JIM keeps trying, never what it synchronises, so no Full
+        // Synchronisation is implied.
         ["initialPasswordTimeToLive"] = C,
+        // Whether JIM refuses to send a password over a connection it cannot confirm is encrypted (#1119).
+        // Turning it on can stop passwords reaching this system altogether, which an administrator has to see;
+        // it changes nothing about what JIM synchronises.
+        ["requireSecureTransport"] = C,
         ["settingValues"] = B,
         // Every individual setting value, whatever the connector calls it. Connector settings are the connector's
         // instructions: where it reads from, what it filters, how it writes. One key covers them all because the
         // snapshot records them under one key (see ConfigurationSnapshotService.SettingValueNodeKey); a connector's
         // own setting names are an open key space and could never be enumerated here.
         ["settingValue"] = B,
+
+        // Password Synchronisation (#1119). These govern whether and how queued password changes are delivered to
+        // this system; none of them change what JIM synchronises, so none imply a Full Synchronisation. Enabling
+        // delivery is the consequential one: it releases every password change that accumulated while the system
+        // was switched off, which reaches a live directory.
+        ["passwordSynchronisation"] = C,
+        ["enabled"] = C,
+        ["targetObjectTypeId"] = C,
+        ["maxRetries"] = C,
+        ["retryBackoffBase"] = C,
 
         // Run Profiles.
         ["runProfiles"] = C,
@@ -324,6 +339,7 @@ public static class ConfigurationChangeClassifier
         [Constants.SettingKeys.ConfigurationChangeRetentionPeriod] = C,
         [Constants.SettingKeys.SecurityEventRetentionPeriod] = C,
         [Constants.SettingKeys.InitialPasswordRetentionPeriod] = C,
+        [Constants.SettingKeys.PasswordEventRetentionPeriod] = C,
         [Constants.SettingKeys.HistoryCleanupBatchSize] = C,
         [Constants.SettingKeys.ChangeTrackingCsoChangesEnabled] = C,
         [Constants.SettingKeys.ChangeTrackingMvoChangesEnabled] = C,
