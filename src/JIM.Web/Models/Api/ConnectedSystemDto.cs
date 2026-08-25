@@ -391,6 +391,13 @@ public class ConnectedSystemAttributeDto
     public bool IsSecondaryExternalId { get; set; }
 
     /// <summary>
+    /// Whether the Connected System's schema requires this attribute for its class (an RFC 4512 MUST).
+    /// JIM refuses an export that would add a class whose required attributes have no value (#492).
+    /// </summary>
+    /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
+    public bool Required { get; set; }
+
+    /// <summary>
     /// Indicates if this attribute's selection state is locked and cannot be changed.
     /// This is true for External ID and Secondary External ID attributes.
     /// </summary>
@@ -438,6 +445,7 @@ public class ConnectedSystemAttributeDto
             Selected = entity.Selected,
             IsExternalId = entity.IsExternalId,
             IsSecondaryExternalId = entity.IsSecondaryExternalId,
+            Required = entity.Required,
             SelectionLocked = entity.SelectionLocked,
             Writability = entity.Writability.ToString(),
             ReferencedObjectTypeId = entity.ReferencedObjectTypeId,

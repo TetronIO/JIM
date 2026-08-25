@@ -683,6 +683,8 @@ Each Object Type also carries `Tags`, the classification key/value pairs the Con
 
 Each attribute carries `writability`, one of `Writable`, `ReadOnly` or `WritableOnCreate`. See [Attribute writability](../configuration/connected-systems.md#attribute-writability) for what each one means for Attribute Flow.
 
+Each attribute also carries `required`: whether the Connected System's schema demands it for the attribute's class (an RFC 4512 MUST). JIM refuses an export that would add a class whose required attributes have no value, so this is what to check when deciding which of a merged auxiliary class's attributes to flow. Read-only: discovered from the schema, never settable.
+
 A Reference attribute additionally carries `referencedObjectTypeId` and `referencedObjectTypeName` when the Connected System's schema declares which Object Type the reference points at (the SQL Connector's `referencesObjectType`); import reference resolution then resolves the reference within that Object Type alone. Both are `null` when the schema does not say. Read-only: discovered from the schema, never settable.
 
 ### Examples
