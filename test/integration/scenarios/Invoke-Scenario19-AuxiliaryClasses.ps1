@@ -756,10 +756,13 @@ userPassword: Test@123!
         Write-TestSection "Test 6: Discovery (full scan, then a bounded quick sample)"
 
         function Wait-Scenario19DiscoveryComplete {
-            param([string]$Label)
+            # -PreviousRunId guards the wait against reading the PREVIOUS run: the latest-run endpoint
+            # answers immediately with the last completed run, so a poll that only checks the status
+            # races the new run's worker pick-up and reports the old run's results as the new run's.
+            param([string]$Label, $PreviousRunId = $null)
             $completed = Wait-ForCondition -TimeoutSeconds 180 -IntervalSeconds 5 -Description "$Label discovery run to complete" -Condition {
                 $run = Get-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId $sourceSystem.id
-                $run -and $run.status -eq "Complete"
+                $run -and $run.status -eq "Complete" -and ($null -eq $PreviousRunId -or "$($run.id)" -ne "$PreviousRunId")
             }
             if (-not $completed) {
                 $run = Get-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId $sourceSystem.id
@@ -784,7 +787,7 @@ userPassword: Test@123!
         # what it observed are bounded by it.
         Write-Host "Starting a QuickSample discovery run (Source, sample size 2)..." -ForegroundColor Gray
         Start-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId $sourceSystem.id -Scope QuickSample -SampleSizePerObjectType 2 -Confirm:$false | Out-Null
-        $sampleRun = Wait-Scenario19DiscoveryComplete -Label "QuickSample"
+        $sampleRun = Wait-Scenario19DiscoveryComplete -Label "QuickSample" -PreviousRunId $fullRun.id
 
         Assert-Condition -Condition ($sampleRun.entriesRead -le 2) `
             -Message "QuickSample read at most the sample size ($($sampleRun.entriesRead) of 2)"
