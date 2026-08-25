@@ -87,7 +87,12 @@ function Set-JIMConnectedSystemAuxiliaryClass {
 
         # An empty array is how the API expresses "carry nothing", so -Clear and an explicit empty
         # set reach the same request rather than being two behaviours.
-        $objectTypeIds = if ($Clear) { @() } else { @($AuxiliaryClassObjectTypeId) }
+        # Typed and assigned in a plain statement, never from an if-expression: an if-expression's
+        # output is enumerated, which collapses a one-element array to a scalar Int32 and @() to
+        # $null, serialising as {"objectTypeIds":16} / {"objectTypeIds":null}, both of which the
+        # API rejects or misreads. The [int[]] constraint keeps the value an array either way.
+        [int[]]$objectTypeIds = @()
+        if (-not $Clear) { $objectTypeIds = $AuxiliaryClassObjectTypeId }
         $body = @{ objectTypeIds = $objectTypeIds }
 
         $description = if ($objectTypeIds.Count -eq 0) {

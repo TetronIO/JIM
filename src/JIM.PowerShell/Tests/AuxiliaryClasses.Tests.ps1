@@ -133,6 +133,38 @@ Describe 'Set-JIMConnectedSystemAuxiliaryClass' {
             }
         }
 
+        It 'Keeps a single class an array, so it serialises as one and not as a scalar' {
+            InModuleScope JIM {
+                # Assigning from an if-expression enumerates its output, which collapses a one-element
+                # array to a scalar Int32; ConvertTo-Json then sends {"objectTypeIds":16} and the API
+                # rejects it with a 400. Merging exactly one class is the cmdlet's own first example,
+                # and Scenario 19's Merge step is where this shipped bug surfaced. The value must
+                # still be an array at the serialisation boundary.
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi { $script:capturedBody = $Body }
+
+                Set-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -AuxiliaryClassObjectTypeId 16 -Confirm:$false
+
+                $script:capturedBody.objectTypeIds -is [System.Collections.ICollection] | Should -BeTrue
+                ($script:capturedBody | ConvertTo-Json -Depth 10 -Compress) | Should -Be '{"objectTypeIds":[16]}'
+            }
+        }
+
+        It 'Serialises -Clear as an empty JSON array, not null' {
+            InModuleScope JIM {
+                # The same if-expression enumeration turns @() into $null, which serialises as
+                # {"objectTypeIds":null}: "change nothing" instead of "withdraw everything".
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi { $script:capturedBody = $Body }
+
+                Set-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -Clear -Confirm:$false
+
+                ($script:capturedBody | ConvertTo-Json -Depth 10 -Compress) | Should -Be '{"objectTypeIds":[]}'
+            }
+        }
+
         It 'Puts to the object type auxiliary classes endpoint' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
