@@ -16,13 +16,15 @@
       auxiliary class with jimBadgeNumber (its MUST) and jimBadgeColour. Boris (index 1) lists
       jimBadgeHolder BEFORE jimPerson in his objectClass values, so the import-side
       one-CSO-per-entry assertion is exercised against both orderings a real directory can serve.
-    - Dora (index 3) carries no badge class but does carry roomNumber, which the MustEnforcement
-      step later flows into the Badge Colour Metaverse attribute: colour without a badge number
-      is what makes her export refusable.
+    - Dora (index 3) carries no badge class in either suffix; her GLITTERBAND entry carries
+      roomNumber, which the MustEnforcement step later flows into the Badge Colour Metaverse
+      attribute as a second-system contributor (the cross-system priority fallback Scenario 14
+      proves): colour without a badge number is what makes her export refusable.
     - Elena and Felix (indices 4-5) are plain jimPerson controls carrying nothing badge-related.
 
     Glitterband (Target) gets the six counterpart entries as plain jimPerson: no auxiliary class
-    and no badge attributes, so the export steps can observe JIM adding the class per entry.
+    and no badge attributes (only Dora's roomNumber), so the export steps can observe JIM adding
+    the class per entry.
 
     Gina (S19-6), the carrier-provisioning subject, is deliberately NOT seeded here; the
     CarrierProvisioning step adds her to Yellowstone itself so earlier steps' counts hold.
@@ -71,8 +73,9 @@ $configMap = @{
 }
 
 # Fixed, deterministic person set. Same Employee ID in both suffixes, so each pair joins to one
-# Metaverse Object. BadgeColour non-null marks a Yellowstone badge carrier; RoomNumber gives the
-# MustEnforcement subject a colour source that needs no badge class on her entry.
+# Metaverse Object. BadgeColour non-null marks a Yellowstone badge carrier; RoomNumber (seeded in
+# the TARGET suffix) gives the MustEnforcement subject a colour source contributed by the second
+# system, needing no badge class on either of her entries.
 $people = @(
     @{ Index = 0; FirstName = "Amber"; LastName = "Archer"; BadgeColour = "Blue";  RoomNumber = $null }
     @{ Index = 1; FirstName = "Boris"; LastName = "Blake";  BadgeColour = "Green"; RoomNumber = $null }
@@ -128,7 +131,7 @@ foreach ($role in @("Source", "Target")) {
             [void]$ldifBuilder.AppendLine("jimBadgeNumber: B19-$i")
             [void]$ldifBuilder.AppendLine("jimBadgeColour: $($person.BadgeColour)")
         }
-        if ($role -eq "Source" -and $null -ne $person.RoomNumber) {
+        if ($role -eq "Target" -and $null -ne $person.RoomNumber) {
             [void]$ldifBuilder.AppendLine("roomNumber: $($person.RoomNumber)")
         }
         [void]$ldifBuilder.AppendLine("userPassword: Test@123!")

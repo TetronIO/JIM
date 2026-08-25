@@ -534,33 +534,31 @@ try {
     if ($lastStepIndex -ge 3) {
         Write-TestSection "Test 4: MustEnforcement (an export that cannot satisfy the class's MUST is refused)"
 
-        # Give Dora (S19-3, no badge) a Badge Colour without a Badge Number: roomNumber becomes
-        # a second-priority contributor to Badge Colour. Priority is explicit because two
-        # mappings now feed one attribute; the carriers keep winning with jimBadgeColour.
-        Write-Host "Adding roomNumber -> Badge Colour (priority 2) on the Source import rule..." -ForegroundColor Gray
-        $sourceUserType = Get-Scenario19UserType -System $sourceSystem
-        $roomNumberAttr = $sourceUserType.attributes | Where-Object { $_.name -eq "roomNumber" }
-        $roomNumberMapping = New-JIMSyncRuleMapping -SyncRuleId $sourceImportRule.id `
+        # Give Dora (S19-3, no badge) a Badge Colour without a Badge Number: her Target entry's
+        # roomNumber becomes a second-system, second-priority contributor to Badge Colour (the
+        # cross-system priority fallback Scenario 14 proves). The carriers keep winning with the
+        # Source's jimBadgeColour at priority 1; Dora, with no priority-1 contribution, takes the
+        # Target's value.
+        Write-Host "Adding roomNumber -> Badge Colour (priority 2) on the Target import rule..." -ForegroundColor Gray
+        $targetImportRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq "$targetSystemName Import Users" } | Select-Object -First 1
+        $targetUserType = Get-Scenario19UserType -System $targetSystem
+        $roomNumberAttr = $targetUserType.attributes | Where-Object { $_.name -eq "roomNumber" }
+        $roomNumberMapping = New-JIMSyncRuleMapping -SyncRuleId $targetImportRule.id `
             -TargetMetaverseAttributeId $mvBadgeColour.id `
             -SourceConnectedSystemAttributeId $roomNumberAttr.id
-        $badgeColourMappings = @(Get-JIMSyncRuleMapping -SyncRuleId $sourceImportRule.id) |
-            Where-Object { $_.targetMetaverseAttributeId -eq $mvBadgeColour.id }
-        $jimBadgeColourMapping = $badgeColourMappings | Where-Object { $_.id -ne $roomNumberMapping.id } | Select-Object -First 1
+        $jimBadgeColourMapping = @(Get-JIMSyncRuleMapping -SyncRuleId $sourceImportRule.id) |
+            Where-Object { $_.targetMetaverseAttributeId -eq $mvBadgeColour.id } | Select-Object -First 1
         Set-JIMMetaverseAttributePriority -AttributeId $mvBadgeColour.id -ObjectTypeId $mvUserType.id `
             -MappingId @($jimBadgeColourMapping.id, $roomNumberMapping.id) | Out-Null
-        Write-Host "  OK roomNumber mapping created at priority 2" -ForegroundColor Green
+        Write-Host "  OK roomNumber mapping created at priority 2 (Target)" -ForegroundColor Green
 
-        Write-Host "Running Full Synchronisation (Source)..." -ForegroundColor Gray
-        $syncResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSync.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Source) with roomNumber mapping"
+        Write-Host "Running Full Synchronisation (Target) to flow Dora's colour and stage her export..." -ForegroundColor Gray
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSync.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Target) with roomNumber mapping"
 
         $doraMvoId = Get-Scenario19MvoId -EmployeeId "S19-3"
         Assert-MvoAttributeValue -MvoId $doraMvoId -AttributeName "Badge Colour" -ExpectedValue "Yellow" -Name "Dora's Badge Colour arrived from roomNumber"
         Assert-MvoAttributeValue -MvoId $doraMvoId -AttributeName "Badge Number" -ExpectNoValue -Name "Dora has no Badge Number"
-
-        Write-Host "Running Full Synchronisation (Target) to stage Dora's export..." -ForegroundColor Gray
-        $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSync.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Target) staging Dora's export"
 
         # The export must be refused BEFORE being sent: writing the colour first-flows a class
         # whose MUST (jimBadgeNumber) neither this export nor Dora's Target entry can satisfy.
@@ -586,17 +584,15 @@ try {
         $doraColour = @(Get-Scenario19LdapAttributeValues -LdapConfig $targetLdapConfig -Uid "dora19" -AttributeName "jimBadgeColour")
         Assert-Equal -Expected 0 -Actual $doraColour.Count -Message "Dora's Target entry was not given the colour"
 
-        # Restore: remove the roomNumber mapping and re-synchronise both systems, so Dora's
-        # Badge Colour is recalled and the refused Pending Export is withdrawn; later steps then
-        # run their exports clean rather than re-tripping this refusal.
+        # Restore: remove the roomNumber mapping and re-synchronise, so Dora's Badge Colour is
+        # recalled and the refused Pending Export is withdrawn; later steps then run their
+        # exports clean rather than re-tripping this refusal.
         Write-Host "Removing the roomNumber mapping and re-synchronising..." -ForegroundColor Gray
         # Shrink the priority list back to the surviving contributor first, so the mapping being
         # removed is no longer referenced by an Attribute Priority entry.
         Set-JIMMetaverseAttributePriority -AttributeId $mvBadgeColour.id -ObjectTypeId $mvUserType.id `
             -MappingId @($jimBadgeColourMapping.id) | Out-Null
-        Remove-JIMSyncRuleMapping -SyncRuleId $sourceImportRule.id -MappingId $roomNumberMapping.id -Confirm:$false | Out-Null
-        $syncResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSync.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Source) after mapping removal"
+        Remove-JIMSyncRuleMapping -SyncRuleId $targetImportRule.id -MappingId $roomNumberMapping.id -Confirm:$false | Out-Null
         $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSync.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Target) after mapping removal"
         Assert-MvoAttributeValue -MvoId $doraMvoId -AttributeName "Badge Colour" -ExpectNoValue -Name "Dora's Badge Colour recalled after mapping removal"
