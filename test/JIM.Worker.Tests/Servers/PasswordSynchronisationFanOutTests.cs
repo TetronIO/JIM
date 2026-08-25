@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using JIM.Application.Servers;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
@@ -66,8 +67,20 @@ public class PasswordSynchronisationFanOutTests
             // These fixtures never reach a Connector: they exercise queueing and one-change delivery with a
             // Connector handed in directly. Resolving one here would be answering a question they do not ask.
             _ => throw new NotSupportedException("This fixture does not resolve Connectors."),
-            (activity, _, _) =>
+            (activity, initiatedBy, initiatedByApiKey) =>
             {
+                // Mirrors the real Activity server: an Activity attributed to neither a person nor an API key is
+                // refused. A fake that accepted one let #1529 through the whole unit suite.
+                if (initiatedBy == null && initiatedByApiKey == null)
+                    throw new InvalidOperationException(
+                        "Activity must be attributed to a security principal. InitiatedByType has not been set.");
+                _createdActivities.Add(activity);
+                return Task.CompletedTask;
+            },
+            activity =>
+            {
+                activity.InitiatedByType = ActivityInitiatorType.System;
+                activity.InitiatedByName = "System";
                 _createdActivities.Add(activity);
                 return Task.CompletedTask;
             },
@@ -89,6 +102,13 @@ public class PasswordSynchronisationFanOutTests
         _connectedSystemRepository
             .Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId))
             .ReturnsAsync(accounts.ToList());
+
+    /// <summary>
+    /// The administrator these fixtures queue changes as. Production always has a principal (a signed-in
+    /// administrator, or the API key an automation authenticated with), and an Activity attributed to neither is
+    /// refused by the Activity server, so passing null here would describe a state the application cannot reach.
+    /// </summary>
+    private static readonly MetaverseObject TestPrincipal = new() { Id = Guid.NewGuid() };
 
     private static PasswordSynchronisationTarget Target(int connectedSystemId, string name, bool enabled = true) => new()
     {
@@ -117,7 +137,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -135,7 +155,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         Assert.That(_deliveryRequests, Is.Empty);
     }
@@ -150,7 +170,7 @@ public class PasswordSynchronisationFanOutTests
         ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
         _deliveryRequests.Clear();
 
         var change = _syncRepository.PendingPasswordChanges.Values.Single();
@@ -189,7 +209,7 @@ public class PasswordSynchronisationFanOutTests
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -210,7 +230,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "Correct-Horse-Battery-Staple",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         var queued = _syncRepository.PendingPasswordChanges.Values.Single();
         using (Assert.EnterMultipleScope())
@@ -232,7 +252,7 @@ public class PasswordSynchronisationFanOutTests
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -253,7 +273,7 @@ public class PasswordSynchronisationFanOutTests
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         Assert.That(result.Targets.Single().ConnectedSystemObjectId, Is.Null,
             "The group object is not this identity's account in that system.");
@@ -270,7 +290,7 @@ public class PasswordSynchronisationFanOutTests
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -294,7 +314,7 @@ public class PasswordSynchronisationFanOutTests
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -369,7 +389,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         Assert.That(_deliveryRequests, Has.Count.EqualTo(1));
     }
@@ -384,7 +404,7 @@ public class PasswordSynchronisationFanOutTests
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -405,7 +425,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         var activity = _createdActivities.Single();
         using (Assert.EnterMultipleScope())
@@ -427,7 +447,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "Correct-Horse-Battery-Staple",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         var activity = _createdActivities.Single();
         var serialised = $"{activity.TargetName} {activity.Message} {activity.TargetContext}";
@@ -444,9 +464,9 @@ public class PasswordSynchronisationFanOutTests
         ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
 
         await _server.QueuePasswordChangeAsync(metaverseObjectId, "Ada Lovelace", "first-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
         await _server.QueuePasswordChangeAsync(metaverseObjectId, "Ada Lovelace", "second-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         var queued = _syncRepository.PendingPasswordChanges.Values.Single();
         Assert.That(_protection.UnprotectPassword(queued.EncryptedPassword), Is.EqualTo("second-password"),
@@ -463,7 +483,7 @@ public class PasswordSynchronisationFanOutTests
         ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
 
         await _server.QueuePasswordChangeAsync(metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         var queued = _syncRepository.PendingPasswordChanges.Values.Single();
         Assert.That(queued.ExpiresAt - queued.CreatedAt, Is.EqualTo(TimeSpan.FromDays(30)));
@@ -479,7 +499,7 @@ public class PasswordSynchronisationFanOutTests
         ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
 
         await _server.QueuePasswordChangeAsync(metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.RequireChangeAtNextSignIn, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.RequireChangeAtNextSignIn, initiatedBy: TestPrincipal, CancellationToken.None);
 
         Assert.That(_syncRepository.PendingPasswordChanges.Values.Single().ExpiryBehaviour,
             Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));

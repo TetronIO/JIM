@@ -39,6 +39,7 @@ public class PasswordSynchronisationServer
     private readonly Func<IPasswordProtectionService> _passwordProtection;
     private readonly Func<ConnectedSystem, IConnector> _createConnector;
     private readonly Func<Activity, MetaverseObject?, ApiKey?, Task> _createActivity;
+    private readonly Func<Activity, Task> _createSystemActivity;
     private readonly Func<Activity, Task> _completeActivity;
     private readonly Func<Activity, string, Task> _completeActivityWithError;
     private readonly Func<int?, Task> _requestDelivery;
@@ -69,6 +70,12 @@ public class PasswordSynchronisationServer
     /// is refused by the Activity server, and rightly: a password change nobody can be shown to have made is not
     /// an audit record.
     /// </param>
+    /// <param name="createSystemActivity">
+    /// Creates an Activity attributed to JIM itself, for work no person or API key asked for. Delivery is the
+    /// case: a queued password change is delivered by a worker pass minutes or days after somebody queued it,
+    /// and there is no principal at that moment to attribute the outcome to. The parent Activity for the change
+    /// carries who made it; this records what one system did with it.
+    /// </param>
     /// <param name="requestDelivery">
     /// Asks for a delivery pass over the given Connected System, or over every system with work due where null.
     /// Queueing and delivering stay separate (a password change must not wait on a directory), so this is how the
@@ -87,6 +94,7 @@ public class PasswordSynchronisationServer
         Func<IPasswordProtectionService> passwordProtection,
         Func<ConnectedSystem, IConnector> createConnector,
         Func<Activity, MetaverseObject?, ApiKey?, Task> createActivity,
+        Func<Activity, Task> createSystemActivity,
         Func<Activity, Task> completeActivity,
         Func<Activity, string, Task> completeActivityWithError,
         Func<int?, Task> requestDelivery)
@@ -97,6 +105,7 @@ public class PasswordSynchronisationServer
         _passwordProtection = passwordProtection;
         _createConnector = createConnector;
         _createActivity = createActivity;
+        _createSystemActivity = createSystemActivity;
         _completeActivity = completeActivity;
         _completeActivityWithError = completeActivityWithError;
         _requestDelivery = requestDelivery;
@@ -530,7 +539,12 @@ public class PasswordSynchronisationServer
                 : failure
         };
 
-        await _createActivity(activity, null, null);
+        // System-attributed, not "attributed to nobody". Every Activity must name a principal, and passing no
+        // initiator here made the Activity server refuse it: the refusal threw out of the delivery pass, so an
+        // outcome could never be recorded and the change was retried for ever. Delivery runs unattended, long
+        // after whoever queued the change has gone, so JIM itself is the honest principal; the parent Activity
+        // still carries the person or API key that made the password change.
+        await _createSystemActivity(activity);
 
         // Completed, and completed as what it was. Creating an Activity sets it InProgress, so an outcome that is
         // never completed sits in the Activities list looking like work still under way; and a refusal recorded

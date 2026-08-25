@@ -179,7 +179,10 @@ function Add-TestResult {
     are separated by a blank line in LDIF, and a dn line starts one.
 #>
 function Get-LDIFAccounts {
-    param([Parameter(Mandatory=$true)][string[]]$RawLines)
+    # AllowEmptyString, because LDIF separates entries with a blank line and PowerShell validates every
+    # element of a Mandatory [string[]]: without it, binding fails with "argument is an empty string" on
+    # the first entry separator, which reads as though the search returned nothing.
+    param([Parameter(Mandatory=$true)][AllowEmptyString()][string[]]$RawLines)
 
     $accounts = @()
     $current = $null

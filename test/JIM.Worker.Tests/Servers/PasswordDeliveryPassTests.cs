@@ -71,7 +71,21 @@ public class PasswordDeliveryPassTests
             () => new Mock<JIM.Data.Repositories.IActivityRepository>().Object,
             () => _protection,
             cs => _createConnector(cs),
-            (_, _, _) => Task.CompletedTask,
+            // Mirrors the real Activity server's refusal to record an Activity attributed to nobody. A fake that
+            // accepted one is why #1529 hid here: delivery passed null for both initiators, the real server threw,
+            // and every unit test passed regardless.
+            (activity, initiatedBy, initiatedByApiKey) =>
+            {
+                if (initiatedBy == null && initiatedByApiKey == null)
+                    throw new InvalidOperationException(
+                        "Activity must be attributed to a security principal. InitiatedByType has not been set.");
+                return Task.CompletedTask;
+            },
+            activity =>
+            {
+                activity.InitiatedByType = ActivityInitiatorType.System;
+                return Task.CompletedTask;
+            },
             _ => Task.CompletedTask,
             (_, _) => Task.CompletedTask,
             _ => Task.CompletedTask);
