@@ -1,6 +1,7 @@
 # LDAP Auxiliary Object Classes (RFC 4512 Directories)
 
-- **Status:** Doing
+- **Status:** Done
+- **Note:** Phase 9's "Scenario 18" shipped as Scenario 19; 18 was taken by Writeback To Source while this branch was in flight. Product defects the scenario surfaced were fixed on the branch; observations outside this feature are [#1531](https://github.com/TetronIO/JIM/issues/1531), [#1532](https://github.com/TetronIO/JIM/issues/1532) and [#1533](https://github.com/TetronIO/JIM/issues/1533).
 - **Issue:** [#492](https://github.com/TetronIO/JIM/issues/492)
 - **Blocked by:** [#845](https://github.com/TetronIO/JIM/issues/845) (classification tag model)
 - **Follow-on:** [#1168](https://github.com/TetronIO/JIM/issues/1168) (Advanced objectClass mode, deferred)
@@ -39,51 +40,51 @@ Design references: issue #492 (full requirements and rationale), the #845 commen
 
 TDD throughout: each phase's tests are written red-first. AD-path code (`GetSchemaAsync`, `GetObjectClassAttributesRecursively`) is deliberately untouched; AD regression coverage is asserted, not modified.
 
-### Phase 1: Data model and persistence
+### Phase 1: Data model and persistence ✅
 
 - `ConnectedSystemObjectTypeExtension`, `StructuralCarrierObjectTypeId`, discovery run/result entities in `JIM.Models/Staging`; EF migration.
 - Repository methods (`JIM.PostgresData`) + `ConnectedSystemServer` methods on the application layer (UI/API never bypass layers). Mutating paths follow the `AsTracking` + `RequireTracked` rules.
 - Tests: model tests; `RequiresPostgres` round-trip tests on a `NoTracking` context for each mutating path; cascade behaviour on object type removal (refresh data-loss semantics).
 
-### Phase 2: DIT Content Rule parsing
+### Phase 2: DIT Content Rule parsing ✅
 
 - `Rfc4512SchemaParser`: parse `dITContentRules` values (OID, NAME, AUX, MUST, MAY, NOT); add OID-keyed class dictionary alongside the name-keyed one.
 - Tests: parser unit tests over real-world rule strings, including NOT lists, multi-value AUX (`$` separators), and unknown OIDs.
 
-### Phase 3: Schema discovery merge
+### Phase 3: Schema discovery merge ✅
 
 - Subschema request additionally asks for `dITContentRules`. `GetRfcSchemaAsync` merges enabled extension types' attributes (Optional, `ClassName` provenance); DIT Content Rule findings persist as suggestions; class-kind tags populated per #845.
 - Refresh reconciliation: admin selections survive refresh unless the auxiliary type itself disappears (FK cascade); the existing schema refresh preflight/confirmation surfaces removals.
 - Tests: discovery unit tests (mocked subschema responses); merge semantics (aux MUST arrives Optional; dedupe against structural attributes; provenance correct); refresh reconciliation tests.
 
-### Phase 4: Usage discovery worker task
+### Phase 4: Usage discovery worker task ✅
 
 - New worker task + Activity (progress counters, cancellation) implementing quick sample and full scan (objectClass-only paged reads per selected structural class); persisted results replace the previous run's; one-at-a-time guard per Connected System.
 - Tests: worker task unit tests (paging, counting, cancellation persists partial results marked partial); Activity progress conformance.
 
-### Phase 5: Export objectClass management
+### Phase 5: Export objectClass management ✅
 
 - `LdapConnectorExport`: multi-valued `objectClass` on add; delta class-add on modify; MUST enforcement at class-add time; carrier class for aux-typed adds; remove the legacy flowed-`objectClass` preference; block `objectClass` as a flow target.
 - All failures surface via Pending Export / RPEI error reporting; batch summary statistics logged per Synchronisation Integrity rules.
 - Tests: export request construction tests for every branch above; error-path tests asserting the missing-MUST message names the attributes.
 
-### Phase 6: Import type matching
+### Phase 6: Import type matching ✅
 
 - `ConvertLdapResults` (and the USN/tombstone paths): order-independent, structural-first matching via persisted class-kind; auxiliary-typed match only when no structural match; regression tests proving one entry cannot yield two Connected System Objects.
 
-### Phase 7: Portal UI
+### Phase 7: Portal UI ✅
 
 - `ConnectedSystemSchemaTab`: Auxiliary Classes panel per structural type (RFC-path systems only): merge switches, suggestion chips (DIT Content Rules + usage counts), discovery scope controls (quick sample with editable N / full scan), persisted status strip (never run / running with Activity link and cancel / last completed / cancelled-partial); Structural Carrier Class select on aux-typed types; merged rows appear in the existing attribute table via the existing Class column.
 - Follows `JIM.Web/CLAUDE.md` conventions (panel spacing, alerts, gating). `dotnet build` required; bUnit coverage in `test/JIM.Web.Tests` where the scope rules allow.
 - The UI mock produced during design is the reference for placement and states.
 
-### Phase 8: Surface parity (REST + PowerShell) and docs
+### Phase 8: Surface parity (REST + PowerShell) and docs ✅
 
 - REST: read/update endpoints for a type's extensions and carrier (ID-based writes), trigger-discovery endpoint, discovery-status read; DTOs + OpenAPI docs; tests in `JIM.Web.Api.Tests`.
 - PowerShell: cmdlet support for reading/setting auxiliary class merges and carrier, and starting/observing discovery; Pester tests; documented output shapes.
 - `docs/` LDAP connector documentation updated in the same PR; `CHANGELOG.md` entries (✨) per changelog rules.
 
-### Phase 9: Integration testing
+### Phase 9: Integration testing ✅
 
 New OpenLDAP-backed scenario via `Run-IntegrationTests.ps1` (reusing the existing OpenLDAP container infrastructure, cf. Scenario 8): merge selection > import aux attributes > export flows add the class per entry (delta convergence) > aux-typed provisioning with carrier > full-scan discovery run end-to-end.
 
