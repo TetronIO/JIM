@@ -26,7 +26,7 @@ permissions:
 jobs:
   build:
     name: Generate and build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Checkout
@@ -60,7 +60,7 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       pages: write
       id-token: write
