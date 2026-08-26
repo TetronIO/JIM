@@ -128,8 +128,11 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: jim_test
+        # Ephemeral host port. A fixed 5432:5432 collides on the self-hosted runner
+        # host, where a second runner service can be running another job (e.g. a
+        # JIM-Bench run) with its own PostgreSQL on the same port at the same moment.
         ports:
-          - 5432:5432
+          - 5432
         # Hold the job's steps until PostgreSQL is accepting connections.
         options: >-
           --health-cmd pg_isready
@@ -143,6 +146,7 @@ jobs:
     # TRUNCATEs every table between tests.
     env:
       JIM_TEST_RESET_HOST: localhost
+      JIM_TEST_RESET_PORT: ${{ job.services.postgres.ports['5432'] }}
       JIM_TEST_RESET_USER: postgres
       JIM_TEST_RESET_PASSWORD: postgres
       JIM_TEST_RESET_DB: jim_test
