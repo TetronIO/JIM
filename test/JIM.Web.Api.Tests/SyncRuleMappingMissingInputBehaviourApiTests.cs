@@ -87,6 +87,12 @@ public class SyncRuleMappingMissingInputBehaviourApiTests
             .Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>()))
             .ReturnsAsync(() => _createdMapping);
 
+        // The duplicate-target check (#1532) reads the Synchronisation Rule's existing mappings on every
+        // mapping create; these tests exercise Missing Input Behaviour, so default the list to empty.
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<SyncRuleMapping>());
+
         var application = new JimApplication(mockRepository.Object);
         _controller = new SynchronisationController(
             new Mock<ILogger<SynchronisationController>>().Object,

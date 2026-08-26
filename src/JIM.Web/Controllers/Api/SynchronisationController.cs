@@ -3239,10 +3239,17 @@ public class SynchronisationController(
 
         var apiKey = await GetCurrentApiKeyAsync();
         bool success;
-        if (apiKey != null)
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason);
-        else
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason);
+        try
+        {
+            success = apiKey != null
+                ? await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason)
+                : await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to create Synchronisation Rule: {Message}", LogSanitiser.Sanitise(ex.Message));
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
         if (!success)
         {
             var validationErrors = syncRule.Validate();
@@ -3317,10 +3324,17 @@ public class SynchronisationController(
 
         var apiKey = await GetCurrentApiKeyAsync();
         bool success;
-        if (apiKey != null)
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId);
-        else
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId);
+        try
+        {
+            success = apiKey != null
+                ? await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId)
+                : await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason, previewActivityId: request.PreviewActivityId);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to update Synchronisation Rule: {Message}", LogSanitiser.Sanitise(ex.Message));
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
         if (!success)
         {
             var validationErrors = syncRule.Validate();
@@ -3742,9 +3756,18 @@ public class SynchronisationController(
                 $"These password settings cannot be satisfied: {string.Join(" ", problems)}"));
 
         var apiKey = await GetCurrentApiKeyAsync();
-        var success = apiKey != null
-            ? await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason)
-            : await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason);
+        bool success;
+        try
+        {
+            success = apiKey != null
+                ? await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason)
+                : await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to update the initial password configuration: {Message}", LogSanitiser.Sanitise(ex.Message));
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
 
         if (!success)
         {
