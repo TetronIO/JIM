@@ -87,7 +87,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
       && startsWith(github.event.pull_request.head.ref, 'dependabot/nuget/')
       && github.event.sender.login != 'jim-automation[bot]'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       # Fails with a diagnosable message rather than create-github-app-token's
       # opaque "'client-id' ... must be set to a non-empty string", which is what
