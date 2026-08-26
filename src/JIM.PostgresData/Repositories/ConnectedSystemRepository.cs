@@ -6341,6 +6341,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (tracked == null)
             return;
 
+        // Deleting a mapping is a Synchronisation Rule configuration change, but the deleted row can no longer
+        // carry the evidence: GetLatestSyncRuleConfigurationChangeAsync computes the configuration watermark
+        // from the SURVIVING rules' and mappings' timestamps, so without a stamp here the next Full
+        // Synchronisation would keep its unchanged-object optimisation on and skip the very objects whose
+        // values the deleted mapping contributed, leaving them in place indefinitely (#1533). Stamp the parent
+        // rule's LastUpdated so the deletion advances the watermark; the deletion's initiator and audit trail
+        // live on its own Activity, so the rule's LastUpdatedBy* fields are left to rule-level edits.
+        var parentRuleId = tracked.SyncRuleId;
+        if (parentRuleId.HasValue)
+        {
+            var parentRuleIdValue = parentRuleId.Value;
+            var parentRule = await Repository.Database.SyncRules
+                .AsTracking()
+                .SingleOrDefaultAsync(r => r.Id == parentRuleIdValue);
+            if (parentRule != null)
+                parentRule.LastUpdated = DateTime.UtcNow;
+        }
+
         // Remove all sources first
         Repository.Database.RemoveRange(tracked.Sources);
         Repository.Database.SyncRuleMappings.Remove(tracked);
