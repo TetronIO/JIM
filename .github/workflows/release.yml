@@ -24,6 +24,10 @@ permissions:
   id-token: write    # For cosign signing
   attestations: write # For SLSA provenance
 
+# Split-trust runner model (see ci.yml): tag pushes come only from authorised
+# maintainers, so every job here runs on the fast self-hosted runner. Nothing
+# pull_request-triggered ever runs on that runner, which is what keeps building
+# release artefacts on it acceptable for a public repo.
 jobs:
   # Job 1: Validate build, tests, and version consistency
   validate:

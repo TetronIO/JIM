@@ -28,7 +28,7 @@ permissions:
 jobs:
   build:
     name: Build site
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - name: Setup .NET
@@ -60,7 +60,7 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       pages: write
       id-token: write

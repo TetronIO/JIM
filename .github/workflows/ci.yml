@@ -14,7 +14,14 @@ permissions:
 jobs:
   build-and-test:
 
-    runs-on: self-hosted
+    # Split-trust runner model: push events only happen once code is on main (merged by
+    # an authorised person), so they may use the fast self-hosted runner. pull_request
+    # events execute code from anyone's fork and must stay on GitHub-hosted VMs; a
+    # self-hosted runner on a public repo would hand fork authors code execution on our
+    # infrastructure. The org runner group must also allowlist this workflow at
+    # refs/heads/main only, so that a fork PR editing this expression still cannot
+    # reach the runner. Every job in this file uses the same expression.
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -82,7 +89,7 @@ jobs:
     # minutes (measured in both Debug and Release; it is the schema walk over the model
     # graph, not the build), and it needs nothing the tests produce. Run alongside them
     # it costs no wall clock; appended to them it would add five minutes to every PR.
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -109,7 +116,7 @@ jobs:
     # unset); here they execute, guarding provider-specific and raw-SQL behaviour the
     # EF Core in-memory provider cannot reproduce (the class of bug behind #849/#850).
     # See issue #861. Runs on every PR so a failure blocks the merge.
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     services:
       postgres:
@@ -168,7 +175,7 @@ jobs:
     # LDAPTLS_REQCERT must never be set here: it would disable libldap certificate
     # validation for the whole process and turn every refusal case into a false pass,
     # which is the exact defect class this job exists to catch. A guard step asserts it.
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -217,7 +224,7 @@ jobs:
     # The job emits a matrix of unique base image references for scan-base-images to
     # consume. Any production Dockerfile with a non-digest-pinned FROM line fails here.
     # See .github/scripts/discover-base-images.ps1 and engineering/DEVELOPER_GUIDE.md.
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     outputs:
       matrix: ${{ steps.discover.outputs.matrix }}
 
@@ -237,7 +244,7 @@ jobs:
     # adding a new production Dockerfile requires zero changes to this workflow:
     # just add the "# jim-compliance: production-image" directive to the new file.
     needs: discover-base-images
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     permissions:
       contents: read
       security-events: write  # required to upload SARIF to code scanning
@@ -386,7 +393,7 @@ jobs:
     # name ("scan-base-images-summary") for the branch protection ruleset.
     if: always()
     needs: [discover-base-images, scan-base-images]
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     steps:
     - name: Check matrix results
       run: |
