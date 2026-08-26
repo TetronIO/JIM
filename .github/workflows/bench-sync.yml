@@ -22,7 +22,9 @@ permissions:
 
 jobs:
   notify-bench-repo:
-    runs-on: ubuntu-latest
+    # Trusted trigger (push to main only), so the self-hosted runner is safe here; see
+    # the split-trust note in ci.yml.
+    runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
