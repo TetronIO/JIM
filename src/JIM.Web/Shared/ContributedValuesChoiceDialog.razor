@@ -1,0 +1,165 @@
+@using JIM.Models.Core
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The recall-or-keep choice shown when deleting a Synchronisation Rule, or removing an Attribute Flow     *@
+@* mapping, that contributed current Metaverse attribute values (#1537). The component owns the copy for   *@
+@* both surfaces (the static helpers below), so the two dialogs cannot drift apart: same default (recall), *@
+@* same keep warning reveal, same result shape back to the caller.                                         *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="4">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="jim-recall-choice-impact">
+                @ImpactText
+                @* Plain lines, not a MudList: a list item inside an alert paints its own surface, which reads
+                   as a rendering fault rather than as emphasis (see ConsequenceConfirmationDialog). *@
+                @foreach (var attributeSummary in AttributeBreakdown)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1" @key="attributeSummary.AttributeId">
+                        @attributeSummary.AttributeName: @attributeSummary.ValueCount.ToString("N0") value(s) on @attributeSummary.ObjectCount.ToString("N0") Metaverse Object(s)
+                    </MudText>
+                }
+            </MudAlert>
+
+            <MudRadioGroup T="bool" @bind-Value="_keepValues">
+                <div class="mt-1">
+                    <MudRadio T="bool" Value="false" Color="Color.Primary">Recall the attribute values (recommended)</MudRadio>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">@RecallHelperText</MudText>
+                </div>
+                <div class="mt-2">
+                    <MudRadio T="bool" Value="true" Color="Color.Primary">Keep the attribute values</MudRadio>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">@KeepHelperText</MudText>
+                    @if (_keepValues)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 ms-12"
+                                  data-testid="jim-recall-choice-keep-warning">
+                            @KeepWarningText
+                        </MudAlert>
+                    }
+                </div>
+            </MudRadioGroup>
+
+            @if (!string.IsNullOrEmpty(InfoText))
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" data-testid="jim-recall-choice-info">
+                    @InfoText
+                </MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" data-testid="jim-recall-choice-cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" DropShadow="false" OnClick="Confirm"
+                   data-testid="jim-recall-choice-confirm">@ConfirmButtonText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// The impact statement inside the leading warning alert: what contributed the values, and at what scale.
+    /// </summary>
+    [Parameter]
+    public string ImpactText { get; set; } = null!;
+
+    /// <summary>
+    /// Per-attribute breakdown rendered as compact lines under the impact statement. Empty for the mapping
+    /// variant, whose impact statement already names its one attribute.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ContributedValuesAttributeSummary> AttributeBreakdown { get; set; } = [];
+
+    /// <summary>
+    /// Helper text under the recall option, stating when and how the recall happens on this surface.
+    /// </summary>
+    [Parameter]
+    public string RecallHelperText { get; set; } = null!;
+
+    /// <summary>
+    /// Helper text under the keep option, stating what keeping the values means.
+    /// </summary>
+    [Parameter]
+    public string KeepHelperText { get; set; } = null!;
+
+    /// <summary>
+    /// The warning revealed when keep is selected, naming the irreversible consequence.
+    /// </summary>
+    [Parameter]
+    public string KeepWarningText { get; set; } = null!;
+
+    /// <summary>
+    /// Optional info alert below the choice, for the mapping variant's "takes effect on save" timing note.
+    /// </summary>
+    [Parameter]
+    public string? InfoText { get; set; }
+
+    /// <summary>
+    /// Label for the confirm action, naming the destructive operation being consented to.
+    /// </summary>
+    [Parameter]
+    public string ConfirmButtonText { get; set; } = null!;
+
+    // Recall is the default on every surface (#1537); keep is the deliberate opt-out behind the warning.
+    private bool _keepValues;
+
+    /// <summary>
+    /// Opens the choice for a Synchronisation Rule deletion. Returns Cancelled true when the administrator
+    /// backed out of the deletion entirely, otherwise whether they chose to keep the contributed values.
+    /// </summary>
+    public static Task<(bool Cancelled, bool KeepContributedValues)> ShowForSyncRuleDeleteAsync(
+        IDialogService dialogService, ContributedValuesSummary summary)
+    {
+        return ShowAsync(dialogService, "Delete Synchronisation Rule", new DialogParameters<ContributedValuesChoiceDialog>
+        {
+            { x => x.ImpactText, $"This rule contributed the current values of {summary.TotalValues:N0} attribute value(s) across {summary.TotalObjects:N0} Metaverse Objects." },
+            { x => x.AttributeBreakdown, summary.Attributes },
+            { x => x.RecallHelperText, "JIM queues a recall operation. Where another Attribute Flow also contributes an attribute, its value takes over; otherwise the value is removed and any resulting changes are staged for export. Progress can be monitored from the Operations page." },
+            { x => x.KeepHelperText, "The values remain in place with no record of where they came from. JIM will never recall them; a new inbound Attribute Flow, or manual or automated removal, would be needed to change them later." },
+            { x => x.KeepWarningText, "Kept values become permanently unmanaged. This cannot be reversed once the rule is deleted." },
+            { x => x.ConfirmButtonText, "Delete Synchronisation Rule" }
+        });
+    }
+
+    /// <summary>
+    /// Opens the choice for an Attribute Flow mapping removal staged in the rule editor. Returns Cancelled
+    /// true when the administrator backed out of the removal, otherwise whether they chose to keep the
+    /// mapping's contributed values. The choice takes effect when the Synchronisation Rule is saved.
+    /// </summary>
+    public static Task<(bool Cancelled, bool KeepContributedValues)> ShowForMappingRemovalAsync(
+        IDialogService dialogService, string attributeName, int totalObjects)
+    {
+        return ShowAsync(dialogService, "Remove Attribute Mapping", new DialogParameters<ContributedValuesChoiceDialog>
+        {
+            { x => x.ImpactText, $"This Attribute Flow contributed the current values of {attributeName} on {totalObjects:N0} Metaverse Objects." },
+            { x => x.RecallHelperText, "The values are recalled at the next Full Synchronisation of the contributing Connected System, with any other contributing Attribute Flow taking over." },
+            { x => x.KeepHelperText, "The values remain in place with no record of where they came from. JIM will never recall them; a new inbound Attribute Flow, or manual or automated removal, would be needed to change them later." },
+            { x => x.KeepWarningText, "Kept values become permanently unmanaged. This cannot be reversed once the mapping is removed." },
+            { x => x.InfoText, "Your choice takes effect when you save the Synchronisation Rule." },
+            { x => x.ConfirmButtonText, "Remove Attribute Mapping" }
+        });
+    }
+
+    private static async Task<(bool Cancelled, bool KeepContributedValues)> ShowAsync(
+        IDialogService dialogService, string title, DialogParameters<ContributedValuesChoiceDialog> parameters)
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+        var dialog = await dialogService.ShowAsync<ContributedValuesChoiceDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is null or { Canceled: true }
+            ? (true, false)
+            : (false, result.Data is true);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(_keepValues));
+}

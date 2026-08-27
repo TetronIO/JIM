@@ -62,7 +62,7 @@ TDD throughout: every behaviour lands red-first. British English, Title Case dom
 - Portal staged-removal path: the Attribute Flow editor removes mappings in memory and persists on rule save, so the save path must carry each staged removal's choice (extend the rule update flow; exact carrier decided at implementation, likely alongside `SyncRuleMappingSettingsUpdate`).
 - Tests: keep exempts values from the #1536 orphan recall at the next Full Synchronisation (workflow test); recall path regression-pinned.
 
-### Phase 4: REST API
+### Phase 4: REST API ✅
 
 - The two DELETE endpoints gain `keepContributedValues`; rule delete returns 202 + `SyncRuleDeletionResult` when queued.
 - New contributed-values-summary GET endpoints.
@@ -76,7 +76,7 @@ TDD throughout: every behaviour lands red-first. British English, Title Case dom
 - `New-JIMSyncRuleMapping`: `-Enabled` parameter (parity fix).
 - Pester tests; cmdlet help includes the keep warning and a destructive example.
 
-### Phase 6: Portal
+### Phase 6: Portal ✅
 
 - Rule delete dialog and mapping removal dialog per the UX artefact (impact summary alert, radio-with-helper pattern from the deprovision choice, keep-selected warning reveal); shown only when the summary reports affected values, otherwise today's message boxes.
 - Post-queue snackbar with "View Activity" (`/activity/{id}`); change reason flow unchanged.

@@ -76,7 +76,7 @@ else if (_syncRule != null)
         }
 
         <MudTabPanel Text="Attribute Flow">
-            <SyncRuleAttributeFlowTab SyncRule="_syncRule" OnChanged="OnChildChanged" />
+            <SyncRuleAttributeFlowTab SyncRule="_syncRule" MappingRemovalChoices="_mappingRemovalChoices" OnChanged="OnChildChanged" />
         </MudTabPanel>
 
         @if (_syncRule.Id > 0)
@@ -93,7 +93,8 @@ else if (_syncRule != null)
                     <MudText Typo="Typo.h5" Class="mb-3">Danger Zone</MudText>
                     <MudText Class="mud-text-secondary mb-4">
                         Deleting this Synchronisation Rule is permanent and cannot be undone. All configuration and Attribute Flow
-                        mappings will be lost.
+                        mappings will be lost. If this rule contributed Metaverse attribute values, you will choose whether they
+                        are recalled or kept.
                     </MudText>
                     <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteSyncRuleAsync"
                         DropShadow="false" Color="Color.Error">Delete Synchronisation Rule</MudButton>
@@ -292,6 +293,14 @@ else if (_syncRule != null)
     private int ChangesTabIndex => ShowInitialPasswordTab ? 5 : 4;
     private bool IsReadOnlyTabActive => _syncRule is { Id: > 0 } && _activeTabIndex >= ChangesTabIndex;
 
+    /// <summary>
+    /// The recall-or-keep choices for the Attribute Flow mapping removals staged in the editor this session
+    /// (#1537). The Attribute Flow tab records one entry for EVERY staged removal of a persisted mapping (keep
+    /// false for recall), the save passes them to the application layer so each named mapping is deleted
+    /// properly, and a successful save (or a reload, which discards the staged edits) empties the list.
+    /// </summary>
+    private readonly List<SyncRuleMappingRemovalChoice> _mappingRemovalChoices = [];
+
     // A single JimApplication (and its DbContext) is held for the whole edit session. The rule is loaded
     // change-tracked and every tab mutates that tracked graph, so the final save lets EF Core diff and
     // persist the changes. A fresh context per handler would leave the rule detached at save time and the
@@ -319,6 +328,9 @@ else if (_syncRule != null)
         // (e.g. the context used while creating, before navigating to the new rule's edit URL).
         _jim?.Dispose();
         _jim = JimFactory.Create();
+
+        // a (re)load discards any staged edits, so the removal choices describing them go too.
+        _mappingRemovalChoices.Clear();
 
         _breadcrumbs =
         [
@@ -724,7 +736,8 @@ else if (_syncRule != null)
         bool wasSuccessful;
         try
         {
-            wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user, changeReason: changeReason, previewActivityId: previewActivityId);
+            wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user, changeReason: changeReason, previewActivityId: previewActivityId,
+                mappingRemovalChoices: _mappingRemovalChoices);
         }
         catch (ArgumentException ex)
         {
@@ -733,6 +746,10 @@ else if (_syncRule != null)
             Snackbar.Add(ex.Message, Severity.Error);
             return;
         }
+        // the staged removals the choices describe have been applied; a failed save keeps them for the retry.
+        if (wasSuccessful)
+            _mappingRemovalChoices.Clear();
+
         switch (wasSuccessful)
         {
             // send the user to the existing-sync-rule view.
@@ -757,19 +774,52 @@ else if (_syncRule != null)
         if (_syncRule == null || _jim == null)
             return;
 
-        var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to delete this Synchronisation Rule?", yesText: "Delete!", cancelText: "Cancel");
-        if (confirmationResult.HasValue && confirmationResult.Value)
+        // whether the rule contributes any current Metaverse attribute values decides which confirmation the
+        // administrator sees: a plain message box when there is nothing at stake beyond configuration, or the
+        // recall-or-keep choice when there is (#1537). Count queries only; nothing is materialised.
+        var summary = await _jim.ConnectedSystems.GetSyncRuleContributedValuesSummaryAsync(_syncRule.Id);
+        var keepContributedValues = false;
+        if (summary.TotalValues == 0)
         {
-            // offer an optional reason for the configuration change history; cancelling aborts the delete
-            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
-            if (cancelled)
+            var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to delete this Synchronisation Rule?", yesText: "Delete!", cancelText: "Cancel");
+            if (!confirmationResult.HasValue || !confirmationResult.Value)
                 return;
-
-            // attribute the operation to the signed-in user; use the edit session's context
-            var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
-            await _jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user, changeReason);
-            NavManager.NavigateTo("/admin/sync-rules");
         }
+        else
+        {
+            var (choiceCancelled, keep) = await ContributedValuesChoiceDialog.ShowForSyncRuleDeleteAsync(DialogService, summary);
+            if (choiceCancelled)
+                return;
+            keepContributedValues = keep;
+        }
+
+        // offer an optional reason for the configuration change history; cancelling aborts the delete
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        if (cancelled)
+            return;
+
+        // attribute the operation to the signed-in user; use the edit session's context
+        var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
+        var result = await _jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user, changeReason, recallContributedValues: !keepContributedValues);
+
+        // when a recall queues, the rule was disabled and deletion completes in the background; say so and
+        // offer the recall Activity, which is where progress lives. The snackbar is enqueued before
+        // navigating; ISnackbar is circuit-scoped, so the message survives the soft navigation.
+        if (result is { RecallQueued: true, RecallActivityId: { } recallActivityId })
+        {
+            Snackbar.Add($"Synchronisation Rule deletion queued: recalling values from {result.AffectedObjectCount:N0} Metaverse Object(s).",
+                Severity.Success, config =>
+                {
+                    config.Action = "View Activity";
+                    config.OnClick = _ =>
+                    {
+                        NavManager.NavigateTo($"/activity/{recallActivityId}");
+                        return Task.CompletedTask;
+                    };
+                });
+        }
+
+        NavManager.NavigateTo("/admin/sync-rules");
     }
 
     public void Dispose()
