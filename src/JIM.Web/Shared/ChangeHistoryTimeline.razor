@@ -82,73 +82,80 @@ else
                                     @if (changeGroup.AttributeChanges.Any())
                                     {
                                         <MudDivider />
-                                        <div class="change-summary" style="display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 4px 8px;">
+                                        <div class="change-summary" style="display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 4px 8px;">
                                             @foreach (var change in GetVisibleDisplayChanges(changeGroup))
                                             {
-                                                    <MudText Class="mud-text-secondary" Style="white-space: nowrap;">
-                                                        @change.AttributeName
-                                                    </MudText>
-                                                    <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(change)">
-                                                        @change.DisplayChangeType
-                                                    </MudChip>
-                                                    @* Value display with old value de-emphasised for updates *@
-                                                    <div
-                                                        style="max-width: 700px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                                        @if (change.IsUpdate)
-                                                        {
-                                                            @if (change.OldReferenceValue != null || change.NewReferenceValue != null)
-                                                            {
-                                                                <MudText Class="mud-text-secondary" Style="display: inline;">
-                                                                    @(change.OldReferenceValue?.DisplayName ?? "(none)")</MudText>
-                                                                    <MudText Class="mud-text-secondary" Style="display: inline;"> →
-                                                                    </MudText>
-                                                                    <MudText Style="display: inline;">
-                                                                        @(change.NewReferenceValue?.DisplayName ?? "(none)")</MudText>
-                                                                    }
-                                                        else
-                                                                    {
-                                                                        <MudText Class="mud-text-secondary" Style="display: inline;">
-                                                                            <TextValueDisplay Value="@change.OldValue" Class="jim-text-code" /></MudText>
-                                                                            <MudText Class="mud-text-secondary" Style="display: inline;"> →
-                                                                            </MudText>
-                                                                            <MudText Style="display: inline;">
-                                                                                <TextValueDisplay Value="@change.NewValue" Class="jim-text-code" /></MudText>
-                                                                            }
-                                                                        }
-                                                    else
-                                                                        {
-                                                                            @* Set/Add values get bold emphasis, Removed values get de-emphasised. The code
-                                                                               face goes on TextValueDisplay's Class, which applies it to a real value only,
-                                                                               so the hyphen and the "(whitespace)" affordance keep the ordinary face. *@
-                                                                            @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
-                                                                            {
-                                                                                <MudText Class="mud-text-secondary"><TextValueDisplay Value="@GetDisplayValue(change)" Class="jim-text-code" />
-                                                                                </MudText>
-                                                                            }
-                                                                            else
-                                                                            {
-                                                                                <MudText><TextValueDisplay Value="@GetDisplayValue(change)" Class="jim-text-code" />
-                                                                                </MudText>
-                                                                            }
-                                                                        }
-                                                                    </div>
-                                                            }
-                                                            @if (ShouldShowMoreIndicatorForDisplay(changeGroup))
-                                                            {
-                                                                <div class="more-changes-indicator">
-                                                                    <MudChip T="string" Variant="Variant.Filled" Color="Color.Primary">
-                                                                        +@GetRemainingDisplayChangesCount(changeGroup).ToString("N0") more
-                                                                    </MudChip>
-                                                                </div>
-                                                            }
-                                                        </div>
-                                                    }
-                                else if (changeGroup.ChangeType == ObjectChangeType.Deleted)
+                                                <MudText Class="mud-text-secondary" Style="white-space: nowrap;">
+                                                    @change.AttributeName
+                                                </MudText>
+                                                <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(change)">
+                                                    @change.DisplayChangeType
+                                                </MudChip>
+                                                @* The value is one line, clipped with an ellipsis. A .jim-one-line-list rather than a
+                                                   clamp on the cell itself, because the clamp has to sit on the element that directly
+                                                   contains the text: MudText renders a block <p>, so an ellipsis declared on the cell
+                                                   never applied and a long Distinguished Name was hard-cut mid-value. The arrow holds
+                                                   its size and only the values give way. Each value carries its full text as a title,
+                                                   and the card opens the change detail dialog, so nothing clipped here is lost. *@
+                                                <div class="jim-one-line-list">
+                                                    @if (change.IsUpdate)
                                                     {
-                                                        <MudText Class="mud-text-secondary">
-                                                            Object was deleted. Final attribute values were not captured.
-                                                        </MudText>
+                                                        @if (change.OldReferenceValue != null || change.NewReferenceValue != null)
+                                                        {
+                                                            var oldReferenceName = change.OldReferenceValue?.DisplayName ?? "(none)";
+                                                            var newReferenceName = change.NewReferenceValue?.DisplayName ?? "(none)";
+                                                            <MudText Class="mud-text-secondary jim-one-line-list-value" title="@oldReferenceName">@oldReferenceName</MudText>
+                                                            <MudText Class="mud-text-secondary">→</MudText>
+                                                            <MudText Class="jim-one-line-list-value" title="@newReferenceName">@newReferenceName</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText Class="mud-text-secondary jim-one-line-list-value" title="@change.OldValue">
+                                                                <TextValueDisplay Value="@change.OldValue" Class="jim-text-code" />
+                                                            </MudText>
+                                                            <MudText Class="mud-text-secondary">→</MudText>
+                                                            <MudText Class="jim-one-line-list-value" title="@change.NewValue">
+                                                                <TextValueDisplay Value="@change.NewValue" Class="jim-text-code" />
+                                                            </MudText>
+                                                        }
                                                     }
+                                                    else
+                                                    {
+                                                        @* Set/Add values get bold emphasis, Removed values get de-emphasised. The code
+                                                           face goes on TextValueDisplay's Class, which applies it to a real value only,
+                                                           so the hyphen and the "(whitespace)" affordance keep the ordinary face. *@
+                                                        var displayValue = GetDisplayValue(change);
+                                                        @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
+                                                        {
+                                                            <MudText Class="mud-text-secondary jim-one-line-list-value" title="@displayValue">
+                                                                <TextValueDisplay Value="@displayValue" Class="jim-text-code" />
+                                                            </MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText Class="jim-one-line-list-value" title="@displayValue">
+                                                                <TextValueDisplay Value="@displayValue" Class="jim-text-code" />
+                                                            </MudText>
+                                                        }
+                                                    }
+                                                </div>
+                                            }
+                                            @if (ShouldShowMoreIndicatorForDisplay(changeGroup))
+                                            {
+                                                <div class="more-changes-indicator">
+                                                    <MudChip T="string" Variant="Variant.Filled" Color="Color.Primary">
+                                                        +@GetRemainingDisplayChangesCount(changeGroup).ToString("N0") more
+                                                    </MudChip>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else if (changeGroup.ChangeType == ObjectChangeType.Deleted)
+                                    {
+                                        <MudText Class="mud-text-secondary">
+                                            Object was deleted. Final attribute values were not captured.
+                                        </MudText>
+                                    }
                                                 </MudStack>
                                             </MudCardContent>
                                         </MudCard>
