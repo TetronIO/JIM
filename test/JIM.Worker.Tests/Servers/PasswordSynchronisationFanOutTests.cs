@@ -9,9 +9,11 @@ using System.Threading.Tasks;
 using JIM.Application.Servers;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Worker.Tests.Services;
 using Moq;
 using NUnit.Framework;
@@ -51,7 +53,7 @@ public class PasswordSynchronisationFanOutTests
         _deliveryRequests = [];
 
         _connectedSystemRepository
-            .Setup(r => r.GetEnabledPasswordSynchronisationTargetsAsync())
+            .Setup(r => r.GetPasswordSynchronisationTargetsAsync())
             .ReturnsAsync([]);
         _connectedSystemRepository
             .Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(It.IsAny<Guid>()))
@@ -65,8 +67,20 @@ public class PasswordSynchronisationFanOutTests
             // These fixtures never reach a Connector: they exercise queueing and one-change delivery with a
             // Connector handed in directly. Resolving one here would be answering a question they do not ask.
             _ => throw new NotSupportedException("This fixture does not resolve Connectors."),
-            (activity, _, _) =>
+            (activity, initiatedBy, initiatedByApiKey) =>
             {
+                // Mirrors the real Activity server: an Activity attributed to neither a person nor an API key is
+                // refused. A fake that accepted one let #1529 through the whole unit suite.
+                if (initiatedBy == null && initiatedByApiKey == null)
+                    throw new InvalidOperationException(
+                        "Activity must be attributed to a security principal. InitiatedByType has not been set.");
+                _createdActivities.Add(activity);
+                return Task.CompletedTask;
+            },
+            activity =>
+            {
+                activity.InitiatedByType = ActivityInitiatorType.System;
+                activity.InitiatedByName = "System";
                 _createdActivities.Add(activity);
                 return Task.CompletedTask;
             },
@@ -81,7 +95,7 @@ public class PasswordSynchronisationFanOutTests
 
     private void ArrangeTargets(params PasswordSynchronisationTarget[] targets) =>
         _connectedSystemRepository
-            .Setup(r => r.GetEnabledPasswordSynchronisationTargetsAsync())
+            .Setup(r => r.GetPasswordSynchronisationTargetsAsync())
             .ReturnsAsync(targets.ToList());
 
     private void ArrangeAccounts(Guid metaverseObjectId, params ConnectedSystemObject[] accounts) =>
@@ -89,11 +103,19 @@ public class PasswordSynchronisationFanOutTests
             .Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId))
             .ReturnsAsync(accounts.ToList());
 
-    private static PasswordSynchronisationTarget Target(int connectedSystemId, string name) => new()
+    /// <summary>
+    /// The administrator these fixtures queue changes as. Production always has a principal (a signed-in
+    /// administrator, or the API key an automation authenticated with), and an Activity attributed to neither is
+    /// refused by the Activity server, so passing null here would describe a state the application cannot reach.
+    /// </summary>
+    private static readonly MetaverseObject TestPrincipal = new() { Id = Guid.NewGuid() };
+
+    private static PasswordSynchronisationTarget Target(int connectedSystemId, string name, bool enabled = true) => new()
     {
         ConnectedSystemId = connectedSystemId,
         ConnectedSystemName = name,
         TargetObjectTypeId = UserObjectTypeId,
+        Enabled = enabled,
         TimeToLive = TimeSpan.FromDays(7)
     };
 
@@ -115,7 +137,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -133,7 +155,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         Assert.That(_deliveryRequests, Is.Empty);
     }
@@ -148,7 +170,7 @@ public class PasswordSynchronisationFanOutTests
         ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
         _deliveryRequests.Clear();
 
         var change = _syncRepository.PendingPasswordChanges.Values.Single();
@@ -163,12 +185,19 @@ public class PasswordSynchronisationFanOutTests
         }
     }
 
+    /// <summary>
+    /// A system switched on after a spell off has nothing parked: what it has is everything queued while it was
+    /// off, already Pending and already due, which nothing un-parks. Requiring something to have been released
+    /// before asking for a pass would leave those changes waiting on the worker's next idle sweep, making
+    /// "enabling delivers what accumulated" true only up to a minute later. Only a genuine change to delivery
+    /// reaches here, so the pass is cheap and a pass with nothing due finishes immediately.
+    /// </summary>
     [Test]
-    public async Task ReleaseForDelivery_NothingReleased_AsksForNothingAsync()
+    public async Task ReleaseForDelivery_NothingParked_StillAsksForDeliveryAsync()
     {
         await _server.ReleaseForDeliveryAsync(3);
 
-        Assert.That(_deliveryRequests, Is.Empty);
+        Assert.That(_deliveryRequests, Is.EqualTo(new int?[] { 3 }));
     }
 
     [Test]
@@ -180,7 +209,7 @@ public class PasswordSynchronisationFanOutTests
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -201,7 +230,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "Correct-Horse-Battery-Staple",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         var queued = _syncRepository.PendingPasswordChanges.Values.Single();
         using (Assert.EnterMultipleScope())
@@ -223,7 +252,7 @@ public class PasswordSynchronisationFanOutTests
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -244,30 +273,125 @@ public class PasswordSynchronisationFanOutTests
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         Assert.That(result.Targets.Single().ConnectedSystemObjectId, Is.Null,
             "The group object is not this identity's account in that system.");
     }
 
     [Test]
-    public async Task QueuePasswordChange_NeverQueuesForASystemThatIsNotEnabledAsync()
+    public async Task QueuePasswordChange_NeverQueuesForASystemNobodyConfiguredAsync()
     {
-        // The identity has an account there, but nobody switched Password Synchronisation on for it. Queueing
-        // anyway would accumulate passwords for a system the administrator never opted in.
+        // The identity has an account there, but nobody configured Password Synchronisation for it at all.
+        // Queueing anyway would accumulate passwords for a system the administrator never opted in to.
         var metaverseObjectId = Guid.NewGuid();
         ArrangeTargets(Target(3, "Corporate AD"));
         ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId), Account(9, UserObjectTypeId));
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Targets, Has.Count.EqualTo(1));
             Assert.That(result.Targets[0].ConnectedSystemId, Is.EqualTo(3));
         }
+    }
+
+    /// <summary>
+    /// Requirement 2: configured but switched off accumulates, it does not discard. This is the difference
+    /// between an administrator disabling a system for a maintenance window and every password changed during
+    /// that window silently never reaching it, which is the exact failure Password Synchronisation exists to
+    /// prevent. Requirement 3's drain on enable also has nothing to drain unless the change was queued here.
+    /// </summary>
+    [Test]
+    public async Task QueuePasswordChange_ForAConfiguredButDisabledSystem_StillQueuesAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        ArrangeTargets(Target(3, "Corporate AD", enabled: false));
+        ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
+
+        var result = await _server.QueuePasswordChangeAsync(
+            metaverseObjectId, "Ada Lovelace", "a-password",
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_syncRepository.PendingPasswordChanges, Has.Count.EqualTo(1),
+                "a switched-off system accumulates the change rather than losing it");
+            Assert.That(result.NoTargets, Is.False);
+            Assert.That(result.Targets[0].Enabled, Is.False,
+                "the caller is told the change is queued and held, not queued and on its way");
+        }
+    }
+
+    /// <summary>
+    /// The Activity is the durable record, read long after the queue rows are gone, so it has to distinguish
+    /// "this system has the password" from "this system will get it when somebody switches it on". Both are
+    /// "queued" to the queue and they are entirely different to the person reading the Activity.
+    /// </summary>
+    [Test]
+    public void DescribeQueueOutcome_WithASystemThatIsSwitchedOff_SaysTheChangeIsHeld()
+    {
+        var message = PasswordSynchronisationServer.DescribeQueueOutcome(
+        [
+            new PasswordQueueTargetOutcome { ConnectedSystemId = 3, ConnectedSystemName = "Corporate AD", Enabled = true },
+            new PasswordQueueTargetOutcome { ConnectedSystemId = 4, ConnectedSystemName = "Contractor LDAP", Enabled = false }
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("Corporate AD"));
+            Assert.That(message, Does.Contain("Held until Password Synchronisation is enabled on Contractor LDAP"));
+        }
+    }
+
+    [Test]
+    public void DescribeQueueOutcome_WithEverySystemTaking_SaysNothingAboutHolding()
+    {
+        var message = PasswordSynchronisationServer.DescribeQueueOutcome(
+            [new PasswordQueueTargetOutcome { ConnectedSystemId = 3, ConnectedSystemName = "Corporate AD", Enabled = true }]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("Corporate AD"));
+            Assert.That(message, Does.Not.Contain("Held"));
+        }
+    }
+
+    /// <summary>
+    /// Requirement 14, and the wording matters: "configured", not "enabled". Once a switched-off system
+    /// accumulates rather than discards, the only case where nothing at all is queued is one where nobody has
+    /// configured Password Synchronisation anywhere, and saying "enabled" would send an administrator to the
+    /// wrong control.
+    /// </summary>
+    [Test]
+    public void DescribeQueueOutcome_WithNoTargets_SaysNothingWasQueuedAnywhere()
+    {
+        var message = PasswordSynchronisationServer.DescribeQueueOutcome([]);
+
+        Assert.That(message, Is.EqualTo(
+            "No Connected System is configured for Password Synchronisation, so this password was not queued for delivery anywhere."));
+    }
+
+    /// <summary>
+    /// The change is still asked for, even where every target is switched off. Asking is cheap and idempotent,
+    /// and the alternative is a special case that decides for itself when delivery is pointless; delivery
+    /// re-reads each system's enabled state anyway, which is the one place that judgement belongs.
+    /// </summary>
+    [Test]
+    public async Task QueuePasswordChange_ForADisabledSystem_StillAsksForDeliveryAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        ArrangeTargets(Target(3, "Corporate AD", enabled: false));
+        ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
+
+        await _server.QueuePasswordChangeAsync(
+            metaverseObjectId, "Ada Lovelace", "a-password",
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
+
+        Assert.That(_deliveryRequests, Has.Count.EqualTo(1));
     }
 
     [Test]
@@ -280,7 +404,7 @@ public class PasswordSynchronisationFanOutTests
 
         var result = await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -301,7 +425,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         var activity = _createdActivities.Single();
         using (Assert.EnterMultipleScope())
@@ -323,7 +447,7 @@ public class PasswordSynchronisationFanOutTests
 
         await _server.QueuePasswordChangeAsync(
             metaverseObjectId, "Ada Lovelace", "Correct-Horse-Battery-Staple",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         var activity = _createdActivities.Single();
         var serialised = $"{activity.TargetName} {activity.Message} {activity.TargetContext}";
@@ -340,9 +464,9 @@ public class PasswordSynchronisationFanOutTests
         ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
 
         await _server.QueuePasswordChangeAsync(metaverseObjectId, "Ada Lovelace", "first-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
         await _server.QueuePasswordChangeAsync(metaverseObjectId, "Ada Lovelace", "second-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         var queued = _syncRepository.PendingPasswordChanges.Values.Single();
         Assert.That(_protection.UnprotectPassword(queued.EncryptedPassword), Is.EqualTo("second-password"),
@@ -359,7 +483,7 @@ public class PasswordSynchronisationFanOutTests
         ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
 
         await _server.QueuePasswordChangeAsync(metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, initiatedBy: TestPrincipal, CancellationToken.None);
 
         var queued = _syncRepository.PendingPasswordChanges.Values.Single();
         Assert.That(queued.ExpiresAt - queued.CreatedAt, Is.EqualTo(TimeSpan.FromDays(30)));
@@ -375,7 +499,7 @@ public class PasswordSynchronisationFanOutTests
         ArrangeAccounts(metaverseObjectId, Account(3, UserObjectTypeId));
 
         await _server.QueuePasswordChangeAsync(metaverseObjectId, "Ada Lovelace", "a-password",
-            PasswordExpiryBehaviour.RequireChangeAtNextSignIn, initiatedBy: null, CancellationToken.None);
+            PasswordExpiryBehaviour.RequireChangeAtNextSignIn, initiatedBy: TestPrincipal, CancellationToken.None);
 
         Assert.That(_syncRepository.PendingPasswordChanges.Values.Single().ExpiryBehaviour,
             Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));

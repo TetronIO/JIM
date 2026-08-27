@@ -2,7 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using Serilog;
+using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.RegularExpressions;
 namespace JIM.Connectors.LDAP;
 
 /// <summary>
@@ -23,6 +25,14 @@ namespace JIM.Connectors.LDAP;
 /// configured trust anchors rather than adding to them, so a directory holding only JIM's certificates would stop
 /// every publicly-issued or otherwise system-trusted directory certificate validating. Copying the bundle in keeps
 /// trust strictly additive: adding certificates to the JIM store can only ever allow more connections, never fewer.
+/// </para>
+/// <para>
+/// The directory must satisfy two different LDAP client TLS backends. GnuTLS-backed builds of the platform LDAP
+/// client (Debian, and Ubuntu up to 24.04) read every file in the directory regardless of name. OpenSSL-backed
+/// builds (Ubuntu 26.04 onwards) look anchors up strictly by subject-hash file name and see nothing else, so the
+/// bundle is split into one file per certificate and the whole directory is passed through <c>openssl rehash</c>,
+/// which creates the hash-named entries OpenSSL requires. Without that, a populated JIM store silently stops
+/// every LDAPS connection validating on OpenSSL-backed platforms.
 /// </para>
 /// </remarks>
 internal sealed class LdapTrustedCertificateDirectory : IDisposable
@@ -110,6 +120,7 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
             }
 
             CopySystemBundle(directoryPath, systemBundleCandidatePaths ?? DefaultSystemBundlePaths, logger);
+            CreateSubjectHashEntries(directoryPath, logger);
 
             logger.Debug("LdapTrustedCertificateDirectory: prepared {Count} trusted certificate(s) from the JIM certificate store for LDAPS validation", writtenThumbprints.Count);
             return trustDirectory;
@@ -189,6 +200,17 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
             return;
         }
 
+        // A multi-certificate bundle file is invisible to OpenSSL's by-hash lookup, so split it into one file per
+        // certificate; openssl rehash then gives each its hash entry, and GnuTLS reads the individual files just as
+        // happily as it read the bundle. A bundle with no recognisable PEM blocks is copied verbatim instead, which
+        // preserves whatever a GnuTLS-backed client could previously make of it.
+        var certificatesWritten = SplitBundleIntoIndividualCertificates(directoryPath, bundlePath);
+        if (certificatesWritten > 0)
+        {
+            logger.Debug("LdapTrustedCertificateDirectory: split the operating system certificate bundle at {BundlePath} into {Count} certificate file(s) so system-trusted issuers continue to validate", bundlePath, certificatesWritten);
+            return;
+        }
+
         var destinationPath = Path.Combine(directoryPath, SystemBundleFileName);
         System.IO.File.Copy(bundlePath, destinationPath, true);
         if (!OperatingSystem.IsWindows())
@@ -196,6 +218,81 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
 
         logger.Debug("LdapTrustedCertificateDirectory: copied the operating system certificate bundle from {BundlePath} so system-trusted issuers continue to validate", bundlePath);
     }
+
+    /// <summary>
+    /// Writes each PEM certificate block found in the bundle to its own file in the trust directory, returning how
+    /// many were written. Zero means the bundle held no recognisable PEM blocks and the caller should fall back to
+    /// copying it verbatim.
+    /// </summary>
+    private static int SplitBundleIntoIndividualCertificates(string directoryPath, string bundlePath)
+    {
+        var bundleContent = System.IO.File.ReadAllText(bundlePath);
+        var certificateBlocks = Regex.Matches(bundleContent, "-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", RegexOptions.Singleline);
+
+        var index = 0;
+        foreach (Match certificateBlock in certificateBlocks)
+        {
+            var certificatePath = ResolveWithin(directoryPath, $"{SystemBundleEntryPrefix}{index:D3}.crt");
+            System.IO.File.WriteAllText(certificatePath, certificateBlock.Value + Environment.NewLine);
+            if (!OperatingSystem.IsWindows())
+                System.IO.File.SetUnixFileMode(certificatePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            index++;
+        }
+
+        return index;
+    }
+
+    /// <summary>
+    /// Runs <c>openssl rehash</c> over the trust directory so OpenSSL-backed LDAP clients can find the anchors.
+    /// </summary>
+    /// <remarks>
+    /// OpenSSL looks trust anchors up strictly by subject-hash file name and sees nothing else in a CA directory,
+    /// while GnuTLS reads every file regardless. The hash entries therefore make the directory valid for both
+    /// backends. Where the binary is unavailable or fails, the directory still works on GnuTLS-backed platforms,
+    /// so this degrades with a warning rather than failing the connection outright.
+    /// </remarks>
+    private static void CreateSubjectHashEntries(string directoryPath, ILogger logger)
+    {
+        const int rehashTimeoutMilliseconds = 30_000;
+        try
+        {
+            using var process = new Process();
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = "openssl",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            process.StartInfo.ArgumentList.Add("rehash");
+            process.StartInfo.ArgumentList.Add(directoryPath);
+            process.Start();
+
+            if (!process.WaitForExit(rehashTimeoutMilliseconds))
+            {
+                process.Kill(entireProcessTree: true);
+                logger.Warning("LdapTrustedCertificateDirectory: openssl rehash did not finish within {TimeoutMilliseconds}ms. LDAPS connections may not honour the JIM certificate store on platforms whose LDAP client is backed by OpenSSL", rehashTimeoutMilliseconds);
+                return;
+            }
+
+            if (process.ExitCode != 0)
+            {
+                var standardError = process.StandardError.ReadToEnd();
+                logger.Warning("LdapTrustedCertificateDirectory: openssl rehash exited with code {ExitCode}: {StandardError}. LDAPS connections may not honour the JIM certificate store on platforms whose LDAP client is backed by OpenSSL", process.ExitCode, standardError);
+            }
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or PlatformNotSupportedException)
+        {
+            logger.Warning(ex, "LdapTrustedCertificateDirectory: could not run openssl rehash. LDAPS connections may not honour the JIM certificate store on platforms whose LDAP client is backed by OpenSSL");
+        }
+    }
+
+    /// <summary>
+    /// File name prefix for the individual certificates split out of the operating system bundle. The numeric
+    /// prefix keeps them visibly distinct from the thumbprint-named JIM certificates, matching the bundle file
+    /// name they replace.
+    /// </summary>
+    internal const string SystemBundleEntryPrefix = "00-system-ca-";
 
     public void Dispose()
     {

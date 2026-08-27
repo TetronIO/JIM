@@ -23,7 +23,10 @@ permissions:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ubuntu-latest
+    # Split-trust runner model (see ci.yml): push and schedule runs are trusted and use
+    # the fast self-hosted runner; pull_request runs execute fork code and stay on
+    # GitHub-hosted VMs.
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
 
     permissions:
       security-events: write

@@ -38,6 +38,19 @@ public class PendingPasswordChangeHeader
     /// <inheritdoc cref="ConnectedSystemId"/>
     public string ConnectedSystemName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Whether that Connected System is currently taking synchronised passwords. False means the change is held
+    /// rather than on its way: a configured system that is switched off accumulates queued changes, and a
+    /// delivery pass steps over it until somebody switches it on.
+    /// <para>
+    /// Defaulted to true deliberately. The read path sets it per row, so the default only governs a header built
+    /// in code, and the safe reading of one of those is the ordinary case: a change on its way to a live system.
+    /// Defaulting to false would make every hand-built header report as held, which is the rarer state and the
+    /// more alarming one to show by accident.
+    /// </para>
+    /// </summary>
+    public bool ConnectedSystemTakingPasswords { get; set; } = true;
+
     public PendingPasswordChangeStatus Status { get; set; }
 
     /// <summary>
@@ -76,7 +89,21 @@ public class PendingPasswordChangeHeader
     /// <summary>
     /// Whether a delivery pass at <paramref name="asOf"/> would attempt this change. The list uses it to separate
     /// a change that is waiting out a backoff from one that is due and simply has not been reached yet.
+    /// <para>
+    /// A change held for a switched-off system is never due, whatever its retry time says: a pass steps over
+    /// that system entirely. Answering otherwise would put "Due now" against a row nothing will attempt, beside
+    /// a queue summary correctly counting it as waiting and not due.
+    /// </para>
     /// </summary>
     public bool IsDue(DateTime asOf) =>
-        Status == PendingPasswordChangeStatus.Pending && (NextRetryAt == null || NextRetryAt <= asOf);
+        Status == PendingPasswordChangeStatus.Pending
+        && ConnectedSystemTakingPasswords
+        && (NextRetryAt == null || NextRetryAt <= asOf);
+
+    /// <summary>
+    /// Whether the change is waiting on somebody switching its Connected System back on rather than on JIM.
+    /// Distinguished from an ordinary wait because the remedy is a person's, not a retry's.
+    /// </summary>
+    public bool IsHeld =>
+        Status == PendingPasswordChangeStatus.Pending && !ConnectedSystemTakingPasswords;
 }

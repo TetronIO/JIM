@@ -205,7 +205,7 @@ These were open during drafting and have since been decided; they are settled in
 
 This PRD's Resolved Decisions committed to building the connector set-password foundation **once**, under [#1121](https://github.com/TetronIO/JIM/issues/1121), and layering this feature's queue, fan-out, and inbound capture on top. That foundation has now shipped, along with three further consumers of it: [#1172](https://github.com/TetronIO/JIM/issues/1172) (one password across several of a person's accounts), [#1221](https://github.com/TetronIO/JIM/issues/1221) (the outstanding-work lifecycle behind initial passwords) and [#1273](https://github.com/TetronIO/JIM/issues/1273) (a static initial password). Several of the functional requirements below are therefore already met, and #1221 in particular built a durable per-account work store whose shape this feature's queue should follow rather than reinvent. This section records all of that, so that the eventual Password Synchronisation implementation extends what exists rather than duplicating it. It is a status record, not a change of scope: no requirement here has been added, removed, or reworded.
 
-Last reviewed 2026-08-11, against `main`.
+Last reviewed 2026-08-24, against `main` plus the Phase 6 branch.
 
 ### Requirements already satisfied
 
@@ -248,9 +248,27 @@ Work delivered under #1121 that this PRD assumed but did not require: Connected 
 5. **The per-system time to live now exists; adopt it rather than growing a second one.** `ConnectedSystem.InitialPasswordTimeToLive` is requirement 5's window, built under [#1316](https://github.com/TetronIO/JIM/issues/1316) and defaulting to Resolved Decision 4's seven days when unset. It is already the property of the Connected System this feature wants, so the queue should read the same field instead of adding one beside it.
 6. **Closed (Phase 5).** The trim now runs on the built-in **History Retention Cleanup** Schedule, which absorbed the initial-password trim rather than leaving two mechanisms, and added the password queue trim beside it under `History.PasswordEventRetentionPeriod`. The housekeeping timer is gone; #1118 is delivered. Recorded as it stood: **The trim exists, in worker housekeeping rather than on a Schedule.** #1316 removes terminal `Parked` and `Expired` rows past `History.InitialPasswordRetentionPeriod` (90 days by default), beside the change-history trims and under the same batch cap. Requirements 28 to 30 ask for a Schedule instead, consistent with #1118; that was deliberately not built as a lone Schedule step ahead of #1118, so this feature's trim should absorb the existing one when it moves rather than leave two mechanisms. `InitialPasswordDeliveryServer.DeleteExpiredWorkRecordsAsync` is the call to move; the selection rules do not change.
 
+### Delivered by the Password Synchronisation implementation
+
+The plan at [`engineering/plans/PASSWORD_SYNCHRONISATION.md`](../../plans/PASSWORD_SYNCHRONISATION.md) built requirements 1 to 14, 21 to 30 and 32 to 33 across its six phases. Recorded here as outcomes rather than as a list of files; the plan carries the detail.
+
+| Req | State | Note |
+|-----|-------|------|
+| 1 to 5 (per-system configuration, the enable toggle, delivery options) | Done | `ConnectedSystemPasswordSynchronisation`, with the Passwords tab, REST resource and `Get-/Set-JIMConnectedSystemPasswordSynchronisation`. The time to live is `ConnectedSystem.InitialPasswordTimeToLive`, per divergence 5, rather than a second field. |
+| 2 to 3 (accumulate while disabled, drain on enable) | Done, after a defect | Both were built in Phase 2, and the accumulate half was **wrong until [#1522](https://github.com/TetronIO/JIM/issues/1522)**: fan-out filtered its targets to enabled systems, so a configured-but-switched-off system was not a target and its changes were discarded rather than held. Delivery had always been correct, which is why it looked right by hand. Fan-out now targets configured systems and carries the enabled state through; queued changes for a switched-off system are reported as **held**, are excluded from the due count and from the worker's idle sweep, and are delivered when the system is enabled. Found by writing integration Scenario 20, which is what now guards it. |
+| 6 to 8 (the encrypted queue, fan-out, coalescing) | Done | `PendingPasswordChange`, one row per (Metaverse Object, Connected System), coalesced in the database by a unique index plus `ON CONFLICT DO UPDATE`. Protected under the dedicated `JIM.PasswordSync.v1` purpose, closing divergence 4 for synchronised passwords. |
+| 9 to 12 (expiry, retry with backoff, parking, failure classification) | Done | Adopting the initial-password work store's shape as this section recommended: delete on success, `Pending`/`Parked`, expiry recorded rather than swept, and `PasswordSetFailureReason` deciding between them. |
+| 13 to 14 (never substitute a generated password; a change that reached nothing says so) | Done | There is no generator on this path at all. A change that found no target is still recorded as an Activity saying so, and the response reports it explicitly rather than as an empty list. |
+| 21 to 23 (the queue page, per-change retry and cancel, Activities) | Done | Administration > Password Synchronisation, with retry and cancel over a single row or the whole filtered set, each recorded as one Activity. |
+| 24 (a new Activity target category) | Done | `ActivityTargetType.PasswordSynchronisation`, closing divergence 2; the existing `SetPassword` operation type is reused as that divergence required. |
+| 25 to 27 (the Metaverse Object panel, the Connected System list indicator) | Done | The panel reads a person's history from Activities rather than from the queue, because a delivered change leaves the queue and a queue-only view would show a person's failures and none of their successes. |
+| 28 to 30 (retention, on a Schedule) | Done | The built-in **History Retention Cleanup** Schedule, which absorbed the initial-password trim rather than leaving two mechanisms. Closes divergence 6 and delivers [#1118](https://github.com/TetronIO/JIM/issues/1118). |
+| 32 to 33 (parity across the three surfaces) | Done | Configuration and queue read, retry and cancel all exist on the portal, the REST API and PowerShell. |
+| 34 (secure-transport-only password endpoints) | Done | Closing the partial state recorded above: every password-accepting endpoint now refuses a request whose transport JIM cannot confirm is encrypted, with a build-time guard against a new one being added without the check. |
+
 ### Not started
 
-Everything else: requirements 1 to 14 (Password Synchronisation configuration, the enable toggle and drain-on-enable, the encrypted queue, fan-out, coalescing, expiry, retry and backoff), 21 to 30 (queue page, Activities and the new category, the Metaverse Object panel, the Connected System list indicator, retention and the Schedule-driven trim), and 32 to 33 (configuration and queue parity across the three surfaces). Phase 2 inbound capture is untouched.
+Requirement 16's warning still has no call site outside the Synchronisation Rule Attribute Flow warning added under this feature; see Requirements partially satisfied. Phase 2 inbound capture (the ingress API, inbound password mapping on import, and the Domain Controller capture agent) is untouched and gets its own plan.
 
 ## Acceptance Criteria
 

@@ -2840,6 +2840,10 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf)
     {
+        // Deliberately without the real implementation's "and the system is enabled" condition: this fake holds
+        // password changes and no Connected System configuration, so it has nothing to answer that from. The
+        // condition is what stops the worker sweeping for a switched-off system for ever, and it is covered
+        // against real PostgreSQL in PasswordDeliveryReadsDatabaseTests rather than here.
         var systems = _pendingPasswordChanges.Values
             .Where(c => c.IsDue(asOf))
             .Select(c => c.ConnectedSystemId)
