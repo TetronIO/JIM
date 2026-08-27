@@ -56,7 +56,7 @@ The governing rule, agreed 2026-08-27 after the recall-or-retain design review: 
 
 **Disable affordances (copy only)**
 
-9. The rule-level Enabled switch and the mapping dialog's Enabled checkbox must state the retention behaviour ("values this flow contributed stay in place until it is re-enabled or deleted"); inline helper text is sufficient, no modal required.
+9. The rule-level Enabled switch and the mapping dialog's Enabled checkbox must state the retention behaviour, including the surviving-contributor nuance: where another Attribute Flow also contributes an attribute, its value takes over at the next synchronisation; values only the disabled flow contributed stay in place until it is re-enabled or deleted. Inline helper text is sufficient, no modal required.
 10. The Synchronisation Rule Danger Zone prose must mention contributed Metaverse values, not just configuration loss.
 
 **Create-disabled parity**
