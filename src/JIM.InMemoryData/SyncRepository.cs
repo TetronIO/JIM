@@ -1173,6 +1173,15 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
+    {
+        var result = _mvos.Values
+            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId))
+            .Select(mvo => mvo.Id)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
     public Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids)
     {
         var result = ids.Distinct().Where(_mvos.ContainsKey).ToDictionary(id => id, id => _mvos[id].Name);
@@ -1298,7 +1307,9 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
+    // Virtual so tests can simulate a persistence failure partway through a batch (the #1537 recall task's
+    // failure-mode coverage), matching the DeleteMetaverseObjectAsync spy precedent above.
+    public virtual Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
     {
         foreach (var mvo in metaverseObjects)
         {

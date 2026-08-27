@@ -43,12 +43,12 @@ Existing convention (Connected System deletion, Run Profile execution, Auxiliary
 
 TDD throughout: every behaviour lands red-first. British English, Title Case domain nouns, changelog + docs in the same PR as the behaviour.
 
-### Phase 1: Application core - impact summary and severing
+### Phase 1: Application core - impact summary and severing ✅
 
 - `IConnectedSystemRepository` / `ConnectedSystemRepository` (+ in-memory twin): `GetContributedValuesSummaryAsync(syncRuleId, attributeId?)` returning per-attribute value/object counts without materialising rows; `SeverContributedValueProvenanceAsync(syncRuleId, attributeId)` as a set-based update.
 - Tests in `JIM.Worker.Tests` (in-memory) + note the EF in-memory `.Include()` caveat; integration coverage via the existing repository test category.
 
-### Phase 2: Rule deletion choice and the recall task
+### Phase 2: Rule deletion choice and the recall task ✅
 
 - `DeleteSyncRuleWorkerTask` (SyncRuleId, RecallContributedValues, `[NotMapped]` ChangeReason copied to the Activity, `ForUser`/`ForApiKey` factories) + `JimDbContext` DbSet + migration.
 - Wiring: `TaskingRepository` create/display-name/type switches; `TaskingServer.CreateWorkerTaskAsync` Activity branch; `Worker.cs` dispatch case.

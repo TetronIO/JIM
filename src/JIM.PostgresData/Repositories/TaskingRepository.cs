@@ -66,6 +66,10 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.SchemaRefreshRemovalWorkerTasks.Add(schemaRefreshRemovalTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
+            case DeleteSyncRuleWorkerTask deleteSyncRuleTask:
+                Repository.Database.DeleteSyncRuleWorkerTasks.Add(deleteSyncRuleTask);
+                await Repository.Database.SaveChangesAsync();
+                break;
             case AuxiliaryClassDiscoveryWorkerTask auxiliaryClassDiscoveryTask:
                 Repository.Database.AuxiliaryClassDiscoveryWorkerTasks.Add(auxiliaryClassDiscoveryTask);
                 await Repository.Database.SaveChangesAsync();
@@ -486,6 +490,12 @@ public class TaskingRepository : ITaskingRepository
                 var refreshedSystem = await db.ConnectedSystems.SingleOrDefaultAsync(q => q.Id == schemaRefreshRemovalTask.ConnectedSystemId);
                 return refreshedSystem?.Name ?? $"Connected System {schemaRefreshRemovalTask.ConnectedSystemId}";
             }
+            case DeleteSyncRuleWorkerTask deleteSyncRuleTask:
+            {
+                // The Synchronisation Rule may be gone: this is the task that deletes it as its final step.
+                var ruleToDelete = await db.SyncRules.SingleOrDefaultAsync(q => q.Id == deleteSyncRuleTask.SyncRuleId);
+                return ruleToDelete?.Name ?? $"Synchronisation Rule {deleteSyncRuleTask.SyncRuleId}";
+            }
             default:
                 return "Unknown WorkerTask type";
         }
@@ -503,6 +513,9 @@ public class TaskingRepository : ITaskingRepository
             TemporalScopeReconciliationWorkerTask => nameof(TemporalScopeReconciliationWorkerTask).SplitOnCapitalLetters(),
             HistoryRetentionCleanupWorkerTask => nameof(HistoryRetentionCleanupWorkerTask).SplitOnCapitalLetters(),
             SchemaRefreshRemovalWorkerTask => nameof(SchemaRefreshRemovalWorkerTask).SplitOnCapitalLetters(),
+            // Literal rather than the split type name: "Synchronisation Rule" is always written in full in
+            // user-visible text, never the SyncRule code identifier's shorthand.
+            DeleteSyncRuleWorkerTask => "Delete Synchronisation Rule Worker Task",
             _ => "Unknown Worker Task Type"
         };
     }

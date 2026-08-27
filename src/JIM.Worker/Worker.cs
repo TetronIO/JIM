@@ -497,6 +497,39 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
+                                case DeleteSyncRuleWorkerTask deleteSyncRuleTask:
+                                {
+                                    Log.Information("ExecuteAsync: DeleteSyncRuleWorkerTask received for Synchronisation Rule id: {SyncRuleId} (RecallContributedValues: {Recall})",
+                                        deleteSyncRuleTask.SyncRuleId, deleteSyncRuleTask.RecallContributedValues);
+                                    if (deleteSyncRuleTask.InitiatedByType == ActivityInitiatorType.NotSet)
+                                    {
+                                        Log.Error($"ExecuteAsync: DeleteSyncRuleWorkerTask {deleteSyncRuleTask.Id} is missing initiator information. Cannot continue processing worker task.");
+                                    }
+                                    else
+                                    {
+                                        try
+                                        {
+                                            // the server owns the recall and the final rule deletion (value
+                                            // withdrawal by provenance, re-election, Pending Export staging,
+                                            // per-object results); this boundary owns the Activity's fate.
+                                            await taskJim.ConnectedSystems.ExecuteSyncRuleDeletionRecallAsync(deleteSyncRuleTask);
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            // On failure the rule survives, still disabled with its
+                                            // deletion-in-progress reason, so the deletion can be retried.
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                            Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing Synchronisation Rule deletion recall task.");
+                                        }
+                                        finally
+                                        {
+                                            Log.Information($"ExecuteAsync: Completed the deletion recall for Synchronisation Rule ({deleteSyncRuleTask.SyncRuleId}) in {newWorkerTask.Activity.ExecutionTime}.");
+                                        }
+                                    }
+
+                                    break;
+                                }
                                 case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
                                 {
                                     Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for Connected System id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}, DeleteChangeHistory: {DeleteHistory}",

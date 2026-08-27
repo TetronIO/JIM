@@ -516,6 +516,15 @@ public interface IMetaverseRepository
     Task<ContributedValuesSummary> GetContributedValuesSummaryAsync(int syncRuleId, int? metaverseAttributeId = null);
 
     /// <summary>
+    /// The distinct ids of Metaverse Objects holding at least one attribute value contributed by the given
+    /// Synchronisation Rule (selected by provenance, <c>ContributedBySyncRuleId</c>). Drives the rule
+    /// deletion recall task (#1537), which must enumerate the affected objects before the rule's deletion
+    /// severs the very provenance this selects on.
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose contributed values select the objects.</param>
+    Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId);
+
+    /// <summary>
     /// Severs the provenance of a Synchronisation Rule's contributed Metaverse attribute values: clears
     /// <see cref="MetaverseObjectAttributeValue.ContributedBySyncRuleId"/> while retaining the denormalised
     /// <see cref="MetaverseObjectAttributeValue.ContributedBySystemId"/>, matching what rule deletion's

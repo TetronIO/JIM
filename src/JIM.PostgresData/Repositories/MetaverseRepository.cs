@@ -3371,6 +3371,16 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
+    {
+        return await Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+            .Select(av => av.MetaverseObject.Id)
+            .Distinct()
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<int> SeverContributedValueProvenanceAsync(int syncRuleId, int? metaverseAttributeId = null)
     {
         var query = Repository.Database.MetaverseObjectAttributeValues

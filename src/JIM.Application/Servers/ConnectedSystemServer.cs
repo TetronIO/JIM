@@ -30,7 +30,7 @@ using Serilog;
 
 namespace JIM.Application.Servers;
 
-public class ConnectedSystemServer
+public partial class ConnectedSystemServer
 {
     private JimApplication Application { get; }
 
@@ -1815,10 +1815,13 @@ public class ConnectedSystemServer
         foreach (var entry in dependents.InvalidatedSyncRules.Where(e => rulesById.ContainsKey(e.SyncRuleId)))
         {
             var rule = rulesById[entry.SyncRuleId];
+            // recallContributedValues: false keeps the schema refresh's Apply and Remove behaviour unchanged
+            // (#1485): the rule deletes synchronously here, and the removal task's obsoletion pipeline is what
+            // withdraws dependent data, recalling contributed values by their surviving system provenance.
             if (initiatedByApiKey != null)
-                await DeleteSyncRuleAsync(rule, initiatedByApiKey, entry.Reason, refreshActivity.Id);
+                await DeleteSyncRuleAsync(rule, initiatedByApiKey, entry.Reason, refreshActivity.Id, recallContributedValues: false);
             else
-                await DeleteSyncRuleAsync(rule, initiatedBy, entry.Reason, refreshActivity.Id);
+                await DeleteSyncRuleAsync(rule, initiatedBy, entry.Reason, refreshActivity.Id, recallContributedValues: false);
         }
 
         foreach (var group in dependents.InvalidatedMappings
@@ -8572,8 +8575,84 @@ public class ConnectedSystemServer
         return true;
     }
 
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, string? changeReason = null, Guid? parentActivityId = null)
+    public Task<SyncRuleDeletionResult> DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, string? changeReason = null, Guid? parentActivityId = null, bool recallContributedValues = true)
+        => DeleteSyncRuleInternalAsync(syncRule, initiatedBy, initiatedByApiKey: null, changeReason, parentActivityId, recallContributedValues);
+
+    /// <summary>
+    /// Deletes a Synchronisation Rule (initiated by API key).
+    /// </summary>
+    public Task<SyncRuleDeletionResult> DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, string? changeReason = null, Guid? parentActivityId = null, bool recallContributedValues = true)
+        => DeleteSyncRuleInternalAsync(syncRule, initiatedBy: null, initiatedByApiKey, changeReason, parentActivityId, recallContributedValues);
+
+    /// <summary>
+    /// Deletes a Synchronisation Rule with the recall-or-keep choice for its contributed Metaverse attribute
+    /// values (#1537). When recall is chosen (the default on every surface) and the rule still contributes
+    /// values, the rule is disabled immediately and a <see cref="DeleteSyncRuleWorkerTask"/> is queued: the
+    /// worker withdraws the values by provenance (re-electing surviving contributors and staging Pending
+    /// Exports) and deletes the rule as its final step, and the returned result carries the queued Activity id.
+    /// Keep, or a rule with no contributed values, deletes synchronously exactly as before (the ON DELETE SET
+    /// NULL foreign key produces the keep end state); a keep chosen with values present is recorded on the
+    /// deletion Activity so the choice is auditable.
+    /// </summary>
+    private async Task<SyncRuleDeletionResult> DeleteSyncRuleInternalAsync(
+        SyncRule syncRule,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey,
+        string? changeReason,
+        Guid? parentActivityId,
+        bool recallContributedValues)
     {
+        // Quantify the rule's contributed values (count queries only). Tolerate a null summary from stubbed
+        // repositories: it means nothing is known to be contributed, which is the synchronous path.
+        var contributedValuesSummary = syncRule.Id > 0
+            ? await Application.Repository.Metaverse.GetContributedValuesSummaryAsync(syncRule.Id)
+            : null;
+        var result = new SyncRuleDeletionResult
+        {
+            AffectedValueCount = contributedValuesSummary?.TotalValues ?? 0,
+            AffectedObjectCount = contributedValuesSummary?.TotalObjects ?? 0
+        };
+
+        if (recallContributedValues && result.AffectedValueCount > 0)
+        {
+            // Recall chosen and there is something to recall: disable the rule immediately (it stops being
+            // evaluated; #1538's dormant-contributor behaviour retains its values in the meantime) and queue
+            // the recall-then-delete task. The rule is deliberately NOT deleted here: deletion's ON DELETE SET
+            // NULL would sever the very provenance the recall selects on.
+            syncRule.Enabled = false;
+            syncRule.DisabledReason = "Deletion in progress: contributed attribute values are being recalled.";
+            StampUpdated(syncRule, initiatedBy, initiatedByApiKey);
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+
+            DeleteSyncRuleWorkerTask recallTask;
+            if (initiatedByApiKey != null)
+                recallTask = DeleteSyncRuleWorkerTask.ForApiKey(syncRule.Id, initiatedByApiKey.Id, initiatedByApiKey.Name);
+            else if (initiatedBy != null)
+                recallTask = DeleteSyncRuleWorkerTask.ForUser(syncRule.Id, initiatedBy.Id, initiatedBy.NameOrId);
+            else
+            {
+                // An internal caller with no principal: attribute the task to the system rather than queueing
+                // it with NotSet, which the worker's dispatch refuses (the task would sit stuck with the rule
+                // left disabled and its Activity never completed).
+                recallTask = new DeleteSyncRuleWorkerTask(syncRule.Id)
+                {
+                    InitiatedByType = ActivityInitiatorType.System,
+                    InitiatedByName = "System"
+                };
+            }
+            recallTask.ChangeReason = changeReason;
+            _ = await Application.Tasking.CreateWorkerTaskAsync(recallTask);
+
+            Log.Information(
+                "DeleteSyncRuleAsync: Synchronisation Rule {SyncRuleId} contributes {ValueCount} value(s) across {ObjectCount} object(s); disabled the rule and queued recall task {TaskId} (Activity {ActivityId}).",
+                syncRule.Id, result.AffectedValueCount, result.AffectedObjectCount, recallTask.Id, recallTask.Activity.Id);
+
+            result.RecallQueued = true;
+            result.RecallActivityId = recallTask.Activity.Id;
+            return result;
+        }
+
+        // Keep chosen, or nothing contributed: synchronous delete exactly as before.
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
             (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
@@ -8595,43 +8674,32 @@ public class ConnectedSystemServer
             // parents itself under that decision's Activity so the history reads as one action.
             ParentActivityId = parentActivityId
         };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        // Capture the attributes this import rule contributes to before deletion, so each can be re-densified after.
-        var affectedAttributeIds = GetContributingImportAttributeIds(syncRule);
+        // A keep chosen while values were present must be auditable at the moment of choice (#1537): the
+        // values remain in place with their Synchronisation Rule provenance nulled, and nothing ever recalls
+        // them.
+        if (!recallContributedValues && result.AffectedValueCount > 0)
+        {
+            activity.Message = $"Contributed attribute values were kept: {result.AffectedValueCount:N0} value(s) across " +
+                $"{result.AffectedObjectCount:N0} Metaverse Object(s) remain in place with no Synchronisation Rule provenance.";
+        }
 
-        await CaptureConfigurationDeletionAsync(activity, syncRule, changeReason);
-        await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
+        if (initiatedByApiKey != null)
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        else
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        foreach (var attributeId in affectedAttributeIds)
-            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId);
-
-        await Application.Activities.CompleteActivityAsync(activity);
+        await DeleteSyncRuleCoreAsync(syncRule, activity, changeReason);
+        return result;
     }
 
     /// <summary>
-    /// Deletes a Synchronisation Rule (initiated by API key).
+    /// The synchronous heart of a Synchronisation Rule deletion, shared by the direct delete paths and the
+    /// recall task's final step: captures the configuration tombstone, deletes the rule, re-densifies each
+    /// affected attribute's priority list, and completes the given Activity.
     /// </summary>
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, string? changeReason = null, Guid? parentActivityId = null)
+    private async Task DeleteSyncRuleCoreAsync(SyncRule syncRule, Activity activity, string? changeReason)
     {
-        // Get Connected System name for activity context (Core: only .Name is read).
-        var connectedSystem = syncRule.ConnectedSystem ??
-            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
-
-        var activity = new Activity
-        {
-            TargetName = syncRule.Name,
-            TargetContext = connectedSystem?.Name,
-            TargetType = ActivityTargetType.SynchronisationRule,
-            TargetOperationType = ActivityTargetOperationType.Delete,
-            // See the MetaverseObject-initiated overload above: the Connected System id is what keeps a rule deletion
-            // attributable once the rule itself is gone.
-            ConnectedSystemId = syncRule.ConnectedSystemId,
-            // See the MetaverseObject-initiated overload above.
-            ParentActivityId = parentActivityId
-        };
-        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
-
         // Capture the attributes this import rule contributes to before deletion, so each can be re-densified after.
         var affectedAttributeIds = GetContributingImportAttributeIds(syncRule);
 

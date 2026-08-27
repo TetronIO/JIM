@@ -50,6 +50,14 @@ public class SchemaRefreshApplyAndRemoveTests
         _taskingRepository = new Mock<ITaskingRepository>();
         _repository.Setup(r => r.Activity).Returns(_activityRepository.Object);
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepository.Object);
+
+        // The deletion-choice impact summary (#1537) is read on every rule delete; empty means no
+        // contributed values, and the schema refresh's rule deletions pass keep anyway (#1485 semantics).
+        var metaverseRepo = new Mock<IMetaverseRepository>();
+        metaverseRepo
+            .Setup(r => r.GetContributedValuesSummaryAsync(It.IsAny<int>(), It.IsAny<int?>()))
+            .ReturnsAsync(new ContributedValuesSummary());
+        _repository.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
         _repository.Setup(r => r.Tasking).Returns(_taskingRepository.Object);
 
         _createdActivities = [];
