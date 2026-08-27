@@ -56,7 +56,7 @@ TDD throughout: every behaviour lands red-first. British English, Title Case dom
 - Executor `ExecuteSyncRuleDeletionRecallAsync` in `ConnectedSystemServer` (pattern: `ExecuteSchemaRefreshRemovalAsync`). The re-election helper currently lives in `SyncTaskProcessorBase` (JIM.Worker); extract the reusable core into JIM.Application rather than duplicating it - this is the phase's main refactor and gets its own tests proving both call sites behave identically.
 - Workflow tests: recall with surviving contributor (takeover), sole contributor (clear + export staging), failure partway (rule survives disabled, Activity failed), keep path (values remain, provenance nulled by FK, Activity records choice).
 
-### Phase 3: Mapping deletion choice
+### Phase 3: Mapping deletion choice ✅
 
 - `DeleteSyncRuleMappingAsync` (both overloads): keep parameter; severing before row delete; recall path unchanged (deferred to next Full Synchronisation; watermark stamp from #1536 already forces re-evaluation).
 - Portal staged-removal path: the Attribute Flow editor removes mappings in memory and persists on rule save, so the save path must carry each staged removal's choice (extend the rule update flow; exact carrier decided at implementation, likely alongside `SyncRuleMappingSettingsUpdate`).
