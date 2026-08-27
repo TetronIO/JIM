@@ -82,10 +82,10 @@ else
                                     @if (changeGroup.AttributeChanges.Any())
                                     {
                                         <MudDivider />
-                                        <div class="change-summary" style="display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 4px 8px;">
+                                        <div class="change-summary">
                                             @foreach (var change in GetVisibleDisplayChanges(changeGroup))
                                             {
-                                                <MudText Class="mud-text-secondary" Style="white-space: nowrap;">
+                                                <MudText Class="mud-text-secondary change-summary-attribute">
                                                     @change.AttributeName
                                                 </MudText>
                                                 <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(change)">
@@ -494,8 +494,24 @@ else
                                     </MudDialog>
 
                                     <style>
+                                        /* The summary grid inside a change card: attribute name, change
+                                           type, value. The value track is minmax(0, 1fr) rather than 1fr so
+                                           that it can shrink below its own content: a grid item's automatic
+                                           minimum is its min-content width, which an unbroken Distinguished
+                                           Name would otherwise force the whole card to accommodate, and the
+                                           one-line clamp on the value would never get to engage. */
                                         .change-summary {
                                             position: relative;
+                                            display: grid;
+                                            grid-template-columns: auto auto minmax(0, 1fr);
+                                            align-items: center;
+                                            gap: 4px 8px;
+                                        }
+
+                                        /* The attribute name labels the row, so it holds its width and the
+                                           value beside it is what gives way. */
+                                        .change-summary-attribute {
+                                            white-space: nowrap;
                                         }
 
                                         .more-changes-indicator {
