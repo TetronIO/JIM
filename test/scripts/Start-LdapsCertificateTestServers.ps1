@@ -56,10 +56,14 @@ $ErrorActionPreference = 'Stop'
 # Matches the image used by the integration test OpenLDAP container (test/integration/docker/openldap).
 $image = 'bitnamilegacy/openldap:latest'
 
+# Host ports are not fixed: Docker publishes each container port to an ephemeral, loopback-bound
+# host port (Port is filled in after the container starts). Fixed ports collide on the self-hosted
+# runner host, where a second runner service can be running another job's containers at the same
+# moment; the fixtures read the actual ports from the environment variables this script exports.
 $servers = @(
-    @{ Name = 'jim-ldaps-system-trusted'; Port = 3636; Hostname = 'ldap-sys.local'; Ca = 'caA' }
-    @{ Name = 'jim-ldaps-jim-store';      Port = 4636; Hostname = 'ldap-jim.local'; Ca = 'caB' }
-    @{ Name = 'jim-ldaps-expired';        Port = 5636; Hostname = 'ldap-old.local'; Ca = 'caB' }
+    @{ Name = 'jim-ldaps-system-trusted'; Port = $null; Hostname = 'ldap-sys.local'; Ca = 'caA' }
+    @{ Name = 'jim-ldaps-jim-store';      Port = $null; Hostname = 'ldap-jim.local'; Ca = 'caB' }
+    @{ Name = 'jim-ldaps-expired';        Port = $null; Hostname = 'ldap-old.local'; Ca = 'caB' }
 )
 
 $systemTrustPath = '/usr/local/share/ca-certificates/jim-ldaps-test-ca-a.crt'
@@ -69,7 +73,8 @@ $bindPassword = 'adminpassword'
 
 # The system-trusted OpenLDAP server also carries the unencrypted-connection coverage: bitnami's openldap image
 # serves plain LDAP on container port 1389 alongside LDAPS on 1636, so no extra container is needed for it.
-$plainLdapHostPort = 3389
+# Host port assigned by Docker after the container starts, like the LDAPS ports above.
+$plainLdapHostPort = $null
 $plainLdapContainerPort = 1389
 
 # Samba AD, added by -IncludeSambaAd, covers the AD-family directory type alongside OpenLDAP.
@@ -81,8 +86,9 @@ $sambaRealm = 'LDAPSTEST.LOCAL'
 $sambaDomain = 'LDAPSTEST'
 $sambaAdminPassword = 'Test@123!JIM'
 $sambaAdminDn = 'CN=Administrator,CN=Users,DC=ldapstest,DC=local'
-$sambaLdapsPort = 6636
-$sambaLdapPort = 6389
+# Host ports assigned by Docker after the container starts; docker restart preserves the mapping.
+$sambaLdapsPort = $null
+$sambaLdapPort = $null
 $sambaCaPath = Join-Path $WorkingDirectory 'samba-ca.pem'
 
 function Assert-Prerequisites {
@@ -124,6 +130,24 @@ function Remove-TestServers {
     }
 
     Write-Host 'LDAPS test servers stopped and cleaned up.'
+}
+
+function Get-PublishedHostPort {
+    <#
+    .SYNOPSIS
+        Returns the ephemeral host port Docker published for a container port, from 'docker port'.
+    #>
+    param(
+        [string]$ContainerName,
+        [int]$ContainerPort
+    )
+
+    $mapping = docker port $ContainerName "$ContainerPort/tcp" 2>$null | Select-Object -First 1
+    if (-not $mapping -or $mapping -notmatch ':(\d+)\s*$') {
+        throw "Could not determine the published host port for ${ContainerName}:${ContainerPort}. Is the container running?"
+    }
+
+    return [int]$Matches[1]
 }
 
 function Invoke-OpenSsl {
@@ -208,10 +232,11 @@ function Start-TestServers {
         docker rm -f $server.Name 2>$null | Out-Null
 
         # Only the system-trusted server also publishes its unencrypted LDAP port, for the plain-connection tests;
-        # the other two servers exist solely to exercise LDAPS certificate validation.
-        $portArguments = @('-p', "$($server.Port):1636")
+        # the other two servers exist solely to exercise LDAPS certificate validation. '127.0.0.1::<port>' has
+        # Docker choose a free host port, bound to loopback only (the test hostnames all resolve to 127.0.0.1).
+        $portArguments = @('-p', '127.0.0.1::1636')
         if ($server.Name -eq 'jim-ldaps-system-trusted') {
-            $portArguments += @('-p', "${plainLdapHostPort}:${plainLdapContainerPort}")
+            $portArguments += @('-p', "127.0.0.1::${plainLdapContainerPort}")
         }
 
         docker run -d --name $server.Name @portArguments `
@@ -224,6 +249,11 @@ function Start-TestServers {
             -e LDAP_TLS_CA_FILE=/certs/$($server.Ca).crt `
             -v "${serverDirectory}:/certs:ro" `
             $image | Out-Null
+
+        $server.Port = Get-PublishedHostPort -ContainerName $server.Name -ContainerPort 1636
+        if ($server.Name -eq 'jim-ldaps-system-trusted') {
+            $script:plainLdapHostPort = Get-PublishedHostPort -ContainerName $server.Name -ContainerPort $plainLdapContainerPort
+        }
 
         Write-Host "Started $($server.Name) on port $($server.Port) as $($server.Hostname)."
     }
@@ -287,8 +317,8 @@ function Start-SambaAdServer {
         -e DOMAIN=$sambaDomain `
         -e ADMIN_PASS=$sambaAdminPassword `
         -e DNS_FORWARDER=8.8.8.8 `
-        -p "${sambaLdapsPort}:636" `
-        -p "${sambaLdapPort}:389" `
+        -p '127.0.0.1::636' `
+        -p '127.0.0.1::389' `
         $sambaImage | Out-Null
 
     # First boot provisions a full AD forest from scratch, which routinely takes several minutes. The container's
@@ -351,6 +381,12 @@ fi
     # first fix still holds.
     Repair-SambaInterfaceBinding -ContainerName $sambaContainerName
 
+    # Read the published ports only AFTER the restart above: an ephemeral '::<port>' mapping is re-assigned
+    # to a NEW random host port on every container restart, so a port captured at docker run time is stale
+    # by here and every connection to it fails with "the LDAP server is unavailable".
+    $script:sambaLdapsPort = Get-PublishedHostPort -ContainerName $sambaContainerName -ContainerPort 636
+    $script:sambaLdapPort = Get-PublishedHostPort -ContainerName $sambaContainerName -ContainerPort 389
+
     docker cp "${sambaContainerName}:/usr/local/samba/private/tls/ca.pem" $sambaCaPath | Out-Null
     if (-not (Test-Path $sambaCaPath)) {
         throw "Failed to copy the Samba AD CA certificate out of $sambaContainerName."
@@ -409,17 +445,23 @@ Start-Sleep -Seconds 16
 Write-Host ''
 Write-Host 'Set these, then run: dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"'
 Write-Host ''
+# Ports come from the running containers (Docker assigns them; see the $servers comment).
+$serversByName = @{}
+foreach ($server in $servers) {
+    $serversByName[$server.Name] = $server
+}
+
 $environmentVariables = [ordered]@{
     JIM_TEST_LDAPS_HOST                 = 'ldap-jim.local'
-    JIM_TEST_LDAPS_PORT                 = '4636'
+    JIM_TEST_LDAPS_PORT                 = "$($serversByName['jim-ldaps-jim-store'].Port)"
     JIM_TEST_LDAPS_USERNAME             = $bindDn
     JIM_TEST_LDAPS_PASSWORD             = $bindPassword
     JIM_TEST_LDAPS_CA_PATH              = (Join-Path $WorkingDirectory 'caB.crt')
     JIM_TEST_LDAPS_MISMATCH_HOST        = '127.0.0.1'
     JIM_TEST_LDAPS_EXPIRED_HOST         = 'ldap-old.local'
-    JIM_TEST_LDAPS_EXPIRED_PORT         = '5636'
+    JIM_TEST_LDAPS_EXPIRED_PORT         = "$($serversByName['jim-ldaps-expired'].Port)"
     JIM_TEST_LDAPS_SYSTEM_TRUSTED_HOST  = 'ldap-sys.local'
-    JIM_TEST_LDAPS_SYSTEM_TRUSTED_PORT  = '3636'
+    JIM_TEST_LDAPS_SYSTEM_TRUSTED_PORT  = "$($serversByName['jim-ldaps-system-trusted'].Port)"
     JIM_TEST_LDAP_PLAIN_HOST            = 'ldap-sys.local'
     JIM_TEST_LDAP_PLAIN_PORT            = "$plainLdapHostPort"
 }

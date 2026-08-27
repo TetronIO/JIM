@@ -221,11 +221,17 @@ jobs:
     # The script needs root: it writes /etc/hosts entries for the certificate names
     # and installs one test CA into the machine trust store. sudo -E preserves
     # GITHUB_ENV so the script can export the connection details to later steps.
-    # Teardown is skipped: the runner is ephemeral.
     - name: Start LDAPS certificate test servers
       run: sudo -E pwsh -File ./test/scripts/Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd
     - name: Run LDAPS certificate validation tests (RequiresLdaps)
       run: dotnet test test/JIM.Worker.Tests/ --no-build --filter "Category=RequiresLdaps" --verbosity normal
+    # On push events this job runs on the self-hosted runner, which is NOT ephemeral:
+    # without teardown the containers, /etc/hosts entries and the trust-store CA
+    # persist on the machine between jobs. Harmless on GitHub-hosted PR runs, essential
+    # on the self-hosted host; run it unconditionally.
+    - name: Tear down LDAPS certificate test servers
+      if: always()
+      run: sudo pwsh -File ./test/scripts/Start-LdapsCertificateTestServers.ps1 -Stop
 
   discover-base-images:
     # Discover production Dockerfiles and enforce the digest-pinning policy.
