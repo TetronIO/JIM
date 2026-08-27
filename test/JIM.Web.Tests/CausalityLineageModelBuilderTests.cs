@@ -441,6 +441,55 @@ public class CausalityLineageModelBuilderTests
         }
     }
 
+    /// <summary>
+    /// A deprovisioning confirmation: a Full Import on the TARGET system finding the record JIM
+    /// deprovisioned already gone, so the item's change type is Deleted and its outcomes are
+    /// Deletion detected plus Export confirmed.
+    /// <para>
+    /// The change type alone cannot place the record, because deletion detection runs on every
+    /// Connected System: the same Deleted item means "the source lost this record, so the Identity
+    /// goes" on a source system, and "JIM's own deprovision landed" on a target. Read as a source, the
+    /// canvas drew the Identity to the RIGHT of the record it had caused the deletion of, so the
+    /// horizontal axis (one hop further along the chain) ran backwards and the join between them read
+    /// "imported" for a record nothing had imported (#1528).
+    /// </para>
+    /// <para>
+    /// The confirmation is the evidence: an Export confirmed outcome means JIM exported to this
+    /// record, which is what makes it a target whatever the run did to it afterwards.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void Build_ConfirmingImportOfADeprovision_PutsTheIdentityUpstreamOfTheRecord()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected,
+            parent: null, ordinal: 0);
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed,
+            parent: null, ordinal: 1);
+        var chain = CausalityTestData.Chain(ExportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                CausalEdgeType.PendingExportQueueingCausedExportExecution,
+                reasonCode: CausalReasonCode.ExportDeleteStaged,
+                connectedSystemId: 2, connectedSystemName: "Glitterband EMEA",
+                members: CausalityTestData.Member("Erin Byrne", SyncItemId,
+                    CausalChainResolution.CauseNotRetained)));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Deleted);
+
+        Assert.That(lineage.Columns, Has.Count.EqualTo(2));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(lineage.Columns[0].Kind, Is.EqualTo(CausalityLineageColumnKind.Identity),
+                "the Identity's deletion caused the record's, so it belongs upstream of it");
+            Assert.That(lineage.Columns[1].Kind, Is.EqualTo(CausalityLineageColumnKind.Record));
+            Assert.That(Sole(lineage.Columns[1]).Cards.Any(c => c.IsThisRun), Is.True,
+                "the page's own record is the one on the target side, carrying this run's events");
+            Assert.That(lineage.Joins.Select(j => j.Label), Is.EqualTo(new[] { "exported" }),
+                "JIM wrote to this record; nothing imported it");
+        }
+    }
+
     // ─── Cohorts, endings, role heads ───
 
     [Test]

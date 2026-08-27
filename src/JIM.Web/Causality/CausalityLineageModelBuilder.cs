@@ -32,10 +32,21 @@ public static class CausalityLineageModelBuilder
     {
         var context = model.Context;
         var allEvents = model.AllEvents().ToList();
+        // Which side of the Identity the page's own record sits on. The export-side change types say so
+        // outright, but a confirming import does not: deletion detection and ordinary imports run on every
+        // Connected System, so the same Deleted or Updated item means "the source lost this record, so the
+        // Identity goes" on a source and "JIM's own export landed" on a target. Read as a source, a
+        // deprovisioning confirmation drew the Identity to the RIGHT of the record whose deletion it had
+        // caused, running the horizontal axis backwards, and labelled the join "imported" for a record
+        // nothing had imported (#1528).
+        //
+        // A confirmation is the evidence that settles it: JIM only confirms what it exported, so a record
+        // carrying one is a record JIM writes to, whatever the run did to it afterwards.
         var pageRecordIsTarget = itemChangeType is ObjectChangeType.Exported
             or ObjectChangeType.Deprovisioned
             or ObjectChangeType.PendingExport
-            or ObjectChangeType.PendingExportConfirmed;
+            or ObjectChangeType.PendingExportConfirmed
+            || allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed);
 
         var recordColumns = new List<ColumnState>();
         ColumnState? identityColumn = null;

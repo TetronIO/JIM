@@ -108,24 +108,26 @@ else
                                                         else
                                                                     {
                                                                         <MudText Class="mud-text-secondary" Style="display: inline;">
-                                                                            <TextValueDisplay Value="@change.OldValue" /></MudText>
+                                                                            <TextValueDisplay Value="@change.OldValue" Class="jim-text-code" /></MudText>
                                                                             <MudText Class="mud-text-secondary" Style="display: inline;"> →
                                                                             </MudText>
                                                                             <MudText Style="display: inline;">
-                                                                                <TextValueDisplay Value="@change.NewValue" /></MudText>
+                                                                                <TextValueDisplay Value="@change.NewValue" Class="jim-text-code" /></MudText>
                                                                             }
                                                                         }
                                                     else
                                                                         {
-                                                                            @* Set/Add values get bold emphasis, Removed values get de-emphasised *@
+                                                                            @* Set/Add values get bold emphasis, Removed values get de-emphasised. The code
+                                                                               face goes on TextValueDisplay's Class, which applies it to a real value only,
+                                                                               so the hyphen and the "(whitespace)" affordance keep the ordinary face. *@
                                                                             @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
                                                                             {
-                                                                                <MudText Class="mud-text-secondary"><TextValueDisplay Value="@GetDisplayValue(change)" />
+                                                                                <MudText Class="mud-text-secondary"><TextValueDisplay Value="@GetDisplayValue(change)" Class="jim-text-code" />
                                                                                 </MudText>
                                                                             }
                                                                             else
                                                                             {
-                                                                                <MudText><TextValueDisplay Value="@GetDisplayValue(change)" />
+                                                                                <MudText><TextValueDisplay Value="@GetDisplayValue(change)" Class="jim-text-code" />
                                                                                 </MudText>
                                                                             }
                                                                         }
