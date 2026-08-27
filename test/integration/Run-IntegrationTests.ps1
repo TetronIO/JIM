@@ -627,6 +627,7 @@ function Show-ScenarioMenu {
                 "*Scenario17*" { "Initial Password provisioning (account holder signs in and changes it)" }
                 "*Scenario18*" { "Writeback into the source Connected System (derived values flow; contributed values are not echoed)" }
                 "*Scenario19*" { "Auxiliary classes (merge, import, export class convergence, discovery)" }
+                "*Scenario20*" { "Password Synchronisation (held while a system is off, delivered when it is switched on, newest password only)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1255,7 +1256,8 @@ $templateIrrelevantScenarios = @(
     "*Scenario16*",  # JIM SQL Connector matrix - its own deterministic SQL seeder sizes the data, not Template
     "*Scenario17*",  # Initial Password - asserts against one account; a larger template only lengthens the export
     "*Scenario18*",  # Writeback To Source - three seeded people; the question is per-object, not per-population
-    "*Scenario19*"   # Auxiliary Classes - fixed six-user dataset per suffix, no template scaling
+    "*Scenario19*",  # Auxiliary Classes - fixed six-user dataset per suffix, no template scaling
+    "*Scenario20*"   # Password Synchronisation - asserts against three accounts; a larger template only lengthens the export
 )
 
 function Test-TemplateRelevant {
@@ -1697,6 +1699,20 @@ if ($Scenario -eq "All") {
         if ($openLdapOnly.Count -gt 0) {
             Write-Host "${YELLOW}Skipping OpenLDAP-only scenario(s) on Samba AD: $($openLdapOnly -join ', ')${NC}"
             $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario14*" -and $_ -notlike "*Scenario19*" })
+        }
+    }
+
+    # The mirror of the rule above, and it exists for the same reason: a scenario that cannot hold on the
+    # directory being swept must be skipped rather than run to a guaranteed failure. Scenarios 17 and 19 are
+    # Samba AD only because both provision accounts and enable them as a password lands, which is an Active
+    # Directory operation; an account left disabled on OpenLDAP cannot be signed in as, and signing in is what
+    # both of them prove. The test OpenLDAP container also serves no TLS, so the RFC 3062 password path JIM
+    # would use there cannot be exercised at all.
+    if ($DirectoryType -eq "OpenLDAP") {
+        $sambaOnly = @($implementedScenarios | Where-Object { $_ -like "*Scenario17*" -or $_ -like "*Scenario20*" })
+        if ($sambaOnly.Count -gt 0) {
+            Write-Host "${YELLOW}Skipping Samba AD-only scenario(s) on OpenLDAP: $($sambaOnly -join ', ')${NC}"
+            $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario17*" -and $_ -notlike "*Scenario20*" })
         }
     }
 

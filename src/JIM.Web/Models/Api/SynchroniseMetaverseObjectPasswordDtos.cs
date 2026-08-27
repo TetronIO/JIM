@@ -52,7 +52,7 @@ public class SynchroniseMetaverseObjectPasswordResponse
     public IReadOnlyList<SynchroniseMetaverseObjectPasswordTarget> Targets { get; set; } = [];
 
     /// <summary>
-    /// True where no Connected System takes synchronised passwords for this identity, so nothing was queued.
+    /// True where no Connected System is configured to take synchronised passwords, so nothing was queued.
     /// Reported explicitly rather than as an empty list alone: silence here would let a caller believe a password
     /// propagated when nothing was even recorded (requirement 14).
     /// </summary>
@@ -69,6 +69,7 @@ public class SynchroniseMetaverseObjectPasswordResponse
             {
                 ConnectedSystemId = t.ConnectedSystemId,
                 ConnectedSystemName = t.ConnectedSystemName,
+                Enabled = t.Enabled,
                 ConnectedSystemObjectId = t.ConnectedSystemObjectId
             }).ToList()
         };
@@ -83,6 +84,14 @@ public class SynchroniseMetaverseObjectPasswordTarget
     public int ConnectedSystemId { get; set; }
 
     public string ConnectedSystemName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether this system is currently taking synchronised passwords. False means the change is queued and
+    /// held: a configured system that is switched off accumulates rather than discards, and enabling it delivers
+    /// what accumulated. Reported so a caller can tell "on its way" from "waiting on somebody enabling the
+    /// system", which are indistinguishable from the queue alone.
+    /// </summary>
+    public bool Enabled { get; set; }
 
     /// <summary>
     /// The account the password is aimed at, or null where the identity has no account in this system yet. A

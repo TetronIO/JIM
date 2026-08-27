@@ -1,9 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Activities;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -261,5 +263,86 @@ public class PasswordDeliveryReadsDatabaseTests
         var loaded = await new PostgresDataRepository(ctx).ConnectedSystems.GetConnectedSystemForPasswordDeliveryAsync(9999);
 
         Assert.That(loaded, Is.Null);
+    }
+
+    /// <summary>
+    /// Seeds a Connected System configured for Password Synchronisation in the given state, with one pending
+    /// password change due against it, and returns the system's id.
+    /// </summary>
+    private async Task<int> SeedSystemWithADueChangeAsync(string name, bool enabled)
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = $"{name} Connector", SupportsPasswordSet = true };
+        var system = new ConnectedSystem { Name = name, ConnectorDefinition = connectorDefinition };
+        var objectType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
+        // A real identity, because PendingPasswordChange.MetaverseObjectId is a foreign key: a fabricated Guid is
+        // refused by the database, which is the whole reason these reads are covered against a real provider.
+        var metaverseObjectType = new MetaverseObjectType { Name = $"User {name}", PluralName = $"Users {name}" };
+        var metaverseObject = new MetaverseObject { Type = metaverseObjectType };
+        seed.AddRange(connectorDefinition, system, objectType, metaverseObjectType, metaverseObject);
+        await seed.SaveChangesAsync();
+
+        seed.Add(new ConnectedSystemPasswordSynchronisation
+        {
+            ConnectedSystemId = system.Id,
+            Enabled = enabled,
+            TargetObjectTypeId = objectType.Id
+        });
+        seed.Add(new PendingPasswordChange
+        {
+            MetaverseObjectId = metaverseObject.Id,
+            ConnectedSystemId = system.Id,
+            EncryptedPassword = "protected",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTime.UtcNow.AddDays(7)
+        });
+        await seed.SaveChangesAsync();
+
+        return system.Id;
+    }
+
+    /// <summary>
+    /// A switched-off system accumulates password changes rather than discarding them, and a delivery pass steps
+    /// over it without touching them. Reporting it as having work due would therefore have the worker's idle
+    /// sweep raise a delivery pass every minute, each recording an Activity for having done nothing, for as long
+    /// as the system stayed off. The changes are held, not due.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemIdsWithDuePasswordChangesAsync_SkipsASystemThatIsSwitchedOffAsync()
+    {
+        var enabled = await SeedSystemWithADueChangeAsync("Corporate AD", enabled: true);
+        await SeedSystemWithADueChangeAsync("Contractor LDAP", enabled: false);
+
+        await using var ctx = NewContext();
+        var systemIds = await new PostgresDataRepository(ctx).Sync
+            .GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime.UtcNow);
+
+        Assert.That(systemIds, Is.EqualTo(new[] { enabled }));
+    }
+
+    /// <summary>
+    /// The other half of the same rule: switching the system on is what makes its accumulated changes due, with
+    /// no change to the changes themselves. This is requirement 3's drain, read from the query that decides
+    /// whether there is anything to drain.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemIdsWithDuePasswordChangesAsync_OnceEnabled_ReportsWhatAccumulatedAsync()
+    {
+        var systemId = await SeedSystemWithADueChangeAsync("Contractor LDAP", enabled: false);
+
+        await using (var enable = NewContext())
+        {
+            var configuration = await enable.ConnectedSystemPasswordSynchronisations
+                .SingleAsync(ps => ps.ConnectedSystemId == systemId);
+            configuration.Enabled = true;
+            await enable.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var systemIds = await new PostgresDataRepository(ctx).Sync
+            .GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime.UtcNow);
+
+        Assert.That(systemIds, Is.EqualTo(new[] { systemId }));
     }
 }

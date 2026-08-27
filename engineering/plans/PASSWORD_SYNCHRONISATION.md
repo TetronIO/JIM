@@ -1,6 +1,6 @@
 # Password Synchronisation (Phase 1: JIM as Password Origin)
 
-- **Status:** Doing (Phases 1 to 5 complete; Phase 6 integration, documentation and security review outstanding)
+- **Status:** Doing (Phases 1 to 6 complete; Scenario 20 authored and awaiting a run against a live Samba AD stack)
 - **Issue:** [#1119](https://github.com/TetronIO/JIM/issues/1119)
 - **PRD:** [`engineering/prd/doing/PRD_PASSWORD_SYNCHRONISATION.md`](../prd/doing/PRD_PASSWORD_SYNCHRONISATION.md)
 
@@ -177,6 +177,13 @@ Each phase is TDD, red first, and lands with its tests, docs, and changelog entr
 - New integration scenario: configure and enable Password Synchronisation on the Samba AD system, change a password via the API, assert delivery by binding; disabled-accumulate-then-drain and coalescing assertions (Scenario 3's shape); registered in `Run-IntegrationTests.ps1`
 - Public docs: Password Synchronisation concept and how-to, LDAP connector reference update, Activities category reference, REST and PowerShell reference; `DEVELOPER_GUIDE.md` password channel section; component diagrams
 - Security review pass against the never-log/never-serialise invariants (including the `Invoke-JIMApi` debug-stream body logging, which must redact password bodies); changelog; PRD Implementation Progress refresh
+
+**Delivered as Scenario 20** (`Invoke-Scenario20-PasswordSynchronisation.ps1`, `Setup-Scenario20.ps1`), documented in `engineering/INTEGRATION_TESTING.md`. It composes Scenario 17's substrate for provisioned, enabled accounts holding a password it knows, then asserts the four questions in order: a switched-off system accumulates rather than discards; three changes coalesce to one; enabling delivers what accumulated unaided and the directory answers the new password and refuses the old; and a change against a live system is delivered without intervention. It also sweeps the containers' own logs for every password value it sent.
+
+Two things came out of writing it, both fixed rather than deferred:
+
+- **The security review's finding**, closed on `main`: PowerShell's own `Invoke-RestMethod` was writing the API key to the debug stream on every authenticated call ([#1516](https://github.com/TetronIO/JIM/issues/1516)), and `Invoke-JIMApi` was logging request bodies unredacted, which included the four cmdlets that take a password as a `SecureString` precisely to keep it out of the session. Both closed; `Get-JIMRedactedBody` and a per-file source sweep are the guards.
+- **[#1522](https://github.com/TetronIO/JIM/issues/1522), a functional defect the scenario existed to find.** Fan-out selected its targets with an `Enabled` filter, so a Connected System that was **configured but switched off** was not a target at all and its password changes were discarded rather than accumulated: requirement 2 inverted, silently, with nothing left behind to notice. Delivery had always been right (it re-reads the enabled state and steps over a switched-off system), which is why the behaviour looked correct in the cases most likely to be tried by hand. Queueing now targets configured systems and carries the enabled state through; due-work detection and the queue summary's due count exclude switched-off systems so the worker's idle sweep does not raise a pointless pass a minute; and the Activity, the portal, the API response and the queue row distinguish **held** from delivered, because "queued" alone reads as "on its way".
 
 ## Success Criteria
 

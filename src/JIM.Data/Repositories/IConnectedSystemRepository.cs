@@ -1027,14 +1027,20 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemPasswordSynchronisation?> GetPasswordSynchronisationAsync(int connectedSystemId);
 
     /// <summary>
-    /// Every Connected System configured and enabled to receive synchronised passwords (#1119), flattened to what
-    /// fan-out needs.
+    /// Every Connected System configured to receive synchronised passwords (#1119), flattened to what fan-out
+    /// needs.
+    /// <para>
+    /// Configured, not only enabled. A system that is switched off is still returned, carrying
+    /// <see cref="PasswordSynchronisationTarget.Enabled"/> as false: requirement 2 has it accumulate queued
+    /// changes while it is off and requirement 3 has enabling it deliver what accumulated, and neither is
+    /// possible if the change was never queued. Delivery reads the flag again and holds those changes back.
+    /// </para>
     /// <para>
     /// Asked on every password change, so it is a projection rather than a graph load: the alternative would
-    /// materialise every configured Connected System to read three fields off each.
+    /// materialise every configured Connected System to read four fields off each.
     /// </para>
     /// </summary>
-    public Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync();
+    public Task<List<PasswordSynchronisationTarget>> GetPasswordSynchronisationTargetsAsync();
 
     /// <summary>
     /// Where each of the named Connected Systems stands on Password Synchronisation (#1119, requirement 26).

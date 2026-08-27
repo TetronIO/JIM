@@ -59,6 +59,18 @@ public static class PendingPasswordChangeDisplay
                 : $"Cancelled by {change.CancelledByName}";
         }
 
+        // Held is answered before the failure, and before returning nothing. A change waiting on a switched-off
+        // system usually has no failure at all, so without this the row reads "Waiting" with no explanation,
+        // which is the one state where what it is waiting for is a person rather than a retry.
+        if (change.IsHeld)
+        {
+            return change.FailureReason is null or PasswordSetFailureReason.None
+                ? "Waiting for Password Synchronisation to be switched on for this Connected System"
+                : $"Waiting for Password Synchronisation to be switched on for this Connected System. " +
+                  $"Last attempt: {Reason(change.FailureReason.Value)}" +
+                  (string.IsNullOrWhiteSpace(change.TargetMessage) ? string.Empty : $": {change.TargetMessage}");
+        }
+
         if (change.FailureReason is null or PasswordSetFailureReason.None)
             return null;
 
