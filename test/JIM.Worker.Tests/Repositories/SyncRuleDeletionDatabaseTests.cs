@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,11 @@ namespace JIM.Worker.Tests.Repositories;
 /// rule survived its owner's deletion with a null owner, belonging to nothing and reachable from nowhere. No
 /// error was reported, because nulling the reference is what the convention asks for. The in-memory provider
 /// cannot see the difference, so only a real provider tells these tests anything.
+/// </para>
+/// <para>
+/// The same convention, and so the same fault, applied to everything else the rule contains: its Attribute Flow
+/// mappings and their sources, and its Scoping Criteria groups, the groups nested inside those, and their
+/// criteria. Those are the larger population, because every rule has them.
 /// </para>
 /// </summary>
 [TestFixture]
@@ -131,6 +137,75 @@ public class SyncRuleDeletionDatabaseTests
         return new Seeded(syncRule.Id, advanced.Id, simple.Id, objectType.Id);
     }
 
+    private sealed record SeededContained(
+        int SyncRuleId, int MappingId, int MappingSourceId, int TopGroupId, int NestedGroupId, int NestedCriterionId);
+
+    /// <summary>
+    /// Seeds a Synchronisation Rule holding one Attribute Flow mapping with a source beneath it, and a Scoping
+    /// Criteria group with a second group nested inside it carrying a criterion. The nested group is the point:
+    /// it hangs off its parent rather than off the rule, so nothing that cascades from the rule alone reaches it.
+    /// </summary>
+    private async Task<SeededContained> SeedContainedConfigurationAsync(string suffix)
+    {
+        await using var ctx = NewContext();
+
+        var definition = new ConnectorDefinition { Name = $"contained-def-{suffix}" };
+        ctx.ConnectorDefinitions.Add(definition);
+        await ctx.SaveChangesAsync();
+
+        var system = new ConnectedSystem { Name = $"contained-cs-{suffix}", ConnectorDefinitionId = definition.Id };
+        ctx.ConnectedSystems.Add(system);
+        await ctx.SaveChangesAsync();
+
+        var objectType = new ConnectedSystemObjectType { ConnectedSystemId = system.Id, Name = "user", Selected = true };
+        ctx.ConnectedSystemObjectTypes.Add(objectType);
+        await ctx.SaveChangesAsync();
+
+        var trackedObjectType = await ctx.ConnectedSystemObjectTypes.AsTracking().SingleAsync(t => t.Id == objectType.Id);
+        var csAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            ConnectedSystemObjectType = trackedObjectType,
+            Name = $"department{suffix}"
+        };
+        ctx.ConnectedSystemAttributes.Add(csAttribute);
+
+        var metaverseObjectType = new MetaverseObjectType { Name = $"ContainedType{suffix}", PluralName = $"ContainedTypes{suffix}" };
+        ctx.MetaverseObjectTypes.Add(metaverseObjectType);
+        var metaverseAttribute = new MetaverseAttribute { Name = $"containedAttr{suffix}" };
+        ctx.MetaverseAttributes.Add(metaverseAttribute);
+        await ctx.SaveChangesAsync();
+
+        var syncRule = new SyncRule
+        {
+            Name = $"contained-rule-{suffix}",
+            ConnectedSystemId = system.Id,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            MetaverseObjectTypeId = metaverseObjectType.Id
+        };
+
+        var mapping = new SyncRuleMapping { TargetMetaverseAttributeId = metaverseAttribute.Id };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttributeId = csAttribute.Id });
+        syncRule.AttributeFlowRules.Add(mapping);
+
+        var nestedCriterion = new SyncRuleScopingCriteria
+        {
+            MetaverseAttributeId = metaverseAttribute.Id,
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "Sales"
+        };
+        var nestedGroup = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        nestedGroup.Criteria.Add(nestedCriterion);
+        var topGroup = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        topGroup.ChildGroups.Add(nestedGroup);
+        syncRule.ObjectScopingCriteriaGroups.Add(topGroup);
+
+        ctx.SyncRules.Add(syncRule);
+        await ctx.SaveChangesAsync();
+
+        return new SeededContained(
+            syncRule.Id, mapping.Id, mapping.Sources[0].Id, topGroup.Id, nestedGroup.Id, nestedCriterion.Id);
+    }
+
     [Test]
     public async Task DeleteSyncRuleAsync_WithAnAdvancedModeObjectMatchingRule_TakesItWithTheRuleAsync()
     {
@@ -162,6 +237,49 @@ public class SyncRuleDeletionDatabaseTests
             Assert.That(await assertCtx.ObjectMatchingRules.AnyAsync(r => r.Id == seeded.SimpleRuleId), Is.True,
                 "a Simple-mode Object Matching Rule on the same Object Type is untouched: it belongs to the " +
                 "Object Type, not to the deleted rule");
+        }
+    }
+
+    /// <summary>
+    /// The rest of what a Synchronisation Rule contains: its Attribute Flow mappings and the sources beneath
+    /// them, and its Scoping Criteria groups, the groups nested inside those, and their criteria. The nesting is
+    /// the part worth seeding explicitly: a cascade from the rule reaches only the top-level groups, so a nested
+    /// group whose own reference does not cascade holds the entire delete up, which is how the equivalent fault
+    /// in the Connected System Container hierarchy behaved.
+    /// </summary>
+    [Test]
+    public async Task DeleteSyncRuleAsync_WithMappingsAndNestedScopingGroups_TakesThemAllWithTheRuleAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var seeded = await SeedContainedConfigurationAsync(suffix);
+
+        await using (var deleteCtx = NewContext())
+        {
+            var repository = new PostgresDataRepository(deleteCtx);
+            var syncRule = await repository.ConnectedSystems.GetSyncRuleAsync(seeded.SyncRuleId);
+            Assert.That(syncRule, Is.Not.Null, "the seeded Synchronisation Rule is readable before it is deleted");
+
+            Assert.That(async () => await repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule!),
+                Throws.Nothing,
+                "a nested Scoping Criteria group must not hold the delete up the way a nested Container once did");
+        }
+
+        await using var assertCtx = NewContext();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await assertCtx.SyncRules.AnyAsync(sr => sr.Id == seeded.SyncRuleId), Is.False,
+                "the Synchronisation Rule itself is gone");
+            Assert.That(await assertCtx.SyncRuleMappings.AnyAsync(m => m.Id == seeded.MappingId), Is.False,
+                "its Attribute Flow mapping goes with it, rather than surviving with a null owner");
+            Assert.That(await assertCtx.SyncRuleMappingSources.AnyAsync(s => s.Id == seeded.MappingSourceId), Is.False,
+                "and the source the mapping read from");
+            Assert.That(await assertCtx.SyncRuleScopingCriteriaGroups.AnyAsync(g => g.Id == seeded.TopGroupId), Is.False,
+                "its top-level Scoping Criteria group goes with it");
+            Assert.That(await assertCtx.SyncRuleScopingCriteriaGroups.AnyAsync(g => g.Id == seeded.NestedGroupId), Is.False,
+                "so does the group nested inside it, which the cascade from the rule cannot reach directly");
+            Assert.That(await assertCtx.SyncRuleScopingCriteria.AnyAsync(c => c.Id == seeded.NestedCriterionId), Is.False,
+                "and the criterion inside that nested group");
         }
     }
 }

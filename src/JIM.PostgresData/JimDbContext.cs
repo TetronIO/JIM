@@ -1084,6 +1084,45 @@ public class JimDbContext : DbContext
             .HasForeignKey(c => c.ParentContainerId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // A Synchronisation Rule owns its Attribute Flow mappings, and a mapping owns the sources it reads from.
+        // Exactly the Predefined Search chain above, and it was wrong the same way: deleting a rule nulled these
+        // rather than removing them, so every mapping and source of every deleted rule stayed behind belonging to
+        // nothing. Nothing failed and nothing said so, because nulling the reference is what the convention asks
+        // for.
+        modelBuilder.Entity<SyncRule>()
+            .HasMany(sr => sr.AttributeFlowRules)
+            .WithOne(m => m.SyncRule!)
+            .HasForeignKey(m => m.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleMapping>()
+            .HasMany(m => m.Sources)
+            .WithOne()
+            .HasForeignKey("SyncRuleMappingId")
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A Synchronisation Rule owns its top-level Scoping Criteria groups, a group owns the groups nested
+        // inside it, and a group owns its criteria. All three levels have to cascade: a nested group hangs off its
+        // parent rather than off the rule, so stopping at the top level would leave the delete blocked one level
+        // deeper instead of at the top, which is precisely how the Container hierarchy above behaved.
+        modelBuilder.Entity<SyncRule>()
+            .HasMany(sr => sr.ObjectScopingCriteriaGroups)
+            .WithOne()
+            .HasForeignKey("SyncRuleId")
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleScopingCriteriaGroup>()
+            .HasMany(g => g.ChildGroups)
+            .WithOne(g => g.ParentGroup!)
+            .HasForeignKey("ParentGroupId")
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleScopingCriteriaGroup>()
+            .HasMany(g => g.Criteria)
+            .WithOne()
+            .HasForeignKey("SyncRuleScopingCriteriaGroupId")
+            .OnDelete(DeleteBehavior.Cascade);
+
         // A Connector Definition owns the settings it declares.
         modelBuilder.Entity<ConnectorDefinition>()
             .HasMany(cd => cd.Settings)

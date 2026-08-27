@@ -5954,15 +5954,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         //     relies on EF's change tracker to detect property modifications, collection
         //     adds (e.g. new ObjectScopingCriteriaGroup) and collection removals on
         //     SaveChanges. With NoTracking, those mutations are invisible to EF.
-        //   - DeleteSyncRuleAsync depends on it, and on the Includes below, for correctness
-        //     rather than convenience: SyncRuleMappings.SyncRuleId and
-        //     SyncRuleScopingCriteriaGroups.SyncRuleId are both NO ACTION in the database,
-        //     so nothing there deletes them when the rule goes. What removes them is EF's
-        //     client-side fixup over the tracked graph this method loads. Drop either
-        //     Include for performance and every Synchronisation Rule delete starts failing
-        //     with 23503, from a change made in a read method with no delete test in sight.
-        //     (ObjectMatchingRules is no longer in that set: it cascades in the database as
-        //     of CascadeObjectMatchingRuleOwnership, so it is safe however it is loaded.)
+        // Deletion does NOT depend on any of the Includes below. Everything a Synchronisation
+        // Rule owns (its Attribute Flow mappings and their sources, its Object Matching
+        // Rules, its Scoping Criteria groups, the groups nested inside them and their
+        // criteria) now cascades in the database, so DeleteSyncRuleAsync is correct whatever
+        // the caller happened to load. Before that it relied on this graph being tracked, and
+        // relied on it wrongly: EF applied ClientSetNull to every one of those optional
+        // references, which nulled the child rows rather than removing them, and each delete
+        // silently left the rule's whole configuration behind belonging to nothing. Adding or
+        // removing an Include here is now a read-path decision only.
         return await Repository.Database.SyncRules
             .AsTracking()
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
