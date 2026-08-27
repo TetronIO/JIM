@@ -39,6 +39,7 @@ public class PasswordSynchronisationServer
     private readonly Func<IPasswordProtectionService> _passwordProtection;
     private readonly Func<ConnectedSystem, IConnector> _createConnector;
     private readonly Func<Activity, MetaverseObject?, ApiKey?, Task> _createActivity;
+    private readonly Func<Activity, Task> _createSystemActivity;
     private readonly Func<Activity, Task> _completeActivity;
     private readonly Func<Activity, string, Task> _completeActivityWithError;
     private readonly Func<int?, Task> _requestDelivery;
@@ -69,6 +70,12 @@ public class PasswordSynchronisationServer
     /// is refused by the Activity server, and rightly: a password change nobody can be shown to have made is not
     /// an audit record.
     /// </param>
+    /// <param name="createSystemActivity">
+    /// Creates an Activity attributed to JIM itself, for work no person or API key asked for. Delivery is the
+    /// case: a queued password change is delivered by a worker pass minutes or days after somebody queued it,
+    /// and there is no principal at that moment to attribute the outcome to. The parent Activity for the change
+    /// carries who made it; this records what one system did with it.
+    /// </param>
     /// <param name="requestDelivery">
     /// Asks for a delivery pass over the given Connected System, or over every system with work due where null.
     /// Queueing and delivering stay separate (a password change must not wait on a directory), so this is how the
@@ -87,6 +94,7 @@ public class PasswordSynchronisationServer
         Func<IPasswordProtectionService> passwordProtection,
         Func<ConnectedSystem, IConnector> createConnector,
         Func<Activity, MetaverseObject?, ApiKey?, Task> createActivity,
+        Func<Activity, Task> createSystemActivity,
         Func<Activity, Task> completeActivity,
         Func<Activity, string, Task> completeActivityWithError,
         Func<int?, Task> requestDelivery)
@@ -97,6 +105,7 @@ public class PasswordSynchronisationServer
         _passwordProtection = passwordProtection;
         _createConnector = createConnector;
         _createActivity = createActivity;
+        _createSystemActivity = createSystemActivity;
         _completeActivity = completeActivity;
         _completeActivityWithError = completeActivityWithError;
         _requestDelivery = requestDelivery;
@@ -166,7 +175,12 @@ public class PasswordSynchronisationServer
             throw new ArgumentException("A password is required.", nameof(password));
 
         var connectedSystems = _connectedSystemRepo();
-        var targets = await connectedSystems.GetEnabledPasswordSynchronisationTargetsAsync();
+
+        // Every system configured for Password Synchronisation, including those switched off. One that is off
+        // accumulates the change rather than discarding it (requirement 2), and enabling it delivers what
+        // accumulated (requirement 3); skipping it here would throw the password away at the only moment it
+        // could have been kept, leaving nothing behind for anybody to notice.
+        var targets = await connectedSystems.GetPasswordSynchronisationTargetsAsync();
 
         // The identity's accounts, read once and matched against every target, rather than a query per system.
         var accounts = await connectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
@@ -214,6 +228,7 @@ public class PasswordSynchronisationServer
             {
                 ConnectedSystemId = target.ConnectedSystemId,
                 ConnectedSystemName = target.ConnectedSystemName,
+                Enabled = target.Enabled,
                 ConnectedSystemObjectId = account?.Id
             });
         }
@@ -225,18 +240,16 @@ public class PasswordSynchronisationServer
 
         // Requirement 14: a change that reached nothing is still recorded, and says so. Silence here would let an
         // administrator believe a password propagated when nothing was even queued.
-        activity.Message = outcomes.Count == 0
-            ? "No Connected System is enabled for Password Synchronisation, so this password was not queued for delivery anywhere."
-            : $"Password change queued for {outcomes.Count} Connected System{(outcomes.Count == 1 ? string.Empty : "s")}: " +
-              string.Join(", ", outcomes.Select(o => o.ConnectedSystemName));
+        activity.Message = DescribeQueueOutcome(outcomes);
 
         await _completeActivity(activity);
 
         // Synchronisation Integrity: summary statistics at the end of every batch operation. The systems are
         // named because that is what an administrator needs; the password is not, and no part of it ever is.
         Log.Information(
-            "QueuePasswordChangeAsync: Password change for Metaverse Object {MetaverseObjectId} queued for {TargetCount} Connected System(s): {Targets}",
-            metaverseObjectId, outcomes.Count,
+            "QueuePasswordChangeAsync: Password change for Metaverse Object {MetaverseObjectId} queued for {TargetCount} Connected System(s), " +
+            "{HeldCount} of which are not currently taking passwords: {Targets}",
+            metaverseObjectId, outcomes.Count, outcomes.Count(o => !o.Enabled),
             outcomes.Count == 0 ? "none" : LogSanitiser.Sanitise(string.Join(", ", outcomes.Select(o => o.ConnectedSystemName))));
 
         // Unscoped, because fan-out reaches every enabled system at once and the pass resolves which of them
@@ -245,6 +258,31 @@ public class PasswordSynchronisationServer
             await _requestDelivery(null);
 
         return new PasswordQueueResult { ActivityId = activity.Id, Targets = outcomes };
+    }
+
+    /// <summary>
+    /// What the Activity says about where a password change went (#1119, requirement 14).
+    /// <para>
+    /// The distinction the message has to carry is between queued-and-on-its-way and queued-but-held: a system
+    /// that is configured and switched off accumulates the change, and an administrator reading the Activity
+    /// weeks later needs to know that a password is sitting waiting on somebody turning that system back on,
+    /// rather than assuming everything named here has the password already.
+    /// </para>
+    /// </summary>
+    internal static string DescribeQueueOutcome(IReadOnlyList<PasswordQueueTargetOutcome> outcomes)
+    {
+        if (outcomes.Count == 0)
+            return "No Connected System is configured for Password Synchronisation, so this password was not queued for delivery anywhere.";
+
+        var message = $"Password change queued for {outcomes.Count} Connected System{(outcomes.Count == 1 ? string.Empty : "s")}: " +
+                      string.Join(", ", outcomes.Select(o => o.ConnectedSystemName)) + ".";
+
+        var held = outcomes.Where(o => !o.Enabled).Select(o => o.ConnectedSystemName).ToList();
+        if (held.Count == 0)
+            return message;
+
+        return message + $" Held until Password Synchronisation is enabled on {string.Join(", ", held)}" +
+               $"; the change{(outcomes.Count == 1 ? string.Empty : "s")} will be delivered then, or expire first.";
     }
 
     /// <summary>
@@ -501,7 +539,12 @@ public class PasswordSynchronisationServer
                 : failure
         };
 
-        await _createActivity(activity, null, null);
+        // System-attributed, not "attributed to nobody". Every Activity must name a principal, and passing no
+        // initiator here made the Activity server refuse it: the refusal threw out of the delivery pass, so an
+        // outcome could never be recorded and the change was retried for ever. Delivery runs unattended, long
+        // after whoever queued the change has gone, so JIM itself is the honest principal; the parent Activity
+        // still carries the person or API key that made the password change.
+        await _createSystemActivity(activity);
 
         // Completed, and completed as what it was. Creating an Activity sets it InProgress, so an outcome that is
         // never completed sits in the Activities list looking like work still under way; and a refusal recorded
@@ -527,15 +570,21 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
-    /// How many Connected Systems are configured and enabled to receive synchronised passwords (#1119).
+    /// How many Connected Systems are configured to receive synchronised passwords (#1119).
     /// <para>
     /// Read by the portal so the Synchronise Password action is offered or not, rather than appearing and then
     /// turning out to reach nothing once somebody has typed a password into it.
     /// </para>
+    /// <para>
+    /// Configured rather than enabled, because a system that is switched off does not make the action pointless:
+    /// the change is queued and waits for it to come back (requirement 2). Counting only the enabled ones would
+    /// withdraw the action during exactly the outage it exists to survive, and the password change made during
+    /// that window would be the one nobody could record.
+    /// </para>
     /// </summary>
-    public async Task<int> GetEnabledTargetCountAsync()
+    public async Task<int> GetTargetCountAsync()
     {
-        var targets = await _connectedSystemRepo().GetEnabledPasswordSynchronisationTargetsAsync();
+        var targets = await _connectedSystemRepo().GetPasswordSynchronisationTargetsAsync();
         return targets.Count;
     }
 
@@ -637,15 +686,20 @@ public class PasswordSynchronisationServer
         var released = await _syncRepo.ReleasePasswordChangesForDeliveryAsync(connectedSystemId);
 
         if (released > 0)
-        {
             Log.Information(
                 "ReleaseForDeliveryAsync: {Released} parked password change(s) on Connected System {ConnectedSystemId} are due again.",
                 released, connectedSystemId);
 
-            // Scoped to this system: the trigger knows exactly which one it released work on, so a pass over
-            // every system would visit others with nothing to do.
-            await _requestDelivery(connectedSystemId);
-        }
+        // Asked for unconditionally, not only when something was un-parked. A system switched on after a spell
+        // off has no parked changes at all: what it has is everything queued while it was off, already Pending
+        // and already due, which nothing un-parks. Gating the request on the released count left those waiting
+        // on the worker's next idle sweep, so "enabling delivers what accumulated" was true only up to a minute
+        // later. The caller only reaches here when delivery actually changed, so an unconditional request costs
+        // one pass over one system, and a pass with nothing due finishes immediately.
+        //
+        // Scoped to this system: the trigger knows exactly which one changed, so a pass over every system would
+        // visit others with nothing to do.
+        await _requestDelivery(connectedSystemId);
 
         return released;
     }

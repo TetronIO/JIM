@@ -241,7 +241,7 @@
                             @if (_passwordSynchronisationSystemCount == 0)
                             {
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="jim-mvo-action-sync-password-unavailable">
-                                    Unavailable: no Connected System is enabled for Password Synchronisation.
+                                    Unavailable: no Connected System is configured for Password Synchronisation.
                                 </MudText>
                             }
                         </MudStack>
@@ -493,7 +493,7 @@
         _passwordCapableAccountCount = (await jim.ConnectedSystems.GetAccountsForPasswordSetAsync(MetaverseObject.Id))
             .Count(account => account.ConnectorCanSetPasswords);
 
-        _passwordSynchronisationSystemCount = await jim.PasswordSynchronisation.GetEnabledTargetCountAsync();
+        _passwordSynchronisationSystemCount = await jim.PasswordSynchronisation.GetTargetCountAsync();
 
         // Loaded with the page rather than when the tab is opened, deliberately. The tab is gated on the
         // Administrator role, so its position among the panels differs between readers, and keying a lazy load on

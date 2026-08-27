@@ -96,7 +96,7 @@ internal sealed class SystemRepository : ISystemRepository
             // Service Settings singleton is preserved by the reset, so that reference outlives the attribute
             // delete below and fails it with 23503 (#1477). Cascading is not an option here: it would delete the
             // singleton itself. The mapping is customer configuration naming an attribute that is about to be
-            // removed, so the reset clears it. SystemResetForeignKeyCoverageTests holds the matching allow-list
+            // removed, so the reset clears it. DeletePathForeignKeyCoverageTests holds the matching allow-list
             // entry for this foreign key; keep the two in step.
             await db.ExecuteSqlRawAsync(
                 @"UPDATE ""ServiceSettings"" SET ""SSOUniqueIdentifierMetaverseAttributeId"" = NULL

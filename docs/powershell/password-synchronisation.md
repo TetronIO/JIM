@@ -51,7 +51,7 @@ Get-JIMPendingPasswordChange -Summary
 | `PageSize` | `int` | No | `50` | Results per page (maximum 100). |
 | `All` | `switch` | Yes (ListAll set) | | Retrieve every page. Stops after 1000 pages with a warning unless `-Force` is supplied. |
 | `Force` | `switch` | No | | Fetch beyond the `-All` page ceiling. |
-| `Summary` | `switch` | Yes (Summary set) | | Return the queue's counts by state instead of its rows. |
+| `Summary` | `switch` | Yes (Summary set) | | Return the queue's counts by state instead of the changes themselves. |
 
 ### Output
 
@@ -64,7 +64,8 @@ In the default and `-All` parameter sets, one `PSCustomObject` per queued change
 | `MetaverseObjectTypePluralName` | Their Metaverse Object Type's plural name, which is what a link to them is built from. |
 | `ConnectedSystemId`, `ConnectedSystemName` | Where it is going. |
 | `Status` | `Pending`, `Parked`, `Expired` or `Cancelled`. |
-| `Due` | Whether a delivery pass would attempt this change right now. A `Pending` change may be waiting out a retry backoff, which `Status` alone cannot tell you. |
+| `Due` | Whether a delivery pass would attempt this change right now. A `Pending` change may be waiting out a retry backoff, or be `Held`, neither of which `Status` alone can tell you. Never `$true` while `Held` is. |
+| `Held` | Whether the change is waiting on Password Synchronisation being switched back on for its Connected System, rather than on JIM. A switched-off system accumulates changes instead of discarding them; switching it on delivers what accumulated. |
 | `FailureReason`, `TargetMessage` | How the last attempt failed, and the target's own words. Both `$null` for a change that has not been attempted. |
 | `AttemptCount` | How many delivery attempts have been made. |
 | `NextRetryAt` | When the next attempt falls due, or `$null` for a change that is due now or is no longer being attempted. |
@@ -94,7 +95,14 @@ Get-JIMConnectedSystem -Name "Corporate AD" | Get-JIMPendingPasswordChange -All
 ```
 
 ```powershell title="Changes waiting out a retry backoff, as opposed to those due now"
-Get-JIMPendingPasswordChange -Status Pending | Where-Object { -not $_.Due }
+Get-JIMPendingPasswordChange -Status Pending | Where-Object { -not $_.Due -and -not $_.Held }
+```
+
+```powershell title="Which systems are holding password changes because they are switched off"
+Get-JIMPendingPasswordChange -Status Pending -All |
+    Where-Object Held |
+    Group-Object ConnectedSystemName |
+    Select-Object Name, Count
 ```
 
 ---
@@ -155,7 +163,7 @@ $result = Resume-JIMPendingPasswordChange -ConnectedSystemId 3 -Force
 ```
 
 !!! note "One request, one Activity"
-    However many changes are piped in, this is a single request and a single Activity. A retry over a directory that has just come back is one decision, and an Activity per row would bury it in its own consequences.
+    However many changes are piped in, this is a single request and a single Activity. A retry over a directory that has just come back is one decision, and an Activity per change would bury it in its own consequences.
 
 ---
 
@@ -163,7 +171,7 @@ $result = Resume-JIMPendingPasswordChange -ConnectedSystemId 3 -Force
 
 Stops JIM delivering matching changes.
 
-The rows are kept, marked `Cancelled`, recording who cancelled them and when. They are not deleted: that person's password is still divergent on that Connected System, and the cancelled row is the only thing that says so. Retention removes them on the same schedule as any other finished change, and a cancelled change can be put back on the queue with `Resume-JIMPendingPasswordChange` provided it has not expired in the meantime.
+The changes are kept, marked `Cancelled`, recording who cancelled them and when. They are not deleted: that person's password is still divergent on that Connected System, and the cancelled change is the only thing that says so. Retention removes them on the same schedule as any other finished change, and a cancelled change can be put back on the queue with `Resume-JIMPendingPasswordChange` provided it has not expired in the meantime.
 
 Applies to `Pending` and `Parked` changes. An `Expired` or already `Cancelled` change is left alone rather than having its recorded outcome overwritten.
 
