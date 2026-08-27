@@ -8633,6 +8633,18 @@ public partial class ConnectedSystemServer
         return true;
     }
 
+    /// <summary>
+    /// Quantifies the Metaverse attribute values a Synchronisation Rule currently contributes (#1537),
+    /// optionally scoped to one target Metaverse Attribute (an Attribute Flow mapping's slice). Count queries
+    /// only, no value rows are materialised, so deletion surfaces can state the impact responsively on large
+    /// estates before the administrator chooses to recall or keep the values.
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose contributions are being quantified.</param>
+    /// <param name="metaverseAttributeId">Optional: limit the summary to one target Metaverse Attribute
+    /// (the mapping-deletion case); null summarises every attribute the rule contributes to.</param>
+    public Task<ContributedValuesSummary> GetSyncRuleContributedValuesSummaryAsync(int syncRuleId, int? metaverseAttributeId = null)
+        => Application.Repository.Metaverse.GetContributedValuesSummaryAsync(syncRuleId, metaverseAttributeId);
+
     public Task<SyncRuleDeletionResult> DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, string? changeReason = null, Guid? parentActivityId = null, bool recallContributedValues = true)
         => DeleteSyncRuleInternalAsync(syncRule, initiatedBy, initiatedByApiKey: null, changeReason, parentActivityId, recallContributedValues);
 
