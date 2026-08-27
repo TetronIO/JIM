@@ -1,6 +1,6 @@
 # Attribute Value Recall Choice
 
-- **Status:** Planned
+- **Status:** Doing
 - **Created:** 2026-08-27
 - **Author:** Jay Van der Zant (drafted with Claude)
 - **Issue:** [#1537](https://github.com/TetronIO/JIM/issues/1537)

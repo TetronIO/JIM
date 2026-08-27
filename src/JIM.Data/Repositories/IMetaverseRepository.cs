@@ -506,6 +506,29 @@ public interface IMetaverseRepository
     Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId);
 
     /// <summary>
+    /// Quantifies the Metaverse attribute values a Synchronisation Rule currently contributes (#1537):
+    /// per-attribute value and distinct-object counts plus the overall distinct-object count, built from
+    /// count queries only so deletion surfaces can state impact without materialising value rows.
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose contributions are being quantified.</param>
+    /// <param name="metaverseAttributeId">Optional: limit the summary to one target Metaverse Attribute
+    /// (the mapping-deletion case); null summarises every attribute the rule contributes to.</param>
+    Task<ContributedValuesSummary> GetContributedValuesSummaryAsync(int syncRuleId, int? metaverseAttributeId = null);
+
+    /// <summary>
+    /// Severs the provenance of a Synchronisation Rule's contributed Metaverse attribute values: clears
+    /// <see cref="MetaverseObjectAttributeValue.ContributedBySyncRuleId"/> while retaining the denormalised
+    /// <see cref="MetaverseObjectAttributeValue.ContributedBySystemId"/>, matching what rule deletion's
+    /// ON DELETE SET NULL produces. This is the "keep the values" mechanism (#1537): null-provenance values
+    /// are deliberately never recalled, so severing permanently exempts them from orphan recall.
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose contributed values are being kept.</param>
+    /// <param name="metaverseAttributeId">Optional: limit severing to one target Metaverse Attribute
+    /// (the mapping-deletion case); null severs every value the rule contributed.</param>
+    /// <returns>The number of value rows severed.</returns>
+    Task<int> SeverContributedValueProvenanceAsync(int syncRuleId, int? metaverseAttributeId = null);
+
+    /// <summary>
     /// Returns a paginated set of attribute values for a specific attribute on a Metaverse Object.
     /// Supports server-side search and pagination for large multi-valued attributes.
     /// </summary>

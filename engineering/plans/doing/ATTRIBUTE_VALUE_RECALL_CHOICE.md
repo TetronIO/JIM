@@ -1,8 +1,8 @@
 # Attribute Value Recall Choice - Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing
 - **Issue:** [#1537](https://github.com/TetronIO/JIM/issues/1537)
-- **PRD:** [`engineering/prd/PRD_ATTRIBUTE_VALUE_RECALL_CHOICE.md`](../prd/PRD_ATTRIBUTE_VALUE_RECALL_CHOICE.md)
+- **PRD:** [`engineering/prd/PRD_ATTRIBUTE_VALUE_RECALL_CHOICE.md`](../../prd/doing/PRD_ATTRIBUTE_VALUE_RECALL_CHOICE.md)
 
 ## Overview
 

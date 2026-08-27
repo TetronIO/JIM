@@ -3341,6 +3341,62 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <inheritdoc />
+    public async Task<ContributedValuesSummary> GetContributedValuesSummaryAsync(int syncRuleId, int? metaverseAttributeId = null)
+    {
+        var query = Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId);
+
+        if (metaverseAttributeId.HasValue)
+            query = query.Where(av => av.AttributeId == metaverseAttributeId.Value);
+
+        var attributes = await query
+            .GroupBy(av => new { av.AttributeId, av.Attribute.Name })
+            .Select(g => new ContributedValuesAttributeSummary
+            {
+                AttributeId = g.Key.AttributeId,
+                AttributeName = g.Key.Name,
+                ValueCount = g.Count(),
+                ObjectCount = g.Select(av => av.MetaverseObject.Id).Distinct().Count()
+            })
+            .OrderBy(a => a.AttributeName)
+            .ToListAsync();
+
+        // A separate distinct count across the whole match set: an object contributed to on several
+        // attributes counts once, so this is not the sum of the per-attribute object counts.
+        var totalObjects = attributes.Count == 0
+            ? 0
+            : await query.Select(av => av.MetaverseObject.Id).Distinct().CountAsync();
+
+        return new ContributedValuesSummary { Attributes = attributes, TotalObjects = totalObjects };
+    }
+
+    /// <inheritdoc />
+    public async Task<int> SeverContributedValueProvenanceAsync(int syncRuleId, int? metaverseAttributeId = null)
+    {
+        var query = Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId);
+
+        if (metaverseAttributeId.HasValue)
+            query = query.Where(av => av.AttributeId == metaverseAttributeId.Value);
+
+        // ContributedBySystemId is deliberately left standing: severing mirrors what rule deletion's
+        // ON DELETE SET NULL produces, and the denormalised system record is what survives that too.
+        if (Repository.Database.Database.IsRelational())
+        {
+            // Single set-based UPDATE; same relational/in-memory split as ApiKeyRepository.StampUsageAsync.
+            return await query.ExecuteUpdateAsync(setters => setters
+                .SetProperty(av => av.ContributedBySyncRuleId, (int?)null));
+        }
+
+        // The in-memory test provider does not support ExecuteUpdateAsync; tracked fallback with the same semantics.
+        var values = await query.AsTracking().ToListAsync();
+        foreach (var value in values)
+            value.ContributedBySyncRuleId = null;
+        await Repository.Database.SaveChangesAsync();
+        return values.Count;
+    }
+
+    /// <inheritdoc />
     public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
     {
         // First, get the Delete change record
