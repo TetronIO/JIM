@@ -201,7 +201,9 @@ function Invoke-JIMApiRequest {
         else {
             $params.Body = $Body | ConvertTo-Json -Depth 10
         }
-        Write-Debug "Request body: $($params.Body)"
+        # Redacted, never raw: several cmdlets put a plaintext password in the body, having taken it as
+        # a SecureString precisely to keep it out of the session history. See Get-JIMRedactedBody.
+        Write-Debug "Request body: $(Get-JIMRedactedBody -Body $Body)"
     }
 
     try {

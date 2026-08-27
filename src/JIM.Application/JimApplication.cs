@@ -176,6 +176,8 @@ public class JimApplication : IDisposable
             (activity, initiatedBy, initiatedByApiKey) => initiatedByApiKey != null
                 ? Activities.CreateActivityAsync(activity, initiatedByApiKey)
                 : Activities.CreateActivityAsync(activity, initiatedBy),
+            // Delivery outcomes are recorded by an unattended worker pass, so they are attributed to JIM itself.
+            activity => Activities.CreateSystemActivityAsync(activity),
             activity => Activities.CompleteActivityAsync(activity),
             (activity, errorMessage) => Activities.CompleteActivityWithErrorAsync(activity, errorMessage),
             // Null-forgiving for the same reason as the repository above: Tasking is assigned further down this

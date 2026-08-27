@@ -160,6 +160,10 @@ It also means JIM writes passwords the way each directory expects rather than wr
 
 Everything above concerns setting a password on one account, at the moment you ask. Password Synchronisation is the other half: one password change reaching **every** system that person has an account in, durably, without you standing over it.
 
+--8<-- "assets/diagrams/password-synchronisation.svg"
+
+<p class="jim-diagram-caption">Each system gets its own queued change, so none of them waits on another and one unavailable system cannot fail the rest.<span class="jimdg-caption-motion"> Moving dots trace one password change fanning out.</span></p>
+
 You configure it per Connected System, on the **Passwords** tab of the Connected System, and it appears only on systems whose connector can set passwords at all. Two settings, and one deliberate separation between them:
 
 - **The configuration** says which Object Type holds the accounts, how many delivery attempts to make before JIM stops and asks you to look, how long to wait before the first retry, and whether to refuse to transmit over a connection JIM cannot confirm is encrypted.
@@ -204,11 +208,12 @@ What happens to a queued change:
 - **It is delivered, and disappears.** Nothing is kept once the target has the password: there is no value worth retaining and every reason not to.
 - **It is retried.** A target that was unreachable, or that failed in a way another attempt may resolve, gets one. Each wait is twice as long as the one before it, starting from the backoff you configured, and never longer than the time the change has left.
 - **It is parked, and waits for you.** A target that *refused* the password, or that cannot do what was asked at all, will refuse it identically next time; JIM stops rather than burning the attempts. So does a change that has used all of them. Parked work is released, and tried again, the moment you change what would be delivered to that system: switching Password Synchronisation on, or correcting a setting.
+- **It is held, because the system is switched off.** Password Synchronisation being switched off on a Connected System does not stop changes being recorded for it; it stops them being sent. They accumulate, shown as **Held**, and switching the system back on delivers all of them without anything else being done. Nothing about a held change is attempted while it waits, so it does not consume attempts and does not appear in the due count. It still expires on time, which is what bounds how long a change window can last before the passwords made during it are lost.
 - **It expires.** A change that outlives its time to live is retired with its last failure recorded, rather than delivering a password the person may have changed twice since.
 
 A change for someone who changes their password again before the first one is delivered replaces the first, rather than queueing behind it. Only the newest password is ever sent.
 
-Delivery is a Password Delivery task in the Operations queue, so a pass is visible while it runs and its outcome is recorded as an Activity like any other work. A pass is raised when a password change is queued, when you enable Password Synchronisation on a system (to deliver what accumulated), and by JIM itself when a retry falls due.
+Delivery is a Password Delivery task in the Operations queue, so a pass is visible while it runs and its outcome is recorded as an Activity like any other work. A pass is raised when a password change is queued, when you enable Password Synchronisation on a system (to deliver what accumulated), and by JIM itself when a retry falls due. A system that is switched off is never swept for: its changes are held rather than due, so no pass is raised on their account until you switch it on.
 
 ### 🔎 Watching the queue
 
@@ -218,7 +223,7 @@ It never shows a password, and cannot: the queued value is encrypted in the data
 
 Four counts sit above the list:
 
-- **Waiting**<br /> Changes JIM still intends to deliver. The second line says how many of those a delivery pass would attempt right now; the rest are waiting out a retry backoff. A large waiting count with nothing due is a queue working through its backoffs. A large due count is a queue that is not being drained.
+- **Waiting**<br /> Changes JIM still intends to deliver. The second line says how many of those a delivery pass would attempt right now; the rest are waiting out a retry backoff, or are held because their Connected System is switched off. A large waiting count with nothing due is a queue working through its backoffs, or one waiting on a system to be switched back on. A large due count is a queue that is not being drained.
 - **Parked**<br /> The target refused them, or they ran out of attempts. These wait on you.
 - **Expired**<br /> They outlived their time to live. The password each carried is gone, so nothing can deliver them now.
 - **Cancelled**<br /> You stopped them. Counted rather than hidden, because that person's password is still divergent on that system and the count is the only thing that says so.
@@ -226,10 +231,10 @@ Four counts sit above the list:
 Filter by Connected System, by state, or by how the last attempt failed, and search by person or system. Two actions apply to whatever the filters are currently showing, as well as to a single row:
 
 - **Retry**<br /> Makes matching changes due immediately and raises a delivery pass. This is what you run once the reason a directory was refusing passwords has been dealt with. It applies to waiting, parked and cancelled changes; an expired one is left alone, because there is no password left to send.
-- **Cancel**<br /> Stops JIM delivering them. The rows stay, marked **Cancelled**, recording who cancelled them and when.
+- **Cancel**<br /> Stops JIM delivering them. The changes stay, marked **Cancelled**, recording who cancelled them and when.
 
 !!! note "Cancelling records an outcome; it does not erase one"
-    A cancelled change is kept for the same reason an expired one is: that person's password on that system is now out of step with the rest, and deleting the row would leave you believing your systems agree when they do not. Retention trims cancelled rows on the same schedule as any other finished change (see [How long any of it is kept](#-how-long-any-of-it-is-kept)), and a cancelled change can be retried, provided it has not expired in the meantime.
+    A cancelled change is kept for the same reason an expired one is: that person's password on that system is now out of step with the rest, and deleting it would leave you believing your systems agree when they do not. Retention removes cancelled changes on the same schedule as any other finished change (see [How long any of it is kept](#-how-long-any-of-it-is-kept)), and a cancelled change can be retried, provided it has not expired in the meantime.
 
 Whatever a retry or a cancel covers, it is recorded as **one** Activity. A retry over a directory that has just come back is a single decision, and a hundred Activities saying so would bury the decision in its own consequences. The Activity is recorded even when nothing matched, so a retry that changed nothing can be told from a retry that never ran.
 
@@ -256,12 +261,12 @@ See [PowerShell: Password Synchronisation](../powershell/password-synchronisatio
 
 A finished password change is not kept for ever. The built-in **History Retention Cleanup** [Schedule](../configuration/schedules.md#built-in-schedules) runs daily and removes two things once they have had the `History.PasswordEventRetentionPeriod` [Service Setting](../administration/configuration.md#service-settings), which defaults to a year:
 
-- **Queue rows that finished**, whether parked, expired or cancelled. A change still owed to a Connected System is never removed, however old it is.
+- **Queued changes that finished**, whether parked, expired or cancelled. A change still owed to a Connected System is never removed, however old it is.
 - **The Activities recording what happened to each change**, including the per-system outcomes behind a person's Password Synchronisation tab.
 
-The two move together on purpose: a person's password history is the outcomes, and a queue row without them says something happened without saying what.
+The two move together on purpose: a person's password history is the outcomes, and a queued change without them says something happened without saying what.
 
-This period is also what bounds how long JIM holds a password. A parked or cancelled row still carries its encrypted value, because both can be retried; shorten the retention period if you would rather JIM stopped holding one sooner. Nothing else ages these rows out, so a target that refuses passwords would otherwise accumulate one permanent row per person.
+This period is also what bounds how long JIM holds a password. A parked or cancelled change still carries its encrypted password, because both can be retried; shorten the retention period if you would rather JIM stopped holding one sooner. Nothing else ages these out, so a target that refuses passwords would otherwise keep one for every person, for ever.
 
 Each pass says what it removed, on its own Activity, so retention is something you can check rather than assume.
 

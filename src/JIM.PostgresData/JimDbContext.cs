@@ -596,16 +596,25 @@ public class JimDbContext : DbContext
             .Property(rp => rp.VerifyImportContentHashes)
             .HasDefaultValue(false);
 
-        // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
+        // An ObjectMatchingRule belongs to either a SyncRule or a ConnectedSystemObjectType, never both, and which
+        // one decides what the rule is: owned by an Object Type it matches every account of that type (Simple
+        // mode), owned by a Synchronisation Rule it matches only what that rule brings in (Advanced mode). Either
+        // way it is contained by its owner and means nothing without it, so both relationships cascade. Left to
+        // convention they were ClientSetNull, and the rule survived its owner's deletion with a null owner:
+        // configuration belonging to nothing, reachable from nowhere, and reported as a clean delete. Its Sources
+        // already cascade from the rule, so they go too. See the "Configuration ownership (issue #1477)" block
+        // below for why an optional foreign key gets this treatment by default.
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.ObjectMatchingRules)
             .WithOne(omr => omr.SyncRule)
-            .HasForeignKey(omr => omr.SyncRuleId);
+            .HasForeignKey(omr => omr.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.ObjectMatchingRules)
             .WithOne(omr => omr.ConnectedSystemObjectType)
-            .HasForeignKey(omr => omr.ConnectedSystemObjectTypeId);
+            .HasForeignKey(omr => omr.ConnectedSystemObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ObjectMatchingRule>()
             .HasOne(omr => omr.MetaverseObjectType)
@@ -1111,7 +1120,7 @@ public class JimDbContext : DbContext
         // whenever the owner is deleted outside a change-tracked graph, and it makes the factory reset's
         // "DELETE ... WHERE ""BuiltIn"" = false" statements fail with 23503 for any custom object holding the child
         // rows it ordinarily holds; since the whole wipe is one transaction, the reset then rolls back entirely.
-        // SystemResetForeignKeyCoverageTests asserts this property across the whole schema, so a child table added
+        // DeletePathForeignKeyCoverageTests asserts this property across the whole schema, so a child table added
         // later cannot silently reintroduce the fault.
 
         // A Predefined Search owns its top-level criteria groups; a group is how the search filters.
@@ -1134,6 +1143,57 @@ public class JimDbContext : DbContext
             .HasMany(g => g.Criteria)
             .WithOne()
             .HasForeignKey(c => c.PredefinedSearchCriteriaGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A Container owns the Containers discovered beneath it. Exactly the nested-group case above, and it bit
+        // the same way: deleting a Connected System removes its Containers with one statement keyed on PartitionId,
+        // but a Container discovered below another carries no PartitionId of its own, so that statement deleted
+        // the top of each branch and left every descendant pointing at a row that had just gone. PostgreSQL
+        // refused on this foreign key and the whole delete rolled back, so a Connected System that had ever
+        // imported a nested hierarchy could not be deleted at all.
+        modelBuilder.Entity<ConnectedSystemContainer>()
+            .HasMany(c => c.ChildContainers)
+            .WithOne(c => c.ParentContainer)
+            .HasForeignKey(c => c.ParentContainerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A Synchronisation Rule owns its Attribute Flow mappings, and a mapping owns the sources it reads from.
+        // Exactly the Predefined Search chain above, and it was wrong the same way: deleting a rule nulled these
+        // rather than removing them, so every mapping and source of every deleted rule stayed behind belonging to
+        // nothing. Nothing failed and nothing said so, because nulling the reference is what the convention asks
+        // for.
+        modelBuilder.Entity<SyncRule>()
+            .HasMany(sr => sr.AttributeFlowRules)
+            .WithOne(m => m.SyncRule!)
+            .HasForeignKey(m => m.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleMapping>()
+            .HasMany(m => m.Sources)
+            .WithOne()
+            .HasForeignKey("SyncRuleMappingId")
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A Synchronisation Rule owns its top-level Scoping Criteria groups, a group owns the groups nested
+        // inside it, and a group owns its criteria. All three levels have to cascade: a nested group hangs off its
+        // parent rather than off the rule, so stopping at the top level would leave the delete blocked one level
+        // deeper instead of at the top, which is precisely how the Container hierarchy above behaved.
+        modelBuilder.Entity<SyncRule>()
+            .HasMany(sr => sr.ObjectScopingCriteriaGroups)
+            .WithOne()
+            .HasForeignKey("SyncRuleId")
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleScopingCriteriaGroup>()
+            .HasMany(g => g.ChildGroups)
+            .WithOne(g => g.ParentGroup!)
+            .HasForeignKey("ParentGroupId")
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleScopingCriteriaGroup>()
+            .HasMany(g => g.Criteria)
+            .WithOne()
+            .HasForeignKey("SyncRuleScopingCriteriaGroupId")
             .OnDelete(DeleteBehavior.Cascade);
 
         // A Connector Definition owns the settings it declares.

@@ -6043,13 +6043,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(ps => ps.ConnectedSystemId == connectedSystemId);
     }
 
-    public async Task<List<PasswordSynchronisationTarget>> GetEnabledPasswordSynchronisationTargetsAsync()
+    public async Task<List<PasswordSynchronisationTarget>> GetPasswordSynchronisationTargetsAsync()
     {
+        // Every configured system, enabled or not. Filtering to the enabled ones here would discard a password
+        // change for a system that is merely switched off, which is the one thing requirement 2 forbids: it
+        // accumulates while it is off, and requirement 3's drain on enable has nothing to drain otherwise. The
+        // Enabled flag travels with the target instead, and delivery holds those changes back.
+        //
         // Joined and projected in the database rather than loading the Connected Systems: fan-out asks this on
-        // every password change, and it needs three fields per system.
+        // every password change, and it needs four fields per system.
         var targets = await Repository.Database.ConnectedSystemPasswordSynchronisations
             .AsNoTracking()
-            .Where(ps => ps.Enabled)
             .Join(Repository.Database.ConnectedSystems.AsNoTracking(),
                 ps => ps.ConnectedSystemId,
                 cs => cs.Id,
@@ -6058,6 +6062,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     ps.ConnectedSystemId,
                     cs.Name,
                     ps.TargetObjectTypeId,
+                    ps.Enabled,
                     cs.InitialPasswordTimeToLive
                 })
             .ToListAsync();
@@ -6070,6 +6075,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 ConnectedSystemId = t.ConnectedSystemId,
                 ConnectedSystemName = t.Name,
                 TargetObjectTypeId = t.TargetObjectTypeId,
+                Enabled = t.Enabled,
                 TimeToLive = new ConnectedSystem { InitialPasswordTimeToLive = t.InitialPasswordTimeToLive }
                     .EffectiveInitialPasswordTimeToLive
             })
@@ -6148,6 +6154,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         //     relies on EF's change tracker to detect property modifications, collection
         //     adds (e.g. new ObjectScopingCriteriaGroup) and collection removals on
         //     SaveChanges. With NoTracking, those mutations are invisible to EF.
+        // Deletion does NOT depend on any of the Includes below. Everything a Synchronisation
+        // Rule owns (its Attribute Flow mappings and their sources, its Object Matching
+        // Rules, its Scoping Criteria groups, the groups nested inside them and their
+        // criteria) now cascades in the database, so DeleteSyncRuleAsync is correct whatever
+        // the caller happened to load. Before that it relied on this graph being tracked, and
+        // relied on it wrongly: EF applied ClientSetNull to every one of those optional
+        // references, which nulled the child rows rather than removing them, and each delete
+        // silently left the rule's whole configuration behind belonging to nothing. Adding or
+        // removing an Include here is now a read-path decision only.
         return await Repository.Database.SyncRules
             .AsTracking()
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
@@ -6650,10 +6665,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 @"UPDATE ""ConnectedSystemObjectChanges"" SET ""DeletedObjectTypeId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
                 connectedSystemId);
 
-        // 3. Delete Containers (child of Partition)
+        // 3. Delete Containers. Both ownership paths are covered: a Container belongs to this system either through
+        //    its Partition or directly, and deleting only the Partition-owned ones stranded the rest. Descendants
+        //    need no statement of their own; ParentContainerId cascades (see JimDbContext, "A Container owns the
+        //    Containers discovered beneath it"), which is what lets a nested hierarchy go in one delete. Keyed on
+        //    the top of each branch rather than walked recursively, because the database does the walking.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemContainers""
-              WHERE ""PartitionId"" IN (SELECT ""Id"" FROM ""ConnectedSystemPartitions"" WHERE ""ConnectedSystemId"" = {0})",
+              WHERE ""PartitionId"" IN (SELECT ""Id"" FROM ""ConnectedSystemPartitions"" WHERE ""ConnectedSystemId"" = {0})
+                 OR ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
         // 4. Delete Run Profiles. Must be before Partitions: ConnectedSystemRunProfiles.PartitionId is a
@@ -6700,8 +6720,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 10. Delete Object Matching Rules for this system before the Synchronisation Rules and Object Types they reference
-        //     (those foreign keys do not cascade). Their Sources are removed automatically via ON DELETE CASCADE.
+        // 10. Delete Object Matching Rules for this system. Both ownership foreign keys now cascade
+        //     (CascadeOwnedConfigurationDeletes), so this statement is no longer what stops the deletes below
+        //     failing; it is kept because the sequence deletes rows explicitly and in a stated order rather than
+        //     relying on cascades it cannot see, and because it removes the rules in one statement instead of
+        //     twice over from two later ones. Their Sources are removed automatically via ON DELETE CASCADE.
         //     An OMR belongs to this system when it is scoped to one of its object types or one of its Synchronisation Rules.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ObjectMatchingRules""
@@ -6718,6 +6741,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemAttributes""
               WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 12b. Delete the Password Synchronisation configuration. It must go before the Object Types below:
+        //      ConnectedSystemPasswordSynchronisations.TargetObjectTypeId is RESTRICT on purpose, so that deleting
+        //      the Object Type holding a system's accounts cannot leave the configuration aimed at nothing. Deleting
+        //      the whole Connected System is the case that RESTRICT is not meant to stop, and the configuration
+        //      cascades from ConnectedSystems, but the cascade only fires at step 16; without this statement the
+        //      Object Type delete below is refused and the entire deletion rolls back.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemPasswordSynchronisations"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
         // 13. Delete Object Types
