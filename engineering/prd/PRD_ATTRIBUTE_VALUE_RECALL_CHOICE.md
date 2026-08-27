@@ -45,7 +45,7 @@ The governing rule, agreed 2026-08-27 after the recall-or-retain design review: 
 1. Deleting a Synchronisation Rule that is the sole contributor for one or more Metaverse attribute values must require a recall-or-keep choice; recall is the default on every surface.
 2. When any values are affected, the portal delete confirmation must state how many objects/values are affected, present the choice with recall pre-selected, and show a warning against keep: values remain in place with no provenance, and a new inbound Attribute Flow or manual/automated removal would be needed to change them later. When no values are affected, the existing confirmation flow is unchanged (no choice shown).
 3. Choosing recall enumerates the affected values **before** the delete commits (deletion severs the provenance the recall needs) and queues a Worker task to perform the recall. The task processes per Metaverse Object with RPEI outcomes, re-elects surviving contributors where they exist, clears the attribute where none do, and stages any resulting export changes through the normal Pending Export model.
-4. On queuing a recall, the portal must surface a link to the recall Activity (route `/activity/{id}`) so progress can be monitored from Operations; the REST delete must return the queued Activity's identifier rather than a bare 204 when a recall was queued.
+4. On queuing a recall, the portal must surface a link to the recall Activity (route `/activity/{id}`) so progress can be monitored from Operations; the REST delete must return 202 Accepted with a tracking DTO carrying the Activity id when a recall was queued (204 as today when not).
 5. Choosing keep deletes the rule exactly as today: values remain, provenance nulls, and the deletion Activity records that keep was chosen.
 
 **Mapping deletion (rule survives)**
@@ -132,11 +132,13 @@ The governing rule, agreed 2026-08-27 after the recall-or-retain design review: 
 - #1538 (disable retains contributed values): merged; this builds directly on it.
 - #1533 / PR #1536 (mapping orphan recall with re-election): shipped; reused as the mapping-delete recall mechanism.
 
-## Open Questions
+## Decisions (product owner, 2026-08-27)
 
-1. **Mapping-delete recall timing**: keep the shipped deferred behaviour (next Full Synchronisation, requirement 6) or queue the same immediate recall task as rule deletes for a uniform experience? Recommendation: keep deferred; it is cheap, already shipped, and the confirmation copy owns the difference.
-2. **Keep-choice mechanism for mapping deletes**: is deliberate provenance severing (requirement 7) acceptable, or should keep be recorded another way (e.g. a tombstone) so it remains distinguishable from legacy orphans? Recommendation: severing; one meaning of "keep" everywhere.
-3. **REST response shape**: 202 with an Activity reference body when a recall is queued, 204 when not? Or always 200 with a result body? Needs to fit existing API conventions.
+The three questions raised in review, resolved:
+
+1. **Mapping-delete recall timing**: stays deferred to the next Full Synchronisation of the contributing system (the shipped #1533/#1536 mechanism); the confirmation copy owns the difference from rule deletes.
+2. **Keep-choice mechanism for mapping deletes**: deliberate provenance severing; "keep" means the same thing on both surfaces.
+3. **REST response shape**: follow the existing API convention for queued work, which is also REST best practice: **202 Accepted with a tracking DTO** carrying the Activity id (precedent: Connected System deletion, Run Profile execution, Auxiliary Class Discovery). A delete that queues no recall keeps its existing 204.
 
 ## Acceptance Criteria
 
@@ -151,4 +153,5 @@ The governing rule, agreed 2026-08-27 after the recall-or-retain design review: 
 ## Additional Context
 
 - Design review: the "Recall or Retain" artefact (Option D adopted 2026-08-27); permutations, pros/cons and stress tests recorded there.
+- UX sign-off: the "Recall Choice UX" artefact (2026-08-27) mocks every portal touch point (both delete dialogs, the queued-recall snackbar with Activity link, and the three copy changes); dialog copy there is the agreed baseline.
 - Precedents: `ClearConnectedSystemObjectsWorkerTask` (boolean option on a task), `SchemaRefreshRemovalWorkerTask` (config decision queues a value-removing, RPEI-reporting task), `ConnectedSystemObjectType.RemoveContributedAttributesOnObsoletion` (recall-by-default with opt-out, and the re-election recall algorithm to reuse).
