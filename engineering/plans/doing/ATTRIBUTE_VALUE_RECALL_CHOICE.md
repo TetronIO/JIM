@@ -84,7 +84,7 @@ TDD throughout: every behaviour lands red-first. British English, Title Case dom
 - Staged mapping removal captures the choice at dialog time, applies at rule save (info alert states this).
 - bUnit coverage where in `test/JIM.Web.Tests` scope; full-stack runtime verification in the devcontainer for the end-to-end flows (delete → task → Activity → values recalled).
 
-### Phase 7: Documentation and changelog
+### Phase 7: Documentation and changelog ✅
 
 - `docs/concepts/attribute-priority.md`: deletion-time choice and keep consequence.
 - Synchronisation Rule how-to/reference pages: dialogs, Activity monitoring, REST/PowerShell parameters.
