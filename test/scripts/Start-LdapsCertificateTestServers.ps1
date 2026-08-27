@@ -321,9 +321,6 @@ function Start-SambaAdServer {
         -p '127.0.0.1::389' `
         $sambaImage | Out-Null
 
-    $script:sambaLdapsPort = Get-PublishedHostPort -ContainerName $sambaContainerName -ContainerPort 636
-    $script:sambaLdapPort = Get-PublishedHostPort -ContainerName $sambaContainerName -ContainerPort 389
-
     # First boot provisions a full AD forest from scratch, which routinely takes several minutes. The container's
     # own healthcheck probes SMB (see the Dockerfile this image is modelled on), which comes up once provisioning
     # has finished, so polling for it doubles as a provisioning-complete signal; do not trust "docker ps" health
@@ -383,6 +380,12 @@ fi
     # The veth peer index can change again across the restart, so re-check the binding rather than assuming the
     # first fix still holds.
     Repair-SambaInterfaceBinding -ContainerName $sambaContainerName
+
+    # Read the published ports only AFTER the restart above: an ephemeral '::<port>' mapping is re-assigned
+    # to a NEW random host port on every container restart, so a port captured at docker run time is stale
+    # by here and every connection to it fails with "the LDAP server is unavailable".
+    $script:sambaLdapsPort = Get-PublishedHostPort -ContainerName $sambaContainerName -ContainerPort 636
+    $script:sambaLdapPort = Get-PublishedHostPort -ContainerName $sambaContainerName -ContainerPort 389
 
     docker cp "${sambaContainerName}:/usr/local/samba/private/tls/ca.pem" $sambaCaPath | Out-Null
     if (-not (Test-Path $sambaCaPath)) {
