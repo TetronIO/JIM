@@ -6721,7 +6721,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             connectedSystemId);
 
         // 10. Delete Object Matching Rules for this system. Both ownership foreign keys now cascade
-        //     (CascadeObjectMatchingRuleOwnership), so this statement is no longer what stops the deletes below
+        //     (CascadeOwnedConfigurationDeletes), so this statement is no longer what stops the deletes below
         //     failing; it is kept because the sequence deletes rows explicitly and in a stated order rather than
         //     relying on cascades it cannot see, and because it removes the rules in one statement instead of
         //     twice over from two later ones. Their Sources are removed automatically via ON DELETE CASCADE.

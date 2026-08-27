@@ -5,11 +5,23 @@
 namespace JIM.PostgresData.Migrations
 {
     /// <inheritdoc />
-    public partial class CascadeSyncRuleOwnedConfiguration : Migration
+    public partial class CascadeOwnedConfigurationDeletes : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropForeignKey(
+                name: "FK_ConnectedSystemContainers_ConnectedSystemContainers_ParentC~",
+                table: "ConnectedSystemContainers");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_ObjectMatchingRules_ConnectedSystemObjectTypes_ConnectedSys~",
+                table: "ObjectMatchingRules");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_ObjectMatchingRules_SyncRules_SyncRuleId",
+                table: "ObjectMatchingRules");
+
             migrationBuilder.DropForeignKey(
                 name: "FK_SyncRuleMappings_SyncRules_SyncRuleId",
                 table: "SyncRuleMappings");
@@ -29,6 +41,30 @@ namespace JIM.PostgresData.Migrations
             migrationBuilder.DropForeignKey(
                 name: "FK_SyncRuleScopingCriteriaGroups_SyncRules_SyncRuleId",
                 table: "SyncRuleScopingCriteriaGroups");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_ConnectedSystemContainers_ConnectedSystemContainers_ParentC~",
+                table: "ConnectedSystemContainers",
+                column: "ParentContainerId",
+                principalTable: "ConnectedSystemContainers",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_ObjectMatchingRules_ConnectedSystemObjectTypes_ConnectedSys~",
+                table: "ObjectMatchingRules",
+                column: "ConnectedSystemObjectTypeId",
+                principalTable: "ConnectedSystemObjectTypes",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_ObjectMatchingRules_SyncRules_SyncRuleId",
+                table: "ObjectMatchingRules",
+                column: "SyncRuleId",
+                principalTable: "SyncRules",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_SyncRuleMappings_SyncRules_SyncRuleId",
@@ -75,6 +111,18 @@ namespace JIM.PostgresData.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
+                name: "FK_ConnectedSystemContainers_ConnectedSystemContainers_ParentC~",
+                table: "ConnectedSystemContainers");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_ObjectMatchingRules_ConnectedSystemObjectTypes_ConnectedSys~",
+                table: "ObjectMatchingRules");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_ObjectMatchingRules_SyncRules_SyncRuleId",
+                table: "ObjectMatchingRules");
+
+            migrationBuilder.DropForeignKey(
                 name: "FK_SyncRuleMappings_SyncRules_SyncRuleId",
                 table: "SyncRuleMappings");
 
@@ -93,6 +141,27 @@ namespace JIM.PostgresData.Migrations
             migrationBuilder.DropForeignKey(
                 name: "FK_SyncRuleScopingCriteriaGroups_SyncRules_SyncRuleId",
                 table: "SyncRuleScopingCriteriaGroups");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_ConnectedSystemContainers_ConnectedSystemContainers_ParentC~",
+                table: "ConnectedSystemContainers",
+                column: "ParentContainerId",
+                principalTable: "ConnectedSystemContainers",
+                principalColumn: "Id");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_ObjectMatchingRules_ConnectedSystemObjectTypes_ConnectedSys~",
+                table: "ObjectMatchingRules",
+                column: "ConnectedSystemObjectTypeId",
+                principalTable: "ConnectedSystemObjectTypes",
+                principalColumn: "Id");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_ObjectMatchingRules_SyncRules_SyncRuleId",
+                table: "ObjectMatchingRules",
+                column: "SyncRuleId",
+                principalTable: "SyncRules",
+                principalColumn: "Id");
 
             migrationBuilder.AddForeignKey(
                 name: "FK_SyncRuleMappings_SyncRules_SyncRuleId",
