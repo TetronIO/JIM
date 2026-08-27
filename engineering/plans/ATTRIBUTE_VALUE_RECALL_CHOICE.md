@@ -108,3 +108,4 @@ The PRD's acceptance criteria, all seven, verified at runtime in the devcontaine
 
 - #1538 (disable retains contributed values): merged; the disable-with-reason queue step depends on its dormant-contributor behaviour.
 - #1533 / PR #1536: shipped; mapping-delete recall reuses it unchanged.
+- Downstream consumers: #809 (Connected System deletion synchronised deprovisioning, natively blocked by #1537) reuses the extracted re-election core and the recall-then-delete task pattern; #1549 (clear-stranded values) may reuse the by-provenance recall. Keep both in mind when shaping the Phase 2 extraction: the core should take its recall scope as an input rather than assuming a rule id.

@@ -27,6 +27,8 @@ The governing rule, agreed 2026-08-27 after the recall-or-retain design review: 
 - Changing disable semantics. Disabling a mapping or rule retains contributed values (shipped in #1538); this PRD only ensures the disable affordances *state* that behaviour.
 - Recalling pre-existing null-provenance values. Values already orphaned before this ships (or orphaned via an explicit keep choice) stay untouched; they are indistinguishable from internally managed data by design.
 - A general-purpose "recall arbitrary values" admin tool.
+- Connected System deletion. Deleting a whole system silently orphans everything its rules contributed (same trap, system level), but the complete answer there is synchronised deprovisioning through the obsoletion path (attribute recall, Metaverse Object deletion rules, downstream exports) and is designed under #809, which is natively blocked by this issue so it can reuse the recall machinery built here.
+- Connector space clearing. A clear keeps rules and provenance intact by design (the reset workflow re-asserts values); the residual stranded-values gap is tracked under #1549.
 - Badging disabled flows that hold retained sole-contributor values. Noted as a possible later affordance in #1537; explicitly out of scope here.
 
 ## User Stories
