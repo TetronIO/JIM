@@ -50,7 +50,7 @@ The governing rule, agreed 2026-08-27 after the recall-or-retain design review: 
 
 **Mapping deletion (rule survives)**
 
-6. Deleting an Attribute Flow mapping that is the sole contributor for values must offer the same choice, same default, same warning. Recall uses the shipped #1536 mechanism (orphan recall with re-election at the next Full Synchronisation of the contributing system); the confirmation must say when the recall will take effect.
+6. Deleting an Attribute Flow mapping that is the sole contributor for values must offer the same choice, same default, same warning. Recall uses the shipped #1536 mechanism, whose verified semantics are: only a synchronisation of the contributing system recalls (never another system's); a Delta Synchronisation recalls just the objects it processes; the deletion stamps the configuration watermark so the next Full Synchronisation re-evaluates every object and completes the recall; clearing the Connected System recalls nothing (Metaverse values and provenance survive a clear). The confirmation must say when the recall will take effect.
 7. Choosing keep must permanently exempt those values from the #1536 orphan recall (proposed mechanism: null their `ContributedBySyncRuleId` at deletion time, making keep mean the same thing on both surfaces: a deliberate severing of provenance).
 8. The portal's mapping delete (which stages the removal in the editor and persists on rule save) must carry the choice through to the save, and the REST/PowerShell mapping delete paths must take it directly.
 
