@@ -5,6 +5,12 @@ namespace JIM.Connectors.LDAP;
 
 internal static class LdapConnectorConstants
 {
+    /// <summary>
+    /// The attribute carrying an entry's object classes. JIM computes its value on export rather than an
+    /// administrator flowing it; see <c>ObjectTypeTags.Keys.ClassMembershipAttribute</c>.
+    /// </summary>
+    internal const string ObjectClassAttributeName = "objectClass";
+
     internal static string SETTING_AUTH_TYPE_SIMPLE => "Simple";
 
     internal static string SETTING_AUTH_TYPE_NTLM => "NTLM";

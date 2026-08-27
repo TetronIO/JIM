@@ -15,7 +15,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -190,7 +190,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             new() { Name = _settingRetryDelay, Required = false, Description = "Initial delay between retries in milliseconds. Uses exponential backoff. Default is 1000ms.", DefaultIntValue = LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
 
             new() { Name = "Schema Discovery", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
-            new() { Name = _settingIncludeAuxiliaryClasses, Description = "When enabled, auxiliary object classes are included in schema discovery alongside structural classes. Enable this if you need to import or export objects whose primary class is declared as auxiliary in the directory schema.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
+            new() { Name = _settingIncludeAuxiliaryClasses, Description = "Applies to Active Directory only. When enabled, auxiliary object classes are included in schema discovery alongside structural classes. Enable this if you need to import or export objects whose primary class is declared as auxiliary in the directory schema. RFC 4512 directories (OpenLDAP, 389 Directory Server) always discover auxiliary classes, because JIM merges the ones an administrator selects into the structural Object Type they extend.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
 
             new() { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
@@ -252,6 +252,34 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
             return await ldapConnectorSchema.GetSchemaAsync();
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+    }
+    #endregion
+
+    #region IConnectorObjectClassUsage members
+    public async Task<ObjectClassUsageResult> ReadObjectClassUsageAsync(
+        ConnectedSystem connectedSystem,
+        ObjectClassUsageRequest request,
+        ILogger logger,
+        CancellationToken cancellationToken,
+        IConnectorProgress progress)
+    {
+        // Its own connection, as schema discovery takes: this runs as a worker task of its own rather than as part
+        // of a synchronisation run, so there is no import connection already open to borrow.
+        OpenImportConnection(connectedSystem.SettingValues, null, logger);
+
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to read object class usage with");
+
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var usage = new LdapConnectorObjectClassUsage(_connection, logger, rootDse);
+            return await usage.ReadAsync(connectedSystem, request, cancellationToken, progress);
         }
         finally
         {

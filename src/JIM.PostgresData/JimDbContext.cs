@@ -35,6 +35,9 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; } = null!;
     public virtual DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; } = null!;
     public virtual DbSet<ConnectedSystemObjectTypeTag> ConnectedSystemObjectTypeTags { get; set; } = null!;
+    public virtual DbSet<ConnectedSystemObjectTypeExtension> ConnectedSystemObjectTypeExtensions { get; set; } = null!;
+    public virtual DbSet<AuxiliaryClassDiscoveryRun> AuxiliaryClassDiscoveryRuns { get; set; } = null!;
+    public virtual DbSet<AuxiliaryClassDiscoveryResult> AuxiliaryClassDiscoveryResults { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordSynchronisation> ConnectedSystemPasswordSynchronisations { get; set; } = null!;
@@ -97,6 +100,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<HistoryRetentionCleanupWorkerTask> HistoryRetentionCleanupWorkerTasks { get; set; } = null!;
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreviewWorkerTask> ConfigurationChangePreviewWorkerTasks { get; set; } = null!;
+    public virtual DbSet<AuxiliaryClassDiscoveryWorkerTask> AuxiliaryClassDiscoveryWorkerTasks { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
 
     // Connection pooling constants
@@ -372,6 +376,75 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObjectTypeTag>()
             .Property(tag => tag.Value)
             .HasMaxLength(256);
+
+        // An administrator's auxiliary class selections. Both ends cascade: removing the structural type takes its
+        // selections with it, and an auxiliary type that vanishes from the schema on a refresh takes with it every
+        // selection pointing at it, which is the documented data-loss semantic of a refresh. Two cascade paths from
+        // one table into one dependent are fine on PostgreSQL, which resolves them per row rather than refusing the
+        // schema as SQL Server would.
+        modelBuilder.Entity<ConnectedSystemObjectType>()
+            .HasMany(csot => csot.Extensions)
+            .WithOne(extension => extension.BaseObjectType)
+            .HasForeignKey(extension => extension.BaseObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConnectedSystemObjectTypeExtension>()
+            .HasOne(extension => extension.ExtensionObjectType)
+            .WithMany()
+            .HasForeignKey(extension => extension.ExtensionObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // One statement of "this type extends that one", not several.
+        modelBuilder.Entity<ConnectedSystemObjectTypeExtension>()
+            .HasIndex(extension => new { extension.BaseObjectTypeId, extension.ExtensionObjectTypeId })
+            .IsUnique();
+
+        // The carrier is a pointer to a sibling row in the same table. Restrict rather than cascade: deleting the
+        // structural class something else is carried by must not silently delete that something else, and a schema
+        // refresh that removes a carrier should surface as a refusal an administrator can see, not as a chain of
+        // disappearing Object Types.
+        modelBuilder.Entity<ConnectedSystemObjectType>()
+            .HasOne(csot => csot.StructuralCarrierObjectType)
+            .WithMany()
+            .HasForeignKey(csot => csot.StructuralCarrierObjectTypeId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Discovery runs are evidence about a Connected System and have no meaning without it.
+        modelBuilder.Entity<AuxiliaryClassDiscoveryRun>()
+            .HasOne(run => run.ConnectedSystem)
+            .WithMany()
+            .HasForeignKey(run => run.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<AuxiliaryClassDiscoveryRun>()
+            .HasMany(run => run.Results)
+            .WithOne(result => result.Run)
+            .HasForeignKey(result => result.RunId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A result names the structural type whose entries were read. Cascade, because a count against a type that
+        // no longer exists says nothing.
+        modelBuilder.Entity<AuxiliaryClassDiscoveryResult>()
+            .HasOne(result => result.StructuralObjectType)
+            .WithMany()
+            .HasForeignKey(result => result.StructuralObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // One count per structural type and auxiliary class within a run.
+        modelBuilder.Entity<AuxiliaryClassDiscoveryResult>()
+            .HasIndex(result => new { result.RunId, result.StructuralObjectTypeId, result.AuxiliaryClassName })
+            .IsUnique();
+
+        modelBuilder.Entity<AuxiliaryClassDiscoveryResult>()
+            .Property(result => result.AuxiliaryClassName)
+            .HasMaxLength(256);
+
+        // At most one run per Connected System may be in flight. A filtered unique index enforces it in the
+        // database rather than leaving it to a check-then-act race between two administrators.
+        modelBuilder.Entity<AuxiliaryClassDiscoveryRun>()
+            .HasIndex(run => run.ConnectedSystemId)
+            .IsUnique()
+            .HasFilter($"\"Status\" = {(int)AuxiliaryClassDiscoveryStatus.InProgress}");
 
         // A Connected System has at most one discovered password policy. Every other child of a Connected System
         // is a collection, so this one-to-one has to be declared explicitly: EF cannot infer which end is the

@@ -307,6 +307,11 @@ You do not have to go looking. Parked and expired accounts are reported in three
 
 Attribute mappings define which attributes to synchronise and how to transform them. Each mapping maps a source attribute (or expression) to a target attribute.
 
+**A target attribute can be flowed to by at most one mapping per Synchronisation Rule.** JIM refuses a second mapping targeting an attribute the rule already flows to, and a disabled mapping counts too, since re-enabling it later would recreate the clash. The refusal exists because the synchronisation engine evaluates one mapping per target attribute, so a same-rule duplicate would be accepted in configuration but silently never contribute. Express the intent like this instead:
+
+- **Fall back between source attributes within one rule**<br /> Use a single [expression mapping](#expression-mappings): `Coalesce(cs["jimBadgeColour"], cs["roomNumber"])`, or the equivalent null-coalescing operator `cs["jimBadgeColour"] ?? cs["roomNumber"]`.
+- **Arbitrate between sources by priority or authority**<br /> Define the second flow on a separate, differently-scoped Synchronisation Rule and order the contributors with [Attribute Priority](../concepts/attribute-priority.md).
+
 ### Direct mappings
 
 A direct mapping copies the attribute value as-is, with no transformation:

@@ -246,7 +246,15 @@ public enum ConnectedSystemExportErrorType
     /// last read it. Applying it anyway would silently overwrite whoever got there first, so the change
     /// is reported and left for the next import to reconcile.
     /// </summary>
-    ConcurrencyConflict
+    ConcurrencyConflict,
+
+    /// <summary>
+    /// JIM refused the export before sending it, because a class it would add to the object has required
+    /// attributes that neither this export writes nor the object already holds (#492). Sending it anyway
+    /// would have the Connected System reject the change in its own terms; refusing it names the attributes
+    /// an administrator has to flow, or the auxiliary class selection to withdraw.
+    /// </summary>
+    ClassMembershipRequirementsNotMet
 }
 
 /// <summary>

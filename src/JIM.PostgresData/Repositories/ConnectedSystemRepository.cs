@@ -254,6 +254,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IQueryable<ConnectedSystemObjectType> otQuery = Repository.Database.ConnectedSystemObjectTypes
             .Include(ot => ot.Attributes)
             .Include(ot => ot.Tags)
+            // An administrator's auxiliary class selections. The schema refresh merges their attributes onto the
+            // structural type from this graph, so a selection that is not fetched is one the merge cannot see, and
+            // the refresh would succeed while quietly dropping every attribute those classes contribute.
+            .Include(ot => ot.Extensions)
             .Where(q => q.ConnectedSystemId == id);
 
         if (withChangeTracking)
@@ -619,12 +623,47 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             if (trackedByName.TryGetValue(incomingAttribute.Name, out var trackedAttribute))
             {
-                // SetValues copies every scalar including the key, and EF throws if a tracked entity's key
-                // would change. A name-matched incoming attribute is not guaranteed to carry the tracked
-                // attribute's Id (a caller may legitimately supply a freshly built incoming graph with
-                // Id == 0), so align the key first; when they already match this is a no-op.
-                incomingAttribute.Id = trackedAttribute.Id;
-                Repository.Database.Entry(trackedAttribute).CurrentValues.SetValues(incomingAttribute);
+                // A name-matched attribute still carrying Id == 0 is a pending insert, not a persisted row.
+                // This happens because the incoming graph can BE the tracked graph: the schema import mutates
+                // a change-tracked Connected System in place, and the auxiliary class merge adds its
+                // contributed attributes (Id == 0) directly to the tracked type's collection, so they arrive
+                // here through trackedByName rather than through the else branch below. Entry() on a detached
+                // instance does not track it, and SetValues would file each such instance in the identity map
+                // at key 0, throwing an identity conflict from the second new attribute onwards (found live
+                // by Scenario 19's Merge step, #492). Register it for insertion instead.
+                if (trackedAttribute.Id == 0 &&
+                    Repository.Database.Entry(trackedAttribute).State == EntityState.Detached)
+                {
+                    trackedAttribute.ConnectedSystemObjectType = trackedType;
+                    Repository.Database.ConnectedSystemAttributes.Add(trackedAttribute);
+                }
+
+                // Same instance reached through both graphs: it is already reconciled by definition, and
+                // "copying it onto itself" via SetValues is what re-keyed entries at Id 0 above.
+                if (ReferenceEquals(trackedAttribute, incomingAttribute))
+                    continue;
+
+                if (trackedAttribute.Id != 0)
+                {
+                    // SetValues copies every scalar including the key, and EF throws if a tracked entity's key
+                    // would change. A name-matched incoming attribute is not guaranteed to carry the tracked
+                    // attribute's Id (a caller may legitimately supply a freshly built incoming graph with
+                    // Id == 0), so align the key first; when they already match this is a no-op.
+                    incomingAttribute.Id = trackedAttribute.Id;
+                    Repository.Database.Entry(trackedAttribute).CurrentValues.SetValues(incomingAttribute);
+                }
+                else
+                {
+                    // The pending insert's entry carries a temporary key (see the Add above and the else branch
+                    // below). SetValues would overwrite it with the incoming Id and stop it being
+                    // store-generated, so mirror the temporary value into the copy and restore the temporary
+                    // marking afterwards; the row still gets its real key on save.
+                    var trackedEntry = Repository.Database.Entry(trackedAttribute);
+                    var keyProperty = trackedEntry.Property(a => a.Id);
+                    incomingAttribute.Id = (int)keyProperty.CurrentValue!;
+                    trackedEntry.CurrentValues.SetValues(incomingAttribute);
+                    keyProperty.IsTemporary = true;
+                }
             }
             else
             {
@@ -709,6 +748,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(ot => ot.Attributes)
             .Include(ot => ot.Tags)
+            // The administrator's auxiliary class selections. Both the REST representation of an Object Type and
+            // the validation that changes the set read them, and a selection that is not fetched reads as one that
+            // was never made.
+            .Include(ot => ot.Extensions)
             .Include(ot => ot.ConnectedSystem)
             .SingleOrDefaultAsync(ot => ot.Id == id);
     }
@@ -3441,12 +3484,145 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(q => q.Attributes)
             .Include(q => q.Tags)
+            .Include(q => q.Extensions)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(x => x.ConnectedSystemId == connectedSystemId).OrderBy(x => x.Name)
             .ToListAsync();
     }
+
+    #region Object Type extensions (auxiliary classes)
+
+    public async Task<List<ConnectedSystemObjectTypeExtension>> GetObjectTypeExtensionsAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemObjectTypeExtensions
+            .Include(extension => extension.BaseObjectType)
+            .Include(extension => extension.ExtensionObjectType)
+            .Where(extension => extension.BaseObjectType.ConnectedSystemId == connectedSystemId)
+            .OrderBy(extension => extension.BaseObjectType.Name)
+            .ThenBy(extension => extension.ExtensionObjectType.Name)
+            .ToListAsync();
+    }
+
+    public async Task<bool> AddObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId)
+    {
+        if (baseObjectTypeId == extensionObjectTypeId)
+            throw new ArgumentException("An Object Type cannot extend itself.", nameof(extensionObjectTypeId));
+
+        var baseObjectType = await Repository.Database.ConnectedSystemObjectTypes.AsNoTracking()
+            .SingleOrDefaultAsync(objectType => objectType.Id == baseObjectTypeId)
+            ?? throw new ArgumentException($"Object Type {baseObjectTypeId} does not exist.", nameof(baseObjectTypeId));
+
+        var extensionObjectType = await Repository.Database.ConnectedSystemObjectTypes.AsNoTracking()
+            .SingleOrDefaultAsync(objectType => objectType.Id == extensionObjectTypeId)
+            ?? throw new ArgumentException($"Object Type {extensionObjectTypeId} does not exist.", nameof(extensionObjectTypeId));
+
+        // Both ends must belong to the same Connected System. A pairing across two systems would merge one
+        // directory's schema into another's, which is meaningless and would corrupt the merged type.
+        if (baseObjectType.ConnectedSystemId != extensionObjectType.ConnectedSystemId)
+            throw new ArgumentException(
+                $"Object Type {extensionObjectTypeId} belongs to Connected System {extensionObjectType.ConnectedSystemId}, not {baseObjectType.ConnectedSystemId}.",
+                nameof(extensionObjectTypeId));
+
+        if (await Repository.Database.ConnectedSystemObjectTypeExtensions.AnyAsync(extension =>
+                extension.BaseObjectTypeId == baseObjectTypeId && extension.ExtensionObjectTypeId == extensionObjectTypeId))
+            return false;
+
+        // Scalar FKs are set rather than the navigations, so Add does not traverse into the (detached, already
+        // persisted) Object Types and try to insert them. See the DbSet.Add graph-traversal rules in src/CLAUDE.md.
+        Repository.Database.ConnectedSystemObjectTypeExtensions.Add(new ConnectedSystemObjectTypeExtension
+        {
+            BaseObjectTypeId = baseObjectTypeId,
+            ExtensionObjectTypeId = extensionObjectTypeId
+        });
+        await Repository.Database.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RemoveObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId)
+    {
+        var extension = await Repository.Database.ConnectedSystemObjectTypeExtensions.AsTracking()
+            .SingleOrDefaultAsync(e => e.BaseObjectTypeId == baseObjectTypeId && e.ExtensionObjectTypeId == extensionObjectTypeId);
+
+        if (extension == null)
+            return false;
+
+        Repository.Database.ConnectedSystemObjectTypeExtensions.Remove(extension);
+        await Repository.Database.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task SetStructuralCarrierObjectTypeAsync(int objectTypeId, int? carrierObjectTypeId)
+    {
+        if (objectTypeId == carrierObjectTypeId)
+            throw new ArgumentException("An Object Type cannot be its own structural carrier.", nameof(carrierObjectTypeId));
+
+        // AsTracking is explicit: JIM.Web and JIM.Scheduler run the context NoTracking, so a query result here
+        // would be detached and SaveChangesAsync would write nothing while reporting success.
+        var objectType = await Repository.Database.ConnectedSystemObjectTypes.AsTracking()
+            .SingleOrDefaultAsync(type => type.Id == objectTypeId)
+            ?? throw new ArgumentException($"Object Type {objectTypeId} does not exist.", nameof(objectTypeId));
+
+        if (carrierObjectTypeId.HasValue)
+        {
+            var carrierId = carrierObjectTypeId.Value;
+            var carrier = await Repository.Database.ConnectedSystemObjectTypes.AsNoTracking()
+                .SingleOrDefaultAsync(type => type.Id == carrierId)
+                ?? throw new ArgumentException($"Object Type {carrierId} does not exist.", nameof(carrierObjectTypeId));
+
+            if (carrier.ConnectedSystemId != objectType.ConnectedSystemId)
+                throw new ArgumentException(
+                    $"Object Type {carrierId} belongs to Connected System {carrier.ConnectedSystemId}, not {objectType.ConnectedSystemId}.",
+                    nameof(carrierObjectTypeId));
+        }
+
+        Repository.Database.RequireTracked(objectType, nameof(SetStructuralCarrierObjectTypeAsync),
+            "This method loads the Object Type with AsTracking itself; if this fires, that query has lost its AsTracking.");
+
+        objectType.StructuralCarrierObjectTypeId = carrierObjectTypeId;
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    #endregion
+
+    #region Auxiliary class discovery
+
+    public async Task<AuxiliaryClassDiscoveryRun> CreateAuxiliaryClassDiscoveryRunAsync(AuxiliaryClassDiscoveryRun run)
+    {
+        Repository.Database.AuxiliaryClassDiscoveryRuns.Add(run);
+        await Repository.Database.SaveChangesAsync();
+        return run;
+    }
+
+    public async Task<AuxiliaryClassDiscoveryRun?> GetLatestAuxiliaryClassDiscoveryRunAsync(int connectedSystemId)
+    {
+        return await Repository.Database.AuxiliaryClassDiscoveryRuns
+            .Include(run => run.Results).ThenInclude(result => result.StructuralObjectType)
+            .Where(run => run.ConnectedSystemId == connectedSystemId)
+            .OrderByDescending(run => run.Started)
+            .ThenByDescending(run => run.Id)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<AuxiliaryClassDiscoveryRun?> GetInProgressAuxiliaryClassDiscoveryRunAsync(int connectedSystemId)
+    {
+        return await Repository.Database.AuxiliaryClassDiscoveryRuns
+            .Include(run => run.Results).ThenInclude(result => result.StructuralObjectType)
+            .SingleOrDefaultAsync(run =>
+                run.ConnectedSystemId == connectedSystemId &&
+                run.Status == AuxiliaryClassDiscoveryStatus.InProgress);
+    }
+
+    public async Task UpdateAuxiliaryClassDiscoveryRunAsync(AuxiliaryClassDiscoveryRun run)
+    {
+        Repository.Database.RequireTracked(run, nameof(UpdateAuxiliaryClassDiscoveryRunAsync),
+            "Load the run via GetInProgressAuxiliaryClassDiscoveryRunAsync on the same JimApplication instance used to save it.");
+
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    #endregion
 
     /// <summary>
     /// The names of a Connected System's Object Types, keyed by id: a Summary-tier projection for
@@ -5275,6 +5451,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ConnectedSystem)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
+            // The graph an export evaluation needs to work out an object's class membership: the tag saying the
+            // Connected System has the concept at all, the auxiliary classes an administrator merged in, and the
+            // structural class that carries an auxiliary-typed object. This overload is the one the worker's
+            // export evaluation cache loads every rule through (GetAllSyncRulesAsync), so anything not fetched
+            // here is class membership silently not computed: exports went out carrying a merged class's
+            // attributes with no class add, and the directory refused them (#492, found by Scenario 19).
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Tags)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Extensions)
+            .ThenInclude(extension => extension.ExtensionObjectType)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.StructuralCarrierObjectType)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.ObjectMatchingRules)
             .ThenInclude(omr => omr.Sources)
@@ -5339,6 +5528,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ConnectedSystem)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
+            // The graph an export evaluation needs to work out an object's class membership: the tag saying the
+            // Connected System has the concept at all, the auxiliary classes an administrator merged in, and the
+            // structural class that carries an auxiliary-typed object. None of it fetched is class membership
+            // silently not computed, and exports going out without the classes their attributes require.
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Tags)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Extensions)
+            .ThenInclude(extension => extension.ExtensionObjectType)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.StructuralCarrierObjectType)
             .Include(sr => sr.MetaverseObjectType)
             .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
@@ -6155,6 +6355,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Already gone. Deleting the same mapping twice is not an error worth raising: the caller's intent holds.
         if (tracked == null)
             return;
+
+        // Deleting a mapping is a Synchronisation Rule configuration change, but the deleted row can no longer
+        // carry the evidence: GetLatestSyncRuleConfigurationChangeAsync computes the configuration watermark
+        // from the SURVIVING rules' and mappings' timestamps, so without a stamp here the next Full
+        // Synchronisation would keep its unchanged-object optimisation on and skip the very objects whose
+        // values the deleted mapping contributed, leaving them in place indefinitely (#1533). Stamp the parent
+        // rule's LastUpdated so the deletion advances the watermark; the deletion's initiator and audit trail
+        // live on its own Activity, so the rule's LastUpdatedBy* fields are left to rule-level edits.
+        var parentRuleId = tracked.SyncRuleId;
+        if (parentRuleId.HasValue)
+        {
+            var parentRuleIdValue = parentRuleId.Value;
+            var parentRule = await Repository.Database.SyncRules
+                .AsTracking()
+                .SingleOrDefaultAsync(r => r.Id == parentRuleIdValue);
+            if (parentRule != null)
+                parentRule.LastUpdated = DateTime.UtcNow;
+        }
 
         // Remove all sources first
         Repository.Database.RemoveRange(tracked.Sources);

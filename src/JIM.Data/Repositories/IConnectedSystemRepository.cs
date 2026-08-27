@@ -1377,6 +1377,60 @@ public interface IConnectedSystemRepository
     /// <param name="objectType">The object type to update.</param>
     Task UpdateObjectTypeAsync(ConnectedSystemObjectType objectType);
 
+    #region Object Type extensions (auxiliary classes)
+
+    /// <summary>
+    /// Gets every auxiliary class selection an administrator has made on a Connected System, with both ends of
+    /// each pairing loaded.
+    /// </summary>
+    Task<List<ConnectedSystemObjectTypeExtension>> GetObjectTypeExtensionsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Records that one Object Type extends another. Does nothing if the pairing already exists, so a caller
+    /// re-asserting a selection does not have to check first.
+    /// </summary>
+    /// <returns>True if a new pairing was recorded; false if it already existed.</returns>
+    Task<bool> AddObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId);
+
+    /// <summary>
+    /// Withdraws an auxiliary class selection. Does nothing if the pairing is not there.
+    /// </summary>
+    /// <returns>True if a pairing was removed; false if there was nothing to remove.</returns>
+    Task<bool> RemoveObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId);
+
+    /// <summary>
+    /// Names the structural Object Type JIM should use as the carrier when creating objects of a type that cannot
+    /// stand alone, or clears it when passed null.
+    /// </summary>
+    Task SetStructuralCarrierObjectTypeAsync(int objectTypeId, int? carrierObjectTypeId);
+
+    #endregion
+
+    #region Auxiliary class discovery
+
+    /// <summary>
+    /// Starts a discovery run for a Connected System.
+    /// </summary>
+    Task<AuxiliaryClassDiscoveryRun> CreateAuxiliaryClassDiscoveryRunAsync(AuxiliaryClassDiscoveryRun run);
+
+    /// <summary>
+    /// Gets the most recently started discovery run for a Connected System, with its results, or null if there has
+    /// never been one.
+    /// </summary>
+    Task<AuxiliaryClassDiscoveryRun?> GetLatestAuxiliaryClassDiscoveryRunAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets the discovery run currently in flight for a Connected System, or null if none is.
+    /// </summary>
+    Task<AuxiliaryClassDiscoveryRun?> GetInProgressAuxiliaryClassDiscoveryRunAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Persists a discovery run's progress, outcome and results.
+    /// </summary>
+    Task UpdateAuxiliaryClassDiscoveryRunAsync(AuxiliaryClassDiscoveryRun run);
+
+    #endregion
+
     /// <summary>
     /// Gets a Connected System Attribute by ID.
     /// </summary>

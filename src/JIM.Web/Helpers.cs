@@ -302,6 +302,9 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",
             [ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed] = "Export Failed",
             [ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId] = "Export Failed",
+            // "Refused" rather than "Failed": JIM declined to send the change, naming the configuration to
+            // fix, which is a different message from an export the Connected System rejected (#492).
+            [ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet] = "Export Refused",
 
             // Generic.
             [ActivityRunProfileExecutionItemErrorType.UnhandledError] = "Operation Failed"

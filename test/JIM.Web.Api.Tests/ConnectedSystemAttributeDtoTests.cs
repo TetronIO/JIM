@@ -79,6 +79,28 @@ public class ConnectedSystemAttributeDtoTests
         }
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public void FromEntity_CarriesWhetherTheConnectedSystemRequiresTheAttribute(bool required)
+    {
+        // A required attribute is one the Connected System's schema demands for the attribute's class (an
+        // RFC 4512 MUST). JIM refuses an export that would add a class whose required attributes have no
+        // value (#492), so an automation author deciding what to flow needs to see the flag, read-only.
+        var entity = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1,
+            Name = "jimBadgeNumber",
+            ClassName = "jimBadgeHolder",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            Required = required
+        };
+
+        var dto = ConnectedSystemAttributeDto.FromEntity(entity);
+
+        Assert.That(dto.Required, Is.EqualTo(required));
+    }
+
     [Test]
     public void FromEntity_AnUndeclaredReferenceTarget_CarriesNulls()
     {

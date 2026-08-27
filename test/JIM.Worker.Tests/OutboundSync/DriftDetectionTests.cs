@@ -397,6 +397,73 @@ public class DriftDetectionTests
     }
 
     /// <summary>
+    /// The Enforce State half of #492's delta convergence: a corrective export whose drifted attribute is a
+    /// merged auxiliary class's contribution must add the class in the same export, exactly as ordinary export
+    /// staging does. Enforce State is on by default, so this drift path is the one that staged Scenario 19's
+    /// join-time exports live, and without the class add the directory refused every one of them with an
+    /// objectClassViolation.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_DriftedAttributeContributedByAMergedClass_CorrectionAddsTheClass()
+    {
+        // Arrange - the Connected System composes class membership, the drifted attribute belongs to a merged
+        // auxiliary class, and the object carries only its structural class.
+        var objectClassAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 7950, Name = "objectClass", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued, ClassName = TargetUserType.Name
+        };
+        TargetUserType.Attributes.Add(objectClassAttr);
+        TargetUserType.Tags.Add(new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassMembershipAttribute, Value = "objectClass" });
+        var badgeHolder = new ConnectedSystemObjectType { Id = 7951, Name = "badgeHolder", ConnectedSystemId = TargetSystem.Id };
+        TargetUserType.Extensions.Add(new ConnectedSystemObjectTypeExtension
+        {
+            BaseObjectTypeId = TargetUserType.Id,
+            ExtensionObjectTypeId = badgeHolder.Id,
+            ExtensionObjectType = badgeHolder
+        });
+        DisplayNameCsoAttr.ClassName = "badgeHolder";
+
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe"
+        });
+
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = objectClassAttr,
+            AttributeId = objectClassAttr.Id,
+            StringValue = TargetUserType.Name
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var exportRule = CreateExportRule(enforceState: true);
+
+        // Act
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, new List<SyncRule> { exportRule }, null);
+
+        // Assert - the corrective export carries the value AND the class it obliges
+        Assert.That(result.CorrectiveExports, Has.Count.EqualTo(1));
+        var classChanges = result.CorrectiveExports[0].AttributeValueChanges
+            .Where(avc => avc.AttributeId == objectClassAttr.Id)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(classChanges.Select(avc => avc.StringValue), Is.EqualTo(new[] { "badgeHolder" }),
+                "the correction first flowing a merged class's attribute must add that class, and only that class");
+            Assert.That(classChanges.Single().ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Add),
+                "class membership is multi-valued, and the object's existing classes must not be restated");
+        }
+    }
+
+    /// <summary>
     /// An Initial Export Only mapping (#223) leaves its target attribute unmanaged once the Connected
     /// System Object is past provisioning, so a diverged value must not be flagged as drift.
     /// </summary>

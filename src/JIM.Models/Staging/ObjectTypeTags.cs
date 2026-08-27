@@ -28,6 +28,29 @@ public static class ObjectTypeTags
         /// internally (configuration or operational classes that only add noise to the schema screen).
         /// </summary>
         public const string Visibility = "visibility";
+
+        /// <summary>
+        /// An auxiliary class the Connected System says may be attached to entries of this object type. Repeated
+        /// once per class, with the class's name as the value.
+        /// </summary>
+        /// <remarks>
+        /// A suggestion, never configuration: it narrows what the portal offers an administrator, and what they
+        /// actually select is held separately as an extension. Its absence says nothing, because most directories
+        /// publish no such statement at all.
+        /// </remarks>
+        public const string PermittedAuxiliaryClass = "permitted-auxiliary-class";
+
+        /// <summary>
+        /// The name of the attribute that carries an object's class membership in the Connected System, i.e.
+        /// <c>objectClass</c> on an RFC 4512 directory.
+        /// </summary>
+        /// <remarks>
+        /// Setting this hands the attribute to JIM: JIM computes its value on export from the Object Type and the
+        /// auxiliary classes an administrator has merged into it, and refuses it as an Attribute Flow target, because
+        /// no hand-written flow can know which auxiliary classes a given object needs. A Connected System that leaves
+        /// it unset is unaffected in every respect.
+        /// </remarks>
+        public const string ClassMembershipAttribute = "class-membership-attribute";
     }
 
     public static class Values

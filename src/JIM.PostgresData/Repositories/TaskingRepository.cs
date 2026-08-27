@@ -66,6 +66,10 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.SchemaRefreshRemovalWorkerTasks.Add(schemaRefreshRemovalTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
+            case AuxiliaryClassDiscoveryWorkerTask auxiliaryClassDiscoveryTask:
+                Repository.Database.AuxiliaryClassDiscoveryWorkerTasks.Add(auxiliaryClassDiscoveryTask);
+                await Repository.Database.SaveChangesAsync();
+                break;
             default:
                 throw new ArgumentException("workerTask was of an unexpected type: " + workerTask.GetType());
         }

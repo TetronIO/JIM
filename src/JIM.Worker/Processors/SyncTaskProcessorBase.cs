@@ -1522,6 +1522,16 @@ public abstract class SyncTaskProcessorBase
             // This ensures reference attributes are processed after all CSOs in the page have MVOs
             _pendingReferenceAttributeProcessing.Add((connectedSystemObject, inboundSyncRules));
 
+            // Orphaned-contribution recall (#1533): a value this system contributed via an Attribute Flow
+            // mapping that no longer exists (deleted), or that is disabled (mapping or whole rule), has
+            // nothing asserting it any more. Full Synchronisation's re-evaluation treats it like the
+            // disabled-rule case: stage its removal here, AFTER the live mappings have flowed (so a mapping
+            // that re-flowed or took over the attribute is seen as its owner), and BEFORE the withdrawal
+            // re-election below, which then hands the attribute to the next surviving contributor or lets it
+            // clear as a NoContributor outcome.
+            if (_attributePriorityContext != null)
+                _syncEngine.RecallOrphanedContributions(connectedSystemObject, _attributePriorityContext);
+
             // Withdrawal re-election (#91): an authoritative source withdrawing a value in place hands the
             // attribute to the next contributor in the same run, rather than leaving it blank until the survivor's
             // system next synchronises. Explicit "Null is a value" assertions write a marker into the additions, so
@@ -4493,10 +4503,16 @@ public abstract class SyncTaskProcessorBase
         var objectTypeId = mvo.Type.Id;
         var recalledAttributeIds = recalledValues.Select(av => av.AttributeId).Distinct().ToList();
 
-        var multiContributorAttributeIds = recalledAttributeIds
-            .Where(id => priorityContext.GetContributorCount(objectTypeId, id) > 1)
+        // An attribute is re-electable when the contributor cache holds a mapping from ANOTHER Connected
+        // System. Counting contributors (> 1) is not equivalent: when the leaver's own mapping has been
+        // deleted or disabled (#1533) it is absent from the cache, so a sole surviving contributor counts as
+        // 1 yet must still be re-elected. The leaver's own system is excluded either way; its other enabled
+        // rules were already evaluated in this pass's ordinary flow.
+        var reElectableAttributeIds = recalledAttributeIds
+            .Where(id => priorityContext.GetContributors(objectTypeId, id)
+                .Any(c => c.SyncRule != null && c.SyncRule.ConnectedSystemId != leaver.ConnectedSystemId))
             .ToList();
-        if (multiContributorAttributeIds.Count == 0)
+        if (reElectableAttributeIds.Count == 0)
             return;
 
         // Survivor discovery must query the repository, not the mvo.ConnectedSystemObjects navigation: the sync
@@ -4512,7 +4528,7 @@ public abstract class SyncTaskProcessorBase
         var survivorsToReflow = new List<(ConnectedSystemObject Cso, SyncRule Rule)>();
         var seen = new HashSet<(Guid CsoId, int RuleId)>();
 
-        foreach (var attributeId in multiContributorAttributeIds)
+        foreach (var attributeId in reElectableAttributeIds)
         {
             // Contributing rules other than the leaver's own (whose contribution is gone). Project to the rule and
             // filter in one pipeline so the leaver's rule and any rule-less mapping are excluded before the body.
