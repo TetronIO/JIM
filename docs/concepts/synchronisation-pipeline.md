@@ -36,6 +36,8 @@ For example, the OpenLDAP connector supports delta imports via the accesslog ove
    - **Obsoletes**<br /> The CSO if the object no longer exists in the source (full import only).
 4. Import statistics are recorded in the activity log (objects added, updated, obsoleted, unchanged)
 
+An obsoleted CSO stays that way until a Synchronisation Run Profile on the same Connected System processes it, so every Full Import in between finds the object missing all over again. Only the first one reports a deletion. The runs that follow record nothing for it, because nothing changed: the CSO was already obsolete when they started. If you are seeing objects sit obsolete for a long time, the Connected System is being imported but not synchronised.
+
 Import does **not** modify the metaverse. The connector space acts as a staging area, isolating the metaverse from any issues during import.
 
 ### How Full Import Detects Unchanged Objects

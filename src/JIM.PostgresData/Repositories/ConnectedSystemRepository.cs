@@ -3096,9 +3096,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
+    /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obsolete.
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obsolete object count for.</param>
     public async Task<int> GetConnectedSystemObjectObsoleteCountAsync(int connectedSystemId)
     {
         return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => 

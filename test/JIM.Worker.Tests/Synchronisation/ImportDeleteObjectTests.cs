@@ -432,5 +432,94 @@ public class ImportDeleteObjectTests
             "Expected no CSOs to be created when deleting a non-existent object.");
     }
 
+    /// <summary>
+    /// Tests that a connector replaying a delete for an object JIM has already marked Obsolete reports
+    /// nothing. An object stays Obsolete until a synchronisation run deletes it, so a changelog re-read
+    /// (or a cookie reset) can hand the same delete back before that happens. Only the first is a
+    /// deletion: recording another claims the run deleted something when the object was Obsolete before
+    /// the run started and Obsolete after, inflating the Activity's deleted total and handing the
+    /// causality graph the start of a chain that has no cause.
+    /// </summary>
+    [Test]
+    public async Task DeltaImportDelete_WithAlreadyObsoleteObject_RecordsNoFurtherExecutionItemAsync()
+    {
+        // set up the Connected System Objects mock, with the object ALREADY Obsolete from an earlier import
+        var connectedSystemObjectType = ConnectedSystemObjectTypesData.First();
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var cso1 = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            ConnectedSystem = ConnectedSystemsData.First(),
+            Type = connectedSystemObjectType,
+            Status = ConnectedSystemObjectStatus.Obsolete,
+            ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
+        };
+        cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                GuidValue = TestConstants.CS_OBJECT_1_HR_ID,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.HR_ID.ToString()),
+                ConnectedSystemObject = cso1
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StringValue = TestConstants.CS_OBJECT_1_DISPLAY_NAME,
+                Attribute = connectedSystemObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.DISPLAY_NAME.ToString()),
+                ConnectedSystemObject = cso1
+            }
+        };
+        connectedSystemObjectData.Add(cso1);
+
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
+            (IEnumerable<ConnectedSystemObject> entities) => {
+                var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+                foreach (var entity in connectedSystemObjects)
+                    entity.Id = Guid.NewGuid();
+                connectedSystemObjectData.AddRange(connectedSystemObjects);
+            });
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        SyncRepo = TestUtilities.CreateSyncRepository(csos: connectedSystemObjectData, activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
+
+        // the connector hands us the same delete a second time
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.Deleted,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>
+            {
+                new()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { TestConstants.CS_OBJECT_1_HR_ID },
+                    Type = AttributeDataType.Guid
+                }
+            }
+        });
+
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformImportAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Where(q => q.ObjectChangeType == ObjectChangeType.Deleted), Is.Empty,
+                "Expected no deletion to be recorded for an object that was already Obsolete before the run started.");
+            Assert.That(SyncRepo.ConnectedSystemObjects[cso1.Id].Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete),
+                "Expected the object to remain Obsolete: suppressing the report must not undo the state.");
+        }
+    }
+
     // todo: test activity/Run Profile execution item/change object creation
 }

@@ -49,6 +49,36 @@
     </MudStack>
 }
 
+@* ─── Objects awaiting deprovisioning ───
+   Obsolescence is a transient state on a healthy system, lasting from the import that found an object
+   gone until the synchronisation that deletes it, so this is Info rather than a warning. It earns a place
+   beside the drift notice because it answers the same shape of question ("what is waiting on a run?") and
+   because the status was otherwise visible only on individual objects, which is nowhere anybody looks: a
+   system that is imported and never synchronised accumulates them in silence (#1527). *@
+@if (_connectedSystem != null && _obsoleteConnectedSystemObjectCount > 0)
+{
+    var obsoleteLead = _obsoleteConnectedSystemObjectCount == 1
+        ? "1 Connected System Object is obsolete."
+        : $"{_obsoleteConnectedSystemObjectCount:N0} Connected System Objects are obsolete.";
+    var obsoleteSubject = _obsoleteConnectedSystemObjectCount == 1 ? "It was" : "They were";
+    var obsoletePronoun = _obsoleteConnectedSystemObjectCount == 1 ? "it" : "them";
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-6">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
+            <span>
+                @obsoleteLead @obsoleteSubject not returned by the last Full Import, so the next Synchronisation
+                Run Profile on this system will disconnect @obsoletePronoun from their Metaverse Objects and
+                delete @obsoletePronoun.
+            </span>
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Info"
+                       DropShadow="false"
+                       Href="@($"/admin/connected-systems/{_connectedSystem.Id}/connector-space?status=Obsolete")">
+                Review
+            </MudButton>
+        </MudStack>
+    </MudAlert>
+}
+
 @* ─── Configuration drift notice ─── *@
 @if (_drift is { HasPendingChanges: true })
 {
@@ -161,6 +191,7 @@ else if (_drift is { TrackingDisabled: true })
     private string? _partitionAndHierarchyText;
     private int _pendingExportCount;
     private int _connectedSystemObjectCount;
+    private int _obsoleteConnectedSystemObjectCount;
     private int _changeCount;
     private ConfigurationDriftStatus? _drift;
     private List<BreadcrumbItem> _breadcrumbs = null!;
@@ -217,6 +248,7 @@ else if (_drift is { TrackingDisabled: true })
 
         _pendingExportCount = await jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
         _connectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(Id);
+        _obsoleteConnectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectObsoleteCountAsync(Id);
         _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(Id);
         _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, Id, 1, 1)).TotalResults;
         _metaverseAttributes ??= await jim.Metaverse.GetMetaverseAttributesAsync();

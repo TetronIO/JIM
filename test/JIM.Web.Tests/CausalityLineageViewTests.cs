@@ -530,6 +530,40 @@ public class CausalityLineageViewTests
         }
     }
 
+    /// <summary>
+    /// An object's body reads top to bottom as time passing: its cards are ordered oldest first, and the
+    /// note about what became of the object afterwards is stated last because it happened last. An ending
+    /// says what lies behind the *oldest* card ("No earlier causes recorded"), so it belongs at the top of
+    /// that order, not the bottom.
+    /// <para>
+    /// Rendered after the cards, it read as a flat contradiction wherever the story fitted in one column: a
+    /// confirming import showed the export that caused it, then this run's events, then "No earlier causes
+    /// recorded" beneath an earlier cause plainly visible above it (#1528).
+    /// </para>
+    /// </summary>
+    [Test]
+    public void Render_ChainEnding_SitsAboveTheCardsItIsAboutAsync()
+    {
+        var cut = RenderLineage(ExportCreateLineage());
+
+        // The source record's object: the one carrying both an ending and a card.
+        var body = cut.FindAll(".ln-obj-body")
+            .First(b => b.QuerySelector(".ln-end") != null);
+        var children = body.Children.ToList();
+        var endingIndex = children.FindIndex(c => c.ClassList.Contains("ln-end"));
+        var firstCardIndex = children.FindIndex(c =>
+            c.ClassList.Contains("ln-now") || c.ClassList.Contains("ln-card"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(endingIndex, Is.GreaterThanOrEqualTo(0), "the ending must render at all");
+            Assert.That(firstCardIndex, Is.GreaterThanOrEqualTo(0), "the fixture's object must carry a card to order against");
+            Assert.That(endingIndex, Is.LessThan(firstCardIndex),
+                "an ending describes what lies behind the oldest card, and the column runs oldest to newest " +
+                "downwards, so rendering it last puts it at the wrong end of the story");
+        }
+    }
+
     [Test]
     public void Render_TruncatedChain_SaysSomeBranchesGoFurtherBack()
     {

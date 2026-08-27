@@ -78,7 +78,7 @@ Where JIM recorded why the cause itself happened, that follows as a second sente
 
 Everything a cause says was captured at the moment it happened: the causing object's name, its object type, the attribute, the Connected System and the Synchronisation Rule. A cause is by definition older than its effect, so the objects and records a chain names have very often been deleted, renamed, or aged out of history by the time anyone reads it; recording the wording alongside the link is what lets the chain still read correctly when they have. A deleted Identity still gets its column, named from those snapshots.
 
-The chain always says why it ends, as a quiet footer under the column it closes, because the three reasons mean entirely different things:
+The chain always says why it ends, because the three reasons mean entirely different things. It is stated at the top of the object it closes, above that object's oldest card: an object's cards read downwards from oldest to newest, so what lies behind the earliest of them belongs at the beginning of that order rather than the end.
 
 - **No earlier causes recorded**: nothing caused this. It is the whole story.
 - **What caused this is no longer retained**: the causing record has aged out of Activity retention. This is expected rather than exceptional on a deployment that has been live longer than one retention window, and is shown calmly rather than as an error; the cause itself is still named, from the wording recorded at the time.
@@ -93,6 +93,8 @@ An export run is the common case of a run whose reason lies elsewhere. It holds 
 - A provisioning create reads "Mia Young was provisioned to Glitterband EMEA, so this run created the record", with the Synchronisation Rule that made the provisioning decision beside it.
 - An update reads "Mia Young's Identity changed, so this run applied the changes to the record".
 - A deprovision reads "The Identity Tina Adams was deleted, so this run deleted the record", and continues through the Deletion Rule decision that ordered it.
+
+A confirming import is the same story read from the other end. When an import finds a change JIM had exported, its **Export confirmed** outcome continues into the export that made it, and from there into the synchronisation that staged it and the import behind that: a deprovisioning confirmation runs all the way back to the moment the source record disappeared. JIM pairs the confirmation to its export by the queued change they both name, rather than by the record, because a record cycles through export and import repeatedly and matching on the record alone could pair a confirmation with the wrong cycle.
 
 Each hop links to the run that staged the change, whose own causes continue above it. Behind any synchronisation, the chain then follows the record's own history to the import that fed it: "Mia Young was imported into Yellowstone APAC as a new record" is the true root of most stories, and a deleted account's chain runs back to the moment the source record disappeared. An export staged by drift correction names the drift correction that staged it, so an export putting a value back reads as the enforcement it is rather than as an ordinary update.
 
