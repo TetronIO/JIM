@@ -232,7 +232,7 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
         var index = 0;
         foreach (Match certificateBlock in certificateBlocks)
         {
-            var certificatePath = Path.Combine(directoryPath, $"{SystemBundleEntryPrefix}{index:D3}.crt");
+            var certificatePath = ResolveWithin(directoryPath, $"{SystemBundleEntryPrefix}{index:D3}.crt");
             System.IO.File.WriteAllText(certificatePath, certificateBlock.Value + Environment.NewLine);
             if (!OperatingSystem.IsWindows())
                 System.IO.File.SetUnixFileMode(certificatePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
