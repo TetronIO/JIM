@@ -138,8 +138,11 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: jim_test
+        # Ephemeral host port. A fixed 5432:5432 collides on the self-hosted runner
+        # host, where a second runner service can be running another job (e.g. a
+        # JIM-Bench run) with its own PostgreSQL on the same port at the same moment.
         ports:
-          - 5432:5432
+          - 5432
         # Hold the job's steps until PostgreSQL is accepting connections.
         options: >-
           --health-cmd pg_isready
@@ -168,6 +171,12 @@ jobs:
     - name: Build
       run: dotnet build JIM.sln --no-restore
     - name: Run database-backed tests (RequiresPostgres)
+      # The ephemeral host port must be read here rather than in the job-level env block
+      # above: the job context is only available inside steps, and referencing it at job
+      # level invalidates the whole workflow file (GitHub reports "workflow file issue"
+      # and no CI jobs run at all).
+      env:
+        JIM_TEST_RESET_PORT: ${{ job.services.postgres.ports['5432'] }}
       run: dotnet test JIM.sln --no-build --filter "Category=RequiresPostgres" --verbosity normal
 
   ldaps-tests:
