@@ -1,8 +1,9 @@
 # Password Synchronisation (Phase 1: JIM as Password Origin)
 
-- **Status:** Doing (Phases 1 to 6 complete; Scenario 20 authored and awaiting a run against a live Samba AD stack)
+- **Status:** Done
 - **Issue:** [#1119](https://github.com/TetronIO/JIM/issues/1119)
-- **PRD:** [`engineering/prd/doing/PRD_PASSWORD_SYNCHRONISATION.md`](../prd/doing/PRD_PASSWORD_SYNCHRONISATION.md)
+- **Note:** Phase 1 only, which is this plan's whole scope. Phase 2 inbound capture (the ingress API, inbound password mapping on import, and the Domain Controller agent) is untouched and gets its own plan; the PRD stays `Doing` until it lands.
+- **PRD:** [`engineering/prd/doing/PRD_PASSWORD_SYNCHRONISATION.md`](../../prd/doing/PRD_PASSWORD_SYNCHRONISATION.md)
 
 ## Overview
 
@@ -172,13 +173,13 @@ Each phase is TDD, red first, and lands with its tests, docs, and changelog entr
 - `ScheduleStepType.HistoryRetentionCleanup`, `HistoryRetentionCleanupWorkerTask` and its four registration points, step dispatch in `SchedulerServer.QueueStepAsync`, worker execution path, and the built-in daily Schedule in the catalogue (so it converges into existing deployments and survives a factory reset, per #916's rule). The housekeeping timer and its `GetLastCleanupTimeAsync` supporting query are gone; retention now has an execution history, a next run time, and a summary Activity per run (requirements 28, 29, 30; delivers #1118)
 - Fixed while here: `DeleteExpiredChangeHistoryAsync` took four positional `DateTime` cutoffs, and this phase's addition would have made it five. Replaced with `ChangeHistoryRetentionCutoffs`, built in one place by `GetRetentionCutoffsAsync`, so the scheduled step and the API endpoint cannot drift apart in how they derive them and a transposed pair cannot compile silently
 
-### Phase 6: Integration, documentation, and security review
+### Phase 6: Integration, documentation, and security review ✅
 
 - New integration scenario: configure and enable Password Synchronisation on the Samba AD system, change a password via the API, assert delivery by binding; disabled-accumulate-then-drain and coalescing assertions (Scenario 3's shape); registered in `Run-IntegrationTests.ps1`
 - Public docs: Password Synchronisation concept and how-to, LDAP connector reference update, Activities category reference, REST and PowerShell reference; `DEVELOPER_GUIDE.md` password channel section; component diagrams
 - Security review pass against the never-log/never-serialise invariants (including the `Invoke-JIMApi` debug-stream body logging, which must redact password bodies); changelog; PRD Implementation Progress refresh
 
-**Delivered as Scenario 20** (`Invoke-Scenario20-PasswordSynchronisation.ps1`, `Setup-Scenario20.ps1`), documented in `engineering/INTEGRATION_TESTING.md`. It composes Scenario 17's substrate for provisioned, enabled accounts holding a password it knows, then asserts the four questions in order: a switched-off system accumulates rather than discards; three changes coalesce to one; enabling delivers what accumulated unaided and the directory answers the new password and refuses the old; and a change against a live system is delivered without intervention. It also sweeps the containers' own logs for every password value it sent.
+**Delivered as Scenario 20** (`Invoke-Scenario20-PasswordSynchronisation.ps1`, `Setup-Scenario20.ps1`), documented in `engineering/INTEGRATION_TESTING.md`, and **run green against a live Samba AD domain controller** (23 assertions). It composes Scenario 17's substrate for provisioned, enabled accounts holding a password it knows, then asserts the four questions in order: a switched-off system accumulates rather than discards; three changes coalesce to one; enabling delivers what accumulated unaided and the directory answers the new password and refuses the old; and a change against a live system is delivered without intervention. It also sweeps the containers' own logs for every password value it sent.
 
 Two things came out of writing it, both fixed rather than deferred:
 
