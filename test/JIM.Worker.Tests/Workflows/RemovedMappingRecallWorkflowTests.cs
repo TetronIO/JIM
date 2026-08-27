@@ -107,11 +107,12 @@ public class RemovedMappingRecallWorkflowTests : WorkflowTestBase
     }
 
     [Test]
-    public async Task FullSync_MappingDisabled_SoleContributor_RecallsValueAsync()
+    public async Task FullSync_MappingDisabled_SoleContributor_LeavesValueInPlaceAsync()
     {
-        // The sibling case (#1485): the mapping is disabled via its own Enabled flag while the rule stays
-        // enabled. Its previous contribution must be recalled exactly like a deleted mapping's, because a
-        // disabled mapping contributes nothing and leaves the contributor cache.
+        // The deliberate contrast with deletion (#1537): a mapping disabled via its own Enabled flag (#1485)
+        // is dormant, not gone. The administrator has paused the flow and may re-enable it, so with no
+        // surviving contributor its previously contributed value must be retained, not cleared. (With a
+        // survivor, the survivor takes the attribute over; that is the re-election path, not this one.)
         var ctx = await SetUpSoleContributorAsync();
 
         await RunFullSyncAsync(ctx.Hr);
@@ -128,13 +129,13 @@ public class RemovedMappingRecallWorkflowTests : WorkflowTestBase
 
         var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
         Assert.That(activity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
-            Is.False, "the recall must complete without unhandled errors");
+            Is.False, "the run must complete without unhandled errors");
 
         mvo = SyncRepo.MetaverseObjects.Values.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId), Is.Null,
-                "the disabled mapping's Description value must be recalled by the contributing system's Full Synchronisation");
+            Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId)?.StringValue, Is.EqualTo(HrDescription),
+                "the disabled mapping's Description value must be retained by the contributing system's Full Synchronisation");
             Assert.That(GetAttributeValue(mvo, ctx.MvDisplayNameAttributeId), Is.Not.Null,
                 "the enabled DisplayName mapping's value must be untouched (control)");
         }

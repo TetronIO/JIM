@@ -11,11 +11,11 @@ namespace JIM.Worker.Tests.SyncEngineTests;
 
 /// <summary>
 /// Pure unit tests for the orphaned-contribution recall (#1533): a Metaverse Object attribute value whose
-/// provenance names an Attribute Flow mapping that no longer exists in the priority contributor cache (mapping
-/// deleted, mapping disabled per #1485, or the whole Synchronisation Rule disabled) must be staged for removal
-/// when its contributing Connected System Object is re-evaluated, exactly as a disabled rule's contributions
-/// are recalled. Values stamped by other systems, values with no rule provenance, and values with a live
-/// mapping are never touched. No mocking, no database.
+/// provenance names an Attribute Flow mapping that has been DELETED must be staged for removal when its
+/// contributing Connected System Object is re-evaluated. A DISABLED mapping (or Synchronisation Rule) is the
+/// deliberate contrast (#1537): the flow is dormant, not gone, so its contributed values stay in place until a
+/// surviving contributor takes them over or the flow is re-enabled or deleted. Values stamped by other systems,
+/// values with no rule provenance, and values with a live mapping are never touched. No mocking, no database.
 /// </summary>
 public class SyncEngineOrphanedContributionRecallTests
 {
@@ -100,39 +100,49 @@ public class SyncEngineOrphanedContributionRecallTests
     }
 
     [Test]
-    public void RecallOrphanedContributions_MappingDisabled_StagesValueForRemoval()
+    public void RecallOrphanedContributions_MappingDisabled_LeavesValueInPlace()
     {
-        // The sibling case (#1485): the mapping row survives but is disabled, so the contributor cache
-        // excludes it and its previous contribution must be recalled identically to a deleted mapping.
+        // A disabled mapping (#1485) is dormant, not gone (#1537): the administrator has paused the flow and
+        // may re-enable it, so its contributed value stays in place. It leaves the contributor cache (so a
+        // surviving contributor still takes the attribute over), but with no survivor the value is retained.
         var dept = DeptAttr();
         var rule = ImportRule(syncRuleId: 1, dept, mappingEnabled: false);
         var context = new AttributePriorityContext(new[] { rule });
 
         var mvo = MvoWithType();
-        var orphan = SeedValue(mvo, dept, "Engineering", syncRuleId: 1, systemId: SystemId);
+        SeedValue(mvo, dept, "Engineering", syncRuleId: 1, systemId: SystemId);
         var cso = CsoJoinedTo(mvo);
 
-        _engine.RecallOrphanedContributions(cso, context);
+        var recalled = _engine.RecallOrphanedContributions(cso, context);
 
-        Assert.That(mvo.PendingAttributeValueRemovals, Does.Contain(orphan), "a disabled mapping's contribution must be recalled");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recalled, Is.Empty);
+            Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty, "a disabled mapping's contribution must be retained, not recalled");
+        }
     }
 
     [Test]
-    public void RecallOrphanedContributions_RuleDisabled_StagesValueForRemoval()
+    public void RecallOrphanedContributions_RuleDisabled_LeavesValueInPlace()
     {
-        // A disabled Synchronisation Rule leaves the contributor cache entirely, so a visit to its system's
-        // Connected System Object under any other enabled rule recalls its stale contributions too.
+        // Disabling a whole Synchronisation Rule is the same dormant statement at rule scope (#1537): the
+        // rule's contributions leave the cache (survivor takeover is unaffected, as Scenario 14's
+        // DisabledRuleNoOpinion proves), but a sole contributor's values are retained, not cleared.
         var dept = DeptAttr();
         var disabledRule = ImportRule(syncRuleId: 1, dept, ruleEnabled: false);
         var context = new AttributePriorityContext(new[] { disabledRule });
 
         var mvo = MvoWithType();
-        var orphan = SeedValue(mvo, dept, "Engineering", syncRuleId: 1, systemId: SystemId);
+        SeedValue(mvo, dept, "Engineering", syncRuleId: 1, systemId: SystemId);
         var cso = CsoJoinedTo(mvo);
 
-        _engine.RecallOrphanedContributions(cso, context);
+        var recalled = _engine.RecallOrphanedContributions(cso, context);
 
-        Assert.That(mvo.PendingAttributeValueRemovals, Does.Contain(orphan), "a disabled rule's contribution must be recalled");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recalled, Is.Empty);
+            Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty, "a disabled rule's contribution must be retained, not recalled");
+        }
     }
 
     [Test]
