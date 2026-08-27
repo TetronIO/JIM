@@ -70,7 +70,7 @@ TDD throughout: every behaviour lands red-first. British English, Title Case dom
 - Regenerate the OpenAPI document (`Generate-OpenApiDoc.ps1`); watch nullable entity navigations in new DTOs (`JsonIgnore` where API-reachable).
 - Tests in `JIM.Web.Api.Tests` for DTO mapping, response codes and the summary shape.
 
-### Phase 5: PowerShell
+### Phase 5: PowerShell ✅
 
 - `Remove-JIMSyncRule` / `Remove-JIMSyncRuleMapping`: `-KeepContributedValues` switch; `ShouldProcess` message includes the summary counts; output carries the recall Activity id (documented output shape per `src/JIM.PowerShell/CLAUDE.md`).
 - `New-JIMSyncRuleMapping`: `-Enabled` parameter (parity fix).
