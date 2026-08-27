@@ -3,10 +3,10 @@
 
 <#
 .SYNOPSIS
-    Setup for Scenario 19: Password Synchronisation
+    Setup for Scenario 20: Password Synchronisation
 
 .DESCRIPTION
-    Builds the substrate Scenario 19 asserts against: accounts provisioned into Samba AD, enabled, and holding a
+    Builds the substrate Scenario 20 asserts against: accounts provisioned into Samba AD, enabled, and holding a
     password the scenario knows, with Password Synchronisation configured on the directory but switched OFF.
 
     Two pieces, and the second is the whole point of this script:
@@ -14,7 +14,7 @@
       1. Provisioned accounts with a known password. That is exactly what Setup-Scenario17.ps1 builds, so this
          composes it rather than rebuilding it (Scenario 17 composes Setup-Scenario1.ps1 in the same way). The
          one thing it asks for differently is the expiry behaviour: Scenario 17 wants must-change-at-next-sign-in
-         because that is what it asserts, whereas Scenario 19 needs accounts whose Initial Password signs in
+         because that is what it asserts, whereas Scenario 20 needs accounts whose Initial Password signs in
          cleanly. Active Directory answers a correct password on a must-change account with the same result code
          as a wrong one (49), distinguished only by a sub-code, so leaving the accounts must-change would make
          "the old password no longer works" and "the old password works and needs changing" harder to tell apart
@@ -49,7 +49,7 @@
     Connected System export parallelism, passed through
 
 .EXAMPLE
-    ./Setup-Scenario19.ps1 -ApiKey "jim_..." -Template Micro
+    ./Setup-Scenario20.ps1 -ApiKey "jim_..." -Template Micro
 #>
 
 param(
@@ -83,13 +83,13 @@ if (-not $DirectoryConfig) {
 }
 
 if ($DirectoryConfig.UserObjectClass -ne "user") {
-    throw "Scenario 19 requires Samba AD. Provisioning enables each account as its Initial Password lands, which " +
+    throw "Scenario 20 requires Samba AD. Provisioning enables each account as its Initial Password lands, which " +
           "is an Active Directory operation with no equivalent on $($DirectoryConfig.ConnectedSystemName); an " +
           "account left disabled cannot be signed in as, and signing in is how this scenario proves a " +
           "synchronised password arrived."
 }
 
-Write-TestSection "Scenario 19 Setup: Password Synchronisation"
+Write-TestSection "Scenario 20 Setup: Password Synchronisation"
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────
 # Step 1: Provisioned accounts holding a known, usable password
@@ -165,7 +165,7 @@ try {
         -Enabled $false `
         -MaxRetries 3 `
         -RetryBackoffBase ([TimeSpan]::FromSeconds(30)) `
-        -ChangeReason "Scenario 19: staged before the change window, as requirement 4 describes" | Out-Null
+        -ChangeReason "Scenario 20: staged before the change window, as requirement 4 describes" | Out-Null
 
     Write-Host "  ✓ Password Synchronisation configured (Object Type: $($userObjectType.name)), switched off" -ForegroundColor Green
 
@@ -188,7 +188,7 @@ finally {
     Remove-Module JIM -Force -ErrorAction SilentlyContinue
 }
 
-Write-TestSection "Scenario 19 Setup Complete"
+Write-TestSection "Scenario 20 Setup Complete"
 Write-Host "Connected System:            $($DirectoryConfig.ConnectedSystemName) (ID: $($config.LDAPSystemId))" -ForegroundColor Cyan
 Write-Host "Password Synchronisation:    configured, switched OFF" -ForegroundColor Cyan
 Write-Host "Initial Password:            Static, never expires, account enabled" -ForegroundColor Cyan

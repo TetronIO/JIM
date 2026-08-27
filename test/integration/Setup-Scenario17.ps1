@@ -45,7 +45,7 @@
 .PARAMETER ExpiryBehaviour
     What the directory should do with the Initial Password once it holds it. Defaults to
     RequireChangeAtNextSignIn, which is what Scenario 17 asserts against and what an administrator would choose
-    for a new starter. Scenario 19 overrides it, because it needs accounts whose Initial Password signs in
+    for a new starter. Scenario 20 overrides it, because it needs accounts whose Initial Password signs in
     cleanly: it is proving that a *synchronised* password replaced that one, and a must-change account answers
     both the old and the new password with the same LDAP result code.
 

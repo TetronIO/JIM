@@ -1,6 +1,6 @@
 # Password Synchronisation (Phase 1: JIM as Password Origin)
 
-- **Status:** Doing (Phases 1 to 6 complete; Scenario 19 authored and awaiting a run against a live Samba AD stack)
+- **Status:** Doing (Phases 1 to 6 complete; Scenario 20 authored and awaiting a run against a live Samba AD stack)
 - **Issue:** [#1119](https://github.com/TetronIO/JIM/issues/1119)
 - **PRD:** [`engineering/prd/doing/PRD_PASSWORD_SYNCHRONISATION.md`](../prd/doing/PRD_PASSWORD_SYNCHRONISATION.md)
 
@@ -178,7 +178,7 @@ Each phase is TDD, red first, and lands with its tests, docs, and changelog entr
 - Public docs: Password Synchronisation concept and how-to, LDAP connector reference update, Activities category reference, REST and PowerShell reference; `DEVELOPER_GUIDE.md` password channel section; component diagrams
 - Security review pass against the never-log/never-serialise invariants (including the `Invoke-JIMApi` debug-stream body logging, which must redact password bodies); changelog; PRD Implementation Progress refresh
 
-**Delivered as Scenario 19** (`Invoke-Scenario19-PasswordSynchronisation.ps1`, `Setup-Scenario19.ps1`), documented in `engineering/INTEGRATION_TESTING.md`. It composes Scenario 17's substrate for provisioned, enabled accounts holding a password it knows, then asserts the four questions in order: a switched-off system accumulates rather than discards; three changes coalesce to one; enabling delivers what accumulated unaided and the directory answers the new password and refuses the old; and a change against a live system is delivered without intervention. It also sweeps the containers' own logs for every password value it sent.
+**Delivered as Scenario 20** (`Invoke-Scenario20-PasswordSynchronisation.ps1`, `Setup-Scenario20.ps1`), documented in `engineering/INTEGRATION_TESTING.md`. It composes Scenario 17's substrate for provisioned, enabled accounts holding a password it knows, then asserts the four questions in order: a switched-off system accumulates rather than discards; three changes coalesce to one; enabling delivers what accumulated unaided and the directory answers the new password and refuses the old; and a change against a live system is delivered without intervention. It also sweeps the containers' own logs for every password value it sent.
 
 Two things came out of writing it, both fixed rather than deferred:
 

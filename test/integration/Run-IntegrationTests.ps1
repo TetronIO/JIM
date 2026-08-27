@@ -626,7 +626,7 @@ function Show-ScenarioMenu {
                 "*Scenario16*" { "JIM SQL Connector provider x capability matrix (SQL Server, Oracle)" }
                 "*Scenario17*" { "Initial Password provisioning (account holder signs in and changes it)" }
                 "*Scenario18*" { "Writeback into the source Connected System (derived values flow; contributed values are not echoed)" }
-                "*Scenario19*" { "Password Synchronisation (held while a system is off, delivered when it is switched on, newest password only)" }
+                "*Scenario20*" { "Password Synchronisation (held while a system is off, delivered when it is switched on, newest password only)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1255,7 +1255,7 @@ $templateIrrelevantScenarios = @(
     "*Scenario16*",  # JIM SQL Connector matrix - its own deterministic SQL seeder sizes the data, not Template
     "*Scenario17*",  # Initial Password - asserts against one account; a larger template only lengthens the export
     "*Scenario18*",  # Writeback To Source - three seeded people; the question is per-object, not per-population
-    "*Scenario19*"   # Password Synchronisation - asserts against three accounts; a larger template only lengthens the export
+    "*Scenario20*"   # Password Synchronisation - asserts against three accounts; a larger template only lengthens the export
 )
 
 function Test-TemplateRelevant {
@@ -1706,10 +1706,10 @@ if ($Scenario -eq "All") {
     # both of them prove. The test OpenLDAP container also serves no TLS, so the RFC 3062 password path JIM
     # would use there cannot be exercised at all.
     if ($DirectoryType -eq "OpenLDAP") {
-        $sambaOnly = @($implementedScenarios | Where-Object { $_ -like "*Scenario17*" -or $_ -like "*Scenario19*" })
+        $sambaOnly = @($implementedScenarios | Where-Object { $_ -like "*Scenario17*" -or $_ -like "*Scenario20*" })
         if ($sambaOnly.Count -gt 0) {
             Write-Host "${YELLOW}Skipping Samba AD-only scenario(s) on OpenLDAP: $($sambaOnly -join ', ')${NC}"
-            $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario17*" -and $_ -notlike "*Scenario19*" })
+            $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario17*" -and $_ -notlike "*Scenario20*" })
         }
     }
 

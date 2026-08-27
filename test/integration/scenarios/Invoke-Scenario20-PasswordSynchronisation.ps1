@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    Test Scenario 19: Password Synchronisation
+    Test Scenario 20: Password Synchronisation
 
 .DESCRIPTION
     Proves that a password change recorded against an identity reaches the account that identity holds in a
@@ -62,7 +62,7 @@
     Directory configuration hashtable from Get-DirectoryConfig
 
 .EXAMPLE
-    ./Invoke-Scenario19-PasswordSynchronisation.ps1 -ApiKey "jim_..." -Template Micro
+    ./Invoke-Scenario20-PasswordSynchronisation.ps1 -ApiKey "jim_..." -Template Micro
 #>
 
 param(
@@ -108,7 +108,7 @@ if (-not $ApiKey) {
 }
 
 if ($DirectoryConfig.UserObjectClass -ne "user") {
-    throw "Scenario 19 requires Samba AD. Provisioning enables each account as its Initial Password lands, which " +
+    throw "Scenario 20 requires Samba AD. Provisioning enables each account as its Initial Password lands, which " +
           "is an Active Directory operation with no equivalent on $($DirectoryConfig.ConnectedSystemName); an " +
           "account left disabled cannot be signed in as, and signing in is how this scenario proves a " +
           "synchronised password arrived."
@@ -238,7 +238,7 @@ function Wait-ForQueueToDrain {
     return $drained
 }
 
-Write-TestSection "Scenario 19: Password Synchronisation"
+Write-TestSection "Scenario 20: Password Synchronisation"
 Write-Host "Directory:  $($DirectoryConfig.ConnectedSystemName) ($($DirectoryConfig.ContainerName))" -ForegroundColor Gray
 Write-Host "Template:   $effectiveTemplate (the -Template value is not used for sizing)" -ForegroundColor Gray
 Write-Host "Step:       $Step" -ForegroundColor Gray
@@ -253,11 +253,11 @@ Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
 & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $effectiveTemplate -OutputPath "$PSScriptRoot/../../test-data"
 Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
-$config = & "$PSScriptRoot/../Setup-Scenario19.ps1" `
+$config = & "$PSScriptRoot/../Setup-Scenario20.ps1" `
     -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $effectiveTemplate -DirectoryConfig $DirectoryConfig
 
 if (-not $config) {
-    throw "Failed to set up Scenario 19 configuration"
+    throw "Failed to set up Scenario 20 configuration"
 }
 
 $initialPassword = $config.InitialPassword
@@ -443,7 +443,7 @@ try {
     Set-JIMConnectedSystemPasswordSynchronisation `
         -Id $ldapSystemId `
         -Enabled $true `
-        -ChangeReason "Scenario 19: the change window has closed" | Out-Null
+        -ChangeReason "Scenario 20: the change window has closed" | Out-Null
 
     Write-Host "  Password Synchronisation switched on; nothing else will be done." -ForegroundColor Gray
 
@@ -578,7 +578,7 @@ $duration = (Get-Date) - $startTime
 $passed = @($script:TestResults | Where-Object { $_.Passed }).Count
 $failed = @($script:TestResults | Where-Object { -not $_.Passed }).Count
 
-Write-TestSection "Scenario 19 Summary"
+Write-TestSection "Scenario 20 Summary"
 Write-Host "Duration: $([math]::Round($duration.TotalSeconds, 1))s" -ForegroundColor Gray
 Write-Host "Passed:   $passed" -ForegroundColor Green
 if ($failed -gt 0) {

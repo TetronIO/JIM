@@ -154,7 +154,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario16-SqlConnectorMatrix` | JIM SQL Connector provider x capability matrix: the connector's capability rows driven against both priority 1 providers (Microsoft SQL Server and Oracle Database). Accepts `-Provider SqlServer\|Oracle\|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import (#170) | sqlserver-hris-a, oracle-hris-b |
 | `Scenario17-InitialPasswordProvisioning` | Initial Password provisioning end to end: an account is provisioned, then the scenario signs in as the account holder with the password JIM set, proves the directory is forcing a change, changes it as the account holder, and signs in again. Samba AD only; `-Template` is ignored | samba-ad-primary |
 | `Scenario18-WritebackToSource` | Whether a value JIM derives is written back into the Connected System it came from ([#1284](https://github.com/TetronIO/JIM/issues/1284)). Two JIM File Connector systems carry identically shaped outbound rules over the same Metaverse Objects, evaluated in one run, differing only in whether the target is the run's source. `-Template` is ignored | file (no directory container) |
-| `Scenario19-PasswordSynchronisation` | Password Synchronisation end to end ([#1119](https://github.com/TetronIO/JIM/issues/1119)): password changes are recorded against identities while the directory is switched off, held rather than discarded, then delivered the moment it is switched on, and the scenario signs in to the directory with each one. Also proves coalescing keeps the newest of three, and that no password value reaches a log. Samba AD only; `-Template` is ignored | samba-ad-primary |
+| `Scenario20-PasswordSynchronisation` | Password Synchronisation end to end ([#1119](https://github.com/TetronIO/JIM/issues/1119)): password changes are recorded against identities while the directory is switched off, held rather than discarded, then delivered the moment it is switched on, and the scenario signs in to the directory with each one. Also proves coalescing keeps the newest of three, and that no password value reaches a log. Samba AD only; `-Template` is ignored | samba-ad-primary |
 
 **Available Templates (`-Template` parameter):**
 
@@ -424,7 +424,7 @@ All templates generate realistic enterprise data following normal distribution p
 | Scenario14 AttributePriority | OpenLDAP only | (ignored) | ~2m | fixed six-user; -Template ignored |
 | Scenario16 SqlConnectorMatrix | database (SQL Server, Oracle) | (ignored) | ~25m per provider (default tier); `-FullMatrix` adds ~19m on SQL Server and ~17m on Oracle for the 500,000-row import | its own SQL seeder sizes the data; -Template ignored; see the scale-import table in the Scenario 16 section |
 | Scenario18 WritebackToSource | file (none) | (ignored) | ~8s | three seeded people; the question is per-object, not per-population |
-| Scenario19 PasswordSynchronisation | Samba AD only | (ignored) | not yet measured | three provisioned accounts; the wait is delivery, not population |
+| Scenario20 PasswordSynchronisation | Samba AD only | (ignored) | not yet measured | three provisioned accounts; the wait is delivery, not population |
 
 **Notes:**
 
@@ -1148,13 +1148,13 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 
 ---
 
-#### Scenario 19: Password Synchronisation
+#### Scenario 20: Password Synchronisation
 
 **Status**: authored against [#1119](https://github.com/TetronIO/JIM/issues/1119) Phase 6. Samba AD only.
 
 **Purpose**: prove that a password change recorded against an identity reaches the account that identity holds in a Connected System, by signing in to the directory with it. Everything else in the feature's coverage stops short of a directory: the unit tests assert against a mocked LDAP executor and an in-memory queue, so they prove JIM emits the right write and moves the right rows, and prove nothing about whether a directory accepts the result.
 
-**Scripts**: `test/integration/scenarios/Invoke-Scenario19-PasswordSynchronisation.ps1` and `test/integration/Setup-Scenario19.ps1`.
+**Scripts**: `test/integration/scenarios/Invoke-Scenario20-PasswordSynchronisation.ps1` and `test/integration/Setup-Scenario20.ps1`.
 
 **The chain, and why each link is needed:**
 
@@ -1171,7 +1171,7 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 | 7 | Nothing parked, nothing expired, and nothing left waiting | A delivered change leaves nothing behind; a parked one is a directory refusal worth surfacing |
 | 8 | No password value appears in any JIM log, and no queue response carries one | The invariant that lets JIM hold passwords at all. Swept from the containers' own logs, so it covers anything a library wrote on JIM's behalf |
 
-**Why the substrate is Scenario 17's.** The scenario needs accounts that are provisioned, enabled, and holding a password it knows, which is exactly what `Setup-Scenario17.ps1` builds; `Setup-Scenario19.ps1` composes it rather than rebuilding it, as Scenario 17 itself composes `Setup-Scenario1.ps1`. It asks for one thing differently: `-ExpiryBehaviour NeverExpires` rather than must-change-at-next-sign-in. Active Directory answers a correct password on a must-change account with the same result code as a wrong one (49), distinguished only by a sub-code, and the synchronised password is meant to be the only variable under test.
+**Why the substrate is Scenario 17's.** The scenario needs accounts that are provisioned, enabled, and holding a password it knows, which is exactly what `Setup-Scenario17.ps1` builds; `Setup-Scenario20.ps1` composes it rather than rebuilding it, as Scenario 17 itself composes `Setup-Scenario1.ps1`. It asks for one thing differently: `-ExpiryBehaviour NeverExpires` rather than must-change-at-next-sign-in. Active Directory answers a correct password on a must-change account with the same result code as a wrong one (49), distinguished only by a sub-code, and the synchronised password is meant to be the only variable under test.
 
 **Why the system starts switched off.** Configured-but-off is the harder half of the behaviour and the one with the worse failure mode, so the scenario starts there and enables the system partway through, making the drain a real one rather than a no-op. It is also how an administrator stages a configuration ahead of a change window (requirement 4).
 
