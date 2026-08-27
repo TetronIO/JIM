@@ -322,6 +322,16 @@ git tag -a v<version> -m "Release v<version>"
 git push origin v<version>
 ```
 
+**Immediately after pushing the tag, authorise it on the self-hosted runner group.** The release workflow's jobs run on the self-hosted runner via the `tetron-trusted` org runner group (id 3), whose workflow allowlist pins `release.yml` to a specific tag ref. The API rejects refs that do not exist yet, so this can only happen after the tag push; until it happens, every release job sits queued waiting for a runner. Requires `gh` authenticated with the `admin:org` scope:
+
+```bash
+KEEP=$(gh api orgs/TetronIO/actions/runner-groups/3 --jq '[.selected_workflows[] | select(startswith("TetronIO/JIM/.github/workflows/release.yml@") | not)]')
+jq -n --argjson keep "$KEEP" '{selected_workflows: ($keep + ["TetronIO/JIM/.github/workflows/release.yml@refs/tags/v<version>"])}' \
+  | gh api -X PATCH orgs/TetronIO/actions/runner-groups/3 --input - --jq '.selected_workflows'
+```
+
+Confirm the output lists the new tag, then watch the release run's jobs leave "queued". If they are still queued after a couple of minutes, cancel and re-run the workflow run; a run queued under the old allowlist can fail to re-match (observed with the group's initial rollout).
+
 The tag-push triggers the release workflow which:
 1. Validates the build and runs all tests
 2. Builds and pushes Docker images to `ghcr.io/tetronio/jim-{web,worker,scheduler}:<version>`
