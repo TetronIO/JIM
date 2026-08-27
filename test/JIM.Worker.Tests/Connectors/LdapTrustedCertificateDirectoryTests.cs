@@ -265,6 +265,96 @@ public class LdapTrustedCertificateDirectoryTests
         }
     }
 
+    /// <summary>
+    /// OpenSSL-backed LDAP clients (Ubuntu 26.04 onwards) look trust anchors up by subject-hash file name and
+    /// cannot see thumbprint-named files at all, while GnuTLS-backed clients (Debian and Ubuntu up to 24.04)
+    /// read every file regardless of name. The directory must satisfy both, which openssl rehash provides.
+    /// </summary>
+    [Test]
+    public void Create_WritesAnOpenSslSubjectHashEntryPerJimCertificate()
+    {
+        AssertOpenSslAvailable();
+        var first = CreateCertificate("hash-one.example.test");
+        var second = CreateCertificate("hash-two.example.test");
+
+        using var trustDirectory = LdapTrustedCertificateDirectory.Create(new[] { first, second }, _logger, new[] { CreateFakeSystemBundle() });
+
+        var hashEntries = GetSubjectHashEntries(trustDirectory.DirectoryPath);
+        var thumbprints = hashEntries
+            .Select(f => { using var c = X509CertificateLoader.LoadCertificateFromFile(f); return c.Thumbprint; })
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hashEntries, Has.Count.EqualTo(2));
+            Assert.That(thumbprints, Is.EquivalentTo(new[] { first.Thumbprint, second.Thumbprint }));
+        }
+    }
+
+    /// <summary>
+    /// A bundle file holding many certificates is invisible to OpenSSL's by-hash lookup even when hash entries
+    /// exist for the JIM certificates, so the operating system bundle must be split into one file per certificate
+    /// and each given a hash entry, or a populated JIM store would stop system-trusted issuers validating on
+    /// OpenSSL-backed platforms.
+    /// </summary>
+    [Test]
+    public void Create_SplitsAPemSystemBundleIntoIndividuallyHashedCertificates()
+    {
+        AssertOpenSslAvailable();
+        var jimCertificate = CreateCertificate("store.example.test");
+        var bundleFirst = CreateCertificate("bundle-one.example.test");
+        var bundleSecond = CreateCertificate("bundle-two.example.test");
+        var bundlePath = CreateFakeSystemBundle(bundleFirst.ExportCertificatePem() + "\n" + bundleSecond.ExportCertificatePem());
+
+        using var trustDirectory = LdapTrustedCertificateDirectory.Create(new[] { jimCertificate }, _logger, new[] { bundlePath });
+
+        var hashEntries = GetSubjectHashEntries(trustDirectory.DirectoryPath);
+        var thumbprints = hashEntries
+            .Select(f => { using var c = X509CertificateLoader.LoadCertificateFromFile(f); return c.Thumbprint; })
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            // One hash entry per certificate: the JIM certificate plus each certificate from the bundle.
+            Assert.That(thumbprints, Is.EquivalentTo(new[] { jimCertificate.Thumbprint, bundleFirst.Thumbprint, bundleSecond.Thumbprint }));
+            // The split replaces the verbatim bundle copy, so nothing is loaded twice on GnuTLS platforms.
+            Assert.That(File.Exists(Path.Combine(trustDirectory.DirectoryPath, LdapTrustedCertificateDirectory.SystemBundleFileName)), Is.False);
+        }
+    }
+
+    /// <summary>
+    /// A bundle that holds no PEM certificate blocks cannot be split, so the previous behaviour of copying it in
+    /// verbatim is kept: GnuTLS-backed clients still read it, and nothing is lost on OpenSSL-backed ones.
+    /// </summary>
+    [Test]
+    public void Create_CopiesANonPemSystemBundleVerbatim()
+    {
+        const string bundleContent = "-- not a PEM bundle --";
+        var certificate = CreateCertificate("verbatim.example.test");
+
+        using var trustDirectory = LdapTrustedCertificateDirectory.Create(new[] { certificate }, _logger, new[] { CreateFakeSystemBundle(bundleContent) });
+
+        var bundlePath = Path.Combine(trustDirectory.DirectoryPath, LdapTrustedCertificateDirectory.SystemBundleFileName);
+        Assert.That(File.ReadAllText(bundlePath), Is.EqualTo(bundleContent));
+    }
+
+    /// <summary>
+    /// Finds the hash-named entries openssl rehash creates: 8 hex characters, a dot, then a collision counter.
+    /// </summary>
+    private static List<string> GetSubjectHashEntries(string directoryPath)
+    {
+        return Directory.GetFileSystemEntries(directoryPath)
+            .Where(f => System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(f), @"^[0-9a-f]{8}\.\d+$"))
+            .ToList();
+    }
+
+    private static void AssertOpenSslAvailable()
+    {
+        var found = Environment.GetEnvironmentVariable("PATH")?
+            .Split(Path.PathSeparator)
+            .Any(p => File.Exists(Path.Combine(p, "openssl"))) ?? false;
+        if (!found)
+            Assert.Ignore("The openssl binary is not on PATH; subject-hash entries cannot be verified on this host.");
+    }
+
     [Test]
     public void Create_ProducesADistinctDirectoryPerInstance()
     {
