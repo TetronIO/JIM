@@ -11,6 +11,16 @@ on:
 permissions:
   contents: read
 
+# Within one run the jobs fan out across every available runner. Across runs, push
+# builds on main are serialised: ldaps-tests mutates machine-global state on the
+# self-hosted host (fixed container names, /etc/hosts entries, a trust-store CA),
+# so two overlapping main runs would corrupt each other's fixtures. A newer queued
+# main run supersedes an older queued one, which is fine: the newest commit contains
+# the older ones. PR runs get one group per PR so a new push cancels the stale run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && 'main-push' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
 jobs:
   build-and-test:
 
