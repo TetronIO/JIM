@@ -269,6 +269,78 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// Recalls Metaverse Object attribute values whose contributing Attribute Flow mapping has been DELETED
+    /// (#1533). A value's provenance (<c>ContributedBySystemId</c> + <c>ContributedBySyncRuleId</c>) names the
+    /// mapping's rule; when the priority contributor cache holds neither a live import mapping from that rule
+    /// targeting the attribute nor a dormant one, the mapping row is gone, nothing any longer asserts the value,
+    /// and it is staged for removal exactly like an in-place withdrawal. The caller's withdrawal re-election pass
+    /// then re-elects the next surviving contributor, or the attribute is genuinely cleared and reported as a
+    /// NoContributor outcome.
+    /// <para>
+    /// A DISABLED mapping, or a mapping on a disabled Synchronisation Rule, is deliberately the opposite case
+    /// (#1537): the flow is dormant, not gone. The administrator has paused it and may re-enable it, so its
+    /// contributed values are retained; a surviving contributor still takes the attribute over (dormant flows are
+    /// absent from the contributor cache proper), but with no survivor the value stays.
+    /// </para>
+    /// <para>
+    /// Deliberately narrow, because a recall is a destructive act:
+    /// <list type="bullet">
+    /// <item>Only values stamped with THIS Connected System's id are considered; another system's stale value is
+    /// recalled by that system's own run.</item>
+    /// <item>Values without a Synchronisation Rule stamp are never touched: internally managed data, pre-provenance
+    /// values, and a deleted rule's <c>ON DELETE SET NULL</c> all look identical, and none may be cleared on the
+    /// strength of a cache miss.</item>
+    /// <item>Call AFTER the CSO's in-scope import rules have flowed: a live mapping that re-flowed the attribute
+    /// this pass has already staged its own diff, and one that supplied the identical value has taken the
+    /// provenance over (<see cref="TakeOverProvenance"/>), so its rows resolve as owned and are left alone.</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    /// <param name="cso">The joined Connected System Object being re-evaluated.</param>
+    /// <param name="priorityContext">The per-run attribute priority contributor cache (#91).</param>
+    /// <returns>The values staged for removal, empty if none.</returns>
+    public List<MetaverseObjectAttributeValue> RecallOrphanedContributions(
+        ConnectedSystemObject cso,
+        AttributePriorityContext priorityContext)
+    {
+        ArgumentNullException.ThrowIfNull(cso);
+        ArgumentNullException.ThrowIfNull(priorityContext);
+
+        var mvo = cso.MetaverseObject;
+        if (mvo == null)
+            return [];
+
+        if (mvo.Type == null)
+        {
+            // Without the Metaverse Object Type the contributor cache cannot be keyed, so no liveness claim can
+            // be made; recalling on unknown liveness would risk clearing legitimate values. Not an error: some
+            // callers legitimately process partially hydrated objects.
+            Log.Verbose("RecallOrphanedContributions: MVO {MvoId} has no Type loaded; skipping mapping-liveness recall for CSO {CsoId}.",
+                mvo.Id, cso.Id);
+            return [];
+        }
+
+        var objectTypeId = mvo.Type.Id;
+        var orphaned = mvo.AttributeValues
+            .Where(av => av.ContributedBySystemId == cso.ConnectedSystemId &&
+                         av.ContributedBySyncRuleId is int contributingRuleId &&
+                         !mvo.PendingAttributeValueRemovals.Contains(av) &&
+                         priorityContext.GetContributor(objectTypeId, av.AttributeId, contributingRuleId) == null &&
+                         !priorityContext.HasDormantContributor(objectTypeId, av.AttributeId, contributingRuleId))
+            .ToList();
+
+        if (orphaned.Count == 0)
+            return orphaned;
+
+        mvo.PendingAttributeValueRemovals.AddRange(orphaned);
+        Log.Information("RecallOrphanedContributions: recalled {Count} attribute value(s) on MVO {MvoId} contributed by " +
+            "Connected System {SystemId} whose Attribute Flow mapping no longer exists. Attribute ids: {AttributeIds}.",
+            orphaned.Count, mvo.Id, cso.ConnectedSystemId, string.Join(", ", orphaned.Select(av => av.AttributeId).Distinct()));
+
+        return orphaned;
+    }
+
+    /// <summary>
     /// Applies the outcome when a contribution that has passed the priority gate yields no value for its target
     /// attribute (the ConnectedNoValue state, #91): the "act on R's contribution state" node of the resolution
     /// decision tree for the no-value branches.

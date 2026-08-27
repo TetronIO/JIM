@@ -35,6 +35,9 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; } = null!;
     public virtual DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; } = null!;
     public virtual DbSet<ConnectedSystemObjectTypeTag> ConnectedSystemObjectTypeTags { get; set; } = null!;
+    public virtual DbSet<ConnectedSystemObjectTypeExtension> ConnectedSystemObjectTypeExtensions { get; set; } = null!;
+    public virtual DbSet<AuxiliaryClassDiscoveryRun> AuxiliaryClassDiscoveryRuns { get; set; } = null!;
+    public virtual DbSet<AuxiliaryClassDiscoveryResult> AuxiliaryClassDiscoveryResults { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordSynchronisation> ConnectedSystemPasswordSynchronisations { get; set; } = null!;
@@ -97,6 +100,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<HistoryRetentionCleanupWorkerTask> HistoryRetentionCleanupWorkerTasks { get; set; } = null!;
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreviewWorkerTask> ConfigurationChangePreviewWorkerTasks { get; set; } = null!;
+    public virtual DbSet<AuxiliaryClassDiscoveryWorkerTask> AuxiliaryClassDiscoveryWorkerTasks { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
 
     // Connection pooling constants
@@ -373,6 +377,75 @@ public class JimDbContext : DbContext
             .Property(tag => tag.Value)
             .HasMaxLength(256);
 
+        // An administrator's auxiliary class selections. Both ends cascade: removing the structural type takes its
+        // selections with it, and an auxiliary type that vanishes from the schema on a refresh takes with it every
+        // selection pointing at it, which is the documented data-loss semantic of a refresh. Two cascade paths from
+        // one table into one dependent are fine on PostgreSQL, which resolves them per row rather than refusing the
+        // schema as SQL Server would.
+        modelBuilder.Entity<ConnectedSystemObjectType>()
+            .HasMany(csot => csot.Extensions)
+            .WithOne(extension => extension.BaseObjectType)
+            .HasForeignKey(extension => extension.BaseObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConnectedSystemObjectTypeExtension>()
+            .HasOne(extension => extension.ExtensionObjectType)
+            .WithMany()
+            .HasForeignKey(extension => extension.ExtensionObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // One statement of "this type extends that one", not several.
+        modelBuilder.Entity<ConnectedSystemObjectTypeExtension>()
+            .HasIndex(extension => new { extension.BaseObjectTypeId, extension.ExtensionObjectTypeId })
+            .IsUnique();
+
+        // The carrier is a pointer to a sibling row in the same table. Restrict rather than cascade: deleting the
+        // structural class something else is carried by must not silently delete that something else, and a schema
+        // refresh that removes a carrier should surface as a refusal an administrator can see, not as a chain of
+        // disappearing Object Types.
+        modelBuilder.Entity<ConnectedSystemObjectType>()
+            .HasOne(csot => csot.StructuralCarrierObjectType)
+            .WithMany()
+            .HasForeignKey(csot => csot.StructuralCarrierObjectTypeId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Discovery runs are evidence about a Connected System and have no meaning without it.
+        modelBuilder.Entity<AuxiliaryClassDiscoveryRun>()
+            .HasOne(run => run.ConnectedSystem)
+            .WithMany()
+            .HasForeignKey(run => run.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<AuxiliaryClassDiscoveryRun>()
+            .HasMany(run => run.Results)
+            .WithOne(result => result.Run)
+            .HasForeignKey(result => result.RunId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A result names the structural type whose entries were read. Cascade, because a count against a type that
+        // no longer exists says nothing.
+        modelBuilder.Entity<AuxiliaryClassDiscoveryResult>()
+            .HasOne(result => result.StructuralObjectType)
+            .WithMany()
+            .HasForeignKey(result => result.StructuralObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // One count per structural type and auxiliary class within a run.
+        modelBuilder.Entity<AuxiliaryClassDiscoveryResult>()
+            .HasIndex(result => new { result.RunId, result.StructuralObjectTypeId, result.AuxiliaryClassName })
+            .IsUnique();
+
+        modelBuilder.Entity<AuxiliaryClassDiscoveryResult>()
+            .Property(result => result.AuxiliaryClassName)
+            .HasMaxLength(256);
+
+        // At most one run per Connected System may be in flight. A filtered unique index enforces it in the
+        // database rather than leaving it to a check-then-act race between two administrators.
+        modelBuilder.Entity<AuxiliaryClassDiscoveryRun>()
+            .HasIndex(run => run.ConnectedSystemId)
+            .IsUnique()
+            .HasFilter($"\"Status\" = {(int)AuxiliaryClassDiscoveryStatus.InProgress}");
+
         // A Connected System has at most one discovered password policy. Every other child of a Connected System
         // is a collection, so this one-to-one has to be declared explicitly: EF cannot infer which end is the
         // dependent. Cascade, because a discovered policy has no meaning without the system it was read from.
@@ -523,16 +596,25 @@ public class JimDbContext : DbContext
             .Property(rp => rp.VerifyImportContentHashes)
             .HasDefaultValue(false);
 
-        // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
+        // An ObjectMatchingRule belongs to either a SyncRule or a ConnectedSystemObjectType, never both, and which
+        // one decides what the rule is: owned by an Object Type it matches every account of that type (Simple
+        // mode), owned by a Synchronisation Rule it matches only what that rule brings in (Advanced mode). Either
+        // way it is contained by its owner and means nothing without it, so both relationships cascade. Left to
+        // convention they were ClientSetNull, and the rule survived its owner's deletion with a null owner:
+        // configuration belonging to nothing, reachable from nowhere, and reported as a clean delete. Its Sources
+        // already cascade from the rule, so they go too. See the "Configuration ownership (issue #1477)" block
+        // below for why an optional foreign key gets this treatment by default.
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.ObjectMatchingRules)
             .WithOne(omr => omr.SyncRule)
-            .HasForeignKey(omr => omr.SyncRuleId);
+            .HasForeignKey(omr => omr.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.ObjectMatchingRules)
             .WithOne(omr => omr.ConnectedSystemObjectType)
-            .HasForeignKey(omr => omr.ConnectedSystemObjectTypeId);
+            .HasForeignKey(omr => omr.ConnectedSystemObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ObjectMatchingRule>()
             .HasOne(omr => omr.MetaverseObjectType)
@@ -1038,7 +1120,7 @@ public class JimDbContext : DbContext
         // whenever the owner is deleted outside a change-tracked graph, and it makes the factory reset's
         // "DELETE ... WHERE ""BuiltIn"" = false" statements fail with 23503 for any custom object holding the child
         // rows it ordinarily holds; since the whole wipe is one transaction, the reset then rolls back entirely.
-        // SystemResetForeignKeyCoverageTests asserts this property across the whole schema, so a child table added
+        // DeletePathForeignKeyCoverageTests asserts this property across the whole schema, so a child table added
         // later cannot silently reintroduce the fault.
 
         // A Predefined Search owns its top-level criteria groups; a group is how the search filters.
@@ -1061,6 +1143,57 @@ public class JimDbContext : DbContext
             .HasMany(g => g.Criteria)
             .WithOne()
             .HasForeignKey(c => c.PredefinedSearchCriteriaGroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A Container owns the Containers discovered beneath it. Exactly the nested-group case above, and it bit
+        // the same way: deleting a Connected System removes its Containers with one statement keyed on PartitionId,
+        // but a Container discovered below another carries no PartitionId of its own, so that statement deleted
+        // the top of each branch and left every descendant pointing at a row that had just gone. PostgreSQL
+        // refused on this foreign key and the whole delete rolled back, so a Connected System that had ever
+        // imported a nested hierarchy could not be deleted at all.
+        modelBuilder.Entity<ConnectedSystemContainer>()
+            .HasMany(c => c.ChildContainers)
+            .WithOne(c => c.ParentContainer)
+            .HasForeignKey(c => c.ParentContainerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A Synchronisation Rule owns its Attribute Flow mappings, and a mapping owns the sources it reads from.
+        // Exactly the Predefined Search chain above, and it was wrong the same way: deleting a rule nulled these
+        // rather than removing them, so every mapping and source of every deleted rule stayed behind belonging to
+        // nothing. Nothing failed and nothing said so, because nulling the reference is what the convention asks
+        // for.
+        modelBuilder.Entity<SyncRule>()
+            .HasMany(sr => sr.AttributeFlowRules)
+            .WithOne(m => m.SyncRule!)
+            .HasForeignKey(m => m.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleMapping>()
+            .HasMany(m => m.Sources)
+            .WithOne()
+            .HasForeignKey("SyncRuleMappingId")
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A Synchronisation Rule owns its top-level Scoping Criteria groups, a group owns the groups nested
+        // inside it, and a group owns its criteria. All three levels have to cascade: a nested group hangs off its
+        // parent rather than off the rule, so stopping at the top level would leave the delete blocked one level
+        // deeper instead of at the top, which is precisely how the Container hierarchy above behaved.
+        modelBuilder.Entity<SyncRule>()
+            .HasMany(sr => sr.ObjectScopingCriteriaGroups)
+            .WithOne()
+            .HasForeignKey("SyncRuleId")
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleScopingCriteriaGroup>()
+            .HasMany(g => g.ChildGroups)
+            .WithOne(g => g.ParentGroup!)
+            .HasForeignKey("ParentGroupId")
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleScopingCriteriaGroup>()
+            .HasMany(g => g.Criteria)
+            .WithOne()
+            .HasForeignKey("SyncRuleScopingCriteriaGroupId")
             .OnDelete(DeleteBehavior.Cascade);
 
         // A Connector Definition owns the settings it declares.

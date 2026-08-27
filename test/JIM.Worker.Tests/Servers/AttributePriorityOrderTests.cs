@@ -56,6 +56,12 @@ public class AttributePriorityOrderTests
             .Setup(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()))
             .Returns(Task.CompletedTask);
 
+        // The duplicate-target check (#1532) reads the Synchronisation Rule's existing mappings on every
+        // mapping create; these tests exercise priority, so default the list to empty.
+        _mockCsRepo
+            .Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<SyncRuleMapping>());
+
         _jim = new JimApplication(_mockRepository.Object);
 
         _user = new MetaverseObject { Id = Guid.NewGuid(), CachedDisplayName = "Test Admin" };

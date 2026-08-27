@@ -22,6 +22,11 @@ public class PasswordQueueSummary
     /// The subset of <see cref="WaitingCount"/> a delivery pass would attempt right now. Reported separately
     /// because the two answer different questions: a large waiting count with nothing due is a queue working
     /// through its backoffs, while a large due count is a queue that is not being drained.
+    /// <para>
+    /// A change queued for a Connected System that is switched off is waiting but not due: it is held until
+    /// somebody enables the system, and a pass would step over it. Counting those here would make the ordinary
+    /// state of a deployment with one system switched off look like a queue nothing is draining.
+    /// </para>
     /// </summary>
     public int DueCount { get; set; }
 

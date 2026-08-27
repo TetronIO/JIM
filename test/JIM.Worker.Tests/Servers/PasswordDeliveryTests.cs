@@ -80,8 +80,20 @@ public class PasswordDeliveryTests
             // These fixtures never reach a Connector: they exercise queueing and one-change delivery with a
             // Connector handed in directly. Resolving one here would be answering a question they do not ask.
             _ => throw new NotSupportedException("This fixture does not resolve Connectors."),
-            (activity, _, _) =>
+            (activity, initiatedBy, initiatedByApiKey) =>
             {
+                // The real Activity server refuses an Activity attributed to nobody, and a fake that accepted one
+                // is why #1529 hid here for the whole of delivery's life.
+                if (initiatedBy == null && initiatedByApiKey == null)
+                    throw new InvalidOperationException(
+                        "Activity must be attributed to a security principal. InitiatedByType has not been set.");
+                _createdActivities.Add(activity);
+                return Task.CompletedTask;
+            },
+            activity =>
+            {
+                activity.InitiatedByType = ActivityInitiatorType.System;
+                activity.InitiatedByName = "System";
                 _createdActivities.Add(activity);
                 return Task.CompletedTask;
             },
@@ -134,6 +146,37 @@ public class PasswordDeliveryTests
                     TypeId = UserObjectTypeId
                 }
             ]);
+
+    /// <summary>
+    /// Regression for #1529. The outcome Activity was created with neither a person nor an API key against it,
+    /// which the Activity server refuses ("Activity must be attributed to a security principal"). The refusal
+    /// threw out of the delivery pass, so no outcome could ever be recorded and the change was retried for ever;
+    /// the password reached the directory and JIM then crashed recording that it had.
+    /// <para>
+    /// Delivery runs unattended, minutes or days after somebody queued the change, so there is no person to
+    /// attribute it to and JIM itself is the honest principal. The parent Activity still names whoever made the
+    /// password change.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task Deliver_RecordsTheOutcomeAttributedToTheSystemAsync()
+    {
+        var change = await QueueAsync();
+        ArrangeAccount(change);
+        _createdActivities.Clear();
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, DateTime.UtcNow, CancellationToken.None);
+
+        var outcome = _createdActivities.SingleOrDefault(a => a.TargetType == ActivityTargetType.PasswordSynchronisation);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1), "the pass must not throw recording what it did");
+            Assert.That(outcome, Is.Not.Null, "the outcome Activity is all that survives once the queue row is deleted");
+            Assert.That(outcome!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        }
+    }
 
     [Test]
     public async Task Deliver_OnSuccess_RemovesTheChangeFromTheQueueAsync()

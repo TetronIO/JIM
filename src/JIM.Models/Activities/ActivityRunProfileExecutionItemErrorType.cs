@@ -164,5 +164,13 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// imports objects of one Object Type and exports another for the same Metaverse Objects: give the
     /// exported Object Types their own Connected System over the same target.
     /// </summary>
-    CouldNotExportDueToExistingConnectedSystemObject
+    CouldNotExportDueToExistingConnectedSystemObject,
+
+    /// <summary>
+    /// JIM refused an export before sending it, because a class it would add to the object has required
+    /// attributes that neither the export writes nor the object already holds (#492). The message names
+    /// exactly what is missing. This is configuration to act on, not a JIM defect: add an Attribute Flow
+    /// for the missing attribute(s), or withdraw the auxiliary class selection that brought the class in.
+    /// </summary>
+    ClassMembershipRequirementsNotMet
 }

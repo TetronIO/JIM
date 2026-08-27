@@ -42,6 +42,11 @@ $script:JIMMaxAllPages = 1000
 $script:JIMMaxRetrievalDepth = 1000000
 $script:JIMAllWarningThreshold = 10000
 
+# What replaces a credential-shaped value before a request body reaches the debug stream. A fixed
+# marker rather than anything derived from the value, so not even its length survives redaction.
+# See Private/Get-JIMRedactedBody.ps1.
+$script:JIMRedactionMarker = '<redacted>'
+
 # Get public and private function definition files
 $Public = @(Get-ChildItem -Path "$PSScriptRoot/Public" -Recurse -Filter '*.ps1' -ErrorAction SilentlyContinue)
 $Private = @(Get-ChildItem -Path "$PSScriptRoot/Private" -Recurse -Filter '*.ps1' -ErrorAction SilentlyContinue)

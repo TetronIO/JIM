@@ -86,9 +86,11 @@ git push origin main --tags
    git push origin v0.3.0
    ```
 
-6. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
+6. **Authorise the tag on the self-hosted runner group**: the release workflow runs on the self-hosted runner, and the `tetron-trusted` org runner group's workflow allowlist pins `release.yml` to a specific tag ref (the API refuses refs that do not exist, so this must follow the tag push). Until this is done the release jobs sit queued. The `/release` skill carries the exact `gh api` command; it needs the `admin:org` scope.
 
-7. **Verify the release**: Once complete, verify:
+7. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
+
+8. **Verify the release**: Once complete, verify:
    - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example`)
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery

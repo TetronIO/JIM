@@ -83,6 +83,17 @@
         bearing (never consulted for an excluded mapping). Primary is then re-enabled and a Full
         Synchronisation (Primary) retakes both attributes, restoring the inherited end-state.
 
+    10b. RemovedMappingRecall - Primary's Description Attribute Flow mapping is DELETED outright
+        (Remove-JIMSyncRuleMapping), the strongest statement of the intent Test 10 proves for a
+        disabled rule. A Full Synchronisation of PRIMARY ITSELF (the contributing system, per
+        #1533; contrast Test 10, where the SURVIVING system's run drives the re-election) recalls
+        Dave's (S14-3) Primary-sourced Description and re-elects the surviving Secondary
+        contribution in the same run: the value's provenance names a mapping that no longer exists
+        in the Attribute Priority contributor cache, so it is treated exactly like a disabled
+        rule's contribution rather than left as a stuck last-written value with dangling
+        provenance. The mapping is then re-created at priority 1 and a Full Synchronisation
+        (Primary) retakes Description, restoring the inherited end-state.
+
     11. PriorityReorderPropagation - Description's priority is reordered to Secondary=1/Primary=2.
         Delta Synchronisation of both systems, with no staged import changes, leaves Dave's
         Description untouched (apply-only propagation: Delta Synchronisation with nothing modified
@@ -229,14 +240,15 @@
     so a configuration change's blast radius must be reasoned through explicitly, not assumed
     narrow because only one user's LDAP entry was touched.
 
-    DisabledRuleNoOpinion and PriorityReorderPropagation (Phase D) both reuse Dave (S14-3): unlike
-    Phases B and C, neither step touches LDAP data at all (both mutate configuration only: rule
-    Enabled state, then Attribute Priority order), and both restore their own configuration mutation
-    before returning, so Dave ends each step in exactly the state Phase C left him in, undisturbed
-    for whichever step runs next. Each documents, in its own comments, the full blast radius of its
-    configuration change across every OTHER joined subject (a disabled rule or reordered priority
-    affects every joined object, not just Dave), without asserting each of them individually, to
-    keep the step's own assertions scoped to its named subject while remaining honest about scope.
+    DisabledRuleNoOpinion, RemovedMappingRecall and PriorityReorderPropagation (Phase D) all reuse
+    Dave (S14-3): unlike Phases B and C, none of these steps touches LDAP data at all (each mutates
+    configuration only: rule Enabled state, then mapping existence, then Attribute Priority order),
+    and each restores its own configuration mutation before returning, so Dave ends each step in
+    exactly the state Phase C left him in, undisturbed for whichever step runs next. Each documents,
+    in its own comments, the full blast radius of its configuration change across every OTHER joined
+    subject (a disabled rule, removed mapping or reordered priority affects every joined object, not
+    just Dave), without asserting each of them individually, to keep the step's own assertions
+    scoped to its named subject while remaining honest about scope.
 
     OutOfScopeNoOpinion (Phase E) deliberately reuses Erin (S14-4) rather than a fresh subject: its
     Description assertion depends on NoContributorCleared's (Phase B) end-state, since the scope
@@ -273,7 +285,7 @@
     Which test step to execute (BaselineResolution, RecallReElection, IdenticalValueHandOver,
     WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor,
     NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet,
-    DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion,
+    DisabledRuleNoOpinion, RemovedMappingRecall, PriorityReorderPropagation, OutOfScopeNoOpinion,
     EnforceStateCorrectsLoser, ScopedExceptionAuthority, DisabledExceptionKeepsSlot,
     EnforceStateCorrectsMultiValuedSet, ScopedExceptionWriteback,
     GraceFreezesSoleSource,
@@ -325,7 +337,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "PriorityReorderPropagation", "OutOfScopeNoOpinion", "EnforceStateCorrectsLoser", "ScopedExceptionAuthority", "DisabledExceptionKeepsSlot", "EnforceStateCorrectsMultiValuedSet", "ScopedExceptionWriteback", "GraceFreezesSoleSource", "GraceExpiryDeletesAndExports", "GraceFallbackFlowsAndExports", "GraceAssertedNullBeatsSurvivor", "GraceExpressionInputFallback", "All")]
+    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "RemovedMappingRecall", "PriorityReorderPropagation", "OutOfScopeNoOpinion", "EnforceStateCorrectsLoser", "ScopedExceptionAuthority", "DisabledExceptionKeepsSlot", "EnforceStateCorrectsMultiValuedSet", "ScopedExceptionWriteback", "GraceFreezesSoleSource", "GraceExpiryDeletesAndExports", "GraceFallbackFlowsAndExports", "GraceAssertedNullBeatsSurvivor", "GraceExpressionInputFallback", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -1655,6 +1667,160 @@ userPassword: Test@123!
                 Name = "DisabledRuleNoOpinion"
                 Success = $disabledRuleSuccess
                 Note = ($disabledRuleNotes -join "; ")
+            }
+        }
+    }
+
+    # ========================================================================
+    # Test 10b: RemovedMappingRecall
+    # ========================================================================
+    if ($Step -eq "RemovedMappingRecall" -or $Step -eq "All") {
+        Write-TestSection "Test 10b: Removed Mapping Recall (Dave, deleting Primary's Description mapping recalls and re-elects in Primary's own Full Synchronisation)"
+
+        $removedMappingSuccess = $true
+        $removedMappingNotes = @()
+
+        try {
+            $primaryImportRuleName = "$primarySystemName Import Users"
+            $secondaryImportRuleName = "$secondarySystemName Import Users"
+
+            $primaryImportRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq $primaryImportRuleName } | Select-Object -First 1
+            if (-not $primaryImportRule) {
+                throw "Could not resolve '$primaryImportRuleName' Synchronisation Rule."
+            }
+
+            $daveMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-3" -PageSize 5) | Select-Object -First 1
+            if (-not $daveMvo) {
+                throw "Could not resolve Dave (S14-3) Metaverse Object."
+            }
+
+            $mvUserTypeForRemoval = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
+            $mvDescriptionAttr = @(Get-JIMMetaverseAttribute) | Where-Object { $_.name -eq "Description" }
+            if (-not $mvUserTypeForRemoval -or -not $mvDescriptionAttr) {
+                throw "Could not resolve the Metaverse 'User' object type and/or the 'Description' attribute."
+            }
+
+            $primaryObjectTypes = @(Get-JIMConnectedSystem -Id $primarySystem.id -ObjectTypes)
+            $primaryUserType = $primaryObjectTypes | Where-Object { $_.name -eq "inetOrgPerson" }
+            $descriptionCsAttr = $primaryUserType.attributes | Where-Object { $_.name -eq "description" }
+            if (-not $descriptionCsAttr) {
+                throw "'description' not found on the Primary system's inetOrgPerson object type."
+            }
+
+            # Require the inherited Primary=1/Secondary=2 order before mutating, exactly as
+            # PriorityReorderPropagation does: a prior step failing to restore its own configuration
+            # mutation should fail loudly here, not corrupt this step's assertions.
+            $priorityBefore = Get-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForRemoval.id
+            $contributorsBefore = @($priorityBefore.contributors)
+            $primaryContributorBefore = $contributorsBefore | Where-Object { $_.connectedSystemName -eq $primarySystemName }
+            $secondaryContributorBefore = $contributorsBefore | Where-Object { $_.connectedSystemName -eq $secondarySystemName }
+            if (-not $primaryContributorBefore -or -not $secondaryContributorBefore) {
+                throw "Could not resolve both 'Description' contributors from Attribute Priority read-back."
+            }
+            if ($primaryContributorBefore.priority -ne 1 -or $secondaryContributorBefore.priority -ne 2) {
+                throw "Expected the inherited Primary=1/Secondary=2 order for 'Description' at the start of this step; found Primary=$($primaryContributorBefore.priority), Secondary=$($secondaryContributorBefore.priority). A prior step may not have restored its own configuration mutation."
+            }
+
+            # Delete Primary's Description mapping outright: the strongest form of "this flow's effects
+            # must stop being asserted" (DisabledRuleNoOpinion proves the disabled-rule sibling). The
+            # deletion also stamps the parent Synchronisation Rule's LastUpdated so the configuration
+            # watermark advances (#1533); without that, a Full Synchronisation would keep its
+            # unchanged-object optimisation on and never revisit the objects whose values the deleted
+            # mapping contributed, which is exactly how the issue was observed live.
+            $primaryMappings = @(Get-JIMSyncRuleMapping -SyncRuleId $primaryImportRule.id)
+            $primaryDescriptionMapping = $primaryMappings | Where-Object { $_.targetMetaverseAttributeId -eq $mvDescriptionAttr.id } | Select-Object -First 1
+            if (-not $primaryDescriptionMapping) {
+                throw "Could not resolve Primary's 'Description' Attribute Flow mapping."
+            }
+            Write-Host "Deleting Primary's 'Description' Attribute Flow mapping (id $($primaryDescriptionMapping.id))..." -ForegroundColor Gray
+            Remove-JIMSyncRuleMapping -SyncRuleId $primaryImportRule.id -MappingId $primaryDescriptionMapping.id -Force | Out-Null
+
+            $primaryMappingsAfterDelete = @(Get-JIMSyncRuleMapping -SyncRuleId $primaryImportRule.id)
+            if ($primaryMappingsAfterDelete | Where-Object { $_.targetMetaverseAttributeId -eq $mvDescriptionAttr.id }) {
+                throw "Primary's 'Description' mapping still exists after Remove-JIMSyncRuleMapping."
+            }
+            Write-Host "  OK Primary's 'Description' mapping deleted and verified via read-back" -ForegroundColor Green
+
+            # A Full Synchronisation of PRIMARY ITSELF drives the recall (#1533). This is the deliberate
+            # contrast with DisabledRuleNoOpinion, where the disabled system's own rule is filtered out of
+            # activeSyncRules and only the SURVIVING system's run re-elects: here the rule is alive and its
+            # objects are visited, and each visited object's Description value carries provenance naming a
+            # mapping that no longer exists in the Attribute Priority contributor cache. The engine treats
+            # that dangling provenance as "no opinion" (SyncEngine.RecallOrphanedContributions), stages the
+            # recall, and the same run's withdrawal re-election hands the attribute to the surviving
+            # Secondary contributor rather than leaving the stale value or blanking it until Secondary
+            # next synchronises.
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) after deleting Primary's 'Description' mapping"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Secondary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $secondaryImportRuleName `
+                -Name "Dave's Description (mapping deleted: Primary's own Full Synchronisation recalls the value and re-elects Secondary in the same run)"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Job Title" `
+                -ExpectedValue "Coordinator (Primary)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Job Title (control: only the Description mapping was deleted)"
+
+            # Blast radius: deleting Primary's Description mapping orphans EVERY Primary-sourced
+            # Description across the joined population, and the same Full Synchronisation (Primary) run
+            # recalls each of them: Frank's and Grace's hand over to Secondary like Dave's; Carol's and
+            # Erin's are already Secondary-sourced or absent since Phases B/C and see no change; Alice
+            # and Bob have no Primary CSO and are unaffected. Not asserted individually here, to keep the
+            # step's assertions scoped to its named subject.
+            $removedMappingNotes += "Deleting Primary's 'Description' mapping and running Full Synchronisation (Primary) recalled Dave's Primary-sourced Description and re-elected Secondary's value in the same run (Frank and Grace likewise, per the blast radius comment; not asserted individually)"
+
+            # Restore: re-create the mapping and put Description back to Primary=1/Secondary=2. The
+            # deletion re-densified the surviving contributor to priority 1 and the re-created mapping
+            # joins the list at the end, so the order must be restored explicitly with the re-created
+            # mapping's NEW id (the deleted mapping's id is gone for good).
+            Write-Host "Re-creating Primary's 'Description' Attribute Flow mapping..." -ForegroundColor Gray
+            New-JIMSyncRuleMapping -SyncRuleId $primaryImportRule.id `
+                -TargetMetaverseAttributeId $mvDescriptionAttr.id `
+                -SourceConnectedSystemAttributeId $descriptionCsAttr.id | Out-Null
+
+            $priorityAfterRecreate = Get-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForRemoval.id
+            $contributorsAfterRecreate = @($priorityAfterRecreate.contributors)
+            $primaryContributorAfter = $contributorsAfterRecreate | Where-Object { $_.connectedSystemName -eq $primarySystemName }
+            $secondaryContributorAfter = $contributorsAfterRecreate | Where-Object { $_.connectedSystemName -eq $secondarySystemName }
+            if (-not $primaryContributorAfter -or -not $secondaryContributorAfter) {
+                throw "Could not resolve both 'Description' contributors after re-creating Primary's mapping."
+            }
+            Set-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForRemoval.id `
+                -MappingId @($primaryContributorAfter.mappingId, $secondaryContributorAfter.mappingId) | Out-Null
+
+            $priorityRestored = Get-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForRemoval.id
+            $contributorsRestored = @($priorityRestored.contributors)
+            $primaryRestored = $contributorsRestored | Where-Object { $_.connectedSystemName -eq $primarySystemName }
+            $secondaryRestored = $contributorsRestored | Where-Object { $_.connectedSystemName -eq $secondarySystemName }
+            if (-not $primaryRestored -or $primaryRestored.priority -ne 1 -or -not $secondaryRestored -or $secondaryRestored.priority -ne 2) {
+                throw "'Description' priority read-back mismatch after restore: expected Primary=1/Secondary=2, got $(@($contributorsRestored | ForEach-Object { "$($_.connectedSystemName)=$($_.priority)" }) -join ', ')"
+            }
+            Write-Host "  OK Primary's 'Description' mapping re-created and priority restored to Primary=1, Secondary=2" -ForegroundColor Green
+
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) after re-creating Primary's 'Description' mapping"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Description (mapping re-created at priority 1: Primary retakes, restoring the inherited end-state)"
+
+            $removedMappingNotes += "Re-creating the mapping at Primary=1 and running Full Synchronisation (Primary) restored Dave's Description to Primary (and, per the same blast radius, every other Primary-joined subject's)"
+        }
+        catch {
+            $removedMappingSuccess = $false
+            $removedMappingNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "RemovedMappingRecall"
+                Success = $removedMappingSuccess
+                Note = ($removedMappingNotes -join "; ")
             }
         }
     }
@@ -3046,9 +3212,9 @@ userPassword: Test@123!
 
 
     # Inherited end-state at this point (under -Step All, or after the last Phase D/E step run
-    # standalone left its flags/data in place): Phase D's two steps (DisabledRuleNoOpinion,
-    # PriorityReorderPropagation) each restore their own configuration mutation (rule Enabled state;
-    # Attribute Priority order) before returning, so the state below is UNCHANGED from Phase C's
+    # standalone left its flags/data in place): Phase D's three steps (DisabledRuleNoOpinion,
+    # RemovedMappingRecall, PriorityReorderPropagation) each restore their own configuration mutation
+    # (rule Enabled state; mapping existence; Attribute Priority order) before returning, so the state below is UNCHANGED from Phase C's
     # inherited end-state for everyone except Erin. Frank (S14-5) has both Job Title and Other
     # Telephones asserted null with Primary provenance; Grace (S14-6) is joined to BOTH suffixes,
     # with her Job Title asserted null (Primary provenance) and her Description Primary-sourced;

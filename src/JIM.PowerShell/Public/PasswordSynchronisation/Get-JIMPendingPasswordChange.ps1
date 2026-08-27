@@ -13,8 +13,10 @@ function Get-JIMPendingPasswordChange {
 
         A change is in one of four states:
 
-        - Pending: JIM still intends to deliver it. Read the Due property alongside this, which says whether the
-          next delivery pass would attempt it: a Pending change may be waiting out a retry backoff.
+        - Pending: JIM still intends to deliver it. Read the Due and Held properties alongside this, which say
+          whether the next delivery pass would attempt it: a Pending change may be waiting out a retry backoff,
+          or be Held because Password Synchronisation is switched off on its Connected System. A held change is
+          never due; switching the system on delivers everything that accumulated for it.
         - Parked: the target refused it, or it ran out of attempts. JIM has stopped trying and it waits on a
           person. FailureReason and TargetMessage say why, in the target's own words.
         - Expired: it outlived its Connected System's time to live. The password it carried is gone and nothing
@@ -90,9 +92,18 @@ function Get-JIMPendingPasswordChange {
         Lists every parked change for one Connected System, following pagination.
 
     .EXAMPLE
-        Get-JIMPendingPasswordChange -Status Pending | Where-Object { -not $_.Due }
+        Get-JIMPendingPasswordChange -Status Pending | Where-Object { -not $_.Due -and -not $_.Held }
 
-        Lists changes waiting out a retry backoff, as opposed to those the next delivery pass will attempt.
+        Lists changes waiting out a retry backoff, as opposed to those the next delivery pass will attempt or
+        those held behind a Connected System that is switched off.
+
+    .EXAMPLE
+        Get-JIMPendingPasswordChange -Status Pending -All | Where-Object Held |
+            Group-Object ConnectedSystemName | Select-Object Name, Count
+
+        Lists the Connected Systems holding password changes because Password Synchronisation is switched off on
+        them, and how many each is holding. Worth running before a change window closes: every one of these
+        expires eventually, and switching the system back on is what delivers them.
 
     .LINK
         Resume-JIMPendingPasswordChange

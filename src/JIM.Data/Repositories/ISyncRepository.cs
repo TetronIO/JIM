@@ -681,6 +681,12 @@ public interface ISyncRepository
     /// <summary>
     /// Which Connected Systems have password changes due now, so a delivery pass can be raised only for the
     /// systems that have work rather than for every configured one.
+    /// <para>
+    /// A system with Password Synchronisation switched off is never among them, however much it has accumulated:
+    /// a pass steps over it without touching its changes, so reporting it as due would have the worker's idle
+    /// sweep raise a pointless pass every minute for as long as the system stayed off. Those changes are not
+    /// due, they are held; enabling the system is what asks for the pass that delivers them.
+    /// </para>
     /// </summary>
     Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf);
 

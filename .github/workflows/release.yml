@@ -24,11 +24,15 @@ permissions:
   id-token: write    # For cosign signing
   attestations: write # For SLSA provenance
 
+# Split-trust runner model (see ci.yml): tag pushes come only from authorised
+# maintainers, so every job here runs on the fast self-hosted runner. Nothing
+# pull_request-triggered ever runs on that runner, which is what keeps building
+# release artefacts on it acceptable for a public repo.
 jobs:
   # Job 1: Validate build, tests, and version consistency
   validate:
     name: Validate Build & Tests
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Checkout
@@ -90,7 +94,7 @@ jobs:
   # Job 2: Build, scan, smoke-test, and push Docker images
   build-containers:
     name: Build & Push Docker Images
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: validate
 
     strategy:
@@ -261,7 +265,7 @@ jobs:
   # the "pages" concurrency group with docs.yml and publish-api-reference.yml.
   publish-docs:
     name: Publish Documentation Site
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [validate, build-containers]
     # Narrower than the workflow-level grant: this job only reads the repo and pulls
     # the released image. The Pages write happens in deploy-docs.
@@ -319,7 +323,7 @@ jobs:
   # Job 3b: Deploy the built documentation site to GitHub Pages.
   deploy-docs:
     name: Deploy Documentation Site
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: publish-docs
     permissions:
       pages: write
@@ -343,7 +347,7 @@ jobs:
   # Depends on build-containers to ensure nothing publishes if Docker builds fail
   publish-powershell:
     name: Publish PowerShell Module
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [validate, build-containers]
 
     steps:
@@ -423,7 +427,7 @@ jobs:
   # Job 4: Create release bundle for air-gapped deployments
   create-bundle:
     name: Create Release Bundle
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: build-containers
 
     outputs:
@@ -471,7 +475,7 @@ jobs:
   # Job 5: Create GitHub Release
   create-release:
     name: Create GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [build-containers, publish-powershell, create-bundle]
 
     steps:
@@ -561,7 +565,7 @@ jobs:
   # with Contents: write). The token is scoped to junctional.io alone.
   notify-site:
     name: Notify junctional.io
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: create-release
     if: ${{ !contains(github.ref, '-') }}
 

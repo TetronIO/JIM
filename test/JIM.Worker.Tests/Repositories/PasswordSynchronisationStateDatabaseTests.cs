@@ -176,4 +176,48 @@ public class PasswordSynchronisationStateDatabaseTests
             Assert.That(states.ContainsKey(asked), Is.True);
         }
     }
+
+    /// <summary>
+    /// Fan-out asks this query which systems a password change is queued for, and a configured system that is
+    /// switched off must be among them (requirement 2): it accumulates while it is off, and delivering what
+    /// accumulated is the whole point of switching it back on (requirement 3). A query that answered with the
+    /// enabled systems alone would discard the change for that system instead, and nothing downstream could tell,
+    /// because a change that was never queued leaves nothing behind to notice.
+    /// </summary>
+    [Test]
+    public async Task GetPasswordSynchronisationTargetsAsync_IncludesAConfiguredButDisabledSystemAsync()
+    {
+        var enabled = await SeedSystemAsync("Corporate AD", connectorSupportsPasswordSet: true, enabled: true);
+        var disabled = await SeedSystemAsync("Contractor LDAP", connectorSupportsPasswordSet: true, enabled: false);
+        await SeedSystemAsync("HR SQL", connectorSupportsPasswordSet: true, enabled: null);
+
+        await using var ctx = NewContext();
+        var targets = await new PostgresDataRepository(ctx).ConnectedSystems.GetPasswordSynchronisationTargetsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(targets.Select(t => t.ConnectedSystemId), Is.EquivalentTo(new[] { enabled, disabled }),
+                "a system nobody configured is not a target; one that is configured but switched off is.");
+            Assert.That(targets.Single(t => t.ConnectedSystemId == enabled).Enabled, Is.True);
+            Assert.That(targets.Single(t => t.ConnectedSystemId == disabled).Enabled, Is.False,
+                "delivery reads this to hold the change back rather than sending it to a system that is off.");
+        }
+    }
+
+    /// <summary>
+    /// The effective time to live is resolved from the Connected System, falling back to JIM's default where the
+    /// system names none. Pinned against a real provider because the fallback lives on the entity rather than in
+    /// the query, and the two would drift silently if it were ever restated in SQL.
+    /// </summary>
+    [Test]
+    public async Task GetPasswordSynchronisationTargetsAsync_ResolvesTheEffectiveTimeToLiveAsync()
+    {
+        var id = await SeedSystemAsync("Corporate AD", connectorSupportsPasswordSet: true, enabled: true);
+
+        await using var ctx = NewContext();
+        var targets = await new PostgresDataRepository(ctx).ConnectedSystems.GetPasswordSynchronisationTargetsAsync();
+
+        Assert.That(targets.Single(t => t.ConnectedSystemId == id).TimeToLive,
+            Is.EqualTo(new ConnectedSystem().EffectiveInitialPasswordTimeToLive));
+    }
 }

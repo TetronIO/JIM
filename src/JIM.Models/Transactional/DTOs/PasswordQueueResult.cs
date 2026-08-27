@@ -36,6 +36,14 @@ public class PasswordQueueTargetOutcome
     public string ConnectedSystemName { get; set; } = string.Empty;
 
     /// <summary>
+    /// Whether this system is currently taking synchronised passwords. False means the change was queued and is
+    /// being held: a configured system that is switched off accumulates rather than discards, and enabling it
+    /// delivers what accumulated. Reported so a caller can tell "on its way" from "waiting for somebody to
+    /// switch the system on", which are the same thing to the queue and very different to an administrator.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
     /// The account the change is aimed at, or null where the identity has no account in this system yet.
     /// <para>
     /// Null is an ordinary outcome rather than a failure: the change waits, bounded by its time to live, and

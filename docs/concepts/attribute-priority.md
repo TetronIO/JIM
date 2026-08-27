@@ -16,6 +16,8 @@ Because priority is held per Synchronisation Rule mapping, the same Connected Sy
 
 A single-source attribute (only one rule maps to it) needs no configuration and is unaffected.
 
+**The contributors are always different Synchronisation Rules; one rule cannot contribute twice.** A Synchronisation Rule can carry at most one Attribute Flow per target attribute, and JIM refuses a second, so a priority list is never an ordering of two mappings from the same rule. To fall back between two source attributes of the same system within one rule, use a single expression mapping (`Coalesce(cs["jimBadgeColour"], cs["roomNumber"])`); to give the same system two positions in the priority order, use two differently-scoped Synchronisation Rules, as described below.
+
 ## 🎯 Giving one system authority over a subset of objects
 
 Because the priority list is a list of **Synchronisation Rules**, not of Connected Systems, a system can appear in it more than once through rules with different Scoping Criteria. That is how you express "this system is authoritative for these objects, that system is authoritative for the rest" without any extra machinery.
@@ -60,6 +62,10 @@ This means an authoritative source leaving hands an attribute down to the next s
 Re-election covers every attribute type, including references: a manager or group membership recalled from a departing source is handed to the surviving contributor within the same synchronisation run, not left blank until that source next synchronises. It also holds when the surviving source carries the identical value; the value simply remains, now attributed to the surviving contributor.
 
 The same hand-over applies when the winning source stays connected but simply stops supplying a value, without "Null is a value" set: for example, an expression that starts evaluating to null, or a source attribute that becomes unpopulated. The next-priority contributor takes over in the same synchronisation run, exactly as it would if the winning source had disconnected. Only when no other source contributes is the attribute cleared.
+
+Removing the flow itself behaves the same way, with one deliberate distinction between deleting and disabling. When the Attribute Flow mapping that contributed a value is **deleted**, nothing asserts that value any more: the next Full Synchronisation of the contributing Connected System recalls the values the mapping contributed and re-elects the next contributor in the same run, or clears the attribute (reported as an **MVO No Contributor** outcome) when no contributor survives. An administrator deleting a flow can therefore expect its effects to stop being asserted at the next Full Synchronisation, rather than lingering until the source data happens to change.
+
+**Disabling** a mapping, or its whole Synchronisation Rule, is a pause rather than a removal. A disabled flow contributes nothing, so a surviving contributor still takes the attribute over exactly as above; but where the disabled flow was the only contributor, its values are retained rather than cleared, ready for the flow to be re-enabled. To withdraw a sole contributor's values, delete the mapping instead.
 
 ## 🔍 Seeing resolution decisions
 
