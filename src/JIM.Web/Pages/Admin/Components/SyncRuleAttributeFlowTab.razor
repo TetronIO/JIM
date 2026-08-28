@@ -1368,7 +1368,14 @@
             var existingChoice = MappingRemovalChoices.FirstOrDefault(c => c.MappingId == attributeFlowRule.Id);
             if (existingChoice != null)
                 MappingRemovalChoices.Remove(existingChoice);
-            MappingRemovalChoices.Add(new SyncRuleMappingRemovalChoice { MappingId = attributeFlowRule.Id, KeepContributedValues = keepContributedValues });
+            MappingRemovalChoices.Add(new SyncRuleMappingRemovalChoice
+            {
+                MappingId = attributeFlowRule.Id,
+                KeepContributedValues = keepContributedValues,
+                // recorded for the Attribute Flow preview, which can no longer read the target from the staged
+                // rule once the mapping is removed; the save resolves the authoritative target itself.
+                TargetMetaverseAttributeId = attributeFlowRule.TargetMetaverseAttributeId ?? attributeFlowRule.TargetMetaverseAttribute?.Id
+            });
         }
 
         await RefreshFlowGridAsync();

@@ -565,7 +565,12 @@ else if (_syncRule != null)
     /// compare against, which is why the page does not need to snapshot them itself.
     /// </summary>
     private SyncRuleAttributeFlowProposal BuildAttributeFlowProposal() =>
-        SyncRuleAttributeFlowProposal.FromCurrentMappings(_syncRule!);
+        // the staged removal choices ride along so the preview states each removal's actual behaviour
+        // (recall by default, keep where chosen), and a changed choice makes a shown preview stale.
+        SyncRuleAttributeFlowProposal.FromCurrentMappings(_syncRule!,
+            [.. _mappingRemovalChoices
+                .Where(c => c.KeepContributedValues && c.TargetMetaverseAttributeId.HasValue)
+                .Select(c => c.TargetMetaverseAttributeId!.Value)]);
 
     /// <summary>
     /// Whether the mappings have moved on from the ones the visible preview was run against.

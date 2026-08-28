@@ -28,4 +28,12 @@ public class SyncRuleMappingRemovalChoice
     /// next Full Synchronisation of the contributing system.
     /// </summary>
     public bool KeepContributedValues { get; set; }
+
+    /// <summary>
+    /// The target Metaverse Attribute of the removed mapping, recorded by the portal at choice time so the
+    /// Attribute Flow preview can state each removal's chosen behaviour (the staged rule no longer holds the
+    /// mapping to read it from). Advisory and display-side only: the save resolves the authoritative target
+    /// from the persisted mapping and never trusts this value.
+    /// </summary>
+    public int? TargetMetaverseAttributeId { get; set; }
 }
