@@ -3366,7 +3366,10 @@ public class MetaverseRepository : IMetaverseRepository
             .Where(av => av.ContributedBySyncRuleId == syncRuleId);
 
         if (metaverseAttributeId.HasValue)
-            query = query.Where(av => av.AttributeId == metaverseAttributeId.Value);
+        {
+            var attributeId = metaverseAttributeId.Value;
+            query = query.Where(av => av.AttributeId == attributeId);
+        }
 
         var attributes = await query
             .GroupBy(av => new { av.AttributeId, av.Attribute.Name })
@@ -3406,7 +3409,10 @@ public class MetaverseRepository : IMetaverseRepository
             .Where(av => av.ContributedBySyncRuleId == syncRuleId);
 
         if (metaverseAttributeId.HasValue)
-            query = query.Where(av => av.AttributeId == metaverseAttributeId.Value);
+        {
+            var attributeId = metaverseAttributeId.Value;
+            query = query.Where(av => av.AttributeId == attributeId);
+        }
 
         // ContributedBySystemId is deliberately left standing: severing mirrors what rule deletion's
         // ON DELETE SET NULL produces, and the denormalised system record is what survives that too.

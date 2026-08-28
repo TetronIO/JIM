@@ -7078,14 +7078,16 @@ public partial class ConnectedSystemServer
         // Sever BEFORE the row deletion. Nothing in the deletion itself touches value provenance (it keys on
         // the rule, which survives), but severing first means a failure between the two steps cannot leave the
         // mapping gone with the keep unhonoured and the values still eligible for recall.
-        if (keepContributedValues && result.AffectedValueCount > 0)
+        if (keepContributedValues && result.AffectedValueCount > 0 && targetMetaverseAttributeId.HasValue)
         {
-            var severedCount = await Application.Repository.Metaverse.SeverContributedValueProvenanceAsync(syncRuleId, targetMetaverseAttributeId!.Value);
+            // affected values imply an import target, but CodeQL cannot see that; capture the value once.
+            var severedAttributeId = targetMetaverseAttributeId.Value;
+            var severedCount = await Application.Repository.Metaverse.SeverContributedValueProvenanceAsync(syncRuleId, severedAttributeId);
             result.ContributedValuesKept = true;
             Log.Information(
                 "DeleteSyncRuleMappingAsync: keep chosen for mapping {MappingId} (Synchronisation Rule {SyncRuleId}, Metaverse attribute {AttributeId}); " +
                 "severed provenance on {SeveredCount} value(s) across {ObjectCount} Metaverse Object(s).",
-                mapping.Id, syncRuleId, targetMetaverseAttributeId.Value, severedCount, result.AffectedObjectCount);
+                mapping.Id, syncRuleId, severedAttributeId, severedCount, result.AffectedObjectCount);
         }
 
         // Capture the import mapping's attribute scope before deletion so the remaining contributors can be re-densified.

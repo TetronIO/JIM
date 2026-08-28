@@ -279,10 +279,9 @@ public class MappingDeletionChoiceWorkflowTests : WorkflowTestBase
         // Entry().State rather than DbSet.Add: Add walks the whole navigation graph and marks every untracked
         // entity it reaches for insertion, and a sync-produced Metaverse Object's graph reaches duplicate
         // instances of already-persisted rows (see "DbSet.Add Walks the Graph" in src/CLAUDE.md).
-        foreach (var mvo in SyncRepo.MetaverseObjects.Values)
+        foreach (var mvo in SyncRepo.MetaverseObjects.Values
+                     .Where(mvo => !DbContext.MetaverseObjects.Local.Any(existing => existing.Id == mvo.Id)))
         {
-            if (DbContext.MetaverseObjects.Local.Any(existing => existing.Id == mvo.Id))
-                continue;
             DbContext.Entry(mvo).State = Microsoft.EntityFrameworkCore.EntityState.Added;
             foreach (var attributeValue in mvo.AttributeValues)
                 DbContext.Entry(attributeValue).State = Microsoft.EntityFrameworkCore.EntityState.Added;

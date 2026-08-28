@@ -78,29 +78,20 @@ public static class ContributorReElectionService
         var joinedCsos = await syncRepository.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
 
         // Gather the distinct (surviving CSO, contributing rule) pairs to re-flow, highest priority first so the
-        // strongest surviving contributor is written first and the gate skips the rest.
-        var survivorsToReflow = new List<(ConnectedSystemObject Cso, SyncRule Rule)>();
-        var seen = new HashSet<(Guid CsoId, int RuleId)>();
-
-        foreach (var attributeId in reElectableAttributeIds)
-        {
-            // Contributing rules eligible under the recall scope. Project to the rule and filter in one
-            // pipeline so ineligible rules and any rule-less mapping are excluded before the body.
-            foreach (var rule in priorityContext.GetContributors(objectTypeId, attributeId)
-                         .Select(c => c.SyncRule)
-                         .Where(r => r != null && scope.IsEligibleContributorRule(r))
-                         .Select(r => r!))
-            {
-                foreach (var survivor in joinedCsos.Where(c =>
-                             c.ConnectedSystemId == rule.ConnectedSystemId &&
-                             scope.IsEligibleSurvivor(c) &&
-                             c.Status != ConnectedSystemObjectStatus.Obsolete))
-                {
-                    if (seen.Add((survivor.Id, rule.Id)))
-                        survivorsToReflow.Add((survivor, rule));
-                }
-            }
-        }
+        // strongest surviving contributor is written first and the gate skips the rest. DistinctBy keeps each
+        // pair's first (highest-priority) occurrence, so the ordering guarantee survives the dedup.
+        var survivorsToReflow = reElectableAttributeIds
+            .SelectMany(attributeId => priorityContext.GetContributors(objectTypeId, attributeId)
+                .Select(c => c.SyncRule)
+                .Where(r => r != null && scope.IsEligibleContributorRule(r))
+                .Select(r => r!)
+                .SelectMany(rule => joinedCsos
+                    .Where(c => c.ConnectedSystemId == rule.ConnectedSystemId &&
+                                scope.IsEligibleSurvivor(c) &&
+                                c.Status != ConnectedSystemObjectStatus.Obsolete)
+                    .Select(survivor => (Cso: survivor, Rule: rule))))
+            .DistinctBy(pair => (pair.Cso.Id, pair.Rule.Id))
+            .ToList();
 
         if (objectTypes == null)
             throw new MissingMemberException("objectTypes is null!");
