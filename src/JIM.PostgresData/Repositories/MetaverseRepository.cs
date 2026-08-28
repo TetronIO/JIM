@@ -1079,6 +1079,25 @@ public class MetaverseRepository : IMetaverseRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<MetaverseObject>> GetMetaverseObjectsByIdsForUpdateAsync(IEnumerable<Guid> ids)
+    {
+        var idList = ids as IReadOnlyCollection<Guid> ?? ids.ToList();
+        if (idList.Count == 0)
+            return new List<MetaverseObject>();
+
+        // Tracked (with the tracker's identity resolution), so shared principals such as each object's
+        // MetaverseObjectType materialise once and the graph can be mutated and persisted alongside other
+        // tracked loads without attach-time identity conflicts. See the interface doc.
+        return await Repository.Database.MetaverseObjects
+            .AsTracking()
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Where(mvo => idList.Contains(mvo.Id))
+            .ToListAsync();
+    }
+
     public async Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids)
     {
         if (ids.Count == 0)

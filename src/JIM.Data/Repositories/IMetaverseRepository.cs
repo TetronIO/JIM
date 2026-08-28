@@ -70,6 +70,16 @@ public interface IMetaverseRepository
     public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// Batch-loads Metaverse Objects by ID with their Type and attribute values, TRACKED, for callers that
+    /// mutate and persist the loaded graph in the same context (#1537's deletion recall). The no-tracking
+    /// sibling above is unusable there: without identity resolution it materialises duplicate instances of
+    /// shared principals (each object's <c>MetaverseObjectType</c>), and persisting alongside anything the
+    /// context already tracks (a re-elected survivor's hydration) throws an identity conflict on attach.
+    /// Only a real database exhibits this; the in-memory test provider always tracks and masks it.
+    /// </summary>
+    public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsForUpdateAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
     /// The cached display names of the given Metaverse Objects, keyed by id, for naming an object in a
     /// message without loading its attribute values (issue #1398). Objects that do not exist are absent
     /// from the result; objects with no cached name map to null.

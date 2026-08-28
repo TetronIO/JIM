@@ -73,7 +73,11 @@ public partial class ConnectedSystemServer
 
             foreach (var batch in affectedMvoIds.Chunk(batchSize))
             {
-                var metaverseObjects = await Application.SyncRepo.GetMetaverseObjectsByIdsNoTrackingAsync(batch);
+                // Tracked load: the re-election path hydrates survivors as tracked entities in this same
+                // context, and persisting a no-tracking graph beside them throws an identity conflict on
+                // shared principals (each object's MetaverseObjectType). Found at runtime; the in-memory
+                // test provider always tracks and cannot catch it.
+                var metaverseObjects = await Application.SyncRepo.GetMetaverseObjectsByIdsForUpdateAsync(batch);
                 await Application.ExportEvaluation.RefreshExportEvaluationCacheForPageAsync(exportEvaluationCache, batch);
 
                 var changedMvos = new List<MetaverseObject>();

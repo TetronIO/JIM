@@ -1163,6 +1163,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(ids);
     }
 
+    // In-memory store: tracked and no-tracking loads are the same object references.
+    public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsForUpdateAsync(IEnumerable<Guid> ids)
+        => GetMetaverseObjectsByIdsNoTrackingAsync(ids);
+
     public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids)
     {
         var result = ids

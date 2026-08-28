@@ -519,8 +519,21 @@ public class Worker : BackgroundService
                                         {
                                             // On failure the rule survives, still disabled with its
                                             // deletion-in-progress reason, so the deletion can be retried.
-                                            await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                            // Log BEFORE attempting to fail the Activity: the failure that
+                                            // lands here can leave the task's DbContext unusable, in which
+                                            // case FailActivityWithErrorAsync throws too and an
+                                            // await-first ordering would swallow both errors, escape the
+                                            // task body unobserved, and leave the task row stuck InProgress
+                                            // with nothing in the logs (observed at runtime, #1537).
                                             Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing Synchronisation Rule deletion recall task.");
+                                            try
+                                            {
+                                                await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                            }
+                                            catch (Exception failEx)
+                                            {
+                                                Log.Error(failEx, "ExecuteAsync: Additionally failed to mark the Synchronisation Rule deletion recall Activity as failed.");
+                                            }
                                         }
                                         finally
                                         {
