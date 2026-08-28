@@ -44,6 +44,14 @@ public class AttributePriorityOrderTests
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockCsRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
 
+        // The deletion-choice impact summary (#1537) is read on every rule delete; empty means no
+        // contributed values, which is the synchronous delete path these tests exercise.
+        var mockMetaverseRepo = new Mock<IMetaverseRepository>();
+        mockMetaverseRepo
+            .Setup(r => r.GetContributedValuesSummaryAsync(It.IsAny<int>(), It.IsAny<int?>()))
+            .ReturnsAsync(new ContributedValuesSummary());
+        _mockRepository.Setup(r => r.Metaverse).Returns(mockMetaverseRepo.Object);
+
         // Activity persistence is a no-op for these tests (we assert on the renumbering, not the audit trail).
         _mockActivityRepo
             .Setup(r => r.CreateActivityAsync(It.IsAny<JIM.Models.Activities.Activity>()))

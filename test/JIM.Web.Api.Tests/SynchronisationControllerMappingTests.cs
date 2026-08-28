@@ -652,6 +652,212 @@ public class SynchronisationControllerMappingTests
 
     #endregion
 
+    #region Mapping deletion keep choice (#1537)
+
+    [Test]
+    public async Task DeleteSyncRuleMappingAsync_KeepContributedValues_SeversProvenanceAsync()
+    {
+        var syncRuleId = 1;
+        var mappingId = 10;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Test Rule" };
+        var mapping = new SyncRuleMapping
+        {
+            Id = mappingId,
+            SyncRule = syncRule,
+            SyncRuleId = syncRuleId,
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 5, Name = "displayName" },
+            TargetMetaverseAttributeId = 5
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId))
+            .ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(mappingId))
+            .ReturnsAsync(mapping);
+        _mockMetaverseRepo.Setup(r => r.GetContributedValuesSummaryAsync(syncRuleId, 5))
+            .ReturnsAsync(new ContributedValuesSummary
+            {
+                Attributes =
+                [
+                    new ContributedValuesAttributeSummary { AttributeId = 5, AttributeName = "displayName", ValueCount = 3, ObjectCount = 2 }
+                ],
+                TotalObjects = 2
+            });
+
+        var result = await _controller.DeleteSyncRuleMappingAsync(syncRuleId, mappingId, keepContributedValues: true);
+
+        Assert.That(result, Is.InstanceOf<NoContentResult>(), "a mapping delete queues nothing, so keep still answers 204");
+        _mockMetaverseRepo.Verify(r => r.SeverContributedValueProvenanceAsync(syncRuleId, 5), Times.Once,
+            "keep must sever the values' provenance before the row deletion");
+        _mockConnectedSystemRepo.Verify(r => r.DeleteSyncRuleMappingAsync(mapping), Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteSyncRuleMappingAsync_DefaultRecall_DoesNotSeverProvenanceAsync()
+    {
+        var syncRuleId = 1;
+        var mappingId = 10;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Test Rule" };
+        var mapping = new SyncRuleMapping
+        {
+            Id = mappingId,
+            SyncRule = syncRule,
+            SyncRuleId = syncRuleId,
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 5, Name = "displayName" },
+            TargetMetaverseAttributeId = 5
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId))
+            .ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(mappingId))
+            .ReturnsAsync(mapping);
+        _mockMetaverseRepo.Setup(r => r.GetContributedValuesSummaryAsync(syncRuleId, 5))
+            .ReturnsAsync(new ContributedValuesSummary
+            {
+                Attributes =
+                [
+                    new ContributedValuesAttributeSummary { AttributeId = 5, AttributeName = "displayName", ValueCount = 3, ObjectCount = 2 }
+                ],
+                TotalObjects = 2
+            });
+
+        var result = await _controller.DeleteSyncRuleMappingAsync(syncRuleId, mappingId);
+
+        Assert.That(result, Is.InstanceOf<NoContentResult>());
+        _mockMetaverseRepo.Verify(r => r.SeverContributedValueProvenanceAsync(It.IsAny<int>(), It.IsAny<int?>()), Times.Never,
+            "the default (recall) leaves provenance intact for the deferred orphan recall");
+        _mockConnectedSystemRepo.Verify(r => r.DeleteSyncRuleMappingAsync(mapping), Times.Once);
+    }
+
+    #endregion
+
+    #region Create-disabled parity (#1537)
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ImportMapping_WithEnabledFalse_CreatesMappingDisabledAsync()
+    {
+        const int syncRuleId = 1;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Import Rule", Direction = SyncRuleDirection.Import, ConnectedSystemObjectTypeId = objectTypeId };
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        SyncRuleMapping? captured = null;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+        _mockConnectedSystemRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()))
+            .Callback<SyncRuleMapping>(m => captured = m)
+            .Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>()))
+            .ReturnsAsync(() => captured);
+
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetMetaverseAttributeId = 5,
+            Enabled = false,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, ConnectedSystemAttributeId = 20 }
+            }
+        };
+
+        await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(captured, Is.Not.Null, "Mapping should have been created.");
+        Assert.That(captured!.Enabled, Is.False, "the mapping must be created disabled when the request says so");
+        Assert.That(captured!.DisabledReason, Is.Null, "an administrator's own choice records no disabled reason");
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ImportMapping_WithoutEnabled_DefaultsToEnabledAsync()
+    {
+        const int syncRuleId = 1;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Import Rule", Direction = SyncRuleDirection.Import, ConnectedSystemObjectTypeId = objectTypeId };
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        SyncRuleMapping? captured = null;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+        _mockConnectedSystemRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()))
+            .Callback<SyncRuleMapping>(m => captured = m)
+            .Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>()))
+            .ReturnsAsync(() => captured);
+
+        // No Enabled supplied: the entity default (true) must stand.
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetMetaverseAttributeId = 5,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, ConnectedSystemAttributeId = 20 }
+            }
+        };
+
+        await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.Enabled, Is.True, "an omitted Enabled must leave the mapping enabled, exactly as before");
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ExportMapping_WithEnabledFalse_CreatesMappingDisabledAsync()
+    {
+        const int syncRuleId = 2;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Export Rule", Direction = SyncRuleDirection.Export, ConnectedSystemObjectTypeId = objectTypeId };
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        SyncRuleMapping? captured = null;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+        _mockConnectedSystemRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()))
+            .Callback<SyncRuleMapping>(m => captured = m)
+            .Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>()))
+            .ReturnsAsync(() => captured);
+
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetConnectedSystemAttributeId = 20,
+            Enabled = false,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, MetaverseAttributeId = 5 }
+            }
+        };
+
+        await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(captured, Is.Not.Null, "Mapping should have been created.");
+        Assert.That(captured!.Enabled, Is.False, "Enabled applies to export mappings exactly as to import mappings");
+    }
+
+    #endregion
+
     #region Duplicate target rejection (#1532)
 
     [Test]

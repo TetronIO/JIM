@@ -31,6 +31,13 @@ public class StartSyncRuleAttributeFlowPreviewRequest
         ConfigurationChangePreviewDeltaPersistence.Capped;
 
     /// <summary>
+    /// The target Metaverse Attribute ids whose staged mapping removal chose to keep the contributed values
+    /// (#1537), so the preview states each removal's actual behaviour. Optional; omitted means every removal
+    /// follows the default (recall at the next Full Synchronisation of the contributing system).
+    /// </summary>
+    public List<int>? KeepContributedValuesAttributeIds { get; set; }
+
+    /// <summary>
     /// The proposal these mappings describe, or the rule's stored Attribute Flow where the caller proposed none.
     /// </summary>
     /// <param name="syncRule">The rule being previewed, read for its stored mappings.</param>
@@ -39,8 +46,8 @@ public class StartSyncRuleAttributeFlowPreviewRequest
         ArgumentNullException.ThrowIfNull(syncRule);
 
         return Mappings == null
-            ? SyncRuleAttributeFlowProposal.FromCurrentMappings(syncRule)
-            : new SyncRuleAttributeFlowProposal([.. Mappings.Select(mapping => mapping.ToProposal())]);
+            ? SyncRuleAttributeFlowProposal.FromCurrentMappings(syncRule, KeepContributedValuesAttributeIds)
+            : new SyncRuleAttributeFlowProposal([.. Mappings.Select(mapping => mapping.ToProposal())], KeepContributedValuesAttributeIds);
     }
 }
 

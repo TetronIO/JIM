@@ -515,19 +515,12 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
 
         var contributors = await GetImportContributorsAsync(rule);
 
+        var keepAttributeIds = (proposal.KeepContributedValuesAttributeIds ?? []).ToHashSet();
+
         foreach (var mapping in withdrawn)
         {
             var attributeName = mapping.TargetMetaverseAttribute?.Name
                 ?? $"Metaverse Attribute {mapping.TargetMetaverseAttributeId}";
-
-            // The value is NOT recalled: inbound flow contributes what its mappings produce, and a mapping that no
-            // longer exists contributes nothing rather than withdrawing what it last wrote.
-            findings.Add(new PreviewValidationFinding(
-                PreviewValidationSeverity.Warning,
-                $"The proposal stops this Synchronisation Rule writing '{attributeName}'. The values it has " +
-                "already written are left in place rather than cleared, so they stay as they are and stop being " +
-                "maintained; no value change is counted below for them.",
-                nameof(SyncRule.AttributeFlowRules)));
 
             var others = contributors
                 .Where(contributor => contributor.RuleId != rule.Id
@@ -536,14 +529,56 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
 
-            if (others.Count > 0)
+            // Since #1533/#1536 a removed mapping's contributed values ARE withdrawn: the orphan recall runs at
+            // the next Full Synchronisation of the contributing system, re-electing a surviving contributor or
+            // clearing the attribute. The exception is a removal whose deletion-time choice (#1537) kept the
+            // values: their provenance is severed at save, so nothing ever recalls them. Say whichever the
+            // proposal carries; the deltas below count neither, because the recall belongs to that later
+            // synchronisation rather than to this save.
+            if (keepAttributeIds.Contains(mapping.TargetMetaverseAttributeId!.Value))
             {
                 findings.Add(new PreviewValidationFinding(
-                    PreviewValidationSeverity.Information,
-                    $"'{attributeName}' is also written by {Describe(others)}. Those rules take their turn on " +
-                    "their own next synchronisation, which this preview does not run, so what they would write " +
-                    "in place of the withdrawn values is not counted below.",
-                    nameof(SyncRule.AttributeFlowRules)));
+                    PreviewValidationSeverity.Warning,
+                    $"The proposal removes this Synchronisation Rule's Attribute Flow to '{attributeName}', and " +
+                    "you chose to keep the values it contributed. They remain in place with no record of where " +
+                    "they came from, and no synchronisation will ever recall them; no value change is counted " +
+                    "below for them.",
+                    nameof(SyncRule.AttributeFlowRules),
+                    attributeName));
+
+                if (others.Count > 0)
+                {
+                    findings.Add(new PreviewValidationFinding(
+                        PreviewValidationSeverity.Information,
+                        $"'{attributeName}' is also written by {Describe(others)}. The kept values remain until " +
+                        "one of those rules next writes the attribute and wins Attribute Priority; what it would " +
+                        "write is not counted below.",
+                        nameof(SyncRule.AttributeFlowRules),
+                        attributeName));
+                }
+            }
+            else
+            {
+                findings.Add(new PreviewValidationFinding(
+                    PreviewValidationSeverity.Warning,
+                    $"The proposal removes this Synchronisation Rule's Attribute Flow to '{attributeName}'. The " +
+                    "values it contributed are recalled at the next Full Synchronisation of the contributing " +
+                    "Connected System: where another Attribute Flow also contributes the attribute its value " +
+                    "takes over, otherwise the attribute is cleared. No value change is counted below for them, " +
+                    "because the recall happens in that synchronisation rather than in this save.",
+                    nameof(SyncRule.AttributeFlowRules),
+                    attributeName));
+
+                if (others.Count > 0)
+                {
+                    findings.Add(new PreviewValidationFinding(
+                        PreviewValidationSeverity.Information,
+                        $"'{attributeName}' is also written by {Describe(others)}, so the recall re-elects among " +
+                        "them rather than clearing the attribute; what they would write in place of the withdrawn " +
+                        "values is not counted below.",
+                        nameof(SyncRule.AttributeFlowRules),
+                        attributeName));
+                }
             }
         }
 

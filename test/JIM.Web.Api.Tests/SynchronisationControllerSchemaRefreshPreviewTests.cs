@@ -43,6 +43,7 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
     private Mock<IConnectedSystemRepository> _connectedSystemRepo = null!;
     private Mock<IActivityRepository> _activityRepo = null!;
     private Mock<IApiKeyRepository> _apiKeyRepo = null!;
+    private Mock<IMetaverseRepository> _metaverseRepo = null!;
     private JimApplication _application = null!;
     private SynchronisationController _controller = null!;
     private string _csvPath = null!;
@@ -55,9 +56,17 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
         _activityRepo = new Mock<IActivityRepository>();
         _apiKeyRepo = new Mock<IApiKeyRepository>();
 
+        _metaverseRepo = new Mock<IMetaverseRepository>();
+
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
         _repository.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repository.Setup(r => r.ApiKeys).Returns(_apiKeyRepo.Object);
+        _repository.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
+
+        // A schema refresh's Apply and Remove deletes invalidated mappings through the deletion-choice path
+        // (#1537), which quantifies contributed values first; default to none.
+        _metaverseRepo.Setup(r => r.GetContributedValuesSummaryAsync(It.IsAny<int>(), It.IsAny<int?>()))
+            .ReturnsAsync(new ContributedValuesSummary());
 
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);

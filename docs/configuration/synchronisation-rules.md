@@ -547,6 +547,21 @@ Saving a Synchronisation Rule can be harmless or far-reaching, and the two sit s
 
 The same rules apply across every configuration surface; see [Configuration changes](configuration-changes.md) for the full picture, including when JIM stays silent.
 
+## Deleting a Synchronisation Rule
+
+Deleting a rule removes all of its configuration: Attribute Flow mappings, scoping criteria and Object Matching Rules. The deletion lives on the rule's **Danger Zone** tab, and what the confirmation asks depends on whether the rule contributed Metaverse attribute values that are still in place.
+
+A rule contributing nothing deletes immediately after a plain confirmation. A rule that did contribute values shows the impact first (how many values, across how many Metaverse Objects, per attribute) and asks what should happen to them:
+
+- **Recall the attribute values** (the default): the rule is disabled immediately and the recall runs as a background operation. Where another Attribute Flow also contributes an attribute, its value takes over; where none does, the attribute is cleared, and resulting changes are staged as [Pending Exports](../concepts/synchronisation-pipeline.md) for mapped target systems. The confirmation links the recall's Activity so you can monitor progress from the Operations page; deleting the rule is the operation's final step.
+- **Keep the attribute values**: the rule is deleted at once and the values remain in place with no record of where they came from. Nothing will ever recall them; a new inbound Attribute Flow, or manual removal, is the only way to change them later. The choice is recorded on the deletion's Activity.
+
+Removing a single **Attribute Flow mapping** from the editor offers the same choice when the mapping contributed values, with one difference in timing: a recalled mapping's values are withdrawn at the next Full Synchronisation of the contributing Connected System rather than by a background operation (the rule survives, so the ordinary recall machinery covers it). The choice is made when you remove the mapping and takes effect when you save the rule.
+
+The same options exist on the other surfaces: `Remove-JIMSyncRule` and `Remove-JIMSyncRuleMapping` take `-KeepContributedValues` and state the impact in their confirmations, and the REST delete endpoints take a `keepContributedValues` query parameter, with a rule deletion that queues a recall answering `202 Accepted` with the recall Activity's id. See the [PowerShell reference](../powershell/synchronisation-rules.md) and the [interactive API reference](../../api/reference/).
+
+For the full recall semantics (re-election, No Contributor outcomes, and how disabling differs from deleting), see [Attribute Priority](../concepts/attribute-priority.md).
+
 ## Manage Synchronisation Rules
 
 - **JIM portal**<br /> Synchronisation Rules area of the admin UI

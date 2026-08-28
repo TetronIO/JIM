@@ -70,6 +70,16 @@ public interface IMetaverseRepository
     public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// Batch-loads Metaverse Objects by ID with their Type and attribute values, TRACKED, for callers that
+    /// mutate and persist the loaded graph in the same context (#1537's deletion recall). The no-tracking
+    /// sibling above is unusable there: without identity resolution it materialises duplicate instances of
+    /// shared principals (each object's <c>MetaverseObjectType</c>), and persisting alongside anything the
+    /// context already tracks (a re-elected survivor's hydration) throws an identity conflict on attach.
+    /// Only a real database exhibits this; the in-memory test provider always tracks and masks it.
+    /// </summary>
+    public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsForUpdateAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
     /// The cached display names of the given Metaverse Objects, keyed by id, for naming an object in a
     /// message without loading its attribute values (issue #1398). Objects that do not exist are absent
     /// from the result; objects with no cached name map to null.
@@ -504,6 +514,38 @@ public interface IMetaverseRepository
     /// <param name="deletedMetaverseObjectId">The id the Metaverse Object had before it was deleted.</param>
     /// <returns>The Deleted change record, or null when the object was not deleted or predates change tracking.</returns>
     Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId);
+
+    /// <summary>
+    /// Quantifies the Metaverse attribute values a Synchronisation Rule currently contributes (#1537):
+    /// per-attribute value and distinct-object counts plus the overall distinct-object count, built from
+    /// count queries only so deletion surfaces can state impact without materialising value rows.
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose contributions are being quantified.</param>
+    /// <param name="metaverseAttributeId">Optional: limit the summary to one target Metaverse Attribute
+    /// (the mapping-deletion case); null summarises every attribute the rule contributes to.</param>
+    Task<ContributedValuesSummary> GetContributedValuesSummaryAsync(int syncRuleId, int? metaverseAttributeId = null);
+
+    /// <summary>
+    /// The distinct ids of Metaverse Objects holding at least one attribute value contributed by the given
+    /// Synchronisation Rule (selected by provenance, <c>ContributedBySyncRuleId</c>). Drives the rule
+    /// deletion recall task (#1537), which must enumerate the affected objects before the rule's deletion
+    /// severs the very provenance this selects on.
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose contributed values select the objects.</param>
+    Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId);
+
+    /// <summary>
+    /// Severs the provenance of a Synchronisation Rule's contributed Metaverse attribute values: clears
+    /// <see cref="MetaverseObjectAttributeValue.ContributedBySyncRuleId"/> while retaining the denormalised
+    /// <see cref="MetaverseObjectAttributeValue.ContributedBySystemId"/>, matching what rule deletion's
+    /// ON DELETE SET NULL produces. This is the "keep the values" mechanism (#1537): null-provenance values
+    /// are deliberately never recalled, so severing permanently exempts them from orphan recall.
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose contributed values are being kept.</param>
+    /// <param name="metaverseAttributeId">Optional: limit severing to one target Metaverse Attribute
+    /// (the mapping-deletion case); null severs every value the rule contributed.</param>
+    /// <returns>The number of value rows severed.</returns>
+    Task<int> SeverContributedValueProvenanceAsync(int syncRuleId, int? metaverseAttributeId = null);
 
     /// <summary>
     /// Returns a paginated set of attribute values for a specific attribute on a Metaverse Object.

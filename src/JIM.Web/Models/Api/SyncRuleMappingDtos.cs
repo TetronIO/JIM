@@ -247,6 +247,14 @@ public class CreateSyncRuleMappingRequest
     public bool? InitialExportOnly { get; set; }
 
     /// <summary>
+    /// Whether the mapping is evaluated by synchronisation from the moment it is created (#1485). When omitted,
+    /// defaults to true (enabled). Supply false to create the mapping disabled, so it can be ordered and
+    /// reviewed before it starts flowing values; a disabled mapping is skipped in both directions until it is
+    /// enabled. Applies to import and export rules alike.
+    /// </summary>
+    public bool? Enabled { get; set; }
+
+    /// <summary>
     /// The sources for this mapping (attribute mappings or expressions).
     /// </summary>
     [Required]

@@ -21,18 +21,30 @@ namespace JIM.Models.Preview;
 /// The proposed mappings, one per target attribute. Empty means the rule would flow nothing, which is a real
 /// proposal: every value it currently contributes would be withdrawn.
 /// </param>
-public record SyncRuleAttributeFlowProposal(IReadOnlyList<SyncRuleMappingProposal> Mappings)
+/// <param name="KeepContributedValuesAttributeIds">
+/// The target Metaverse Attribute ids whose staged mapping removal chose to KEEP the contributed values
+/// (#1537). The preview uses this to say what the removal will actually do: an attribute listed here has its
+/// values kept (provenance severed at save, never recalled); a removed attribute not listed follows the
+/// default, recall at the next Full Synchronisation of the contributing system. Advisory to the preview only;
+/// the save itself carries the authoritative choices.
+/// </param>
+public record SyncRuleAttributeFlowProposal(
+    IReadOnlyList<SyncRuleMappingProposal> Mappings,
+    IReadOnlyList<int>? KeepContributedValuesAttributeIds = null)
 {
     /// <summary>
     /// The mappings currently in force on <paramref name="syncRule"/>, as a proposal. What "no change" looks like,
     /// and the baseline an adapter evaluates a proposal against.
     /// </summary>
-    public static SyncRuleAttributeFlowProposal FromCurrentMappings(SyncRule syncRule)
+    /// <param name="syncRule">The rule whose current mappings form the proposal.</param>
+    /// <param name="keepContributedValuesAttributeIds">See the record parameter of the same name.</param>
+    public static SyncRuleAttributeFlowProposal FromCurrentMappings(SyncRule syncRule, IReadOnlyList<int>? keepContributedValuesAttributeIds = null)
     {
         ArgumentNullException.ThrowIfNull(syncRule);
 
         return new SyncRuleAttributeFlowProposal(
-            [.. syncRule.AttributeFlowRules.Select(SyncRuleMappingProposal.FromMapping)]);
+            [.. syncRule.AttributeFlowRules.Select(SyncRuleMappingProposal.FromMapping)],
+            keepContributedValuesAttributeIds);
     }
 
     /// <summary>
@@ -49,8 +61,14 @@ public record SyncRuleAttributeFlowProposal(IReadOnlyList<SyncRuleMappingProposa
     public bool DescribesSameMappingsAs(SyncRuleAttributeFlowProposal? other) =>
         other is not null && CanonicalKey() == other.CanonicalKey();
 
-    private string CanonicalKey() =>
-        string.Join("|", Mappings.Select(mapping => mapping.CanonicalKey()).Order(StringComparer.Ordinal));
+    private string CanonicalKey()
+    {
+        // The keep choices are part of what the preview said, so a changed choice makes a shown preview stale
+        // exactly as an edited mapping does.
+        var keepIds = string.Join(",", (KeepContributedValuesAttributeIds ?? []).Order());
+        return string.Join("|", Mappings.Select(mapping => mapping.CanonicalKey()).Order(StringComparer.Ordinal))
+            + $"|keep=[{keepIds}]";
+    }
 }
 
 /// <summary>

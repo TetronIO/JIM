@@ -166,7 +166,9 @@
     }
     <MudSwitch Class="mt-5" @bind-Value="@SyncRule.Enabled" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary" Label="Enabled?" />
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Synchronisation Rules are not evaluated when disabled. Use
-        this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated.</MudText>
+        this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated.
+        Where another Attribute Flow also contributes an attribute, its value takes over at the next synchronisation;
+        values only this rule contributed stay in place until it is re-enabled or deleted.</MudText>
     @* A rule disabled on the administrator's behalf records why (#1485); saving the rule enabled clears it. *@
     @if (!SyncRule.Enabled && !string.IsNullOrWhiteSpace(SyncRule.DisabledReason))
     {

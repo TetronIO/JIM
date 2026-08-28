@@ -3,6 +3,7 @@
 @using JIM.Models.Activities
 @using JIM.Models.Preview
 @using JIM.Models.Utility
+@using JIM.Utilities
 @using JIM.Web.Models
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
@@ -31,7 +32,7 @@
         <MudText Typo="Typo.h6">@Title</MudText>
         @if (_activity != null)
         {
-            <MudChip T="string" Color="@StatusColour" Variant="Variant.Outlined">@StatusLabel</MudChip>
+            <MudChip T="string" Color="@StatusColour" Variant="Variant.Filled">@StatusLabel</MudChip>
         }
         <MudSpacer />
         @if (IsRunning)
@@ -151,10 +152,22 @@
                     @foreach (var finding in _findings.OrderByDescending(f => f.Severity))
                     {
                         <MudAlert Severity="@FindingSeverity(finding.Severity)" Variant="Variant.Outlined" Class="mt-2" Dense="true">
-                            @finding.Message
+                            @* a finding about one Metaverse Attribute names it separately so the quoted name in
+                               the plain-text message renders as the standard Metaverse attribute chip here *@
+                            @foreach (var part in FindingMessageParts(finding))
+                            {
+                                @if (part.IsAttribute)
+                                {
+                                    <AttributeChip Kind="AttributeChipKind.Metaverse" Name="@part.Text" />
+                                }
+                                else
+                                {
+                                    @part.Text
+                                }
+                            }
                             @if (!string.IsNullOrEmpty(finding.PropertyName))
                             {
-                                <span class="mud-text-secondary"> (@finding.PropertyName)</span>
+                                <span class="mud-text-secondary"> (@finding.PropertyName.SplitOnCapitalLetters())</span>
                             }
                         </MudAlert>
                     }
@@ -460,6 +473,35 @@
     /// </summary>
     [Parameter, EditorRequired]
     public Guid ActivityId { get; set; }
+
+    private readonly record struct FindingMessagePart(string Text, bool IsAttribute);
+
+    /// <summary>
+    /// Splits a finding's message so its Metaverse Attribute renders as the standard attribute chip: the name
+    /// appears quoted in the plain-text message (which REST and PowerShell consumers read whole), and a finding
+    /// that names its attribute has each quoted occurrence swapped for a chip part. A finding naming no
+    /// attribute renders as one text part, unchanged.
+    /// </summary>
+    private static IEnumerable<FindingMessagePart> FindingMessageParts(PreviewValidationFinding finding)
+    {
+        if (string.IsNullOrEmpty(finding.MetaverseAttributeName))
+            return [new FindingMessagePart(finding.Message, false)];
+
+        var token = $"'{finding.MetaverseAttributeName}'";
+        var segments = finding.Message.Split(token);
+        if (segments.Length == 1)
+            return [new FindingMessagePart(finding.Message, false)];
+
+        var parts = new List<FindingMessagePart>();
+        for (var i = 0; i < segments.Length; i++)
+        {
+            if (segments[i].Length > 0)
+                parts.Add(new FindingMessagePart(segments[i], false));
+            if (i < segments.Length - 1)
+                parts.Add(new FindingMessagePart(finding.MetaverseAttributeName!, true));
+        }
+        return parts;
+    }
 
     /// <summary>Heading for the panel. Surfaces override it where a more specific noun reads better.</summary>
     [Parameter]

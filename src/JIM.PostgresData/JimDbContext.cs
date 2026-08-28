@@ -93,6 +93,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SyncRuleMappingSource> SyncRuleMappingSources { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
+    public virtual DbSet<DeleteSyncRuleWorkerTask> DeleteSyncRuleWorkerTasks { get; set; } = null!;
     public virtual DbSet<SchemaRefreshRemovalWorkerTask> SchemaRefreshRemovalWorkerTasks { get; set; } = null!;
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
     public virtual DbSet<PasswordDeliveryWorkerTask> PasswordDeliveryWorkerTasks { get; set; } = null!;

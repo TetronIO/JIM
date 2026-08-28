@@ -377,6 +377,21 @@ public interface ISyncRepository
     Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// As <see cref="GetMetaverseObjectsByIdsNoTrackingAsync"/> but TRACKED, for callers that mutate and
+    /// persist the loaded graph in the same context; see <c>IMetaverseRepository</c> for why the
+    /// no-tracking variant cannot be persisted alongside tracked loads.
+    /// </summary>
+    Task<List<MetaverseObject>> GetMetaverseObjectsByIdsForUpdateAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
+    /// The distinct ids of Metaverse Objects holding at least one attribute value contributed by the given
+    /// Synchronisation Rule (selected by provenance, <c>ContributedBySyncRuleId</c>). Drives the rule
+    /// deletion recall task (#1537), which must enumerate the affected objects before the rule's deletion
+    /// severs the very provenance this selects on.
+    /// </summary>
+    Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId);
+
+    /// <summary>
     /// The cached display names of the given Metaverse Objects, keyed by id, for naming a referenced
     /// object in an export's unresolved-reference message without loading it (issue #1398). Objects
     /// that do not exist are absent from the result.
