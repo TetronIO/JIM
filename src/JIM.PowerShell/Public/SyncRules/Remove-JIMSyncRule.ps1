@@ -9,6 +9,20 @@ function Remove-JIMSyncRule {
     .DESCRIPTION
         Permanently deletes a Synchronisation Rule.
 
+        When the rule still contributes Metaverse attribute values, deleting it withdraws them by default:
+        the rule is disabled immediately and the recall runs as a queued Worker task (surviving lower-priority
+        contributors are re-elected and resulting exports staged), with the rule deleted as the task's final
+        step. In that case the cmdlet returns a tracking object carrying the recall Activity id; monitor
+        progress with Get-JIMActivity.
+
+        Use -KeepContributedValues to delete the rule immediately and leave the values in place instead. The
+        kept values lose their provenance: nothing records that this rule contributed them, so no future
+        recall can ever withdraw them.
+
+        A rule contributing nothing deletes immediately either way. Before prompting for confirmation, the
+        cmdlet quantifies the contributed values so the confirmation states the impact of the choice
+        (-Force skips both the lookup and the prompt).
+
     .PARAMETER Id
         The unique identifier of the Synchronisation Rule to delete.
 
@@ -18,6 +32,12 @@ function Remove-JIMSyncRule {
     .PARAMETER ChangeReason
         An optional reason for the deletion, recorded against the change history.
 
+    .PARAMETER KeepContributedValues
+        Keeps the Metaverse attribute values the rule contributed instead of recalling them. WARNING: the kept
+        values remain in place with no provenance, so nothing can ever recall them; surviving lower-priority
+        contributors are not re-elected. Omit this switch to recall the values (the default), which withdraws
+        them via a queued Worker task before the rule is deleted.
+
     .PARAMETER Force
         Suppresses confirmation prompts.
 
@@ -25,12 +45,21 @@ function Remove-JIMSyncRule {
         If specified, returns the deleted Synchronisation Rule object.
 
     .OUTPUTS
-        If -PassThru is specified, returns the deleted Synchronisation Rule object.
+        When the deletion queues a contributed-values recall, a PSCustomObject tracking the queued work:
+        - RecallActivityId: the recall Activity's id (a GUID); monitor it with Get-JIMActivity
+        - AffectedValueCount: how many Metaverse attribute values the rule contributed at decision time
+        - AffectedObjectCount: how many distinct Metaverse Objects held at least one of those values
+
+        When the deletion completes immediately (keep chosen, or nothing contributed), nothing is returned.
+        If -PassThru is specified, the Synchronisation Rule object as it stood before deletion is also
+        returned.
 
     .EXAMPLE
         Remove-JIMSyncRule -Id 1
 
-        Removes the Synchronisation Rule with ID 1 (prompts for confirmation).
+        Removes the Synchronisation Rule with ID 1 (prompts for confirmation). When the rule still contributes
+        Metaverse attribute values, the confirmation states how many attributes and Metaverse Objects the
+        recall will affect.
 
     .EXAMPLE
         Remove-JIMSyncRule -Id 1 -Force -ChangeReason "Decommissioned (CHG0123)"
@@ -38,14 +67,32 @@ function Remove-JIMSyncRule {
         Removes the Synchronisation Rule without confirmation and records a reason against the change history.
 
     .EXAMPLE
+        $recall = Remove-JIMSyncRule -Id 1 -Force
+        Get-JIMActivity -Id $recall.RecallActivityId
+
+        Removes a Synchronisation Rule that still contributes Metaverse attribute values, capturing the
+        tracking object the queued recall returns, then retrieves the recall Activity to monitor its progress.
+        The rule is deleted as the recall task's final step.
+
+    .EXAMPLE
+        Remove-JIMSyncRule -Id 1 -KeepContributedValues -Force
+
+        Removes the Synchronisation Rule immediately, KEEPING the Metaverse attribute values it contributed.
+        The kept values lose their provenance: nothing records that this rule contributed them, so no future
+        recall can ever withdraw them. Only choose this when the values should outlive the rule.
+
+    .EXAMPLE
         Get-JIMSyncRule | Where-Object { $_.name -like "Test*" } | Remove-JIMSyncRule -Force
 
-        Removes all Synchronisation Rules with names starting with "Test".
+        Force-deletes every Synchronisation Rule whose name starts with "Test". Review the matches first by
+        running the Get-JIMSyncRule filter on its own, or run the pipeline without -Force to confirm each
+        deletion individually.
 
     .LINK
         Get-JIMSyncRule
         New-JIMSyncRule
         Set-JIMSyncRule
+        Get-JIMActivity
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
@@ -59,6 +106,8 @@ function Remove-JIMSyncRule {
         [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]$ChangeReason,
+
+        [switch]$KeepContributedValues,
 
         [switch]$Force,
 
@@ -84,19 +133,57 @@ function Remove-JIMSyncRule {
             return
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($existing.name, "Delete Synchronisation Rule")) {
+        # Quantify the contributed values so the confirmation states the impact of the recall-or-keep
+        # choice (#1537). -Force suppresses the confirmation, so the lookup would be wasted there (the
+        # documented bulk-pipeline path).
+        $confirmAction = 'Delete Synchronisation Rule'
+        if (-not $Force) {
+            $contributedSummary = $null
+            try {
+                $contributedSummary = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$ruleId/contributed-values-summary"
+            }
+            catch {
+                # An unavailable summary must not block the deletion; the server still applies the chosen
+                # recall/keep behaviour regardless of what the confirmation could state.
+                Write-Verbose "Could not retrieve the contributed-values summary for Synchronisation Rule ${ruleId}: $_"
+            }
+
+            $impactText = Get-JIMContributedValuesImpactText -Summary $contributedSummary -KeepContributedValues:$KeepContributedValues
+            if ($impactText) {
+                $confirmAction = "Delete Synchronisation Rule ($impactText)"
+            }
+        }
+
+        if ($Force -or $PSCmdlet.ShouldProcess($existing.name, $confirmAction)) {
             Write-Verbose "Deleting Synchronisation Rule: $ruleId"
 
-            # The reason is supplied as a query parameter because HTTP DELETE bodies are awkward for clients.
+            # The reason and the keep choice are supplied as query parameters because HTTP DELETE bodies are
+            # awkward for clients.
             $deleteEndpoint = "/api/v1/synchronisation/sync-rules/$ruleId"
+            $queryParts = @()
+            if ($KeepContributedValues) {
+                $queryParts += 'keepContributedValues=true'
+            }
             if ($PSBoundParameters.ContainsKey('ChangeReason')) {
-                $deleteEndpoint += "?changeReason=$([System.Uri]::EscapeDataString($ChangeReason))"
+                $queryParts += "changeReason=$([System.Uri]::EscapeDataString($ChangeReason))"
+            }
+            if ($queryParts.Count -gt 0) {
+                $deleteEndpoint += '?' + ($queryParts -join '&')
             }
 
             try {
-                Invoke-JIMApi -Endpoint $deleteEndpoint -Method 'DELETE'
+                $result = Invoke-JIMApi -Endpoint $deleteEndpoint -Method 'DELETE'
 
-                Write-Verbose "Deleted Synchronisation Rule: $ruleId"
+                if ($result -and $result.RecallActivityId) {
+                    # 202 Accepted: a contributed-values recall was queued. The rule is disabled now and
+                    # deleted as the task's final step; surface the tracking object so scripts can monitor
+                    # the recall Activity.
+                    Write-Verbose "Queued a contributed-values recall for Synchronisation Rule ${ruleId}; Activity: $($result.RecallActivityId)"
+                    $result
+                }
+                else {
+                    Write-Verbose "Deleted Synchronisation Rule: $ruleId"
+                }
 
                 if ($PassThru) {
                     $existing

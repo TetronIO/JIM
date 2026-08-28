@@ -195,6 +195,37 @@ namespace JIM.Application.Servers
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
             }
+            else if (workerTask is DeleteSyncRuleWorkerTask deleteSyncRuleTask)
+            {
+                // The recall-then-delete half of deleting a Synchronisation Rule with contributed values
+                // (#1537) is tracked with its own Activity, targeting the rule so the queue and Operations
+                // name what is being recalled. The rule still exists at queue time (it is disabled, not
+                // deleted, until the task's final step), so its name resolves; tolerate its absence the way
+                // the other queue branches do.
+                var syncRule = await Application.ConnectedSystems.GetSyncRuleAsync(deleteSyncRuleTask.SyncRuleId);
+                var connectedSystem = syncRule != null
+                    ? await Application.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId)
+                    : null;
+                var activity = new Activity
+                {
+                    TargetName = syncRule?.Name ?? $"Synchronisation Rule {deleteSyncRuleTask.SyncRuleId}",
+                    TargetContext = connectedSystem?.Name,
+                    TargetType = ActivityTargetType.SynchronisationRule,
+                    TargetOperationType = ActivityTargetOperationType.RecallAttributeValues,
+                    // The Connected System survives the deletion, so its id is the durable link once the rule is gone.
+                    ConnectedSystemId = syncRule?.ConnectedSystemId
+                };
+
+                // Carry the optional deletion reason onto the queued Activity now, so it survives to when the
+                // worker runs (the reason is transient on the task and never persisted there).
+                if (!string.IsNullOrWhiteSpace(deleteSyncRuleTask.ChangeReason))
+                    activity.ChangeReason = deleteSyncRuleTask.ChangeReason.Trim();
+
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
+
+                // associate the activity with the worker task so the worker task processor can complete the activity when done.
+                workerTask.Activity = activity;
+            }
             else if (workerTask is ConfigurationChangePreviewWorkerTask)
             {
                 // The only task type that does NOT create its Activity. A preview's Activity already exists,

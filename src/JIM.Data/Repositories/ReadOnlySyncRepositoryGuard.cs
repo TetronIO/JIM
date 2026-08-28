@@ -128,6 +128,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids)
         => _inner.GetMetaverseObjectsByIdsNoTrackingAsync(ids);
 
+    public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsForUpdateAsync(IEnumerable<Guid> ids)
+        => _inner.GetMetaverseObjectsByIdsForUpdateAsync(ids);
+
+    public Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
+        => _inner.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(syncRuleId);
+
     public Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids)
         => _inner.GetMetaverseObjectDisplayNamesAsync(ids);
 

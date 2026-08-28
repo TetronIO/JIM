@@ -242,10 +242,66 @@ Describe 'New-JIMSyncRuleMapping' {
         }
     }
 
+    Context 'Create disabled (#1485)' {
+
+        BeforeAll {
+            $command = Get-Command New-JIMSyncRuleMapping
+        }
+
+        It 'Should have an Enabled parameter of type bool' {
+            $param = $command.Parameters['Enabled']
+            $param | Should -Not -BeNullOrEmpty
+            $param.ParameterType | Should -Be ([bool])
+        }
+
+        It 'Sends enabled=false when -Enabled $false is supplied, creating the mapping disabled' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10 -Enabled $false -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('enabled') -and $Body.enabled -eq $false
+                }
+            }
+        }
+
+        It 'Sends enabled=true when -Enabled $true is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10 -Enabled $true -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('enabled') -and $Body.enabled -eq $true
+                }
+            }
+        }
+
+        It 'Omits enabled when the parameter is not supplied, leaving the server default of enabled' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10 -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('enabled')
+                }
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
             $help = Get-Help New-JIMSyncRuleMapping -Full
+        }
+
+        It 'Should document the Enabled parameter' {
+            ($help.Parameters.Parameter | Where-Object { $_.Name -eq 'Enabled' }) | Should -Not -BeNullOrEmpty
         }
 
         It 'Should document the CaseNormalisation parameter' {
@@ -397,6 +453,152 @@ Describe 'Set-JIMSyncRuleMapping' {
 
         It 'Should document the MissingInputBehaviour parameter' {
             ($help.Parameters.Parameter | Where-Object { $_.Name -eq 'MissingInputBehaviour' }) | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+    }
+}
+
+Describe 'Remove-JIMSyncRuleMapping' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Remove-JIMSyncRuleMapping
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a KeepContributedValues switch parameter' {
+            $command.Parameters['KeepContributedValues'].SwitchParameter | Should -BeTrue
+        }
+    }
+
+    Context 'Contributed-values recall choice (#1537)' {
+
+        It 'Sends keepContributedValues=true on the DELETE when -KeepContributedValues is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return }
+
+                Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5 -Force -KeepContributedValues
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and
+                    $Endpoint -match 'sync-rules/1/mappings/5\?keepContributedValues=true'
+                }
+            }
+        }
+
+        It 'Omits keepContributedValues from the DELETE when the switch is not supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return }
+
+                Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -notmatch 'keepContributedValues'
+                }
+            }
+        }
+
+        It 'Consults the mapping-scoped contributed-values summary before the confirmation' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ Attributes = @(); TotalValues = 0; TotalObjects = 0 }
+                }
+
+                Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'sync-rules/1/mappings/5/contributed-values-summary'
+                }
+            }
+        }
+
+        It 'Skips the summary lookup when -Force suppresses the confirmation' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return }
+
+                Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter {
+                    $Endpoint -match 'contributed-values-summary'
+                }
+            }
+        }
+
+        It 'Uses the deferred-recall wording, because a mapping recall happens at the next Full Synchronisation' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{
+                        Attributes   = @([PSCustomObject]@{ AttributeId = 5; AttributeName = 'Department'; ValueCount = 96; ObjectCount = 96 })
+                        TotalValues  = 96
+                        TotalObjects = 96
+                    }
+                }
+                Mock Get-JIMContributedValuesImpactText { 'IMPACT SENTENCE' }
+
+                Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5 -Confirm:$false
+
+                Should -Invoke Get-JIMContributedValuesImpactText -Times 1 -Exactly -ParameterFilter {
+                    $Summary.TotalValues -eq 96 -and $DeferredRecall -eq $true -and -not $KeepContributedValues
+                }
+            }
+        }
+
+        It 'Tells the impact text the values will be kept when -KeepContributedValues is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{
+                        Attributes   = @([PSCustomObject]@{ AttributeId = 5; AttributeName = 'Department'; ValueCount = 96; ObjectCount = 96 })
+                        TotalValues  = 96
+                        TotalObjects = 96
+                    }
+                }
+                Mock Get-JIMContributedValuesImpactText { 'IMPACT SENTENCE' }
+
+                Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5 -KeepContributedValues -Confirm:$false
+
+                Should -Invoke Get-JIMContributedValuesImpactText -Times 1 -Exactly -ParameterFilter {
+                    $KeepContributedValues -eq $true
+                }
+            }
+        }
+
+        It 'Emits nothing: a mapping deletion always completes without queued work' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return }
+
+                $result = Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5 -Force -KeepContributedValues
+
+                $result | Should -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Remove-JIMSyncRuleMapping -Full
+        }
+
+        It 'Should document the KeepContributedValues parameter' {
+            ($help.Parameters.Parameter | Where-Object { $_.Name -eq 'KeepContributedValues' }) | Should -Not -BeNullOrEmpty
         }
 
         It 'Should have examples' {

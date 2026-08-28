@@ -1163,12 +1163,25 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(ids);
     }
 
+    // In-memory store: tracked and no-tracking loads are the same object references.
+    public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsForUpdateAsync(IEnumerable<Guid> ids)
+        => GetMetaverseObjectsByIdsNoTrackingAsync(ids);
+
     public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids)
     {
         var result = ids
             .Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null)
             .Where(mvo => mvo != null)
             .Select(mvo => mvo!)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
+    {
+        var result = _mvos.Values
+            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId))
+            .Select(mvo => mvo.Id)
             .ToList();
         return Task.FromResult(result);
     }
@@ -1298,7 +1311,9 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
+    // Virtual so tests can simulate a persistence failure partway through a batch (the #1537 recall task's
+    // failure-mode coverage), matching the DeleteMetaverseObjectAsync spy precedent above.
+    public virtual Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
     {
         foreach (var mvo in metaverseObjects)
         {

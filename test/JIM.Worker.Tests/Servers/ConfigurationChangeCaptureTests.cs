@@ -45,6 +45,14 @@ public class ConfigurationChangeCaptureTests
         _repo.Setup(r => r.ServiceSettings).Returns(_settingsRepo.Object);
         _repo.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
 
+        // The deletion-choice impact summary (#1537) is read on every rule delete; empty means no
+        // contributed values, which is the synchronous delete path these tests exercise.
+        var metaverseRepo = new Mock<IMetaverseRepository>();
+        metaverseRepo
+            .Setup(r => r.GetContributedValuesSummaryAsync(It.IsAny<int>(), It.IsAny<int?>()))
+            .ReturnsAsync(new ContributedValuesSummary());
+        _repo.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
+
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>()))
             .Callback<Activity>(a => _completedActivity = a)
