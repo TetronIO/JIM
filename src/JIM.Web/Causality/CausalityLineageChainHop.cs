@@ -42,6 +42,13 @@ public sealed class CausalityLineageChainHop
     public string? RunKind { get; init; }
 
     /// <summary>
+    /// The hop's tone-tinted operation chip (Created/Updated/Deleted/Joined), derived from the cohort's
+    /// own facts via <see cref="OutcomeDisplayMap.GetHopOperation"/>; null where the hop states no object
+    /// operation (a confirmation, or an edge recorded before reason codes existed).
+    /// </summary>
+    public OutcomeDisplay? Operation { get; init; }
+
+    /// <summary>
     /// Link to the Run Profile Execution Item that recorded the cause, for a sole-cause cohort.
     /// Null where the cohort speaks for several (each member carries its own link), where no item
     /// was recorded, or where the item is the very page being read.

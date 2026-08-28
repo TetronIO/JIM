@@ -112,6 +112,13 @@ public static class CausalityLineageModelBuilder
         // ─── The chain's hops, flattened onto the columns of the objects they describe ───
         ColumnState AssignCohort(CausalChainCohort cohort)
         {
+            // A derived Identity-creation hop states a fact about the Identity itself (it was projected,
+            // joined or created), so it always lands on the Identity column. Tested before every other
+            // check, including the source-import one below: a derived cohort's default EdgeType (0) is
+            // MetaverseObjectDeletionCausedDeprovision, which would otherwise misroute it.
+            if (cohort.MetaverseChangeType != null)
+                return GetIdentityColumn();
+
             // The derived source-import hop is the record's own timeline: data arriving at (or
             // disappearing from) the source system.
             if (cohort.SourceImportChangeType != null)
@@ -176,8 +183,11 @@ public static class CausalityLineageModelBuilder
             Walk(chain.Cohorts, context.CsoDisplayName, chain.RunProfileExecutionItemId);
 
         // The Identity column also exists when the story spans both sides of the Metaverse with no
-        // loaded event on the Identity itself (a create export): records never join directly, so the
-        // graph the canvas draws must still route through the Identity.
+        // loaded event on the Identity itself and no creation cohort resolved either (a create export
+        // whose projecting item's history has aged out): records never join directly, so the graph the
+        // canvas draws must still route through the Identity. Where the walk did resolve the creation
+        // fact, AssignCohort already created this column for the resulting hop; this is the residual case
+        // where it did not.
         var hasSourceRecord = recordColumns.Any(c => c.IsSourceSide);
         var hasTargetRecord = recordColumns.Any(c => !c.IsSourceSide);
         if (identityColumn == null && hasSourceRecord && hasTargetRecord)
@@ -241,6 +251,7 @@ public static class CausalityLineageModelBuilder
             Reason = CausalityCauseWording.Reason(cohort),
             ShowConnectedSystemChip = CausalityCauseWording.ShowConnectedSystemChip(cohort),
             RunKind = GetRunKind(cohort),
+            Operation = OutcomeDisplayMap.GetHopOperation(cohort),
             ActivityItemHref = soleMember != null ? GetActivityItemHref(soleMember, effectItemId) : null,
             Occurred = cohort.Members.Count > 0 ? cohort.Members.Min(m => m.Occurred) : default,
             Members = soleMember != null
@@ -259,6 +270,12 @@ public static class CausalityLineageModelBuilder
     /// </summary>
     private static string? GetRunKind(CausalChainCohort cohort)
     {
+        // Tested first, per the hazard on MetaverseChangeType: a derived cohort's default EdgeType would
+        // otherwise fall into the switch below. A projection or join was decided by a synchronisation; a
+        // direct create was not synchronised into existence at all, so it states no run kind.
+        if (cohort.MetaverseChangeType != null)
+            return cohort.MetaverseChangeType == ObjectChangeType.Created ? null : "Synchronisation run";
+
         if (cohort.SourceImportChangeType != null)
             return "Import run";
 
@@ -482,6 +499,25 @@ public static class CausalityLineageModelBuilder
                 return "projected";
             if (hasPageRecord && hasJoined)
                 return "joined";
+
+            // An earlier-run projection or join is still the truth about this join even when nothing on
+            // the page's own item names it: the Identity column's creation cohort (#1495 follow-up)
+            // carries the Connected System id of the item that decided it. Guarded to a sole record on the
+            // left, because the label speaks for the whole side and a multi-record side has no single
+            // "the projecting record" to credit; see this method's own remarks on the one-label-per-side
+            // rule.
+            if (left.Count == 1)
+            {
+                var earlierRunLabel = right[0].Hops
+                    .Select(h => h.Hop.Cohort)
+                    .Where(c => c.MetaverseChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined
+                        && c.ConnectedSystemId == left[0].SystemId)
+                    .Select(c => c.MetaverseChangeType == ObjectChangeType.Projected ? "projected" : "joined")
+                    .FirstOrDefault();
+                if (earlierRunLabel != null)
+                    return earlierRunLabel;
+            }
+
             return "imported";
         }
 

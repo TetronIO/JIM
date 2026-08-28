@@ -36,6 +36,22 @@ public static class CausalityCauseWording
         var parts = new List<CausalityCauseSentencePart>();
         var plural = cohort.MemberCount != 1;
 
+        // A derived Identity-creation hop states a fact about the Identity's own origin (#1495 follow-up),
+        // and is worded before the source-import branch and the edge switch alike: it carries no EdgeType
+        // of its own, and testing MetaverseChangeType first is what the hazard on CausalChainCohort
+        // requires. Direct creation names no cause to be the subject of a sentence, so it states the fact
+        // plainly rather than reusing Subject.
+        if (cohort.MetaverseChangeType is { } metaverseChangeType)
+        {
+            parts.Add(new CausalityCauseSentencePart(metaverseChangeType switch
+            {
+                ObjectChangeType.Projected => $"{Subject(cohort)} was created as a new Identity",
+                ObjectChangeType.Joined => $"{Subject(cohort)} was joined to this existing Identity",
+                _ => "This Identity was created directly in JIM"
+            }));
+            return parts;
+        }
+
         // A derived source-import hop carries no edge type, so it is worded before the switch: the true root
         // of a chain, where data arrived at (or disappeared from) the source system. The system is named in
         // the sentence and never chipped on this hop; see ShowConnectedSystemChip.
@@ -203,7 +219,8 @@ public static class CausalityCauseWording
     public static bool ShowConnectedSystemChip(CausalChainCohort cohort)
     {
         ArgumentNullException.ThrowIfNull(cohort);
-        return cohort.SourceImportChangeType is null
+        return cohort.MetaverseChangeType is null
+            && cohort.SourceImportChangeType is null
             && cohort.EdgeType != CausalEdgeType.PendingExportQueueingCausedExportExecution;
     }
 

@@ -990,6 +990,30 @@
     padding: 1px 7px;
 }
 
+/* The chain card's operation chip (#1495 follow-up): the .evt-badge recipe (see "Event badges and entity
+   rows" above), reused rather than duplicated, but resolving --tone-text ahead of --tone so a Primary chip
+   reads with the WCAG-safe text token (causality.css:27-34) rather than the raw fill colour a badge on a
+   solid surface can get away with. Placed as the card's first child, above the sentence it summarises. */
+.causality-panel .ln-op {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 2px 8px;
+    border-radius: 5px;
+    margin-bottom: 6px;
+    color: var(--tone-text, var(--tone, var(--cz-secondary)));
+    background: color-mix(in srgb, var(--tone, var(--cz-secondary)) 13%, transparent);
+}
+
+.causality-panel .ln-op .mud-icon-root {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+}
+
 .causality-panel .ln-time {
     font-size: 0.75rem;
     color: var(--cz-text-dim);
