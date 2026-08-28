@@ -228,6 +228,21 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     border-radius: var(--jim-container-radius) !important;
 }
 
+/* Alert icons: MudBlazor top-anchors the icon (.mud-alert-icon { padding: 7px 0 } inside a
+   flex-start .mud-alert-position) while the message carries 9px top padding, so on every alert the
+   icon rides 1-2px above the centre of the first text line (worst with a 16px MudText first line).
+   Centre the icon on the first line instead: 9px mirrors the message's own top padding, and the
+   (1lh - 24px) / 2 term splits the difference between the inherited line box and the 24px icon.
+   Top padding only, so a multi-line alert keeps its icon with the first line rather than floating
+   mid-block. html[lang] qualification because MudBlazor's stylesheet loads after this one and wins
+   the bare-class tie. 8.5px is measured, not derived: the two content shapes JIM's alerts open with
+   (a 16px MudText line at 24px line-height, and plain text inheriting the body's 1.43) centre at
+   +2px and +1.4px respectively, so 8.5px lands both within half a pixel. Do not reach for lh units
+   here: they resolve against this element's own 22px MudBlazor font-size, not the message's line. */
+html[lang] .mud-alert-icon {
+    padding-top: 8.5px;
+}
+
 /* Links inside alerts: inherit the alert's text colour with bold + underline for emphasis.
    Overrides the global --jim-link-color so links don't appear as clashing blue/purple
    inside coloured alert boxes (e.g., yellow warning, green success). */
