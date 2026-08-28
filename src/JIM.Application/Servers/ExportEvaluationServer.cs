@@ -1382,7 +1382,7 @@ public class ExportEvaluationServer
     /// </remarks>
     private void AddClassMembershipChanges(
         SyncRule exportRule,
-        ConnectedSystemObject? existingCso,
+        ConnectedSystemObject? csoForExport,
         PendingExportChangeType changeType,
         List<PendingExportAttributeValueChange> attributeChanges)
     {
@@ -1390,7 +1390,12 @@ public class ExportEvaluationServer
         if (objectType == null)
             return;
 
-        var currentValues = existingCso?.AttributeValues ?? [];
+        // The CSO this export writes onto, not the CSO the Metaverse Object was joined to when evaluation
+        // started: on the export-matching rejoin path those differ (existingCso is null, which is what routed
+        // evaluation into provisioning), and the classes the entry already carries live on the matched CSO.
+        // Planned against null, the planner restated the structural class and the directory refused the
+        // duplicate value.
+        var currentValues = csoForExport?.AttributeValues ?? [];
         var plan = ClassMembershipPlanner.Plan(
             objectType,
             currentClasses: ClassValuesOn(currentValues, objectType),
@@ -1796,7 +1801,7 @@ public class ExportEvaluationServer
             await AddSecondaryExternalIdToCsoAsync(csoForExport, attributeChanges, exportRule);
         }
 
-        AddClassMembershipChanges(exportRule, existingCso, changeType, attributeChanges);
+        AddClassMembershipChanges(exportRule, csoForExport, changeType, attributeChanges);
 
         // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
         // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
@@ -1902,7 +1907,7 @@ public class ExportEvaluationServer
             await AddSecondaryExternalIdToCsoAsync(csoForExport, attributeChanges, exportRule);
         }
 
-        AddClassMembershipChanges(exportRule, existingCso, changeType, attributeChanges);
+        AddClassMembershipChanges(exportRule, csoForExport, changeType, attributeChanges);
 
         var csoId = csoForExport?.Id;
         Log.Verbose("CreateOrUpdatePendingExportAsync: Creating Pending Export. csoForExport={CsoForExport}, csoId={CsoId}, changeType={ChangeType}",
@@ -2181,7 +2186,7 @@ public class ExportEvaluationServer
         // existing Pending Export gaining its first merged-class attribute gains the class with it. This is
         // the overload the synchronisation engine's per-page path stages through; without this call, exports
         // went out carrying a merged class's attributes with no class add, and the directory refused them.
-        AddClassMembershipChanges(exportRule, existingCso, changeType, attributeChanges);
+        AddClassMembershipChanges(exportRule, csoForExport, changeType, attributeChanges);
 
         var csoId = csoForExport?.Id;
 
