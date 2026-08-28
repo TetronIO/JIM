@@ -50,6 +50,14 @@ public class AuxiliaryClassAttributeMergerTests
         };
 
         objectType.Tags.Add(new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassKind, Value = classKind });
+
+        // RFC 4512 discovery hands every object type's class membership to JIM, and that tag is what entitles the
+        // merger to reconcile the type at all; a type without it (the Active Directory path) is left alone.
+        objectType.Tags.Add(new ConnectedSystemObjectTypeTag
+        {
+            Key = ObjectTypeTags.Keys.ClassMembershipAttribute,
+            Value = "objectClass"
+        });
         return objectType;
     }
 
@@ -255,5 +263,52 @@ public class AuxiliaryClassAttributeMergerTests
         var connectedSystem = new ConnectedSystem { Id = 1, Name = "Directory" };
 
         Assert.That(() => AuxiliaryClassAttributeMerger.Merge(connectedSystem), Throws.Nothing);
+    }
+
+    /// <summary>
+    /// Red-first regression: the merger's premise, that an attribute bearing another class's name can only have
+    /// arrived through a merge, holds only where JIM manages class membership (the RFC 4512 path, whose discovery
+    /// stamps every attribute with the structural class's own name). Active Directory discovery resolves the class
+    /// hierarchy itself and stamps each attribute with the class it actually came from, so a `user` type natively
+    /// carries `cn` from person, `title` from organizationalPerson and `sAMAccountName` from securityPrincipal.
+    /// Reconciling such a type stripped every inherited attribute on schema apply, which is how Scenario 4's Samba
+    /// AD run lost sAMAccountName, sn, cn, title, department, company, employeeID, distinguishedName and
+    /// description. AD types carry no class membership attribute tag, and that absence is what must spare them.
+    /// </summary>
+    [Test]
+    public void Merge_TypeWhoseClassMembershipJimDoesNotManage_LeavesItsInheritedAttributesAlone()
+    {
+        var userType = new ConnectedSystemObjectType
+        {
+            Id = 10,
+            Name = "user",
+            Attributes =
+            [
+                Attribute("cn", "person"),
+                Attribute("sn", "person"),
+                Attribute("title", "organizationalPerson"),
+                Attribute("sAMAccountName", "securityPrincipal"),
+                Attribute("description", "top"),
+                Attribute("userPrincipalName", "user")
+            ]
+        };
+        userType.Tags.Add(new ConnectedSystemObjectTypeTag
+        {
+            Key = ObjectTypeTags.Keys.ClassKind,
+            Value = ObjectTypeTags.Values.ClassKindStructural
+        });
+
+        var connectedSystem = new ConnectedSystem { Id = 1, Name = "Directory", ObjectTypes = [userType] };
+
+        var result = AuxiliaryClassAttributeMerger.Merge(connectedSystem);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(userType.Attributes.Select(a => a.Name),
+                Is.EquivalentTo(new[] { "cn", "sn", "title", "sAMAccountName", "description", "userPrincipalName" }),
+                "Inherited attributes are native on a type whose class membership JIM does not manage; " +
+                "removing them strips most of an Active Directory user's schema on every apply.");
+            Assert.That(result.RemovedAttributes, Is.Empty);
+        }
     }
 }

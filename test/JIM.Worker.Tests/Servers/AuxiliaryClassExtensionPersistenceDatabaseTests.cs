@@ -270,6 +270,11 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
             required: true, className: "posixAccount", writability: AttributeWritability.Writable));
         posixAccount.Attributes.Add(new ConnectorSchemaAttribute("gidNumber", AttributeDataType.Number, AttributePlurality.SingleValued,
             required: true, className: "posixAccount", writability: AttributeWritability.Writable));
+
+        // RFC 4512 discovery hands every object type's class membership to JIM, and that tag is what entitles
+        // the merge to reconcile the type; without it (the Active Directory path) the type is left alone.
+        person.Tags.Add(new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.ClassMembershipAttribute, "objectClass"));
+        posixAccount.Tags.Add(new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.ClassMembershipAttribute, "objectClass"));
         schema.ObjectTypes = [person, posixAccount];
 
         await using var ctx = NewContext();
