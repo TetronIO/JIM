@@ -205,7 +205,7 @@ These were open during drafting and have since been decided; they are settled in
 
 This PRD's Resolved Decisions committed to building the connector set-password foundation **once**, under [#1121](https://github.com/TetronIO/JIM/issues/1121), and layering this feature's queue, fan-out, and inbound capture on top. That foundation has now shipped, along with three further consumers of it: [#1172](https://github.com/TetronIO/JIM/issues/1172) (one password across several of a person's accounts), [#1221](https://github.com/TetronIO/JIM/issues/1221) (the outstanding-work lifecycle behind initial passwords) and [#1273](https://github.com/TetronIO/JIM/issues/1273) (a static initial password). Several of the functional requirements below are therefore already met, and #1221 in particular built a durable per-account work store whose shape this feature's queue should follow rather than reinvent. This section records all of that, so that the eventual Password Synchronisation implementation extends what exists rather than duplicating it. It is a status record, not a change of scope: no requirement here has been added, removed, or reworded.
 
-Last reviewed 2026-08-24, against `main` plus the Phase 6 branch.
+Last reviewed 2026-08-28, against `main` with the whole of Phase 1 merged.
 
 ### Requirements already satisfied
 
@@ -250,7 +250,7 @@ Work delivered under #1121 that this PRD assumed but did not require: Connected 
 
 ### Delivered by the Password Synchronisation implementation
 
-The plan at [`engineering/plans/done/PASSWORD_SYNCHRONISATION.md`](../../plans/done/PASSWORD_SYNCHRONISATION.md) built requirements 1 to 14, 21 to 30 and 32 to 33 across its six phases. Recorded here as outcomes rather than as a list of files; the plan carries the detail.
+The plan at [`engineering/plans/done/PASSWORD_SYNCHRONISATION.md`](../../plans/done/PASSWORD_SYNCHRONISATION.md) built requirements 1 to 14, 21 to 30 and 32 to 33 across its six implementation steps. Recorded here as outcomes rather than as a list of files; the plan carries the detail.
 
 | Req | State | Note |
 |-----|-------|------|

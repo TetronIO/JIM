@@ -128,35 +128,37 @@ The queue, fan-out, and delivery speak only `IConnectorPasswordManagement`, and 
 - **File Connector: never, by design.** A password written to a file is cleartext at rest with no audit and no revocation; the PRD's "Rejected and deferred inbound channels" reasoning applies equally outbound. The capability stays false and the configuration stays hidden.
 - **Mock connector: already implements the capability** and is how Phases 2 and 3 are unit tested.
 
-## Implementation Phases
+## Implementation Steps
 
-Each phase is TDD, red first, and lands with its tests, docs, and changelog entries; write parity ships with each surface in its own phase per the surface-parity rule.
+Each step is TDD, red first, and lands with its tests, docs, and changelog entries; write parity ships with each surface in its own step per the surface-parity rule.
 
-### Phase 1: Configuration and encryption foundation ✅
+> **A note on numbering.** These six steps all build **Phase 1** of the epic ([#1119](https://github.com/TetronIO/JIM/issues/1119)) and of the PRD, which is JIM as password origin. The epic's Phase 2 is inbound capture and is not covered by this plan at all. "Step 6 complete" and "Phase 2 not started" are therefore both true; the two numbering schemes count different things, which is why this plan counts steps.
+
+### Step 1: Configuration and encryption foundation ✅
 
 - `ConnectedSystemPasswordSynchronisation` entity, EF configuration, migration; comparison/completeness guard tests
 - Dedicated protection purpose in `CredentialProtectionService` (`ProtectPassword`/`UnprotectPassword`, prefix, round-trip and isolation tests: a value protected under one purpose must not unprotect under the other)
 - Configuration parity: portal tab on `ConnectedSystemDetail` (visible only when the connector has the capability), REST create/read/update/enable/disable on `SynchronisationController`, `Get-/Set-JIMConnectedSystemPasswordSynchronisation` cmdlets with Pester tests (requirements 1, 2, 4, 5, 32)
 - Wire `CredentialAttributes.HasCredentialLikeName` into Attribute Flow configuration validation as a warning (closes requirement 16's missing call site)
 
-### Phase 2: Queue, fan-out, and Activities ✅
+### Step 2: Queue, fan-out, and Activities ✅
 
 - `PendingPasswordChange` + status enum, EF configuration, unique coalescing index, migration, bulk-columns constants, repository methods on `ISyncRepository` (UPSERT, get-due, record-attempts, delete, expire, release, counts), guard and in-memory implementations
 - `PasswordSynchronisationServer`: `QueuePasswordChangeAsync` with coalescing, zero-target no-op Activity, batched writes
 - New Activity target type and category, label, map, and exhaustiveness tests (requirements 6, 7, 8, 14, 23, 24)
 - Unit tests: coalescing supersedes, fan-out scoping (enabled + configured + object type), unprovisioned target queues, no-op recorded, payload encrypted at rest, never-log invariant
 
-### Phase 3: Delivery, retry, and drain ✅
+### Step 3: Delivery, retry, and drain ✅
 
 - `PasswordDeliveryWorkerTask` + static processor; the four task-type registration points; housekeeping due-retry enqueue
 - Expiry-first pass, backoff schedule, park rules (policy rejection never regenerates, requirement 13), max-retries exhaustion, child Activity per outcome, delete-on-success
 - Drain-on-enable and configuration-change release semantics (requirement 3); manual retry resets `NextRetryAt` and re-enqueues
 - Unit tests against `MockCallConnector` (which already implements `IConnectorPasswordManagement`); `RequiresPostgres` round-trip tests for the UPSERT and the due-work query
-- `RequireSecureTransport` honoured as a refusal (divergence 1 closed). Implemented as `IConnectorPasswordManagement.IsPasswordChannelSecure`, a statement of fact by the Connector, with the refusal applied by JIM: the policy is JIM's, held per Connected System, and a Connector cannot know whether a given deployment is an isolated network that cannot serve TLS. Delivered ahead of Phase 4, where it was originally listed, because the delivery pass is what enforces it
+- `RequireSecureTransport` honoured as a refusal (divergence 1 closed). Implemented as `IConnectorPasswordManagement.IsPasswordChannelSecure`, a statement of fact by the Connector, with the refusal applied by JIM: the policy is JIM's, held per Connected System, and a Connector cannot know whether a given deployment is an isolated network that cannot serve TLS. Delivered ahead of Step 4, where it was originally listed, because the delivery pass is what enforces it
 - The setting then moved from `ConnectedSystemPasswordSynchronisation` to `ConnectedSystem` and now governs all three paths that write a password to a system (initial-password provisioning, the administrator set-password path, and the delivery pass), sharing one rule in `PasswordChannelSecurity`. A switch guarding only synchronised passwords left an administrator who turned it on still sending in the clear down the other two, and a system that provisions accounts but receives no synchronised passwords has no Password Synchronisation row to hold it, so it could not be set there at all. Each path responds differently to the refusal: queued changes stay queued, accounts stay owed, and an administrator is told at the time
 - Fixed while here: none of the Password Synchronisation configuration keys were classified in `ConfigurationChangeClassifier`, so saving those settings would have thrown the first time the change was captured. The completeness guard missed it because its sample Connected System carried no Password Synchronisation configuration; it now does
 
-### Phase 4: Surfaces and reporting ✅
+### Step 4: Surfaces and reporting ✅
 
 - ✅ **Entry point (delivered).** `POST /api/v1/metaverse/objects/{id}/password` queues a synchronised change, with `Sync-JIMMetaverseObjectPassword` and a Synchronise Password action on the Metaverse Object beside it. Deliberately a new operation rather than a change to the existing per-account Set Password, whose own design already settled the point: it preselects nothing, because resetting a forgotten password in one system must not silently reset the others (#1172). The two answer different questions and keep different expiry defaults
 - ✅ **Secure transport on every password endpoint (delivered, requirement 34).** A `RequireSecureTransport` filter refuses a password over a transport JIM cannot confirm is encrypted, with a completeness guard that fails the build if an endpoint binds a password without it. Development over plain HTTP is exempt; the refusal names `JIM_TRUSTED_PROXIES` because TLS terminating at an untrusted proxy is the likeliest legitimate cause
@@ -165,15 +167,15 @@ Each phase is TDD, red first, and lands with its tests, docs, and changelog entr
 - Connected System list: state on `ConnectedSystemHeader` (all three projection sites), indicator chip, `passwordsync` sort arm, filter control (requirement 26)
 - Metaverse Object detail: admin-only Password Synchronisation panel via the `AuthorizeView` tab precedent, listing that identity's password Activities with per-system outcomes (requirement 25)
 
-### Phase 5: Schedule-driven retention ✅
+### Step 5: Schedule-driven retention ✅
 
 - `History.PasswordEventRetentionPeriod` Service Setting (seeded, typed accessor with a zero guard, classifier entry, History API + DTO). One period governs both the Password Synchronisation Activities and the terminal queue rows: a queue row without its outcomes says something happened without saying what, so ageing them apart would leave half a record
 - Password Synchronisation Activities spared by the general Activity trim and given their own, mirroring the configuration-change and security-event classes; `DeleteExpiredPasswordEventActivitiesAsync` is the only path that removes them
-- The queue trim itself already existed at the repository layer (`DeleteTerminalPasswordChangesAsync`, built in Phase 2 with its `RequiresPostgres` coverage) but nothing called it. Wired through `PasswordSynchronisationServer.DeleteExpiredQueueRecordsAsync` into the cleanup pass, alongside the initial-password trim it now sits beside (divergence 6 closed: one mechanism, not two)
+- The queue trim itself already existed at the repository layer (`DeleteTerminalPasswordChangesAsync`, built in Step 2 with its `RequiresPostgres` coverage) but nothing called it. Wired through `PasswordSynchronisationServer.DeleteExpiredQueueRecordsAsync` into the cleanup pass, alongside the initial-password trim it now sits beside (divergence 6 closed: one mechanism, not two)
 - `ScheduleStepType.HistoryRetentionCleanup`, `HistoryRetentionCleanupWorkerTask` and its four registration points, step dispatch in `SchedulerServer.QueueStepAsync`, worker execution path, and the built-in daily Schedule in the catalogue (so it converges into existing deployments and survives a factory reset, per #916's rule). The housekeeping timer and its `GetLastCleanupTimeAsync` supporting query are gone; retention now has an execution history, a next run time, and a summary Activity per run (requirements 28, 29, 30; delivers #1118)
-- Fixed while here: `DeleteExpiredChangeHistoryAsync` took four positional `DateTime` cutoffs, and this phase's addition would have made it five. Replaced with `ChangeHistoryRetentionCutoffs`, built in one place by `GetRetentionCutoffsAsync`, so the scheduled step and the API endpoint cannot drift apart in how they derive them and a transposed pair cannot compile silently
+- Fixed while here: `DeleteExpiredChangeHistoryAsync` took four positional `DateTime` cutoffs, and this step's addition would have made it five. Replaced with `ChangeHistoryRetentionCutoffs`, built in one place by `GetRetentionCutoffsAsync`, so the scheduled step and the API endpoint cannot drift apart in how they derive them and a transposed pair cannot compile silently
 
-### Phase 6: Integration, documentation, and security review ✅
+### Step 6: Integration, documentation, and security review ✅
 
 - New integration scenario: configure and enable Password Synchronisation on the Samba AD system, change a password via the API, assert delivery by binding; disabled-accumulate-then-drain and coalescing assertions (Scenario 3's shape); registered in `Run-IntegrationTests.ps1`
 - Public docs: Password Synchronisation concept and how-to, LDAP connector reference update, Activities category reference, REST and PowerShell reference; `DEVELOPER_GUIDE.md` password channel section; component diagrams
@@ -188,21 +190,21 @@ Two things came out of writing it, both fixed rather than deferred:
 
 ## Success Criteria
 
-The PRD's acceptance criteria, all of which this plan covers except the Phase 2 (inbound) items. Concretely measurable: three password changes for one identity against a disabled system leave one queue row; enabling delivers it without intervention; a policy rejection parks with the target's reason and never generates a substitute; an expired row is visible as `Expired`, never silently gone; a worker restart mid-queue loses and duplicates nothing; no password value appears in any log, Activity, DTO, or API response under test.
+The PRD's acceptance criteria, all of which this plan covers except the epic's Phase 2 (inbound) items. Concretely measurable: three password changes for one identity against a disabled system leave one queue row; enabling delivers it without intervention; a policy rejection parks with the target's reason and never generates a substitute; an expired row is visible as `Expired`, never silently gone; a worker restart mid-queue loses and duplicates nothing; no password value appears in any log, Activity, DTO, or API response under test.
 
 ## Risks and Mitigations
 
 - **Coalescing race between two near-simultaneous changes.** Mitigated in the database: the unique index plus `ON CONFLICT DO UPDATE` makes last-write-wins atomic; no application-side read-modify-write.
 - **Double delivery on crash between set and delete.** Accepted and safe: re-setting the same password is idempotent for the user; the child Activity records both attempts honestly.
 - **`RequireSecureTransport` refusing valid signed-and-sealed binds.** It is per-system opt-in (default off), exactly why divergence 1 chose an option over a hard-coded rule; the warning-only behaviour remains the default.
-- **Phase 5 effectively implements #1118, widening scope.** Isolated in its own phase; deferring it leaves the password trim in housekeeping beside the initial-password one (two entries in one mechanism, not two mechanisms), which is acceptable temporarily but must not ship as the final state.
-- **Key-ring loss now strands queued passwords, not just connector credentials.** Documented risk the PRD accepts (#952); the queue's TTL bounds the damage; the docs phase reiterates the backup requirement.
+- **Step 5 effectively implements #1118, widening scope.** Isolated in its own step; deferring it leaves the password trim in housekeeping beside the initial-password one (two entries in one mechanism, not two mechanisms), which is acceptable temporarily but must not ship as the final state.
+- **Key-ring loss now strands queued passwords, not just connector credentials.** Documented risk the PRD accepts (#952); the queue's TTL bounds the damage; the docs step reiterates the backup requirement.
 - **Backoff arithmetic overflow on high attempt counts.** Cap the computed delay at the TTL; a delay past `ExpiresAt` expires instead.
 
 ## Dependencies
 
 - No new NuGet packages.
-- #1118 is delivered by Phase 5 rather than depended on; if it lands independently first, Phase 5 collapses to adding two trim calls to its step.
+- #1118 is delivered by Step 5 rather than depended on; if it lands independently first, Step 5 collapses to adding two trim calls to its Schedule step.
 - #952 (key-ring backup docs) becomes more important, not blocking.
 
 ## Out of Scope
