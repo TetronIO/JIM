@@ -36,6 +36,17 @@ internal static class AuxiliaryClassAttributeMerger
 
         foreach (var baseType in objectTypes)
         {
+            // Reconciliation is only sound where the Connected System hands the type's class membership to JIM,
+            // because only there does discovery stamp every attribute with the structural class's own name, making
+            // a foreign ClassName proof of a merge. Active Directory discovery resolves the class hierarchy itself
+            // and stamps each attribute with the class it actually came from (cn from person, sAMAccountName from
+            // securityPrincipal), so on an AD type a foreign ClassName is the ordinary state of an inherited
+            // attribute; reconciling such a type stripped most of a user's schema on every apply. AD types carry
+            // no class membership attribute tag, and no extensions can be selected for them, so skipping them
+            // forgoes nothing.
+            if (!baseType.ManagesClassMembership())
+                continue;
+
             var contributors = ResolveContributors(baseType, objectTypesById, result);
             RemoveAttributesNoLongerContributed(baseType, contributors, result);
             AddAttributesFromContributors(baseType, contributors, result);
