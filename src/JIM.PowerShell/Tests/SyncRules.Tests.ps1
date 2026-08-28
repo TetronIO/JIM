@@ -607,6 +607,185 @@ Describe 'Remove-JIMSyncRule' {
             $param = $command.Parameters['InputObject']
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipeline } | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should have a KeepContributedValues switch parameter' {
+            $command.Parameters['KeepContributedValues'].SwitchParameter | Should -BeTrue
+        }
+    }
+
+    Context 'Contributed-values recall choice (#1537)' {
+
+        It 'Sends keepContributedValues=true on the DELETE when -KeepContributedValues is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                Remove-JIMSyncRule -Id 1 -Force -KeepContributedValues
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -match 'keepContributedValues=true'
+                }
+            }
+        }
+
+        It 'Omits keepContributedValues from the DELETE when the switch is not supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                Remove-JIMSyncRule -Id 1 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -notmatch 'keepContributedValues'
+                }
+            }
+        }
+
+        It 'Combines keepContributedValues and changeReason into one query string' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                Remove-JIMSyncRule -Id 1 -Force -KeepContributedValues -ChangeReason 'Decommissioned (CHG0123)'
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and
+                    $Endpoint -match 'keepContributedValues=true' -and
+                    $Endpoint -match 'changeReason=' -and
+                    @($Endpoint -split '\?').Count -eq 2
+                }
+            }
+        }
+
+        It 'Consults the contributed-values summary before the confirmation' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    if ($Endpoint -match 'contributed-values-summary') {
+                        return [PSCustomObject]@{ Attributes = @(); TotalValues = 0; TotalObjects = 0 }
+                    }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                Remove-JIMSyncRule -Id 1 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'sync-rules/1/contributed-values-summary'
+                }
+            }
+        }
+
+        It 'Skips the summary lookup when -Force suppresses the confirmation' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                Remove-JIMSyncRule -Id 1 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter {
+                    $Endpoint -match 'contributed-values-summary'
+                }
+            }
+        }
+
+        It 'Feeds the summary and the recall choice into the confirmation impact text' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    if ($Endpoint -match 'contributed-values-summary') {
+                        return [PSCustomObject]@{
+                            Attributes   = @([PSCustomObject]@{ AttributeId = 1; AttributeName = 'Display Name'; ValueCount = 3; ObjectCount = 3 })
+                            TotalValues  = 3
+                            TotalObjects = 3
+                        }
+                    }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+                Mock Get-JIMContributedValuesImpactText { 'IMPACT SENTENCE' }
+
+                Remove-JIMSyncRule -Id 1 -Confirm:$false
+
+                Should -Invoke Get-JIMContributedValuesImpactText -Times 1 -Exactly -ParameterFilter {
+                    $Summary.TotalValues -eq 3 -and -not $KeepContributedValues
+                }
+            }
+        }
+
+        It 'Tells the impact text the values will be kept when -KeepContributedValues is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    if ($Endpoint -match 'contributed-values-summary') {
+                        return [PSCustomObject]@{
+                            Attributes   = @([PSCustomObject]@{ AttributeId = 1; AttributeName = 'Display Name'; ValueCount = 3; ObjectCount = 3 })
+                            TotalValues  = 3
+                            TotalObjects = 3
+                        }
+                    }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+                Mock Get-JIMContributedValuesImpactText { 'IMPACT SENTENCE' }
+
+                Remove-JIMSyncRule -Id 1 -KeepContributedValues -Confirm:$false
+
+                Should -Invoke Get-JIMContributedValuesImpactText -Times 1 -Exactly -ParameterFilter {
+                    $KeepContributedValues -eq $true
+                }
+            }
+        }
+
+        It 'Emits the recall tracking object when the deletion queues a recall (202)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $activityId = [guid]'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') {
+                        return [PSCustomObject]@{
+                            RecallActivityId    = [guid]'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                            AffectedValueCount  = 3204
+                            AffectedObjectCount = 1204
+                        }
+                    }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                $result = Remove-JIMSyncRule -Id 1 -Force
+
+                $result | Should -Not -BeNullOrEmpty
+                $result.RecallActivityId | Should -Be $activityId
+                $result.AffectedValueCount | Should -Be 3204
+                $result.AffectedObjectCount | Should -Be 1204
+            }
+        }
+
+        It 'Emits nothing when the deletion completes immediately (204)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                $result = Remove-JIMSyncRule -Id 1 -Force
+
+                $result | Should -BeNullOrEmpty
+            }
+        }
     }
 
     Context 'Requires Connection' {

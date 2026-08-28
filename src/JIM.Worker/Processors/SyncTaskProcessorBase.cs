@@ -4500,95 +4500,19 @@ public abstract class SyncTaskProcessorBase
         if (priorityContext == null || mvo.Type == null)
             return;
 
-        var objectTypeId = mvo.Type.Id;
-        var recalledAttributeIds = recalledValues.Select(av => av.AttributeId).Distinct().ToList();
-
-        // An attribute is re-electable when the contributor cache holds a mapping from ANOTHER Connected
-        // System. Counting contributors (> 1) is not equivalent: when the leaver's own mapping has been
-        // deleted or disabled (#1533) it is absent from the cache, so a sole surviving contributor counts as
-        // 1 yet must still be re-elected. The leaver's own system is excluded either way; its other enabled
-        // rules were already evaluated in this pass's ordinary flow.
-        var reElectableAttributeIds = recalledAttributeIds
-            .Where(id => priorityContext.GetContributors(objectTypeId, id)
-                .Any(c => c.SyncRule != null && c.SyncRule.ConnectedSystemId != leaver.ConnectedSystemId))
-            .ToList();
-        if (reElectableAttributeIds.Count == 0)
-            return;
-
-        // Survivor discovery must query the repository, not the mvo.ConnectedSystemObjects navigation: the sync
-        // page loads hydrate the Metaverse Object with Type and AttributeValues only, so on PostgreSQL that
-        // navigation holds just the sibling CSOs EF happens to be tracking in this run (typically only the leaving
-        // system's own page), and survivors joined via other Connected Systems are invisible, silently disabling
-        // re-election. The in-memory test database auto-fixes the navigation up and masks this; only a
-        // real-database run can catch a regression here.
-        var joinedCsos = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
-
-        // Gather the distinct (surviving CSO, contributing rule) pairs to re-flow, highest priority first so the
-        // strongest surviving contributor is written first and the gate skips the rest.
-        var survivorsToReflow = new List<(ConnectedSystemObject Cso, SyncRule Rule)>();
-        var seen = new HashSet<(Guid CsoId, int RuleId)>();
-
-        foreach (var attributeId in reElectableAttributeIds)
-        {
-            // Contributing rules other than the leaver's own (whose contribution is gone). Project to the rule and
-            // filter in one pipeline so the leaver's rule and any rule-less mapping are excluded before the body.
-            foreach (var rule in priorityContext.GetContributors(objectTypeId, attributeId)
-                         .Select(c => c.SyncRule)
-                         .Where(r => r != null && r.ConnectedSystemId != leaver.ConnectedSystemId)
-                         .Select(r => r!))
-            {
-                foreach (var survivor in joinedCsos.Where(c =>
-                             c.ConnectedSystemId == rule.ConnectedSystemId &&
-                             c.Id != leaver.Id &&
-                             c.Status != ConnectedSystemObjectStatus.Obsolete))
-                {
-                    if (seen.Add((survivor.Id, rule.Id)))
-                        survivorsToReflow.Add((survivor, rule));
-                }
-            }
-        }
-
-        if (_objectTypes == null)
-            throw new MissingMemberException("_objectTypes is null!");
-
-        foreach (var (survivor, rule) in survivorsToReflow)
-        {
-            // The discovery load does not eagerly fetch the survivor's object type or reference-value navigations;
-            // load the full Connected System Object so the re-flow evaluates real values, can resolve the
-            // survivor's type, and can resolve its reference attributes on PostgreSQL (the in-memory test database
-            // auto-tracks navigations and would mask a missing load). A tracked survivor resolves to the same
-            // instance, now fully hydrated.
-            if (survivor.Type == null || survivor.AttributeValues.Count == 0 ||
-                survivor.AttributeValues.Any(av => av.ReferenceValueId.HasValue && av.ReferenceValue == null))
-            {
-                var loaded = await _syncRepo.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id);
-                if (loaded != null)
-                {
-                    survivor.AttributeValues = loaded.AttributeValues;
-                    survivor.Type ??= loaded.Type;
-                }
-            }
-
-            // The gate writes to the survivor's joined Metaverse Object; ensure the back-reference is the MVO in hand.
-            survivor.MetaverseObject = mvo;
-
-            // A survivor out of the rule's scope is not a legitimate contributor, so it must not be re-elected.
-            if (!_syncServer.IsCsoInScopeForImportRule(survivor, rule))
-                continue;
-
-            // The survivor belongs to a different Connected System than the one being synced, so its Connected System
-            // Object Type is not in the run's per-system _objectTypes cache; include it so the engine can resolve the
-            // survivor's type. Reference attributes are re-flowed too: unlike import-time flow (where a referenced
-            // object may not exist yet, needing deferred passes), every object a surviving CSO references already
-            // exists and is joined at recall time, so its references resolve in this single pass. This is the final
-            // opportunity to resolve them in this run, hence isFinalReferencePass (an unresolvable reference warns).
-            var objectTypesForSurvivor = new List<ConnectedSystemObjectType>(_objectTypes);
-            if (survivor.Type != null && objectTypesForSurvivor.All(t => t.Id != survivor.Type.Id))
-                objectTypesForSurvivor.Add(survivor.Type);
-
-            _syncEngine.FlowInboundAttributes(survivor, rule, objectTypesForSurvivor, _expressionEvaluator,
-                skipReferenceAttributes: false, onlyReferenceAttributes: false, isFinalReferencePass: true, _attributePriorityContext);
-        }
+        // The reusable core lives in JIM.Application (#1537 extraction) so the rule-deletion recall task can
+        // share it; this scope reproduces the obsoletion semantics exactly (the leaver's whole system is
+        // excluded, because its other enabled rules were already evaluated in this pass's ordinary flow).
+        await ContributorReElectionService.ReElectSurvivingContributorsAsync(
+            mvo,
+            recalledValues,
+            ContributorRecallScope.ForObsoletingConnectedSystemObject(leaver),
+            priorityContext,
+            _syncEngine,
+            _syncRepo,
+            _syncServer.IsCsoInScopeForImportRule,
+            _objectTypes,
+            _expressionEvaluator);
     }
 
     /// <summary>
@@ -4604,18 +4528,7 @@ public abstract class SyncTaskProcessorBase
         MetaverseObject mvo,
         IReadOnlyCollection<MetaverseObjectAttributeValue> additions,
         IReadOnlyCollection<MetaverseObjectAttributeValue> removals)
-    {
-        if (removals.Count == 0)
-            return new HashSet<int>();
-
-        var reAddedAttributeIds = additions.Select(av => av.AttributeId).ToHashSet();
-        return removals
-            .Select(av => av.AttributeId)
-            .Distinct()
-            .Where(attributeId => !reAddedAttributeIds.Contains(attributeId) &&
-                                  !mvo.AttributeValues.Any(av => av.AttributeId == attributeId && !removals.Contains(av)))
-            .ToHashSet();
-    }
+        => ContributorReElectionService.GetClearedAttributeIds(mvo, additions, removals);
 
     /// <summary>
     /// Counts the attributes genuinely cleared by a set of pending Metaverse Object changes. These are the "no

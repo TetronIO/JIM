@@ -75,5 +75,14 @@ public enum ActivityTargetOperationType
     /// objects rather than schema, and changes nothing: what it finds is recorded as suggestions an administrator
     /// may act on, never as configuration.
     /// </summary>
-    DiscoverAuxiliaryClasses = 16
+    DiscoverAuxiliaryClasses = 16,
+
+    /// <summary>
+    /// The queued recall half of deleting a Synchronisation Rule with contributed Metaverse attribute values
+    /// (#1537): the worker withdraws the rule's contributed values by provenance (re-electing surviving
+    /// contributors, staging Pending Exports), then deletes the rule as its final step. Used with
+    /// <see cref="ActivityTargetType.SynchronisationRule"/>; the rule deletion itself is recorded as a child
+    /// <see cref="Delete"/> Activity.
+    /// </summary>
+    RecallAttributeValues = 17
 }

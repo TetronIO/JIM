@@ -3785,17 +3785,31 @@ public class SynchronisationController(
     /// <summary>
     /// Delete a Synchronisation Rule
     /// </summary>
+    /// <remarks>
+    /// When the rule still contributes Metaverse attribute values, deleting it withdraws them by default: the
+    /// rule is disabled immediately and a recall runs as a queued Worker task (re-electing surviving
+    /// contributors and staging resulting exports), with the rule deleted as the task's final step; the
+    /// response is 202 Accepted with the recall Activity id and the affected counts. Pass
+    /// <c>keepContributedValues=true</c> to delete the rule immediately and leave the values in place with no
+    /// provenance; nothing will ever recall them. A rule contributing nothing deletes immediately with 204
+    /// either way. Use the contributed-values-summary endpoint first to understand the impact.
+    /// </remarks>
     /// <param name="id">The unique identifier of the Synchronisation Rule to delete.</param>
+    /// <param name="keepContributedValues">True to keep the Metaverse attribute values the rule contributed
+    /// (they remain in place with no provenance and are never recalled); false (the default) to recall them
+    /// via a queued Worker task before the rule is deleted.</param>
     /// <param name="changeReason">An optional reason for the deletion, recorded against the change history.</param>
-    /// <returns>No content on success.</returns>
-    /// <response code="204">Synchronisation Rule deleted successfully.</response>
+    /// <returns>No content when the deletion completed immediately; a tracking response when a recall was queued.</returns>
+    /// <response code="204">Synchronisation Rule deleted successfully (keep chosen, or nothing contributed).</response>
+    /// <response code="202">A contributed-values recall was queued; the rule is disabled and will be deleted when the recall completes.</response>
     /// <response code="404">Synchronisation Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{id:int}", Name = "DeleteSyncRule")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(SyncRuleDeletionQueuedResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> DeleteSyncRuleAsync(int id, [FromQuery] string? changeReason = null)
+    public async Task<IActionResult> DeleteSyncRuleAsync(int id, [FromQuery] bool keepContributedValues = false, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Deleting Synchronisation Rule: {Id}", id);
 
@@ -3813,14 +3827,60 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
         var apiKey = await GetCurrentApiKeyAsync();
-        if (apiKey != null)
-            await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, apiKey, changeReason);
-        else
-            await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, initiatedBy, changeReason);
+        var result = apiKey != null
+            ? await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, apiKey, changeReason, recallContributedValues: !keepContributedValues)
+            : await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, initiatedBy, changeReason, recallContributedValues: !keepContributedValues);
+
+        // A queued recall means the rule is disabled but not yet deleted: answer 202 with the recall Activity
+        // so the caller can monitor it (the rule is deleted as the task's final step). This is the same
+        // queued-work convention the Connected System deletion and Run Profile execution endpoints use.
+        if (result.RecallQueued && result.RecallActivityId.HasValue)
+        {
+            _logger.LogInformation(
+                "Queued a contributed-values recall for Synchronisation Rule {Id}: {ValueCount} value(s) across {ObjectCount} object(s), Activity {ActivityId}",
+                id, result.AffectedValueCount, result.AffectedObjectCount, result.RecallActivityId.Value);
+
+            return AcceptedAtRoute("GetActivity", new { id = result.RecallActivityId.Value }, new SyncRuleDeletionQueuedResponse
+            {
+                RecallActivityId = result.RecallActivityId.Value,
+                AffectedValueCount = result.AffectedValueCount,
+                AffectedObjectCount = result.AffectedObjectCount
+            });
+        }
 
         _logger.LogInformation("Deleted Synchronisation Rule: {Id}", id);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Get a summary of the Metaverse attribute values a Synchronisation Rule contributes
+    /// </summary>
+    /// <remarks>
+    /// Quantifies the values the Synchronisation Rule's Attribute Flow mappings currently contribute to the
+    /// Metaverse: per-attribute value and object counts plus totals. Use it before deleting the rule to
+    /// understand what a recall would withdraw, or what a keep would leave in place with no provenance.
+    /// Count queries only; no value rows are materialised.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
+    /// <returns>The contributed-values summary.</returns>
+    /// <response code="200">The summary (empty when the rule contributes nothing).</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("sync-rules/{id:int}/contributed-values-summary", Name = "GetSyncRuleContributedValuesSummary")]
+    [ProducesResponseType(typeof(ContributedValuesSummaryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSyncRuleContributedValuesSummaryAsync(int id)
+    {
+        _logger.LogTrace("Requested the contributed-values summary for Synchronisation Rule: {Id}", id);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
+
+        var summary = await _application.ConnectedSystems.GetSyncRuleContributedValuesSummaryAsync(id);
+        return Ok(ContributedValuesSummaryDto.FromModel(summary));
     }
 
     #endregion
@@ -4216,6 +4276,12 @@ public class SynchronisationController(
             mapping.Sources.Add(source);
         }
 
+        // Enabled applies to import and export mappings alike (#1537 create-disabled parity: the portal could
+        // already create a mapping disabled). The entity default is true; only override when the request
+        // supplies a value.
+        if (request.Enabled.HasValue)
+            mapping.Enabled = request.Enabled.Value;
+
         try
         {
             var apiKey = await GetCurrentApiKeyAsync();
@@ -4318,8 +4384,19 @@ public class SynchronisationController(
     /// <summary>
     /// Delete an Attribute Flow Mapping
     /// </summary>
+    /// <remarks>
+    /// By default, the Metaverse attribute values an import mapping contributed are recalled at the next Full
+    /// Synchronisation of the contributing system (surviving lower-priority contributors are re-elected). Pass
+    /// <c>keepContributedValues=true</c> to leave them in place instead: their provenance is severed before the
+    /// mapping is deleted, permanently exempting them from recall. Use the mapping's
+    /// contributed-values-summary endpoint first to understand the impact. Export mappings contribute nothing,
+    /// so the choice does not apply to them.
+    /// </remarks>
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="mappingId">The unique identifier of the mapping to delete.</param>
+    /// <param name="keepContributedValues">True to keep the Metaverse attribute values the mapping contributed
+    /// (their provenance is severed, so nothing ever recalls them); false (the default) to leave them to be
+    /// recalled at the next Full Synchronisation of the contributing system.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">Mapping deleted successfully.</response>
     /// <response code="404">Synchronisation Rule or mapping not found.</response>
@@ -4328,7 +4405,7 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> DeleteSyncRuleMappingAsync(int syncRuleId, int mappingId)
+    public async Task<IActionResult> DeleteSyncRuleMappingAsync(int syncRuleId, int mappingId, [FromQuery] bool keepContributedValues = false)
     {
         _logger.LogInformation("Deleting mapping {MappingId} for Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
 
@@ -4350,13 +4427,54 @@ public class SynchronisationController(
         // Get the current API key for Activity attribution if authenticated via API key
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
-            await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, apiKey);
+            await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, apiKey, keepContributedValues: keepContributedValues);
         else
-            await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, initiatedBy);
+            await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, initiatedBy, keepContributedValues: keepContributedValues);
 
         _logger.LogInformation("Deleted mapping {MappingId} from Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Get a summary of the Metaverse attribute values an Attribute Flow Mapping contributes
+    /// </summary>
+    /// <remarks>
+    /// Quantifies the values this mapping's (Synchronisation Rule, target Metaverse Attribute) pair currently
+    /// contributes. Use it before deleting the mapping to understand what a recall would withdraw at the next
+    /// Full Synchronisation, or what a keep would leave in place with no provenance. An export mapping, or one
+    /// with no target Metaverse Attribute, contributes nothing and returns an empty summary. Count queries
+    /// only; no value rows are materialised.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="mappingId">The unique identifier of the mapping.</param>
+    /// <returns>The contributed-values summary, scoped to the mapping's target Metaverse Attribute.</returns>
+    /// <response code="200">The summary (empty when the mapping contributes nothing).</response>
+    /// <response code="404">Synchronisation Rule or mapping not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}/contributed-values-summary", Name = "GetSyncRuleMappingContributedValuesSummary")]
+    [ProducesResponseType(typeof(ContributedValuesSummaryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSyncRuleMappingContributedValuesSummaryAsync(int syncRuleId, int mappingId)
+    {
+        _logger.LogTrace("Requested the contributed-values summary for mapping {MappingId} of Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
+        if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
+
+        // Only an import mapping with a target Metaverse Attribute contributes to the Metaverse; anything else
+        // has an empty summary by definition, so no count query runs.
+        if (!mapping.TargetMetaverseAttributeId.HasValue)
+            return Ok(new ContributedValuesSummaryDto());
+
+        var summary = await _application.ConnectedSystems.GetSyncRuleContributedValuesSummaryAsync(syncRuleId, mapping.TargetMetaverseAttributeId.Value);
+        return Ok(ContributedValuesSummaryDto.FromModel(summary));
     }
 
     #endregion

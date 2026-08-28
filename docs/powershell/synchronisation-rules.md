@@ -288,10 +288,10 @@ Deletes a Synchronisation Rule and all associated configuration, including attri
 
 ```powershell
 # By ID (default)
-Remove-JIMSyncRule -Id <int> [-Force] [-ChangeReason <string>] [-PassThru]
+Remove-JIMSyncRule -Id <int> [-KeepContributedValues] [-Force] [-ChangeReason <string>] [-PassThru]
 
 # By input object
-Remove-JIMSyncRule -InputObject <PSCustomObject> [-Force] [-ChangeReason <string>] [-PassThru]
+Remove-JIMSyncRule -InputObject <PSCustomObject> [-KeepContributedValues] [-Force] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -300,13 +300,22 @@ Remove-JIMSyncRule -InputObject <PSCustomObject> [-Force] [-ChangeReason <string
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById set) | | The ID of the Synchronisation Rule to delete. Accepts pipeline input. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Synchronisation Rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
+| `KeepContributedValues` | `switch` | No | `$false` | Keeps the Metaverse attribute values the rule contributed instead of recalling them. The kept values lose their provenance, so nothing can ever recall them. Omit to recall (the default): the rule is disabled immediately and the recall runs as a queued background operation, with the rule deleted as its final step. |
+| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt (and the impact lookup that would populate it) |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with the deletion and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the deleted Synchronisation Rule object before removal |
 
 ### Output
 
-With `-PassThru`, returns the Synchronisation Rule object that was deleted. Without it, returns nothing.
+When the deletion queues a contributed-values recall, returns a tracking object:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `RecallActivityId` | `guid` | The recall Activity's id; monitor it with `Get-JIMActivity` |
+| `AffectedValueCount` | `int` | Metaverse attribute values the rule contributed at decision time |
+| `AffectedObjectCount` | `int` | Distinct Metaverse Objects holding at least one of those values |
+
+When the deletion completes immediately (keep chosen, or nothing contributed), returns nothing. With `-PassThru`, the Synchronisation Rule object as it stood before deletion is also returned.
 
 **ShouldProcess impact level:** High. Prompts for confirmation unless `-Force` is specified.
 
@@ -319,6 +328,17 @@ Remove-JIMSyncRule -Id 5
 ```powershell title="Force delete without confirmation"
 Remove-JIMSyncRule -Id 5 -Force
 ```
+
+```powershell title="Delete a contributing rule and monitor the recall"
+$recall = Remove-JIMSyncRule -Id 5 -Force
+Get-JIMActivity -Id $recall.RecallActivityId
+```
+
+```powershell title="Delete a rule KEEPING the values it contributed"
+Remove-JIMSyncRule -Id 5 -KeepContributedValues
+```
+
+Keeping severs the values' provenance: nothing records that the rule contributed them, so no future synchronisation can recall them. Only choose this when the values should outlive the rule.
 
 ```powershell title="Pipeline: remove all disabled Synchronisation Rules for a Connected System"
 Get-JIMSyncRule -ConnectedSystemName "Legacy HR" |
@@ -414,6 +434,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `SourceMetaverseAttributeId` | `int[]` | Yes (ExportAttribute set) | | One or more metaverse attribute IDs to read from |
 | `Expression` | `string` | Yes (ImportExpression, ExportExpression sets) | | A DynamicExpresso expression. Use `mv["Name"]` for metaverse attributes and `cs["Name"]` for Connected System attributes. |
 | `MissingInputBehaviour` | `string` | No (ImportExpression, ExportExpression sets) | `EvaluateAnyway` | What to do when an attribute the expression reads has no value on the object: `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess). |
+| `Enabled` | `bool` | No | `$true` | Create the mapping disabled with `-Enabled $false`, ready to switch on later with `Set-JIMSyncRuleMapping -Enabled $true`. A disabled Attribute Flow is skipped by synchronisation in both directions. |
 
 ### Output
 
@@ -544,10 +565,10 @@ Deletes an Attribute Flow mapping from a Synchronisation Rule.
 
 ```powershell
 # By IDs
-Remove-JIMSyncRuleMapping -SyncRuleId <int> -MappingId <int> [-Force]
+Remove-JIMSyncRuleMapping -SyncRuleId <int> -MappingId <int> [-KeepContributedValues] [-Force]
 
 # By input object
-Remove-JIMSyncRuleMapping -SyncRuleId <int> -InputObject <PSCustomObject> [-Force]
+Remove-JIMSyncRuleMapping -SyncRuleId <int> -InputObject <PSCustomObject> [-KeepContributedValues] [-Force]
 ```
 
 ### Parameters
@@ -557,18 +578,23 @@ Remove-JIMSyncRuleMapping -SyncRuleId <int> -InputObject <PSCustomObject> [-Forc
 | `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
 | `MappingId` | `int` | Yes (by ID) | | The ID of the mapping to delete. Accepts pipeline input. Alias: `Id`. |
 | `InputObject` | `PSCustomObject` | Yes (by object) | | A mapping object from `Get-JIMSyncRuleMapping`. Accepts pipeline input. |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
+| `KeepContributedValues` | `switch` | No | `$false` | Keeps the Metaverse attribute values the mapping contributed instead of recalling them; their provenance is severed before the mapping is deleted, so nothing can ever recall them. Omit to recall (the default): the values are withdrawn at the next Full Synchronisation of the contributing Connected System, with any other contributing Attribute Flow taking over. |
+| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt (and the impact lookup that would populate it) |
 
 ### Output
 
 None.
 
-**ShouldProcess impact level:** High. Prompts for confirmation unless `-Force` is specified.
+**ShouldProcess impact level:** High. Prompts for confirmation unless `-Force` is specified. When the mapping contributed values, the confirmation states how many values, on how many Metaverse Objects, will be recalled or kept.
 
 ### Examples
 
 ```powershell title="Delete a specific mapping"
 Remove-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12
+```
+
+```powershell title="Delete a mapping KEEPING the values it contributed"
+Remove-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12 -KeepContributedValues
 ```
 
 ```powershell title="Force delete without confirmation"

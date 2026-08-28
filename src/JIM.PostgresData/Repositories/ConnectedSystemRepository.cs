@@ -6239,9 +6239,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task DeleteSyncRuleAsync(SyncRule syncRule)
     {
         // Null out the FK reference in Activities to preserve audit history
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL WHERE ""SyncRuleId"" = {0}",
-            syncRule.Id);
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL WHERE ""SyncRuleId"" = {0}",
+                syncRule.Id);
+        }
+        else
+        {
+            // The in-memory test provider does not support raw SQL; tracked fallback with the same semantics.
+            var activities = await Repository.Database.Activities.AsTracking()
+                .Where(a => a.SyncRuleId == syncRule.Id).ToListAsync();
+            foreach (var activity in activities)
+                activity.SyncRuleId = null;
+            await Repository.Database.SaveChangesAsync();
+        }
 
         Repository.Database.Remove(syncRule);
         await Repository.Database.SaveChangesAsync();
