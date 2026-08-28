@@ -682,7 +682,7 @@
                     @bind-Value="_attributeFlowMapping.Enabled"
                     Label="Enabled" />
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    A disabled Attribute Flow is skipped by synchronisation in both directions until it is re-enabled, without touching the rest of the Synchronisation Rule.
+                    A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.
                     Where another Attribute Flow also contributes the attribute, its value takes over at the next synchronisation; values only this flow contributed stay in place.
                 </MudText>
                 @if (!string.IsNullOrWhiteSpace(_attributeFlowMapping.DisabledReason))
