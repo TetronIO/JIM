@@ -230,6 +230,23 @@ public interface IActivityRepository
     public Task<List<CausalEdge>> GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> effectRunProfileExecutionItemIds);
 
     /// <summary>
+    /// Maps Pending Export ids to the Run Profile Execution Item that executed each one's export (#1528), so
+    /// the upward walk can follow a confirming import back to the export it confirms.
+    /// </summary>
+    /// <remarks>
+    /// A confirming import's edge names the Pending Export it confirms and never an item: reconciliation
+    /// deletes that Pending Export moments later, so the link has to be recorded there or not at all, and
+    /// pairing a confirmation to an export by Connected System Object id alone can land on the wrong cycle
+    /// because an object cycles through export and import repeatedly. The Pending Export id IS the cycle.
+    /// The export execution's own <see cref="CausalEdgeType.PendingExportQueueingCausedExportExecution"/>
+    /// edge carries the same id, so the pair identifies the executing item exactly. Nothing is written to
+    /// support this: the join was always available, and only the walk was not spending it.
+    /// </remarks>
+    /// <param name="pendingExportIds">The Pending Export ids named by the confirmations at one level of the walk.</param>
+    /// <returns>The executing item id per Pending Export id; ids with no recorded export execution are absent.</returns>
+    public Task<Dictionary<Guid, Guid>> GetExportExecutionItemIdsByPendingExportIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);
+
+    /// <summary>
     /// Summarises the given Run Profile Execution Items for the causal walk (#1223): which still exist, and
     /// what each did to which Connected System Object.
     /// </summary>

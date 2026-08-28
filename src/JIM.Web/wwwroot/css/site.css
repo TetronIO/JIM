@@ -140,6 +140,48 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     background-color: color-mix(in srgb, var(--mud-palette-error) 15%, transparent) !important;
 }
 
+/* A selected chip is a solid fill in its own colour, not that colour as text on a tint of itself.
+
+   MudBlazor renders a selected chip as the text variant whatever Variant the call site passes, so the rules
+   above applied to it too: the label was painted in --mud-palette-<colour> on a 15% tint of the same colour.
+   Measured on the Connector Space's status filter, the selected Success chip came out at 3.98:1 against the
+   4.5:1 WCAG AA floor for its 14px label. A solid fill instead pairs with the theme's own *-text colour,
+   which ThemeContrastTests measures for every theme on every build, so the selected state can no longer
+   drift below AA without failing the build. It also makes selection obvious at a glance rather than a
+   slightly deeper tint of the unselected chip.
+
+   Colour.Default chips are deliberately untouched: they carry no semantic colour, and MudBlazor already
+   paints them as near-black text on a light grey, which measures far above the floor. */
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-primary {
+    background-color: var(--mud-palette-primary) !important;
+    color: var(--mud-palette-primary-text) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-secondary {
+    background-color: var(--mud-palette-secondary) !important;
+    color: var(--mud-palette-secondary-text) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-info {
+    background-color: var(--mud-palette-info) !important;
+    color: var(--mud-palette-info-text) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-success {
+    background-color: var(--mud-palette-success) !important;
+    color: var(--mud-palette-success-text) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-warning {
+    background-color: var(--mud-palette-warning) !important;
+    color: var(--mud-palette-warning-text) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-error {
+    background-color: var(--mud-palette-error) !important;
+    color: var(--mud-palette-error-text) !important;
+}
+
 .mud-main-content {
     padding-top: 0;
 }

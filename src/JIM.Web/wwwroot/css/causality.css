@@ -784,9 +784,17 @@
 /* ─── Lineage view (#1495) ─── */
 
 /* Wide stories scroll horizontally inside the scroller; the page body never scrolls sideways. */
+/* The scroller's padding stacked on .canvas-wrap's 24px, so the Lineage sat in a 42px margin where the
+   Timeline (which uses the wrapper alone) sits in 24px. The two are the same panel and must gap the same.
+
+   Not simply zero: overflow-x:auto makes overflow-y:auto too, so the box clips on all four sides, and an
+   edge card's ring (.ln-now .evt-card) and a link's focus outline (2px at a 2px offset) sit outside their
+   element and would be cut. The scroller keeps just enough room for those and gives it back with a matching
+   negative margin, so the view's outer gap is the wrapper's 24px exactly. */
 .causality-panel .ln-scroller {
     overflow-x: auto;
-    padding: 18px;
+    padding: 6px;
+    margin: -6px;
 }
 
 .causality-panel .ln-truncated {
@@ -1080,7 +1088,8 @@
     padding: 1px 7px;
 }
 
-/* ─── Endings: quiet footers, never warnings ─── */
+/* ─── Endings: quiet, never warnings. They head the object's body rather than closing it, because they
+   describe what lies behind its oldest card and the body runs oldest to newest downwards. ─── */
 
 .causality-panel .ln-end {
     font-size: 0.8125rem;

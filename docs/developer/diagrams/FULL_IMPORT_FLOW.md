@@ -106,8 +106,10 @@ flowchart TD
     %% --- Delete path ---
     CheckDelete -->|Yes| FindExisting[Find existing CSO<br/>by external ID]
     FindExisting --> ExistsDel{CSO<br/>exists?}
-    ExistsDel -->|Yes| MarkObsolete[Set Status = Obsolete<br/>RPEI: Deleted<br/>Add to update list]
+    ExistsDel -->|Yes| AlreadyObsoleteDel{CSO already<br/>Obsolete?}
     ExistsDel -->|No| IgnoreDel[No CSO to delete<br/>Remove RPEI, skip]
+    AlreadyObsoleteDel -->|Yes| ReplayedDel[Delete already reported<br/>by an earlier import<br/>Remove RPEI, skip]
+    AlreadyObsoleteDel -->|No| MarkObsolete[Set Status = Obsolete<br/>RPEI: Deleted<br/>Add to update list]
 
     %% --- Create/Update path ---
     CheckDelete -->|No| FindCso[Find existing CSO<br/>by external ID]
@@ -140,9 +142,15 @@ flowchart TD
     FindCso --> CheckProcessed{CSO already processed<br/>in this import run?}
     CheckProcessed -->|Yes| SkipLog[Skip - ext ID may have<br/>been updated during import]
     SkipLog --> Loop
-    CheckProcessed -->|No| Obsolete[Set CSO Status = Obsolete<br/>Set LastUpdated = UtcNow<br/>RPEI: Deleted<br/>Add to update list]
+    CheckProcessed -->|No| ClearPes[Clear stale Pending Exports<br/>export evaluation does not<br/>exclude Obsolete CSOs]
+    ClearPes --> AlreadyObsolete{CSO already<br/>Obsolete?}
+    AlreadyObsolete -->|Yes| StillGone[Reported by an earlier import<br/>Awaiting a synchronisation run<br/>No RPEI, no status write]
+    StillGone --> Loop
+    AlreadyObsolete -->|No| Obsolete[Set CSO Status = Obsolete<br/>Set LastUpdated = UtcNow<br/>RPEI: Deleted<br/>Add to update list]
     Obsolete --> Loop
 ```
+
+**Reported once, not once per run**: a CSO stays Obsolete until a synchronisation run on its own Connected System deletes it, so every import in between finds it missing again. Only the first records a deletion; the rest change nothing and report nothing, because the object was Obsolete before the run started and Obsolete after. The Pending Export cleanup still runs each time: export evaluation does not exclude Obsolete CSOs, so a synchronisation on another Connected System can stage an export against one at any point between imports.
 
 **Safety rule**: If zero objects were imported, deletion detection is skipped entirely. This prevents accidental mass-deletion when the Connected System returns no data due to connectivity issues.
 
