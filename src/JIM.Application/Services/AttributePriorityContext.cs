@@ -60,13 +60,13 @@ public sealed class AttributePriorityContext
             // elected as a surviving contributor whose values never actually flow. It is recorded as DORMANT
             // instead, so the recall pass can tell a paused flow (values retained, #1537) from a deleted
             // mapping (values orphaned, #1533).
-            foreach (var mapping in rule.AttributeFlowRules.Where(m => m.TargetMetaverseAttribute != null && m.SyncRuleId.HasValue))
+            foreach (var mapping in rule.AttributeFlowRules.Where(m => m.TargetMetaverseAttribute != null))
             {
                 var attributeId = mapping.TargetMetaverseAttribute!.Id;
 
                 if (!rule.Enabled || !mapping.Enabled)
                 {
-                    _dormantContributors.Add((rule.MetaverseObjectTypeId, attributeId, mapping.SyncRuleId!.Value));
+                    _dormantContributors.Add((rule.MetaverseObjectTypeId, attributeId, mapping.SyncRuleId));
                     continue;
                 }
 
@@ -78,7 +78,7 @@ public sealed class AttributePriorityContext
                 }
 
                 list.Add(mapping);
-                _contributorBySyncRule[(rule.MetaverseObjectTypeId, attributeId, mapping.SyncRuleId!.Value)] = mapping;
+                _contributorBySyncRule[(rule.MetaverseObjectTypeId, attributeId, mapping.SyncRuleId)] = mapping;
             }
         }
 

@@ -60,7 +60,13 @@ public class SyncRuleMapping : IAuditable
     /// A backlink to the parent SynchronisationRule.
     /// </summary>
     public SyncRule? SyncRule { get; set; }
-    public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// The owning Synchronisation Rule. Required (#1550): a mapping always belongs to a rule, so removing one
+    /// from the rule's collection deletes the row rather than orphaning it with a null owner, and the orphan
+    /// state cannot be expressed at the database level.
+    /// </summary>
+    public int SyncRuleId { get; set; }
 
     /// <summary>
     /// The sources that provide the value for the target attribute when the mapping is evaluated. 

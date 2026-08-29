@@ -6676,7 +6676,7 @@ public partial class ConnectedSystemServer
     /// <exception cref="ArgumentException">Another mapping on the rule already targets the same attribute.</exception>
     private async Task ValidateNoDuplicateMappingTargetAsync(SyncRuleMapping mapping)
     {
-        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId;
         if (syncRuleId == 0)
             return; // a rule still being composed has no persisted mappings; the whole-rule save path validates its collection
 
@@ -6763,7 +6763,7 @@ public partial class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId;
         // Capture the object type before ClearMappingNavigationProperties detaches the SyncRule nav; auto-assign
         // needs it to scope the attribute's priority list.
         var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
@@ -6802,7 +6802,7 @@ public partial class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
-        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId;
         // Capture the object type before ClearMappingNavigationProperties detaches the SyncRule nav; auto-assign
         // needs it to scope the attribute's priority list.
         var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
@@ -6843,7 +6843,7 @@ public partial class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId;
         AuditHelper.SetUpdated(mapping, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
 
@@ -6925,7 +6925,7 @@ public partial class ConnectedSystemServer
             AuditHelper.SetUpdated(mapping, initiatedBy);
         }
 
-        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId;
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
@@ -7031,7 +7031,7 @@ public partial class ConnectedSystemServer
 
         Log.Debug("DeleteSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 
-        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId;
         // The scalar FK, deliberately: every caller of the direct delete hands over a persisted mapping (the
         // REST handler, PowerShell and the schema refresh all load from the database), so the scalar is always
         // populated, and it is what the pre-choice code keyed the priority reconcile on. Editor-built mappings
@@ -7427,9 +7427,10 @@ public partial class ConnectedSystemServer
     private async Task CaptureAttributePriorityChangeOnAffectedRulesAsync(Activity parentActivity, List<SyncRuleMapping> changed, Func<Activity, Task> createChildActivityAsync)
     {
         var affectedRuleIds = changed
-            .Select(m => m.SyncRuleId ?? m.SyncRule?.Id)
-            .Where(id => id.HasValue)
-            .Select(id => id!.Value)
+            // An unsaved mapping carries only the navigation (the scalar is still default); a persisted one
+            // always carries the scalar, which is required (#1550).
+            .Select(m => m.SyncRuleId != 0 ? m.SyncRuleId : m.SyncRule?.Id ?? 0)
+            .Where(id => id != 0)
             .Distinct();
 
         foreach (var ruleId in affectedRuleIds)
@@ -8473,14 +8474,18 @@ public partial class ConnectedSystemServer
             // existing Synchronisation Rule - update
             activity.TargetOperationType = ActivityTargetOperationType.Update;
             AuditHelper.SetUpdated(syncRule, initiatedBy);
+            // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
+            // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
+            // this must run while every named row is still readable; the keep choices are recorded on the
+            // Activity once it exists.
+            var keepMessages = await ApplyStagedMappingRemovalChoicesAsync(syncRule, mappingRemovalChoices);
+
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+            if (keepMessages.Count > 0)
+                activity.Message = string.Join(" ", keepMessages);
 
             // Read before the write, or there is nothing left to compare the new configuration against.
             var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
-
-            // Staged mapping removals (#1537): sever kept values' provenance and delete the removed rows,
-            // BEFORE the save persists the rest of the rule.
-            await ApplyStagedMappingRemovalChoicesAsync(syncRule, mappingRemovalChoices, activity);
 
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
             await ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(syncRule, previousInitialPassword);
@@ -8616,11 +8621,16 @@ public partial class ConnectedSystemServer
         {
             activity.TargetOperationType = ActivityTargetOperationType.Update;
             AuditHelper.SetUpdated(syncRule, initiatedByApiKey);
-            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
-            // Staged mapping removals (#1537): sever kept values' provenance and delete the removed rows,
-            // BEFORE the save persists the rest of the rule.
-            await ApplyStagedMappingRemovalChoicesAsync(syncRule, mappingRemovalChoices, activity);
+            // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
+            // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
+            // this must run while every named row is still readable; the keep choices are recorded on the
+            // Activity once it exists.
+            var keepMessages = await ApplyStagedMappingRemovalChoicesAsync(syncRule, mappingRemovalChoices);
+
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+            if (keepMessages.Count > 0)
+                activity.Message = string.Join(" ", keepMessages);
 
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
@@ -8828,60 +8838,67 @@ public partial class ConnectedSystemServer
     /// its sources are deleted properly. Without a keep, provenance stays intact and the shipped orphan recall
     /// withdraws the values at the next Full Synchronisation of the contributing system.
     /// <para>
-    /// A staged removal NOT named in the choices is deliberately left to the save's long-standing EF behaviour
-    /// (the severed relationship nulls the mapping row's foreign key rather than deleting the row), so callers
-    /// that never pass choices are entirely unaffected.
+    /// A staged removal NOT named in the choices still deletes its row: the mapping's Synchronisation Rule
+    /// foreign key is required (#1550), so severing the relationship deletes the orphaned row at save. What the
+    /// carrier adds on top is the recall-or-keep choice and its audit trail; an uncarried removal always takes
+    /// the safe default (recall).
     /// </para>
     /// </summary>
-    private async Task ApplyStagedMappingRemovalChoicesAsync(SyncRule syncRule, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices, Activity activity)
+    private async Task<List<string>> ApplyStagedMappingRemovalChoicesAsync(SyncRule syncRule, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices)
     {
         if (mappingRemovalChoices == null || mappingRemovalChoices.Count == 0)
-            return;
+            return [];
 
-        var keepMessages = new List<string>();
+        // Read every named mapping BEFORE acting on any of them. The mapping's Synchronisation Rule foreign key
+        // is required (#1550), so on a tracking context the very first SaveChanges after the editor severed a
+        // mapping deletes its row; a read-then-act interleaving would find the second mapping already gone.
+        // This is also why the caller invokes this method before anything else in the save flushes.
+        var removedMappings = new List<(SyncRuleMappingRemovalChoice Choice, SyncRuleMapping Mapping)>();
         foreach (var choice in mappingRemovalChoices)
         {
             // The database state is authoritative: the staged collection no longer holds the mapping, and only
             // the persisted row can say which Metaverse attribute it targeted.
             var removedMapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingAsync(choice.MappingId)
                 ?? throw new ArgumentException($"Mapping removal choice for mapping {choice.MappingId} names a mapping that does not exist; it may already have been deleted, in which case its choice was made then.");
-            // A null owner is tolerated rather than refused: on a tracking context the staged removal itself
-            // has already severed the loaded instance's rule reference (EF's fix-up), and that is exactly the
-            // state a staged removal produces. Only a mapping positively owned by a DIFFERENT rule is a defect.
-            var owningRuleId = removedMapping.SyncRule?.Id ?? removedMapping.SyncRuleId;
-            if (owningRuleId.HasValue && owningRuleId.Value != syncRule.Id)
+            // The owner is read from the persisted foreign key: a mapping owned by a DIFFERENT rule is a caller
+            // defect. On a tracking context the staged removal may have severed the loaded instance's rule
+            // navigation, which is why the scalar is the authority here.
+            if (removedMapping.SyncRuleId != syncRule.Id)
                 throw new ArgumentException($"Mapping removal choice for mapping {choice.MappingId} names a mapping that does not belong to Synchronisation Rule {syncRule.Id}.");
 
-            var targetMetaverseAttributeId = GetTargetMetaverseAttributeId(removedMapping);
-            if (choice.KeepContributedValues && targetMetaverseAttributeId.HasValue)
-            {
-                // Sever BEFORE the row deletion, mirroring the direct delete path. #1535 made duplicate targets
-                // within a rule impossible, so (rule id, target attribute id) identifies exactly this mapping's
-                // contributions.
-                var summary = await Application.Repository.Metaverse.GetContributedValuesSummaryAsync(syncRule.Id, targetMetaverseAttributeId.Value);
-                if (summary.TotalValues > 0)
-                {
-                    await Application.Repository.Metaverse.SeverContributedValueProvenanceAsync(syncRule.Id, targetMetaverseAttributeId.Value);
-                    var attributeName = removedMapping.TargetMetaverseAttribute?.Name ?? $"attribute {targetMetaverseAttributeId.Value}";
-                    keepMessages.Add($"Contributed attribute values were kept for the removed {attributeName} Attribute Flow: " +
-                        $"{summary.TotalValues:N0} value(s) across {summary.TotalObjects:N0} Metaverse Object(s) remain in place " +
-                        "with no Synchronisation Rule provenance.");
-                    Log.Information(
-                        "ApplyStagedMappingRemovalChoicesAsync: keep chosen for staged removal of mapping {MappingId} (Synchronisation Rule {SyncRuleId}, " +
-                        "Metaverse attribute {AttributeId}); severed provenance on {ValueCount} value(s) across {ObjectCount} Metaverse Object(s).",
-                        choice.MappingId, syncRule.Id, targetMetaverseAttributeId.Value, summary.TotalValues, summary.TotalObjects);
-                }
-            }
-
-            // Delete the row and its sources properly (the repository also stamps the parent rule so the
-            // configuration watermark advances, though the save's own update stamp covers that here too).
-            await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(removedMapping);
+            removedMappings.Add((choice, removedMapping));
         }
 
-        // The keep choices must be auditable on the save's Activity, mirroring what the direct mapping delete
-        // and the rule-level keep record.
-        if (keepMessages.Count > 0)
-            activity.Message = string.Join(" ", keepMessages);
+        // The rows themselves are NOT deleted here: the required foreign key guarantees the save's own flush
+        // deletes every severed row (and cascades its sources), and the rule save advances the configuration
+        // watermark, so the #1536 orphan recall re-evaluates every object at the next Full Synchronisation.
+        var keepMessages = new List<string>();
+        foreach (var (choice, removedMapping) in removedMappings)
+        {
+            var targetMetaverseAttributeId = GetTargetMetaverseAttributeId(removedMapping);
+            if (!choice.KeepContributedValues || !targetMetaverseAttributeId.HasValue)
+                continue;
+
+            // Sever BEFORE the rows are deleted by the save, mirroring the direct delete path. #1535 made
+            // duplicate targets within a rule impossible, so (rule id, target attribute id) identifies exactly
+            // this mapping's contributions.
+            var severedAttributeId = targetMetaverseAttributeId.Value;
+            var summary = await Application.Repository.Metaverse.GetContributedValuesSummaryAsync(syncRule.Id, severedAttributeId);
+            if (summary.TotalValues == 0)
+                continue;
+
+            await Application.Repository.Metaverse.SeverContributedValueProvenanceAsync(syncRule.Id, severedAttributeId);
+            var attributeName = removedMapping.TargetMetaverseAttribute?.Name ?? $"attribute {severedAttributeId}";
+            keepMessages.Add($"Contributed attribute values were kept for the removed {attributeName} Attribute Flow: " +
+                $"{summary.TotalValues:N0} value(s) across {summary.TotalObjects:N0} Metaverse Object(s) remain in place " +
+                "with no Synchronisation Rule provenance.");
+            Log.Information(
+                "ApplyStagedMappingRemovalChoicesAsync: keep chosen for staged removal of mapping {MappingId} (Synchronisation Rule {SyncRuleId}, " +
+                "Metaverse attribute {AttributeId}); severed provenance on {ValueCount} value(s) across {ObjectCount} Metaverse Object(s).",
+                choice.MappingId, syncRule.Id, severedAttributeId, summary.TotalValues, summary.TotalObjects);
+        }
+
+        return keepMessages;
     }
 
     /// <summary>
