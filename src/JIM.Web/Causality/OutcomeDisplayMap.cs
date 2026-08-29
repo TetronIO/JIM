@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
+using JIM.Models.Enums;
 using MudBlazor;
 
 namespace JIM.Web.Causality;
@@ -202,6 +204,74 @@ public static class OutcomeDisplayMap
             CausalReasonCode.ExportDeleteStaged =>
                 new OutcomeDisplay("Record deleted", "CSO Exported (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete),
             _ => Get(ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
+        };
+    }
+
+    /// <summary>
+    /// The tone-tinted operation chip a Lineage chain-hop card carries (#1495 follow-up): what the hop did
+    /// to an object, in the same vocabulary as a this-run event card, derived entirely from facts the
+    /// cohort already carries. Null where the hop states no object operation at all: a confirmation
+    /// confirms rather than changes anything, and a queueing edge recorded before reason codes existed has
+    /// no decision to report, so neither is worth guessing.
+    /// </summary>
+    /// <remarks>
+    /// Checked in the order the hazard on <see cref="CausalChainCohort.MetaverseChangeType"/> requires:
+    /// that field, then <see cref="CausalChainCohort.SourceImportChangeType"/>, then the edge type. Both
+    /// derived-cohort fields carry no <see cref="CausalEdgeType"/> of their own, so a derived cohort's
+    /// default <see cref="CausalEdgeType"/> (0, <see cref="CausalEdgeType.MetaverseObjectDeletionCausedDeprovision"/>)
+    /// would otherwise be read as a Metaverse Object deletion that never happened.
+    /// </remarks>
+    public static OutcomeDisplay? GetHopOperation(CausalChainCohort cohort)
+    {
+        ArgumentNullException.ThrowIfNull(cohort);
+
+        if (cohort.MetaverseChangeType is { } metaverseChangeType)
+        {
+            return metaverseChangeType switch
+            {
+                ObjectChangeType.Projected =>
+                    new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Primary, Icons.Material.Filled.AirlineStops),
+                ObjectChangeType.Joined =>
+                    new OutcomeDisplay("Joined", "CSO Joined", CausalityTone.Secondary, Icons.Material.Filled.Link),
+                ObjectChangeType.Created =>
+                    new OutcomeDisplay("Created", "MVO Created", CausalityTone.Success, Icons.Material.Filled.Add),
+                _ => null
+            };
+        }
+
+        if (cohort.SourceImportChangeType is { } sourceImportChangeType)
+        {
+            return sourceImportChangeType switch
+            {
+                ObjectChangeType.Added =>
+                    new OutcomeDisplay("Created", "CSO Added", CausalityTone.Success, Icons.Material.Filled.Add),
+                ObjectChangeType.Updated =>
+                    new OutcomeDisplay("Updated", "CSO Updated", CausalityTone.Info, Icons.Material.Filled.Edit),
+                ObjectChangeType.Deleted =>
+                    new OutcomeDisplay("Deleted", "CSO Deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
+                _ => null
+            };
+        }
+
+        return cohort.EdgeType switch
+        {
+            CausalEdgeType.PendingExportQueueingCausedExportExecution => cohort.ReasonCode switch
+            {
+                CausalReasonCode.ExportCreateStaged =>
+                    new OutcomeDisplay("Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.AddCircle),
+                CausalReasonCode.ExportUpdateStaged =>
+                    new OutcomeDisplay("Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit),
+                CausalReasonCode.ExportDeleteStaged =>
+                    new OutcomeDisplay("Deleted", "Export Staged (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete),
+                // NotSet covers edges written before the reason codes existed: guessing create/update/delete
+                // for that history would be worse than stating nothing.
+                _ => null
+            },
+            CausalEdgeType.MetaverseObjectDeletionCausedDeprovision or CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval =>
+                new OutcomeDisplay("Deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove),
+            // ExportCausedImportConfirmation and any seam this map does not know fall through here: a
+            // confirmation is not itself an object operation, and an unknown edge is never guessed.
+            _ => null
         };
     }
 
