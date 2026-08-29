@@ -88,6 +88,12 @@ public class SchemaRefreshAuxiliaryClassTests
         posixAccount.Attributes.Add(new ConnectorSchemaAttribute("uidNumber", AttributeDataType.Number, AttributePlurality.SingleValued,
             required: true, className: "posixAccount", writability: AttributeWritability.Writable));
 
+        // RFC 4512 discovery hands every object type's class membership to JIM. The tag is what entitles the
+        // reconciliation half of the merge to act on a type; without it (the Active Directory path, whose
+        // discovery stamps attributes with the classes they were inherited from) the type is left alone.
+        person.Tags.Add(new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.ClassMembershipAttribute, "objectClass"));
+        posixAccount.Tags.Add(new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.ClassMembershipAttribute, "objectClass"));
+
         return new ConnectorSchema { ObjectTypes = [person, posixAccount] };
     }
 

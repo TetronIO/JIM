@@ -314,6 +314,15 @@ else
     [Parameter]
     public int Id { get; set; }
 
+    /// <summary>
+    /// Deep link: a status to open the list narrowed to. Reached from the Connected System page, which
+    /// counts the objects waiting on a synchronisation and needs somewhere to send the reader that shows
+    /// exactly those (#1527). Unrecognised values are ignored rather than refused: a stale or hand-typed
+    /// link should open the list, not an error page.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? DeepLinkStatus { get; set; }
+
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
@@ -371,6 +380,14 @@ else
         _objectTypes = (await jim.ConnectedSystems.GetObjectTypesAsync(Id))
             .Where(t => t.Selected)
             .ToList();
+
+        // Applied before the grid's first window loads, so the deep link opens on the narrowed list rather
+        // than painting everything and then filtering it away.
+        if (Enum.TryParse<ConnectedSystemObjectStatus>(DeepLinkStatus, ignoreCase: true, out var deepLinkStatus)
+            && GetAvailableStatuses().Contains(deepLinkStatus))
+        {
+            _selectedStatuses = new List<ConnectedSystemObjectStatus> { deepLinkStatus };
+        }
     }
 
     private async Task<VirtualisedWindow<ConnectedSystemObjectHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
@@ -460,10 +477,14 @@ else
 
     private static IEnumerable<ConnectedSystemObjectStatus> GetAvailableStatuses()
     {
+        // Obsolete belongs here as much as the other two: it is the state an object sits in between the
+        // import that found it gone and the synchronisation that deletes it, and it was the one status
+        // the portal could not filter for, though the REST API and PowerShell always could (#1527).
         return new[]
         {
             ConnectedSystemObjectStatus.Normal,
-            ConnectedSystemObjectStatus.PendingProvisioning
+            ConnectedSystemObjectStatus.PendingProvisioning,
+            ConnectedSystemObjectStatus.Obsolete
         };
     }
 
@@ -484,6 +505,9 @@ else
         {
             ConnectedSystemObjectStatus.Normal => Color.Success,
             ConnectedSystemObjectStatus.PendingProvisioning => Color.Info,
+            // Warning rather than Error: an obsolete object is on its way out by design, and only a
+            // pile of them that never clears is a problem.
+            ConnectedSystemObjectStatus.Obsolete => Color.Warning,
             _ => Color.Default
         };
     }

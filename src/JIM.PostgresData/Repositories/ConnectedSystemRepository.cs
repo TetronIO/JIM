@@ -3096,9 +3096,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
+    /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obsolete.
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obsolete object count for.</param>
     public async Task<int> GetConnectedSystemObjectObsoleteCountAsync(int connectedSystemId)
     {
         return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => 
@@ -5678,7 +5678,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Select(m => new DataFlowHeader
             {
                 SyncRuleMappingId = m.Id,
-                SyncRuleId = m.SyncRuleId!.Value,
+                SyncRuleId = m.SyncRuleId,
                 SyncRuleName = m.SyncRule!.Name,
                 SyncRuleEnabled = m.SyncRule.Enabled,
                 Direction = m.SyncRule.Direction,
@@ -6239,9 +6239,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task DeleteSyncRuleAsync(SyncRule syncRule)
     {
         // Null out the FK reference in Activities to preserve audit history
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL WHERE ""SyncRuleId"" = {0}",
-            syncRule.Id);
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL WHERE ""SyncRuleId"" = {0}",
+                syncRule.Id);
+        }
+        else
+        {
+            // The in-memory test provider does not support raw SQL; tracked fallback with the same semantics.
+            var activities = await Repository.Database.Activities.AsTracking()
+                .Where(a => a.SyncRuleId == syncRule.Id).ToListAsync();
+            foreach (var activity in activities)
+                activity.SyncRuleId = null;
+            await Repository.Database.SaveChangesAsync();
+        }
 
         Repository.Database.Remove(syncRule);
         await Repository.Database.SaveChangesAsync();
@@ -6364,15 +6376,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // rule's LastUpdated so the deletion advances the watermark; the deletion's initiator and audit trail
         // live on its own Activity, so the rule's LastUpdatedBy* fields are left to rule-level edits.
         var parentRuleId = tracked.SyncRuleId;
-        if (parentRuleId.HasValue)
-        {
-            var parentRuleIdValue = parentRuleId.Value;
-            var parentRule = await Repository.Database.SyncRules
-                .AsTracking()
-                .SingleOrDefaultAsync(r => r.Id == parentRuleIdValue);
-            if (parentRule != null)
-                parentRule.LastUpdated = DateTime.UtcNow;
-        }
+        var parentRule = await Repository.Database.SyncRules
+            .AsTracking()
+            .SingleOrDefaultAsync(r => r.Id == parentRuleId);
+        if (parentRule != null)
+            parentRule.LastUpdated = DateTime.UtcNow;
 
         // Remove all sources first
         Repository.Database.RemoveRange(tracked.Sources);

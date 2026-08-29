@@ -24,6 +24,13 @@ public sealed class AttributePriorityContext
     // (object type, attribute, Synchronisation Rule) -> the contributing mapping, for O(1) incumbent lookup.
     private readonly Dictionary<(int ObjectTypeId, int AttributeId, int SyncRuleId), SyncRuleMapping> _contributorBySyncRule = new();
 
+    // (object type, attribute, Synchronisation Rule) with a DORMANT mapping: the row exists but is disabled,
+    // or its whole rule is disabled. Dormant flows contribute nothing (they are absent from the contributor
+    // structures above, so survivor takeover is unaffected), but their previously contributed values are
+    // retained rather than recalled: the administrator has paused the flow and may re-enable it (#1537).
+    // Only a mapping row that is genuinely GONE orphans its values.
+    private readonly HashSet<(int ObjectTypeId, int AttributeId, int SyncRuleId)> _dormantContributors = new();
+
     /// <summary>
     /// Whether "Null is a value" assertions are honoured (asserted-null <c>NullValue</c> marker rows are written and
     /// block lower-priority fall-through). This is gated on the <c>NullValue</c> read-query filter being in place,
@@ -46,16 +53,24 @@ public sealed class AttributePriorityContext
         ArgumentNullException.ThrowIfNull(allSyncRules);
         HonourNullAssertions = honourNullAssertions;
 
-        foreach (var rule in allSyncRules.Where(r => r.Enabled && r.Direction == SyncRuleDirection.Import))
+        foreach (var rule in allSyncRules.Where(r => r.Direction == SyncRuleDirection.Import))
         {
-            // A disabled mapping (#1485) contributes nothing: counted, it would inflate the contributor count
-            // (forcing the slow multi-contributor path) and could be elected as a surviving contributor whose
-            // values never actually flow.
-            foreach (var mapping in rule.AttributeFlowRules.Where(m => m.Enabled && m.TargetMetaverseAttribute != null && m.SyncRuleId.HasValue))
+            // A disabled mapping (#1485), and every mapping of a disabled rule, contributes nothing: counted,
+            // it would inflate the contributor count (forcing the slow multi-contributor path) and could be
+            // elected as a surviving contributor whose values never actually flow. It is recorded as DORMANT
+            // instead, so the recall pass can tell a paused flow (values retained, #1537) from a deleted
+            // mapping (values orphaned, #1533).
+            foreach (var mapping in rule.AttributeFlowRules.Where(m => m.TargetMetaverseAttribute != null))
             {
                 var attributeId = mapping.TargetMetaverseAttribute!.Id;
-                var listKey = (rule.MetaverseObjectTypeId, attributeId);
 
+                if (!rule.Enabled || !mapping.Enabled)
+                {
+                    _dormantContributors.Add((rule.MetaverseObjectTypeId, attributeId, mapping.SyncRuleId));
+                    continue;
+                }
+
+                var listKey = (rule.MetaverseObjectTypeId, attributeId);
                 if (!_contributorsByAttribute.TryGetValue(listKey, out var list))
                 {
                     list = [];
@@ -63,7 +78,7 @@ public sealed class AttributePriorityContext
                 }
 
                 list.Add(mapping);
-                _contributorBySyncRule[(rule.MetaverseObjectTypeId, attributeId, mapping.SyncRuleId!.Value)] = mapping;
+                _contributorBySyncRule[(rule.MetaverseObjectTypeId, attributeId, mapping.SyncRuleId)] = mapping;
             }
         }
 
@@ -91,6 +106,15 @@ public sealed class AttributePriorityContext
     /// </summary>
     public SyncRuleMapping? GetContributor(int objectTypeId, int attributeId, int syncRuleId) =>
         _contributorBySyncRule.TryGetValue((objectTypeId, attributeId, syncRuleId), out var mapping) ? mapping : null;
+
+    /// <summary>
+    /// Whether the given Synchronisation Rule holds a DORMANT mapping for the attribute: the mapping row exists
+    /// but is disabled, or its whole rule is disabled (#1537). A dormant flow contributes nothing, but its
+    /// previously contributed values are retained rather than recalled; only a mapping that is genuinely gone
+    /// (no live contributor and no dormant one) orphans its values (#1533).
+    /// </summary>
+    public bool HasDormantContributor(int objectTypeId, int attributeId, int syncRuleId) =>
+        _dormantContributors.Contains((objectTypeId, attributeId, syncRuleId));
 
     /// <summary>
     /// The import mappings contributing to a Metaverse Object attribute, ordered canonically (highest priority first),

@@ -1253,6 +1253,36 @@ public class SyncImportTaskProcessor
             return;
         }
 
+        // Clean up any stale Pending Exports for this CSO. When a CSO's object is deleted from the
+        // target system, any Exported-status Delete PEs (awaiting confirmation) or other stale PEs
+        // are no longer relevant. Without this cleanup, stale PEs accumulate and can cause duplicate
+        // PE errors when subsequent operations create new PEs for other CSOs.
+        //
+        // This runs ahead of the already-Obsolete guard below, and must: export evaluation does not
+        // exclude Obsolete objects, so a synchronisation on another Connected System can stage an
+        // export against this one at any point between imports, and that export would be sent to a
+        // target object that no longer exists. Reporting nothing must not become doing nothing.
+        var deletedPeCount = await _syncRepo
+            .DeletePendingExportsByConnectedSystemObjectIdsAsync(new[] { cso.Id });
+        if (deletedPeCount > 0)
+        {
+            Log.Information("ObsoleteConnectedSystemObjectAsync: Cleaned up {Count} stale Pending Export(s) for obsolete CSO {CsoId}",
+                deletedPeCount, cso.Id);
+        }
+
+        // An object stays Obsolete until a synchronisation run on its own Connected System deletes it,
+        // so every import in between finds it missing all over again. Only the first of those is a
+        // deletion. On the second the object was Obsolete before the run started and Obsolete after, so
+        // an execution item here would claim a deletion that never happened: it inflates the Activity's
+        // deleted total, and the causality graph draws it as the start of a fresh chain, because a
+        // deletion arriving out of nowhere is exactly what it looks like. Report nothing, write nothing.
+        if (cso.Status == ConnectedSystemObjectStatus.Obsolete)
+        {
+            Log.Debug("ObsoleteConnectedSystemObjectAsync: CSO {CsoId} is already Obsolete and awaiting a synchronisation run. Nothing to report.",
+                cso.Id);
+            return;
+        }
+
         // we need to create a Run Profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
         _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
@@ -1273,18 +1303,6 @@ public class SyncImportTaskProcessor
         // Note: The RPEI uses DeletionDetected (user-facing), but the CSO status uses Obsolete (internal state)
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
         cso.LastUpdated = DateTime.UtcNow;
-
-        // Clean up any stale Pending Exports for this CSO. When a CSO's object is deleted from the
-        // target system, any Exported-status Delete PEs (awaiting confirmation) or other stale PEs
-        // are no longer relevant. Without this cleanup, stale PEs accumulate and can cause duplicate
-        // PE errors when subsequent operations create new PEs for other CSOs.
-        var deletedPeCount = await _syncRepo
-            .DeletePendingExportsByConnectedSystemObjectIdsAsync(new[] { cso.Id });
-        if (deletedPeCount > 0)
-        {
-            Log.Information("ObsoleteConnectedSystemObjectAsync: Cleaned up {Count} stale Pending Export(s) for obsolete CSO {CsoId}",
-                deletedPeCount, cso.Id);
-        }
 
         // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
         _csoIdsQueuedForUpdate.Add(cso.Id);
@@ -1766,7 +1784,18 @@ public class SyncImportTaskProcessor
                 // When a connector specifies Delete, mark the existing CSO as Obsolete internally
                 if (importObject.ChangeType == ObjectChangeType.Deleted)
                 {
-                    if (connectedSystemObject != null)
+                    if (connectedSystemObject is { Status: ConnectedSystemObjectStatus.Obsolete })
+                    {
+                        // The connector is replaying a delete for an object JIM already knows is gone: an
+                        // object stays Obsolete until a synchronisation run deletes it, so a changelog
+                        // re-read can hand the same delete back before that happens. Only the first is a
+                        // deletion; another would claim this run deleted something it did not touch. Drop
+                        // the item exactly as the no-matching-object arm below does.
+                        _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
+                        Log.Debug("ProcessImportObjectsAsync: Connector requested delete for CSO {CsoId}, which is already Obsolete and awaiting a synchronisation run. Nothing to report.",
+                            connectedSystemObject.Id);
+                    }
+                    else if (connectedSystemObject != null)
                     {
                         // RPEI uses DeletionDetected (user-facing), CSO status uses Obsolete (internal state)
                         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;

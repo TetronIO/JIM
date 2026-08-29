@@ -1788,7 +1788,7 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(2147483647);
 
-                    b.Property<int?>("SyncRuleId")
+                    b.Property<int>("SyncRuleId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("TargetConnectedSystemAttributeId")
@@ -4251,6 +4251,19 @@ namespace JIM.PostgresData.Migrations
                     b.HasDiscriminator().HasValue("DeleteConnectedSystemWorkerTask");
                 });
 
+            modelBuilder.Entity("JIM.Models.Tasking.DeleteSyncRuleWorkerTask", b =>
+                {
+                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
+
+                    b.Property<bool>("RecallContributedValues")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("SyncRuleId")
+                        .HasColumnType("integer");
+
+                    b.HasDiscriminator().HasValue("DeleteSyncRuleWorkerTask");
+                });
+
             modelBuilder.Entity("JIM.Models.Tasking.ExampleDataTemplateWorkerTask", b =>
                 {
                     b.HasBaseType("JIM.Models.Tasking.WorkerTask");
@@ -4820,7 +4833,8 @@ namespace JIM.PostgresData.Migrations
                     b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
                         .WithMany("AttributeFlowRules")
                         .HasForeignKey("SyncRuleId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("JIM.Models.Staging.ConnectedSystemObjectTypeAttribute", "TargetConnectedSystemAttribute")
                         .WithMany()

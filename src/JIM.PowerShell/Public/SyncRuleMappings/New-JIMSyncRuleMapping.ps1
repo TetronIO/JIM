@@ -75,6 +75,12 @@ function New-JIMSyncRuleMapping {
         export; afterwards the target attribute is unmanaged by JIM on that Connected System Object and
         Drift Correction does not re-assert it.
 
+    .PARAMETER Enabled
+        Whether the mapping is evaluated by synchronisation from the moment it is created. Omit to create the
+        mapping enabled (the server default). Supply $false to create it disabled, so it can be ordered and
+        reviewed before it starts flowing values; a disabled mapping is skipped in both directions until it
+        is re-enabled with Set-JIMSyncRuleMapping -Enabled $true.
+
     .OUTPUTS
         PSCustomObject representing the created Synchronisation Rule Mapping.
 
@@ -122,6 +128,12 @@ function New-JIMSyncRuleMapping {
         New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -SourceMetaverseAttributeId 8 -InitialExportOnly
 
         Creates an export mapping that only flows during initial provisioning; the attribute is unmanaged afterwards.
+
+    .EXAMPLE
+        New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10 -Enabled $false
+
+        Creates the mapping disabled, so it can be ordered and reviewed before it starts flowing values.
+        Enable it when ready with Set-JIMSyncRuleMapping -Enabled $true.
 
     .LINK
         Get-JIMSyncRuleMapping
@@ -193,7 +205,12 @@ function New-JIMSyncRuleMapping {
         # provisioning (Create) export; the attribute is unmanaged by JIM afterwards.
         [Parameter(ParameterSetName = 'ExportAttribute')]
         [Parameter(ParameterSetName = 'ExportExpression')]
-        [switch]$InitialExportOnly
+        [switch]$InitialExportOnly,
+
+        # Create disabled (#1485), import and export mappings alike: omit to create the mapping enabled (the
+        # server default); supply $false to create it disabled for ordering and review before it flows values.
+        [Parameter()]
+        [bool]$Enabled
     )
 
     process {
@@ -249,7 +266,7 @@ function New-JIMSyncRuleMapping {
                 return
             }
 
-            # Inbound value processing (#843) — import mappings only. The flags enum is sent as a
+            # Inbound value processing (#843), import mappings only. The flags enum is sent as a
             # comma-separated set of names; whitespace is treated as no value unless -PreserveWhitespace.
             $processingFlags = @()
             if (-not $PreserveWhitespace) { $processingFlags += 'TreatWhitespaceAsNoValue' }
@@ -300,6 +317,12 @@ function New-JIMSyncRuleMapping {
             }
 
             $targetDescription = "CS Attribute $TargetConnectedSystemAttributeId"
+        }
+
+        # Create disabled (#1485). Sent only when asked for, so the server's default of enabled stands
+        # otherwise.
+        if ($PSBoundParameters.ContainsKey('Enabled')) {
+            $body.enabled = $Enabled
         }
 
         if ($PSCmdlet.ShouldProcess("$targetDescription in Synchronisation Rule $SyncRuleId", "Create Mapping")) {

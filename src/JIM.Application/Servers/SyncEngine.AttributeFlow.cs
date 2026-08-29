@@ -63,7 +63,7 @@ public partial class SyncEngine
         // loses priority resolution to the rule currently owning the value (the incumbent) must never reach the
         // Metaverse Object. Single-contributor attributes, and runs without a priority context, use the unchanged
         // write path: the gate adds one cached lookup and never engages for the common single-contributor case.
-        if (priorityContext != null && contributingSyncRuleId.HasValue &&
+        if (priorityContext != null &&
             priorityContext.GetContributorCount(mvoObjectTypeId, syncRuleMapping.TargetMetaverseAttribute.Id) > 1)
         {
             var incumbentSyncRuleId = FindEffectiveIncumbentSyncRuleId(mvo, syncRuleMapping.TargetMetaverseAttribute.Id);
@@ -269,15 +269,19 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Recalls Metaverse Object attribute values whose contribution no longer has a live Attribute Flow mapping
-    /// behind it (#1533). A value's provenance (<c>ContributedBySystemId</c> + <c>ContributedBySyncRuleId</c>) names
-    /// the mapping's rule; when the priority contributor cache holds no enabled import mapping from that rule
-    /// targeting the attribute, the mapping was deleted, the mapping was disabled (#1485), or the whole
-    /// Synchronisation Rule was disabled. A removed flow is a stronger statement of the disabled-rule intent the
-    /// engine already honours (a disabled rule's contributions are re-elected away by survivors): the flow's
-    /// effects must stop being asserted, so the value is staged for removal exactly like an in-place withdrawal.
-    /// The caller's withdrawal re-election pass then re-elects the next surviving contributor, or the attribute is
-    /// genuinely cleared and reported as a NoContributor outcome.
+    /// Recalls Metaverse Object attribute values whose contributing Attribute Flow mapping has been DELETED
+    /// (#1533). A value's provenance (<c>ContributedBySystemId</c> + <c>ContributedBySyncRuleId</c>) names the
+    /// mapping's rule; when the priority contributor cache holds neither a live import mapping from that rule
+    /// targeting the attribute nor a dormant one, the mapping row is gone, nothing any longer asserts the value,
+    /// and it is staged for removal exactly like an in-place withdrawal. The caller's withdrawal re-election pass
+    /// then re-elects the next surviving contributor, or the attribute is genuinely cleared and reported as a
+    /// NoContributor outcome.
+    /// <para>
+    /// A DISABLED mapping, or a mapping on a disabled Synchronisation Rule, is deliberately the opposite case
+    /// (#1537): the flow is dormant, not gone. The administrator has paused it and may re-enable it, so its
+    /// contributed values are retained; a surviving contributor still takes the attribute over (dormant flows are
+    /// absent from the contributor cache proper), but with no survivor the value stays.
+    /// </para>
     /// <para>
     /// Deliberately narrow, because a recall is a destructive act:
     /// <list type="bullet">
@@ -321,7 +325,8 @@ public partial class SyncEngine
             .Where(av => av.ContributedBySystemId == cso.ConnectedSystemId &&
                          av.ContributedBySyncRuleId is int contributingRuleId &&
                          !mvo.PendingAttributeValueRemovals.Contains(av) &&
-                         priorityContext.GetContributor(objectTypeId, av.AttributeId, contributingRuleId) == null)
+                         priorityContext.GetContributor(objectTypeId, av.AttributeId, contributingRuleId) == null &&
+                         !priorityContext.HasDormantContributor(objectTypeId, av.AttributeId, contributingRuleId))
             .ToList();
 
         if (orphaned.Count == 0)
@@ -329,7 +334,7 @@ public partial class SyncEngine
 
         mvo.PendingAttributeValueRemovals.AddRange(orphaned);
         Log.Information("RecallOrphanedContributions: recalled {Count} attribute value(s) on MVO {MvoId} contributed by " +
-            "Connected System {SystemId} whose Attribute Flow mapping no longer exists or is disabled. Attribute ids: {AttributeIds}.",
+            "Connected System {SystemId} whose Attribute Flow mapping no longer exists. Attribute ids: {AttributeIds}.",
             orphaned.Count, mvo.Id, cso.ConnectedSystemId, string.Join(", ", orphaned.Select(av => av.AttributeId).Distinct()));
 
         return orphaned;

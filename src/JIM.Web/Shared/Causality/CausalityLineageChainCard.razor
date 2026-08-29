@@ -7,9 +7,20 @@
    object it happened to. Carries the hop's snapshotted sentence (with the reference attribute
    highlighted), the attribution chips and reason, the run kind and timestamp, the link to the item
    that recorded it, and the in-place expansion of a plural cohort's members. Subdued is achieved
-   with colour tokens, never bare opacity, so the text meets WCAG AA without interaction. *@
+   with colour tokens, never bare opacity, so the text meets WCAG AA without interaction. Where the
+   hop states an object operation (#1495 follow-up), it leads with the same tone-tinted chip
+   vocabulary a this-run event card uses, so a reader scanning a column for what happened does not
+   have to read every sentence to find out. *@
 
-<div class="ln-card">
+<div class="ln-card"
+     style="@(Hop.Operation is { } cardOperation ? $"--tone: {CausalityToneCss.CssVar(cardOperation.Tone)}; --tone-text: {CausalityToneCss.TextCssVar(cardOperation.Tone)}" : null)">
+    @if (Hop.Operation is { } chipOperation)
+    {
+        <span class="ln-op">
+            <MudIcon Icon="@chipOperation.Icon" />
+            @(TechnicalNames ? chipOperation.TechnicalLabel : chipOperation.PlainLabel)
+        </span>
+    }
     <div class="ln-sentence">
         @foreach (var part in Hop.SentenceParts)
         {
@@ -97,6 +108,13 @@
     /// </summary>
     [Parameter, EditorRequired]
     public CausalityLineageChainHop Hop { get; set; } = null!;
+
+    /// <summary>
+    /// When true, technical labels (MVO/CSO vocabulary) are emphasised and plain language demoted, exactly
+    /// as the panel-wide toggle does for this-run event cards.
+    /// </summary>
+    [Parameter]
+    public bool TechnicalNames { get; set; }
 
     private bool _expanded;
 

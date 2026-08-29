@@ -184,16 +184,16 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     [Test]
     public async Task ValidateAsync_AttributeIsAlsoWrittenFromAnotherConnectedSystem_SaysThePreviewCoversThisSystemOnlyAsync()
     {
-        // The honesty that matters most here. A contributor on another Connected System takes its turn on its own
-        // synchronisation, which this preview does not run, so a withdrawal reported here may in reality be
-        // replaced by that rule's value rather than left blank. Silence would let an administrator read a
-        // withdrawal as a permanent loss.
+        // The honesty that matters most here. A surviving contributor on another Connected System is what the
+        // recall re-elects to, but what it would write is evaluated by that system's synchronisation, which
+        // this preview does not run. Silence would let an administrator read the withdrawal as a permanent loss.
         GivenAnImportRuleOnAnotherSystemWritingEmail();
 
         var findings = await NewAdapter().ValidateAsync(Context(new SyncRuleAttributeFlowProposal([])));
 
         Assert.That(findings.Any(f => f.Message.Contains("Directory Import", StringComparison.Ordinal)
-            && f.Message.Contains("own next synchronisation", StringComparison.OrdinalIgnoreCase)), Is.True);
+            && f.Message.Contains("re-elects", StringComparison.OrdinalIgnoreCase)
+            && f.Message.Contains("not counted below", StringComparison.OrdinalIgnoreCase)), Is.True);
     }
 
     [Test]
@@ -261,12 +261,12 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     }
 
     [Test]
-    public async Task EvaluateDeltasAsync_MappingRemovedEntirely_CountsNoValueChangeBecauseNothingIsRecalledAsync()
+    public async Task EvaluateDeltasAsync_MappingRemovedEntirely_CountsNoValueChangeBecauseTheRecallIsNotThisSaveAsync()
     {
-        // The honest negative, and the one most tempting to get wrong. Inbound flow contributes what its mappings
-        // produce; a mapping that no longer exists contributes nothing rather than withdrawing what it last wrote,
-        // so the next synchronisation changes no value. Reporting a withdrawal here would be a confident lie, and
-        // what actually happens (the value is left in place and stops being maintained) is said in a finding.
+        // The deltas describe what SAVING does. A removed mapping's contributed values are withdrawn by the
+        // orphan recall (#1533/#1536), but that runs at the next Full Synchronisation of the contributing
+        // system, not in the save, so counting the withdrawals here would claim the save does something it
+        // does not. The recall (or a keep choice) is said in a finding instead.
         GivenJoinedCso(email: "ada@corp.local", currentMetaverseEmail: "ada@corp.local");
 
         var deltas = await EvaluateAsync(new SyncRuleAttributeFlowProposal([]));
@@ -275,12 +275,40 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     }
 
     [Test]
-    public async Task ValidateAsync_MappingRemovedEntirely_SaysTheValuesAreLeftInPlaceAsync()
+    public async Task ValidateAsync_MappingRemovedEntirely_SaysTheValuesAreRecalledAtTheNextFullSynchronisationAsync()
     {
         var findings = await NewAdapter().ValidateAsync(Context(new SyncRuleAttributeFlowProposal([])));
 
-        Assert.That(findings.Any(f => f.Message.Contains("Email", StringComparison.Ordinal)
-            && f.Message.Contains("left in place", StringComparison.OrdinalIgnoreCase)), Is.True);
+        var finding = findings.SingleOrDefault(f => f.Severity == PreviewValidationSeverity.Warning
+            && f.Message.Contains("Email", StringComparison.Ordinal));
+        Assert.That(finding, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding!.Message, Does.Contain("recalled at the next Full Synchronisation"));
+            Assert.That(finding!.Message, Does.Not.Contain("left in place"));
+            Assert.That(finding!.MetaverseAttributeName, Is.EqualTo("Email"),
+                "the finding names its attribute so the portal can render the standard Metaverse attribute chip");
+        }
+    }
+
+    [Test]
+    public async Task ValidateAsync_MappingRemovedWithKeepChosen_SaysTheValuesAreKeptAsync()
+    {
+        // The deletion-time choice (#1537) travels on the proposal so the preview describes what will really
+        // happen: keep severs provenance at save, and nothing ever recalls the values.
+        var findings = await NewAdapter().ValidateAsync(Context(
+            new SyncRuleAttributeFlowProposal([], KeepContributedValuesAttributeIds: [MvEmailAttributeId])));
+
+        var finding = findings.SingleOrDefault(f => f.Severity == PreviewValidationSeverity.Warning
+            && f.Message.Contains("Email", StringComparison.Ordinal));
+        Assert.That(finding, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding!.Message, Does.Contain("keep the values"));
+            Assert.That(finding!.Message, Does.Contain("ever recall them"));
+            Assert.That(finding!.Message, Does.Not.Contain("recalled at the next Full Synchronisation"));
+            Assert.That(finding!.MetaverseAttributeName, Is.EqualTo("Email"));
+        }
     }
 
     [Test]

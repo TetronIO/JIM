@@ -39,6 +39,7 @@ public class CausalChainWalkTests
     private readonly Dictionary<Guid, CausalChainItemSummary> _summariesById = new();
     private readonly Dictionary<Guid, CausalSourceImportEvent> _importEventsByCsoId = new();
     private readonly Dictionary<(int SystemId, string ExternalId), CausalSourceImportEvent> _importEventsByExternalId = new();
+    private readonly Dictionary<Guid, Guid> _exportItemIdsByPendingExportId = new();
 
     [SetUp]
     public void SetUp()
@@ -48,6 +49,7 @@ public class CausalChainWalkTests
         _summariesById.Clear();
         _importEventsByCsoId.Clear();
         _importEventsByExternalId.Clear();
+        _exportItemIdsByPendingExportId.Clear();
 
         _mockRepository = new Mock<IRepository>();
         _mockActivityRepository = new Mock<IActivityRepository>();
@@ -66,6 +68,12 @@ public class CausalChainWalkTests
                 // summary via _summariesById exercise the source-import hop.
                 .ToDictionary(id => id, id => _summariesById.GetValueOrDefault(id)
                     ?? new CausalChainItemSummary { Id = id, ObjectChangeType = ObjectChangeType.PendingExport }));
+
+        _mockActivityRepository
+            .Setup(r => r.GetExportExecutionItemIdsByPendingExportIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids
+                .Where(_exportItemIdsByPendingExportId.ContainsKey)
+                .ToDictionary(id => id, id => _exportItemIdsByPendingExportId[id]));
 
         _mockActivityRepository
             .Setup(r => r.GetLatestImportItemForCsoAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<Guid>()))
@@ -461,7 +469,11 @@ public class CausalChainWalkTests
         var syncMember = chain.Cohorts.Single().Members.Single();
         Assert.That(syncMember.Resolution, Is.EqualTo(CausalChainResolution.Resolved),
             "a synchronisation whose record has a retained import must resolve rather than end the chain");
-        var sourceHop = syncMember.Causes.Single();
+        // SeedSyncCauseSummary defaults to Projected, so the resolved cause also carries the derived
+        // Identity-creation cohort (#1495 follow-up) beside its source-import hop; that cohort has its own
+        // dedicated tests, so this one isolates the hop it is actually about.
+        Assert.That(syncMember.Causes, Has.Count.EqualTo(2));
+        var sourceHop = syncMember.Causes.Single(c => c.SourceImportChangeType != null);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(sourceHop.SourceImportChangeType, Is.EqualTo(ObjectChangeType.Added));
@@ -536,13 +548,19 @@ public class CausalChainWalkTests
     /// A record whose imports have aged out yields no hop, and the chain ends at the synchronisation as a
     /// complete story rather than pretending the timeline never existed or faking a truncation.
     /// </summary>
+    /// <remarks>
+    /// Uses AttributeFlow rather than the default Projected: a Projected/Joined/Created cause always
+    /// resolves now, because it carries the derived Identity-creation cohort (#1495 follow-up) regardless
+    /// of whether an import is retained. AttributeFlow is still a source-import-hop item type, so this
+    /// keeps testing exactly what it always tested: the record's own timeline, aged out.
+    /// </remarks>
     [Test]
     public async Task GetCausalChain_SynchronisationCauseWithNoRetainedImport_EndsThereAsync()
     {
         var itemId = Guid.NewGuid();
         var syncItemId = Guid.NewGuid();
         SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
-        SeedSyncCauseSummary(syncItemId);
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.AttributeFlow);
 
         var chain = await _application.Activities.GetCausalChainAsync(itemId);
 
@@ -670,6 +688,231 @@ public class CausalChainWalkTests
 
     #endregion
 
+    #region the Identity-creation cohort (#1495 follow-up)
+
+    /// <summary>
+    /// A resolved projecting cause states its own creation as a derived cohort attached under the
+    /// member, so the Lineage view's Identity column can say the Identity was created even when the
+    /// projecting item lies further back than the page's own root.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ResolvedProjectionCause_AddsAnIdentityCreationCohortUnderTheMemberAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.Projected);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var syncMember = chain.Cohorts.Single().Members.Single();
+        var creationCohort = syncMember.Causes.Single(c => c.MetaverseChangeType != null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(creationCohort.MetaverseChangeType, Is.EqualTo(ObjectChangeType.Projected));
+            Assert.That(creationCohort.Members.Single().DisplayName, Is.EqualTo("Mia Young (S8-352)"));
+            Assert.That(creationCohort.Members.Single().Occurred,
+                Is.EqualTo(new DateTime(2026, 8, 15, 11, 0, 0, DateTimeKind.Utc)));
+            Assert.That(creationCohort.Members.Single().RunProfileExecutionItemId, Is.EqualTo(syncItemId));
+            Assert.That(creationCohort.Members.Single().Resolution, Is.EqualTo(CausalChainResolution.Resolved));
+        }
+    }
+
+    /// <summary>
+    /// The join variant reads identically: a resolved joining cause states the Identity was joined to,
+    /// not projected.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ResolvedJoinCause_AddsAnIdentityCreationCohortWithJoinedTypeAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.Joined);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var syncMember = chain.Cohorts.Single().Members.Single();
+        var creationCohort = syncMember.Causes.Single(c => c.MetaverseChangeType != null);
+        Assert.That(creationCohort.MetaverseChangeType, Is.EqualTo(ObjectChangeType.Joined));
+    }
+
+    /// <summary>
+    /// A non-creating sync type (an ordinary Attribute Flow) says nothing about the Identity's origin,
+    /// so it must add no creation cohort at all.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_NonCreatingSyncCause_AddsNoIdentityCreationCohortAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.AttributeFlow);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var syncMember = chain.Cohorts.Single().Members.Single();
+        Assert.That(syncMember.Causes.Any(c => c.MetaverseChangeType != null), Is.False);
+    }
+
+    /// <summary>
+    /// The projecting item viewed directly gets no creation cohort of its own: this-run's events already
+    /// state "Identity created" on the Identity column via <see cref="JIM.Web.Causality.CausalityLane.Identity"/>
+    /// in that case, so a derived cohort here would say the same thing twice.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ProjectionItemViewedDirectly_AddsNoCreationCohortAtRootAsync()
+    {
+        var itemId = Guid.NewGuid();
+        SeedSyncCauseSummary(itemId, ObjectChangeType.Projected);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        Assert.That(chain.Cohorts.Any(c => c.MetaverseChangeType != null), Is.False);
+    }
+
+    /// <summary>
+    /// The same projecting item reached on two branches (a cohort of two members both pointing at it)
+    /// must still read as one "Identity created" card, not one per branch.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ProjectorReachedOnTwoBranches_ProducesOneCreationCohortCardAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId,
+            NewEdge(itemId, causeItemId: syncItemId, causeName: "Branch A"),
+            NewEdge(itemId, causeItemId: syncItemId, causeName: "Branch B"));
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.Projected);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var creationCohorts = chain.Cohorts.SelectMany(c => c.Members)
+            .SelectMany(m => m.Causes)
+            .Where(c => c.MetaverseChangeType != null)
+            .ToList();
+        Assert.That(creationCohorts, Has.Count.EqualTo(1),
+            "the same projecting item reached on two branches must still read as one 'Identity created' card");
+    }
+
+    /// <summary>
+    /// The creation cohort's member states a fact about the item it is attached under; it must not be
+    /// walked again as though it were a fresh cause, or the walk would re-query the same item every
+    /// level and never terminate on its own.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_IdentityCreationCohort_DoesNotReenterTheWalkAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.Projected);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId, maxDepth: 5);
+
+        var creationMember = chain.Cohorts.Single().Members.Single().Causes
+            .Single(c => c.MetaverseChangeType != null).Members.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(creationMember.Causes, Is.Empty,
+                "the creation cohort states a fact about the item itself; it must not be walked again as its own cause");
+            Assert.That(chain.IsTruncatedByDepth, Is.False);
+        }
+        _mockActivityRepository.Verify(
+            r => r.GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()),
+            Times.Exactly(2),
+            "the creation cohort's member must not be re-queried as though it were a fresh cause");
+    }
+
+    #endregion
+
+    #region export confirmation
+
+    /// <summary>
+    /// The confirmation-to-export hop (#1528). The edge a confirming import records names the Pending Export
+    /// it confirms and nothing else, deliberately: reconciliation deletes that Pending Export moments later,
+    /// and pairing a confirmation with an export by Connected System Object id alone can land on the wrong
+    /// cycle, because an object cycles through export and import repeatedly. The Pending Export id IS the
+    /// cycle, which is what makes it the safe key.
+    ///
+    /// So the walk has to spend it. The export execution's own edge carries the same Pending Export id, so
+    /// the pair identifies the executing item exactly; without following it, every confirming import reports
+    /// "No earlier causes recorded" while the export, the synchronisation that staged it and the import that
+    /// started the whole thing all sit recorded and unreachable.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ConfirmingImport_ReachesTheExportThroughThePendingExportIdAsync()
+    {
+        var confirmingItemId = Guid.NewGuid();
+        var exportItemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        var pendingExportId = Guid.NewGuid();
+
+        SeedEdges(confirmingItemId, NewConfirmationEdge(confirmingItemId, pendingExportId, "Ada Lovelace"));
+        SeedEdges(exportItemId, NewQueueingEdge(exportItemId, pendingExportId, syncItemId, "Ada Lovelace"));
+        SeedExportExecutionItem(pendingExportId, exportItemId);
+        Retain(exportItemId);
+
+        var chain = await _application.Activities.GetCausalChainAsync(confirmingItemId);
+
+        var confirmation = chain.Cohorts.Single().Members.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(confirmation.RunProfileExecutionItemId, Is.EqualTo(exportItemId),
+                "the export that caused the confirmation is identified by the Pending Export they share");
+            Assert.That(confirmation.Resolution, Is.EqualTo(CausalChainResolution.Resolved),
+                "a hop the walk can follow is not an ending; reporting one hides the whole chain behind it");
+            Assert.That(confirmation.Causes.Single().Members.Single().RunProfileExecutionItemId,
+                Is.EqualTo(syncItemId),
+                "and the export's own cause must follow, which is the point of resolving the hop at all");
+        }
+    }
+
+    /// <summary>
+    /// The export has aged out while the confirmation survives, which is the ordinary shape once a deployment
+    /// outlives one retention window: causes are always older than their effects. It must read as history
+    /// lost, never as the complete story.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ConfirmingImportWhoseExportAgedOut_ReportsTheHistoryAsNotRetainedAsync()
+    {
+        var confirmingItemId = Guid.NewGuid();
+        var exportItemId = Guid.NewGuid();
+        var pendingExportId = Guid.NewGuid();
+
+        SeedEdges(confirmingItemId, NewConfirmationEdge(confirmingItemId, pendingExportId, "Ada Lovelace"));
+        SeedExportExecutionItem(pendingExportId, exportItemId);
+        // Deliberately not retained: the edge still resolves an id, and the item behind it is gone.
+
+        var chain = await _application.Activities.GetCausalChainAsync(confirmingItemId);
+
+        Assert.That(chain.Cohorts.Single().Members.Single().Resolution,
+            Is.EqualTo(CausalChainResolution.CauseNotRetained));
+    }
+
+    /// <summary>
+    /// Nothing to resolve to. A Pending Export whose export execution recorded no edge (an export that
+    /// failed, so the queueing cause was never written) leaves the confirmation genuinely terminal, and it
+    /// must keep saying so rather than inventing a hop.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ConfirmingImportWithNoMatchingExportEdge_StaysACompleteEndingAsync()
+    {
+        var confirmingItemId = Guid.NewGuid();
+        SeedEdges(confirmingItemId, NewConfirmationEdge(confirmingItemId, Guid.NewGuid(), "Ada Lovelace"));
+
+        var chain = await _application.Activities.GetCausalChainAsync(confirmingItemId);
+
+        var confirmation = chain.Cohorts.Single().Members.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(confirmation.RunProfileExecutionItemId, Is.Null);
+            Assert.That(confirmation.Resolution, Is.EqualTo(CausalChainResolution.NoFurtherCauses));
+        }
+    }
+
+    #endregion
+
     private void SeedEdges(Guid effectItemId, params CausalEdge[] edges)
     {
         if (!_edgesByEffectItemId.TryGetValue(effectItemId, out var list))
@@ -685,6 +928,53 @@ public class CausalChainWalkTests
     {
         foreach (var id in itemIds)
             _retainedItemIds.Add(id);
+    }
+
+    /// <summary>Records which item executed the export a Pending Export was staged for.</summary>
+    private void SeedExportExecutionItem(Guid pendingExportId, Guid exportItemId)
+    {
+        _exportItemIdsByPendingExportId[pendingExportId] = exportItemId;
+    }
+
+    /// <summary>
+    /// The edge a confirming import records: it names the Pending Export it confirms and never an item, so
+    /// the walk has nothing to follow until it spends that id.
+    /// </summary>
+    private static CausalEdge NewConfirmationEdge(Guid effectItemId, Guid pendingExportId, string causeName)
+    {
+        return new CausalEdge
+        {
+            Id = Guid.NewGuid(),
+            EffectRunProfileExecutionItemId = effectItemId,
+            EffectSyncOutcomeId = Guid.NewGuid(),
+            CausePendingExportId = pendingExportId,
+            CauseConnectedSystemObjectId = Guid.NewGuid(),
+            CauseDisplayName = causeName,
+            EdgeType = CausalEdgeType.ExportCausedImportConfirmation,
+            ConnectedSystemId = 7,
+            ConnectedSystemName = "Yellowstone APAC"
+        };
+    }
+
+    /// <summary>
+    /// The edge an export execution records, carrying the same Pending Export id. It is what makes the
+    /// confirmation's id resolvable, and it names the synchronisation that staged the export.
+    /// </summary>
+    private static CausalEdge NewQueueingEdge(Guid effectItemId, Guid pendingExportId, Guid causeItemId, string causeName)
+    {
+        return new CausalEdge
+        {
+            Id = Guid.NewGuid(),
+            EffectRunProfileExecutionItemId = effectItemId,
+            EffectSyncOutcomeId = Guid.NewGuid(),
+            CauseRunProfileExecutionItemId = causeItemId,
+            CausePendingExportId = pendingExportId,
+            CauseDisplayName = causeName,
+            EdgeType = CausalEdgeType.PendingExportQueueingCausedExportExecution,
+            ReasonCode = CausalReasonCode.ExportDeleteStaged,
+            ConnectedSystemId = 7,
+            ConnectedSystemName = "Yellowstone APAC"
+        };
     }
 
     private static CausalEdge NewEdge(

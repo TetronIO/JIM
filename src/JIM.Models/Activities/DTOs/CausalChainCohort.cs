@@ -65,6 +65,22 @@ public class CausalChainCohort
     public Enums.ObjectChangeType? SourceImportChangeType { get; init; }
 
     /// <summary>
+    /// Set where this cohort is a derived Identity-creation hop rather than a recorded edge: that a
+    /// resolved cause further back in the chain is itself the item that decided the Identity's existence,
+    /// by projecting a new one, joining an existing one, or (rarely) being created directly. The walk
+    /// synthesises these from a resolved member's own summary rather than from a stored edge, so a
+    /// column that would otherwise stay empty (the projecting item lies further back than the page's own
+    /// root) can still say the Identity was created.
+    /// </summary>
+    /// <remarks>
+    /// Carries no <see cref="EdgeType"/> of its own, exactly as <see cref="SourceImportChangeType"/>
+    /// does not: a derived cohort's <see cref="EdgeType"/> defaults to
+    /// <see cref="CausalEdgeType.MetaverseObjectDeletionCausedDeprovision"/> (ordinal 0), which nothing
+    /// here means to say. Every consumer MUST test this property before consulting <see cref="EdgeType"/>.
+    /// </remarks>
+    public Enums.ObjectChangeType? MetaverseChangeType { get; init; }
+
+    /// <summary>
     /// The Synchronisation Rule responsible, where one applies.
     /// </summary>
     public int? SyncRuleId { get; init; }

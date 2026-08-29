@@ -19,7 +19,13 @@ namespace JIM.Models.Preview;
 /// The configuration property concerned, where the finding is about one, so the editor can point at the field
 /// rather than leaving the administrator to find it.
 /// </param>
+/// <param name="MetaverseAttributeName">
+/// The Metaverse Attribute the finding is about, where it is about one. The name also appears quoted inside
+/// <paramref name="Message"/> so plain-text consumers (REST, PowerShell) read a complete sentence; the portal
+/// uses this field to render the quoted name as the standard Metaverse attribute chip instead.
+/// </param>
 public record PreviewValidationFinding(
     PreviewValidationSeverity Severity,
     string Message,
-    string? PropertyName = null);
+    string? PropertyName = null,
+    string? MetaverseAttributeName = null);

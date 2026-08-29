@@ -1079,6 +1079,25 @@ public class MetaverseRepository : IMetaverseRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<MetaverseObject>> GetMetaverseObjectsByIdsForUpdateAsync(IEnumerable<Guid> ids)
+    {
+        var idList = ids as IReadOnlyCollection<Guid> ?? ids.ToList();
+        if (idList.Count == 0)
+            return new List<MetaverseObject>();
+
+        // Tracked (with the tracker's identity resolution), so shared principals such as each object's
+        // MetaverseObjectType materialise once and the graph can be mutated and persisted alongside other
+        // tracked loads without attach-time identity conflicts. See the interface doc.
+        return await Repository.Database.MetaverseObjects
+            .AsTracking()
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Where(mvo => idList.Contains(mvo.Id))
+            .ToListAsync();
+    }
+
     public async Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids)
     {
         if (ids.Count == 0)
@@ -3338,6 +3357,78 @@ public class MetaverseRepository : IMetaverseRepository
             .OrderByDescending(c => c.ChangeTime)
             .Include(c => c.DeletedObjectType)
             .FirstOrDefaultAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<ContributedValuesSummary> GetContributedValuesSummaryAsync(int syncRuleId, int? metaverseAttributeId = null)
+    {
+        var query = Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId);
+
+        if (metaverseAttributeId.HasValue)
+        {
+            var attributeId = metaverseAttributeId.Value;
+            query = query.Where(av => av.AttributeId == attributeId);
+        }
+
+        var attributes = await query
+            .GroupBy(av => new { av.AttributeId, av.Attribute.Name })
+            .Select(g => new ContributedValuesAttributeSummary
+            {
+                AttributeId = g.Key.AttributeId,
+                AttributeName = g.Key.Name,
+                ValueCount = g.Count(),
+                ObjectCount = g.Select(av => av.MetaverseObject.Id).Distinct().Count()
+            })
+            .OrderBy(a => a.AttributeName)
+            .ToListAsync();
+
+        // A separate distinct count across the whole match set: an object contributed to on several
+        // attributes counts once, so this is not the sum of the per-attribute object counts.
+        var totalObjects = attributes.Count == 0
+            ? 0
+            : await query.Select(av => av.MetaverseObject.Id).Distinct().CountAsync();
+
+        return new ContributedValuesSummary { Attributes = attributes, TotalObjects = totalObjects };
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
+    {
+        return await Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+            .Select(av => av.MetaverseObject.Id)
+            .Distinct()
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> SeverContributedValueProvenanceAsync(int syncRuleId, int? metaverseAttributeId = null)
+    {
+        var query = Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId);
+
+        if (metaverseAttributeId.HasValue)
+        {
+            var attributeId = metaverseAttributeId.Value;
+            query = query.Where(av => av.AttributeId == attributeId);
+        }
+
+        // ContributedBySystemId is deliberately left standing: severing mirrors what rule deletion's
+        // ON DELETE SET NULL produces, and the denormalised system record is what survives that too.
+        if (Repository.Database.Database.IsRelational())
+        {
+            // Single set-based UPDATE; same relational/in-memory split as ApiKeyRepository.StampUsageAsync.
+            return await query.ExecuteUpdateAsync(setters => setters
+                .SetProperty(av => av.ContributedBySyncRuleId, (int?)null));
+        }
+
+        // The in-memory test provider does not support ExecuteUpdateAsync; tracked fallback with the same semantics.
+        var values = await query.AsTracking().ToListAsync();
+        foreach (var value in values)
+            value.ContributedBySyncRuleId = null;
+        await Repository.Database.SaveChangesAsync();
+        return values.Count;
     }
 
     /// <inheritdoc />

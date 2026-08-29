@@ -698,7 +698,7 @@ public class ActivityServer
         var rootEdges = await Application.Repository.Activity
             .GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync([runProfileExecutionItemId]);
 
-        var cohorts = GroupIntoCohorts(rootEdges);
+        var cohorts = GroupIntoCohorts(rootEdges, await ResolveExportExecutionItemIdsAsync(rootEdges));
 
         // The viewed item's own timeline continues behind it too: a synchronisation item opened directly gets
         // its source-import hop at the root, exactly as it would nested under an export's chain.
@@ -736,6 +736,11 @@ public class ActivityServer
             .Where(m => m.RunProfileExecutionItemId.HasValue)
             .ToList();
 
+        // Scoped to the whole call rather than per level: a cascade routinely reaches the same projecting
+        // item on several branches (a cohort of many members converging on one cause, or two independent
+        // branches), and each must still read as one "Identity created" card rather than one per branch.
+        var identityCreationItemIds = new HashSet<Guid>();
+
         for (var depth = 1; frontier.Count > 0; depth++)
         {
             if (depth >= maxDepth)
@@ -758,6 +763,12 @@ public class ActivityServer
                     .ToDictionary(g => g.Key, g => g.ToList())
                 : [];
 
+            // One resolution pass for the whole level, for the same reason the edge load is batched: a level
+            // of a large cascade holds thousands of members, and asking per member would issue thousands of
+            // round trips to render one panel.
+            var exportExecutionItemIds = await ResolveExportExecutionItemIdsAsync(
+                edgesByEffect.Values.SelectMany(e => e).ToList());
+
             var nextFrontier = new List<CausalChainMember>();
             foreach (var member in frontier)
             {
@@ -772,7 +783,7 @@ public class ActivityServer
                 }
 
                 var memberCohorts = edgesByEffect.TryGetValue(causeItemId, out var edges)
-                    ? GroupIntoCohorts(edges)
+                    ? GroupIntoCohorts(edges, exportExecutionItemIds)
                     : [];
 
                 // The record's own timeline continues behind a synchronisation item to the import that fed
@@ -781,6 +792,14 @@ public class ActivityServer
                 var sourceHop = await TryBuildSourceImportCohortAsync(summary);
                 if (sourceHop != null)
                     memberCohorts.Add(sourceHop);
+
+                // Where this cause's own summary shows it decided the Identity's existence (it projected,
+                // joined, or was created directly), state that fact too: otherwise the Identity column
+                // stays empty whenever the deciding item lies further back than the page's own root, even
+                // though the fact is sitting right here on the item being resolved.
+                var identityCreationHop = TryBuildIdentityCreationCohort(summary, member, identityCreationItemIds);
+                if (identityCreationHop != null)
+                    memberCohorts.Add(identityCreationHop);
 
                 if (memberCohorts.Count == 0)
                 {
@@ -798,7 +817,13 @@ public class ActivityServer
 
                 member.Resolution = CausalChainResolution.Resolved;
                 member.Causes.AddRange(memberCohorts);
-                nextFrontier.AddRange(member.Causes.SelectMany(c => c.Members)
+                // A creation cohort's sole member names the very item it is attached under (that is how it
+                // reaches the lineage builder without a tree-shape change), so it must not re-enter the
+                // frontier: doing so would re-query the same item at every remaining level until the depth
+                // bound, rather than terminating on its own.
+                nextFrontier.AddRange(member.Causes
+                    .Where(c => c.MetaverseChangeType == null)
+                    .SelectMany(c => c.Members)
                     .Where(m => m.RunProfileExecutionItemId.HasValue));
             }
 
@@ -885,6 +910,66 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// The Object Change Types that mean a resolved item decided the Identity's existence: it projected a
+    /// new one, joined an existing one, or (rarely) was created directly rather than through synchronisation.
+    /// </summary>
+    private static readonly HashSet<ObjectChangeType> IdentityCreationItemTypes =
+    [
+        ObjectChangeType.Projected,
+        ObjectChangeType.Joined,
+        ObjectChangeType.Created
+    ];
+
+    /// <summary>
+    /// Builds the derived cohort that states an Identity's own creation, where a resolved cause's summary
+    /// shows it decided that Identity's existence: the Lineage view's Identity column would otherwise stay
+    /// empty whenever the deciding item lies further back than the page's own root, even though the fact
+    /// is sitting on the very item just resolved.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors <see cref="TryBuildSourceImportCohortAsync"/> deliberately: a derived cohort with no
+    /// <see cref="CausalEdgeType"/> of its own, attached under the resolved member exactly where a stored
+    /// cause would be, so the lineage builder's recursive walk needs no tree-shape change to reach it.
+    ///
+    /// Never called for the page's own root item: there, this run's own events already state "Identity
+    /// created" on the Identity column via the Lineage view's Identity lane, and a derived cohort here
+    /// would say the same thing twice.
+    ///
+    /// <paramref name="seenCreatingItemIds"/> is scoped to the whole causal walk, not to one level: several
+    /// branches of a cascade routinely converge on the item that created the Identity, and each must still
+    /// read as one card rather than one per branch.
+    /// </remarks>
+    private static CausalChainCohort? TryBuildIdentityCreationCohort(
+        CausalChainItemSummary summary, CausalChainMember member, HashSet<Guid> seenCreatingItemIds)
+    {
+        if (!IdentityCreationItemTypes.Contains(summary.ObjectChangeType))
+            return null;
+
+        if (!seenCreatingItemIds.Add(summary.Id))
+            return null;
+
+        return new CausalChainCohort
+        {
+            MetaverseChangeType = summary.ObjectChangeType,
+            // No name snapshotted: HasConnectedSystem is false, so the card renders no chip for it. The id
+            // is kept anyway, purely so the lineage builder's join-label guard can credit the right source
+            // record with an earlier-run projection or join.
+            ConnectedSystemId = summary.ConnectedSystemId,
+            Members =
+            [
+                new CausalChainMember
+                {
+                    MetaverseObjectId = member.MetaverseObjectId,
+                    DisplayName = member.DisplayName,
+                    RunProfileExecutionItemId = summary.Id,
+                    Occurred = summary.ActivityExecuted,
+                    Resolution = CausalChainResolution.Resolved
+                }
+            ]
+        };
+    }
+
+    /// <summary>
     /// Finds the import that last changed the item's record: by the record's id while it exists, and by the
     /// external ID snapshotted on the item once the record's deletion has nulled the id on every item that
     /// processed it (#1495). The degraded key is bounded exactly as the id is (latest at or before the
@@ -913,7 +998,54 @@ public class ActivityServer
     private static bool IsTimelineSevered(CausalChainItemSummary summary) =>
         SourceImportHopItemTypes.Contains(summary.ObjectChangeType) && !summary.ConnectedSystemObjectId.HasValue;
 
-    private static List<CausalChainCohort> GroupIntoCohorts(List<CausalEdge> edges)
+    /// <summary>
+    /// Resolves the export execution behind every export confirmation among <paramref name="edges"/> (#1528),
+    /// keyed by the Pending Export the two share.
+    /// </summary>
+    /// <remarks>
+    /// A confirming import's edge names the Pending Export it confirms and never an item, because
+    /// reconciliation deletes that Pending Export moments after the edge is written and an object-id pairing
+    /// could land on the wrong export/import cycle. Spending that id here is what lets the walk continue past
+    /// a confirmation; without it every confirming import ends at "No earlier causes recorded" while the
+    /// export, the synchronisation that staged it and the import that started the story all sit recorded and
+    /// unreachable.
+    /// </remarks>
+    private async Task<Dictionary<Guid, Guid>> ResolveExportExecutionItemIdsAsync(List<CausalEdge> edges)
+    {
+        var pendingExportIds = edges
+            .Where(e => e.EdgeType == CausalEdgeType.ExportCausedImportConfirmation &&
+                        !e.CauseRunProfileExecutionItemId.HasValue &&
+                        e.CausePendingExportId.HasValue)
+            .Select(e => e.CausePendingExportId!.Value)
+            .Distinct()
+            .ToList();
+
+        return pendingExportIds.Count == 0
+            ? []
+            : await Application.Repository.Activity.GetExportExecutionItemIdsByPendingExportIdsAsync(pendingExportIds);
+    }
+
+    /// <summary>
+    /// The item an edge's cause points at: the one it names, or for an export confirmation the export
+    /// execution resolved through the Pending Export they share (#1528).
+    /// </summary>
+    private static Guid? CauseItemId(CausalEdge edge, Dictionary<Guid, Guid> exportExecutionItemIds)
+    {
+        if (edge.CauseRunProfileExecutionItemId.HasValue)
+            return edge.CauseRunProfileExecutionItemId;
+
+        if (edge.EdgeType != CausalEdgeType.ExportCausedImportConfirmation || edge.CausePendingExportId is not { } pendingExportId)
+            return null;
+
+        // Absent where the export recorded no queueing edge of its own, which is what a failed export leaves
+        // behind. The confirmation is then genuinely terminal and must keep saying so rather than inventing
+        // a hop to nowhere.
+        return exportExecutionItemIds.TryGetValue(pendingExportId, out var exportItemId) ? exportItemId : null;
+    }
+
+    private static List<CausalChainCohort> GroupIntoCohorts(
+        List<CausalEdge> edges,
+        Dictionary<Guid, Guid> exportExecutionItemIds)
     {
         return edges
             // The object type and the attribute join the key so the rendered sentence is always correct for
@@ -935,20 +1067,24 @@ public class ActivityServer
                 ConnectedSystemName = g.First().ConnectedSystemName,
                 SyncRuleId = g.Key.SyncRuleId,
                 SyncRuleName = g.First().SyncRuleName,
-                Members = g.Select(e => new CausalChainMember
+                Members = g.Select(e =>
                 {
-                    MetaverseObjectId = e.CauseMetaverseObjectId,
-                    ConnectedSystemObjectId = e.CauseConnectedSystemObjectId,
-                    PendingExportId = e.CausePendingExportId,
-                    RunProfileExecutionItemId = e.CauseRunProfileExecutionItemId,
-                    SyncOutcomeId = e.CauseSyncOutcomeId,
-                    DisplayName = e.CauseDisplayName,
-                    Occurred = e.Created,
-                    // A cause that named no item has nowhere to walk to, and nothing was lost in getting here,
-                    // so it is a complete ending rather than a truncated one.
-                    Resolution = e.CauseRunProfileExecutionItemId.HasValue
-                        ? CausalChainResolution.Resolved
-                        : CausalChainResolution.NoFurtherCauses
+                    var causeItemId = CauseItemId(e, exportExecutionItemIds);
+                    return new CausalChainMember
+                    {
+                        MetaverseObjectId = e.CauseMetaverseObjectId,
+                        ConnectedSystemObjectId = e.CauseConnectedSystemObjectId,
+                        PendingExportId = e.CausePendingExportId,
+                        RunProfileExecutionItemId = causeItemId,
+                        SyncOutcomeId = e.CauseSyncOutcomeId,
+                        DisplayName = e.CauseDisplayName,
+                        Occurred = e.Created,
+                        // A cause that reaches no item has nowhere to walk to, and nothing was lost in getting
+                        // here, so it is a complete ending rather than a truncated one.
+                        Resolution = causeItemId.HasValue
+                            ? CausalChainResolution.Resolved
+                            : CausalChainResolution.NoFurtherCauses
+                    };
                 }).ToList()
             })
             .ToList();

@@ -682,7 +682,8 @@
                     @bind-Value="_attributeFlowMapping.Enabled"
                     Label="Enabled" />
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    A disabled Attribute Flow is skipped by synchronisation in both directions until it is re-enabled, without touching the rest of the Synchronisation Rule.
+                    A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.
+                    Where another Attribute Flow also contributes the attribute, its value takes over at the next synchronisation; values only this flow contributed stay in place.
                 </MudText>
                 @if (!string.IsNullOrWhiteSpace(_attributeFlowMapping.DisabledReason))
                 {
@@ -727,6 +728,16 @@
 
     [Parameter]
     public SyncRule SyncRule { get; set; } = null!;
+
+    /// <summary>
+    /// The page-owned accumulator for the recall-or-keep choices of this edit session's staged mapping
+    /// removals (#1537). Every removal of a persisted mapping records an entry here (keep false for recall,
+    /// including removals where no choice was offered because the mapping contributed nothing), so the save
+    /// deletes each named mapping properly rather than leaving it to the legacy orphaning path. The page
+    /// passes the collection into the rule save and owns clearing it (after a successful save, or a reload).
+    /// </summary>
+    [Parameter]
+    public IList<SyncRuleMappingRemovalChoice> MappingRemovalChoices { get; set; } = [];
 
     [Parameter]
     public EventCallback OnChanged { get; set; }
@@ -1318,14 +1329,66 @@
 
     private async Task HandleAttributeFlowRuleDeleteClickAsync(SyncRuleMapping attributeFlowRule)
     {
-        var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to remove this Attribute Mapping?", yesText: "Remove!", cancelText: "Cancel");
-        if (confirmationResult.HasValue && confirmationResult.Value)
+        // a persisted import mapping with a target may hold the current values of its Metaverse attribute; if
+        // it does, the removal needs the recall-or-keep choice rather than a plain confirmation (#1537).
+        // Everything else (never persisted, export, no target, nothing contributed) keeps today's flow.
+        var keepContributedValues = false;
+        var choiceOffered = false;
+        if (attributeFlowRule.Id > 0 && GetMappingTargetMetaverseAttributeId(attributeFlowRule) is { } targetMetaverseAttributeId)
         {
-            SyncRule.AttributeFlowRules.Remove(attributeFlowRule);
-            await RefreshFlowGridAsync();
-            await OnChanged.InvokeAsync();
+            using var jim = JimFactory.Create();
+            var summary = await jim.ConnectedSystems.GetSyncRuleContributedValuesSummaryAsync(SyncRule.Id, targetMetaverseAttributeId);
+            if (summary.TotalValues > 0)
+            {
+                choiceOffered = true;
+                var attributeName = attributeFlowRule.TargetMetaverseAttribute?.Name
+                    ?? summary.Attributes.FirstOrDefault()?.AttributeName
+                    ?? "the attribute";
+                var (cancelled, keep) = await ContributedValuesChoiceDialog.ShowForMappingRemovalAsync(DialogService, attributeName, summary.TotalObjects);
+                if (cancelled)
+                    return;
+                keepContributedValues = keep;
+            }
         }
+
+        if (!choiceOffered)
+        {
+            var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to remove this Attribute Mapping?", yesText: "Remove!", cancelText: "Cancel");
+            if (!confirmationResult.HasValue || !confirmationResult.Value)
+                return;
+        }
+
+        SyncRule.AttributeFlowRules.Remove(attributeFlowRule);
+
+        // record the choice for EVERY staged removal of a persisted mapping, not just the keeps: a removal
+        // named in the save's carrier is deleted properly, one not named falls back to the legacy orphaning
+        // path (#1550). Replace-not-add keeps the carrier valid should the same id ever be recorded twice.
+        if (attributeFlowRule.Id > 0)
+        {
+            var existingChoice = MappingRemovalChoices.FirstOrDefault(c => c.MappingId == attributeFlowRule.Id);
+            if (existingChoice != null)
+                MappingRemovalChoices.Remove(existingChoice);
+            MappingRemovalChoices.Add(new SyncRuleMappingRemovalChoice
+            {
+                MappingId = attributeFlowRule.Id,
+                KeepContributedValues = keepContributedValues,
+                // recorded for the Attribute Flow preview, which can no longer read the target from the staged
+                // rule once the mapping is removed; the save resolves the authoritative target itself.
+                TargetMetaverseAttributeId = attributeFlowRule.TargetMetaverseAttributeId ?? attributeFlowRule.TargetMetaverseAttribute?.Id
+            });
+        }
+
+        await RefreshFlowGridAsync();
+        await OnChanged.InvokeAsync();
     }
+
+    /// <summary>
+    /// The Metaverse attribute an import mapping targets, from the scalar or the loaded navigation (the FK
+    /// scalar is preferred; the navigation may be the only one populated on a mapping edited this session).
+    /// Null for export mappings and for import mappings with no target yet.
+    /// </summary>
+    private static int? GetMappingTargetMetaverseAttributeId(SyncRuleMapping mapping) =>
+        mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id;
 
     /// <summary>
     /// Whether any of the page's own chip filters is narrowing the list. It tells the empty state apart from the

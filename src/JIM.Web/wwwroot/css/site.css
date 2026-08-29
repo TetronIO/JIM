@@ -140,6 +140,48 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     background-color: color-mix(in srgb, var(--mud-palette-error) 15%, transparent) !important;
 }
 
+/* A selected chip is a solid fill in its own colour, not that colour as text on a tint of itself.
+
+   MudBlazor renders a selected chip as the text variant whatever Variant the call site passes, so the rules
+   above applied to it too: the label was painted in --mud-palette-<colour> on a 15% tint of the same colour.
+   Measured on the Connector Space's status filter, the selected Success chip came out at 3.98:1 against the
+   4.5:1 WCAG AA floor for its 14px label. A solid fill instead pairs with the theme's own *-text colour,
+   which ThemeContrastTests measures for every theme on every build, so the selected state can no longer
+   drift below AA without failing the build. It also makes selection obvious at a glance rather than a
+   slightly deeper tint of the unselected chip.
+
+   Colour.Default chips are deliberately untouched: they carry no semantic colour, and MudBlazor already
+   paints them as near-black text on a light grey, which measures far above the floor. */
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-primary {
+    background-color: var(--mud-palette-primary) !important;
+    color: var(--mud-palette-primary-text) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-secondary {
+    background-color: var(--mud-palette-secondary) !important;
+    color: var(--mud-palette-secondary-text) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-info {
+    background-color: var(--mud-palette-info) !important;
+    color: var(--mud-palette-info-text) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-success {
+    background-color: var(--mud-palette-success) !important;
+    color: var(--mud-palette-success-text) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-warning {
+    background-color: var(--mud-palette-warning) !important;
+    color: var(--mud-palette-warning-text) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-selected.mud-chip-color-error {
+    background-color: var(--mud-palette-error) !important;
+    color: var(--mud-palette-error-text) !important;
+}
+
 .mud-main-content {
     padding-top: 0;
 }
@@ -226,6 +268,21 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
 .mud-table,
 .mud-alert {
     border-radius: var(--jim-container-radius) !important;
+}
+
+/* Alert icons: MudBlazor top-anchors the icon (.mud-alert-icon { padding: 7px 0 } inside a
+   flex-start .mud-alert-position) while the message carries 9px top padding, so on every alert the
+   icon rides 1-2px above the centre of the first text line (worst with a 16px MudText first line).
+   Centre the icon on the first line instead: 9px mirrors the message's own top padding, and the
+   (1lh - 24px) / 2 term splits the difference between the inherited line box and the 24px icon.
+   Top padding only, so a multi-line alert keeps its icon with the first line rather than floating
+   mid-block. html[lang] qualification because MudBlazor's stylesheet loads after this one and wins
+   the bare-class tie. 8.5px is measured, not derived: the two content shapes JIM's alerts open with
+   (a 16px MudText line at 24px line-height, and plain text inheriting the body's 1.43) centre at
+   +2px and +1.4px respectively, so 8.5px lands both within half a pixel. Do not reach for lh units
+   here: they resolve against this element's own 22px MudBlazor font-size, not the message's line. */
+html[lang] .mud-alert-icon {
+    padding-top: 8.5px;
 }
 
 /* Links inside alerts: inherit the alert's text colour with bold + underline for emphasis.

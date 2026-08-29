@@ -784,9 +784,17 @@
 /* ─── Lineage view (#1495) ─── */
 
 /* Wide stories scroll horizontally inside the scroller; the page body never scrolls sideways. */
+/* The scroller's padding stacked on .canvas-wrap's 24px, so the Lineage sat in a 42px margin where the
+   Timeline (which uses the wrapper alone) sits in 24px. The two are the same panel and must gap the same.
+
+   Not simply zero: overflow-x:auto makes overflow-y:auto too, so the box clips on all four sides, and an
+   edge card's ring (.ln-now .evt-card) and a link's focus outline (2px at a 2px offset) sit outside their
+   element and would be cut. The scroller keeps just enough room for those and gives it back with a matching
+   negative margin, so the view's outer gap is the wrapper's 24px exactly. */
 .causality-panel .ln-scroller {
     overflow-x: auto;
-    padding: 18px;
+    padding: 6px;
+    margin: -6px;
 }
 
 .causality-panel .ln-truncated {
@@ -982,6 +990,30 @@
     padding: 1px 7px;
 }
 
+/* The chain card's operation chip (#1495 follow-up): the .evt-badge recipe (see "Event badges and entity
+   rows" above), reused rather than duplicated, but resolving --tone-text ahead of --tone so a Primary chip
+   reads with the WCAG-safe text token (causality.css:27-34) rather than the raw fill colour a badge on a
+   solid surface can get away with. Placed as the card's first child, above the sentence it summarises. */
+.causality-panel .ln-op {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 2px 8px;
+    border-radius: 5px;
+    margin-bottom: 6px;
+    color: var(--tone-text, var(--tone, var(--cz-secondary)));
+    background: color-mix(in srgb, var(--tone, var(--cz-secondary)) 13%, transparent);
+}
+
+.causality-panel .ln-op .mud-icon-root {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+}
+
 .causality-panel .ln-time {
     font-size: 0.75rem;
     color: var(--cz-text-dim);
@@ -1080,7 +1112,8 @@
     padding: 1px 7px;
 }
 
-/* ─── Endings: quiet footers, never warnings ─── */
+/* ─── Endings: quiet, never warnings. They head the object's body rather than closing it, because they
+   describe what lies behind its oldest card and the body runs oldest to newest downwards. ─── */
 
 .causality-panel .ln-end {
     font-size: 0.8125rem;

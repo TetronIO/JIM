@@ -2668,6 +2668,124 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
+    /// Red-first regression: on the export-matching rejoin path, class membership (#492) must be planned
+    /// against the matched Connected System Object, not against the null <c>existingCso</c> that routed
+    /// evaluation into provisioning in the first place. Planned against null, the planner sees an object
+    /// carrying no classes and stages the structural class as an Add; the directory entry already carries
+    /// it, so the export fails with "objectClass: value #0 already exists" (found by Scenario 4's
+    /// DeprovisionJoinedDelete arrange, where a disconnect then re-add rejoins the surviving entry).
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_ExportMatchingRejoin_DoesNotRestateAClassTheObjectAlreadyCarriesAsync()
+    {
+        // Arrange - as the join happy-path above, plus a Connected System that has the concept of class
+        // membership: the Object Type declares its class membership attribute and carries it in its schema.
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var objectClassAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 9101,
+            Name = "objectClass",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued,
+            Selected = true
+        };
+        targetUserType.Attributes.Add(objectClassAttr);
+        targetUserType.Tags.Add(new ConnectedSystemObjectTypeTag
+        {
+            ConnectedSystemObjectType = targetUserType,
+            ConnectedSystemObjectTypeId = targetUserType.Id,
+            Key = ObjectTypeTags.Keys.ClassMembershipAttribute,
+            Value = "objectClass"
+        });
+
+        // The entry JIM is about to rejoin already exists at the Connected System and already carries its
+        // structural class, exactly as a disconnected-then-re-added directory entry does.
+        var cso = SeedUnclaimedTargetCso(SyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = objectClassAttr,
+            AttributeId = objectClassAttr.Id,
+            StringValue = targetUserType.Name
+        });
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>
+        {
+            BuildExportMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr)
+        };
+
+        exportRule.AttributeFlowRules.Clear();
+        var employeeIdMapping = new SyncRuleMapping
+        {
+            Id = 6002,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = csEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = csEmployeeIdAttr.Id
+        };
+        employeeIdMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 6002,
+            Order = 1,
+            MetaverseAttribute = employeeIdAttr,
+            MetaverseAttributeId = employeeIdAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(employeeIdMapping);
+
+        var cache = new ExportEvaluationCache(
+            new Dictionary<int, List<SyncRule>> { { mvUserType.Id, new List<SyncRule> { exportRule } } },
+            new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>(),
+            Array.Empty<ConnectedSystemObjectAttributeValue>().ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId)),
+            new List<int> { targetSystem.Id });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, cache);
+
+        // Assert - the rejoin staged an Update, and that Update must not restate the class the entry
+        // already carries: the directory refuses a duplicate objectClass value and the export fails.
+        Assert.That(result.PendingExports, Has.Count.EqualTo(1), "Expected exactly one PendingExport");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(result.PendingExports[0].AttributeValueChanges.Where(c =>
+                    c.Attribute?.Name.Equals("objectClass", StringComparison.OrdinalIgnoreCase) == true),
+                Is.Empty,
+                "Class membership must be planned against the matched Connected System Object, which " +
+                "already carries its structural class; staging it again is an Add the directory refuses.");
+        }
+    }
+
+    /// <summary>
     /// Red-first regression for #1051: when the atomic claim reports the CSO was claimed by another
     /// Metaverse Object first, export evaluation must fall back to provisioning a new CSO rather than
     /// leaving the seeded CSO in a stolen or inconsistent state. Uses a repository whose claim always

@@ -450,5 +450,49 @@ public class CausalityCauseWordingTests
 
     #endregion
 
+    #region the Identity-creation hop (#1495 follow-up)
+
+    private static CausalChainCohort CreationCohort(ObjectChangeType changeType)
+    {
+        return new CausalChainCohort
+        {
+            MetaverseChangeType = changeType,
+            ConnectedSystemId = 1,
+            Members = [new CausalChainMember { DisplayName = "Mia Young (S8-352)" }]
+        };
+    }
+
+    [Test]
+    public void Sentence_IdentityCreationHopForAProjection_ReadsAsANewIdentity()
+    {
+        var sentence = CausalityCauseWording.Sentence(CreationCohort(ObjectChangeType.Projected), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo("Mia Young (S8-352) was created as a new Identity"));
+    }
+
+    [Test]
+    public void Sentence_IdentityCreationHopForAJoin_ReadsAsJoinedToTheExistingIdentity()
+    {
+        var sentence = CausalityCauseWording.Sentence(CreationCohort(ObjectChangeType.Joined), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo("Mia Young (S8-352) was joined to this existing Identity"));
+    }
+
+    [Test]
+    public void Sentence_IdentityCreationHopForADirectCreate_ReadsAsCreatedDirectlyInJim()
+    {
+        var sentence = CausalityCauseWording.Sentence(CreationCohort(ObjectChangeType.Created), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo("This Identity was created directly in JIM"));
+    }
+
+    [Test]
+    public void ShowConnectedSystemChip_IdentityCreationHop_SuppressesTheChip()
+    {
+        Assert.That(CausalityCauseWording.ShowConnectedSystemChip(CreationCohort(ObjectChangeType.Projected)), Is.False);
+    }
+
+    #endregion
+
     #endregion
 }

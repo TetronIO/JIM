@@ -93,6 +93,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SyncRuleMappingSource> SyncRuleMappingSources { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
+    public virtual DbSet<DeleteSyncRuleWorkerTask> DeleteSyncRuleWorkerTasks { get; set; } = null!;
     public virtual DbSet<SchemaRefreshRemovalWorkerTask> SchemaRefreshRemovalWorkerTasks { get; set; } = null!;
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
     public virtual DbSet<PasswordDeliveryWorkerTask> PasswordDeliveryWorkerTasks { get; set; } = null!;
@@ -1161,7 +1162,9 @@ public class JimDbContext : DbContext
         // Exactly the Predefined Search chain above, and it was wrong the same way: deleting a rule nulled these
         // rather than removing them, so every mapping and source of every deleted rule stayed behind belonging to
         // nothing. Nothing failed and nothing said so, because nulling the reference is what the convention asks
-        // for.
+        // for. The collection-removal half of the same defect (#1550) is closed by the foreign key being
+        // required (SyncRuleMapping.SyncRuleId is non-nullable), so severing a mapping from its rule deletes the
+        // row rather than orphaning it.
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.AttributeFlowRules)
             .WithOne(m => m.SyncRule!)

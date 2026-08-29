@@ -53,6 +53,14 @@ CSOs have a lifecycle:
 3. **Joined** or **projected** during synchronisation, to link with an MVO
 4. **Obsoleted** when the object no longer exists in the external system
 
+### Objects awaiting deprovisioning
+
+An obsoleted CSO is not deleted straight away. It stays obsolete until a Synchronisation Run Profile runs on the same Connected System, which is what disconnects it from its Metaverse Object and deletes it, applying grace periods and [Metaverse Deletion Rules](metaverse.md#deletion-behaviour) as configured. On a system that is imported and synchronised on a normal schedule this is a state objects pass through in minutes.
+
+A system that is imported but rarely synchronised is the case worth watching, because obsolete objects accumulate there with nothing acting on them. The Connected System's page states the count whenever it is above zero, with **Review** opening the Connector Space narrowed to exactly those objects; you can also reach them from the Connector Space's own **Obsolete** status filter, over the REST API with `GET /connected-systems/{id}/connector-space?status=Obsolete`, or with `Get-JIMConnectedSystemObject -ConnectedSystemId <id> -Status Obsolete`.
+
+Only the first import to find an object missing records a deletion against it. Later imports that find it still missing change nothing and record nothing, because nothing has happened: the object was already obsolete when they started.
+
 ## Partitions and containers
 
 A **partition** is a top-level logical division of a connector space that mirrors a boundary defined by the external system. Partitions exist in JIM primarily to service LDAP-style directories and their naming contexts (NCs): the discrete directory trees that an LDAP server hosts. The separate domain partitions within an Active Directory forest, or the distinct naming contexts exposed by an OpenLDAP server, each surface as a partition in JIM.

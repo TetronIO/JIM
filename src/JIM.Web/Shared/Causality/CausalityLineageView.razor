@@ -92,6 +92,15 @@
                              || lineageObject.IsDeletedAfterThisRun)
                         {
                             <div class="ln-obj-body">
+                                @* Stated first because it is about what lies behind the oldest card, and the
+                                   body runs oldest to newest downwards: "No earlier causes recorded" under
+                                   the newest card read as a contradiction wherever a story fitted in one
+                                   column, with an earlier cause plainly visible above it. It bookends the
+                                   "deleted after this run" note at the other end for the same reason. *@
+                                @foreach (var ending in lineageObject.Endings)
+                                {
+                                    <div class="ln-end" @key="ending">@ending.Text</div>
+                                }
                                 @foreach (var card in lineageObject.Cards)
                                 {
                                     @if (card.Event is { } thisRunEvent)
@@ -119,12 +128,8 @@
                                     }
                                     else if (card.Hop is { } hop)
                                     {
-                                        <CausalityLineageChainCard Hop="hop" @key="card" />
+                                        <CausalityLineageChainCard Hop="hop" TechnicalNames="TechnicalNames" @key="card" />
                                     }
-                                }
-                                @foreach (var ending in lineageObject.Endings)
-                                {
-                                    <div class="ln-end" @key="ending">@ending.Text</div>
                                 }
                                 @* What became of the object afterwards, stated last because it happened
                                    last: the panel reads top to bottom as time passing, so position carries
