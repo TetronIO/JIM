@@ -159,6 +159,20 @@ Do not retro-edit the completed `engineering/plans/done/CONNECTED_SYSTEM_DELETIO
 - **#363 (shipped):** the `SyncOutcome` causal graph model preview results reuse.
 - The existing obsoletion processors, `MarkOrphanedMvosForDeletionAsync`, `RemoveContributedAttributesOnObsoletion`, and the "Deleting" status / queue-after-sync machinery.
 
+## Decisions (product owner, 2026-08-29)
+
+- **The two-mode choice model is adopted, with Synchronised Deprovisioning as the default** (Decisions Needed item 1, per its recommendation): a deletion-time choice in the #1537 dialog pattern, the synchronised path pre-selected, the fast path behind a warning stating its consequences.
+- **Customer-facing naming**: the options an administrator sees are **"Deprovision through synchronisation (recommended)"** and **"Delete immediately and keep contributed data"**. "Teardown" is internal engineering shorthand only and must never appear in UI copy, cmdlet help, API documentation or the changelog; where this PRD says Teardown, read the second option above.
+
+### Design inputs inherited from #1537 (shipped 2026-08-29)
+
+The rule/mapping-level recall work settled machinery and conventions this capability reuses rather than re-decides:
+
+- **Task shape**: the recall-then-delete Worker task (`DeleteSyncRuleWorkerTask` precedent): the entity is fenced at queue time, the recall runs batched with RPEIs and Activity progress, deletion is the task's final step, and failure partway leaves a consistent, retryable state.
+- **Re-election core**: `ContributorReElectionService` takes its recall scope as an input (`ContributorRecallScope`); this capability adds a system-scoped factory rather than forking the algorithm.
+- **API convention**: queued work answers 202 Accepted with a tracking DTO carrying the Activity id (the Connected System delete endpoint already has the 200/202 split).
+- **Coverage subtlety (from the #1551 investigation)**: per-object obsoletion cannot reach values whose Metaverse Object no longer holds one of this system's Connected System Objects (stranded by an earlier connector-space clear, #1549). A complete run therefore needs a **by-provenance residue pass** per Synchronisation Rule, before those rules are deleted (deletion's ON DELETE SET NULL severs the provenance it selects on).
+
 ## Open Questions
 
 1. Exactly where does the preview computation run, and how is the "proposed configuration" (a pending deletion) represented to the #827 framework? These are #827-owned and must be settled by the framework design before the adapter is built.
@@ -185,9 +199,9 @@ Do not retro-edit the completed `engineering/plans/done/CONNECTED_SYSTEM_DELETIO
 
 ## Decisions Needed
 
-The product owner must decide the following before implementation issues are split out. Each carries a recommendation.
+The product owner must decide the following before implementation issues are split out. Each carries a recommendation. (Item 1 is now decided; see the Decisions section.)
 
-1. **Default deletion mode: Teardown or Synchronised Deprovisioning?**
+1. **Default deletion mode: Teardown or Synchronised Deprovisioning?** ✅ **Decided 2026-08-29: Synchronised Deprovisioning is the default**, per the recommendation below, with the customer-facing names recorded in the Decisions section above.
    *Recommendation:* Default to **Synchronised Deprovisioning**, with Teardown a deliberate opt-out. It is the data-integrity-correct outcome (the Metaverse and downstream systems end in a synchronisation-consistent state), and JIM's stated bias is fast/hard-correct over convenient. The cost is that deleting a shared-identity system now fires downstream exports the administrator might not expect, which is precisely why it must be gated behind the tier-3 preview and an explicit name-to-confirm. Teardown stays a first-class, clearly-labelled choice for abandon-the-data cases.
 
 2. **Is the tier-3 preview offered or mandatory before Synchronised Deprovisioning?**
