@@ -776,6 +776,248 @@ public class CausalityLineageModelBuilderTests
         Assert.That(exportedEvent.PlainLabel, Is.EqualTo("Exported"));
     }
 
+    // ─── Identity-creation cohort (#1495 follow-up) ───
+
+    /// <summary>
+    /// The creation hop lands on the Identity column, ordered before this run's own Identity events (the
+    /// chain hop is an earlier fact), carries "Synchronisation run" and names no duplicate activity link:
+    /// its sole member names the very item the sibling queueing hop already links to.
+    /// </summary>
+    [Test]
+    public void Build_IdentityCreationCohort_LandsOnIdentityColumnWithNoDuplicateActivityLink()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0);
+        var chain = CausalityTestData.Chain(ExportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                CausalEdgeType.PendingExportQueueingCausedExportExecution,
+                reasonCode: CausalReasonCode.ExportUpdateStaged,
+                connectedSystemId: 2, connectedSystemName: "Glitterband EMEA",
+                members: CausalityTestData.Member("Liam Allen", SyncItemId,
+                    occurred: CausalityTestData.ChainBaseTime.AddMinutes(10),
+                    causes: CausalityTestData.Cohort(
+                        default,
+                        metaverseChangeType: ObjectChangeType.Projected,
+                        connectedSystemId: 1,
+                        members: CausalityTestData.Member("Liam Allen", SyncItemId,
+                            CausalChainResolution.Resolved,
+                            occurred: CausalityTestData.ChainBaseTime)))));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+
+        var identity = lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity);
+        var identityObject = Sole(identity);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(identityObject.Cards, Has.Count.EqualTo(2));
+            Assert.That(identityObject.Cards[0].Hop!.Cohort.MetaverseChangeType, Is.EqualTo(ObjectChangeType.Projected),
+                "the creation hop happened first, so it renders before the hop it sits beside");
+            Assert.That(identityObject.Cards[0].Hop!.RunKind, Is.EqualTo("Synchronisation run"));
+            Assert.That(identityObject.Cards[0].Hop!.ActivityItemHref, Is.Null,
+                "the creation hop names the same item the sibling hop already links to");
+            Assert.That(identityObject.Cards[1].Hop!.Cohort.ReasonCode, Is.EqualTo(CausalReasonCode.ExportUpdateStaged));
+            Assert.That(identityObject.Cards[1].Hop!.ActivityItemHref, Is.EqualTo($"/activity/item/{SyncItemId}"));
+        }
+    }
+
+    /// <summary>
+    /// A direct-create hop states no run kind: nothing synchronised it into existence.
+    /// </summary>
+    [Test]
+    public void Build_IdentityCreationCohortForADirectCreate_StatesNoRunKind()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0);
+        var chain = CausalityTestData.Chain(ExportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                default,
+                metaverseChangeType: ObjectChangeType.Created,
+                members: CausalityTestData.Member("Liam Allen", Guid.NewGuid(), CausalChainResolution.Resolved)));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+
+        var identity = lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity);
+        Assert.That(Sole(identity).Cards.Single().Hop!.RunKind, Is.Null);
+    }
+
+    /// <summary>
+    /// The Identity column's creation hop renders before this run's own Identity events too, not only
+    /// before a sibling chain hop: the panel reads oldest to newest downwards, and the chain hop is
+    /// always the older fact.
+    /// </summary>
+    [Test]
+    public void Build_IdentityCreationHop_RendersBeforeThisRunsIdentityEvents()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var chain = CausalityTestData.Chain(item.Id, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                default,
+                metaverseChangeType: ObjectChangeType.Joined,
+                connectedSystemId: 1,
+                members: CausalityTestData.Member("Liam Allen", Guid.NewGuid(),
+                    CausalChainResolution.Resolved,
+                    occurred: CausalityTestData.ChainBaseTime)));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext(), chain: chain);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Projected);
+
+        var identity = lineage.Columns.Single(c => c.Kind == CausalityLineageColumnKind.Identity);
+        var identityObject = Sole(identity);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(identityObject.Cards.First().Hop, Is.Not.Null,
+                "the chain hop (an earlier fact) renders before this run's own events");
+            Assert.That(identityObject.Cards.First().Hop!.Cohort.MetaverseChangeType, Is.EqualTo(ObjectChangeType.Joined));
+            Assert.That(identityObject.Cards.Last().IsThisRun, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// <see cref="CausalityLineageModelBuilder"/> wires <see cref="OutcomeDisplayMap.GetHopOperation"/>
+    /// through to every hop, whatever cohort shape produced it.
+    /// </summary>
+    [TestCase(CausalReasonCode.ExportCreateStaged, "Created")]
+    [TestCase(CausalReasonCode.ExportUpdateStaged, "Updated")]
+    [TestCase(CausalReasonCode.ExportDeleteStaged, "Deleted")]
+    public void Build_QueueingHop_CarriesTheDecisionsOperationChip(CausalReasonCode reasonCode, string expectedPlainLabel)
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0);
+        var chain = CausalityTestData.Chain(ExportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                CausalEdgeType.PendingExportQueueingCausedExportExecution,
+                reasonCode: reasonCode,
+                connectedSystemId: 2, connectedSystemName: "Glitterband EMEA",
+                members: CausalityTestData.Member("Liam Allen", SyncItemId,
+                    CausalChainResolution.NoFurtherCauses)));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+
+        var hop = lineage.Columns.SelectMany(c => c.Objects).SelectMany(o => o.Cards)
+            .Single(c => !c.IsThisRun).Hop!;
+        Assert.That(hop.Operation!.PlainLabel, Is.EqualTo(expectedPlainLabel));
+    }
+
+    /// <summary>
+    /// A confirmation states no object operation, so its hop carries no chip.
+    /// </summary>
+    [Test]
+    public void Build_ExportConfirmationHop_CarriesNoOperationChip()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ImportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed,
+            parent: null, ordinal: 0);
+        var chain = CausalityTestData.Chain(ImportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                CausalEdgeType.ExportCausedImportConfirmation,
+                connectedSystemId: 1, connectedSystemName: "Yellowstone APAC",
+                members: CausalityTestData.Member("Liam Allen", ExportItemId,
+                    CausalChainResolution.NoFurtherCauses)));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext(), chain: chain);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.PendingExportConfirmed);
+
+        var hop = lineage.Columns.SelectMany(c => c.Objects).SelectMany(o => o.Cards)
+            .Single(c => !c.IsThisRun).Hop!;
+        Assert.That(hop.Operation, Is.Null);
+    }
+
+    /// <summary>
+    /// An earlier-run projection is still the truth about a join even where nothing on the page's own item
+    /// names it: the creation cohort attached to the Identity column carries the same Connected System id
+    /// as the sole record on the source side.
+    /// </summary>
+    [Test]
+    public void Build_EarlierRunProjectionWithASoleSourceRecord_LabelsTheJoinProjected()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0);
+        var chain = CausalityTestData.Chain(ExportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                CausalEdgeType.PendingExportQueueingCausedExportExecution,
+                reasonCode: CausalReasonCode.ExportUpdateStaged,
+                connectedSystemId: 2, connectedSystemName: "Glitterband EMEA",
+                members: CausalityTestData.Member("Liam Allen", SyncItemId,
+                    occurred: CausalityTestData.ChainBaseTime.AddMinutes(10),
+                    causes:
+                    [
+                        CausalityTestData.Cohort(
+                            default,
+                            sourceImportChangeType: ObjectChangeType.Added,
+                            connectedSystemId: 1, connectedSystemName: "Yellowstone APAC",
+                            members: CausalityTestData.Member("Liam Allen", ImportItemId,
+                                CausalChainResolution.NoFurtherCauses,
+                                occurred: CausalityTestData.ChainBaseTime)),
+                        CausalityTestData.Cohort(
+                            default,
+                            metaverseChangeType: ObjectChangeType.Projected,
+                            connectedSystemId: 1,
+                            members: CausalityTestData.Member("Liam Allen", SyncItemId,
+                                CausalChainResolution.Resolved,
+                                occurred: CausalityTestData.ChainBaseTime))
+                    ])));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+
+        Assert.That(lineage.Joins[0].Label, Is.EqualTo("projected"));
+    }
+
+    /// <summary>
+    /// The sole-record guard: two source records mean no single record can be credited with the
+    /// projection, so the one-label-per-side rule keeps "imported".
+    /// </summary>
+    [Test]
+    public void Build_EarlierRunProjectionWithTwoSourceRecords_KeepsImported()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0);
+        var chain = CausalityTestData.Chain(ExportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                CausalEdgeType.PendingExportQueueingCausedExportExecution,
+                reasonCode: CausalReasonCode.ExportUpdateStaged,
+                connectedSystemId: 2, connectedSystemName: "Glitterband EMEA",
+                members: CausalityTestData.Member("Liam Allen", SyncItemId,
+                    occurred: CausalityTestData.ChainBaseTime.AddMinutes(10),
+                    causes:
+                    [
+                        CausalityTestData.Cohort(
+                            default,
+                            sourceImportChangeType: ObjectChangeType.Added,
+                            connectedSystemId: 1, connectedSystemName: "Yellowstone APAC",
+                            members: CausalityTestData.Member("Liam Allen", ImportItemId,
+                                CausalChainResolution.NoFurtherCauses,
+                                occurred: CausalityTestData.ChainBaseTime)),
+                        CausalityTestData.Cohort(
+                            default,
+                            sourceImportChangeType: ObjectChangeType.Added,
+                            connectedSystemId: 3, connectedSystemName: "Contoso HR",
+                            members: CausalityTestData.Member("Liam Allen", Guid.NewGuid(),
+                                CausalChainResolution.NoFurtherCauses,
+                                occurred: CausalityTestData.ChainBaseTime)),
+                        CausalityTestData.Cohort(
+                            default,
+                            metaverseChangeType: ObjectChangeType.Projected,
+                            connectedSystemId: 1,
+                            members: CausalityTestData.Member("Liam Allen", SyncItemId,
+                                CausalChainResolution.Resolved,
+                                occurred: CausalityTestData.ChainBaseTime))
+                    ])));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+
+        Assert.That(lineage.Joins[0].Label, Is.EqualTo("imported"));
+    }
+
     [Test]
     public void Build_QueueingCohortWithNoEffectOutcomeId_StillSuppliesTheDecision()
     {

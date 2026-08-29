@@ -110,6 +110,43 @@ public class CausalityLineageViewTests
         return CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
     }
 
+    /// <summary>
+    /// A sync item whose projecting item lies further back than the page's own root: the Identity column
+    /// would otherwise stay empty even though the fact is known (#1495 follow-up).
+    /// </summary>
+    private static CausalityLineageModel IdentityCreationLineage()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var chain = CausalityTestData.Chain(item.Id, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                default,
+                metaverseChangeType: ObjectChangeType.Projected,
+                connectedSystemId: 1,
+                members: CausalityTestData.Member("Liam Allen", Guid.NewGuid(),
+                    CausalChainResolution.Resolved,
+                    occurred: CausalityTestData.ChainBaseTime)));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext(), chain: chain);
+        return CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Projected);
+    }
+
+    /// <summary>
+    /// The confirmation story: an import confirming an earlier export, which states no object operation.
+    /// </summary>
+    private static CausalityLineageModel ConfirmingImportLineage()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ImportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed,
+            parent: null, ordinal: 0);
+        var chain = CausalityTestData.Chain(ImportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                CausalEdgeType.ExportCausedImportConfirmation,
+                connectedSystemId: 1, connectedSystemName: "Yellowstone APAC",
+                members: CausalityTestData.Member("Liam Allen", ExportItemId,
+                    CausalChainResolution.NoFurtherCauses)));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext(), chain: chain);
+        return CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.PendingExportConfirmed);
+    }
+
     private IRenderedComponent<CausalityLineageView> RenderLineage(
         CausalityLineageModel model, bool technicalNames = false,
         Action<CausalityEvent?>? onSelectionChanged = null,
@@ -627,6 +664,83 @@ public class CausalityLineageViewTests
             Assert.That(cut.FindAll(".ln-join"), Has.Count.EqualTo(1));
             Assert.That(cut.FindAll(".ln-join-arrow"), Is.Empty);
             Assert.That(cut.FindAll(".ln-join-label"), Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Every chain-hop card carries its tone-tinted operation chip (#1495 follow-up), with the tone
+    /// exposed as inline custom properties on the card exactly as a this-run event card exposes them
+    /// (mirrors <c>CausalityEventCard.razor</c>).
+    /// </summary>
+    [Test]
+    public void Render_ChainCards_EachCarryTheirOperationChipWithToneVariables()
+    {
+        var cut = RenderLineage(ExportCreateLineage());
+
+        var chainCards = cut.FindAll(".ln-card");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chainCards, Has.Count.EqualTo(2));
+            foreach (var card in chainCards)
+            {
+                var chip = card.QuerySelector(".ln-op");
+                Assert.That(chip, Is.Not.Null);
+                Assert.That(chip!.TextContent.Trim(), Is.EqualTo("Created"));
+                var style = card.GetAttribute("style")!;
+                Assert.That(style, Does.Contain("--tone:"));
+                Assert.That(style, Does.Contain("--tone-text:"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The technical-names toggle swaps the chip's label exactly as it swaps an event card's, so the
+    /// vocabulary a reader asked for is consistent across every card on the panel.
+    /// </summary>
+    [Test]
+    public void Render_TechnicalNames_SwapsTheOperationChipLabel()
+    {
+        var cut = RenderLineage(IdentityCreationLineage(), technicalNames: true);
+
+        var chainCard = cut.Find(".ln-card");
+        Assert.That(chainCard.QuerySelector(".ln-op")!.TextContent.Trim(), Is.EqualTo("MVO Projected"));
+    }
+
+    /// <summary>
+    /// A confirmation is not an object operation, so it carries no chip and no tone custom properties.
+    /// </summary>
+    [Test]
+    public void Render_ConfirmationChainCard_CarriesNoOperationChip()
+    {
+        var cut = RenderLineage(ConfirmingImportLineage());
+
+        var chainCard = cut.Find(".ln-card");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chainCard.TextContent, Does.Contain("exported, and this import confirms it"));
+            Assert.That(chainCard.QuerySelector(".ln-op"), Is.Null);
+            Assert.That(chainCard.GetAttribute("style"), Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// The Identity-creation card (#1495 follow-up) renders as a chain card under the Identity column,
+    /// stating the Identity's own creation even though the projecting item lies further back than this
+    /// page's own root.
+    /// </summary>
+    [Test]
+    public void Render_IdentityCreationCard_RendersUnderTheIdentityColumn()
+    {
+        var cut = RenderLineage(IdentityCreationLineage());
+
+        var identityObject = cut.FindAll(".ln-object")
+            .Single(o => o.QuerySelector(".glyph")!.TextContent.Trim() == "ID");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(identityObject.QuerySelector(".ln-card"), Is.Not.Null,
+                "the creation hop is a chain card under the Identity column");
+            Assert.That(identityObject.QuerySelector(".ln-card")!.TextContent,
+                Does.Contain("was created as a new Identity"));
         }
     }
 }

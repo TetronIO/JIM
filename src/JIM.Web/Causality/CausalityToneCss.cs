@@ -35,4 +35,16 @@ public static class CausalityToneCss
     {
         return $"var(--cz-{CssClass(tone)})";
     }
+
+    /// <summary>
+    /// A CSS var() reference for a tone's TEXT colour, as used by a lineage chain-hop card's operation
+    /// chip. Primary resolves to <c>--cz-primary-text</c>: the raw palette primary fails WCAG AA as text
+    /// (see the note on that custom property in causality.css), and blending it toward the theme's text
+    /// colour is what fixes it. Every other tone's fill already meets contrast as text, so it resolves to
+    /// the ordinary <see cref="CssVar"/>.
+    /// </summary>
+    public static string TextCssVar(CausalityTone tone)
+    {
+        return tone == CausalityTone.Primary ? "var(--cz-primary-text)" : CssVar(tone);
+    }
 }

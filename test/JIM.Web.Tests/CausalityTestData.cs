@@ -254,8 +254,9 @@ public static class CausalityTestData
 
     /// <summary>
     /// Builds a cohort of causes sharing one attribution tuple. Pass
-    /// <paramref name="sourceImportChangeType"/> for the derived source-import hop, which carries no
-    /// edge type of its own.
+    /// <paramref name="sourceImportChangeType"/> for the derived source-import hop, or
+    /// <paramref name="metaverseChangeType"/> for the derived Identity-creation hop (#1495 follow-up);
+    /// both carry no edge type of their own.
     /// </summary>
     public static CausalChainCohort Cohort(
         CausalEdgeType edgeType,
@@ -268,6 +269,7 @@ public static class CausalityTestData
         string? objectTypePluralName = null,
         string? attributeName = null,
         ObjectChangeType? sourceImportChangeType = null,
+        ObjectChangeType? metaverseChangeType = null,
         Guid? effectSyncOutcomeId = null,
         params CausalChainMember[] members)
     {
@@ -283,6 +285,7 @@ public static class CausalityTestData
             ObjectTypePluralName = objectTypePluralName,
             AttributeName = attributeName,
             SourceImportChangeType = sourceImportChangeType,
+            MetaverseChangeType = metaverseChangeType,
             EffectSyncOutcomeId = effectSyncOutcomeId,
             Members = [.. members]
         };

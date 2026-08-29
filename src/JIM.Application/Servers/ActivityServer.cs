@@ -736,6 +736,11 @@ public class ActivityServer
             .Where(m => m.RunProfileExecutionItemId.HasValue)
             .ToList();
 
+        // Scoped to the whole call rather than per level: a cascade routinely reaches the same projecting
+        // item on several branches (a cohort of many members converging on one cause, or two independent
+        // branches), and each must still read as one "Identity created" card rather than one per branch.
+        var identityCreationItemIds = new HashSet<Guid>();
+
         for (var depth = 1; frontier.Count > 0; depth++)
         {
             if (depth >= maxDepth)
@@ -788,6 +793,14 @@ public class ActivityServer
                 if (sourceHop != null)
                     memberCohorts.Add(sourceHop);
 
+                // Where this cause's own summary shows it decided the Identity's existence (it projected,
+                // joined, or was created directly), state that fact too: otherwise the Identity column
+                // stays empty whenever the deciding item lies further back than the page's own root, even
+                // though the fact is sitting right here on the item being resolved.
+                var identityCreationHop = TryBuildIdentityCreationCohort(summary, member, identityCreationItemIds);
+                if (identityCreationHop != null)
+                    memberCohorts.Add(identityCreationHop);
+
                 if (memberCohorts.Count == 0)
                 {
                     // A synchronisation-side item was fed by an import by definition, so where its record's
@@ -804,7 +817,13 @@ public class ActivityServer
 
                 member.Resolution = CausalChainResolution.Resolved;
                 member.Causes.AddRange(memberCohorts);
-                nextFrontier.AddRange(member.Causes.SelectMany(c => c.Members)
+                // A creation cohort's sole member names the very item it is attached under (that is how it
+                // reaches the lineage builder without a tree-shape change), so it must not re-enter the
+                // frontier: doing so would re-query the same item at every remaining level until the depth
+                // bound, rather than terminating on its own.
+                nextFrontier.AddRange(member.Causes
+                    .Where(c => c.MetaverseChangeType == null)
+                    .SelectMany(c => c.Members)
                     .Where(m => m.RunProfileExecutionItemId.HasValue));
             }
 
@@ -884,6 +903,66 @@ public class ActivityServer
                     // omitting it left the hop with default(DateTime), which the Lineage reads as "no time
                     // recorded" and renders without one. It also orders the column's cards.
                     Occurred = importEvent.Occurred,
+                    Resolution = CausalChainResolution.Resolved
+                }
+            ]
+        };
+    }
+
+    /// <summary>
+    /// The Object Change Types that mean a resolved item decided the Identity's existence: it projected a
+    /// new one, joined an existing one, or (rarely) was created directly rather than through synchronisation.
+    /// </summary>
+    private static readonly HashSet<ObjectChangeType> IdentityCreationItemTypes =
+    [
+        ObjectChangeType.Projected,
+        ObjectChangeType.Joined,
+        ObjectChangeType.Created
+    ];
+
+    /// <summary>
+    /// Builds the derived cohort that states an Identity's own creation, where a resolved cause's summary
+    /// shows it decided that Identity's existence: the Lineage view's Identity column would otherwise stay
+    /// empty whenever the deciding item lies further back than the page's own root, even though the fact
+    /// is sitting on the very item just resolved.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors <see cref="TryBuildSourceImportCohortAsync"/> deliberately: a derived cohort with no
+    /// <see cref="CausalEdgeType"/> of its own, attached under the resolved member exactly where a stored
+    /// cause would be, so the lineage builder's recursive walk needs no tree-shape change to reach it.
+    ///
+    /// Never called for the page's own root item: there, this run's own events already state "Identity
+    /// created" on the Identity column via the Lineage view's Identity lane, and a derived cohort here
+    /// would say the same thing twice.
+    ///
+    /// <paramref name="seenCreatingItemIds"/> is scoped to the whole causal walk, not to one level: several
+    /// branches of a cascade routinely converge on the item that created the Identity, and each must still
+    /// read as one card rather than one per branch.
+    /// </remarks>
+    private static CausalChainCohort? TryBuildIdentityCreationCohort(
+        CausalChainItemSummary summary, CausalChainMember member, HashSet<Guid> seenCreatingItemIds)
+    {
+        if (!IdentityCreationItemTypes.Contains(summary.ObjectChangeType))
+            return null;
+
+        if (!seenCreatingItemIds.Add(summary.Id))
+            return null;
+
+        return new CausalChainCohort
+        {
+            MetaverseChangeType = summary.ObjectChangeType,
+            // No name snapshotted: HasConnectedSystem is false, so the card renders no chip for it. The id
+            // is kept anyway, purely so the lineage builder's join-label guard can credit the right source
+            // record with an earlier-run projection or join.
+            ConnectedSystemId = summary.ConnectedSystemId,
+            Members =
+            [
+                new CausalChainMember
+                {
+                    MetaverseObjectId = member.MetaverseObjectId,
+                    DisplayName = member.DisplayName,
+                    RunProfileExecutionItemId = summary.Id,
+                    Occurred = summary.ActivityExecuted,
                     Resolution = CausalChainResolution.Resolved
                 }
             ]

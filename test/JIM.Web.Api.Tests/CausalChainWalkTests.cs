@@ -469,7 +469,11 @@ public class CausalChainWalkTests
         var syncMember = chain.Cohorts.Single().Members.Single();
         Assert.That(syncMember.Resolution, Is.EqualTo(CausalChainResolution.Resolved),
             "a synchronisation whose record has a retained import must resolve rather than end the chain");
-        var sourceHop = syncMember.Causes.Single();
+        // SeedSyncCauseSummary defaults to Projected, so the resolved cause also carries the derived
+        // Identity-creation cohort (#1495 follow-up) beside its source-import hop; that cohort has its own
+        // dedicated tests, so this one isolates the hop it is actually about.
+        Assert.That(syncMember.Causes, Has.Count.EqualTo(2));
+        var sourceHop = syncMember.Causes.Single(c => c.SourceImportChangeType != null);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(sourceHop.SourceImportChangeType, Is.EqualTo(ObjectChangeType.Added));
@@ -544,13 +548,19 @@ public class CausalChainWalkTests
     /// A record whose imports have aged out yields no hop, and the chain ends at the synchronisation as a
     /// complete story rather than pretending the timeline never existed or faking a truncation.
     /// </summary>
+    /// <remarks>
+    /// Uses AttributeFlow rather than the default Projected: a Projected/Joined/Created cause always
+    /// resolves now, because it carries the derived Identity-creation cohort (#1495 follow-up) regardless
+    /// of whether an import is retained. AttributeFlow is still a source-import-hop item type, so this
+    /// keeps testing exactly what it always tested: the record's own timeline, aged out.
+    /// </remarks>
     [Test]
     public async Task GetCausalChain_SynchronisationCauseWithNoRetainedImport_EndsThereAsync()
     {
         var itemId = Guid.NewGuid();
         var syncItemId = Guid.NewGuid();
         SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
-        SeedSyncCauseSummary(syncItemId);
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.AttributeFlow);
 
         var chain = await _application.Activities.GetCausalChainAsync(itemId);
 
@@ -674,6 +684,144 @@ public class CausalChainWalkTests
 
         Assert.That(chain.Cohorts.Single().Members.Single().Resolution,
             Is.EqualTo(CausalChainResolution.CauseNotRetained));
+    }
+
+    #endregion
+
+    #region the Identity-creation cohort (#1495 follow-up)
+
+    /// <summary>
+    /// A resolved projecting cause states its own creation as a derived cohort attached under the
+    /// member, so the Lineage view's Identity column can say the Identity was created even when the
+    /// projecting item lies further back than the page's own root.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ResolvedProjectionCause_AddsAnIdentityCreationCohortUnderTheMemberAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.Projected);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var syncMember = chain.Cohorts.Single().Members.Single();
+        var creationCohort = syncMember.Causes.Single(c => c.MetaverseChangeType != null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(creationCohort.MetaverseChangeType, Is.EqualTo(ObjectChangeType.Projected));
+            Assert.That(creationCohort.Members.Single().DisplayName, Is.EqualTo("Mia Young (S8-352)"));
+            Assert.That(creationCohort.Members.Single().Occurred,
+                Is.EqualTo(new DateTime(2026, 8, 15, 11, 0, 0, DateTimeKind.Utc)));
+            Assert.That(creationCohort.Members.Single().RunProfileExecutionItemId, Is.EqualTo(syncItemId));
+            Assert.That(creationCohort.Members.Single().Resolution, Is.EqualTo(CausalChainResolution.Resolved));
+        }
+    }
+
+    /// <summary>
+    /// The join variant reads identically: a resolved joining cause states the Identity was joined to,
+    /// not projected.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ResolvedJoinCause_AddsAnIdentityCreationCohortWithJoinedTypeAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.Joined);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var syncMember = chain.Cohorts.Single().Members.Single();
+        var creationCohort = syncMember.Causes.Single(c => c.MetaverseChangeType != null);
+        Assert.That(creationCohort.MetaverseChangeType, Is.EqualTo(ObjectChangeType.Joined));
+    }
+
+    /// <summary>
+    /// A non-creating sync type (an ordinary Attribute Flow) says nothing about the Identity's origin,
+    /// so it must add no creation cohort at all.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_NonCreatingSyncCause_AddsNoIdentityCreationCohortAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.AttributeFlow);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var syncMember = chain.Cohorts.Single().Members.Single();
+        Assert.That(syncMember.Causes.Any(c => c.MetaverseChangeType != null), Is.False);
+    }
+
+    /// <summary>
+    /// The projecting item viewed directly gets no creation cohort of its own: this-run's events already
+    /// state "Identity created" on the Identity column via <see cref="JIM.Web.Causality.CausalityLane.Identity"/>
+    /// in that case, so a derived cohort here would say the same thing twice.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ProjectionItemViewedDirectly_AddsNoCreationCohortAtRootAsync()
+    {
+        var itemId = Guid.NewGuid();
+        SeedSyncCauseSummary(itemId, ObjectChangeType.Projected);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        Assert.That(chain.Cohorts.Any(c => c.MetaverseChangeType != null), Is.False);
+    }
+
+    /// <summary>
+    /// The same projecting item reached on two branches (a cohort of two members both pointing at it)
+    /// must still read as one "Identity created" card, not one per branch.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_ProjectorReachedOnTwoBranches_ProducesOneCreationCohortCardAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId,
+            NewEdge(itemId, causeItemId: syncItemId, causeName: "Branch A"),
+            NewEdge(itemId, causeItemId: syncItemId, causeName: "Branch B"));
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.Projected);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        var creationCohorts = chain.Cohorts.SelectMany(c => c.Members)
+            .SelectMany(m => m.Causes)
+            .Where(c => c.MetaverseChangeType != null)
+            .ToList();
+        Assert.That(creationCohorts, Has.Count.EqualTo(1),
+            "the same projecting item reached on two branches must still read as one 'Identity created' card");
+    }
+
+    /// <summary>
+    /// The creation cohort's member states a fact about the item it is attached under; it must not be
+    /// walked again as though it were a fresh cause, or the walk would re-query the same item every
+    /// level and never terminate on its own.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_IdentityCreationCohort_DoesNotReenterTheWalkAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var syncItemId = Guid.NewGuid();
+        SeedEdges(itemId, NewEdge(itemId, causeItemId: syncItemId, causeName: "Mia Young (S8-352)"));
+        SeedSyncCauseSummary(syncItemId, ObjectChangeType.Projected);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId, maxDepth: 5);
+
+        var creationMember = chain.Cohorts.Single().Members.Single().Causes
+            .Single(c => c.MetaverseChangeType != null).Members.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(creationMember.Causes, Is.Empty,
+                "the creation cohort states a fact about the item itself; it must not be walked again as its own cause");
+            Assert.That(chain.IsTruncatedByDepth, Is.False);
+        }
+        _mockActivityRepository.Verify(
+            r => r.GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()),
+            Times.Exactly(2),
+            "the creation cohort's member must not be re-queried as though it were a fresh cause");
     }
 
     #endregion
