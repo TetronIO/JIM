@@ -133,7 +133,7 @@ foreach ($staleName in @($sourceSystemName, $targetSystemName)) {
         # -Force, not $ConfirmPreference: preference variables do not flow into module scope, so
         # Remove-JIMConnectedSystem (ConfirmImpact High) would still prompt and, with no
         # interactive host, fail outright.
-        Remove-JIMConnectedSystem -Id $stale.id -Force | Out-Null
+        Remove-JIMConnectedSystem -Id $stale.id -DeleteImmediately -Force | Out-Null
         Write-Host "  OK Removed existing '$staleName'" -ForegroundColor Green
     }
 }

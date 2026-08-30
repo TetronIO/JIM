@@ -39,6 +39,15 @@ public class DeleteConnectedSystemWorkerTask : WorkerTask
     public bool SynchronisedDeprovisioning { get; set; } = false;
 
     /// <summary>
+    /// Whether this immediate deletion was issued against a system already fenced by a Synchronised
+    /// Deprovisioning run: the finish-immediately exit (#809). The remaining deprovisioning work is
+    /// abandoned and the deletion completed; the task's Activity records the abandonment, and a failure
+    /// keeps the fence (Status stays Deleting) because a half-deprovisioned system never returns to
+    /// service. Only meaningful when <see cref="SynchronisedDeprovisioning"/> is false.
+    /// </summary>
+    public bool AbandonsDeprovisioningRun { get; set; }
+
+    /// <summary>
     /// Resumability checkpoint (#809): the pass the deprovisioning run last completed a batch in. Null until
     /// the first batch completes; a worker restart resumes from here rather than reprocessing committed
     /// work. Only meaningful when <see cref="SynchronisedDeprovisioning"/> is true.

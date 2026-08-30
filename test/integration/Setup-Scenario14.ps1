@@ -137,7 +137,7 @@ foreach ($staleName in @($primarySystemName, $secondarySystemName)) {
         # scope, so Remove-JIMConnectedSystem (ConfirmImpact High) still prompts. With no interactive
         # host the prompt fails outright ("Exception calling ShouldProcess"), taking setup down before
         # it reaches anything this scenario is about.
-        Remove-JIMConnectedSystem -Id $stale.id -Force | Out-Null
+        Remove-JIMConnectedSystem -Id $stale.id -DeleteImmediately -Force | Out-Null
         Write-Host "  OK Removed existing '$staleName'" -ForegroundColor Green
     }
 }

@@ -226,6 +226,19 @@ public class TaskingRepository : ITaskingRepository
         return await Repository.Database.WorkerTasks.Include(st => st.Activity).Where(q => workerTaskIds.Contains(q.Id) && q.Status == WorkerTaskStatus.CancellationRequested).ToListAsync();
     }
 
+    public async Task<DeleteConnectedSystemWorkerTask?> GetDeleteConnectedSystemWorkerTaskAsync(int connectedSystemId)
+    {
+        // Filtered off the shared Worker Task set rather than the typed one, so the discriminator this depends on
+        // is part of what the query does rather than something taken on trust. At most one deletion task should
+        // exist per system (a fenced system refuses to queue a second); the oldest is returned defensively.
+        return await Repository.Database.WorkerTasks
+            .OfType<DeleteConnectedSystemWorkerTask>()
+            .Include(t => t.Activity)
+            .Where(t => t.ConnectedSystemId == connectedSystemId)
+            .OrderBy(t => t.Timestamp)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<ExampleDataTemplateWorkerTask?> GetFirstExampleDataWorkerTaskAsync(int dataGenerationTemplateId)
     {
         return await Repository.Database.ExampleDataTemplateWorkerTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);

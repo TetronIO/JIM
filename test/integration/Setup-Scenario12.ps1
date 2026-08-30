@@ -121,7 +121,7 @@ $existing = @(Get-JIMConnectedSystem -ErrorAction SilentlyContinue)
 $sys = $existing | Where-Object { $_.name -eq $hrSystemName }
 if ($sys) {
     Write-Host "  Removing existing '$hrSystemName'..." -ForegroundColor Gray
-    Remove-JIMConnectedSystem -Id $sys.id -Force | Out-Null
+    Remove-JIMConnectedSystem -Id $sys.id -DeleteImmediately -Force | Out-Null
 }
 Write-Host "  OK Cleanup complete" -ForegroundColor Green
 

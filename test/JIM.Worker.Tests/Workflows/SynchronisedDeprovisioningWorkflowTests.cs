@@ -453,6 +453,216 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
     }
 
     // -----------------------------------------------------------------------------------------------------------------
+    // Failed-run exits (#809, Phase 3): retry (re-issue the deprovisioning delete on a fenced system) and
+    // finish-immediately (issue the immediate delete on a fenced system). There is deliberately no
+    // un-fencing abort: a half-deprovisioned system never returns to service.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task DeleteAsync_DeprovisioningModeOnFencedSystemWithPersistedTask_AttachesToItWithoutQueuingASecondAsync()
+    {
+        // A worker crash leaves the deprovisioning task persisted with its checkpoint; startup recovery
+        // re-queues it. A retry issued then must attach to that task (reporting its ids) rather than
+        // queue a second run against the same system.
+        var system = await CreateConnectedSystemAsync("HR Source");
+        var user = await CreateAdministratorAsync();
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(system);
+        var checkpointCsoId = Guid.NewGuid();
+        task.CheckpointPhase = SynchronisedDeprovisioningPhase.ObjectPass;
+        task.CheckpointConnectedSystemObjectId = checkpointCsoId;
+        DbContext.DeleteConnectedSystemWorkerTasks.Add(task);
+        await DbContext.SaveChangesAsync();
+
+        var result = await Jim.ConnectedSystems.DeleteAsync(system.Id, user, synchronisedDeprovisioning: true);
+
+        var persistedTask = DbContext.DeleteConnectedSystemWorkerTasks.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, "the retry must be accepted, not refused");
+            Assert.That(result.Outcome, Is.EqualTo(DeletionOutcome.QueuedAsBackgroundJob));
+            Assert.That(result.WorkerTaskId, Is.EqualTo(task.Id), "the retry must report the persisted task, not a new one");
+            Assert.That(result.ActivityId, Is.EqualTo(activity.Id));
+            Assert.That(persistedTask.Id, Is.EqualTo(task.Id), "no second task may be queued");
+            Assert.That(persistedTask.CheckpointPhase, Is.EqualTo(SynchronisedDeprovisioningPhase.ObjectPass),
+                "the persisted checkpoint must be left intact for the resumed run");
+            Assert.That(persistedTask.CheckpointConnectedSystemObjectId, Is.EqualTo(checkpointCsoId));
+        }
+    }
+
+    [Test]
+    public async Task DeleteAsync_DeprovisioningModeOnFencedSystemAfterFailedRun_QueuesRetryThatResumesAsync()
+    {
+        // A failed run's task row is deleted at the worker's dispatch boundary, so the retry queues a
+        // fresh deprovisioning task. The run still resumes from where the data stands rather than
+        // re-running in full: completed batches deleted their Connected System Objects, so only the
+        // remainder is processed, and the already-processed object's target gains no second export.
+        var ctx = await SetUpTwoObjectsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        SimulateAllTargetExportsExecuted(ctx.Target);
+
+        var hrCsos = SyncRepo.ConnectedSystemObjects.Values
+            .Where(c => c.ConnectedSystemId == ctx.Hr.Id)
+            .OrderBy(c => c.Id)
+            .ToList();
+        Assert.That(hrCsos, Has.Count.EqualTo(2), "precondition: two HR Connected System Objects");
+        var processedCso = hrCsos[0];
+        var processedMvo = processedCso.MetaverseObject!;
+        var processedTargetCso = SyncRepo.ConnectedSystemObjects.Values
+            .Single(c => c.ConnectedSystemId == ctx.Target.Id && c.MetaverseObjectId == processedMvo.Id);
+
+        // Simulate the first object's completed batch (as the failed run left it): values recalled, join
+        // broken, Connected System Object deleted, export staged.
+        foreach (var recalled in processedMvo.AttributeValues.Where(av => av.ContributedBySystemId == ctx.Hr.Id).ToList())
+            processedMvo.AttributeValues.Remove(recalled);
+        processedMvo.ConnectedSystemObjects.Remove(processedCso);
+        processedCso.MetaverseObject = null;
+        processedCso.MetaverseObjectId = null;
+        await SyncRepo.DeleteConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { processedCso });
+        var preStagedExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = ctx.Target.Id,
+            ConnectedSystemObjectId = processedTargetCso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Pending
+        };
+        await SyncRepo.CreatePendingExportsAsync(new List<PendingExport> { preStagedExport });
+
+        // Fence the system with no persisted task, exactly as a failed run leaves it.
+        await FenceSystemAsync(ctx.Hr);
+        var user = await CreateAdministratorAsync();
+
+        var result = await Jim.ConnectedSystems.DeleteAsync(ctx.Hr.Id, user, synchronisedDeprovisioning: true);
+
+        var retryTask = DbContext.DeleteConnectedSystemWorkerTasks.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, "the retry must re-queue, not refuse");
+            Assert.That(result.Outcome, Is.EqualTo(DeletionOutcome.QueuedAsBackgroundJob));
+            Assert.That(retryTask.SynchronisedDeprovisioning, Is.True);
+        }
+
+        var runResult = await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(retryTask);
+
+        var exportsForProcessedTarget = SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemObjectId == processedTargetCso.Id)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(runResult.ConnectedSystemObjectsProcessed, Is.EqualTo(1),
+                "the retried run must process only the remaining object, not re-run in full");
+            Assert.That(exportsForProcessedTarget, Has.Count.EqualTo(1),
+                "the already-processed object's target must not gain a second staged export");
+            Assert.That(await DbContext.ConnectedSystems.FindAsync(ctx.Hr.Id), Is.Null,
+                "the retried run must complete the deletion");
+        }
+    }
+
+    [Test]
+    public async Task DeleteAsync_ImmediateModeOnFencedSystem_FinishesDeletionAndRecordsAbandonmentAsync()
+    {
+        // Finish-immediately: the immediate delete on a fenced system abandons the remaining
+        // deprovisioning work and completes the deletion, keeping the remaining contributed data
+        // (unrecallable) and recording the abandonment on the Activity.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        var hrCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Hr.Id);
+        var mvo = hrCso.MetaverseObject!;
+        Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId), Is.Not.Null,
+            "precondition: HR contributed the description value");
+
+        await FenceSystemAsync(ctx.Hr);
+        var user = await CreateAdministratorAsync();
+
+        var result = await Jim.ConnectedSystems.DeleteAsync(ctx.Hr.Id, user, synchronisedDeprovisioning: false);
+
+        var deleteActivity = DbContext.Activities.Single(a =>
+            a.TargetType == ActivityTargetType.ConnectedSystem && a.TargetOperationType == ActivityTargetOperationType.Delete);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, "finish-immediately must proceed, not refuse");
+            Assert.That(result.Outcome, Is.EqualTo(DeletionOutcome.CompletedImmediately));
+            Assert.That(await DbContext.ConnectedSystems.FindAsync(ctx.Hr.Id), Is.Null,
+                "the deletion must complete");
+            Assert.That(deleteActivity.Message, Does.Contain("abandoned"),
+                "the Activity must record that a deprovisioning run was abandoned partway");
+            Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId), Is.Not.Null,
+                "the remaining contributed value must be kept, not recalled");
+        }
+    }
+
+    [Test]
+    public async Task DeleteAsync_ImmediateModeOnFencedSystemWithQueuedTask_CancelsTheQueuedRunAndFinishesAsync()
+    {
+        // Finish-immediately issued while the deprovisioning task is still queued (not yet started):
+        // the queued run is cancelled and the deletion completed.
+        var system = await CreateConnectedSystemAsync("HR Source");
+        var user = await CreateAdministratorAsync();
+        var queued = await Jim.ConnectedSystems.DeleteAsync(system.Id, user, synchronisedDeprovisioning: true);
+        Assert.That(queued.Outcome, Is.EqualTo(DeletionOutcome.QueuedAsBackgroundJob), "precondition: a deprovisioning run queued");
+
+        var result = await Jim.ConnectedSystems.DeleteAsync(system.Id, user, synchronisedDeprovisioning: false);
+
+        var cancelledActivity = await DbContext.Activities.FindAsync(queued.ActivityId!.Value);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Outcome, Is.EqualTo(DeletionOutcome.CompletedImmediately));
+            Assert.That(DbContext.DeleteConnectedSystemWorkerTasks.Any(), Is.False,
+                "the queued deprovisioning task must be cancelled and removed");
+            Assert.That(cancelledActivity, Is.Not.Null);
+            Assert.That(cancelledActivity!.Status, Is.EqualTo(ActivityStatus.Cancelled),
+                "the abandoned run's Activity must be cancelled, never left in progress");
+            Assert.That(await DbContext.ConnectedSystems.FindAsync(system.Id), Is.Null,
+                "the deletion must complete");
+        }
+    }
+
+    [Test]
+    public async Task DeleteAsync_ImmediateModeOnFencedSystemWithProcessingTask_RefusesAsync()
+    {
+        // A deprovisioning run actively executing cannot be raced by an immediate bulk delete; the
+        // finish-immediately exit applies to a failed or queued run, not a live one.
+        var system = await CreateConnectedSystemAsync("HR Source");
+        var user = await CreateAdministratorAsync();
+        var (task, _) = await FenceSystemAndBuildTaskAsync(system);
+        task.Status = WorkerTaskStatus.Processing;
+        DbContext.DeleteConnectedSystemWorkerTasks.Add(task);
+        await DbContext.SaveChangesAsync();
+
+        var result = await Jim.ConnectedSystems.DeleteAsync(system.Id, user, synchronisedDeprovisioning: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("currently executing"));
+            Assert.That(await DbContext.ConnectedSystems.FindAsync(system.Id), Is.Not.Null, "the system must survive");
+        }
+    }
+
+    [Test]
+    public async Task DeleteAsync_DeprovisioningModeOnFencedSystemWithQueuedImmediateTask_RefusesAsync()
+    {
+        // A queued immediate deletion will complete without deprovisioning; a deprovisioning retry
+        // cannot supersede it, and silently attaching to it would misreport the mode.
+        var system = await CreateConnectedSystemAsync("HR Source");
+        var user = await CreateAdministratorAsync();
+        var (task, _) = await FenceSystemAndBuildTaskAsync(system);
+        task.SynchronisedDeprovisioning = false;
+        DbContext.DeleteConnectedSystemWorkerTasks.Add(task);
+        await DbContext.SaveChangesAsync();
+
+        var result = await Jim.ConnectedSystems.DeleteAsync(system.Id, user, synchronisedDeprovisioning: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("immediate deletion is already queued"));
+            Assert.That(DbContext.DeleteConnectedSystemWorkerTasks.Count(), Is.EqualTo(1), "nothing new may be queued");
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
     // Topology builders
     // -----------------------------------------------------------------------------------------------------------------
 
@@ -487,10 +697,10 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Fences the system with the Deleting status (as the queue step does) and builds the worker task with
-    /// its Activity, mirroring what TaskingServer records at queue time.
+    /// Fences the system with the Deleting status, exactly as the queue step does, without building a task:
+    /// the state a failed deprovisioning run leaves behind once the worker's boundary has deleted its task row.
     /// </summary>
-    private async Task<(DeleteConnectedSystemWorkerTask Task, Activity Activity)> FenceSystemAndBuildTaskAsync(ConnectedSystem system)
+    private async Task FenceSystemAsync(ConnectedSystem system)
     {
         // Detach processor-modified entities first (the same guard the base harness's helpers apply): the
         // full syncs above leave tracked entities in states the in-memory store no longer recognises.
@@ -500,6 +710,15 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
         var persistedSystem = await DbContext.ConnectedSystems.FindAsync(system.Id);
         persistedSystem!.Status = ConnectedSystemStatus.Deleting;
         await DbContext.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Fences the system with the Deleting status (as the queue step does) and builds the worker task with
+    /// its Activity, mirroring what TaskingServer records at queue time.
+    /// </summary>
+    private async Task<(DeleteConnectedSystemWorkerTask Task, Activity Activity)> FenceSystemAndBuildTaskAsync(ConnectedSystem system)
+    {
+        await FenceSystemAsync(system);
 
         var activity = new Activity
         {
