@@ -4,7 +4,7 @@
 - **Created:** 2026-07-25
 - **Author:** Tetron
 - **Issue:** [#1119](https://github.com/TetronIO/JIM/issues/1119)
-- **Note:** `Doing` refers to Phase 2 only. Phase 1 (this document's own machinery: per-system configuration, the encrypted queue, fan-out, coalescing, retry and backoff, the queue page, retention, and the three surfaces) is delivered and evidenced against every [Acceptance Criterion](#acceptance-criteria) below; see [Implementation Progress](#implementation-progress) for the per-requirement record. The foundation it was built on landed under [#1121](https://github.com/TetronIO/JIM/issues/1121), [#1172](https://github.com/TetronIO/JIM/issues/1172), [#1221](https://github.com/TetronIO/JIM/issues/1221) and [#1273](https://github.com/TetronIO/JIM/issues/1273). What remains is Phase 2 inbound capture (the ingress API, inbound password mapping on import, and the Domain Controller agent), which gets its own plan.
+- **Note:** `Doing` refers to Phase 2 only. Phase 1 (this document's own machinery: per-system configuration, the encrypted queue, fan-out, coalescing, retry and backoff, the queue page, retention, and the three surfaces) is delivered and evidenced against every [Acceptance Criterion](#acceptance-criteria) below; see [Implementation Progress](#implementation-progress) for the per-requirement record. The foundation it was built on landed under [#1121](https://github.com/TetronIO/JIM/issues/1121), [#1172](https://github.com/TetronIO/JIM/issues/1172), [#1221](https://github.com/TetronIO/JIM/issues/1221) and [#1273](https://github.com/TetronIO/JIM/issues/1273). What remains is Phase 2 inbound capture, now the ingress API alone: inbound password mapping on import was carved out to [#1563](https://github.com/TetronIO/JIM/issues/1563) for future consideration, because nothing has asked for it and it is the only part of this feature that is not event-shaped.
 
 ## Problem Statement
 
@@ -33,7 +33,7 @@ Password data raises requirements that JIM's existing synchronisation machinery 
 - **Password history or complexity policy management.** JIM delivers a password to a target system; that system enforces its own policy and history. JIM will report a policy rejection as a failure, not attempt to pre-validate against a remote policy.
 - **Self-service password reset (SSPR).** An end-user-facing reset portal is a separate feature with its own authentication and verification requirements. This PRD covers administrator-initiated and externally-captured password changes only.
 - **The Domain Controller capture agent itself.** Phase 2 delivers the inbound ingress API that such an agent would call. The native Windows agent is a separate deliverable with its own toolchain, signing, and release cycle; see "Phase 2 prerequisites" below.
-- **File-based (CSV) password ingest.** Deliberately deferred; the supported way to bring a password in from a source is Phase 2 inbound password mapping on import, which never lands the value in the Metaverse. See "Rejected and deferred inbound channels".
+- **File-based (CSV) password ingest.** Deliberately deferred; see "Rejected and deferred inbound channels". Note that this leaves a source system supplying joiners' initial passwords with no committed route into the password channel: the alternative this once pointed at, inbound password mapping on import, is parked at [#1563](https://github.com/TetronIO/JIM/issues/1563). A repeat request for either is the demand signal to pick that up rather than to reopen the file question.
 - **Adopting a third-party password filter as a dependency.** Existing open-source filters are design references, not components we ship; see "Prior art".
 
 ## User Stories
@@ -268,7 +268,7 @@ The plan at [`engineering/plans/done/PASSWORD_SYNCHRONISATION.md`](../../plans/d
 
 ### Not started
 
-Requirement 16's warning still has no call site outside the Synchronisation Rule Attribute Flow warning added under this feature; see Requirements partially satisfied. Phase 2 inbound capture (the ingress API, inbound password mapping on import, and the Domain Controller capture agent) is untouched and gets its own plan.
+Requirement 16's warning still has no call site outside the Synchronisation Rule Attribute Flow warning added under this feature; see Requirements partially satisfied. Phase 2 inbound capture (the ingress API and the Domain Controller capture agent) is untouched and gets its own plan. Inbound password mapping on import is no longer part of it; see [#1563](https://github.com/TetronIO/JIM/issues/1563).
 
 ## Acceptance Criteria
 
@@ -296,10 +296,10 @@ Every criterion below is met. Each carries where it lives and what proves it, so
 
 **Phase 1: JIM as password origin.** Everything in this document: configuration, queue, connector capability, delivery, reporting, audit, retention, and the three surfaces. Password changes originate from an administrator in the portal, from the REST API, from PowerShell, or from provisioning.
 
-**Phase 2: inbound capture.** Two channels sharing one entry point into the password channel:
+**Phase 2: inbound capture.** One channel into the password channel, having been two. The second is recorded below with the reason it was carved out, because the reasoning is worth keeping:
 
 - *Ingress API.* A documented, API-key-authenticated endpoint that an external capture agent posts password change events to, with payload envelope encryption so that a TLS-terminating proxy cannot recover the password, a versioned wire contract, replay protection, and per-agent check-in reporting so an administrator can see which capture agents are healthy.
-- *Inbound password mapping on import.* A per-Connected-System setting nominating a source attribute as a password. The value is diverted at the import boundary straight into the password channel and is **never** persisted as a Connected System Object or Metaverse Object attribute value, never written to change history, and never available to an Attribute Flow. This is the supported answer to "my authoritative source supplies initial passwords", it works with any connector including the File connector, and it is strictly safer than the file-ingest idea considered below because the value never lands in the Metaverse. It is also the supported alternative to the do-it-yourself route described under "Why credential attributes are denylisted".
+- *Inbound password mapping on import.* **Carved out to [#1563](https://github.com/TetronIO/JIM/issues/1563) and no longer part of Phase 2.** It would have let a per-Connected-System setting nominate an imported attribute as a password, diverted at the import boundary. Two reasons for parking it: nothing has asked for it, and it is the only channel in this feature that is not event-shaped. An import reports current state rather than what changed, so the nominated column arrives again on every run holding the same value, and JIM cannot tell a genuine change from a repeat without keeping something derived from the password, which is the one thing the rest of the design refuses to do. The issue carries the design and the three questions that would need settling.
 
 **Phase 3 and beyond (not committed):** the native Domain Controller capture agent; a SCIM inbound password channel; self-service password reset; defensive password filtering ([#1120](https://github.com/TetronIO/JIM/issues/1120), see below).
 
@@ -348,7 +348,7 @@ Nothing in JIM today stops an administrator importing a cleartext password into 
 - **The `unicodePwd` write will usually fail anyway.** AD only accepts `unicodePwd` as a quoted UTF-16LE value over LDAPS with modify semantics that the generic export path does not produce, so the DIY mapping tends to *look* configured while silently never setting a password, which is worse than an honest refusal.
 - **It has no queue, no retry, no audit-without-the-value, and no coalescing.** It bypasses everything Phase 1 provides.
 
-Hence requirements 14 and 15: well-known credential attributes are denylisted from import and from Attribute Flow selection, and a credential-like attribute name outside that list raises a configuration warning pointing the administrator at the password channel (or, in Phase 2, at inbound password mapping on import, which is the supported way to bring a password *in* from a source without it ever touching the Metaverse). The denylist is not a security boundary against a determined administrator (they own the schema and could rename an attribute), it is a guardrail that makes the safe path the obvious one and the dangerous path deliberate.
+Hence requirements 14 and 15: well-known credential attributes are denylisted from import and from Attribute Flow selection, and a credential-like attribute name outside that list raises a configuration warning pointing the administrator at the password channel. The denylist is not a security boundary against a determined administrator (they own the schema and could rename an attribute), it is a guardrail that makes the safe path the obvious one and the dangerous path deliberate.
 
 ### Rejected and deferred inbound channels
 
