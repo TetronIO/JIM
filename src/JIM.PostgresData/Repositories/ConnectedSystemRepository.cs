@@ -6607,6 +6607,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false)
     {
+        // The in-memory test provider does not support raw SQL; tracked fallback with the same semantics
+        // (the established pattern; see DeleteSyncRuleAsync). Production always takes the relational path.
+        if (!Repository.Database.Database.IsRelational())
+        {
+            await DeleteConnectedSystemViaTrackedFallbackAsync(connectedSystemId);
+            return;
+        }
+
         // Use raw SQL for bulk deletion - much faster than EF Core tracking. The whole operation runs in one
         // transaction so a mid-sequence failure rolls back rather than leaving a half-deleted system (fast/hard
         // failure over corrupted state). Delete order follows the dependency graph; foreign keys from retained
@@ -6788,6 +6796,71 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Repository.Database.Database.SetCommandTimeout(previousTimeout);
 
         Log.Information("DeleteConnectedSystemAsync: Completed bulk deletion for Connected System {Id}", connectedSystemId);
+    }
+
+    /// <summary>
+    /// The in-memory (non-relational) test-provider fallback for <see cref="DeleteConnectedSystemAsync"/>:
+    /// tracked EF removals with the same observable semantics as the raw SQL sequence for the state the
+    /// workflow test harness holds in the DbContext. Audit rows are retained with their now-dead foreign
+    /// keys nulled (including attribute-value provenance, which the relational schema nulls via ON DELETE
+    /// SET NULL); configuration and data rows are removed. Never taken by a relational provider.
+    /// </summary>
+    private async Task DeleteConnectedSystemViaTrackedFallbackAsync(int connectedSystemId)
+    {
+        var db = Repository.Database;
+
+        // Retained audit/history rows: null the foreign keys that reference rows removed below.
+        var systemRuleIds = await db.SyncRules.Where(sr => sr.ConnectedSystemId == connectedSystemId).Select(sr => sr.Id).ToListAsync();
+        foreach (var activity in await db.Activities.AsTracking()
+                     .Where(a => a.ConnectedSystemId == connectedSystemId
+                                 || (a.SyncRuleId.HasValue && systemRuleIds.Contains(a.SyncRuleId.Value)))
+                     .ToListAsync())
+        {
+            activity.ConnectedSystemId = null;
+            activity.ConnectedSystemRunProfileId = null;
+            if (activity.SyncRuleId.HasValue && systemRuleIds.Contains(activity.SyncRuleId.Value))
+                activity.SyncRuleId = null;
+        }
+        foreach (var change in await db.MetaverseObjectChanges.AsTracking()
+                     .Where(c => c.SyncRuleId.HasValue && systemRuleIds.Contains(c.SyncRuleId.Value)).ToListAsync())
+            change.SyncRuleId = null;
+        foreach (var attributeValue in await db.MetaverseObjectAttributeValues.AsTracking()
+                     .Where(av => av.ContributedBySystemId == connectedSystemId
+                                  || (av.ContributedBySyncRuleId.HasValue && systemRuleIds.Contains(av.ContributedBySyncRuleId.Value)))
+                     .ToListAsync())
+        {
+            if (attributeValue.ContributedBySystemId == connectedSystemId)
+                attributeValue.ContributedBySystemId = null;
+            if (attributeValue.ContributedBySyncRuleId.HasValue && systemRuleIds.Contains(attributeValue.ContributedBySyncRuleId.Value))
+                attributeValue.ContributedBySyncRuleId = null;
+        }
+
+        // Data and configuration rows, in dependency order. The in-memory provider applies configured
+        // client-side cascades to tracked dependents, so children loaded by these tracked queries go with
+        // their parents.
+        db.PendingExports.RemoveRange(await db.PendingExports.AsTracking().Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync());
+        db.ConnectedSystemObjects.RemoveRange(await db.ConnectedSystemObjects.AsTracking().Where(cso => cso.ConnectedSystemId == connectedSystemId).ToListAsync());
+        db.ObjectMatchingRules.RemoveRange(await db.ObjectMatchingRules.AsTracking()
+            .Where(omr => (omr.SyncRuleId.HasValue && systemRuleIds.Contains(omr.SyncRuleId.Value))
+                          || (omr.ConnectedSystemObjectTypeId.HasValue && omr.ConnectedSystemObjectType!.ConnectedSystemId == connectedSystemId))
+            .ToListAsync());
+        db.SyncRules.RemoveRange(await db.SyncRules.AsTracking().Where(sr => sr.ConnectedSystemId == connectedSystemId).ToListAsync());
+        db.ConnectedSystemRunProfiles.RemoveRange(await db.ConnectedSystemRunProfiles.AsTracking().Where(rp => rp.ConnectedSystemId == connectedSystemId).ToListAsync());
+        db.ConnectedSystemContainers.RemoveRange(await db.ConnectedSystemContainers.AsTracking()
+            .Where(c => (c.ConnectedSystem != null && c.ConnectedSystem.Id == connectedSystemId)
+                        || (c.Partition != null && c.Partition.ConnectedSystem.Id == connectedSystemId)).ToListAsync());
+        db.ConnectedSystemPartitions.RemoveRange(await db.ConnectedSystemPartitions.AsTracking().Where(p => p.ConnectedSystem.Id == connectedSystemId).ToListAsync());
+        db.ConnectedSystemAttributes.RemoveRange(await db.ConnectedSystemAttributes.AsTracking()
+            .Where(a => a.ConnectedSystemObjectType != null && a.ConnectedSystemObjectType.ConnectedSystemId == connectedSystemId).ToListAsync());
+        db.ConnectedSystemObjectTypes.RemoveRange(await db.ConnectedSystemObjectTypes.AsTracking().Where(t => t.ConnectedSystemId == connectedSystemId).ToListAsync());
+        db.ConnectedSystemSettingValues.RemoveRange(await db.ConnectedSystemSettingValues.AsTracking().Where(sv => sv.ConnectedSystem.Id == connectedSystemId).ToListAsync());
+
+        var connectedSystem = await db.ConnectedSystems.AsTracking().SingleOrDefaultAsync(cs => cs.Id == connectedSystemId);
+        if (connectedSystem != null)
+            db.ConnectedSystems.Remove(connectedSystem);
+
+        await db.SaveChangesAsync();
+        Log.Information("DeleteConnectedSystemAsync: Completed tracked-fallback deletion for Connected System {Id}", connectedSystemId);
     }
 
     public async Task<int> GetSyncRuleCountAsync(int connectedSystemId)

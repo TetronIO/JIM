@@ -309,6 +309,21 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.Entry(dbSynchronisationWorkerTask).CurrentValues.SetValues(synchronisationWorkerTask);
                 break;
             }
+            case DeleteConnectedSystemWorkerTask deleteConnectedSystemWorkerTask:
+            {
+                // The Synchronised Deprovisioning run (#809) persists its resumability checkpoint through
+                // this path after each completed batch.
+                var dbDeleteConnectedSystemWorkerTask = await Repository.Database.DeleteConnectedSystemWorkerTasks.Include(st => st.Activity).AsTracking().SingleOrDefaultAsync(q => q.Id == workerTask.Id);
+                if (dbDeleteConnectedSystemWorkerTask == null)
+                {
+                    Log.Error("UpdateWorkerTaskAsync: Could not retrieve a DeleteConnectedSystemWorkerTask object to update.");
+                    return;
+                }
+
+                // map scalar value updates to the db version of the object
+                Repository.Database.Entry(dbDeleteConnectedSystemWorkerTask).CurrentValues.SetValues(deleteConnectedSystemWorkerTask);
+                break;
+            }
         }
 
         await Repository.Database.SaveChangesAsync();
@@ -508,6 +523,9 @@ public class TaskingRepository : ITaskingRepository
             ExampleDataTemplateWorkerTask => nameof(ExampleDataTemplateWorkerTask).SplitOnCapitalLetters(),
             SynchronisationWorkerTask => nameof(SynchronisationWorkerTask).SplitOnCapitalLetters(),
             ClearConnectedSystemObjectsWorkerTask => nameof(ClearConnectedSystemObjectsWorkerTask).SplitOnCapitalLetters(),
+            // The queue must distinguish the two deletion modes (#809): a Synchronised Deprovisioning run is
+            // long-lived per-object work, where the immediate deletion is a bulk operation.
+            DeleteConnectedSystemWorkerTask { SynchronisedDeprovisioning: true } => "Deprovision Connected System Worker Task",
             DeleteConnectedSystemWorkerTask => nameof(DeleteConnectedSystemWorkerTask).SplitOnCapitalLetters(),
             PasswordDeliveryWorkerTask => nameof(PasswordDeliveryWorkerTask).SplitOnCapitalLetters(),
             TemporalScopeReconciliationWorkerTask => nameof(TemporalScopeReconciliationWorkerTask).SplitOnCapitalLetters(),

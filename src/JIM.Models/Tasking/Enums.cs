@@ -28,6 +28,31 @@ public enum WorkerTaskExecutionMode
 }
 
 /// <summary>
+/// The passes of a Connected System Synchronised Deprovisioning run (#809), recorded on the task row as
+/// its resumability checkpoint. A value means the run last completed a batch within (or reached) that
+/// pass; a worker restart resumes there rather than reprocessing committed work.
+/// </summary>
+public enum SynchronisedDeprovisioningPhase
+{
+	/// <summary>
+	/// The per-object pass: each Connected System Object processed through the obsoletion core, in
+	/// ascending id order, batched.
+	/// </summary>
+	ObjectPass = 0,
+
+	/// <summary>
+	/// The by-provenance residue pass: per import Synchronisation Rule, remaining contributed values
+	/// recalled, before any rule is deleted.
+	/// </summary>
+	ResiduePass = 1,
+
+	/// <summary>
+	/// The final step: the existing Connected System deletion (tombstone, bulk delete).
+	/// </summary>
+	FinalDeletion = 2
+}
+
+/// <summary>
 /// The database operation that raised a real-time Worker Task change notification (issue #307).
 /// Values map to the PostgreSQL trigger operation (TG_OP) that fired.
 /// </summary>

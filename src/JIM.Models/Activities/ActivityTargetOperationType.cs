@@ -84,5 +84,15 @@ public enum ActivityTargetOperationType
     /// <see cref="ActivityTargetType.SynchronisationRule"/>; the rule deletion itself is recorded as a child
     /// <see cref="Delete"/> Activity.
     /// </summary>
-    RecallAttributeValues = 17
+    RecallAttributeValues = 17,
+
+    /// <summary>
+    /// A Connected System deletion running as Synchronised Deprovisioning (#809): every Connected System
+    /// Object processed through the synchronisation engine's obsoletion semantics (attribute recall with
+    /// surviving-contributor re-election, Metaverse Object deletion rules, Pending Export staging), a
+    /// by-provenance residue pass, then the deletion itself. Used with
+    /// <see cref="ActivityTargetType.ConnectedSystem"/>. Distinct from <see cref="Delete"/> so the audit
+    /// trail shows which deletion mode ran (the PRD's auditability requirement).
+    /// </summary>
+    Deprovision = 18
 }
