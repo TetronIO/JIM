@@ -5678,7 +5678,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Select(m => new DataFlowHeader
             {
                 SyncRuleMappingId = m.Id,
-                SyncRuleId = m.SyncRuleId!.Value,
+                SyncRuleId = m.SyncRuleId,
                 SyncRuleName = m.SyncRule!.Name,
                 SyncRuleEnabled = m.SyncRule.Enabled,
                 Direction = m.SyncRule.Direction,
@@ -6376,15 +6376,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // rule's LastUpdated so the deletion advances the watermark; the deletion's initiator and audit trail
         // live on its own Activity, so the rule's LastUpdatedBy* fields are left to rule-level edits.
         var parentRuleId = tracked.SyncRuleId;
-        if (parentRuleId.HasValue)
-        {
-            var parentRuleIdValue = parentRuleId.Value;
-            var parentRule = await Repository.Database.SyncRules
-                .AsTracking()
-                .SingleOrDefaultAsync(r => r.Id == parentRuleIdValue);
-            if (parentRule != null)
-                parentRule.LastUpdated = DateTime.UtcNow;
-        }
+        var parentRule = await Repository.Database.SyncRules
+            .AsTracking()
+            .SingleOrDefaultAsync(r => r.Id == parentRuleId);
+        if (parentRule != null)
+            parentRule.LastUpdated = DateTime.UtcNow;
 
         // Remove all sources first
         Repository.Database.RemoveRange(tracked.Sources);

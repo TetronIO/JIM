@@ -63,7 +63,7 @@ public partial class SyncEngine
         // loses priority resolution to the rule currently owning the value (the incumbent) must never reach the
         // Metaverse Object. Single-contributor attributes, and runs without a priority context, use the unchanged
         // write path: the gate adds one cached lookup and never engages for the common single-contributor case.
-        if (priorityContext != null && contributingSyncRuleId.HasValue &&
+        if (priorityContext != null &&
             priorityContext.GetContributorCount(mvoObjectTypeId, syncRuleMapping.TargetMetaverseAttribute.Id) > 1)
         {
             var incumbentSyncRuleId = FindEffectiveIncumbentSyncRuleId(mvo, syncRuleMapping.TargetMetaverseAttribute.Id);

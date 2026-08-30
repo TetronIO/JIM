@@ -214,6 +214,31 @@ public class MappingDeletionChoiceWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_StagedRemovalWithoutCarrier_DeletesTheMappingRowAsync()
+    {
+        // The #1550 guard: a staged removal that arrives WITHOUT a removal-choice carrier entry (a future
+        // caller that never learnt the convention) must still delete the mapping row rather than orphan it.
+        // The Synchronisation Rule FK is required, so severing the relationship deletes the orphaned row
+        // instead of nulling its owner; the orphan state is inexpressible.
+        var ctx = await SetUpStagedRemovalTopologyAsync();
+
+        ctx.Rule.AttributeFlowRules.Remove(ctx.DescriptionMapping);
+        var success = await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.Rule, ctx.User);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(success, Is.True);
+            Assert.That(DbContext.SyncRuleMappings.SingleOrDefault(m => m.Id == ctx.DescriptionMapping.Id), Is.Null,
+                "an uncarried staged removal must delete the mapping row, never orphan it with a null owner");
+            Assert.That(DbContext.MetaverseObjectAttributeValues
+                    .Where(av => av.AttributeId == ctx.DescriptionAttributeId)
+                    .Select(v => v.ContributedBySyncRuleId),
+                Has.All.EqualTo(ctx.Rule.Id),
+                "provenance stays intact so the orphan recall withdraws the values at the next Full Synchronisation");
+        }
+    }
+
+    [Test]
     public async Task CreateOrUpdateSyncRuleAsync_RemovalChoiceForMappingStillPresent_ThrowsAsync()
     {
         // A choice claiming a removal the save does not perform is a caller defect: honouring the keep would
