@@ -1122,11 +1122,90 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Recorded on the delete Activity when an immediate deletion is issued against a system already fenced
+    /// by a Synchronised Deprovisioning run: the finish-immediately exit (#809). Customer-facing wording; the
+    /// audit trail must say what was and was not done for the objects the abandoned run never reached.
+    /// </summary>
+    public const string SynchronisedDeprovisioningAbandonedMessage =
+        "A Synchronised Deprovisioning run was abandoned partway and the deletion completed immediately. " +
+        "The remaining contributed attribute values were kept without provenance (they can no longer be recalled), " +
+        "surviving contributors were not re-elected, and downstream systems were not corrected.";
+
+    /// <summary>
+    /// Evaluates a deletion request against a system already fenced (Status = Deleting), per the #809
+    /// failed-run exit decision. Returns the result to answer with, or null when the request should proceed
+    /// through the ordinary flow (re-queue for a deprovisioning retry; complete the deletion for
+    /// finish-immediately). There is deliberately no un-fencing abort: a half-deprovisioned system never
+    /// returns to service.
+    /// </summary>
+    /// <param name="existingDeletionTask">The persisted deletion task for the system, if one survives. A
+    /// surviving task means the run is queued or executing, its checkpoint intact; a failed run's task row
+    /// is removed at the worker's boundary, so no task means the retry must queue afresh.</param>
+    /// <param name="synchronisedDeprovisioning">The mode of the incoming request.</param>
+    /// <param name="connectedSystemId">The fenced system, for logging.</param>
+    private static ConnectedSystemDeletionResult? EvaluateFencedDeletionRequest(
+        DeleteConnectedSystemWorkerTask? existingDeletionTask,
+        bool synchronisedDeprovisioning,
+        int connectedSystemId)
+    {
+        if (synchronisedDeprovisioning)
+        {
+            // RETRY: re-issuing the deprovisioning delete resumes the run.
+            if (existingDeletionTask == null)
+                return null; // a failed run left no task; the caller queues a fresh one (completed batches deleted their objects, so the new run resumes from where the data stands).
+
+            if (!existingDeletionTask.SynchronisedDeprovisioning)
+            {
+                Log.Warning("DeleteAsync: Connected System {Id} is fenced with an immediate deletion task {TaskId} queued; a deprovisioning retry cannot supersede it.",
+                    connectedSystemId, existingDeletionTask.Id);
+                return ConnectedSystemDeletionResult.Failed(
+                    "An immediate deletion is already queued for this Connected System and will complete without deprovisioning; a Synchronised Deprovisioning request cannot supersede it.");
+            }
+
+            if (existingDeletionTask.Activity == null)
+            {
+                // Fast/hard: a persisted deletion task without its Activity is an integrity fault; attaching
+                // to it would leave the caller with nothing to monitor.
+                Log.Error("DeleteAsync: Connected System {Id} has deprovisioning task {TaskId} persisted with no Activity; refusing the retry.",
+                    connectedSystemId, existingDeletionTask.Id);
+                return ConnectedSystemDeletionResult.Failed(
+                    "The queued Synchronised Deprovisioning task for this Connected System carries no Activity; investigate the task queue before retrying.");
+            }
+
+            // The run is already queued or executing; the retry attaches to it (checkpoint intact) rather
+            // than queuing a second run against the same system.
+            Log.Information("DeleteAsync: Connected System {Id} is fenced with deprovisioning task {TaskId} persisted; the retry attaches to it.",
+                connectedSystemId, existingDeletionTask.Id);
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(existingDeletionTask.Id, existingDeletionTask.Activity.Id);
+        }
+
+        // FINISH-IMMEDIATELY: the immediate delete on a fenced system abandons the remaining deprovisioning
+        // work and completes the deletion. A run actively executing cannot be raced by a bulk delete, so
+        // that one case refuses; a queued (not yet started) run is cancelled by the caller before proceeding.
+        if (existingDeletionTask is { Status: WorkerTaskStatus.Processing })
+        {
+            Log.Warning("DeleteAsync: Connected System {Id} has deletion task {TaskId} currently executing; refusing the immediate deletion.",
+                connectedSystemId, existingDeletionTask.Id);
+            return ConnectedSystemDeletionResult.Failed(
+                "A deletion task for this Connected System is currently executing; wait for it to complete or fail before requesting the immediate deletion.");
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Deletes a Connected System and all its related data.
     /// Implements the queue-based deletion approach:
     /// 1. Sets status to Deleting (blocks new operations)
     /// 2. If sync is running, queues deletion to run after sync completes
     /// 3. Otherwise, executes deletion (sync or async based on CSO count)
+    /// <para>
+    /// A system already fenced (Status = Deleting) takes the failed-run exits instead (#809):
+    /// deprovisioning mode RETRIES the run (attaching to the persisted task where one survives, its
+    /// checkpoint intact, or queueing afresh), and immediate mode FINISHES the deletion immediately,
+    /// abandoning the remaining deprovisioning work with the abandonment recorded on the Activity. There is
+    /// no un-fencing abort: a half-deprovisioned system never returns to service.
+    /// </para>
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
@@ -1151,17 +1230,35 @@ public partial class ConnectedSystemServer
             return ConnectedSystemDeletionResult.Failed($"Connected System with ID {connectedSystemId} not found.");
         }
 
-        // Check if already being deleted
-        if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
+        // A system already fenced (Status = Deleting) is a failed-run exit (#809): deprovisioning mode is
+        // the RETRY, immediate mode is FINISH-IMMEDIATELY. There is no un-fencing abort.
+        var alreadyFenced = connectedSystem.Status == ConnectedSystemStatus.Deleting;
+        if (alreadyFenced)
         {
-            Log.Warning("DeleteAsync: Connected System {Id} is already being deleted", connectedSystemId);
-            return ConnectedSystemDeletionResult.Failed("Connected System is already being deleted.");
+            var existingDeletionTask = await Application.Tasking.GetDeleteConnectedSystemWorkerTaskAsync(connectedSystemId);
+            var fencedRefusalOrAttachment = EvaluateFencedDeletionRequest(existingDeletionTask, synchronisedDeprovisioning, connectedSystemId);
+            if (fencedRefusalOrAttachment != null)
+                return fencedRefusalOrAttachment;
+
+            if (!synchronisedDeprovisioning && existingDeletionTask != null)
+            {
+                // Finish-immediately abandons the queued (not yet started) deprovisioning run: cancel its
+                // task and Activity before completing the deletion through the ordinary flow below.
+                Log.Information("DeleteAsync: Connected System {Id}: cancelling queued deletion task {TaskId}; the immediate deletion abandons the remaining deprovisioning work.",
+                    connectedSystemId, existingDeletionTask.Id);
+                await Application.Tasking.CancelWorkerTaskAsync(existingDeletionTask);
+            }
+        }
+        else
+        {
+            // Set status to Deleting to block new operations
+            connectedSystem.Status = ConnectedSystemStatus.Deleting;
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
         }
 
-        // Set status to Deleting to block new operations
-        connectedSystem.Status = ConnectedSystemStatus.Deleting;
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
-        Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
+        // The finish-immediately exit must be recorded on the Activity and must never un-fence on failure.
+        var abandonsDeprovisioningRun = alreadyFenced && !synchronisedDeprovisioning;
 
         // Check for running sync operations
         var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
@@ -1174,6 +1271,7 @@ public partial class ConnectedSystemServer
             var deleteTask = initiatedBy != null
                 ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning);
+            deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
@@ -1208,6 +1306,7 @@ public partial class ConnectedSystemServer
             var deleteTask = initiatedBy != null
                 ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
@@ -1225,7 +1324,9 @@ public partial class ConnectedSystemServer
         {
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // The finish-immediately exit (#809) must leave the abandonment on the audit trail.
+            Message = abandonsDeprovisioningRun ? SynchronisedDeprovisioningAbandonedMessage : null
             // ConnectedSystemId intentionally not set - the CS will be deleted before activity completes
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -1252,9 +1353,19 @@ public partial class ConnectedSystemServer
             // Mark activity as failed
             await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
 
-            // Reset status so deletion can be retried
-            connectedSystem.Status = ConnectedSystemStatus.Active;
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            if (alreadyFenced)
+            {
+                // The system was fenced by a deprovisioning run before this request: the fence must hold on
+                // failure so a half-deprovisioned system never returns to service (#809). The deletion stays
+                // retryable through the fenced-system exits.
+                Log.Warning("DeleteAsync: Connected System {Id} deletion failed; keeping the Deleting fence (the system was part-way through Synchronised Deprovisioning).", connectedSystemId);
+            }
+            else
+            {
+                // Reset status so deletion can be retried
+                connectedSystem.Status = ConnectedSystemStatus.Active;
+                await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            }
 
             return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
         }
@@ -1278,17 +1389,35 @@ public partial class ConnectedSystemServer
             return ConnectedSystemDeletionResult.Failed($"Connected System with ID {connectedSystemId} not found.");
         }
 
-        // Check if already being deleted
-        if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
+        // A system already fenced (Status = Deleting) is a failed-run exit (#809): deprovisioning mode is
+        // the RETRY, immediate mode is FINISH-IMMEDIATELY. There is no un-fencing abort.
+        var alreadyFenced = connectedSystem.Status == ConnectedSystemStatus.Deleting;
+        if (alreadyFenced)
         {
-            Log.Warning("DeleteAsync: Connected System {Id} is already being deleted", connectedSystemId);
-            return ConnectedSystemDeletionResult.Failed("Connected System is already being deleted.");
+            var existingDeletionTask = await Application.Tasking.GetDeleteConnectedSystemWorkerTaskAsync(connectedSystemId);
+            var fencedRefusalOrAttachment = EvaluateFencedDeletionRequest(existingDeletionTask, synchronisedDeprovisioning, connectedSystemId);
+            if (fencedRefusalOrAttachment != null)
+                return fencedRefusalOrAttachment;
+
+            if (!synchronisedDeprovisioning && existingDeletionTask != null)
+            {
+                // Finish-immediately abandons the queued (not yet started) deprovisioning run: cancel its
+                // task and Activity before completing the deletion through the ordinary flow below.
+                Log.Information("DeleteAsync: Connected System {Id}: cancelling queued deletion task {TaskId}; the immediate deletion abandons the remaining deprovisioning work.",
+                    connectedSystemId, existingDeletionTask.Id);
+                await Application.Tasking.CancelWorkerTaskAsync(existingDeletionTask);
+            }
+        }
+        else
+        {
+            // Set status to Deleting to block new operations
+            connectedSystem.Status = ConnectedSystemStatus.Deleting;
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
         }
 
-        // Set status to Deleting to block new operations
-        connectedSystem.Status = ConnectedSystemStatus.Deleting;
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
-        Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
+        // The finish-immediately exit must be recorded on the Activity and must never un-fence on failure.
+        var abandonsDeprovisioningRun = alreadyFenced && !synchronisedDeprovisioning;
 
         // Check for running sync operations
         var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
@@ -1298,6 +1427,7 @@ public partial class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning);
+            deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
@@ -1326,6 +1456,7 @@ public partial class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
@@ -1340,7 +1471,9 @@ public partial class ConnectedSystemServer
         {
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // The finish-immediately exit (#809) must leave the abandonment on the audit trail.
+            Message = abandonsDeprovisioningRun ? SynchronisedDeprovisioningAbandonedMessage : null
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -1361,8 +1494,17 @@ public partial class ConnectedSystemServer
             var errorMessage = GetFullExceptionMessage(ex);
             await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
 
-            connectedSystem.Status = ConnectedSystemStatus.Active;
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            if (alreadyFenced)
+            {
+                // The fence must hold on failure so a half-deprovisioned system never returns to service
+                // (#809); the deletion stays retryable through the fenced-system exits.
+                Log.Warning("DeleteAsync: Connected System {Id} deletion failed; keeping the Deleting fence (the system was part-way through Synchronised Deprovisioning).", connectedSystemId);
+            }
+            else
+            {
+                connectedSystem.Status = ConnectedSystemStatus.Active;
+                await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            }
 
             return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
         }

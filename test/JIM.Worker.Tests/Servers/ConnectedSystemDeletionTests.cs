@@ -356,9 +356,11 @@ public class ConnectedSystemDeletionTests
     }
 
     [Test]
-    public async Task DeleteAsync_WhenAlreadyDeleting_ReturnsFailedResultAsync()
+    public async Task DeleteAsync_WhenAlreadyDeletingWithTaskExecuting_ReturnsFailedResultAsync()
     {
-        // Arrange
+        // A fenced system no longer refuses outright (#809's failed-run exits: retry and
+        // finish-immediately both proceed); the one remaining refusal for the immediate mode is a
+        // deletion task actively executing, which a bulk delete must not race.
         var connectedSystem = new ConnectedSystem
         {
             Id = 1,
@@ -366,13 +368,19 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Deleting
         };
         _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
+        _mockTaskingRepo.Setup(r => r.GetDeleteConnectedSystemWorkerTaskAsync(1))
+            .ReturnsAsync(new DeleteConnectedSystemWorkerTask(1, evaluateMvoDeletionRules: true)
+            {
+                Status = WorkerTaskStatus.Processing,
+                Activity = new Activity { Id = Guid.NewGuid() }
+            });
 
         // Act
         var result = await _jim.ConnectedSystems.DeleteAsync(1, _initiatedBy);
 
         // Assert
         Assert.That(result.Outcome, Is.EqualTo(DeletionOutcome.Failed));
-        Assert.That(result.ErrorMessage, Does.Contain("already being deleted"));
+        Assert.That(result.ErrorMessage, Does.Contain("currently executing"));
     }
 
     [Test]

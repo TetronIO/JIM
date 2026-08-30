@@ -95,7 +95,7 @@ Write-TestStep "Step 3" "Removing any Connected System left by a previous run"
 # removing the source of identity first would deprovision them on the way past.
 foreach ($staleName in @($controlSystemName, $hrSystemName)) {
     foreach ($stale in @(Get-JIMConnectedSystem -Name $staleName -ErrorAction SilentlyContinue | Where-Object { $_ })) {
-        Remove-JIMConnectedSystem -Id $stale.id -Force | Out-Null
+        Remove-JIMConnectedSystem -Id $stale.id -DeleteImmediately -Force | Out-Null
         Write-Host "  Removed '$($stale.name)'" -ForegroundColor Gray
     }
 }

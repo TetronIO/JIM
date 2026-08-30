@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
+using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
@@ -201,6 +204,99 @@ public class ConnectedSystemDeletionDatabaseTests
                     .AnyAsync(ps => ps.ConnectedSystemId == systemId),
                 Is.False,
                 "its Password Synchronisation configuration goes with it, rather than being left orphaned");
+        }
+    }
+
+    /// <summary>
+    /// The deletion sequence severs the audit foreign keys in the DATABASE with raw SQL
+    /// (Activities.ConnectedSystemId, .SyncRuleId, .ConnectedSystemRunProfileId), but the worker holds the
+    /// task's Activity TRACKED on the same long-lived DbContext, and the completion write that follows the
+    /// deletion marks the whole entity Modified (<c>UpdateDetachedSafe</c>). Without a tracker fix-up the
+    /// tracked instance re-asserts the deleted system id and PostgreSQL refuses with 23503
+    /// (FK_Activities_ConnectedSystems_ConnectedSystemId), which is exactly how the first Synchronised
+    /// Deprovisioning run (#809) died after "system deleted", and it then poisons every later
+    /// SaveChangesAsync on the context, including FailActivityWithErrorAsync and the task-row completion,
+    /// leaving the task stuck InProgress and the worker queue wedged.
+    /// </summary>
+    [Test]
+    public async Task DeleteConnectedSystemAsync_WithATrackedActivityReferencingTheSystem_DoesNotReassertTheSeveredForeignKeysAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (systemId, _) = await SeedSystemAsync(suffix);
+
+        // Seed the graph the severing statements key on: a Metaverse Object Type and Connected System
+        // Object Type backing a Synchronisation Rule, plus a Run Profile.
+        int syncRuleId;
+        int runProfileId;
+        Guid activityId;
+        await using (var seedCtx = NewContext())
+        {
+            var mvoType = new MetaverseObjectType { Name = $"deletion-mvo-type-{suffix}", PluralName = $"deletion-mvo-types-{suffix}" };
+            seedCtx.MetaverseObjectTypes.Add(mvoType);
+            var csoType = new ConnectedSystemObjectType { ConnectedSystemId = systemId, Name = "user", Selected = true };
+            seedCtx.ConnectedSystemObjectTypes.Add(csoType);
+            await seedCtx.SaveChangesAsync();
+
+            var syncRule = new SyncRule
+            {
+                Name = $"deletion-rule-{suffix}",
+                ConnectedSystemId = systemId,
+                ConnectedSystemObjectTypeId = csoType.Id,
+                MetaverseObjectTypeId = mvoType.Id,
+                Direction = SyncRuleDirection.Import
+            };
+            seedCtx.SyncRules.Add(syncRule);
+            var runProfile = new ConnectedSystemRunProfile
+            {
+                Name = $"deletion-profile-{suffix}",
+                ConnectedSystemId = systemId,
+                RunType = ConnectedSystemRunType.FullSynchronisation
+            };
+            seedCtx.ConnectedSystemRunProfiles.Add(runProfile);
+            await seedCtx.SaveChangesAsync();
+            syncRuleId = syncRule.Id;
+            runProfileId = runProfile.Id;
+
+            // The worst-case Activity: it carries every foreign key the deletion severs.
+            var activity = new Activity
+            {
+                Id = Guid.NewGuid(),
+                TargetType = ActivityTargetType.ConnectedSystem,
+                TargetOperationType = ActivityTargetOperationType.Delete,
+                Status = ActivityStatus.InProgress,
+                ConnectedSystemId = systemId,
+                SyncRuleId = syncRuleId,
+                ConnectedSystemRunProfileId = runProfileId
+            };
+            seedCtx.Activities.Add(activity);
+            await seedCtx.SaveChangesAsync();
+            activityId = activity.Id;
+        }
+
+        // The worker shape: the Activity is tracked on the SAME context the deletion runs on (JIM.Worker's
+        // context tracks by default; this fixture's default is NoTracking, so opt in explicitly).
+        await using var workerCtx = NewContext();
+        var repository = new PostgresDataRepository(workerCtx);
+        var trackedActivity = await workerCtx.Activities.AsTracking().SingleAsync(a => a.Id == activityId);
+
+        await repository.ConnectedSystems.DeleteConnectedSystemAsync(systemId);
+
+        // The completion write that follows the deletion on the worker's dispatch boundary.
+        trackedActivity.Status = ActivityStatus.Complete;
+        trackedActivity.Message = "Deprovisioned.";
+        Assert.That(async () => await repository.Activity.UpdateActivityAsync(trackedActivity),
+            Throws.Nothing,
+            "completing the task's Activity after the deletion must not re-assert the severed foreign keys " +
+            "from the tracked instance; the deletion's raw SQL nulled them in the database only");
+
+        await using var assertCtx = NewContext();
+        var persisted = await assertCtx.Activities.SingleAsync(a => a.Id == activityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.Status, Is.EqualTo(ActivityStatus.Complete), "the completion itself landed");
+            Assert.That(persisted.ConnectedSystemId, Is.Null, "the Connected System reference stays severed");
+            Assert.That(persisted.SyncRuleId, Is.Null, "the Synchronisation Rule reference stays severed");
+            Assert.That(persisted.ConnectedSystemRunProfileId, Is.Null, "the Run Profile reference stays severed");
         }
     }
 }

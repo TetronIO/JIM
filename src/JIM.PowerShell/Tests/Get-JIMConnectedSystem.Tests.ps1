@@ -156,6 +156,130 @@ Describe 'Remove-JIMConnectedSystem' {
             $inputParam = $command.Parameters['InputObject']
             $inputParam.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipeline } | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should have a DeleteImmediately switch parameter' {
+            $command.Parameters['DeleteImmediately'].SwitchParameter | Should -BeTrue
+        }
+    }
+
+    Context 'Deletion mode (#809)' {
+
+        It 'Sends the DELETE without a mode parameter by default (the server default is deprovisioning)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR System' }
+                }
+
+                Remove-JIMConnectedSystem -Id 1 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -notmatch 'synchronisedDeprovisioning'
+                }
+            }
+        }
+
+        It 'Sends synchronisedDeprovisioning=false on the DELETE when -DeleteImmediately is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR System' }
+                }
+
+                Remove-JIMConnectedSystem -Id 1 -Force -DeleteImmediately
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -match 'synchronisedDeprovisioning=false'
+                }
+            }
+        }
+
+        It 'Combines synchronisedDeprovisioning=false and changeReason into one query string' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR System' }
+                }
+
+                Remove-JIMConnectedSystem -Id 1 -Force -DeleteImmediately -ChangeReason 'Decommissioned (CHG0123)'
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and
+                    $Endpoint -match 'synchronisedDeprovisioning=false' -and
+                    $Endpoint -match 'changeReason=' -and
+                    @($Endpoint -split '\?').Count -eq 2
+                }
+            }
+        }
+
+        It 'Returns a tracking object with the Activity id when the deletion queues' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $activityId = [Guid]::NewGuid()
+                $workerTaskId = [Guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') {
+                        return [PSCustomObject]@{
+                            Success      = $true
+                            Outcome      = 'QueuedAsBackgroundJob'
+                            ActivityId   = $activityId
+                            WorkerTaskId = $workerTaskId
+                        }
+                    }
+                    [PSCustomObject]@{ id = 1; name = 'HR System' }
+                }
+
+                $tracking = Remove-JIMConnectedSystem -Id 1 -Force
+
+                $tracking | Should -Not -BeNullOrEmpty
+                $tracking.ActivityId | Should -Be $activityId
+                $tracking.WorkerTaskId | Should -Be $workerTaskId
+                $tracking.Outcome | Should -Be 'QueuedAsBackgroundJob'
+            }
+        }
+
+        It 'Consults the deletion preview before the confirmation' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    if ($Endpoint -match 'deletion-preview') {
+                        return [PSCustomObject]@{
+                            ConnectedSystemObjectCount  = 120
+                            ContributedValueCount       = 300
+                            ContributedValueObjectCount = 100
+                            MvosWithDeletionRuleCount   = 5
+                        }
+                    }
+                    [PSCustomObject]@{ id = 1; name = 'HR System' }
+                }
+
+                Remove-JIMConnectedSystem -Id 1 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'connected-systems/1/deletion-preview'
+                }
+            }
+        }
+
+        It 'Skips the preview lookup when -Force suppresses the confirmation' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR System' }
+                }
+
+                Remove-JIMConnectedSystem -Id 1 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter {
+                    $Endpoint -match 'deletion-preview'
+                }
+            }
+        }
     }
 
     Context 'Requires Connection' {
@@ -181,6 +305,62 @@ Describe 'Remove-JIMConnectedSystem' {
 
         It 'Should have examples' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+
+        It 'Should warn that -DeleteImmediately keeps contributed values unrecallably' {
+            ($help.Parameters.Parameter | Where-Object { $_.Name -eq 'DeleteImmediately' } | Out-String) |
+                Should -Match 'provenance'
+        }
+
+        It 'Should document the retry semantics for a failed deprovisioning run' {
+            ($help.Description | Out-String) | Should -Match 'retry|retries|resumes'
+        }
+
+        It 'Should document that -DeleteImmediately on a fenced system finishes the deletion' {
+            ($help.Description | Out-String) | Should -Match 'abandon'
+        }
+
+        It 'Should document the tracking output shape' {
+            ($help.returnValues | Out-String) | Should -Match 'ActivityId'
+        }
+    }
+}
+
+Describe 'Get-JIMConnectedSystemDeletionImpactText' {
+
+    It 'Returns nothing when there is no preview at all (the lookup failed)' {
+        InModuleScope JIM {
+            Get-JIMConnectedSystemDeletionImpactText -Preview $null | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'Describes the deprovisioning impact with counts' {
+        InModuleScope JIM {
+            $preview = [PSCustomObject]@{
+                ConnectedSystemObjectCount  = 1200
+                ContributedValueCount       = 3400
+                ContributedValueObjectCount = 1100
+                MvosWithDeletionRuleCount   = 7
+            }
+            $text = Get-JIMConnectedSystemDeletionImpactText -Preview $preview
+            $text | Should -Match '1,200 Connected System Object'
+            $text | Should -Match '3,400 contributed attribute value'
+            $text | Should -Match '1,100 Metaverse Object'
+            $text | Should -Match '7 Metaverse Object\(s\) will be evaluated for deletion'
+        }
+    }
+
+    It 'Warns that immediate deletion keeps the values unrecallably' {
+        InModuleScope JIM {
+            $preview = [PSCustomObject]@{
+                ConnectedSystemObjectCount  = 10
+                ContributedValueCount       = 25
+                ContributedValueObjectCount = 8
+                MvosWithDeletionRuleCount   = 0
+            }
+            $text = Get-JIMConnectedSystemDeletionImpactText -Preview $preview -DeleteImmediately
+            $text | Should -Match 'KEPT with no provenance'
+            $text | Should -Match 'deleted immediately'
         }
     }
 }

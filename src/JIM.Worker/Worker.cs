@@ -612,7 +612,16 @@ public class Worker : BackgroundService
                                         try
                                         {
                                             var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemCoreAsync(deleteConnectedSystemTask.ConnectedSystemId, withChangeTracking: true);
-                                            if (connectedSystem != null && connectedSystem.Status == ConnectedSystemStatus.Deleting)
+                                            if (deleteConnectedSystemTask.AbandonsDeprovisioningRun)
+                                            {
+                                                // Finish-immediately (#809): the system was fenced by a Synchronised Deprovisioning
+                                                // run before this deletion was requested, so the fence must hold on failure; a
+                                                // half-deprovisioned system never returns to service. The deletion stays retryable
+                                                // through the fenced-system exits.
+                                                Log.Warning("ExecuteAsync: Connected System {Id} deletion failed; keeping the Deleting fence (the system was part-way through Synchronised Deprovisioning).",
+                                                    deleteConnectedSystemTask.ConnectedSystemId);
+                                            }
+                                            else if (connectedSystem != null && connectedSystem.Status == ConnectedSystemStatus.Deleting)
                                             {
                                                 // Status is runtime state, not configuration: the status-only update avoids
                                                 // recording a spurious configuration-change version for the reset.

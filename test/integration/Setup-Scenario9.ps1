@@ -108,7 +108,7 @@ $partitionTestSystem = $existingSystems | Where-Object { $_.name -eq $systemName
 
 if ($partitionTestSystem) {
     Write-Host "  Removing existing '$systemName' Connected System..." -ForegroundColor Gray
-    Remove-JIMConnectedSystem -Id $partitionTestSystem.id | Out-Null
+    Remove-JIMConnectedSystem -Id $partitionTestSystem.id -DeleteImmediately | Out-Null
     Write-Host "  OK Removed existing Connected System" -ForegroundColor Green
 }
 

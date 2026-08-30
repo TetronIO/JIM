@@ -127,7 +127,7 @@ foreach ($name in @($hrSystemName, $targetSystemName)) {
     $sys = $existing | Where-Object { $_.name -eq $name }
     if ($sys) {
         Write-Host "  Removing existing '$name'..." -ForegroundColor Gray
-        Remove-JIMConnectedSystem -Id $sys.id -Force | Out-Null
+        Remove-JIMConnectedSystem -Id $sys.id -DeleteImmediately -Force | Out-Null
     }
 }
 Write-Host "  OK Cleanup complete" -ForegroundColor Green
