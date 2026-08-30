@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
@@ -850,4 +851,105 @@ public class CausalityModelBuilderTests
             .First(l => l.Kind == CausalityEntityKind.Identity && l.Href != null);
         Assert.That(identityLink.Href, Does.StartWith("/t/people/v/"));
     }
+
+    #region Operation chip (#1495 follow-up)
+
+    [Test]
+    public void Build_NewJoinerScenario_PopulatesOperationForEventsThatStateAnObjectOperation()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var projected = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        var attributeFlow = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+        var provisioned = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+        var pendingExport = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(projected.Operation?.PlainLabel, Is.EqualTo("Created"));
+            Assert.That(attributeFlow.Operation?.PlainLabel, Is.EqualTo("Updated"));
+            Assert.That(provisioned.Operation?.PlainLabel, Is.EqualTo("Created"));
+            Assert.That(pendingExport.Operation, Is.Null,
+                "PendingExportCreated collapses Create and Update; nothing in scope distinguishes them");
+        }
+    }
+
+    [Test]
+    public void Build_LeaverScenario_PopulatesOperationForTheDeletionAndTheStagedDeprovisions()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+
+        var mvoDeleted = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        var deprovisions = model.AllEvents()
+            .Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued)
+            .ToList();
+        var outOfScope = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvoDeleted.Operation?.PlainLabel, Is.EqualTo("Deleted"));
+            Assert.That(deprovisions, Has.Count.EqualTo(2));
+            Assert.That(deprovisions.Select(d => d.Operation?.PlainLabel), Has.All.EqualTo("Deleted"));
+            Assert.That(outOfScope.Operation, Is.Null, "leaving scope is not itself an object operation");
+        }
+    }
+
+    [Test]
+    public void Build_ExportedWithAResolvedChainDecision_PopulatesOperationFromTheDecision()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var exported = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0, detailCount: 3);
+        var cohort = CausalityTestData.Cohort(
+            CausalEdgeType.PendingExportQueueingCausedExportExecution,
+            reasonCode: CausalReasonCode.ExportCreateStaged,
+            effectSyncOutcomeId: exported.Id);
+        var chain = CausalityTestData.Chain(item.Id, false, cohort);
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
+
+        var exportedEvent = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exportedEvent.Operation?.PlainLabel, Is.EqualTo("Created"));
+            Assert.That(exportedEvent.Operation?.TechnicalLabel, Is.EqualTo("Export Staged (Create)"));
+            Assert.That(exportedEvent.Operation?.Tone, Is.EqualTo(CausalityTone.Success));
+        }
+    }
+
+    [Test]
+    public void Build_ExportedWithNoChain_LeavesOperationNullRatherThanGuessed()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.ExportFailureItem(), CausalityTestData.ExportContext());
+
+        var exportedEvent = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
+        var failedEvent = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exportedEvent.Operation, Is.Null);
+            Assert.That(failedEvent.Operation, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// A Configuration Change Preview transition (#827) never executes, so its event states no object
+    /// operation: nothing happened. Proven end-to-end through the builder, not just at the map (see
+    /// OutcomeDisplayMapEventOperationTests), because a preview item is a genuinely different shape (no
+    /// chain, no attribute changes) and the builder must not derive an operation from anything else on
+    /// the event.
+    /// </summary>
+    [Test]
+    public void Build_PreviewOutcome_CarriesNoOperation()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope,
+            parent: null, ordinal: 0);
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        Assert.That(model.AllEvents().Single().Operation, Is.Null);
+    }
+
+    #endregion
 }

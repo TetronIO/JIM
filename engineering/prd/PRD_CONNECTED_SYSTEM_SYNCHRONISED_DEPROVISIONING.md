@@ -159,6 +159,21 @@ Do not retro-edit the completed `engineering/plans/done/CONNECTED_SYSTEM_DELETIO
 - **#363 (shipped):** the `SyncOutcome` causal graph model preview results reuse.
 - The existing obsoletion processors, `MarkOrphanedMvosForDeletionAsync`, `RemoveContributedAttributesOnObsoletion`, and the "Deleting" status / queue-after-sync machinery.
 
+## Decisions (product owner, 2026-08-29)
+
+- **The two-mode choice model is adopted, with Synchronised Deprovisioning as the default** (Decisions Needed item 1, per its recommendation): a deletion-time choice in the #1537 dialog pattern, the synchronised path pre-selected, the fast path behind a warning stating its consequences.
+- **Customer-facing naming**: the options an administrator sees are **"Deprovision through synchronisation (recommended)"** and **"Delete immediately and keep contributed data"**. "Teardown" is internal engineering shorthand only and must never appear in UI copy, cmdlet help, API documentation or the changelog; where this PRD says Teardown, read the second option above.
+- **All four remaining Decisions Needed items are decided per their recommendations** (product owner, 2026-08-29): the preview is offered and strongly surfaced but not mandatory, with the Activity recording whether one was run (item 2); deprovisioning honours each Object Type's `RemoveContributedAttributesOnObsoletion` unchanged (item 3); the execution side (#809) ships first once the shared evaluation logic is factored out, with the #134 preview landing only as an #827 adapter (item 4); and preview results persist as a lightweight summary Activity (item 5).
+
+### Design inputs inherited from #1537 (shipped 2026-08-29)
+
+The rule/mapping-level recall work settled machinery and conventions this capability reuses rather than re-decides:
+
+- **Task shape**: the recall-then-delete Worker task (`DeleteSyncRuleWorkerTask` precedent): the entity is fenced at queue time, the recall runs batched with RPEIs and Activity progress, deletion is the task's final step, and failure partway leaves a consistent, retryable state.
+- **Re-election core**: `ContributorReElectionService` takes its recall scope as an input (`ContributorRecallScope`); this capability adds a system-scoped factory rather than forking the algorithm.
+- **API convention**: queued work answers 202 Accepted with a tracking DTO carrying the Activity id (the Connected System delete endpoint already has the 200/202 split).
+- **Coverage subtlety (from the #1551 investigation)**: per-object obsoletion cannot reach values whose Metaverse Object no longer holds one of this system's Connected System Objects (stranded by an earlier connector-space clear, #1549). A complete run therefore needs a **by-provenance residue pass** per Synchronisation Rule, before those rules are deleted (deletion's ON DELETE SET NULL severs the provenance it selects on).
+
 ## Open Questions
 
 1. Exactly where does the preview computation run, and how is the "proposed configuration" (a pending deletion) represented to the #827 framework? These are #827-owned and must be settled by the framework design before the adapter is built.
@@ -185,19 +200,19 @@ Do not retro-edit the completed `engineering/plans/done/CONNECTED_SYSTEM_DELETIO
 
 ## Decisions Needed
 
-The product owner must decide the following before implementation issues are split out. Each carries a recommendation.
+The product owner must decide the following before implementation issues are split out. Each carries a recommendation. (All five items are now decided; see the Decisions section.)
 
-1. **Default deletion mode: Teardown or Synchronised Deprovisioning?**
+1. **Default deletion mode: Teardown or Synchronised Deprovisioning?** ✅ **Decided 2026-08-29: Synchronised Deprovisioning is the default**, per the recommendation below, with the customer-facing names recorded in the Decisions section above.
    *Recommendation:* Default to **Synchronised Deprovisioning**, with Teardown a deliberate opt-out. It is the data-integrity-correct outcome (the Metaverse and downstream systems end in a synchronisation-consistent state), and JIM's stated bias is fast/hard-correct over convenient. The cost is that deleting a shared-identity system now fires downstream exports the administrator might not expect, which is precisely why it must be gated behind the tier-3 preview and an explicit name-to-confirm. Teardown stays a first-class, clearly-labelled choice for abandon-the-data cases.
 
-2. **Is the tier-3 preview offered or mandatory before Synchronised Deprovisioning?**
+2. **Is the tier-3 preview offered or mandatory before Synchronised Deprovisioning?** ✅ **Decided 2026-08-29, per the recommendation below.**
    *Recommendation:* **Offered, strongly surfaced, not mandatory.** At 1m objects a forced tier-3 scan on every deletion is a poor experience and sometimes unnecessary (the administrator may already know the blast radius). Make it one prominent click with a warning that proceeding without it is unvalidated; record in the Activity whether a preview was run.
 
-3. **Does Synchronised Deprovisioning honour `RemoveContributedAttributesOnObsoletion` per object type, or override it for deletion?**
+3. **Does Synchronised Deprovisioning honour `RemoveContributedAttributesOnObsoletion` per object type, or override it for deletion?** ✅ **Decided 2026-08-29, per the recommendation below.**
    *Recommendation:* **Honour the existing per-object-type setting unchanged.** Deletion should be indistinguishable from disconnecting every object through normal synchronisation; overriding recall for the deletion case would create a second, surprising recall policy and break the "preview equals execution" guarantee. If an administrator wants values abandoned rather than recalled, that intent is expressed by choosing Teardown, not by a hidden override.
 
-4. **Sequencing against #827: does this feature wait for the framework, or ship execution first?**
+4. **Sequencing against #827: does this feature wait for the framework, or ship execution first?** ✅ **Decided 2026-08-29, per the recommendation below.**
    *Recommendation:* **Design both together now; implement the execution side (#809) as soon as the shared evaluation contract is fixed, but land the preview (#134) only as an #827 adapter.** #809's synchronised execution reuses existing obsoletion processors and does not itself need the preview framework, so it can proceed once the evaluation logic that the preview will also call is factored out cleanly. Shipping a bespoke #134 preview ahead of #827 is explicitly ruled out by the June 2026 decision and would create the exact UX/architecture divergence #827 exists to prevent.
 
-5. **Preview retention: persist as an Activity or transient?**
+5. **Preview retention: persist as an Activity or transient?** ✅ **Decided 2026-08-29, per the recommendation below.**
    *Recommendation:* **Persist a lightweight audit Activity** ("preview run, N attributes recalled / M precedence shifts / K exports, administrator proceeded with mode X"). In high-trust deployments the ability to show an administrator was warned before a destructive deprovisioning is worth the small storage cost; keep it summary-level, not per-object. Align the final shape with #827 open question 4 so all preview surfaces retain consistently.

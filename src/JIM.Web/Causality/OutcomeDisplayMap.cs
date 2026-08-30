@@ -208,11 +208,19 @@ public static class OutcomeDisplayMap
     }
 
     /// <summary>
-    /// The tone-tinted operation chip a Lineage chain-hop card carries (#1495 follow-up): what the hop did
-    /// to an object, in the same vocabulary as a this-run event card, derived entirely from facts the
-    /// cohort already carries. Null where the hop states no object operation at all: a confirmation
-    /// confirms rather than changes anything, and a queueing edge recorded before reason codes existed has
-    /// no decision to report, so neither is worth guessing.
+    /// One tone and one icon per operation verb (#1495 follow-up refinement), shared by
+    /// <see cref="GetHopOperation"/>, <see cref="GetEventOperation"/> and <see cref="GetQueueingDecisionOperation"/>.
+    /// The chip is the operation vocabulary a reader scans a column on: Created is always
+    /// <see cref="CausalityTone.Success"/> and <see cref="Icons.Material.Filled.Add"/>, Updated is always
+    /// <see cref="CausalityTone.Info"/> and <see cref="Icons.Material.Filled.Edit"/>, Deleted is always
+    /// <see cref="CausalityTone.Error"/> and <see cref="Icons.Material.Filled.Delete"/>, Joined is always
+    /// <see cref="CausalityTone.Secondary"/> and <see cref="Icons.Material.Filled.Link"/>, regardless of
+    /// which outcome type or edge produced the chip. Colour-on-colour previously varied per outcome
+    /// (Primary for a projection, a distinct "circled" icon for a provision, PersonRemove for a deletion),
+    /// which meant scanning a column for "what happened" needed reading every chip's icon rather than
+    /// matching its colour. The outcome-specific icon and wording are not lost: the card's own title, the
+    /// summary band's pills and the sentence beside a chain card (all built from the unchanged <see cref="Map"/>
+    /// dictionary above) still carry them; only the chip itself is now one look per verb.
     /// </summary>
     /// <remarks>
     /// Checked in the order the hazard on <see cref="CausalChainCohort.MetaverseChangeType"/> requires:
@@ -230,7 +238,7 @@ public static class OutcomeDisplayMap
             return metaverseChangeType switch
             {
                 ObjectChangeType.Projected =>
-                    new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Primary, Icons.Material.Filled.AirlineStops),
+                    new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add),
                 ObjectChangeType.Joined =>
                     new OutcomeDisplay("Joined", "CSO Joined", CausalityTone.Secondary, Icons.Material.Filled.Link),
                 ObjectChangeType.Created =>
@@ -255,24 +263,128 @@ public static class OutcomeDisplayMap
 
         return cohort.EdgeType switch
         {
-            CausalEdgeType.PendingExportQueueingCausedExportExecution => cohort.ReasonCode switch
-            {
-                CausalReasonCode.ExportCreateStaged =>
-                    new OutcomeDisplay("Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.AddCircle),
-                CausalReasonCode.ExportUpdateStaged =>
-                    new OutcomeDisplay("Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit),
-                CausalReasonCode.ExportDeleteStaged =>
-                    new OutcomeDisplay("Deleted", "Export Staged (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete),
-                // NotSet covers edges written before the reason codes existed: guessing create/update/delete
-                // for that history would be worse than stating nothing.
-                _ => null
-            },
+            CausalEdgeType.PendingExportQueueingCausedExportExecution => GetQueueingDecisionOperation(cohort.ReasonCode),
             CausalEdgeType.MetaverseObjectDeletionCausedDeprovision or CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval =>
-                new OutcomeDisplay("Deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove),
+                new OutcomeDisplay("Deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
             // ExportCausedImportConfirmation and any seam this map does not know fall through here: a
             // confirmation is not itself an object operation, and an unknown edge is never guessed.
             _ => null
         };
+    }
+
+    /// <summary>
+    /// The tone-tinted operation chip a this-run event card carries (#1495 follow-up): the same
+    /// vocabulary as <see cref="GetHopOperation"/>, keyed on the outcome type directly rather than on a
+    /// chain cohort, since a this-run event has no cohort of its own.
+    /// </summary>
+    /// <param name="outcomeType">The event's underlying sync outcome type.</param>
+    /// <param name="exportReasonCode">
+    /// For an <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Exported"/> outcome, the staged
+    /// change's reason code where the causal chain resolved one (the same lookup
+    /// <see cref="CausalityModelBuilder"/> uses for the outcome's own title); null where the chain did
+    /// not resolve one, or where it is not an Exported outcome. Ignored for every other outcome type.
+    /// </param>
+    /// <remarks>
+    /// PendingExportCreated is deliberately absent from the mapped cases: it collapses Create and Update
+    /// into one outcome type (unlike DeprovisionQueued, which gets its own type for Delete), and nothing
+    /// available at build time distinguishes them; the CSO change snapshot attached to the outcome always
+    /// records <see cref="ObjectChangeType.PendingExport"/> regardless of the staged kind, and the
+    /// reason code that would answer it is only assigned later, at export execution, onto the export's own
+    /// outcome rather than onto this one. Guessing from the change's optional ConnectedSystemObjectId
+    /// would be wrong too: a reused pending-provisioning CSO carries a non-null id even for a Create.
+    /// </remarks>
+    public static OutcomeDisplay? GetEventOperation(
+        ActivityRunProfileExecutionItemSyncOutcomeType outcomeType,
+        CausalReasonCode? exportReasonCode = null)
+    {
+        if (outcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
+            return exportReasonCode is { } reasonCode ? GetQueueingDecisionOperation(reasonCode) : null;
+
+        return outcomeType switch
+        {
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected =>
+                new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add),
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined =>
+                new OutcomeDisplay("Joined", "CSO Joined", CausalityTone.Secondary, Icons.Material.Filled.Link),
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded =>
+                new OutcomeDisplay("Created", "CSO Added", CausalityTone.Success, Icons.Material.Filled.Add),
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated =>
+                new OutcomeDisplay("Updated", "CSO Updated", CausalityTone.Info, Icons.Material.Filled.Edit),
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted =>
+                new OutcomeDisplay("Deleted", "CSO Deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
+            // The plain labels match the map's own AttributeFlow/DriftCorrection titles above so the
+            // chip's technical label never disagrees with the card's own; both are honestly "an update",
+            // not a create or a delete.
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow =>
+                new OutcomeDisplay("Updated", "MVO Attribute Flow", CausalityTone.Info, Icons.Material.Filled.Edit),
+            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection =>
+                new OutcomeDisplay("Updated", "CSO Drift Corrected", CausalityTone.Info, Icons.Material.Filled.Edit),
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned =>
+                new OutcomeDisplay("Created", "CSO Provisioned", CausalityTone.Success, Icons.Material.Filled.Add),
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted =>
+                new OutcomeDisplay("Deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
+            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned =>
+                new OutcomeDisplay("Deleted", "CSO Deprovisioned", CausalityTone.Error, Icons.Material.Filled.Delete),
+            // A queued deprovision is a staged delete; reuse the chain's own "Export Staged (Delete)"
+            // chip rather than inventing a second vocabulary for the same staged kind.
+            ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued =>
+                GetQueueingDecisionOperation(CausalReasonCode.ExportDeleteStaged),
+            // PendingExportCreated (see remarks above), every Would* preview (nothing executed),
+            // ExportConfirmed/ExportFailed (confirming or failing an export is not itself an object
+            // operation), DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled
+            // (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
+            // (attribute-priority housekeeping, not an object operation) and anything unmapped all fall
+            // through here: null rather than a guess.
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// The operation a Pending Export queueing edge's reason code states, shared between
+    /// <see cref="GetHopOperation"/> (keyed on a chain cohort's edge) and <see cref="GetEventOperation"/>
+    /// (keyed on the outcome type directly, for DeprovisionQueued and a decision-resolved Exported).
+    /// </summary>
+    private static OutcomeDisplay? GetQueueingDecisionOperation(CausalReasonCode reasonCode)
+    {
+        return reasonCode switch
+        {
+            CausalReasonCode.ExportCreateStaged =>
+                new OutcomeDisplay("Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.Add),
+            CausalReasonCode.ExportUpdateStaged =>
+                new OutcomeDisplay("Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit),
+            CausalReasonCode.ExportDeleteStaged =>
+                new OutcomeDisplay("Deleted", "Export Staged (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete),
+            // NotSet covers edges written before the reason codes existed: guessing create/update/delete
+            // for that history would be worse than stating nothing.
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Whether an outcome's Lineage card head (the icon tile and title, <c>.evt-head</c>) is redundant
+    /// because two other things on the panel already state it (#1495 second follow-up): the join label
+    /// printed between the two columns the card sits between (PROJECTED / PROVISIONED / JOINED), and the
+    /// card's own operation chip (<see cref="GetEventOperation"/>), which states the same verb again in
+    /// the same first-child position the head would otherwise occupy. Stacking a third restatement (the
+    /// head's "Identity created" / "Provisioned" / "Joined to Identity") added a title a reader had
+    /// already read twice by the time they reached it.
+    /// </summary>
+    /// <remarks>
+    /// True for exactly <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Projected"/>,
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Joined"/> and
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned"/>: the only outcomes whose
+    /// Lineage join label carries this precise meaning. <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Exported"/>
+    /// is deliberately excluded even though it renders a chip too: its decision-specific titles ("Record
+    /// created", "Changes applied", "Record deleted") are not restated by any join label, so its head is
+    /// the only place they appear and must keep rendering. This is meaningful only where a chip actually
+    /// renders alongside the card; a caller must not suppress a title without one (see
+    /// <c>CausalityEventCard.HideTitle</c>'s guard for that misuse case).
+    /// </remarks>
+    public static bool IsTitleSubsumedByOperation(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        return outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
     }
 
     /// <summary>

@@ -10,7 +10,10 @@
    encloses its own head and events, which is what lets a side hold several records without the
    reader losing where one record's story ends. This run's events render primary (accent ring and
    badge) around the shared event card, so tones, entity chips, attribute counts and the shared
-   drawer keep working; earlier runs' events render as subdued chain cards carrying their run kind,
+   drawer keep working; a card whose title the join label and operation chip both already state
+   (Projected, Joined, Provisioned; see OutcomeDisplayMap.IsTitleSubsumedByOperation, #1495 second
+   follow-up) suppresses its own head so the chip is not a third restatement. Earlier runs' events
+   render as subdued chain cards carrying their run kind,
    timestamp and activity link. Chain endings close their object as quiet footers. Narrow viewports
    stack the columns vertically, per the Flow view's existing breakpoint. *@
 
@@ -122,6 +125,8 @@
                                             </div>
                                             <CausalityEventCard Event="thisRunEvent" TechnicalNames="TechnicalNames"
                                                                 HideSystemChip="true"
+                                                                Operation="thisRunEvent.Operation"
+                                                                HideTitle="@(thisRunEvent.OutcomeType is { } outcomeType && OutcomeDisplayMap.IsTitleSubsumedByOperation(outcomeType))"
                                                                 Selected="ReferenceEquals(SelectedEvent, thisRunEvent)"
                                                                 OnSelect="ToggleSelectionAsync" />
                                         </div>
