@@ -141,16 +141,18 @@ public class ConnectedSystemObjectObsoletionServiceTests
 
             // The sole contributor's value is recalled: a removal with no re-elected replacement.
             Assert.That(result.MvoAttributeChange, Is.Not.Null);
-            Assert.That(result.MvoAttributeChange!.Value.Removals, Is.EqualTo(new[] { _contributedValue }));
-            Assert.That(result.MvoAttributeChange.Value.Additions, Is.Empty);
-            Assert.That(result.MvoAttributeChange.Value.ChangeType, Is.EqualTo(ObjectChangeType.Disconnected));
+            var mvoAttributeChange = result.MvoAttributeChange!.Value;
+            Assert.That(mvoAttributeChange.Removals, Is.EqualTo(new[] { _contributedValue }));
+            Assert.That(mvoAttributeChange.Additions, Is.Empty);
+            Assert.That(mvoAttributeChange.ChangeType, Is.EqualTo(ObjectChangeType.Disconnected));
             Assert.That(result.RecallClearedAttributeCount, Is.EqualTo(1));
 
             // The Metaverse Object is staged for persistence and export evaluation, and the recall was applied.
             Assert.That(result.MvoToUpdate, Is.SameAs(_mvo));
             Assert.That(result.ExportEvaluation, Is.Not.Null);
-            Assert.That(result.ExportEvaluation!.Value.ChangedAttributes, Is.EqualTo(new[] { _contributedValue }));
-            Assert.That(result.ExportEvaluation.Value.RemovedAttributes, Is.EqualTo(new[] { _contributedValue }));
+            var exportEvaluation = result.ExportEvaluation!.Value;
+            Assert.That(exportEvaluation.ChangedAttributes, Is.EqualTo(new[] { _contributedValue }));
+            Assert.That(exportEvaluation.RemovedAttributes, Is.EqualTo(new[] { _contributedValue }));
             Assert.That(_mvo.AttributeValues, Is.Empty, "the recalled value must have been applied (removed) by the core");
 
             // The join is broken and reported.
