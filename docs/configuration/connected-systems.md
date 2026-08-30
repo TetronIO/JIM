@@ -377,6 +377,16 @@ What you will see:
 
 Attributes that merely *look* credential-bearing, such as `pwdLastSet`, `badPwdCount` and `pwdProperties`, are unaffected and remain fully selectable; they carry no credential material.
 
+### When JIM warns instead of blocking
+
+The list above is the set JIM knows by name. It cannot cover a directory or line-of-business system with a password field of its own naming, and that is exactly where somebody is most likely to reach for the wrong answer: mapping the password as an ordinary attribute.
+
+So when an Attribute Flow targets an attribute whose *name* suggests it carries a password, and that name is not on the list above, the Synchronisation Rule shows a warning naming the attribute, saying what flowing a password as an attribute would store it in, and pointing at Password Synchronisation instead. It appears wherever the rule's validity is shown: the Synchronisation Rule editor, the REST API and PowerShell alike.
+
+**The warning never blocks anything.** It is a judgement about a name, not about the data, and it is deliberately broad enough to catch a field JIM has never seen. Attributes such as `pwdLastSet`, `badPwdCount`, `pwdProperties` and `passwordHistoryLength` match it and are perfectly ordinary things to flow, so the wording says so: if the attribute is not a password, no action is needed and the rule saves exactly as it is. Anything that genuinely must be refused belongs on the blocked list instead, not behind a warning.
+
+If the attribute *does* carry a password, the answer is [Password Synchronisation](#password-synchronisation), which delivers it to the system without it ever being stored as a value.
+
 ## Password policy and the password channel
 
 Where a Connected System can accept passwords, its Schema tab carries a Password Channel panel. It has two jobs: showing you the password rules JIM read from the system itself, and letting you check the channel works before you rely on it.
