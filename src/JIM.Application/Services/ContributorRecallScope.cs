@@ -9,17 +9,18 @@ namespace JIM.Application.Services;
 /// <summary>
 /// Describes whose contribution a recall is withdrawing, so the surviving-contributor re-election core
 /// (<see cref="ContributorReElectionService"/>) knows which contributing Synchronisation Rules may be
-/// re-elected and which joined Connected System Objects count as survivors. The two shipped scopes:
+/// re-elected and which joined Connected System Objects count as survivors. The shipped scopes:
 /// <list type="bullet">
 /// <item>an obsoleting or withdrawing Connected System Object (#91): every contributor from the leaver's own
 /// Connected System is ineligible (its other enabled rules were already evaluated in the run's ordinary flow),
 /// and the leaver itself is never a survivor;</item>
 /// <item>a Synchronisation Rule being deleted (#1537): only the deleted rule's own contribution is ineligible;
 /// other rules of the same Connected System are legitimate survivors, because no ordinary flow accompanies the
-/// deletion recall.</item>
+/// deletion recall;</item>
+/// <item>a Connected System being deleted (#809): the whole system is leaving, so every one of its rules is
+/// ineligible and none of its objects counts as a survivor.</item>
 /// </list>
-/// Future recall scopes (#809 Connected System deletion, #1549 stranded values) add factories here rather than
-/// forking the core.
+/// Future recall scopes (#1549 stranded values) add factories here rather than forking the core.
 /// </summary>
 public sealed class ContributorRecallScope
 {
@@ -59,6 +60,20 @@ public sealed class ContributorRecallScope
         return new ContributorRecallScope(
             rule => rule.Id != syncRuleId,
             _ => true);
+    }
+
+    /// <summary>
+    /// The system-deletion scope (#809): the whole Connected System is leaving, so every contributing
+    /// Synchronisation Rule belonging to it is excluded from re-election, and none of its joined
+    /// Connected System Objects counts as a survivor; only objects joined via other Connected Systems
+    /// may take over.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being deleted.</param>
+    public static ContributorRecallScope ForDeletedConnectedSystem(int connectedSystemId)
+    {
+        return new ContributorRecallScope(
+            rule => rule.ConnectedSystemId != connectedSystemId,
+            cso => cso.ConnectedSystemId != connectedSystemId);
     }
 
     /// <summary>

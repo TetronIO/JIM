@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
+using JIM.Application.Services;
 using JIM.Application.Utilities;
 using JIM.Connectors;
 using JIM.Data;

@@ -1791,6 +1791,18 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Quantifies the Metaverse attribute values contributed by ANY of a Connected System's Synchronisation
+    /// Rules (by <see cref="MetaverseObjectAttributeValue.ContributedBySyncRuleId"/> provenance) and the
+    /// distinct Metaverse Objects holding them, for the Connected System deletion preview's deprovisioning
+    /// impact statement (#809). Count queries only.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose contributions are being quantified.</param>
+    public async Task<(int ValueCount, int ObjectCount)> GetContributedValueCountsByConnectedSystemAsync(int connectedSystemId)
+    {
+        return await Application.Repository.Metaverse.GetContributedValueCountsByConnectedSystemAsync(connectedSystemId);
+    }
+
+    /// <summary>
     /// Gets MVOs that are pending deletion (have LastConnectorDisconnectedDate set but haven't been deleted yet).
     /// These are MVOs awaiting their grace period to expire before automatic deletion.
     /// </summary>
