@@ -416,6 +416,75 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
     }
 
     [Test]
+    public void ConsequenceConfirmationDialog_GroupedCounts_RendersGroupAndSubgroupHeaders()
+    {
+        // Counts regrouped by fate (#809): rows carrying a Group render under a group header row, and rows
+        // carrying a Subgroup render under an indented subgroup header within it.
+        var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
+        {
+            {
+                x => x.Counts, new List<ImpactCount>
+                {
+                    new() { Group = "Removed with the system", Label = "Connected System Objects", Count = 1200 },
+                    new() { Group = "Affected, not removed", Subgroup = "Metaverse Objects", Label = "Joined", Count = 340 },
+                    new() { Group = "Affected, not removed", Label = "Activities", Count = 12, Note = "kept" }
+                }
+            }
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            var groupHeaders = provider.FindAll("[data-testid='jim-consequence-count-group']");
+            var subgroupHeaders = provider.FindAll("[data-testid='jim-consequence-count-subgroup']");
+            Assert.That(groupHeaders, Has.Count.EqualTo(2), "each distinct group renders one header row");
+            Assert.That(subgroupHeaders, Has.Count.EqualTo(1), "each distinct subgroup renders one header row");
+            Assert.That(groupHeaders[0].TextContent, Does.Contain("Removed with the system"));
+            Assert.That(groupHeaders[1].TextContent, Does.Contain("Affected, not removed"));
+            Assert.That(subgroupHeaders[0].TextContent, Does.Contain("Metaverse Objects"));
+        }
+    }
+
+    [Test]
+    public void ConsequenceConfirmationDialog_GroupedCounts_EmitsEachHeaderOnce()
+    {
+        // Consecutive rows sharing a group (or subgroup) share one header rather than repeating it per row.
+        var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
+        {
+            {
+                x => x.Counts, new List<ImpactCount>
+                {
+                    new() { Group = "Removed with the system", Label = "Connected System Objects", Count = 1 },
+                    new() { Group = "Removed with the system", Label = "Synchronisation Rules", Count = 2 },
+                    new() { Group = "Affected, not removed", Subgroup = "Metaverse Objects", Label = "Joined", Count = 3 },
+                    new() { Group = "Affected, not removed", Subgroup = "Metaverse Objects", Label = "Contributed attribute values", Count = 4 }
+                }
+            }
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll("[data-testid='jim-consequence-count-group']"), Has.Count.EqualTo(2));
+            Assert.That(provider.FindAll("[data-testid='jim-consequence-count-subgroup']"), Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void ConsequenceConfirmationDialog_UngroupedCounts_RenderWithoutHeaders()
+    {
+        // Existing callers pass flat lists; they must render exactly as before groups existed.
+        var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
+        {
+            { x => x.Counts, [new ImpactCount { Label = "Connected System Objects", Count = 12405 }] }
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll("[data-testid='jim-consequence-count-group']"), Is.Empty);
+            Assert.That(provider.FindAll("[data-testid='jim-consequence-count-subgroup']"), Is.Empty);
+        }
+    }
+
+    [Test]
     public void ConsequenceConfirmationDialog_WithWarnings_RendersEach()
     {
         var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>

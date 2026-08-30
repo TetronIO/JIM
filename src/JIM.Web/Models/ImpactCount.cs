@@ -25,4 +25,18 @@ public sealed class ImpactCount
     /// preserved rather than deleted.
     /// </summary>
     public string? Note { get; init; }
+
+    /// <summary>
+    /// Optional group this row belongs to, for example "Removed with the system". Consecutive rows sharing
+    /// a group render under one header row; rows with no group render flat, exactly as before groups
+    /// existed. Group rows in the list consecutively; the renderer emits a header whenever the value
+    /// changes from the previous row.
+    /// </summary>
+    public string? Group { get; init; }
+
+    /// <summary>
+    /// Optional subgroup within <see cref="Group"/>, for example "Metaverse Objects", rendered as an
+    /// indented header row over its consecutive rows. Only meaningful when <see cref="Group"/> is set.
+    /// </summary>
+    public string? Subgroup { get; init; }
 }

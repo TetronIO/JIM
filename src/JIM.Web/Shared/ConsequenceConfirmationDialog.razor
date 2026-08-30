@@ -73,10 +73,32 @@
                     {
                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Outlined="true">
                             <tbody>
+                                @{
+                                    // Headers are emitted whenever the group or subgroup changes from the previous
+                                    // row, so consecutive rows share one header and a flat (ungrouped) list renders
+                                    // exactly as it always has.
+                                    string? currentGroup = null;
+                                    string? currentSubgroup = null;
+                                }
                                 @foreach (var count in Counts)
                                 {
+                                    @if (count.Group != null && count.Group != currentGroup)
+                                    {
+                                        currentGroup = count.Group;
+                                        currentSubgroup = null;
+                                        <tr data-testid="jim-consequence-count-group">
+                                            <td colspan="2"><MudText Typo="Typo.subtitle2">@count.Group</MudText></td>
+                                        </tr>
+                                    }
+                                    @if (count.Subgroup != null && count.Subgroup != currentSubgroup)
+                                    {
+                                        currentSubgroup = count.Subgroup;
+                                        <tr data-testid="jim-consequence-count-subgroup">
+                                            <td colspan="2" class="ps-6"><MudText Typo="Typo.subtitle2" Class="mud-text-secondary">@count.Subgroup</MudText></td>
+                                        </tr>
+                                    }
                                     <tr>
-                                        <td>
+                                        <td class="@(count.Subgroup != null ? "ps-8" : count.Group != null ? "ps-6" : null)">
                                             @count.Label
                                             @if (!string.IsNullOrEmpty(count.Note))
                                             {
