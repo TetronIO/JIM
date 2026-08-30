@@ -909,6 +909,7 @@ public class SyncPreviewServer
                         TargetEntityDescription = systemName,
                         DetailCount = entry.AttributeChanges.Count,
                         DetailMessage = entry.ConnectedSystemId.ToString(),
+                        StagedChangeType = entry.EffectiveChangeType,
                         Ordinal = 0
                     });
                     siblings.Add(provisioned);
@@ -923,6 +924,7 @@ public class SyncPreviewServer
                         SyncRuleName = entry.SyncRuleName,
                         DetailCount = entry.AttributeChanges.Count,
                         DetailMessage = entry.ConnectedSystemId.ToString(),
+                        StagedChangeType = entry.EffectiveChangeType,
                         Ordinal = siblings.Count
                     });
                     break;
@@ -936,6 +938,7 @@ public class SyncPreviewServer
                         SyncRuleId = entry.SyncRuleId,
                         SyncRuleName = entry.SyncRuleName,
                         DetailMessage = entry.ConnectedSystemId.ToString(),
+                        StagedChangeType = PendingExportChangeType.Delete,
                         Ordinal = siblings.Count
                     });
                     break;

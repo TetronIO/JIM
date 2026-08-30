@@ -4,6 +4,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 
 namespace JIM.Models.Activities;
 
@@ -77,6 +78,26 @@ public class ActivityRunProfileExecutionItemSyncOutcome
     /// the <see cref="TargetEntityDescription"/> snapshot pattern.
     /// </summary>
     public string? SyncRuleName { get; set; }
+
+    /// <summary>
+    /// The kind of change staged on the Pending Export this outcome reports, recorded from the Pending
+    /// Export's own <see cref="PendingExport.ChangeType"/> at the moment it was staged, matching the
+    /// snapshot approach of <see cref="SyncRuleId"/> above: the field this outcome depends on (the
+    /// Pending Export) is later deleted once the export executes, so what it recorded at the time is
+    /// the only durable copy.
+    /// <para>
+    /// Recorded on every Pending Export outcome (a queued create/update and a queued deprovision alike),
+    /// though only <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated"/> needs
+    /// it for display: that type alone collapses Create and Update into one outcome, so this is the only
+    /// place that distinguishes them before the export actually runs. A queued deprovision already reads
+    /// Deleted from its own outcome type and does not need this to say so.
+    /// </para>
+    /// <para>
+    /// Null for outcomes recorded before this was captured, which is honestly "unknown kind" rather than
+    /// a guess; display code must render no chip for a null value rather than assume Create.
+    /// </para>
+    /// </summary>
+    public PendingExportChangeType? StagedChangeType { get; set; }
 
     /// <summary>
     /// Quantitative detail (e.g., "12 attributes flowed", "3 attributes exported").

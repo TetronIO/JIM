@@ -268,6 +268,34 @@ public class HousekeepingActivityWorkflowTests
     }
 
     /// <summary>
+    /// The recall item's own PendingExportCreated outcome must record the staged kind (#1561 follow-up),
+    /// exactly as every other Pending Export outcome does now: a membership removal is an attribute
+    /// update to the referencing group's record, never a create or a delete.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoReferencedByGroup_RecallOutcomeRecordsStagedUpdateAsync()
+    {
+        var (memberMvo, memberDn) = SeedEligibleMemberWithTargetCso("Lena Leaver");
+        var groupMvo = SeedGroupMvoReferencing("Team Alpha", memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberMvo.Id, memberDn);
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([memberMvo]);
+
+        await WorkerInstance.PerformHousekeepingAsync(Jim);
+
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var recallRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id
+            && r.ObjectChangeType == ObjectChangeType.PendingExport
+            && r.ConnectedSystemObjectId == groupTargetCso.Id);
+        var recallOutcome = recallRpei.SyncOutcomes
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+        Assert.That(recallOutcome.StagedChangeType, Is.EqualTo(PendingExportChangeType.Update),
+            "A membership removal is an attribute update to the referencing group's own record");
+    }
+
+    /// <summary>
     /// Deletion cascade (#1044): a grace-period-expired Metaverse Object whose target Connected System Object is
     /// matched by an export Synchronisation Rule with a Delete deprovisioning action stages a delete Pending Export.
     /// That export deprovisions a real account, so it must be recorded on the housekeeping Activity as a consequence
@@ -305,6 +333,8 @@ public class HousekeepingActivityWorkflowTests
             "The staged delete Pending Export must be recorded as a consequence of the Metaverse Object deletion");
         Assert.That(cascadeOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued),
             "A staged Delete Pending Export is a queued deprovision, not an attribute update");
+        Assert.That(cascadeOutcome.StagedChangeType, Is.EqualTo(PendingExportChangeType.Delete),
+            "Every Pending Export outcome records its staged kind (#1561 follow-up), DeprovisionQueued included");
         Assert.That(cascadeOutcome.TargetEntityId, Is.EqualTo(deletePendingExport.Id));
         Assert.That(cascadeOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName),
             "The outcome must name the Connected System the account is being deleted from; the identity is named by the item it hangs off");

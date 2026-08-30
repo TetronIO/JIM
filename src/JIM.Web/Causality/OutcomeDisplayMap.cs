@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Transactional;
 using MudBlazor;
 
 namespace JIM.Web.Causality;
@@ -284,21 +285,33 @@ public static class OutcomeDisplayMap
     /// <see cref="CausalityModelBuilder"/> uses for the outcome's own title); null where the chain did
     /// not resolve one, or where it is not an Exported outcome. Ignored for every other outcome type.
     /// </param>
-    /// <remarks>
-    /// PendingExportCreated is deliberately absent from the mapped cases: it collapses Create and Update
-    /// into one outcome type (unlike DeprovisionQueued, which gets its own type for Delete), and nothing
-    /// available at build time distinguishes them; the CSO change snapshot attached to the outcome always
-    /// records <see cref="ObjectChangeType.PendingExport"/> regardless of the staged kind, and the
-    /// reason code that would answer it is only assigned later, at export execution, onto the export's own
-    /// outcome rather than onto this one. Guessing from the change's optional ConnectedSystemObjectId
-    /// would be wrong too: a reused pending-provisioning CSO carries a non-null id even for a Create.
-    /// </remarks>
+    /// <param name="stagedChangeType">
+    /// For a <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated"/> outcome,
+    /// the kind of change staged (<see cref="ActivityRunProfileExecutionItemSyncOutcome.StagedChangeType"/>),
+    /// recorded at staging time so this outcome type, which collapses Create and Update, can still state
+    /// which one it was. Null for an outcome recorded before this was captured. Ignored for every other
+    /// outcome type: DeprovisionQueued already reads Deleted from its own outcome type and does not need it.
+    /// </param>
     public static OutcomeDisplay? GetEventOperation(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType,
-        CausalReasonCode? exportReasonCode = null)
+        CausalReasonCode? exportReasonCode = null,
+        PendingExportChangeType? stagedChangeType = null)
     {
         if (outcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
             return exportReasonCode is { } reasonCode ? GetQueueingDecisionOperation(reasonCode) : null;
+
+        if (outcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated)
+        {
+            return stagedChangeType switch
+            {
+                PendingExportChangeType.Create => GetQueueingDecisionOperation(CausalReasonCode.ExportCreateStaged),
+                PendingExportChangeType.Update => GetQueueingDecisionOperation(CausalReasonCode.ExportUpdateStaged),
+                PendingExportChangeType.Delete => GetQueueingDecisionOperation(CausalReasonCode.ExportDeleteStaged),
+                // Null covers outcomes recorded before this was captured: honestly "unknown kind"
+                // rather than a guess.
+                _ => null
+            };
+        }
 
         return outcomeType switch
         {
@@ -329,12 +342,12 @@ public static class OutcomeDisplayMap
             // chip rather than inventing a second vocabulary for the same staged kind.
             ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued =>
                 GetQueueingDecisionOperation(CausalReasonCode.ExportDeleteStaged),
-            // PendingExportCreated (see remarks above), every Would* preview (nothing executed),
-            // ExportConfirmed/ExportFailed (confirming or failing an export is not itself an object
-            // operation), DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled
-            // (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
-            // (attribute-priority housekeeping, not an object operation) and anything unmapped all fall
-            // through here: null rather than a guess.
+            // Every Would* preview (nothing executed), ExportConfirmed/ExportFailed (confirming or
+            // failing an export is not itself an object operation),
+            // DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled (a state change,
+            // not an operation this map states an icon for), AssertedNull/NoContributor (attribute-priority
+            // housekeeping, not an object operation) and anything unmapped all fall through here: null
+            // rather than a guess. PendingExportCreated never reaches this switch; it is handled above.
             _ => null
         };
     }

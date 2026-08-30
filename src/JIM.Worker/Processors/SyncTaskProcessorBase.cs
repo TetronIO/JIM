@@ -1923,7 +1923,8 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: provisionedParent.TargetEntityDescription,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString());
+                            detailMessage: peCsId.ToString(),
+                            stagedChangeType: pendingExport.ChangeType);
                     }
                     else if (exportParent != null)
                     {
@@ -1935,7 +1936,8 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString());
+                            detailMessage: peCsId.ToString(),
+                            stagedChangeType: pendingExport.ChangeType);
                     }
                     else
                     {
@@ -1946,7 +1948,8 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString());
+                            detailMessage: peCsId.ToString(),
+                            stagedChangeType: pendingExport.ChangeType);
                     }
 
                     // Snapshot PE attribute changes so the Causality Tree can render detail
@@ -1975,7 +1978,8 @@ public abstract class SyncTaskProcessorBase
                         targetEntityId: pe.Id,
                         targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name,
                         detailCount: pe.AttributeValueChanges.Count,
-                        detailMessage: pe.ConnectedSystemId.ToString());
+                        detailMessage: pe.ConnectedSystemId.ToString(),
+                        stagedChangeType: pe.ChangeType);
 
                     await SnapshotPendingExportChangesAsync(peOutcome, pe);
                 }
@@ -3584,7 +3588,8 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
-                    detailMessage: pendingExport.ConnectedSystemId.ToString());
+                    detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                    stagedChangeType: pendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(nestedOutcome, pendingExport);
                 // The deletion item's id is assigned here where missing, because the RPEI flush that would
                 // otherwise assign it runs after this method; the flush only fills ids in where absent.
@@ -3619,7 +3624,8 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
-                    detailMessage: pendingExport.ConnectedSystemId.ToString());
+                    detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                    stagedChangeType: pendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(cascadeOutcome, pendingExport);
                 cascadeEffectOutcome = cascadeOutcome;
             }
@@ -3821,7 +3827,8 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: stagedPendingExport.Id,
                     targetEntityDescription: targetSystemName,
                     detailCount: stagedPendingExport.AttributeValueChanges.Count,
-                    detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
+                    detailMessage: stagedPendingExport.ConnectedSystemId.ToString(),
+                    stagedChangeType: stagedPendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
                 effectOutcome = recallOutcome;
             }

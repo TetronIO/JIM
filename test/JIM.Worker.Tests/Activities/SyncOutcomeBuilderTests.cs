@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Enums;
+using JIM.Models.Transactional;
 using JIM.Worker.Processors;
 
 namespace JIM.Worker.Tests.Activities;
@@ -190,6 +191,48 @@ public class SyncOutcomeBuilderTests
 
         Assert.That(child.SyncRuleId, Is.EqualTo(7));
         Assert.That(child.SyncRuleName, Is.EqualTo("AD Export"));
+    }
+
+    #endregion
+
+    #region Staged Change Type (export queued operation chip)
+
+    [Test]
+    public void AddRootOutcome_WithStagedChangeType_SetsStagedChangeTypeAsync()
+    {
+        var rpei = CreateRpei();
+
+        var outcome = SyncOutcomeBuilder.AddRootOutcome(rpei,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            stagedChangeType: PendingExportChangeType.Create);
+
+        Assert.That(outcome.StagedChangeType, Is.EqualTo(PendingExportChangeType.Create));
+    }
+
+    [Test]
+    public void AddRootOutcome_WithoutStagedChangeType_LeavesStagedChangeTypeNullAsync()
+    {
+        var rpei = CreateRpei();
+
+        var outcome = SyncOutcomeBuilder.AddRootOutcome(rpei,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+        Assert.That(outcome.StagedChangeType, Is.Null,
+            "Outcomes recorded before this feature (and callers that pass nothing) must leave the field null");
+    }
+
+    [Test]
+    public void AddChildOutcome_WithStagedChangeType_SetsStagedChangeTypeAsync()
+    {
+        var rpei = CreateRpei();
+        var root = SyncOutcomeBuilder.AddRootOutcome(rpei,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+
+        var child = SyncOutcomeBuilder.AddChildOutcome(rpei, root,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued,
+            stagedChangeType: PendingExportChangeType.Delete);
+
+        Assert.That(child.StagedChangeType, Is.EqualTo(PendingExportChangeType.Delete));
     }
 
     #endregion

@@ -812,4 +812,45 @@ public class CausalityLineageViewTests
             Assert.That(exportedCard.Find(".evt-title").TextContent.Trim(), Is.EqualTo("Record created"));
         }
     }
+
+    // ─── Export queued carries its staged kind (#1561 follow-up) ───
+
+    /// <summary>
+    /// The new-joiner fixture's Export queued outcome was staged as a Create; once the outcome records
+    /// that (#1561 follow-up), its card must carry the same Created chip as every other create.
+    /// </summary>
+    [Test]
+    public void Render_ExportQueuedThisRunCardWithStagedKind_CarriesItsOperationChip()
+    {
+        var cut = RenderLineage(NewJoinerLineage());
+
+        var pendingExportCard = cut.FindComponents<CausalityEventCard>()
+            .Single(c => c.Instance.Event.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var chip = pendingExportCard.Find(".evt-card").QuerySelector(".ln-op");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip, Is.Not.Null, "a staged Create records its kind, so the card must carry a chip");
+            Assert.That(chip!.TextContent.Trim(), Is.EqualTo("Created"));
+        }
+    }
+
+    /// <summary>
+    /// An Export queued outcome recorded before this feature existed carries no staged kind, and must
+    /// render no chip at all rather than guess.
+    /// </summary>
+    [Test]
+    public void Render_ExportQueuedWithNoStagedKind_CarriesNoOperationChip()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            parent: null, ordinal: 0, targetEntityDescription: "Glitterband EMEA");
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.PendingExport);
+
+        var cut = RenderLineage(lineage);
+
+        Assert.That(cut.Find(".evt-card").QuerySelector(".ln-op"), Is.Null,
+            "an outcome recorded before this feature has no staged kind and must show no chip");
+    }
 }
