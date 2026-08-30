@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Web.Causality;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -19,15 +20,19 @@ namespace JIM.Web.Tests;
 public class OutcomeDisplayMapEventOperationTests
 {
     [Test]
-    public void GetEventOperation_Projected_ReadsCreatedPrimary()
+    public void GetEventOperation_Projected_ReadsCreatedSuccess()
     {
+        // Deliberate behaviour change (#1495 second follow-up): Projected used to chip Primary/AirlineStops,
+        // the only operation with a look of its own. Every "Created" verb now shares one tone and icon
+        // (Success/Add) so a column scans on colour alone; the technical label is unchanged.
         var display = OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(display!.PlainLabel, Is.EqualTo("Created"));
             Assert.That(display.TechnicalLabel, Is.EqualTo("MVO Projected"));
-            Assert.That(display.Tone, Is.EqualTo(CausalityTone.Primary));
+            Assert.That(display.Tone, Is.EqualTo(CausalityTone.Success));
+            Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Add));
         }
     }
 
@@ -115,6 +120,8 @@ public class OutcomeDisplayMapEventOperationTests
     [Test]
     public void GetEventOperation_Provisioned_ReadsCreatedSuccessWithTheMapsTechnicalLabel()
     {
+        // Deliberate behaviour change (#1495 second follow-up): Provisioned used to chip its own AddCircle
+        // icon; every "Created" verb now shares Success/Add so a column scans on colour alone.
         var display = OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
 
         using (Assert.EnterMultipleScope())
@@ -122,12 +129,15 @@ public class OutcomeDisplayMapEventOperationTests
             Assert.That(display!.PlainLabel, Is.EqualTo("Created"));
             Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Provisioned"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Success));
+            Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Add));
         }
     }
 
     [Test]
     public void GetEventOperation_MvoDeleted_ReadsDeletedErrorWithTheMapsTechnicalLabel()
     {
+        // Deliberate behaviour change (#1495 second follow-up): MvoDeleted used to chip PersonRemove; every
+        // "Deleted" verb now shares Error/Delete so a column scans on colour alone.
         var display = OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
 
         using (Assert.EnterMultipleScope())
@@ -135,6 +145,7 @@ public class OutcomeDisplayMapEventOperationTests
             Assert.That(display!.PlainLabel, Is.EqualTo("Deleted"));
             Assert.That(display.TechnicalLabel, Is.EqualTo("MVO Deleted"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Error));
+            Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Delete));
         }
     }
 
@@ -166,11 +177,13 @@ public class OutcomeDisplayMapEventOperationTests
         }
     }
 
-    [TestCase(CausalReasonCode.ExportCreateStaged, "Created", "Export Staged (Create)", CausalityTone.Success)]
-    [TestCase(CausalReasonCode.ExportUpdateStaged, "Updated", "Export Staged (Update)", CausalityTone.Info)]
-    [TestCase(CausalReasonCode.ExportDeleteStaged, "Deleted", "Export Staged (Delete)", CausalityTone.Error)]
+    // ExportCreateStaged's icon is a deliberate behaviour change (#1495 second follow-up): it used to chip
+    // AddCircle; every "Created" verb now shares Add so a column scans on colour alone.
+    [TestCase(CausalReasonCode.ExportCreateStaged, "Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.Add)]
+    [TestCase(CausalReasonCode.ExportUpdateStaged, "Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit)]
+    [TestCase(CausalReasonCode.ExportDeleteStaged, "Deleted", "Export Staged (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete)]
     public void GetEventOperation_ExportedWithAResolvedReason_ReadsTheDecision(
-        CausalReasonCode reasonCode, string plainLabel, string technicalLabel, CausalityTone tone)
+        CausalReasonCode reasonCode, string plainLabel, string technicalLabel, CausalityTone tone, string icon)
     {
         var display = OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.Exported, reasonCode);
 
@@ -179,6 +192,7 @@ public class OutcomeDisplayMapEventOperationTests
             Assert.That(display!.PlainLabel, Is.EqualTo(plainLabel));
             Assert.That(display.TechnicalLabel, Is.EqualTo(technicalLabel));
             Assert.That(display.Tone, Is.EqualTo(tone));
+            Assert.That(display.Icon, Is.EqualTo(icon));
         }
     }
 

@@ -12,7 +12,11 @@
    clickable and keyboard operable (role button, tabbable, Enter/Space) to open the shared attribute
    drawer. Where a caller passes Operation (the Lineage view only, #1495 follow-up), the card leads
    with the same tone-tinted operation chip a chain card carries, in the same first-child position;
-   the Timeline does not pass it, so its own row markup is unaffected. *@
+   the Timeline does not pass it, so its own row markup is unaffected. Where a caller also sets
+   HideTitle (Lineage only, #1495 second follow-up), the icon tile and title (.evt-head) are suppressed
+   for outcomes whose title the chip and the column's own join label already state twice over; the
+   card's aria-label and click/keyboard activation keep using the same (unrendered) Title regardless,
+   so accessibility and the drawer are unaffected. *@
 
 <div class="evt-card @(IsClickable ? "clickable" : null) @(Selected ? "selected" : null)"
      style="--tone: @CausalityToneCss.CssVar(Event.Tone)"
@@ -30,16 +34,19 @@
             @(TechnicalNames ? operation.TechnicalLabel : operation.PlainLabel)
         </span>
     }
-    <div class="evt-head">
-        <span class="evt-icon" aria-hidden="true">
-            <MudIcon Icon="@Event.Icon" />
-        </span>
-        <span class="evt-title">@Title</span>
-        @if (Event.Badge != null)
-        {
-            <span class="evt-badge">@Event.Badge</span>
-        }
-    </div>
+    @if (!HideTitle || Operation is null)
+    {
+        <div class="evt-head">
+            <span class="evt-icon" aria-hidden="true">
+                <MudIcon Icon="@Event.Icon" />
+            </span>
+            <span class="evt-title">@Title</span>
+            @if (Event.Badge != null)
+            {
+                <span class="evt-badge">@Event.Badge</span>
+            }
+        </div>
+    }
     @if (!string.IsNullOrWhiteSpace(Event.DetailMessage))
     {
         <div class="evt-sub">@Event.DetailMessage</div>
@@ -132,6 +139,21 @@
     /// </summary>
     [Parameter]
     public OutcomeDisplay? Operation { get; set; }
+
+    /// <summary>
+    /// When true AND <see cref="Operation"/> is set, suppresses the card's own icon tile and title
+    /// (<c>.evt-head</c>) (Lineage only, #1495 second follow-up): for the outcomes where
+    /// <see cref="OutcomeDisplayMap.IsTitleSubsumedByOperation"/> returns true, the join label printed
+    /// between the Lineage columns and the operation chip this card already leads with both restate the
+    /// same fact the head would add a third time. Default false leaves every other caller (and every
+    /// outcome the map does not name) rendering exactly as before. Ignored when <see cref="Operation"/>
+    /// is null, which would otherwise leave the card naming nothing at all: that combination is a
+    /// caller misuse, so the head renders regardless rather than producing an unlabelled card. The
+    /// card's aria-label and click/keyboard activation keep using <see cref="Title"/> either way, so
+    /// accessibility and the shared attribute drawer are unaffected by whether the head itself renders.
+    /// </summary>
+    [Parameter]
+    public bool HideTitle { get; set; }
 
     /// <summary>
     /// Raised when a clickable card is activated (click, Enter or Space).

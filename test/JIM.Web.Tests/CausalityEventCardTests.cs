@@ -31,14 +31,16 @@ public class CausalityEventCardTests
         bool technicalNames = false,
         bool selected = false,
         Microsoft.AspNetCore.Components.EventCallback<CausalityEvent> onSelect = default,
-        OutcomeDisplay? operation = null)
+        OutcomeDisplay? operation = null,
+        bool hideTitle = false)
     {
         return context.Render<CausalityEventCard>(ps => ps
             .Add(c => c.Event, causalityEvent)
             .Add(c => c.TechnicalNames, technicalNames)
             .Add(c => c.Selected, selected)
             .Add(c => c.OnSelect, onSelect)
-            .Add(c => c.Operation, operation));
+            .Add(c => c.Operation, operation)
+            .Add(c => c.HideTitle, hideTitle));
     }
 
     [Test]
@@ -213,7 +215,7 @@ public class CausalityEventCardTests
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
         var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Primary, Icons.Material.Filled.AirlineStops);
+        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add);
 
         var cut = RenderCard(context, projected, operation: operation);
 
@@ -225,7 +227,7 @@ public class CausalityEventCardTests
             // First child: the same position a Lineage chain card's own chip occupies.
             Assert.That(card.Children.First().ClassList, Does.Contain("ln-op"));
             Assert.That(chip.GetAttribute("style"),
-                Is.EqualTo($"--tone: {CausalityToneCss.CssVar(CausalityTone.Primary)}; --tone-text: {CausalityToneCss.TextCssVar(CausalityTone.Primary)}"));
+                Is.EqualTo($"--tone: {CausalityToneCss.CssVar(CausalityTone.Success)}; --tone-text: {CausalityToneCss.TextCssVar(CausalityTone.Success)}"));
         }
     }
 
@@ -247,10 +249,88 @@ public class CausalityEventCardTests
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
         var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Primary, Icons.Material.Filled.AirlineStops);
+        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add);
 
         var cut = RenderCard(context, projected, technicalNames: true, operation: operation);
 
         Assert.That(cut.Find(".ln-op").TextContent.Trim(), Is.EqualTo("MVO Projected"));
+    }
+
+    // ─── HideTitle (#1495 second follow-up) ───
+
+    [Test]
+    public async Task Render_HideTitleFalse_RendersTheHeadAsBeforeAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add);
+
+        var cut = RenderCard(context, projected, operation: operation, hideTitle: false);
+
+        Assert.That(cut.FindAll(".evt-head"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Render_HideTitleTrueWithOperationSet_SuppressesTheHeadAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add);
+
+        var cut = RenderCard(context, projected, operation: operation, hideTitle: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll(".evt-head"), Is.Empty);
+            Assert.That(cut.FindAll(".evt-title"), Is.Empty);
+            // The chip is now the card's first element, since the head that used to lead it is gone.
+            var card = cut.Find(".evt-card");
+            Assert.That(card.Children.First().ClassList, Does.Contain("ln-op"));
+        }
+    }
+
+    /// <summary>
+    /// Misuse guard: a caller that sets HideTitle without an Operation would otherwise leave a card
+    /// naming nothing at all. The head renders anyway rather than silently producing an unlabelled card.
+    /// </summary>
+    [Test]
+    public async Task Render_HideTitleTrueWithNoOperation_StillRendersTheHeadAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+
+        var cut = RenderCard(context, projected, operation: null, hideTitle: true);
+
+        Assert.That(cut.FindAll(".evt-head"), Has.Count.EqualTo(1));
+    }
+
+    /// <summary>
+    /// The card's accessible name comes from the same Title the (unrendered) head would have shown, so a
+    /// hidden title costs the drawer nothing: the aria-label and click/keyboard activation are unaffected.
+    /// </summary>
+    [Test]
+    public async Task Render_HideTitleTrue_KeepsTheAriaLabelAndInteractivityAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        var pendingExport = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        CausalityEvent? selectedEvent = null;
+        var onSelect = Microsoft.AspNetCore.Components.EventCallback.Factory.Create<CausalityEvent>(
+            this, e => selectedEvent = e);
+
+        var cut = RenderCard(context, pendingExport, onSelect: onSelect, hideTitle: true);
+
+        var card = cut.Find(".evt-card");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(card.GetAttribute("aria-label"), Is.EqualTo("Export queued: show attribute detail"));
+            Assert.That(card.ClassList, Does.Contain("clickable"));
+        }
+
+        card.Click();
+        Assert.That(selectedEvent, Is.SameAs(pendingExport));
     }
 }

@@ -208,11 +208,19 @@ public static class OutcomeDisplayMap
     }
 
     /// <summary>
-    /// The tone-tinted operation chip a Lineage chain-hop card carries (#1495 follow-up): what the hop did
-    /// to an object, in the same vocabulary as a this-run event card, derived entirely from facts the
-    /// cohort already carries. Null where the hop states no object operation at all: a confirmation
-    /// confirms rather than changes anything, and a queueing edge recorded before reason codes existed has
-    /// no decision to report, so neither is worth guessing.
+    /// One tone and one icon per operation verb (#1495 follow-up refinement), shared by
+    /// <see cref="GetHopOperation"/>, <see cref="GetEventOperation"/> and <see cref="GetQueueingDecisionOperation"/>.
+    /// The chip is the operation vocabulary a reader scans a column on: Created is always
+    /// <see cref="CausalityTone.Success"/> and <see cref="Icons.Material.Filled.Add"/>, Updated is always
+    /// <see cref="CausalityTone.Info"/> and <see cref="Icons.Material.Filled.Edit"/>, Deleted is always
+    /// <see cref="CausalityTone.Error"/> and <see cref="Icons.Material.Filled.Delete"/>, Joined is always
+    /// <see cref="CausalityTone.Secondary"/> and <see cref="Icons.Material.Filled.Link"/>, regardless of
+    /// which outcome type or edge produced the chip. Colour-on-colour previously varied per outcome
+    /// (Primary for a projection, a distinct "circled" icon for a provision, PersonRemove for a deletion),
+    /// which meant scanning a column for "what happened" needed reading every chip's icon rather than
+    /// matching its colour. The outcome-specific icon and wording are not lost: the card's own title, the
+    /// summary band's pills and the sentence beside a chain card (all built from the unchanged <see cref="Map"/>
+    /// dictionary above) still carry them; only the chip itself is now one look per verb.
     /// </summary>
     /// <remarks>
     /// Checked in the order the hazard on <see cref="CausalChainCohort.MetaverseChangeType"/> requires:
@@ -230,7 +238,7 @@ public static class OutcomeDisplayMap
             return metaverseChangeType switch
             {
                 ObjectChangeType.Projected =>
-                    new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Primary, Icons.Material.Filled.AirlineStops),
+                    new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add),
                 ObjectChangeType.Joined =>
                     new OutcomeDisplay("Joined", "CSO Joined", CausalityTone.Secondary, Icons.Material.Filled.Link),
                 ObjectChangeType.Created =>
@@ -257,7 +265,7 @@ public static class OutcomeDisplayMap
         {
             CausalEdgeType.PendingExportQueueingCausedExportExecution => GetQueueingDecisionOperation(cohort.ReasonCode),
             CausalEdgeType.MetaverseObjectDeletionCausedDeprovision or CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval =>
-                new OutcomeDisplay("Deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove),
+                new OutcomeDisplay("Deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
             // ExportCausedImportConfirmation and any seam this map does not know fall through here: a
             // confirmation is not itself an object operation, and an unknown edge is never guessed.
             _ => null
@@ -295,7 +303,7 @@ public static class OutcomeDisplayMap
         return outcomeType switch
         {
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected =>
-                new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Primary, Icons.Material.Filled.AirlineStops),
+                new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add),
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined =>
                 new OutcomeDisplay("Joined", "CSO Joined", CausalityTone.Secondary, Icons.Material.Filled.Link),
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded =>
@@ -312,9 +320,9 @@ public static class OutcomeDisplayMap
             ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection =>
                 new OutcomeDisplay("Updated", "CSO Drift Corrected", CausalityTone.Info, Icons.Material.Filled.Edit),
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned =>
-                new OutcomeDisplay("Created", "CSO Provisioned", CausalityTone.Success, Icons.Material.Filled.AddCircle),
+                new OutcomeDisplay("Created", "CSO Provisioned", CausalityTone.Success, Icons.Material.Filled.Add),
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted =>
-                new OutcomeDisplay("Deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove),
+                new OutcomeDisplay("Deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned =>
                 new OutcomeDisplay("Deleted", "CSO Deprovisioned", CausalityTone.Error, Icons.Material.Filled.Delete),
             // A queued deprovision is a staged delete; reuse the chain's own "Export Staged (Delete)"
@@ -341,7 +349,7 @@ public static class OutcomeDisplayMap
         return reasonCode switch
         {
             CausalReasonCode.ExportCreateStaged =>
-                new OutcomeDisplay("Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.AddCircle),
+                new OutcomeDisplay("Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.Add),
             CausalReasonCode.ExportUpdateStaged =>
                 new OutcomeDisplay("Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit),
             CausalReasonCode.ExportDeleteStaged =>
@@ -350,6 +358,33 @@ public static class OutcomeDisplayMap
             // for that history would be worse than stating nothing.
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Whether an outcome's Lineage card head (the icon tile and title, <c>.evt-head</c>) is redundant
+    /// because two other things on the panel already state it (#1495 second follow-up): the join label
+    /// printed between the two columns the card sits between (PROJECTED / PROVISIONED / JOINED), and the
+    /// card's own operation chip (<see cref="GetEventOperation"/>), which states the same verb again in
+    /// the same first-child position the head would otherwise occupy. Stacking a third restatement (the
+    /// head's "Identity created" / "Provisioned" / "Joined to Identity") added a title a reader had
+    /// already read twice by the time they reached it.
+    /// </summary>
+    /// <remarks>
+    /// True for exactly <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Projected"/>,
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Joined"/> and
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned"/>: the only outcomes whose
+    /// Lineage join label carries this precise meaning. <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Exported"/>
+    /// is deliberately excluded even though it renders a chip too: its decision-specific titles ("Record
+    /// created", "Changes applied", "Record deleted") are not restated by any join label, so its head is
+    /// the only place they appear and must keep rendering. This is meaningful only where a chip actually
+    /// renders alongside the card; a caller must not suppress a title without one (see
+    /// <c>CausalityEventCard.HideTitle</c>'s guard for that misuse case).
+    /// </remarks>
+    public static bool IsTitleSubsumedByOperation(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        return outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
     }
 
     /// <summary>

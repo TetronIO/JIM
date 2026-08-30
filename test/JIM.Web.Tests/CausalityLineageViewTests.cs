@@ -765,4 +765,51 @@ public class CausalityLineageViewTests
             Assert.That(thisRunCard.Children.First().ClassList, Does.Contain("ln-op"));
         }
     }
+
+    // ─── Redundant card titles suppressed on the Lineage (#1495 second follow-up) ───
+
+    /// <summary>
+    /// Projected and Provisioned both carry a Lineage join label (PROJECTED / PROVISIONED) stating the
+    /// same verb their own operation chip already states, so their card heads are redundant and must
+    /// not render on this view: the chip becomes the card's only stated name for the outcome.
+    /// </summary>
+    [Test]
+    public void Render_ProjectedAndProvisionedThisRunCards_ShowTheChipButSuppressTheHead()
+    {
+        var cut = RenderLineage(NewJoinerLineage());
+
+        var cards = cut.FindComponents<CausalityEventCard>();
+        var projected = cards.Single(c => c.Instance.Event.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        var provisioned = cards.Single(c => c.Instance.Event.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(projected.Find(".evt-card").QuerySelector(".ln-op"), Is.Not.Null,
+                "the chip must still render");
+            Assert.That(projected.FindAll(".evt-head"), Is.Empty, "the head is the restated fact");
+            Assert.That(provisioned.Find(".evt-card").QuerySelector(".ln-op"), Is.Not.Null);
+            Assert.That(provisioned.FindAll(".evt-head"), Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Exported is deliberately excluded from title suppression: its decision-specific titles ("Record
+    /// created" here) are not restated by any Lineage join label, so its card head must keep rendering
+    /// even though the card also carries an operation chip.
+    /// </summary>
+    [Test]
+    public void Render_ExportedThisRunCard_KeepsItsTitle()
+    {
+        var cut = RenderLineage(ExportCreateLineage());
+
+        var exportedCard = cut.FindComponents<CausalityEventCard>()
+            .Single(c => c.Instance.Event.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exportedCard.Find(".evt-card").QuerySelector(".ln-op"), Is.Not.Null,
+                "the fixture must actually carry a chip for this guard to mean anything");
+            Assert.That(exportedCard.Find(".evt-title").TextContent.Trim(), Is.EqualTo("Record created"));
+        }
+    }
 }

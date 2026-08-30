@@ -240,6 +240,28 @@ public class CausalityTimelineViewTests
     }
 
     /// <summary>
+    /// The Lineage-only title suppression (#1495 second follow-up, <see cref="OutcomeDisplayMap.IsTitleSubsumedByOperation"/>)
+    /// never reaches the Timeline: it builds its own row markup rather than passing HideTitle through
+    /// <see cref="CausalityEventCard"/> at all, so Projected and Provisioned (both title-subsumed on the
+    /// Lineage) keep printing their verb here exactly as before.
+    /// </summary>
+    [Test]
+    public async Task Render_ProjectedAndProvisioned_StillPrintTheirVerbsAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var cut = RenderTimeline(context, model);
+
+        var verbs = cut.FindAll(".tl-line .verb").Select(v => v.TextContent.Trim()).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(verbs, Does.Contain("Identity created"));
+            Assert.That(verbs, Does.Contain("Provisioned"));
+        }
+    }
+
+    /// <summary>
     /// Hosts the Timeline with owned expanded-event state, mirroring how CausalityPanel binds it.
     /// </summary>
     private sealed class TimelineHost : Microsoft.AspNetCore.Components.ComponentBase
