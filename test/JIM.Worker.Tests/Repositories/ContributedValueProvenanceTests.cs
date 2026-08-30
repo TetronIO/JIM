@@ -14,7 +14,9 @@ namespace JIM.Worker.Tests.Repositories;
 /// summary that quantifies a Synchronisation Rule's sole-contributor footprint before deletion (count
 /// queries only, per-attribute and distinct-object), and provenance severing, the "keep the values"
 /// mechanism that permanently exempts values from orphan recall by clearing their Synchronisation Rule
-/// link while retaining the denormalised contributing-system record.
+/// link while retaining the denormalised contributing-system record. Also covers the system-scoped
+/// variant (#809), which quantifies a whole Connected System's contributed footprint for the deletion
+/// preview by the same provenance join.
 /// </summary>
 [TestFixture]
 public class ContributedValueProvenanceTests
@@ -63,8 +65,8 @@ public class ContributedValueProvenanceTests
         };
         _dbContext.MetaverseAttributes.AddRange(_displayName, _mobile);
 
-        _hrRule = new SyncRule { Name = "HR Users Inbound", Direction = SyncRuleDirection.Import };
-        _adRule = new SyncRule { Name = "AD Users Inbound", Direction = SyncRuleDirection.Import };
+        _hrRule = new SyncRule { Name = "HR Users Inbound", Direction = SyncRuleDirection.Import, ConnectedSystemId = HrSystemId };
+        _adRule = new SyncRule { Name = "AD Users Inbound", Direction = SyncRuleDirection.Import, ConnectedSystemId = AdSystemId };
         _dbContext.SyncRules.AddRange(_hrRule, _adRule);
 
         _mvo1 = new MetaverseObject { Id = Guid.NewGuid(), Type = mvoType, Created = DateTime.UtcNow };
@@ -194,6 +196,68 @@ public class ContributedValueProvenanceTests
                 "the denormalised contributing-system record must survive severing, matching rule-deletion FK behaviour");
             Assert.That(hrMobile.ContributedBySyncRuleId, Is.EqualTo(_hrRule.Id), "the rule's other attribute must be untouched");
             Assert.That(adDisplayName.ContributedBySyncRuleId, Is.EqualTo(_adRule.Id), "another rule's values must be untouched");
+        }
+    }
+
+    [Test]
+    public async Task GetContributedValueCountsByConnectedSystem_MixedContributions_CountsValuesAndDistinctObjectsAsync()
+    {
+        await SeedContributionsAsync();
+
+        var (valueCount, objectCount) = await _repository.Metaverse.GetContributedValueCountsByConnectedSystemAsync(HrSystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valueCount, Is.EqualTo(3), "all values contributed by any of the system's Synchronisation Rules count");
+            Assert.That(objectCount, Is.EqualTo(2), "MVO 1 carries two of the system's values; distinct objects must not double-count it");
+        }
+    }
+
+    [Test]
+    public async Task GetContributedValueCountsByConnectedSystem_SeveredProvenance_IsNotCountedAsync()
+    {
+        await SeedContributionsAsync();
+
+        // A severed value (rule link cleared, denormalised system record retained) is permanently exempt
+        // from recall (#1537), so the deprovisioning impact count must select on the rule join, not the
+        // denormalised system id.
+        _dbContext.MetaverseObjectAttributeValues.Add(
+            NewValue(_mvo3, _mobile, "0700 000003", contributedBySyncRuleId: null, contributedBySystemId: HrSystemId));
+        await _dbContext.SaveChangesAsync();
+
+        var (valueCount, objectCount) = await _repository.Metaverse.GetContributedValueCountsByConnectedSystemAsync(HrSystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valueCount, Is.EqualTo(3));
+            Assert.That(objectCount, Is.EqualTo(2));
+        }
+    }
+
+    [Test]
+    public async Task GetContributedValueCountsByConnectedSystem_OtherSystem_CountsOnlyItsOwnRulesAsync()
+    {
+        await SeedContributionsAsync();
+
+        var (valueCount, objectCount) = await _repository.Metaverse.GetContributedValueCountsByConnectedSystemAsync(AdSystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valueCount, Is.EqualTo(1));
+            Assert.That(objectCount, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task GetContributedValueCountsByConnectedSystem_NoContributions_ReturnsZeroesAsync()
+    {
+        // No contributions seeded at all.
+        var (valueCount, objectCount) = await _repository.Metaverse.GetContributedValueCountsByConnectedSystemAsync(HrSystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valueCount, Is.Zero);
+            Assert.That(objectCount, Is.Zero);
         }
     }
 

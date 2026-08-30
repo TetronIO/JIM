@@ -116,6 +116,62 @@ public class ConnectedSystemDeletionTests
     }
 
     [Test]
+    public async Task GetDeletionPreviewAsync_WithContributedValues_PopulatesDeprovisioningImpactCountsAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            Status = ConnectedSystemStatus.Active
+        };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
+        _mockMvRepo.Setup(r => r.GetContributedValueCountsByConnectedSystemAsync(1)).ReturnsAsync((1250, 480));
+
+        // Act
+        var result = await _jim.ConnectedSystems.GetDeletionPreviewAsync(1);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.ContributedValueCount, Is.EqualTo(1250),
+                "the preview must state how many Metaverse attribute values the system's Synchronisation Rules contribute");
+            Assert.That(result.ContributedValueObjectCount, Is.EqualTo(480),
+                "the preview must state how many distinct Metaverse Objects hold those values");
+        }
+    }
+
+    [Test]
+    public async Task GetDeletionPreviewAsync_WithNoContributedValues_ReportsZeroImpactCountsAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            Status = ConnectedSystemStatus.Active
+        };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
+        _mockMvRepo.Setup(r => r.GetContributedValueCountsByConnectedSystemAsync(1)).ReturnsAsync((0, 0));
+
+        // Act
+        var result = await _jim.ConnectedSystems.GetDeletionPreviewAsync(1);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.ContributedValueCount, Is.Zero);
+            Assert.That(result.ContributedValueObjectCount, Is.Zero);
+        }
+    }
+
+    [Test]
     public async Task GetDeletionPreviewAsync_WithNonExistentId_ReturnsNullAsync()
     {
         // Arrange

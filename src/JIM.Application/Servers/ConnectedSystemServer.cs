@@ -1082,6 +1082,12 @@ public partial class ConnectedSystemServer
         // execution does (#119).
         preview.MvosWithDeletionRuleCount = await Application.Metaverse.GetMvosOrphanedByConnectedSystemDeletionCountAsync(connectedSystemId);
 
+        // Deprovisioning impact (#809): the attribute values this system's Synchronisation Rules
+        // contribute (by provenance) and the distinct Metaverse Objects holding them; what a
+        // synchronised deprovisioning would recall or hand to a surviving contributor. Count-only.
+        (preview.ContributedValueCount, preview.ContributedValueObjectCount) =
+            await Application.Metaverse.GetContributedValueCountsByConnectedSystemAsync(connectedSystemId);
+
         // Check for running sync operations
         var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
         preview.HasRunningSyncOperation = runningSyncTask != null;

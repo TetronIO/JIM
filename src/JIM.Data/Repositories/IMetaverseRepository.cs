@@ -526,6 +526,17 @@ public interface IMetaverseRepository
     Task<ContributedValuesSummary> GetContributedValuesSummaryAsync(int syncRuleId, int? metaverseAttributeId = null);
 
     /// <summary>
+    /// Quantifies the Metaverse attribute values contributed by ANY of a Connected System's Synchronisation
+    /// Rules (selected by provenance, <c>ContributedBySyncRuleId</c>), for the Connected System deletion
+    /// preview's deprovisioning impact statement (#809): the contributed value rows, and the distinct
+    /// Metaverse Objects holding at least one of them. Built from count queries only; no value rows are
+    /// materialised. Values whose provenance was severed (#1537's "keep the values" mechanism) are
+    /// deliberately excluded: they are permanently exempt from recall, so they are not deprovisioning impact.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose contributions are being quantified.</param>
+    Task<(int ValueCount, int ObjectCount)> GetContributedValueCountsByConnectedSystemAsync(int connectedSystemId);
+
+    /// <summary>
     /// The distinct ids of Metaverse Objects holding at least one attribute value contributed by the given
     /// Synchronisation Rule (selected by provenance, <c>ContributedBySyncRuleId</c>). Drives the rule
     /// deletion recall task (#1537), which must enumerate the affected objects before the rule's deletion

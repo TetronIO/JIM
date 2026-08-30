@@ -3,20 +3,23 @@
 
 using JIM.Models.Activities;
 
-namespace JIM.Worker.Processors;
+namespace JIM.Application.Services;
 
 /// <summary>
 /// Static helper for building sync outcome tree nodes on RPEIs.
 /// Centralises outcome node creation and summary generation so that
 /// integration points in the sync processor remain clean and consistent.
+/// Lives in JIM.Application (moved from the worker for #809) so the extracted obsoletion core
+/// (<see cref="ConnectedSystemObjectObsoletionService"/>) can build the same outcome trees the
+/// run-time sync path records.
 /// </summary>
-internal static class SyncOutcomeBuilder
+public static class SyncOutcomeBuilder
 {
     /// <summary>
     /// Creates a root outcome node and adds it to the RPEI's SyncOutcomes collection.
     /// Returns the node so children can be attached in Detailed mode.
     /// </summary>
-    internal static ActivityRunProfileExecutionItemSyncOutcome AddRootOutcome(
+    public static ActivityRunProfileExecutionItemSyncOutcome AddRootOutcome(
         ActivityRunProfileExecutionItem rpei,
         ActivityRunProfileExecutionItemSyncOutcomeType type,
         Guid? targetEntityId = null,
@@ -46,7 +49,7 @@ internal static class SyncOutcomeBuilder
     /// Creates a child outcome node under a parent and adds it to the RPEI's SyncOutcomes collection.
     /// The parent-child FK relationship is resolved during bulk insert flattening.
     /// </summary>
-    internal static ActivityRunProfileExecutionItemSyncOutcome AddChildOutcome(
+    public static ActivityRunProfileExecutionItemSyncOutcome AddChildOutcome(
         ActivityRunProfileExecutionItem rpei,
         ActivityRunProfileExecutionItemSyncOutcome parent,
         ActivityRunProfileExecutionItemSyncOutcomeType type,
@@ -77,11 +80,11 @@ internal static class SyncOutcomeBuilder
 
     /// <summary>
     /// Builds the denormalised OutcomeSummary string from the RPEI's SyncOutcomes collection.
-    /// Format: "Projected:1,AttributeFlow:12,PendingExportCreated:2" — counts per outcome type.
+    /// Format: "Projected:1,AttributeFlow:12,PendingExportCreated:2"; counts per outcome type.
     /// Counts all outcome nodes (root + children) so the summary reflects the full causal chain,
     /// matching how Activity-level stats are derived from rpei.SyncOutcomes in Worker.cs.
     /// </summary>
-    internal static void BuildOutcomeSummary(ActivityRunProfileExecutionItem rpei)
+    public static void BuildOutcomeSummary(ActivityRunProfileExecutionItem rpei)
     {
         if (rpei.SyncOutcomes.Count == 0)
             return;
