@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Web.Causality;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -21,8 +22,11 @@ namespace JIM.Web.Tests;
 public class OutcomeDisplayMapHopOperationTests
 {
     [Test]
-    public void GetHopOperation_MetaverseChangeTypeProjected_ReadsCreatedPrimary()
+    public void GetHopOperation_MetaverseChangeTypeProjected_ReadsCreatedSuccess()
     {
+        // Deliberate behaviour change (#1495 second follow-up): Projected used to chip Primary/AirlineStops,
+        // the only operation with a look of its own. Every "Created" verb now shares one tone and icon
+        // (Success/Add) so a column scans on colour alone; the technical label is unchanged.
         var cohort = new CausalChainCohort { MetaverseChangeType = ObjectChangeType.Projected };
 
         var display = OutcomeDisplayMap.GetHopOperation(cohort);
@@ -31,7 +35,8 @@ public class OutcomeDisplayMapHopOperationTests
         {
             Assert.That(display!.PlainLabel, Is.EqualTo("Created"));
             Assert.That(display.TechnicalLabel, Is.EqualTo("MVO Projected"));
-            Assert.That(display.Tone, Is.EqualTo(CausalityTone.Primary));
+            Assert.That(display.Tone, Is.EqualTo(CausalityTone.Success));
+            Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Add));
         }
     }
 
@@ -83,11 +88,13 @@ public class OutcomeDisplayMapHopOperationTests
         }
     }
 
-    [TestCase(CausalReasonCode.ExportCreateStaged, "Created", "Export Staged (Create)", CausalityTone.Success)]
-    [TestCase(CausalReasonCode.ExportUpdateStaged, "Updated", "Export Staged (Update)", CausalityTone.Info)]
-    [TestCase(CausalReasonCode.ExportDeleteStaged, "Deleted", "Export Staged (Delete)", CausalityTone.Error)]
+    // ExportCreateStaged's icon is a deliberate behaviour change (#1495 second follow-up): it used to chip
+    // AddCircle; every "Created" verb now shares Add so a column scans on colour alone.
+    [TestCase(CausalReasonCode.ExportCreateStaged, "Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.Add)]
+    [TestCase(CausalReasonCode.ExportUpdateStaged, "Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit)]
+    [TestCase(CausalReasonCode.ExportDeleteStaged, "Deleted", "Export Staged (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete)]
     public void GetHopOperation_QueueingEdgeWithADecision_ReadsTheDecision(
-        CausalReasonCode reasonCode, string plainLabel, string technicalLabel, CausalityTone tone)
+        CausalReasonCode reasonCode, string plainLabel, string technicalLabel, CausalityTone tone, string icon)
     {
         var cohort = new CausalChainCohort
         {
@@ -102,6 +109,7 @@ public class OutcomeDisplayMapHopOperationTests
             Assert.That(display!.PlainLabel, Is.EqualTo(plainLabel));
             Assert.That(display.TechnicalLabel, Is.EqualTo(technicalLabel));
             Assert.That(display.Tone, Is.EqualTo(tone));
+            Assert.That(display.Icon, Is.EqualTo(icon));
         }
     }
 
@@ -109,6 +117,8 @@ public class OutcomeDisplayMapHopOperationTests
     [TestCase(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval)]
     public void GetHopOperation_MvoDeletionEdges_ReadDeletedError(CausalEdgeType edgeType)
     {
+        // Deliberate behaviour change (#1495 second follow-up): this edge used to chip PersonRemove; every
+        // "Deleted" verb now shares Error/Delete so a column scans on colour alone.
         var cohort = new CausalChainCohort { EdgeType = edgeType };
 
         var display = OutcomeDisplayMap.GetHopOperation(cohort);
@@ -118,6 +128,7 @@ public class OutcomeDisplayMapHopOperationTests
             Assert.That(display!.PlainLabel, Is.EqualTo("Deleted"));
             Assert.That(display.TechnicalLabel, Is.EqualTo("MVO Deleted"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Error));
+            Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Delete));
         }
     }
 

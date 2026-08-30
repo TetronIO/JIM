@@ -174,8 +174,11 @@ public class CausalityPanelTests
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.Find(".toggle-line").ClassList, Does.Contain("on"));
-        var titles = cut.FindAll(".evt-title").Select(t => t.TextContent.Trim()).ToList();
-        Assert.That(titles.Any(t => t.StartsWith("MVO Projected")), Is.True);
+        // Projected's own card head is suppressed on the Lineage (#1495 second follow-up: its title is
+        // subsumed by the PROJECTED join label and the operation chip), so its technical label now
+        // surfaces on the chip rather than on an .evt-title.
+        var chips = cut.FindAll(".ln-op").Select(t => t.TextContent.Trim()).ToList();
+        Assert.That(chips.Any(t => t.StartsWith("MVO Projected")), Is.True);
     }
 
     [Test]
@@ -188,8 +191,9 @@ public class CausalityPanelTests
         Assert.That(_preferences.CausalityTechNamesWrites, Is.EqualTo(new[] { true }));
         Assert.That(cut.Find(".toggle-line").ClassList, Does.Contain("on"));
         Assert.That(cut.Find(".toggle-line").GetAttribute("aria-pressed"), Is.EqualTo("true"));
-        var titles = cut.FindAll(".evt-title").Select(t => t.TextContent.Trim()).ToList();
-        Assert.That(titles.Any(t => t.StartsWith("MVO Projected")), Is.True);
+        // See the comment above: Projected's technical label now shows on its chip, not its (suppressed) title.
+        var chips = cut.FindAll(".ln-op").Select(t => t.TextContent.Trim()).ToList();
+        Assert.That(chips.Any(t => t.StartsWith("MVO Projected")), Is.True);
 
         cut.Find(".toggle-line").Click();
 
