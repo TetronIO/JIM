@@ -174,13 +174,11 @@ public partial class ConnectedSystemServer
             var stagedPendingExports = new List<PendingExport>();
             var executionItems = new List<ActivityRunProfileExecutionItem>();
 
-            foreach (var mvo in metaverseObjects)
+            // A Metaverse Object marked for deferred deletion keeps its values for the grace window;
+            // recalling them here would undo the per-object pass's deliberate freeze.
+            foreach (var mvo in metaverseObjects
+                         .Where(mvo => !skipMetaverseObjectsPendingDeletion || mvo.LastConnectorDisconnectedDate == null))
             {
-                // A Metaverse Object marked for deferred deletion keeps its values for the grace window;
-                // recalling them here would undo the per-object pass's deliberate freeze.
-                if (skipMetaverseObjectsPendingDeletion && mvo.LastConnectorDisconnectedDate != null)
-                    continue;
-
                 // Select this object's recalled values by intact provenance. An empty set means the
                 // provenance moved since the id query ran (a concurrent re-election); nothing to do.
                 var recalledValues = mvo.AttributeValues
