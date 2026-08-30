@@ -383,21 +383,25 @@ public static class OutcomeDisplayMap
     /// already read twice by the time they reached it.
     /// </summary>
     /// <remarks>
-    /// True for exactly <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Projected"/>,
+    /// True for <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Projected"/>,
     /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Joined"/> and
-    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned"/>: the only outcomes whose
-    /// Lineage join label carries this precise meaning. <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Exported"/>
-    /// is deliberately excluded even though it renders a chip too: its decision-specific titles ("Record
-    /// created", "Changes applied", "Record deleted") are not restated by any join label, so its head is
-    /// the only place they appear and must keep rendering. This is meaningful only where a chip actually
-    /// renders alongside the card; a caller must not suppress a title without one (see
-    /// <c>CausalityEventCard.HideTitle</c>'s guard for that misuse case).
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned"/> (whose Lineage join
+    /// label states the same verb a third time), and for
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Exported"/>: its decision-specific
+    /// titles ("Record created", "Changes applied", "Record deleted") say nothing the chip's own
+    /// Created / Updated / Deleted does not, so once the chip exists the title is the restatement.
+    /// Exported's chip only renders where the export's queueing decision resolved, and an item exported
+    /// before causal capture existed resolves none; that no-chip case is exactly what
+    /// <c>CausalityEventCard.HideTitle</c>'s misuse guard covers, keeping the bare "Exported" head
+    /// rendering rather than leaving the card naming nothing, so this method stays a function of the
+    /// outcome type alone.
     /// </remarks>
     public static bool IsTitleSubsumedByOperation(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
         return outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
             or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
-            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Exported;
     }
 
     /// <summary>
