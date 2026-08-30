@@ -7,6 +7,7 @@ using Bunit;
 using JIM.Models.Activities;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -29,13 +30,15 @@ public class CausalityEventCardTests
         CausalityEvent causalityEvent,
         bool technicalNames = false,
         bool selected = false,
-        Microsoft.AspNetCore.Components.EventCallback<CausalityEvent> onSelect = default)
+        Microsoft.AspNetCore.Components.EventCallback<CausalityEvent> onSelect = default,
+        OutcomeDisplay? operation = null)
     {
         return context.Render<CausalityEventCard>(ps => ps
             .Add(c => c.Event, causalityEvent)
             .Add(c => c.TechnicalNames, technicalNames)
             .Add(c => c.Selected, selected)
-            .Add(c => c.OnSelect, onSelect));
+            .Add(c => c.OnSelect, onSelect)
+            .Add(c => c.Operation, operation));
     }
 
     [Test]
@@ -200,5 +203,54 @@ public class CausalityEventCardTests
         var chips = cut.FindAll(".evt-entities .chip").Select(c => c.TextContent).ToList();
         Assert.That(chips.Any(c => c.Contains("Liam Allen")), Is.True);
         Assert.That(chips.Any(c => c.Contains("Yellowstone People - Inbound")), Is.True);
+    }
+
+    // ─── Operation chip (#1495 follow-up) ───
+
+    [Test]
+    public async Task Render_WithOperationSet_RendersTheChipAsTheCardsFirstChildAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Primary, Icons.Material.Filled.AirlineStops);
+
+        var cut = RenderCard(context, projected, operation: operation);
+
+        var card = cut.Find(".evt-card");
+        var chip = cut.Find(".ln-op");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.TextContent.Trim(), Is.EqualTo("Created"));
+            // First child: the same position a Lineage chain card's own chip occupies.
+            Assert.That(card.Children.First().ClassList, Does.Contain("ln-op"));
+            Assert.That(chip.GetAttribute("style"),
+                Is.EqualTo($"--tone: {CausalityToneCss.CssVar(CausalityTone.Primary)}; --tone-text: {CausalityToneCss.TextCssVar(CausalityTone.Primary)}"));
+        }
+    }
+
+    [Test]
+    public async Task Render_WithOperationUnset_RendersNoChipAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+
+        var cut = RenderCard(context, projected);
+
+        Assert.That(cut.FindAll(".ln-op"), Is.Empty);
+    }
+
+    [Test]
+    public async Task Render_OperationWithTechnicalNames_SwapsTheChipsLabelTooAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Primary, Icons.Material.Filled.AirlineStops);
+
+        var cut = RenderCard(context, projected, technicalNames: true, operation: operation);
+
+        Assert.That(cut.Find(".ln-op").TextContent.Trim(), Is.EqualTo("MVO Projected"));
     }
 }

@@ -743,4 +743,26 @@ public class CausalityLineageViewTests
                 Does.Contain("was created as a new Identity"));
         }
     }
+
+    /// <summary>
+    /// A this-run event card carries the same operation chip a chain card does (#1495 follow-up):
+    /// the Lineage view is the one caller that passes <c>Operation</c> through to
+    /// <see cref="CausalityEventCard"/>, so a column scan finds an operation marker on every card,
+    /// this run's included, not just on earlier runs' chain cards.
+    /// </summary>
+    [Test]
+    public void Render_ThisRunEventCard_CarriesTheEventsOwnOperationChip()
+    {
+        var cut = RenderLineage(ExportCreateLineage());
+
+        var thisRunCard = cut.Find(".ln-now .evt-card");
+        var chip = thisRunCard.QuerySelector(".ln-op");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip, Is.Not.Null);
+            Assert.That(chip!.TextContent.Trim(), Is.EqualTo("Created"));
+            // First child of the card, exactly as a chain card's own chip leads it.
+            Assert.That(thisRunCard.Children.First().ClassList, Does.Contain("ln-op"));
+        }
+    }
 }

@@ -10,13 +10,26 @@
    named exactly once (as a chip or a footer link); a lineage column's head already names the owning
    system, so its cards suppress the system chip via HideSystemChip. Cards with attribute detail are
    clickable and keyboard operable (role button, tabbable, Enter/Space) to open the shared attribute
-   drawer. *@
+   drawer. Where a caller passes Operation (the Lineage view only, #1495 follow-up), the card leads
+   with the same tone-tinted operation chip a chain card carries, in the same first-child position;
+   the Timeline does not pass it, so its own row markup is unaffected. *@
 
 <div class="evt-card @(IsClickable ? "clickable" : null) @(Selected ? "selected" : null)"
      style="--tone: @CausalityToneCss.CssVar(Event.Tone)"
      role="@(IsClickable ? "button" : null)" tabindex="@(IsClickable ? "0" : null)"
      aria-label="@(IsClickable ? $"{Title}: show attribute detail" : null)"
      @onclick="HandleActivationAsync" @onkeydown="HandleKeyDownAsync">
+    @if (Operation is { } operation)
+    {
+        @* The chip's own tone can differ from the card's (an Info-toned Attribute Flow update inside
+           an otherwise Primary-toned card, for instance), so it carries its own --tone/--tone-text
+           rather than relying on the card root's, which stays the event's own tone for the icon tile
+           and badge above. *@
+        <span class="ln-op" style="--tone: @CausalityToneCss.CssVar(operation.Tone); --tone-text: @CausalityToneCss.TextCssVar(operation.Tone)">
+            <MudIcon Icon="@operation.Icon" />
+            @(TechnicalNames ? operation.TechnicalLabel : operation.PlainLabel)
+        </span>
+    }
     <div class="evt-head">
         <span class="evt-icon" aria-hidden="true">
             <MudIcon Icon="@Event.Icon" />
@@ -109,6 +122,16 @@
     /// </summary>
     [Parameter]
     public bool HideSystemChip { get; set; }
+
+    /// <summary>
+    /// The operation chip to lead the card with (#1495 follow-up), or null to render no chip at all.
+    /// Deliberately a separate parameter rather than the card reading <see cref="CausalityEvent.Operation"/>
+    /// off <see cref="Event"/> itself: the Lineage view is the only caller that passes it, so the
+    /// Timeline (which never sets this parameter) renders identically to before this feature existed,
+    /// even though its events carry the same populated <c>Operation</c> on the shared model.
+    /// </summary>
+    [Parameter]
+    public OutcomeDisplay? Operation { get; set; }
 
     /// <summary>
     /// Raised when a clickable card is activated (click, Enter or Space).

@@ -255,22 +255,99 @@ public static class OutcomeDisplayMap
 
         return cohort.EdgeType switch
         {
-            CausalEdgeType.PendingExportQueueingCausedExportExecution => cohort.ReasonCode switch
-            {
-                CausalReasonCode.ExportCreateStaged =>
-                    new OutcomeDisplay("Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.AddCircle),
-                CausalReasonCode.ExportUpdateStaged =>
-                    new OutcomeDisplay("Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit),
-                CausalReasonCode.ExportDeleteStaged =>
-                    new OutcomeDisplay("Deleted", "Export Staged (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete),
-                // NotSet covers edges written before the reason codes existed: guessing create/update/delete
-                // for that history would be worse than stating nothing.
-                _ => null
-            },
+            CausalEdgeType.PendingExportQueueingCausedExportExecution => GetQueueingDecisionOperation(cohort.ReasonCode),
             CausalEdgeType.MetaverseObjectDeletionCausedDeprovision or CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval =>
                 new OutcomeDisplay("Deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove),
             // ExportCausedImportConfirmation and any seam this map does not know fall through here: a
             // confirmation is not itself an object operation, and an unknown edge is never guessed.
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// The tone-tinted operation chip a this-run event card carries (#1495 follow-up): the same
+    /// vocabulary as <see cref="GetHopOperation"/>, keyed on the outcome type directly rather than on a
+    /// chain cohort, since a this-run event has no cohort of its own.
+    /// </summary>
+    /// <param name="outcomeType">The event's underlying sync outcome type.</param>
+    /// <param name="exportReasonCode">
+    /// For an <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Exported"/> outcome, the staged
+    /// change's reason code where the causal chain resolved one (the same lookup
+    /// <see cref="CausalityModelBuilder"/> uses for the outcome's own title); null where the chain did
+    /// not resolve one, or where it is not an Exported outcome. Ignored for every other outcome type.
+    /// </param>
+    /// <remarks>
+    /// PendingExportCreated is deliberately absent from the mapped cases: it collapses Create and Update
+    /// into one outcome type (unlike DeprovisionQueued, which gets its own type for Delete), and nothing
+    /// available at build time distinguishes them; the CSO change snapshot attached to the outcome always
+    /// records <see cref="ObjectChangeType.PendingExport"/> regardless of the staged kind, and the
+    /// reason code that would answer it is only assigned later, at export execution, onto the export's own
+    /// outcome rather than onto this one. Guessing from the change's optional ConnectedSystemObjectId
+    /// would be wrong too: a reused pending-provisioning CSO carries a non-null id even for a Create.
+    /// </remarks>
+    public static OutcomeDisplay? GetEventOperation(
+        ActivityRunProfileExecutionItemSyncOutcomeType outcomeType,
+        CausalReasonCode? exportReasonCode = null)
+    {
+        if (outcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
+            return exportReasonCode is { } reasonCode ? GetQueueingDecisionOperation(reasonCode) : null;
+
+        return outcomeType switch
+        {
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected =>
+                new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Primary, Icons.Material.Filled.AirlineStops),
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined =>
+                new OutcomeDisplay("Joined", "CSO Joined", CausalityTone.Secondary, Icons.Material.Filled.Link),
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded =>
+                new OutcomeDisplay("Created", "CSO Added", CausalityTone.Success, Icons.Material.Filled.Add),
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated =>
+                new OutcomeDisplay("Updated", "CSO Updated", CausalityTone.Info, Icons.Material.Filled.Edit),
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted =>
+                new OutcomeDisplay("Deleted", "CSO Deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
+            // The plain labels match the map's own AttributeFlow/DriftCorrection titles above so the
+            // chip's technical label never disagrees with the card's own; both are honestly "an update",
+            // not a create or a delete.
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow =>
+                new OutcomeDisplay("Updated", "MVO Attribute Flow", CausalityTone.Info, Icons.Material.Filled.Edit),
+            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection =>
+                new OutcomeDisplay("Updated", "CSO Drift Corrected", CausalityTone.Info, Icons.Material.Filled.Edit),
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned =>
+                new OutcomeDisplay("Created", "CSO Provisioned", CausalityTone.Success, Icons.Material.Filled.AddCircle),
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted =>
+                new OutcomeDisplay("Deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove),
+            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned =>
+                new OutcomeDisplay("Deleted", "CSO Deprovisioned", CausalityTone.Error, Icons.Material.Filled.Delete),
+            // A queued deprovision is a staged delete; reuse the chain's own "Export Staged (Delete)"
+            // chip rather than inventing a second vocabulary for the same staged kind.
+            ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued =>
+                GetQueueingDecisionOperation(CausalReasonCode.ExportDeleteStaged),
+            // PendingExportCreated (see remarks above), every Would* preview (nothing executed),
+            // ExportConfirmed/ExportFailed (confirming or failing an export is not itself an object
+            // operation), DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled
+            // (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
+            // (attribute-priority housekeeping, not an object operation) and anything unmapped all fall
+            // through here: null rather than a guess.
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// The operation a Pending Export queueing edge's reason code states, shared between
+    /// <see cref="GetHopOperation"/> (keyed on a chain cohort's edge) and <see cref="GetEventOperation"/>
+    /// (keyed on the outcome type directly, for DeprovisionQueued and a decision-resolved Exported).
+    /// </summary>
+    private static OutcomeDisplay? GetQueueingDecisionOperation(CausalReasonCode reasonCode)
+    {
+        return reasonCode switch
+        {
+            CausalReasonCode.ExportCreateStaged =>
+                new OutcomeDisplay("Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.AddCircle),
+            CausalReasonCode.ExportUpdateStaged =>
+                new OutcomeDisplay("Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit),
+            CausalReasonCode.ExportDeleteStaged =>
+                new OutcomeDisplay("Deleted", "Export Staged (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete),
+            // NotSet covers edges written before the reason codes existed: guessing create/update/delete
+            // for that history would be worse than stating nothing.
             _ => null
         };
     }

@@ -165,7 +165,12 @@ public static class CausalityModelBuilder
         IReadOnlySet<Guid>? livePendingExportIds,
         CausalChain? chain)
     {
-        var display = GetEventDisplay(outcome, chain);
+        // Resolved once and shared by the outcome's own title (decision-aware for Exported, #1495) and
+        // its operation chip (#1495 follow-up), rather than each re-walking the chain independently.
+        var exportReasonCode = outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported
+            ? FindQueueingReason(chain, outcome.Id)
+            : null;
+        var display = GetEventDisplay(outcome, exportReasonCode);
         var parsedDetail = OutcomeDetailMessageParser.Parse(outcome.DetailMessage);
         var usesIdChannel = UsesDetailMessageIdChannel(outcome.OutcomeType);
         var lane = GetLane(outcome.OutcomeType);
@@ -194,6 +199,7 @@ public static class CausalityModelBuilder
             SyncRuleName = outcome.SyncRuleName,
             Links = links,
             AttributeRows = GetAttributeRows(outcome, recordAttributeRows, identityAttributeRows),
+            Operation = OutcomeDisplayMap.GetEventOperation(outcome.OutcomeType, exportReasonCode),
             Children = childOutcomes
                 .Select(c => BuildEvent(c, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
                     livePendingExportIds, chain))
@@ -209,12 +215,12 @@ public static class CausalityModelBuilder
     /// </summary>
     private static OutcomeDisplay GetEventDisplay(
         ActivityRunProfileExecutionItemSyncOutcome outcome,
-        CausalChain? chain)
+        CausalReasonCode? exportReasonCode)
     {
         if (outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
             return OutcomeDisplayMap.Get(outcome.OutcomeType);
 
-        return FindQueueingReason(chain, outcome.Id) is { } reasonCode
+        return exportReasonCode is { } reasonCode
             ? OutcomeDisplayMap.GetExportDecision(reasonCode)
             : OutcomeDisplayMap.Get(outcome.OutcomeType);
     }
