@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Deleting a Connected System now offers a choice: **Deprovision through synchronisation** (the new default) processes every object as a normal disconnection, recalling or handing over contributed values, evaluating Metaverse Object deletion rules and correcting downstream systems, as a queued operation monitorable from Operations; **Delete immediately and keep contributed data** preserves today's fast removal behind a stated warning. A stopped run resumes from where it left off, or can be finished immediately. (#809)
+
 - ✨ Deleting a Synchronisation Rule or an Attribute Flow mapping that contributed Metaverse attribute values now asks whether to recall the values (the default: surviving contributors take over, and what no longer has a source is cleared and staged for export) or keep them in place behind a stated warning. A rule deletion's recall runs as a queued background operation with its own Activity to monitor from Operations, and the choice is available across the portal, the REST API and PowerShell. (#1537)
 - ✨ Attribute Flow mappings can now be created disabled via the REST API and `New-JIMSyncRuleMapping -Enabled $false`, matching what the portal's add dialog could already do. (#1537)
 

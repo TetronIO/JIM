@@ -1,17 +1,21 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
+@using JIM.Models.Tasking
 @using JIM.Web.Models
 @using JIM.Web.Services
 @using Serilog
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
+@inject NavigationManager NavManager
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* Thin surface over the shared ConsequenceConfirmationDialog: this component owns evaluating the *@
-@* deletion preview and performing the delete; the shared dialog owns presenting it and the consent *@
-@* rules. See engineering/plans/doing/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2). *@
+@* deletion preview, the #809 deletion-mode choice and performing the delete; the shared dialog    *@
+@* owns presenting it and the consent rules.                                                       *@
+@* See engineering/plans/doing/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2) and                       *@
+@* engineering/plans/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md (Phase 4).                    *@
 
 <ConsequenceConfirmationDialog Loading="@(_preview == null)"
                                LoadingText="Loading deletion preview..."
@@ -22,8 +26,72 @@
                                ConfirmButtonText="Delete Permanently"
                                BusyText="Deleting..."
                                OnConfirmAsync="DeleteAsync">
+    <LeadingContent>
+        @* ─── Fenced-system exits (#809) ─── *@
+        @if (_fenced)
+        {
+            @if (_fencedTask != null)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" data-testid="jim-delete-cs-fenced-notice">
+                    A Synchronised Deprovisioning run for this system is already queued or running. Deprovision through
+                    synchronisation attaches to it, resuming from its checkpoint; Delete immediately and keep contributed
+                    data abandons the remaining deprovisioning and completes the deletion at once.
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="jim-delete-cs-fenced-notice">
+                    A previous Synchronised Deprovisioning run stopped before completing and this system remains fenced.
+                    Deprovision through synchronisation resumes from where the run stopped; Delete immediately and keep
+                    contributed data finishes the deletion at once, keeping the remaining contributed data.
+                </MudAlert>
+            }
+        }
+
+        @* ─── Deletion mode (#809): deprovision is the default; immediate is the warned opt-out ─── *@
+        <MudRadioGroup T="bool" @bind-Value="_deleteImmediately">
+            <div class="mt-1">
+                <MudRadio T="bool" Value="false" Color="Color.Primary">Deprovision through synchronisation (recommended)</MudRadio>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">
+                    Each of this system's objects is processed as though it had disconnected through a normal
+                    synchronisation: contributed values are recalled or handed to surviving contributors, Metaverse
+                    Object deletion rules are evaluated for objects losing their last connector, and downstream systems
+                    receive corrective exports. Runs as a queued operation you can monitor from the Operations page;
+                    deleting the system is its final step.
+                </MudText>
+            </div>
+            <div class="mt-2">
+                <MudRadio T="bool" Value="true" Color="Color.Primary">Delete immediately and keep contributed data</MudRadio>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">
+                    The system is removed at once. Values it contributed remain in place with no record of where they
+                    came from; Metaverse Object deletion rules are evaluated in bulk for objects losing their last
+                    connector, but no per-object synchronisation processing occurs; downstream systems are not
+                    corrected.
+                </MudText>
+                @if (_deleteImmediately)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 ms-12"
+                              data-testid="jim-delete-cs-immediate-warning">
+                        Kept values become permanently unmanaged, and downstream systems keep whatever this system last
+                        exported. This cannot be reversed.
+                    </MudAlert>
+                }
+            </div>
+        </MudRadioGroup>
+
+        @* Reserves the #134/#827 attribute impact preview spot, so the layout does not shift when it lands. *@
+        <div>
+            <MudTooltip Text="Arriving with configuration change preview" Arrow="true" Placement="Placement.Top">
+                <MudButton Variant="Variant.Outlined" Disabled="true" data-testid="jim-delete-cs-preview-impact">
+                    Preview attribute impact
+                </MudButton>
+            </MudTooltip>
+        </div>
+    </LeadingContent>
     <AdditionalContent>
-        @if (_preview is { WillRunAsBackgroundJob: true })
+        @* The estimate describes the immediate bulk delete; deprovisioning always queues and its helper text
+           above already says so, so showing a bulk-delete estimate there would mislead. *@
+        @if (_deleteImmediately && _preview is { WillRunAsBackgroundJob: true })
         {
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
                 Due to the size of this system, deletion will run as a background job.
@@ -50,6 +118,10 @@
 </ConsequenceConfirmationDialog>
 
 @code {
+    private const string GroupRemoved = "Removed with the system";
+    private const string GroupAffected = "Affected, not removed";
+    private const string SubgroupMetaverseObjects = "Metaverse Objects";
+
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
@@ -63,9 +135,22 @@
     private string? _changeReason;
     private bool _deleteChangeHistory;
 
+    // Deprovision through synchronisation is the default (#809); immediate deletion is the deliberate,
+    // warned opt-out, mirroring the recall-or-keep default in ContributedValuesChoiceDialog (#1537).
+    private bool _deleteImmediately;
+
+    // Fenced (#809): the system is already Status = Deleting, so the two modes become the failed-run exits:
+    // deprovisioning retries/attaches, immediate finishes. A surviving task means the run is queued or
+    // executing; no task means a failed run whose retry resumes from the checkpointed data state.
+    private bool _fenced;
+    private DeleteConnectedSystemWorkerTask? _fencedTask;
+
     protected override async Task OnInitializedAsync()
     {
         using var jim = JimFactory.Create();
+        _fenced = ConnectedSystem.Status == ConnectedSystemStatus.Deleting;
+        if (_fenced)
+            _fencedTask = await jim.Tasking.GetDeleteConnectedSystemWorkerTaskAsync(ConnectedSystem.Id);
         _preview = await jim.ConnectedSystems.GetDeletionPreviewAsync(ConnectedSystem.Id);
     }
 
@@ -74,16 +159,21 @@
         if (_preview == null)
             return [];
 
+        // Grouped by fate (#809): what the deletion removes outright, then what it affects but leaves in
+        // place, with the Metaverse Object impact broken down so the administrator can weigh the mode
+        // choice above against what it governs.
         return
         [
-            new ImpactCount { Label = "Connected System Objects", Count = _preview.ConnectedSystemObjectCount },
-            new ImpactCount { Label = "Synchronisation Rules", Count = _preview.SyncRuleCount },
-            new ImpactCount { Label = "Run Profiles", Count = _preview.RunProfileCount },
-            new ImpactCount { Label = "Partitions", Count = _preview.PartitionCount },
-            new ImpactCount { Label = "Containers", Count = _preview.ContainerCount },
-            new ImpactCount { Label = "Pending Exports", Count = _preview.PendingExportCount },
-            new ImpactCount { Label = "Activities", Count = _preview.ActivityCount, Note = "will be preserved" },
-            new ImpactCount { Label = "Metaverse Objects", Count = _preview.JoinedMvoCount, Note = "disconnected, not deleted" }
+            new ImpactCount { Group = GroupRemoved, Label = "Connected System Objects", Count = _preview.ConnectedSystemObjectCount },
+            new ImpactCount { Group = GroupRemoved, Label = "Synchronisation Rules", Count = _preview.SyncRuleCount },
+            new ImpactCount { Group = GroupRemoved, Label = "Run Profiles", Count = _preview.RunProfileCount },
+            new ImpactCount { Group = GroupRemoved, Label = "Partitions", Count = _preview.PartitionCount },
+            new ImpactCount { Group = GroupRemoved, Label = "Containers", Count = _preview.ContainerCount },
+            new ImpactCount { Group = GroupRemoved, Label = "Pending Exports", Count = _preview.PendingExportCount },
+            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Joined", Count = _preview.JoinedMvoCount, Note = "related objects; deprovisioned per the choice above" },
+            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Contributed attribute values", Count = _preview.ContributedValueCount, Note = "recalled or kept per the choice above" },
+            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Eligible for deletion rules", Count = _preview.MvosWithDeletionRuleCount, Note = "their own rules decide, when deprovisioning" },
+            new ImpactCount { Group = GroupAffected, Label = "Activities", Count = _preview.ActivityCount, Note = "kept: the audit history of what this system did" }
         ];
     }
 
@@ -93,7 +183,8 @@
         {
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-            var result = await jim.ConnectedSystems.DeleteAsync(ConnectedSystem.Id, user, _deleteChangeHistory, _changeReason);
+            var result = await jim.ConnectedSystems.DeleteAsync(ConnectedSystem.Id, user, _deleteChangeHistory, _changeReason,
+                synchronisedDeprovisioning: !_deleteImmediately);
 
             if (!result.Success)
             {
@@ -108,7 +199,28 @@
                     break;
 
                 case DeletionOutcome.QueuedAsBackgroundJob:
-                    Snackbar.Add("Deletion has been queued as a background job. You can monitor progress in the Operations view.", Severity.Info);
+                    if (!_deleteImmediately && result.ActivityId is { } activityId)
+                    {
+                        // Deprovisioning queued: say what will happen and offer the Activity, which is where
+                        // progress lives (SyncRuleDetail's recall snackbar precedent, #1537). The snackbar is
+                        // enqueued before the caller navigates; ISnackbar is circuit-scoped, so it survives
+                        // the soft navigation.
+                        var objectCount = _preview?.ConnectedSystemObjectCount ?? 0;
+                        Snackbar.Add($"Deprovisioning queued: {objectCount:N0} objects will be processed before {ConnectedSystem.Name} is deleted.",
+                            Severity.Success, config =>
+                            {
+                                config.Action = "View Activity";
+                                config.OnClick = _ =>
+                                {
+                                    NavManager.NavigateTo($"/activity/{activityId}");
+                                    return Task.CompletedTask;
+                                };
+                            });
+                    }
+                    else
+                    {
+                        Snackbar.Add("Deletion has been queued as a background job. You can monitor progress in the Operations view.", Severity.Info);
+                    }
                     break;
 
                 case DeletionOutcome.QueuedAfterSync:
