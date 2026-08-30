@@ -1131,11 +1131,17 @@ public partial class ConnectedSystemServer
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
+    /// <param name="changeReason">Optional reason for the deletion, recorded on the Activity.</param>
+    /// <param name="synchronisedDeprovisioning">When true, the deletion runs as Synchronised Deprovisioning
+    /// (#809): the system is fenced and the work ALWAYS queues to the worker (there is no synchronous
+    /// small-system path), where every Connected System Object is processed through the synchronisation
+    /// engine's obsoletion semantics before the deletion. False (the default) keeps the immediate deletion
+    /// exactly as it is.</param>
     /// <returns>The result of the deletion request.</returns>
-    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false, string? changeReason = null)
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false, string? changeReason = null, bool synchronisedDeprovisioning = false)
     {
-        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}, deleteChangeHistory={DeleteHistory}",
-            connectedSystemId, initiatedBy?.NameOrId ?? "System", deleteChangeHistory);
+        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}, deleteChangeHistory={DeleteHistory}, synchronisedDeprovisioning={Deprovision}",
+            connectedSystemId, initiatedBy?.NameOrId ?? "System", deleteChangeHistory, synchronisedDeprovisioning);
 
         // Get the Connected System (Core: only Name and Status are read, and Status is updated via the entity).
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
@@ -1166,12 +1172,28 @@ public partial class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = initiatedBy != null
-                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory)
-                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
+                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning);
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
+        }
+
+        if (synchronisedDeprovisioning)
+        {
+            // Synchronised Deprovisioning ALWAYS queues (no synchronous small-system path): the run is
+            // per-object synchronisation-engine work, checkpointed and resumable, and must execute on the
+            // worker regardless of scale. The system is already fenced (Status = Deleting) above.
+            Log.Information("DeleteAsync: Connected System {Id} deletion queued as Synchronised Deprovisioning.", connectedSystemId);
+
+            var deprovisioningTask = initiatedBy != null
+                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning: true)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning: true);
+            deprovisioningTask.ChangeReason = changeReason;
+            _ = await Application.Tasking.CreateWorkerTaskAsync(deprovisioningTask);
+
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id);
         }
 
         // Get CSO count to determine sync vs async deletion
@@ -1239,12 +1261,14 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Deletes a Connected System (initiated by API key).
+    /// Deletes a Connected System (initiated by API key). <paramref name="synchronisedDeprovisioning"/>
+    /// carries the same semantics as the user-initiated overload: true always queues the worker-side
+    /// Synchronised Deprovisioning run; false keeps the immediate deletion exactly as it is.
     /// </summary>
-    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, ApiKey initiatedByApiKey, bool deleteChangeHistory = false, string? changeReason = null)
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, ApiKey initiatedByApiKey, bool deleteChangeHistory = false, string? changeReason = null, bool synchronisedDeprovisioning = false)
     {
-        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by API key {ApiKeyName}, deleteChangeHistory={DeleteHistory}",
-            connectedSystemId, initiatedByApiKey.Name, deleteChangeHistory);
+        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by API key {ApiKeyName}, deleteChangeHistory={DeleteHistory}, synchronisedDeprovisioning={Deprovision}",
+            connectedSystemId, initiatedByApiKey.Name, deleteChangeHistory, synchronisedDeprovisioning);
 
         // Get the Connected System (Core: only Name and Status are read, and Status is updated via the entity).
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
@@ -1273,11 +1297,24 @@ public partial class ConnectedSystemServer
             Log.Information("DeleteAsync: Sync task {TaskId} is running for Connected System {CsId}. Queuing deletion.",
                 runningSyncTask.Id, connectedSystemId);
 
-            var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning);
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
+        }
+
+        if (synchronisedDeprovisioning)
+        {
+            // Synchronised Deprovisioning ALWAYS queues (no synchronous small-system path); see the
+            // user-initiated overload for the rationale. The system is already fenced above.
+            Log.Information("DeleteAsync: Connected System {Id} deletion queued as Synchronised Deprovisioning.", connectedSystemId);
+
+            var deprovisioningTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning: true);
+            deprovisioningTask.ChangeReason = changeReason;
+            _ = await Application.Tasking.CreateWorkerTaskAsync(deprovisioningTask);
+
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id);
         }
 
         // Get CSO count to determine sync vs async deletion

@@ -49,6 +49,8 @@ TDD red-first throughout; British English; Title Case domain nouns; changelog + 
 
 ### Phase 3: REST and PowerShell
 
+- **Retry/abort decision carried in from Phase 2**: after a failed run the system stays fenced (deliberate), and `DeleteAsync` refuses a Deleting system, so the surfaces must give the administrator an explicit retry (re-queue from checkpoint) and, if we choose to offer it, an abort that un-fences; decide and deliver both here.
+
 - `DELETE connected-systems/{id}` gains the mode (deprovision default; the existing 200/202 split carries the tracking DTO); deprovisioning always queues.
 - `Remove-JIMConnectedSystem`: mode parameter (deprovision default), impact-stating `ShouldProcess` text, tracking output with the Activity id; help carries the immediate-mode warning. Pester.
 - OpenAPI regeneration.

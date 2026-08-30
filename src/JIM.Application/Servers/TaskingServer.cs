@@ -95,8 +95,18 @@ namespace JIM.Application.Servers
                 partitionWarning = validationResult.WarningMessage;
 
                 // every CRUD operation requires tracking with an activity...
-                // Core: only .Name is read for activity context; Run Profiles are loaded separately.
+                // Core: only .Name and .Status are read for activity context; Run Profiles are loaded separately.
                 var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(synchronisationWorkerTask.ConnectedSystemId);
+
+                // A Deleting Connected System is fenced (#809): its deletion or Synchronised Deprovisioning
+                // run must not race a run profile execution, so refuse to queue one. This is the single
+                // choke point every run profile path (portal, REST, scheduler) queues through.
+                if (connectedSystem?.Status == ConnectedSystemStatus.Deleting)
+                {
+                    return WorkerTaskCreationResult.Failed(
+                        $"Connected System '{connectedSystem.Name}' is being deleted; run profiles cannot be executed against it.");
+                }
+
                 var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfile = runProfiles.Single(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
                 var activity = new Activity
@@ -158,12 +168,16 @@ namespace JIM.Application.Servers
                 // Connected System deletion requires tracking with an activity for audit purposes.
                 // The TargetName must be populated since the Connected System will be deleted.
                 // Core: only .Name is read for activity context.
+                // The operation type records which deletion mode ran (#809): Deprovision for Synchronised
+                // Deprovisioning, Delete for the immediate deletion, so the audit trail distinguishes them.
                 var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(deleteConnectedSystemTask.ConnectedSystemId);
                 var activity = new Activity
                 {
                     TargetName = connectedSystem?.Name ?? $"Connected System {deleteConnectedSystemTask.ConnectedSystemId}",
                     TargetType = ActivityTargetType.ConnectedSystem,
-                    TargetOperationType = ActivityTargetOperationType.Delete,
+                    TargetOperationType = deleteConnectedSystemTask.SynchronisedDeprovisioning
+                        ? ActivityTargetOperationType.Deprovision
+                        : ActivityTargetOperationType.Delete,
                     ConnectedSystemId = deleteConnectedSystemTask.ConnectedSystemId,
                 };
 
