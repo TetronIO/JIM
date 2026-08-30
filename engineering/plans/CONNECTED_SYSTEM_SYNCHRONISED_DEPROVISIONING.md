@@ -39,13 +39,13 @@ TDD red-first throughout; British English; Title Case domain nouns; changelog + 
 
 - Extract the reusable core of `ProcessObsoleteConnectedSystemObjectAsync` into JIM.Application (collaborators parameterised, exactly the `ContributorReElectionService` extraction pattern), with the processor delegating; behaviour-preserving, proven by the existing obsoletion suites before and after.
 - `ContributorRecallScope.ForDeletedConnectedSystem(connectedSystemId)`: every contributor from the deleted system is ineligible; any other system's joined object is a survivor.
-- Extend `GetDeletionPreviewAsync` with the deprovisioning impact counts (contributed values/objects, deletion-rule-eligible identities), count-query only.
+- Extend `GetDeletionPreviewAsync` with the deprovisioning impact counts (contributed values/objects, deletion-rule-eligible Metaverse Objects), count-query only.
 
 ### Phase 2: The deprovisioning run
 
 - Task flag + migration; TaskingServer Activity branch wording; Worker dispatch case extension.
 - Executor with the three passes above, checkpointing, fencing, RPEIs, batch summary logging.
-- Workflow tests: surviving-contributor takeover across systems; sole-contributor clear; deletion rule fires for last-connector identities (and grace period holds); exports staged; residue pass catches a cleared-space value; failure partway leaves the system fenced and retryable; resume from checkpoint does not double-process; immediate mode byte-for-byte unchanged.
+- Workflow tests: surviving-contributor takeover across systems; sole-contributor clear; deletion rule fires for last-connector Metaverse Objects (and grace period holds); exports staged; residue pass catches a cleared-space value; failure partway leaves the system fenced and retryable; resume from checkpoint does not double-process; immediate mode byte-for-byte unchanged.
 
 ### Phase 3: REST and PowerShell
 
