@@ -571,8 +571,12 @@ Changing a Connected System's settings, schema, or partition selection is confir
 
 **Removing a Connected System:**
 
-1. Run a deletion preview to understand the impact (which Metaverse Objects become disconnected, which Synchronisation Rules become invalid)
-2. Delete the Connected System. Small systems are removed immediately; larger systems, or a system with a running sync, are queued and run as a background activity.
+Deleting a Connected System asks what should happen to everything it managed, with the impact quantified in the delete dialog before you choose:
+
+- **Deprovision through synchronisation** (the default on every surface): each of the system's objects is processed as though it had disconnected through a normal synchronisation. Contributed values are recalled or handed to surviving contributors per [Attribute Priority](../concepts/attribute-priority.md), Metaverse Object deletion rules are evaluated for objects losing their last connector, and downstream systems receive corrective exports. The run is queued and Activity-tracked; monitor it from the Operations page via the link the dialog surfaces, and the system is deleted as the run's final step. While it runs, the system is fenced: excluded from scheduled runs and read-only.
+- **Delete immediately and keep contributed data**: the system is removed at once. Values it contributed remain in place with no record of where they came from and nothing will ever recall them; deletion rules are evaluated in bulk for objects losing their last connector, but no per-object synchronisation processing occurs and downstream systems are not corrected. The dialog's warning states this before you confirm. Small systems are removed synchronously; larger systems, or a system with a running sync, are queued as a background activity.
+
+If a deprovisioning run stops before completing, the system stays fenced and consistent: deleting it again with deprovisioning resumes from where the run stopped, and deleting immediately finishes the removal at once (keeping whatever contributed data remained). A half-deprovisioned system never returns to service.
 
 Deleting a Connected System records a final snapshot of its configuration in the [configuration change history](activities.md#configuration-change-history), so a decommissioned system's last-known state, and who removed it, remain auditable after it is gone. You can attach an optional reason in the admin portal delete dialog, with `Remove-JIMConnectedSystem -ChangeReason`, or via the REST API. As with all such snapshots, connector secrets are recorded as changed but never stored.
 
