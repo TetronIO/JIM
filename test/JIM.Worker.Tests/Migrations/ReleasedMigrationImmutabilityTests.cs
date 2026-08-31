@@ -21,7 +21,7 @@ public class ReleasedMigrationImmutabilityTests
     [Test]
     public void ReleasedMigrations_ComparedWithTheManifest_AreUnchangedAndNotResequenced()
     {
-        var migrationsDirectory = Path.Join(FindRepositoryRoot(), "src", "JIM.PostgresData", "Migrations");
+        var migrationsDirectory = Path.Join(ReleasedMigrationManifest.FindRepositoryRoot(), "src", "JIM.PostgresData", "Migrations");
         var manifestPath = Path.Join(migrationsDirectory, "released-migrations.lock");
         Assert.That(File.Exists(manifestPath), Is.True,
             $"The released-migrations manifest is missing at {manifestPath}; it is append-only and must never be deleted.");
@@ -61,19 +61,5 @@ public class ReleasedMigrationImmutabilityTests
 
         Assert.That(migrations, Is.Not.Empty, $"No migrations found under {migrationsDirectory}; the guard is looking in the wrong place.");
         return migrations;
-    }
-
-    /// <summary>
-    /// Walks up from the test assembly's location to the directory holding <c>JIM.sln</c>, matching the
-    /// convention-sweep tests' approach: the guard reads source files, which are not copied to the test output.
-    /// </summary>
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null && !File.Exists(Path.Join(directory.FullName, "JIM.sln")))
-            directory = directory.Parent;
-
-        Assert.That(directory, Is.Not.Null, "Could not locate JIM.sln by walking up from the test output directory.");
-        return directory!.FullName;
     }
 }
