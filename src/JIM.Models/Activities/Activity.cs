@@ -258,7 +258,10 @@ public class Activity
     /// <summary>
     /// The client IP address the request originated from, populated for Authentication activities (and harmless to
     /// leave null elsewhere). Truthful behind a reverse proxy only once ForwardedHeaders middleware is configured to
-    /// rewrite <c>HttpContext.Connection.RemoteIpAddress</c>. An IP address is personal data; retention is governed
+    /// rewrite <c>HttpContext.Connection.RemoteIpAddress</c>. Stored normalised: an IPv4 client on Kestrel's
+    /// dual-stack socket arrives as an IPv4-mapped IPv6 address (<c>::ffff:a.b.c.d</c>) and is unmapped to the plain
+    /// IPv4 form before recording (<c>IpAddressExtensions.ToNormalisedString</c> in JIM.Web). An IP address is
+    /// personal data; retention is governed
     /// by <see cref="JIM.Models.Core.Constants.SettingKeys.SecurityEventRetentionPeriod"/> for this target type.
     /// </summary>
     [MaxLength(45)]

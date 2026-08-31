@@ -572,6 +572,38 @@ html[lang] .mud-paper .mud-table .mud-table-body .mud-table-cell {
     background-color: var(--mud-palette-surface, #ffffff);
 }
 
+/* One column opts out: the Attribute column of an attribute table carries its own background so
+   that it reads as a row header rather than as data. The nested-cell rule above outranks the
+   plain .jim-attr-name selector, though (three classes and an attribute against one), so the
+   column has been painted flat wherever such a table is used, which is everywhere it is used.
+   Restate it at matching specificity, mirroring the same four contexts. */
+html[lang] .mud-paper .mud-simple-table tbody td.jim-attr-name,
+html[lang] .mud-paper .mud-table .mud-table-body .mud-table-cell.jim-attr-name,
+html[lang] .jim-expansion-panel .mud-simple-table tbody td.jim-attr-name,
+html[lang] .jim-expansion-panel .mud-table .mud-table-body .mud-table-cell.jim-attr-name {
+    background-color: var(--jim-attr-name-bg, var(--mud-palette-background-grey));
+}
+
+/* ... and that opaque cell background paints over the row-hover colour MudBlazor sets on the
+   <tr>, so a hoverable table nested in a paper or an expansion panel shows no hover at all.
+   Restore it by layering the same colour over each hovered cell's own background rather than
+   replacing it, so the row highlights uniformly and every cell keeps whatever background it
+   carries (an opaque hover colour simply flattens to itself, which still highlights uniformly).
+   The selectors deliberately mirror the two opaque-cell rules above (and their .jim-expansion-panel
+   twins); tables outside those scopes have transparent cells, where MudBlazor's own rule already
+   works and a second layer would paint the hover colour twice. Scoped to .mud-table-hover so
+   tables with hover disabled, such as the Theme Preview sample, are unaffected, and wrapped in
+   MudBlazor's own hover media query so a touch device does not get a hover state stuck on the
+   last row tapped. */
+@media (hover: hover) and (pointer: fine) {
+    html[lang] .mud-paper .mud-simple-table.mud-table-hover tbody tr:hover > td,
+    html[lang] .mud-paper .mud-table.mud-table-hover .mud-table-body .mud-table-row:hover > .mud-table-cell,
+    html[lang] .jim-expansion-panel .mud-simple-table.mud-table-hover tbody tr:hover > td,
+    html[lang] .jim-expansion-panel .mud-table.mud-table-hover .mud-table-body .mud-table-row:hover > .mud-table-cell {
+        background-image: linear-gradient(var(--mud-palette-table-hover), var(--mud-palette-table-hover));
+    }
+}
+
 /* Footer / pagination row in nested tables matches the header background.
    Uses !important to override MudBlazor's inherited surface colour. */
 html[lang] .mud-paper .mud-table .mud-table-foot,
@@ -1771,17 +1803,6 @@ html[lang] .jim-schema-change-table td {
 .jim-attr-name {
     background-color: var(--jim-attr-name-bg, var(--mud-palette-background-grey));
     white-space: nowrap;
-}
-
-/* The attribute name column carries its own background so it reads as a row header, and that
-   background paints over the row-hover colour MudBlazor sets on the <tr>, leaving the first
-   column conspicuously unhighlighted while the rest of the row lights up. Layer the hover colour
-   over the column's own background rather than replacing it, so the whole row highlights and the
-   column keeps its distinction (a theme whose hover colour is opaque simply flattens to it, which
-   still highlights uniformly). Scoped to .mud-table-hover so tables with hover disabled, such as
-   the Theme Preview sample, are unaffected. */
-.jim-attribute-table.mud-table-hover tbody tr:hover .jim-attr-name {
-    background-image: linear-gradient(var(--mud-palette-table-hover), var(--mud-palette-table-hover));
 }
 
 .jim-attr-type {
