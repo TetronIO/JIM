@@ -140,6 +140,24 @@ public class Worker : BackgroundService
 
             if (CurrentTasks.Count > 0)
             {
+                // Sweep entries whose Task has terminated without running its own epilogue: an exception
+                // escaping a dispatch case (a completion write failing on a poisoned DbContext was the
+                // observed trigger, #1568) leaves the entry here forever, which pins this branch and stops
+                // the loop ever polling for new work again, while heartbeating a dead task. Observe the
+                // fault loudly and drop the entry so the worker lives; the task row itself is left to
+                // stale-task recovery.
+                foreach (var defunctTaskEntry in GetDefunctTaskEntries(CurrentTasks))
+                {
+                    Log.Error(defunctTaskEntry.Task.Exception,
+                        "ExecuteAsync: Worker task {TaskId} terminated without completing its own epilogue; dropping it from the in-flight list so the worker keeps processing. Its task row is left for stale-task recovery.",
+                        defunctTaskEntry.TaskId);
+                    lock (_currentTasksLock)
+                        CurrentTasks.Remove(defunctTaskEntry);
+                }
+
+                if (CurrentTasks.Count == 0)
+                    continue;
+
                 try
                 {
                     // Update heartbeats for all tasks we're currently processing so the scheduler
@@ -803,7 +821,36 @@ public class Worker : BackgroundService
                             // Mark the task as complete — unless it was already cancelled by the main loop's
                             // CancelWorkerTaskAsync (which deletes the DB record and marks the activity Cancelled).
                             if (!cancellationTokenSource.IsCancellationRequested)
-                                await taskJim.Tasking.CompleteWorkerTaskAsync(newWorkerTask);
+                            {
+                                try
+                                {
+                                    await taskJim.Tasking.CompleteWorkerTaskAsync(newWorkerTask);
+                                }
+                                catch (Exception completionEx)
+                                {
+                                    // The task's own context can be unusable by now (a failed SaveChanges earlier in
+                                    // the task poisons it), and an escaping failure here previously wedged the whole
+                                    // worker queue (#1568). Retry the completion on a fresh scope; if even that
+                                    // fails, log and fall through so the in-flight entry is still released below —
+                                    // the task row is then left for stale-task recovery.
+                                    Log.Error(completionEx,
+                                        "ExecuteAsync: Completing worker task {TaskId} failed on the task's own context; retrying on a fresh scope.",
+                                        newWorkerTask.Id);
+                                    try
+                                    {
+                                        using var completionJim = _jimFactory.Create();
+                                        var freshWorkerTask = await completionJim.Tasking.GetWorkerTaskAsync(newWorkerTask.Id);
+                                        if (freshWorkerTask != null)
+                                            await completionJim.Tasking.CompleteWorkerTaskAsync(freshWorkerTask);
+                                    }
+                                    catch (Exception freshScopeEx)
+                                    {
+                                        Log.Error(freshScopeEx,
+                                            "ExecuteAsync: Completing worker task {TaskId} failed on a fresh scope too; its row is left for stale-task recovery.",
+                                            newWorkerTask.Id);
+                                    }
+                                }
+                            }
 
                             // remove from the current tasks list after locking it for thread safety
                             lock (_currentTasksLock)
@@ -1305,6 +1352,16 @@ public class Worker : BackgroundService
             outcome.ConnectedSystemObjectChange = change;
         }
     }
+
+    /// <summary>
+    /// The in-flight entries whose Task has terminated (faulted, cancelled or completed) while still listed:
+    /// an exception that escapes a dispatch case skips the case's own list removal, and a terminated entry
+    /// left in place pins the main loop's in-flight branch forever, so it never polls for new work again
+    /// (#1568). The main loop sweeps these each cycle, logging any fault, so a single bad task can never
+    /// silently wedge the worker.
+    /// </summary>
+    internal static List<TaskTask> GetDefunctTaskEntries(IEnumerable<TaskTask> currentTasks) =>
+        currentTasks.Where(entry => entry.Task.IsCompleted).ToList();
 
     /// <summary>
     /// Summarises one retention pass for its Activity's message (requirement 30): what it removed, per class of
