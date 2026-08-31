@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Transactional;
 using JIM.Web.Causality;
 using MudBlazor;
 using NUnit.Framework;
@@ -212,12 +213,33 @@ public class OutcomeDisplayMapEventOperationTests
 
     /// <summary>
     /// PendingExportCreated collapses Create and Update into one outcome type (unlike DeprovisionQueued,
-    /// which gets its own type for Delete), and nothing else in scope at this point distinguishes them:
-    /// see the investigation note on <see cref="CausalityModelBuilder"/>. Guessing would be worse than
-    /// saying nothing.
+    /// which gets its own type for Delete): the staged kind recorded on the outcome (#1561 follow-up) is
+    /// what tells them apart, routed through the same queueing-decision vocabulary a chain's queueing
+    /// edge uses (Export Staged (Create)/(Update)).
+    /// </summary>
+    [TestCase(PendingExportChangeType.Create, "Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.Add)]
+    [TestCase(PendingExportChangeType.Update, "Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit)]
+    public void GetEventOperation_PendingExportCreatedWithStagedChangeType_ReadsTheStagedKind(
+        PendingExportChangeType stagedChangeType, string plainLabel, string technicalLabel, CausalityTone tone, string icon)
+    {
+        var display = OutcomeDisplayMap.GetEventOperation(
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, stagedChangeType: stagedChangeType);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(display!.PlainLabel, Is.EqualTo(plainLabel));
+            Assert.That(display.TechnicalLabel, Is.EqualTo(technicalLabel));
+            Assert.That(display.Tone, Is.EqualTo(tone));
+            Assert.That(display.Icon, Is.EqualTo(icon));
+        }
+    }
+
+    /// <summary>
+    /// An outcome recorded before this was captured carries no staged kind, and null must stay null
+    /// rather than default to a guessed Create.
     /// </summary>
     [Test]
-    public void GetEventOperation_PendingExportCreated_IsNullBecauseCreateAndUpdateAreIndistinguishable()
+    public void GetEventOperation_PendingExportCreatedWithNoStagedChangeType_IsNullForLegacyOutcomes()
     {
         Assert.That(OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated), Is.Null);
     }

@@ -26,9 +26,9 @@ else if (Value.Attribute.Type == AttributeDataType.DateTime && Value.DateTimeVal
 }
 else if (Value.Attribute.Type == AttributeDataType.Boolean && Value.BoolValue.HasValue)
 {
-    <MudIcon Icon="@(Value.BoolValue.Value ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"
-            
-             Color="@(Value.BoolValue.Value ? Color.Success : Color.Default)" />
+    @* Local capture: see "Nullable dereference in Razor" in JIM.Web/CLAUDE.md. *@
+    var boolValue = Value.BoolValue.Value;
+    <BooleanValue Value="@boolValue" />
 }
 else if (Value.Attribute.Type == AttributeDataType.Binary && Value.ByteValue != null)
 {

@@ -102,16 +102,10 @@
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
         {
-            if (attributeValue.BoolValue.Value)
-            {
-                <MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small" />
-                <span class="ms-1">True</span>
-            }
-            else
-            {
-                <MudIcon Icon="@Icons.Material.Filled.Close" Color="Color.Default" Size="Size.Small" />
-                <span class="ms-1">False</span>
-            }
+            @* Local capture: CodeQL does not read the HasValue guard above as establishing null-state
+               for a dereference in markup (JIM.Web/CLAUDE.md, "Nullable dereference in Razor"). *@
+            var boolValue = attributeValue.BoolValue.Value;
+            <BooleanValue Value="@boolValue" />
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Binary && attributeValue.ByteValue != null)
         {

@@ -3,6 +3,8 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Enums;
+using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -117,6 +119,116 @@ public class SyncOutcomeSyncRuleAttributionDatabaseTests
             "An outcome with no attributed Synchronisation Rule must persist a NULL SyncRuleName");
     }
 
+    /// <summary>
+    /// Round-trip for the Export queued staged kind (#1561 follow-up): every Pending Export outcome
+    /// records the kind of change staged (Create/Update/Delete), and an outcome recorded before this
+    /// existed persists a NULL rather than a guess. Exercises the same raw INSERT writer
+    /// (<c>BulkInsertSyncOutcomesRawAsync</c>) as the Synchronisation Rule attribution test above.
+    /// </summary>
+    [Test]
+    public async Task BulkInsertRpeisAsync_OutcomesWithStagedChangeType_PersistTheColumnAsync()
+    {
+        var activityId = await SeedActivityAsync();
+
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.PendingExport,
+            DisplayNameSnapshot = "Some User"
+        };
+        var createOutcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            StagedChangeType = PendingExportChangeType.Create
+        };
+        var updateOutcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            StagedChangeType = PendingExportChangeType.Update
+        };
+        var deleteOutcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued,
+            StagedChangeType = PendingExportChangeType.Delete
+        };
+        // Outcomes recorded before this feature existed carry no staged kind at all.
+        var legacyOutcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+        };
+        rpei.SyncOutcomes.Add(createOutcome);
+        rpei.SyncOutcomes.Add(updateOutcome);
+        rpei.SyncOutcomes.Add(deleteOutcome);
+        rpei.SyncOutcomes.Add(legacyOutcome);
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.Sync.BulkInsertRpeisAsync([rpei]);
+        }
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.ActivityRunProfileExecutionItemSyncOutcomes
+            .AsNoTracking()
+            .Where(o => o.ActivityRunProfileExecutionItemId == rpei.Id)
+            .ToListAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.Single(o => o.Id == createOutcome.Id).StagedChangeType,
+                Is.EqualTo(PendingExportChangeType.Create));
+            Assert.That(persisted.Single(o => o.Id == updateOutcome.Id).StagedChangeType,
+                Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(persisted.Single(o => o.Id == deleteOutcome.Id).StagedChangeType,
+                Is.EqualTo(PendingExportChangeType.Delete));
+            Assert.That(persisted.Single(o => o.Id == legacyOutcome.Id).StagedChangeType, Is.Null,
+                "An outcome recorded before this feature existed must persist NULL, not a guessed kind");
+        }
+    }
+
+    /// <summary>
+    /// The cross-page merge read (<c>GetRpeisWithMvoChangeIdsForCrossPageMergeAsync</c>) is a second,
+    /// independent raw-SQL projection of the same table; a column added to the insert writers but not
+    /// to this SELECT and reader would silently drop it whenever a reference resolved at page end
+    /// merges into an outcome tree built earlier in the same page (#1428's cross-page merge path).
+    /// </summary>
+    [Test]
+    public async Task GetRpeisWithMvoChangeIdsForCrossPageMergeAsync_OutcomeWithStagedChangeType_ReturnsTheColumnAsync()
+    {
+        var activityId = await SeedActivityAsync();
+        var csoId = await SeedConnectedSystemObjectAsync();
+
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.PendingExport,
+            ConnectedSystemObjectId = csoId,
+            DisplayNameSnapshot = "Some User"
+        };
+        var outcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            StagedChangeType = PendingExportChangeType.Update
+        };
+        rpei.SyncOutcomes.Add(outcome);
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.Sync.BulkInsertRpeisAsync([rpei]);
+        }
+
+        await using var readCtx = NewContext();
+        var repositoryForRead = new PostgresDataRepository(readCtx);
+        var merged = await repositoryForRead.Sync.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(activityId, [csoId]);
+
+        var mergedOutcome = merged.Single().Rpei.SyncOutcomes.Single();
+        Assert.That(mergedOutcome.StagedChangeType, Is.EqualTo(PendingExportChangeType.Update),
+            "The cross-page merge read must carry the staged kind, or a same-page merge would silently drop it");
+    }
+
     private async Task<Guid> SeedActivityAsync()
     {
         await using var ctx = NewContext();
@@ -131,5 +243,28 @@ public class SyncOutcomeSyncRuleAttributionDatabaseTests
         ctx.Activities.Add(activity);
         await ctx.SaveChangesAsync();
         return activity.Id;
+    }
+
+    /// <summary>
+    /// Seeds a minimal Connected System Object, so an RPEI's ConnectedSystemObjectId foreign key resolves.
+    /// </summary>
+    private async Task<Guid> SeedConnectedSystemObjectAsync()
+    {
+        await using var ctx = NewContext();
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var system = new ConnectedSystem { Name = "Yellowstone HR", ConnectorDefinition = connectorDefinition };
+        var csType = new ConnectedSystemObjectType { Name = "USER", ConnectedSystem = system, Selected = true };
+        ctx.AddRange(connectorDefinition, system, csType);
+        await ctx.SaveChangesAsync();
+
+        var cso = new ConnectedSystemObject
+        {
+            Type = csType,
+            ConnectedSystem = system,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+        ctx.Add(cso);
+        await ctx.SaveChangesAsync();
+        return cso.Id;
     }
 }

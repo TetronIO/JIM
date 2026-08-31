@@ -793,12 +793,12 @@ public class CausalityLineageViewTests
     }
 
     /// <summary>
-    /// Exported is deliberately excluded from title suppression: its decision-specific titles ("Record
-    /// created" here) are not restated by any Lineage join label, so its card head must keep rendering
-    /// even though the card also carries an operation chip.
+    /// An Exported card whose export decision resolved states the operation on its chip, so its
+    /// decision-specific title ("Record created" here) restates the same fact and must not render:
+    /// the card reads like every other chip-carrying card on the view.
     /// </summary>
     [Test]
-    public void Render_ExportedThisRunCard_KeepsItsTitle()
+    public void Render_ExportedThisRunCard_ShowsTheChipButSuppressesTheHead()
     {
         var cut = RenderLineage(ExportCreateLineage());
 
@@ -808,8 +808,74 @@ public class CausalityLineageViewTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(exportedCard.Find(".evt-card").QuerySelector(".ln-op"), Is.Not.Null,
-                "the fixture must actually carry a chip for this guard to mean anything");
-            Assert.That(exportedCard.Find(".evt-title").TextContent.Trim(), Is.EqualTo("Record created"));
+                "the chip must still render");
+            Assert.That(exportedCard.FindAll(".evt-head"), Is.Empty, "the head restates the chip");
         }
+    }
+
+    /// <summary>
+    /// An Exported card whose decision never resolved (an item exported before causal capture existed)
+    /// carries no chip, so suppressing its title would leave the card naming nothing at all; the
+    /// card's misuse guard keeps the head rendering with the bare "Exported" title.
+    /// </summary>
+    [Test]
+    public void Render_ExportedThisRunCardWithoutAResolvedDecision_KeepsItsTitle()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0, detailCount: 11);
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext());
+        var cut = RenderLineage(CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Exported));
+
+        var exportedCard = cut.FindComponents<CausalityEventCard>()
+            .Single(c => c.Instance.Event.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exportedCard.Find(".evt-card").QuerySelector(".ln-op"), Is.Null,
+                "the fixture must carry no chip for this guard to mean anything");
+            Assert.That(exportedCard.Find(".evt-title").TextContent.Trim(), Is.EqualTo("Exported"));
+        }
+    }
+
+    // ─── Export queued carries its staged kind (#1561 follow-up) ───
+
+    /// <summary>
+    /// The new-joiner fixture's Export queued outcome was staged as a Create; once the outcome records
+    /// that (#1561 follow-up), its card must carry the same Created chip as every other create.
+    /// </summary>
+    [Test]
+    public void Render_ExportQueuedThisRunCardWithStagedKind_CarriesItsOperationChip()
+    {
+        var cut = RenderLineage(NewJoinerLineage());
+
+        var pendingExportCard = cut.FindComponents<CausalityEventCard>()
+            .Single(c => c.Instance.Event.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var chip = pendingExportCard.Find(".evt-card").QuerySelector(".ln-op");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip, Is.Not.Null, "a staged Create records its kind, so the card must carry a chip");
+            Assert.That(chip!.TextContent.Trim(), Is.EqualTo("Created"));
+        }
+    }
+
+    /// <summary>
+    /// An Export queued outcome recorded before this feature existed carries no staged kind, and must
+    /// render no chip at all rather than guess.
+    /// </summary>
+    [Test]
+    public void Render_ExportQueuedWithNoStagedKind_CarriesNoOperationChip()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            parent: null, ordinal: 0, targetEntityDescription: "Glitterband EMEA");
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext());
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.PendingExport);
+
+        var cut = RenderLineage(lineage);
+
+        Assert.That(cut.Find(".evt-card").QuerySelector(".ln-op"), Is.Null,
+            "an outcome recorded before this feature has no staged kind and must show no chip");
     }
 }

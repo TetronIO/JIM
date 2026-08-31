@@ -886,7 +886,9 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             $execution = Start-JIMSchedule -Id $parallelSchedule.id -PassThru
 
             Assert-NotNull -Value $execution -Message "Complex parallel execution started"
-            Assert-Equal -Expected 14 -Actual $execution.totalSteps -Message "Execution shows 14 total steps"
+            # TotalSteps counts step groups, not step rows: parallel steps sharing a stepIndex are one position
+            $expectedStepGroups = @($scheduleWithSteps.steps.stepIndex | Select-Object -Unique).Count
+            Assert-Equal -Expected $expectedStepGroups -Actual $execution.totalSteps -Message "Execution shows $expectedStepGroups total step groups"
 
             $testResults.Steps += @{ Name = "Complex Parallel Execution Started"; Success = $true }
 

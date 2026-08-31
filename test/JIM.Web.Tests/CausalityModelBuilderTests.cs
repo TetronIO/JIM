@@ -869,9 +869,27 @@ public class CausalityModelBuilderTests
             Assert.That(projected.Operation?.PlainLabel, Is.EqualTo("Created"));
             Assert.That(attributeFlow.Operation?.PlainLabel, Is.EqualTo("Updated"));
             Assert.That(provisioned.Operation?.PlainLabel, Is.EqualTo("Created"));
-            Assert.That(pendingExport.Operation, Is.Null,
-                "PendingExportCreated collapses Create and Update; nothing in scope distinguishes them");
+            // The fixture's Pending Export was staged as a Create (#1561 follow-up); the outcome's
+            // recorded StagedChangeType is what now tells Create and Update apart.
+            Assert.That(pendingExport.Operation?.PlainLabel, Is.EqualTo("Created"));
         }
+    }
+
+    /// <summary>
+    /// An Export queued outcome recorded before the staged kind was captured (StagedChangeType null)
+    /// must carry no operation chip: guessing Create would be dishonest for what could equally have
+    /// been an Update.
+    /// </summary>
+    [Test]
+    public void Build_PendingExportCreatedWithNoStagedChangeType_HasNoOperation()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            parent: null, ordinal: 0, targetEntityDescription: "Glitterband EMEA");
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext());
+
+        Assert.That(model.AllEvents().Single().Operation, Is.Null);
     }
 
     [Test]
