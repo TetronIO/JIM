@@ -253,7 +253,17 @@ Edit `src/JIM.PowerShell/JIM.psd1`:
 - If the version has a prerelease suffix (e.g., `0.4.0-alpha`), uncomment/set `Prerelease = 'alpha'`
 - If the version is stable (no suffix), ensure `Prerelease` is commented out
 
-## Step 4: Present Summary for Review
+## Step 4: Freeze the Released Migrations
+
+Every migration shipping in this release becomes immutable the moment a customer applies it, so record the set in the released-migrations manifest:
+
+```bash
+pwsh -File ./scripts/Update-ReleasedMigrationsManifest.ps1 -Version <version>
+```
+
+This appends every not-yet-listed migration (id, content hashes, this version) to `src/JIM.PostgresData/Migrations/released-migrations.lock`. From then on, `ReleasedMigrationImmutabilityTests` (JIM.Worker.Tests) fails the build if a listed migration is renamed, regenerated, edited or deleted, or if a new migration's timestamp sorts before the newest listed one. The script is idempotent and refuses to run if a frozen migration has already been changed; if it refuses, stop the release and investigate.
+
+## Step 5: Present Summary for Review
 
 Show the user:
 1. The version being released
@@ -261,7 +271,7 @@ Show the user:
 3. The full changelog section for the new version
 4. Ask for confirmation before committing
 
-## Step 5: Commit on a Release Branch
+## Step 6: Commit on a Release Branch
 
 The `main` branch is protected and rejects direct pushes. The release commit must land on `main` via a PR.
 
@@ -269,13 +279,13 @@ If you have not already created a release branch (e.g. for documentation updates
 
 ```bash
 git checkout -b release/v<version>
-git add VERSION CHANGELOG.md src/JIM.PowerShell/JIM.psd1
+git add VERSION CHANGELOG.md src/JIM.PowerShell/JIM.psd1 src/JIM.PostgresData/Migrations/released-migrations.lock
 git commit -m "Release v<version>"
 ```
 
 If you are already on `release/v<version>` from the documentation step, add the release files to a separate commit on the same branch.
 
-## Step 6: Open the Release PR
+## Step 7: Open the Release PR
 
 Push the release branch and open a PR to `main`:
 
@@ -299,14 +309,14 @@ EOF
 )"
 ```
 
-Wait for all required status checks to pass (currently 7), then merge the PR. Use a **merge commit** or **squash** — do not rebase, because the tag in Step 8 must point at a commit that is on `main`. After merge, switch back to `main` and pull:
+Wait for all required status checks to pass (read the current list from the ruleset; see root `CLAUDE.md` > Merging via gh CLI), then merge the PR. Use a **merge commit** or **squash** — do not rebase, because the tag in Step 8 must point at a commit that is on `main`. After merge, switch back to `main` and pull:
 
 ```bash
 git checkout main
 git pull origin main
 ```
 
-## Step 7: Tag the Merge Commit and Push the Tag
+## Step 8: Tag the Merge Commit and Push the Tag
 
 The release workflow runs on tag push. It will build and publish artefacts from whatever commit the tag points at, so the tag must point at a commit that is on `main`.
 
@@ -340,7 +350,7 @@ The tag-push triggers the release workflow which:
 5. Attaches standalone deployment files to the release (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example`)
 6. Creates a GitHub Release with all assets
 
-## Step 8: Post-Release Verification
+## Step 9: Post-Release Verification
 
 Tell the user to verify after the workflow completes:
 - [ ] GitHub Release page has the bundle, checksums, and standalone deployment files
@@ -353,7 +363,7 @@ Provide the Actions URL for monitoring:
 https://github.com/TetronIO/JIM/actions
 ```
 
-## Step 9: Long-form Release Announcement (GitHub Discussions)
+## Step 10: Long-form Release Announcement (GitHub Discussions)
 
 The curated `CHANGELOG.md` / GitHub Release notes are intentionally terse. The detail that does not fit there (performance work, test-coverage expansion, internal hardening) has a home here instead: a long-form announcement in GitHub Discussions. The difference from the changelog is **depth and length, not audience** — the announcement is just as public and customer-facing as the changelog, only more expansive. This is where the entries the Changelog Validation step removed can resurface, reframed as outcomes.
 
