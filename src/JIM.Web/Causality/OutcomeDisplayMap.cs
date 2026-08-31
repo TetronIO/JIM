@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Transactional;
 using MudBlazor;
 
 namespace JIM.Web.Causality;
@@ -284,21 +285,33 @@ public static class OutcomeDisplayMap
     /// <see cref="CausalityModelBuilder"/> uses for the outcome's own title); null where the chain did
     /// not resolve one, or where it is not an Exported outcome. Ignored for every other outcome type.
     /// </param>
-    /// <remarks>
-    /// PendingExportCreated is deliberately absent from the mapped cases: it collapses Create and Update
-    /// into one outcome type (unlike DeprovisionQueued, which gets its own type for Delete), and nothing
-    /// available at build time distinguishes them; the CSO change snapshot attached to the outcome always
-    /// records <see cref="ObjectChangeType.PendingExport"/> regardless of the staged kind, and the
-    /// reason code that would answer it is only assigned later, at export execution, onto the export's own
-    /// outcome rather than onto this one. Guessing from the change's optional ConnectedSystemObjectId
-    /// would be wrong too: a reused pending-provisioning CSO carries a non-null id even for a Create.
-    /// </remarks>
+    /// <param name="stagedChangeType">
+    /// For a <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated"/> outcome,
+    /// the kind of change staged (<see cref="ActivityRunProfileExecutionItemSyncOutcome.StagedChangeType"/>),
+    /// recorded at staging time so this outcome type, which collapses Create and Update, can still state
+    /// which one it was. Null for an outcome recorded before this was captured. Ignored for every other
+    /// outcome type: DeprovisionQueued already reads Deleted from its own outcome type and does not need it.
+    /// </param>
     public static OutcomeDisplay? GetEventOperation(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType,
-        CausalReasonCode? exportReasonCode = null)
+        CausalReasonCode? exportReasonCode = null,
+        PendingExportChangeType? stagedChangeType = null)
     {
         if (outcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
             return exportReasonCode is { } reasonCode ? GetQueueingDecisionOperation(reasonCode) : null;
+
+        if (outcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated)
+        {
+            return stagedChangeType switch
+            {
+                PendingExportChangeType.Create => GetQueueingDecisionOperation(CausalReasonCode.ExportCreateStaged),
+                PendingExportChangeType.Update => GetQueueingDecisionOperation(CausalReasonCode.ExportUpdateStaged),
+                PendingExportChangeType.Delete => GetQueueingDecisionOperation(CausalReasonCode.ExportDeleteStaged),
+                // Null covers outcomes recorded before this was captured: honestly "unknown kind"
+                // rather than a guess.
+                _ => null
+            };
+        }
 
         return outcomeType switch
         {
@@ -329,12 +342,12 @@ public static class OutcomeDisplayMap
             // chip rather than inventing a second vocabulary for the same staged kind.
             ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued =>
                 GetQueueingDecisionOperation(CausalReasonCode.ExportDeleteStaged),
-            // PendingExportCreated (see remarks above), every Would* preview (nothing executed),
-            // ExportConfirmed/ExportFailed (confirming or failing an export is not itself an object
-            // operation), DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled
-            // (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
-            // (attribute-priority housekeeping, not an object operation) and anything unmapped all fall
-            // through here: null rather than a guess.
+            // Every Would* preview (nothing executed), ExportConfirmed/ExportFailed (confirming or
+            // failing an export is not itself an object operation),
+            // DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled (a state change,
+            // not an operation this map states an icon for), AssertedNull/NoContributor (attribute-priority
+            // housekeeping, not an object operation) and anything unmapped all fall through here: null
+            // rather than a guess. PendingExportCreated never reaches this switch; it is handled above.
             _ => null
         };
     }
@@ -370,21 +383,25 @@ public static class OutcomeDisplayMap
     /// already read twice by the time they reached it.
     /// </summary>
     /// <remarks>
-    /// True for exactly <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Projected"/>,
+    /// True for <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Projected"/>,
     /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Joined"/> and
-    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned"/>: the only outcomes whose
-    /// Lineage join label carries this precise meaning. <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Exported"/>
-    /// is deliberately excluded even though it renders a chip too: its decision-specific titles ("Record
-    /// created", "Changes applied", "Record deleted") are not restated by any join label, so its head is
-    /// the only place they appear and must keep rendering. This is meaningful only where a chip actually
-    /// renders alongside the card; a caller must not suppress a title without one (see
-    /// <c>CausalityEventCard.HideTitle</c>'s guard for that misuse case).
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned"/> (whose Lineage join
+    /// label states the same verb a third time), and for
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.Exported"/>: its decision-specific
+    /// titles ("Record created", "Changes applied", "Record deleted") say nothing the chip's own
+    /// Created / Updated / Deleted does not, so once the chip exists the title is the restatement.
+    /// Exported's chip only renders where the export's queueing decision resolved, and an item exported
+    /// before causal capture existed resolves none; that no-chip case is exactly what
+    /// <c>CausalityEventCard.HideTitle</c>'s misuse guard covers, keeping the bare "Exported" head
+    /// rendering rather than leaving the card naming nothing, so this method stays a function of the
+    /// outcome type alone.
     /// </remarks>
     public static bool IsTitleSubsumedByOperation(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
         return outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
             or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
-            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Exported;
     }
 
     /// <summary>

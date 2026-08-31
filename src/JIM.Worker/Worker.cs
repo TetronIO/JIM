@@ -1334,13 +1334,15 @@ public class Worker : BackgroundService
                 targetEntityId: pendingExport.Id,
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
-                detailMessage: pendingExport.ConnectedSystemId.ToString())
+                detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                stagedChangeType: pendingExport.ChangeType)
             : SyncOutcomeBuilder.AddChildOutcome(executionItem, parent,
                 SyncOutcomeTypes.ForPendingExport(pendingExport),
                 targetEntityId: pendingExport.Id,
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
-                detailMessage: pendingExport.ConnectedSystemId.ToString());
+                detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                stagedChangeType: pendingExport.ChangeType);
 
         if (csoChangeTrackingEnabled && pendingExport.AttributeValueChanges.Count > 0)
         {

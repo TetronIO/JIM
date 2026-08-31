@@ -1,0 +1,17 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A Boolean attribute value: the tick or cross, and the word beside it. The word is load-bearing rather
+   than decorative; a cross on its own reads almost identically to an attribute holding no value at all,
+   which is what the Connector Space table's icon-only treatment said. *@
+<MudIcon Icon="@(Value ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"
+         Color="@(Value ? Color.Success : Color.Default)" />
+<span class="ms-1">@(Value ? "True" : "False")</span>
+
+@code {
+    /// <summary>
+    /// The Boolean attribute value to display.
+    /// </summary>
+    [Parameter]
+    public bool Value { get; set; }
+}

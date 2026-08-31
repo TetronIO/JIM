@@ -7,6 +7,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Web.Causality;
 
 namespace JIM.Web.Tests;
@@ -107,7 +108,8 @@ public static class CausalityTestData
 
         var pendingExport = AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
             parent: provisioned, ordinal: 0, targetEntityId: PendingExportId,
-            targetEntityDescription: "Glitterband EMEA", detailCount: 11, detailMessage: "2");
+            targetEntityDescription: "Glitterband EMEA", detailCount: 11, detailMessage: "2",
+            stagedChangeType: PendingExportChangeType.Create);
         pendingExport.ConnectedSystemObjectChange = BuildCsoChangeSnapshot();
 
         return item;
@@ -185,7 +187,8 @@ public static class CausalityTestData
         int? detailCount = null,
         string? detailMessage = null,
         int? syncRuleId = null,
-        string? syncRuleName = null)
+        string? syncRuleName = null,
+        PendingExportChangeType? stagedChangeType = null)
     {
         var outcome = new ActivityRunProfileExecutionItemSyncOutcome
         {
@@ -199,6 +202,7 @@ public static class CausalityTestData
             DetailMessage = detailMessage,
             SyncRuleId = syncRuleId,
             SyncRuleName = syncRuleName,
+            StagedChangeType = stagedChangeType,
             Ordinal = ordinal
         };
         parent?.Children.Add(outcome);

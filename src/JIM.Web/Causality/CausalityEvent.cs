@@ -134,8 +134,9 @@ public sealed class CausalityEvent
     /// <summary>
     /// The tone-tinted operation chip this event's card carries (#1495 follow-up): what this event did
     /// to an object, in the same vocabulary as a Lineage chain-hop card's own chip. Null where the
-    /// outcome states no object operation at all (a preview, a confirmation, an outcome whose staged
-    /// kind is not honestly derivable); see <see cref="OutcomeDisplayMap.GetEventOperation"/>.
+    /// outcome states no object operation at all (a preview, a confirmation), or where an Export queued
+    /// outcome was recorded before its staged kind was captured; see
+    /// <see cref="OutcomeDisplayMap.GetEventOperation"/>.
     /// </summary>
     public OutcomeDisplay? Operation { get; init; }
 }

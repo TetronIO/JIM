@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Worker.Processors;
 using NUnit.Framework;
 
@@ -65,6 +66,49 @@ public class SyncOutcomeTreeShapeTests : WorkflowTestBase
                 Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated),
                 "The Pending Export staged for the provisioned object nests under its Provisioned outcome");
         }
+
+        var pendingExportOutcome = provisioned!.Children
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        Assert.That(pendingExportOutcome.StagedChangeType, Is.EqualTo(PendingExportChangeType.Create),
+            "A newly provisioned object's Pending Export is a Create, and the outcome must record that staged kind");
+    }
+
+    /// <summary>
+    /// The same chain re-run over a changed source value, once the target object already exists: the
+    /// staged Pending Export is now an Update, not a Create, and the outcome must record which (#1561
+    /// follow-up: the Export queued chip needs the staged kind, not just the outcome type).
+    /// </summary>
+    [Test]
+    public async Task PerformFullSyncAsync_ExistingProvisionedObjectAttributeChanges_PendingExportOutcomeRecordsUpdateAsync()
+    {
+        // Arrange - first sync projects, provisions and stages the Create
+        var (sourceSystem, cso) = await ArrangeProjectingAndProvisioningTopologyAsync();
+        await RunFullSyncAsync(sourceSystem);
+        var reloadedCso = await ReloadEntityAsync(cso);
+
+        // Simulate the first Create having already been exported and confirmed: the target CSO leaves
+        // PendingProvisioning for Normal, and its Create Pending Export is cleared from the queue. Without
+        // both steps the second sync's evaluation still sees a PendingProvisioning CSO and reuses (rather
+        // than replaces) the same Create export, per ExportEvaluationServer's ReusePendingProvisioningCso path.
+        var provisionedTargetCso = SyncRepo.ConnectedSystemObjects.Values
+            .Single(c => c.MetaverseObjectId == reloadedCso.MetaverseObjectId && c.ConnectedSystemId != sourceSystem.Id);
+        provisionedTargetCso.Status = ConnectedSystemObjectStatus.Normal;
+        SyncRepo.ClearAllPendingExports();
+
+        // The source value changes, so the second sync flows an update and stages an Update Pending Export
+        var displayNameAttrValue = reloadedCso.AttributeValues.Single(av => av.Attribute?.Name == "DisplayName");
+        displayNameAttrValue.StringValue = "John Smith Jr";
+        reloadedCso.LastUpdated = DateTime.UtcNow;
+
+        // Act
+        var activity = await RunFullSyncAsync(sourceSystem);
+
+        // Assert - the Pending Export outcome staged by the second sync records an Update
+        var pendingExportOutcome = activity.RunProfileExecutionItems
+            .SelectMany(r => r.SyncOutcomes)
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        Assert.That(pendingExportOutcome.StagedChangeType, Is.EqualTo(PendingExportChangeType.Update),
+            "An update to an already-provisioned object's attribute stages an Update Pending Export, and the outcome must record that staged kind");
     }
 
     /// <summary>

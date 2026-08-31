@@ -46,6 +46,13 @@ public class SyncOutcomeNode
     public string? SyncRuleName { get; set; }
 
     /// <summary>
+    /// The kind of change a staged Pending Export represents, mirroring
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcome.StagedChangeType"/> so a preview's Export
+    /// queued node carries the same fact the real synchronisation would record.
+    /// </summary>
+    public PendingExportChangeType? StagedChangeType { get; set; }
+
+    /// <summary>
     /// Quantitative detail (for example "12 attributes flowed").
     /// </summary>
     public int? DetailCount { get; set; }
@@ -79,6 +86,7 @@ public class SyncOutcomeNode
         TargetEntityDescription = outcome.TargetEntityDescription,
         SyncRuleId = outcome.SyncRuleId,
         SyncRuleName = outcome.SyncRuleName,
+        StagedChangeType = outcome.StagedChangeType,
         DetailCount = outcome.DetailCount,
         DetailMessage = outcome.DetailMessage,
         Ordinal = outcome.Ordinal,

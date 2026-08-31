@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Transactional;
 
 namespace JIM.Application.Services;
 
@@ -27,7 +28,8 @@ public static class SyncOutcomeBuilder
         int? detailCount = null,
         string? detailMessage = null,
         int? syncRuleId = null,
-        string? syncRuleName = null)
+        string? syncRuleName = null,
+        PendingExportChangeType? stagedChangeType = null)
     {
         var outcome = new ActivityRunProfileExecutionItemSyncOutcome
         {
@@ -38,6 +40,7 @@ public static class SyncOutcomeBuilder
             DetailMessage = detailMessage,
             SyncRuleId = syncRuleId,
             SyncRuleName = syncRuleName,
+            StagedChangeType = stagedChangeType,
             Ordinal = rpei.SyncOutcomes.Count
         };
 
@@ -58,7 +61,8 @@ public static class SyncOutcomeBuilder
         int? detailCount = null,
         string? detailMessage = null,
         int? syncRuleId = null,
-        string? syncRuleName = null)
+        string? syncRuleName = null,
+        PendingExportChangeType? stagedChangeType = null)
     {
         var outcome = new ActivityRunProfileExecutionItemSyncOutcome
         {
@@ -70,6 +74,7 @@ public static class SyncOutcomeBuilder
             DetailMessage = detailMessage,
             SyncRuleId = syncRuleId,
             SyncRuleName = syncRuleName,
+            StagedChangeType = stagedChangeType,
             Ordinal = parent.Children.Count
         };
 

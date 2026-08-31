@@ -18,18 +18,13 @@ public class OutcomeDisplayMapTitleSubsumptionTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Projected)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Joined)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)]
-    public void IsTitleSubsumedByOperation_TheThreeJoinLabelledOutcomes_AreTrue(
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Exported)]
+    public void IsTitleSubsumedByOperation_TheChipCarryingOutcomes_AreTrue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
         Assert.That(OutcomeDisplayMap.IsTitleSubsumedByOperation(outcomeType), Is.True);
     }
 
-    /// <summary>
-    /// Exported is deliberately out of scope: its decision-specific titles ("Record created", "Changes
-    /// applied", "Record deleted") are not restated anywhere else on the panel, unlike the three join
-    /// labels above, so its card head must keep rendering.
-    /// </summary>
-    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Exported)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted)]
