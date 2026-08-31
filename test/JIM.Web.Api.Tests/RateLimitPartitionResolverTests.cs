@@ -179,6 +179,24 @@ public class RateLimitPartitionResolverTests
     }
 
     [Test]
+    public void Resolve_UnauthenticatedApiRequest_Ipv4MappedAddressSharesPartitionWithPlainIpv4()
+    {
+        // Kestrel's dual-stack socket reports IPv4 clients as IPv4-mapped IPv6 (::ffff:a.b.c.d), while a
+        // ForwardedHeaders rewrite yields the plain IPv4 form. Both must land in the same partition, or one
+        // client gets two rate limit buckets depending on topology.
+        var mappedContext = BuildContext("/api/v1/connected-systems");
+        mappedContext.Connection.RemoteIpAddress = IPAddress.Parse("::ffff:203.0.113.7");
+        var plainContext = BuildContext("/api/v1/connected-systems");
+        plainContext.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
+
+        var mappedDecision = RateLimitPartitionResolver.Resolve(mappedContext, EnabledSettings);
+        var plainDecision = RateLimitPartitionResolver.Resolve(plainContext, EnabledSettings);
+
+        Assert.That(mappedDecision.PartitionKey, Is.EqualTo(plainDecision.PartitionKey));
+        Assert.That(mappedDecision.PartitionKey, Is.EqualTo("unauth:203.0.113.7:30"));
+    }
+
+    [Test]
     public void Resolve_FailedApiKeyAuthentication_IsTreatedAsUnauthenticated()
     {
         // A failed ApiKeyAuthenticationHandler result leaves HttpContext.User unauthenticated (AuthenticateResult.Fail
