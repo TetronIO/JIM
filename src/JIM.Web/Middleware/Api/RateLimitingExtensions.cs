@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using JIM.Utilities;
+using JIM.Web.Extensions;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -110,7 +111,7 @@ public static class RateLimitingExtensions
             "Rate limit exceeded for {Method} {Path} from {RemoteIp}; Retry-After {RetryAfterSeconds}s",
             LogSanitiser.Sanitise(httpContext.Request.Method),
             LogSanitiser.Sanitise(httpContext.Request.Path.ToString()),
-            httpContext.Connection.RemoteIpAddress,
+            httpContext.Connection.RemoteIpAddress.ToNormalisedString(),
             retryAfterSeconds);
 
         var errorResponse = new ApiErrorResponse
