@@ -48,11 +48,17 @@ public class ServiceSettingsRepository : IServiceSettingsRepository
             return;
         }
 
-        // map scalar value updates to the db version of the object
+        // map scalar value updates to the db version of the object (the SSO unique identifier foreign key included)
         Repository.Database.Entry(dbServiceSettings).CurrentValues.SetValues(serviceSettings);
 
-        // manually update reference properties
-        dbServiceSettings.SSOUniqueIdentifierMetaverseAttribute = serviceSettings.SSOUniqueIdentifierMetaverseAttribute;
+        // reconcile the SSO unique identifier reference by foreign key, never by assigning the caller's navigation
+        // instance: the caller's instance is detached (GetServiceSettingsAsync is a no-tracking query in JIM.Web),
+        // and the same attribute is routinely already tracked by this context. The factory reset is the proven case:
+        // its seeding pass loads every Metaverse Attribute tracked, then advances the authentication epoch through
+        // this method, and attaching the detached duplicate threw and failed the whole reset with a 409. A non-null
+        // navigation wins over the copied scalar because callers set the navigation without maintaining the scalar.
+        if (serviceSettings.SSOUniqueIdentifierMetaverseAttribute != null)
+            dbServiceSettings.SSOUniqueIdentifierMetaverseAttributeId = serviceSettings.SSOUniqueIdentifierMetaverseAttribute.Id;
 
         await Repository.Database.SaveChangesAsync();
     }
