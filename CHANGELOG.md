@@ -185,6 +185,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A factory reset failed with a 409 error on any deployment with SSO configured: the reset's final step, which invalidates existing portal sessions, tripped over the built-in configuration restore it had just run and rolled the session-invalidation save back. The Service Settings update now records the SSO unique identifier reference by key, and the reset completes.
+
 - 🐛 A worker task failure that also poisoned its database session could silently stop the worker processing any further queued operations until a restart. The worker now retries the task's completion on a fresh session and always releases the task, so one bad task can no longer wedge the queue. (#1568)
 
 - 🐛 A table nested inside a card or an expansion panel highlights the whole row on hover again, not just its first column. Such tables paint each data cell opaque so the rows contrast against the shaded header, and that covered the hover colour the row underneath was carrying.
