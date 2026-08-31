@@ -3,6 +3,7 @@
 
 using System.Security.Claims;
 using JIM.Models.Core;
+using JIM.Web.Extensions;
 
 namespace JIM.Web.Middleware.Api;
 
@@ -61,7 +62,7 @@ public static class RateLimitPartitionResolver
 
         // Unauthenticated /api requests, including requests that failed API key authentication (a failed
         // ApiKeyAuthenticationHandler result leaves HttpContext.User unauthenticated, not throwing), fall here.
-        var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var clientIp = context.Connection.RemoteIpAddress.ToNormalisedString() ?? "unknown";
         return new RateLimitDecision(
             RateLimitPartitionKind.UnauthenticatedFixedWindow,
             $"unauth:{clientIp}:{settings.UnauthenticatedRequestsPerMinute}",

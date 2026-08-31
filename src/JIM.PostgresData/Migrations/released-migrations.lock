@@ -1,0 +1,10 @@
+# Released migrations manifest: every migration that has shipped in a JIM release, frozen.
+#
+# A listed migration has been applied to customer databases and is immutable: it must never be renamed,
+# regenerated, edited or deleted, and no new migration may carry a timestamp that sorts before the newest
+# id listed here. ReleasedMigrationImmutabilityTests (JIM.Worker.Tests) fails the build on any violation.
+#
+# Append-only. Written by scripts/Update-ReleasedMigrationsManifest.ps1 as part of /release; never edit by
+# hand except to recover from a mis-run of that script before the release tag is pushed.
+#
+# Format: <migration id> <sha256 of .cs> <sha256 of .Designer.cs> <first released version>
