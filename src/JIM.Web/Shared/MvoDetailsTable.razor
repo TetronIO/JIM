@@ -96,24 +96,24 @@
         {
             if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
             {
-                <MudLink Href="@($"mailto:{attributeValue.StringValue}")">@attributeValue.StringValue</MudLink>
+                <MudLink Href="@($"mailto:{attributeValue.StringValue}")" Class="jim-text-code">@attributeValue.StringValue</MudLink>
             }
             else
             {
-                <TextValueDisplay Value="@attributeValue.StringValue" />
+                <TextValueDisplay Value="@attributeValue.StringValue" Class="jim-text-code" />
             }
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Number)
         {
-            @attributeValue.IntValue
+            <span class="jim-text-code">@attributeValue.IntValue</span>
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
         {
-            @attributeValue.LongValue
+            <span class="jim-text-code">@attributeValue.LongValue</span>
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Decimal)
         {
-            @attributeValue.DecimalValue?.ToString(CultureInfo.InvariantCulture)
+            <span class="jim-text-code">@attributeValue.DecimalValue?.ToString(CultureInfo.InvariantCulture)</span>
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.DateTime && attributeValue.DateTimeValue.HasValue)
         {
@@ -125,20 +125,14 @@
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
         {
-            @attributeValue.GuidValue?.ToString()
+            <span class="jim-text-code">@attributeValue.GuidValue?.ToString()</span>
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
         {
-            if (attributeValue.BoolValue.Value)
-            {
-                <MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small" />
-                <span class="ms-1">True</span>
-            }
-            else
-            {
-                <MudIcon Icon="@Icons.Material.Filled.Close" Color="Color.Default" Size="Size.Small" />
-                <span class="ms-1">False</span>
-            }
+            @* Local capture: CodeQL does not read the HasValue guard above as establishing null-state
+               for a dereference in markup (JIM.Web/CLAUDE.md, "Nullable dereference in Razor"). *@
+            var boolValue = attributeValue.BoolValue.Value;
+            <BooleanValue Value="@boolValue" />
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Binary && attributeValue.ByteValue != null)
         {

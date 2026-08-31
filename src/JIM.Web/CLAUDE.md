@@ -18,6 +18,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
 | `<WhitespaceValue Value="@x" />` | A value that is present but consists only of whitespace (the `<EmptyValue />` sibling) | "Empty values" below |
 | `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |
+| `<BooleanValue Value="@x" />` | Any Boolean attribute value: the tick or cross, and the word beside it | "Boolean values" below |
 | `<PrefilledFormValidator />` | Inside any `MudForm` prefilled with an existing entity, so validity-gated buttons enable on load | "Form action gating" below |
 | `<CollapsibleStackTrace StackTrace="@x" />` | Any place an error's stack trace is offered alongside its message | "Errors and stack traces" below |
 | `<SearchField @bind-Value="_searchString" />` | Every box that filters a list, table or dialog as the user types | "Search and filter boxes" below |
@@ -238,6 +239,12 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 - `<EmptyValue />` renders inline. If a cell needs the placeholder centred to match the column's populated rows, wrap it: `<div class="d-flex justify-center align-center" style="height: 100%; width: 100%;"><EmptyValue /></div>`.
 
 **Whitespace vs. empty (text attribute values).** A value can be *present but whitespace-only* (when a connected system imports whitespace and the mapping's "treat whitespace as no value" processing is off). Rendering it raw looks identical to no value, which is misleading. For any text **attribute-value** display, prefer `<TextValueDisplay Value="@x" />`: it renders `<EmptyValue />` for null/empty, `<WhitespaceValue />` (a low-lighted "(whitespace)" affordance with a tooltip visualising the characters) for whitespace-only, and the value itself otherwise. It is safe to pass a value that has already been formatted to a non-whitespace string for a non-text type (it simply renders unchanged), so string-returning value helpers can be wrapped directly: `<TextValueDisplay Value="@GetValueText(context)" />`. Use the bare `<EmptyValue />` for non-attribute fields (descriptions, names, etc.) where whitespace is not a meaningful distinction.
+
+## Boolean values
+
+**A Boolean attribute value is a `<BooleanValue Value="@x" />`:** the tick or cross, and "True" or "False" beside it. The label is load-bearing rather than decorative, which is why the component renders it rather than leaving it to the call site: a cross on its own reads almost identically to an attribute holding no value at all, and the Connector Space table said exactly that for as long as it rendered the icon alone.
+
+The four surfaces showing Boolean attribute values (the Connector Space table, and the Metaverse Object detail's Form, Tabs and Table views) each carried their own copy of this markup, and the copies had already drifted: three rendered icon-plus-label at `Size.Small`, the fourth rendered a default-size icon and no label at all. The component is what stops them drifting again; `BooleanValueTests` pins the icons, the colours, the labels and the default icon size.
 
 ## Tooltips
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
