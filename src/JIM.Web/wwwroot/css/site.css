@@ -572,6 +572,18 @@ html[lang] .mud-paper .mud-table .mud-table-body .mud-table-cell {
     background-color: var(--mud-palette-surface, #ffffff);
 }
 
+/* One column opts out: the Attribute column of an attribute table carries its own background so
+   that it reads as a row header rather than as data. The nested-cell rule above outranks the
+   plain .jim-attr-name selector, though (three classes and an attribute against one), so the
+   column has been painted flat wherever such a table is used, which is everywhere it is used.
+   Restate it at matching specificity, mirroring the same four contexts. */
+html[lang] .mud-paper .mud-simple-table tbody td.jim-attr-name,
+html[lang] .mud-paper .mud-table .mud-table-body .mud-table-cell.jim-attr-name,
+html[lang] .jim-expansion-panel .mud-simple-table tbody td.jim-attr-name,
+html[lang] .jim-expansion-panel .mud-table .mud-table-body .mud-table-cell.jim-attr-name {
+    background-color: var(--jim-attr-name-bg, var(--mud-palette-background-grey));
+}
+
 /* ... and that opaque cell background paints over the row-hover colour MudBlazor sets on the
    <tr>, so a hoverable table nested in a paper or an expansion panel shows no hover at all.
    Restore it by layering the same colour over each hovered cell's own background rather than
