@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20260830143932_AddStagedChangeTypeToSyncOutcomes")]
+    [Migration("20260831074702_AddStagedChangeTypeToSyncOutcomes")]
     partial class AddStagedChangeTypeToSyncOutcomes
     {
         /// <inheritdoc />
@@ -4239,6 +4239,18 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.HasBaseType("JIM.Models.Tasking.WorkerTask");
 
+                    b.Property<bool>("AbandonsDeprovisioningRun")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("CheckpointConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("CheckpointPhase")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CheckpointSyncRuleId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
@@ -4246,6 +4258,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("EvaluateMvoDeletionRules")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SynchronisedDeprovisioning")
                         .HasColumnType("boolean");
 
                     b.ToTable("WorkerTasks", t =>
