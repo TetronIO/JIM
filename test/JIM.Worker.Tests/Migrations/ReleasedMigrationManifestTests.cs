@@ -140,6 +140,24 @@ public class ReleasedMigrationManifestTests
     }
 
     [Test]
+    public void NewestReleasedId_EmptyManifest_ReturnsNull()
+    {
+        Assert.That(ReleasedMigrationManifest.NewestReleasedId([]), Is.Null);
+    }
+
+    [Test]
+    public void NewestReleasedId_MultipleEntries_ReturnsTheOrdinalMaximum()
+    {
+        var newest = ReleasedMigrationManifest.NewestReleasedId(
+        [
+            new ReleasedMigrationManifest.Entry("20260601000000_Second", HashA, HashB, "1.1.0"),
+            new ReleasedMigrationManifest.Entry("20260101000000_First", HashA, HashB, "1.0.0")
+        ]);
+
+        Assert.That(newest, Is.EqualTo("20260601000000_Second"));
+    }
+
+    [Test]
     public void HashContent_CrlfAndLf_HashIdentically()
     {
         // A Windows checkout must not read as an edit; hashing normalises line endings first.

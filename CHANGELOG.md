@@ -185,6 +185,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A worker task failure that also poisoned its database session could silently stop the worker processing any further queued operations until a restart. The worker now retries the task's completion on a fresh session and always releases the task, so one bad task can no longer wedge the queue. (#1568)
+
 - 🐛 A table nested inside a card or an expansion panel highlights the whole row on hover again, not just its first column. Such tables paint each data cell opaque so the rows contrast against the shaded header, and that covered the hover colour the row underneath was carrying.
 - 🐛 The Attribute column of an attribute table reads as a row header again, in its own shading rather than flat against the values beside it. The rule painting nested tables' data cells outranked the column's own background and painted over it.
 
