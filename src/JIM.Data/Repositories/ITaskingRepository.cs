@@ -26,6 +26,16 @@ public interface ITaskingRepository
     public Task<ExampleDataTemplateWorkerTask?> GetFirstExampleDataWorkerTaskAsync(int dataGenerationTemplateId);
 
     /// <summary>
+    /// The persisted deletion task for a Connected System (any status), with its Activity, or null when none
+    /// is queued or processing. A worker task is deleted on completion AND after a failed run, so a null
+    /// answer for a fenced (Status = Deleting) system means a deprovisioning run failed and left no task
+    /// behind; the retry then queues a fresh one (#809). At most one deletion task exists per system, since
+    /// deletion requests against a fenced system never queue a second; the oldest is returned defensively
+    /// should that invariant ever be violated.
+    /// </summary>
+    public Task<DeleteConnectedSystemWorkerTask?> GetDeleteConnectedSystemWorkerTaskAsync(int connectedSystemId);
+
+    /// <summary>
     /// Whether a Password Delivery Worker Task that would cover the given scope is already waiting to run (#1119).
     /// <para>
     /// Only tasks still queued count. A pass already running may have read the queue before the work being

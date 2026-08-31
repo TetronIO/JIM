@@ -102,7 +102,7 @@ Write-TestStep "Step 3" "Removing any Connected System left by a previous run"
 foreach ($name in @($exportSystemName, $appUserSystemName, $systemName)) {
     $existing = Get-JIMConnectedSystem -Name $name -ErrorAction SilentlyContinue
     foreach ($system in @($existing | Where-Object { $_ })) {
-        Remove-JIMConnectedSystem -Id $system.id -Force | Out-Null
+        Remove-JIMConnectedSystem -Id $system.id -DeleteImmediately -Force | Out-Null
         Write-Host "  Removed '$($system.name)'" -ForegroundColor Gray
     }
 }

@@ -2474,14 +2474,26 @@ public class SynchronisationController(
     /// Delete a Connected System
     /// </summary>
     /// <remarks>
-    /// Small systems (fewer than 1,000 CSOs) are deleted immediately and return 200 OK. Larger systems, or systems with a running sync, are queued as a background job and return 202 Accepted with tracking IDs. Use the deletion-preview endpoint first to understand the impact.
+    /// By default the deletion runs as <b>Deprovision through synchronisation</b> (recommended): the system is
+    /// fenced and a background run processes every Connected System Object through the synchronisation engine's
+    /// obsoletion semantics (attribute recall with surviving-contributor re-election, Metaverse Object Deletion
+    /// Rule evaluation, Pending Export staging) before the deletion completes; the response is always 202
+    /// Accepted with tracking IDs. Pass <c>synchronisedDeprovisioning=false</c> for <b>Delete immediately and
+    /// keep contributed data</b>: small systems (fewer than 1,000 CSOs) delete synchronously and return 200 OK,
+    /// larger systems or systems with a running sync queue and return 202; contributed attribute values are kept
+    /// without provenance (they can never be recalled) and downstream systems are not corrected. On a system
+    /// whose deprovisioning run failed partway (it remains fenced), re-issuing the default deletes RETRIES the
+    /// run, resuming from its checkpoint, and <c>synchronisedDeprovisioning=false</c> FINISHES the deletion
+    /// immediately, abandoning the remaining deprovisioning (recorded on the Activity). Use the
+    /// deletion-preview endpoint first to understand the impact.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System to delete.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity and the configuration change history tombstone. Supplied as a query parameter because HTTP DELETE bodies are awkward for clients.</param>
+    /// <param name="synchronisedDeprovisioning">True (the default) to deprovision through synchronisation; false to delete immediately and keep contributed data.</param>
     /// <returns>The result of the deletion request including outcome and tracking IDs.</returns>
-    /// <response code="200">Deletion completed immediately.</response>
-    /// <response code="202">Deletion has been queued as a background job.</response>
+    /// <response code="200">Deletion completed immediately (immediate mode, small system only).</response>
+    /// <response code="202">Deletion has been queued as a background job; the result carries the Activity and Worker Task ids to track it by. Always the case for the default deprovisioning mode.</response>
     /// <response code="400">Deletion failed.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("connected-systems/{connectedSystemId:int}", Name = "DeleteConnectedSystem")]
@@ -2492,10 +2504,11 @@ public class SynchronisationController(
     public async Task<IActionResult> DeleteConnectedSystemAsync(
         int connectedSystemId,
         [FromQuery] bool deleteChangeHistory = false,
-        [FromQuery] string? changeReason = null)
+        [FromQuery] string? changeReason = null,
+        [FromQuery] bool synchronisedDeprovisioning = true)
     {
-        _logger.LogInformation("Deletion requested for Connected System: {Id}, deleteChangeHistory={DeleteHistory}",
-            connectedSystemId, deleteChangeHistory);
+        _logger.LogInformation("Deletion requested for Connected System: {Id}, deleteChangeHistory={DeleteHistory}, synchronisedDeprovisioning={Deprovision}",
+            connectedSystemId, deleteChangeHistory, synchronisedDeprovisioning);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
@@ -2507,8 +2520,8 @@ public class SynchronisationController(
 
         var apiKey = await GetCurrentApiKeyAsync();
         var result = apiKey != null
-            ? await _application.ConnectedSystems.DeleteAsync(connectedSystemId, apiKey, deleteChangeHistory, changeReason)
-            : await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory, changeReason);
+            ? await _application.ConnectedSystems.DeleteAsync(connectedSystemId, apiKey, deleteChangeHistory, changeReason, synchronisedDeprovisioning)
+            : await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory, changeReason, synchronisedDeprovisioning);
 
         if (!result.Success)
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Deletion failed."));

@@ -3393,6 +3393,30 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <inheritdoc />
+    public async Task<(int ValueCount, int ObjectCount)> GetContributedValueCountsByConnectedSystemAsync(int connectedSystemId)
+    {
+        // Select by the rule-provenance join, not the denormalised ContributedBySystemId: severed values
+        // (rule link cleared, system record retained, #1537) are permanently exempt from recall and must
+        // not be stated as deprovisioning impact.
+        var query = Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => av.ContributedBySyncRuleId != null &&
+                         Repository.Database.SyncRules
+                             .Where(sr => sr.ConnectedSystemId == connectedSystemId)
+                             .Select(sr => sr.Id)
+                             .Contains(av.ContributedBySyncRuleId.Value));
+
+        var valueCount = await query.CountAsync();
+
+        // A distinct count across the whole match set: an object contributed to on several attributes
+        // counts once. Skipped when there are no values at all.
+        var objectCount = valueCount == 0
+            ? 0
+            : await query.Select(av => av.MetaverseObject.Id).Distinct().CountAsync();
+
+        return (valueCount, objectCount);
+    }
+
+    /// <inheritdoc />
     public async Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
     {
         return await Repository.Database.MetaverseObjectAttributeValues

@@ -42,7 +42,6 @@ public partial class ConnectedSystemServer
         if (task.Activity == null)
             throw new InvalidDataException("ExecuteSyncRuleDeletionRecallAsync: the task must carry the Activity it was queued under.");
 
-        const int batchSize = 500;
         var result = new SyncRuleDeletionRecallResult();
         var activity = task.Activity;
 
@@ -64,110 +63,23 @@ public partial class ConnectedSystemServer
             var expressionEvaluator = new DynamicExpressoEvaluator();
             var exportEvaluationCache = await Application.ExportEvaluation.BuildExportEvaluationCacheAsync(allSyncRules);
             var recallScope = ContributorRecallScope.ForDeletedSyncRule(task.SyncRuleId);
-            var survivorObjectTypes = new List<Models.Staging.ConnectedSystemObjectType>();
 
             var affectedMvoIds = await Application.SyncRepo.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(task.SyncRuleId);
             activity.ObjectsToProcess = affectedMvoIds.Count;
             activity.ObjectsProcessed = 0;
             await Application.Repository.Activity.UpdateActivityAsync(activity);
 
-            foreach (var batch in affectedMvoIds.Chunk(batchSize))
-            {
-                // Tracked load: the re-election path hydrates survivors as tracked entities in this same
-                // context, and persisting a no-tracking graph beside them throws an identity conflict on
-                // shared principals (each object's MetaverseObjectType). Found at runtime; the in-memory
-                // test provider always tracks and cannot catch it.
-                var metaverseObjects = await Application.SyncRepo.GetMetaverseObjectsByIdsForUpdateAsync(batch);
-                await Application.ExportEvaluation.RefreshExportEvaluationCacheForPageAsync(exportEvaluationCache, batch);
-
-                var changedMvos = new List<MetaverseObject>();
-                var removedValueIds = new List<Guid>();
-                var stagedPendingExports = new List<PendingExport>();
-                var executionItems = new List<ActivityRunProfileExecutionItem>();
-
-                foreach (var mvo in metaverseObjects)
-                {
-                    // Select this object's recalled values by intact provenance. An empty set means the
-                    // provenance moved since the id query ran (a concurrent re-election); nothing to do.
-                    var recalledValues = mvo.AttributeValues
-                        .Where(av => av.ContributedBySyncRuleId == task.SyncRuleId)
-                        .ToList();
-                    if (recalledValues.Count == 0)
-                        continue;
-
-                    mvo.PendingAttributeValueRemovals.AddRange(recalledValues);
-
-                    // Re-elect any surviving contributor for the recalled attributes: with the deleted rule's
-                    // values marked for removal, re-flowing the survivors through the normal attribute-flow
-                    // gate elects the highest-priority survivor; attributes with no other contributor gain
-                    // nothing and are genuinely cleared.
-                    await ContributorReElectionService.ReElectSurvivingContributorsAsync(
-                        mvo, recalledValues, recallScope, priorityContext, syncEngine, Application.SyncRepo,
-                        (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
-                        survivorObjectTypes, expressionEvaluator);
-
-                    // Capture pending changes BEFORE applying (which clears the pending lists), additions
-                    // first: export evaluation stages a single-valued attribute's FIRST matching changed
-                    // value, so a re-elected survivor's addition must precede the recalled removal or the
-                    // target would be staged with the stale value.
-                    var additions = mvo.PendingAttributeValueAdditions.ToList();
-                    var removals = mvo.PendingAttributeValueRemovals.ToList();
-                    var changedAttributes = additions.Concat(removals).ToList();
-                    var removedAttributes = removals.ToHashSet();
-                    var clearedAttributeCount = ContributorReElectionService.GetClearedAttributeIds(mvo, additions, removals).Count;
-
-                    syncEngine.ApplyPendingAttributeChanges(mvo);
-                    changedMvos.Add(mvo);
-                    removedValueIds.AddRange(removals.Where(av => av.Id != Guid.Empty).Select(av => av.Id));
-
-                    // Stage the resulting export changes for mapped target systems. Recall semantics: a
-                    // recall updates existing target objects and never provisions new ones; ordinary
-                    // synchronisation remains the provisioning path.
-                    var exportEvaluation = await Application.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-                        mvo, changedAttributes, exportEvaluationCache, deferSave: true,
-                        removedAttributes: removedAttributes, existingPendingExports: stagedPendingExports,
-                        recallSemantics: true);
-                    // The evaluation can return an export it merged into rather than a new one; only genuinely
-                    // new instances join the batch's staging list.
-                    var newlyStagedExports = exportEvaluation.PendingExports
-                        .Where(pendingExport => !stagedPendingExports.Contains(pendingExport))
-                        .ToList();
-                    stagedPendingExports.AddRange(newlyStagedExports);
-
-                    executionItems.Add(BuildRecallExecutionItem(mvo, syncRule, additions.Count, clearedAttributeCount));
-
-                    result.MetaverseObjectsProcessed++;
-                    result.ValuesRecalled += recalledValues.Count;
-                    result.AttributesReElected += additions.Count;
-                    result.AttributesCleared += clearedAttributeCount;
-                }
-
-                // Persist the batch: apply the attribute changes, explicitly delete the recalled value rows
-                // (the objects were loaded untracked, so nothing else would), then stage the Pending Exports
-                // with the same delete-then-create pattern the sync flush uses (prevents unique-index
-                // collisions on ConnectedSystemObjectId; pre-existing exports were merged into these instances).
-                await Application.SyncRepo.UpdateMetaverseObjectsAsync(changedMvos);
-                if (removedValueIds.Count > 0)
-                    await Application.SyncRepo.DeleteMetaverseObjectAttributeValuesByIdsAsync(removedValueIds);
-
-                if (stagedPendingExports.Count > 0)
-                {
-                    var targetCsoIds = stagedPendingExports
-                        .Where(pe => pe.ConnectedSystemObjectId.HasValue)
-                        .Select(pe => pe.ConnectedSystemObjectId!.Value)
-                        .Distinct()
-                        .ToList();
-                    if (targetCsoIds.Count > 0)
-                        await Application.SyncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(targetCsoIds);
-                    await Application.SyncRepo.CreatePendingExportsAsync(stagedPendingExports);
-                    result.PendingExportsStaged += stagedPendingExports.Count;
-                }
-
-                await Application.Activities.AddRunProfileExecutionItemsAsync(activity, executionItems);
-
-                activity.ObjectsProcessed += batch.Length;
-                await Application.Repository.Activity.UpdateActivityAsync(activity);
-            }
+            result = await RecallSyncRuleContributedValuesAsync(
+                task.SyncRuleId,
+                recallScope,
+                priorityContext,
+                syncEngine,
+                expressionEvaluator,
+                exportEvaluationCache,
+                activity,
+                reElectedDetailMessage: $"Synchronisation Rule '{syncRule.Name}' is being deleted; a surviving contributor was re-elected for the recalled attribute value(s).",
+                clearedDetailMessage: $"Synchronisation Rule '{syncRule.Name}' is being deleted; the recalled attribute value(s) had no remaining contributor and were cleared.",
+                trackActivityProgress: true);
         }
 
         // FINAL step: delete the rule via the existing delete path (configuration snapshot, priority
@@ -208,11 +120,159 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Recalls every Metaverse attribute value the given Synchronisation Rule contributed, selected by
+    /// intact provenance, re-electing surviving contributors under the caller's
+    /// <see cref="ContributorRecallScope"/> and staging Pending Exports for mapped target systems through
+    /// the normal model. Batched, with one Run Profile Execution Item per affected Metaverse Object. Shared
+    /// by the rule-deletion recall (#1537) and the Connected System Synchronised Deprovisioning residue pass
+    /// (#809), whose scopes and audit wording differ but whose mechanics are one implementation.
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose contributed values are recalled (by provenance).</param>
+    /// <param name="recallScope">Whose contribution is ineligible for re-election and who may take over.</param>
+    /// <param name="priorityContext">The attribute priority contributor cache (#91), built from all Synchronisation Rules.</param>
+    /// <param name="syncEngine">The synchronisation decision engine, for the re-election re-flow and change application.</param>
+    /// <param name="expressionEvaluator">The evaluator for expression-based mappings in the re-election re-flow.</param>
+    /// <param name="exportEvaluationCache">The pre-built export evaluation cache driving Pending Export staging.</param>
+    /// <param name="activity">The Activity the per-object results are recorded on.</param>
+    /// <param name="reElectedDetailMessage">The outcome wording for values a surviving contributor took over.</param>
+    /// <param name="clearedDetailMessage">The outcome wording for values cleared with no remaining contributor.</param>
+    /// <param name="trackActivityProgress">Whether to advance the Activity's ObjectsProcessed counter per batch
+    /// (true for the #1537 task, whose counters track Metaverse Objects; false for the deprovisioning residue
+    /// pass, whose counters track Connected System Objects).</param>
+    /// <param name="skipMetaverseObjectsPendingDeletion">Whether to leave Metaverse Objects already marked for
+    /// deferred deletion untouched (true for the deprovisioning residue pass: their single-source values were
+    /// deliberately frozen for the grace window by the per-object pass, and housekeeping owns their removal).</param>
+    internal async Task<SyncRuleDeletionRecallResult> RecallSyncRuleContributedValuesAsync(
+        int syncRuleId,
+        ContributorRecallScope recallScope,
+        AttributePriorityContext priorityContext,
+        SyncEngine syncEngine,
+        JIM.Models.Interfaces.IExpressionEvaluator expressionEvaluator,
+        ExportEvaluationCache exportEvaluationCache,
+        Activity activity,
+        string reElectedDetailMessage,
+        string clearedDetailMessage,
+        bool trackActivityProgress,
+        bool skipMetaverseObjectsPendingDeletion = false)
+    {
+        const int batchSize = 500;
+        var result = new SyncRuleDeletionRecallResult();
+        var survivorObjectTypes = new List<Models.Staging.ConnectedSystemObjectType>();
+        var affectedMvoIds = await Application.SyncRepo.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(syncRuleId);
+
+        foreach (var batch in affectedMvoIds.Chunk(batchSize))
+        {
+            // Tracked load: the re-election path hydrates survivors as tracked entities in this same
+            // context, and persisting a no-tracking graph beside them throws an identity conflict on
+            // shared principals (each object's MetaverseObjectType). Found at runtime; the in-memory
+            // test provider always tracks and cannot catch it.
+            var metaverseObjects = await Application.SyncRepo.GetMetaverseObjectsByIdsForUpdateAsync(batch);
+            await Application.ExportEvaluation.RefreshExportEvaluationCacheForPageAsync(exportEvaluationCache, batch);
+
+            var changedMvos = new List<MetaverseObject>();
+            var removedValueIds = new List<Guid>();
+            var stagedPendingExports = new List<PendingExport>();
+            var executionItems = new List<ActivityRunProfileExecutionItem>();
+
+            // A Metaverse Object marked for deferred deletion keeps its values for the grace window;
+            // recalling them here would undo the per-object pass's deliberate freeze.
+            foreach (var mvo in metaverseObjects
+                         .Where(mvo => !skipMetaverseObjectsPendingDeletion || mvo.LastConnectorDisconnectedDate == null))
+            {
+                // Select this object's recalled values by intact provenance. An empty set means the
+                // provenance moved since the id query ran (a concurrent re-election); nothing to do.
+                var recalledValues = mvo.AttributeValues
+                    .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+                    .ToList();
+                if (recalledValues.Count == 0)
+                    continue;
+
+                mvo.PendingAttributeValueRemovals.AddRange(recalledValues);
+
+                // Re-elect any surviving contributor for the recalled attributes: with the recalled rule's
+                // values marked for removal, re-flowing the survivors through the normal attribute-flow
+                // gate elects the highest-priority survivor; attributes with no other contributor gain
+                // nothing and are genuinely cleared.
+                await ContributorReElectionService.ReElectSurvivingContributorsAsync(
+                    mvo, recalledValues, recallScope, priorityContext, syncEngine, Application.SyncRepo,
+                    (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
+                    survivorObjectTypes, expressionEvaluator);
+
+                // Capture pending changes BEFORE applying (which clears the pending lists), additions
+                // first: export evaluation stages a single-valued attribute's FIRST matching changed
+                // value, so a re-elected survivor's addition must precede the recalled removal or the
+                // target would be staged with the stale value.
+                var additions = mvo.PendingAttributeValueAdditions.ToList();
+                var removals = mvo.PendingAttributeValueRemovals.ToList();
+                var changedAttributes = additions.Concat(removals).ToList();
+                var removedAttributes = removals.ToHashSet();
+                var clearedAttributeCount = ContributorReElectionService.GetClearedAttributeIds(mvo, additions, removals).Count;
+
+                syncEngine.ApplyPendingAttributeChanges(mvo);
+                changedMvos.Add(mvo);
+                removedValueIds.AddRange(removals.Where(av => av.Id != Guid.Empty).Select(av => av.Id));
+
+                // Stage the resulting export changes for mapped target systems. Recall semantics: a
+                // recall updates existing target objects and never provisions new ones; ordinary
+                // synchronisation remains the provisioning path.
+                var exportEvaluation = await Application.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+                    mvo, changedAttributes, exportEvaluationCache, deferSave: true,
+                    removedAttributes: removedAttributes, existingPendingExports: stagedPendingExports,
+                    recallSemantics: true);
+                // The evaluation can return an export it merged into rather than a new one; only genuinely
+                // new instances join the batch's staging list.
+                var newlyStagedExports = exportEvaluation.PendingExports
+                    .Where(pendingExport => !stagedPendingExports.Contains(pendingExport))
+                    .ToList();
+                stagedPendingExports.AddRange(newlyStagedExports);
+
+                executionItems.Add(BuildRecallExecutionItem(mvo, reElectedDetailMessage, clearedDetailMessage, additions.Count, clearedAttributeCount));
+
+                result.MetaverseObjectsProcessed++;
+                result.ValuesRecalled += recalledValues.Count;
+                result.AttributesReElected += additions.Count;
+                result.AttributesCleared += clearedAttributeCount;
+            }
+
+            // Persist the batch: apply the attribute changes, explicitly delete the recalled value rows
+            // (the objects were loaded untracked, so nothing else would), then stage the Pending Exports
+            // with the same delete-then-create pattern the sync flush uses (prevents unique-index
+            // collisions on ConnectedSystemObjectId; pre-existing exports were merged into these instances).
+            await Application.SyncRepo.UpdateMetaverseObjectsAsync(changedMvos);
+            if (removedValueIds.Count > 0)
+                await Application.SyncRepo.DeleteMetaverseObjectAttributeValuesByIdsAsync(removedValueIds);
+
+            if (stagedPendingExports.Count > 0)
+            {
+                var targetCsoIds = stagedPendingExports
+                    .Where(pe => pe.ConnectedSystemObjectId.HasValue)
+                    .Select(pe => pe.ConnectedSystemObjectId!.Value)
+                    .Distinct()
+                    .ToList();
+                if (targetCsoIds.Count > 0)
+                    await Application.SyncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(targetCsoIds);
+                await Application.SyncRepo.CreatePendingExportsAsync(stagedPendingExports);
+                result.PendingExportsStaged += stagedPendingExports.Count;
+            }
+
+            await Application.Activities.AddRunProfileExecutionItemsAsync(activity, executionItems);
+
+            if (trackActivityProgress)
+            {
+                activity.ObjectsProcessed += batch.Length;
+                await Application.Repository.Activity.UpdateActivityAsync(activity);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Builds the per-object Run Profile Execution Item for a recall: an Attribute Flow change whose outcomes
     /// record what was re-elected and what was cleared, so the decision's history names every object it touched.
     /// </summary>
     private static ActivityRunProfileExecutionItem BuildRecallExecutionItem(
-        MetaverseObject mvo, Models.Logic.SyncRule syncRule, int reElectedCount, int clearedCount)
+        MetaverseObject mvo, string reElectedDetailMessage, string clearedDetailMessage, int reElectedCount, int clearedCount)
     {
         var item = new ActivityRunProfileExecutionItem
         {
@@ -230,7 +290,7 @@ public partial class ConnectedSystemServer
                 OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
                 TargetEntityId = mvo.Id,
                 TargetEntityDescription = mvo.NameOrId,
-                DetailMessage = $"Synchronisation Rule '{syncRule.Name}' is being deleted; a surviving contributor was re-elected for the recalled attribute value(s).",
+                DetailMessage = reElectedDetailMessage,
                 DetailCount = reElectedCount,
                 Ordinal = ordinal++
             });
@@ -242,7 +302,7 @@ public partial class ConnectedSystemServer
                 OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
                 TargetEntityId = mvo.Id,
                 TargetEntityDescription = mvo.NameOrId,
-                DetailMessage = $"Synchronisation Rule '{syncRule.Name}' is being deleted; the recalled attribute value(s) had no remaining contributor and were cleared.",
+                DetailMessage = clearedDetailMessage,
                 DetailCount = clearedCount,
                 Ordinal = ordinal
             });

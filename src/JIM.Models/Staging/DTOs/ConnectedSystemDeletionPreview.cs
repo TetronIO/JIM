@@ -42,6 +42,20 @@ public class ConnectedSystemDeletionPreview
     /// </summary>
     public int MvosWithGracePeriodCount { get; set; }
 
+    /// <summary>
+    /// Metaverse attribute values contributed by any of this system's Synchronisation Rules (by
+    /// provenance). These are the values a synchronised deprovisioning would recall, or hand to a
+    /// surviving contributor (#809).
+    /// </summary>
+    public int ContributedValueCount { get; set; }
+
+    /// <summary>
+    /// Distinct Metaverse Objects holding at least one of those contributed values. Not the same as
+    /// <see cref="JoinedMvoCount"/>: an object can be joined without holding a contributed value, and
+    /// vice versa after joins change.
+    /// </summary>
+    public int ContributedValueObjectCount { get; set; }
+
     // Warnings for the administrator
     public List<string> Warnings { get; set; } = new();
 

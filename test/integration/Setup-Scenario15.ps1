@@ -145,7 +145,7 @@ Write-TestStep "Step 3" "Cleaning up existing configuration"
 foreach ($systemName in @($scimSystemName, $hrSystemName)) {
     $existing = @(Get-JIMConnectedSystem -ErrorAction SilentlyContinue) | Where-Object { $_.name -eq $systemName }
     foreach ($system in $existing) {
-        Remove-JIMConnectedSystem -Id $system.id -Force | Out-Null
+        Remove-JIMConnectedSystem -Id $system.id -DeleteImmediately -Force | Out-Null
         Write-Host "  Removed existing '$systemName'" -ForegroundColor Gray
     }
 }

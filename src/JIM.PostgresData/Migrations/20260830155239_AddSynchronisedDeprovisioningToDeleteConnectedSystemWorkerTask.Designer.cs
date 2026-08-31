@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260830155239_AddSynchronisedDeprovisioningToDeleteConnectedSystemWorkerTask")]
+    partial class AddSynchronisedDeprovisioningToDeleteConnectedSystemWorkerTask
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -459,9 +462,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<Guid?>("ParentSyncOutcomeId")
                         .HasColumnType("uuid");
-
-                    b.Property<int?>("StagedChangeType")
-                        .HasColumnType("integer");
 
                     b.Property<int?>("SyncRuleId")
                         .HasColumnType("integer");
@@ -4235,9 +4235,6 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.Tasking.DeleteConnectedSystemWorkerTask", b =>
                 {
                     b.HasBaseType("JIM.Models.Tasking.WorkerTask");
-
-                    b.Property<bool>("AbandonsDeprovisioningRun")
-                        .HasColumnType("boolean");
 
                     b.Property<Guid?>("CheckpointConnectedSystemObjectId")
                         .HasColumnType("uuid");

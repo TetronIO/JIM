@@ -21,23 +21,25 @@
         Metaverse Objects joined to this system's CSOs will be disconnected but not deleted.
     </MudText>
 
+    @if (ConnectedSystem.Status == ConnectedSystemStatus.Deleting)
+    {
+        <MudText Class="mt-2">
+            A deletion is already underway or stopped partway for this system. Deleting again offers the
+            exits: Deprovision through synchronisation resumes the run, and Delete immediately and keep
+            contributed data completes the deletion at once.
+        </MudText>
+    }
+
+    @* Stays live for a fenced (Status = Deleting) system: the dialog's two modes become the retry and
+       finish-immediately exits (#809), and the server refuses anything that cannot proceed. *@
     <MudButton
         Variant="Variant.Filled"
         Color="Color.Error"
         Class="mt-5"
         DropShadow="false"
         StartIcon="@Icons.Material.Filled.Delete"
-        OnClick="HandleShowDeleteConfirmationAsync"
-        Disabled="@(ConnectedSystem.Status == ConnectedSystemStatus.Deleting)">
-        @if (ConnectedSystem.Status == ConnectedSystemStatus.Deleting)
-        {
-            <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-            <span class="ms-2">Deletion in Progress...</span>
-        }
-        else
-        {
-            <text>Delete Connected System</text>
-        }
+        OnClick="HandleShowDeleteConfirmationAsync">
+        Delete Connected System
     </MudButton>
 </MudPaper>
 

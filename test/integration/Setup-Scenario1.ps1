@@ -129,7 +129,7 @@ try {
         foreach ($system in $existingSystems) {
             Write-Host "    Deleting '$($system.name)' (ID: $($system.id))..." -ForegroundColor Gray
             try {
-                Remove-JIMConnectedSystem -Id $system.id -Force -ErrorAction Stop
+                Remove-JIMConnectedSystem -Id $system.id -DeleteImmediately -Force -ErrorAction Stop
                 Write-Host "    ✓ Deleted '$($system.name)'" -ForegroundColor Green
             }
             catch {

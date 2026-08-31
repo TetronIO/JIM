@@ -67,6 +67,8 @@ Removing the flow itself behaves the same way, with one deliberate distinction b
 
 Deleting a whole **Synchronisation Rule** offers the same choice with one mechanical difference: the deletion itself would sever the provenance the recall depends on, so the recall cannot wait for a synchronisation. Choosing recall disables the rule immediately and queues the recall as a background operation, visible on the Operations page as its own Activity with per-object outcomes; surviving contributors are re-elected, resulting changes are staged as Pending Exports, and deleting the rule is the operation's final step. Choosing keep deletes the rule at once and leaves the values in place with no provenance, exactly as for a kept mapping.
 
+Deleting a whole **Connected System** extends the same choice to everything the system contributed: deprovisioning through synchronisation processes each of its objects as a normal disconnection (recall, re-election, deletion rules, downstream exports), while deleting immediately keeps the contributed data behind the same kind of stated warning. See [Removing a Connected System](../configuration/connected-systems.md).
+
 **Disabling** a mapping, or its whole Synchronisation Rule, is a pause rather than a removal. A disabled flow contributes nothing, so a surviving contributor still takes the attribute over exactly as above; but where the disabled flow was the only contributor, its values are retained rather than cleared, ready for the flow to be re-enabled. To withdraw a sole contributor's values, delete the mapping instead.
 
 ## 🔍 Seeing resolution decisions

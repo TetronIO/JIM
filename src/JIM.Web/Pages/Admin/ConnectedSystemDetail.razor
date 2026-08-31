@@ -5,6 +5,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Staging
+@using JIM.Models.Tasking
 @using JIM.Web.Pages.Admin.Components
 @using JIM.Web.Shared
 @inject IJimApplicationFactory JimFactory
@@ -47,6 +48,61 @@
             <span class="@(_pendingExportCount > 0 ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@_pendingExportCount.ToString("N0")</span>
         </MudButton>
     </MudStack>
+}
+
+@* ─── Deletion fence notice (#809) ───
+   A system with Status = Deleting is fenced: excluded from scheduled runs, its deletion either underway on
+   the worker or stopped partway. The banner is the page's authority on that state; the Danger Zone's delete
+   button stays live so the administrator can take the retry or finish-immediately exit from there. *@
+@if (_connectedSystem is { Status: ConnectedSystemStatus.Deleting })
+{
+    @if (_deletionTask != null)
+    {
+        var deletionActivity = _deletionTask.Activity;
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-6">
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
+                <span>
+                    @if (_deletionTask.SynchronisedDeprovisioning)
+                    {
+                        <strong>Deprovisioning in progress.</strong>
+                        <text> This system is being deleted through synchronisation and is excluded from scheduled runs;
+                        configuration is read-only until the run completes.</text>
+                        @if (deletionActivity is { ObjectsToProcess: > 0 } progressActivity)
+                        {
+                            var objectsProcessed = progressActivity.ObjectsProcessed;
+                            var objectsToProcess = progressActivity.ObjectsToProcess;
+                            <text> @objectsProcessed.ToString("N0") of @objectsToProcess.ToString("N0") objects processed.</text>
+                        }
+                    }
+                    else
+                    {
+                        <strong>Deletion in progress.</strong>
+                        <text> This system is being deleted and is excluded from scheduled runs; configuration is
+                        read-only until the deletion completes.</text>
+                    }
+                </span>
+                @if (deletionActivity is { } linkActivity)
+                {
+                    var deletionActivityId = linkActivity.Id;
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Inherit"
+                               DropShadow="false"
+                               Href="@($"/activity/{deletionActivityId}")">
+                        View Activity
+                    </MudButton>
+                }
+            </MudStack>
+        </MudAlert>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-6">
+            <strong>Deprovisioning stopped before completing.</strong> A Synchronised Deprovisioning run did not finish,
+            so this system remains fenced and excluded from scheduled runs; the work already done stands. Deleting the
+            system again with Deprovision through synchronisation resumes from where the run stopped; Delete immediately
+            and keep contributed data finishes the deletion at once.
+        </MudAlert>
+    }
 }
 
 @* ─── Objects awaiting deprovisioning ───
@@ -196,6 +252,11 @@ else if (_drift is { TrackingDisabled: true })
     private ConfigurationDriftStatus? _drift;
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
+    // The live deletion task for a fenced system (#809). A surviving task means the deletion is queued or
+    // executing (its Activity is where progress lives); a fenced system with no task is a failed run,
+    // retryable from the Danger Zone.
+    private DeleteConnectedSystemWorkerTask? _deletionTask;
+
     private IList<MetaverseAttribute>? _metaverseAttributes;
 
     private AuxiliaryClassDiscoveryRun? _latestAuxiliaryClassDiscoveryRun;
@@ -245,6 +306,12 @@ else if (_drift is { TrackingDisabled: true })
             _partitionsAndHierarchiesText = "partitions";
             _partitionAndHierarchyText = "partition";
         }
+
+        // Resolve the live deletion task for a fenced system, so the fence notice can link its Activity
+        // and show progress; one lookup, only when fenced (#809).
+        _deletionTask = _connectedSystem.Status == ConnectedSystemStatus.Deleting
+            ? await jim.Tasking.GetDeleteConnectedSystemWorkerTaskAsync(Id)
+            : null;
 
         _pendingExportCount = await jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
         _connectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(Id);

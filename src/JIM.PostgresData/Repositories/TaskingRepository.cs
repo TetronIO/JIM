@@ -226,6 +226,19 @@ public class TaskingRepository : ITaskingRepository
         return await Repository.Database.WorkerTasks.Include(st => st.Activity).Where(q => workerTaskIds.Contains(q.Id) && q.Status == WorkerTaskStatus.CancellationRequested).ToListAsync();
     }
 
+    public async Task<DeleteConnectedSystemWorkerTask?> GetDeleteConnectedSystemWorkerTaskAsync(int connectedSystemId)
+    {
+        // Filtered off the shared Worker Task set rather than the typed one, so the discriminator this depends on
+        // is part of what the query does rather than something taken on trust. At most one deletion task should
+        // exist per system (a fenced system refuses to queue a second); the oldest is returned defensively.
+        return await Repository.Database.WorkerTasks
+            .OfType<DeleteConnectedSystemWorkerTask>()
+            .Include(t => t.Activity)
+            .Where(t => t.ConnectedSystemId == connectedSystemId)
+            .OrderBy(t => t.Timestamp)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<ExampleDataTemplateWorkerTask?> GetFirstExampleDataWorkerTaskAsync(int dataGenerationTemplateId)
     {
         return await Repository.Database.ExampleDataTemplateWorkerTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);
@@ -307,6 +320,21 @@ public class TaskingRepository : ITaskingRepository
 
                 // map scalar value updates to the db version of the object
                 Repository.Database.Entry(dbSynchronisationWorkerTask).CurrentValues.SetValues(synchronisationWorkerTask);
+                break;
+            }
+            case DeleteConnectedSystemWorkerTask deleteConnectedSystemWorkerTask:
+            {
+                // The Synchronised Deprovisioning run (#809) persists its resumability checkpoint through
+                // this path after each completed batch.
+                var dbDeleteConnectedSystemWorkerTask = await Repository.Database.DeleteConnectedSystemWorkerTasks.Include(st => st.Activity).AsTracking().SingleOrDefaultAsync(q => q.Id == workerTask.Id);
+                if (dbDeleteConnectedSystemWorkerTask == null)
+                {
+                    Log.Error("UpdateWorkerTaskAsync: Could not retrieve a DeleteConnectedSystemWorkerTask object to update.");
+                    return;
+                }
+
+                // map scalar value updates to the db version of the object
+                Repository.Database.Entry(dbDeleteConnectedSystemWorkerTask).CurrentValues.SetValues(deleteConnectedSystemWorkerTask);
                 break;
             }
         }
@@ -508,6 +536,9 @@ public class TaskingRepository : ITaskingRepository
             ExampleDataTemplateWorkerTask => nameof(ExampleDataTemplateWorkerTask).SplitOnCapitalLetters(),
             SynchronisationWorkerTask => nameof(SynchronisationWorkerTask).SplitOnCapitalLetters(),
             ClearConnectedSystemObjectsWorkerTask => nameof(ClearConnectedSystemObjectsWorkerTask).SplitOnCapitalLetters(),
+            // The queue must distinguish the two deletion modes (#809): a Synchronised Deprovisioning run is
+            // long-lived per-object work, where the immediate deletion is a bulk operation.
+            DeleteConnectedSystemWorkerTask { SynchronisedDeprovisioning: true } => "Deprovision Connected System Worker Task",
             DeleteConnectedSystemWorkerTask => nameof(DeleteConnectedSystemWorkerTask).SplitOnCapitalLetters(),
             PasswordDeliveryWorkerTask => nameof(PasswordDeliveryWorkerTask).SplitOnCapitalLetters(),
             TemporalScopeReconciliationWorkerTask => nameof(TemporalScopeReconciliationWorkerTask).SplitOnCapitalLetters(),

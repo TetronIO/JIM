@@ -381,6 +381,7 @@ public static class Helpers
         {
             ActivityTargetOperationType.Create => Color.Success,
             ActivityTargetOperationType.Delete => Color.Error,
+            ActivityTargetOperationType.Deprovision => Color.Error,
             ActivityTargetOperationType.Clear => Color.Error,
             ActivityTargetOperationType.Update => Color.Tertiary,
             ActivityTargetOperationType.Read => Color.Default,

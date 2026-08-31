@@ -5,6 +5,7 @@ using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Utilities;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Application.Interfaces;
 using JIM.Connectors;
@@ -545,8 +546,48 @@ public class Worker : BackgroundService
                                 }
                                 case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
                                 {
-                                    Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for Connected System id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}, DeleteChangeHistory: {DeleteHistory}",
-                                        deleteConnectedSystemTask.ConnectedSystemId, deleteConnectedSystemTask.EvaluateMvoDeletionRules, deleteConnectedSystemTask.DeleteChangeHistory);
+                                    Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for Connected System id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}, DeleteChangeHistory: {DeleteHistory}, SynchronisedDeprovisioning: {Deprovision}",
+                                        deleteConnectedSystemTask.ConnectedSystemId, deleteConnectedSystemTask.EvaluateMvoDeletionRules, deleteConnectedSystemTask.DeleteChangeHistory, deleteConnectedSystemTask.SynchronisedDeprovisioning);
+
+                                    if (deleteConnectedSystemTask.SynchronisedDeprovisioning)
+                                    {
+                                        try
+                                        {
+                                            // the server owns the deprovisioning run itself (per-object obsoletion,
+                                            // residue recall, checkpointing, the final deletion, per-object results);
+                                            // this boundary owns the Activity's fate.
+                                            await taskJim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(deleteConnectedSystemTask);
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            // On failure the Connected System survives, still fenced (Status stays
+                                            // Deleting so nothing synchronises a half-deprovisioned system), and the
+                                            // run is retryable from its checkpoint. Deliberately NOT resetting the
+                                            // status to Active here, unlike the immediate path below.
+                                            // Log BEFORE attempting to fail the Activity: the failure that lands here
+                                            // can leave the task's DbContext unusable, in which case
+                                            // FailActivityWithErrorAsync throws too and an await-first ordering would
+                                            // swallow both errors, escape the task body unobserved, and leave the task
+                                            // row stuck InProgress with nothing in the logs (observed at runtime, #1537).
+                                            Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing Connected System Synchronised Deprovisioning task.");
+                                            try
+                                            {
+                                                await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                            }
+                                            catch (Exception failEx)
+                                            {
+                                                Log.Error(failEx, "ExecuteAsync: Additionally failed to mark the Synchronised Deprovisioning Activity as failed.");
+                                            }
+                                        }
+                                        finally
+                                        {
+                                            Log.Information("ExecuteAsync: Completed the Synchronised Deprovisioning for Connected System ({ConnectedSystemId}) in {ExecutionTime}",
+                                                deleteConnectedSystemTask.ConnectedSystemId, newWorkerTask.Activity.ExecutionTime);
+                                        }
+
+                                        break;
+                                    }
 
                                     try
                                     {
@@ -571,7 +612,16 @@ public class Worker : BackgroundService
                                         try
                                         {
                                             var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemCoreAsync(deleteConnectedSystemTask.ConnectedSystemId, withChangeTracking: true);
-                                            if (connectedSystem != null && connectedSystem.Status == ConnectedSystemStatus.Deleting)
+                                            if (deleteConnectedSystemTask.AbandonsDeprovisioningRun)
+                                            {
+                                                // Finish-immediately (#809): the system was fenced by a Synchronised Deprovisioning
+                                                // run before this deletion was requested, so the fence must hold on failure; a
+                                                // half-deprovisioned system never returns to service. The deletion stays retryable
+                                                // through the fenced-system exits.
+                                                Log.Warning("ExecuteAsync: Connected System {Id} deletion failed; keeping the Deleting fence (the system was part-way through Synchronised Deprovisioning).",
+                                                    deleteConnectedSystemTask.ConnectedSystemId);
+                                            }
+                                            else if (connectedSystem != null && connectedSystem.Status == ConnectedSystemStatus.Deleting)
                                             {
                                                 // Status is runtime state, not configuration: the status-only update avoids
                                                 // recording a spurious configuration-change version for the reset.

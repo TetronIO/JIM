@@ -40,6 +40,17 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// The persisted deletion task for a Connected System (any status), with its Activity, or null when
+        /// none is queued or processing. Used by the fenced-system deletion exits (#809): a surviving task
+        /// means the run is queued or executing (its checkpoint intact); no task on a fenced system means a
+        /// run failed and its row was removed at the worker's boundary.
+        /// </summary>
+        public async Task<DeleteConnectedSystemWorkerTask?> GetDeleteConnectedSystemWorkerTaskAsync(int connectedSystemId)
+        {
+            return await Application.Repository.Tasking.GetDeleteConnectedSystemWorkerTaskAsync(connectedSystemId);
+        }
+
+        /// <summary>
         /// Retrieves a list of the current tasks, with any inherited task information formatted into the name,
         /// i.e. Connected System name and Connected System Run Profile name for a SynchronisationWorkerTask.
         /// </summary>
@@ -95,8 +106,18 @@ namespace JIM.Application.Servers
                 partitionWarning = validationResult.WarningMessage;
 
                 // every CRUD operation requires tracking with an activity...
-                // Core: only .Name is read for activity context; Run Profiles are loaded separately.
+                // Core: only .Name and .Status are read for activity context; Run Profiles are loaded separately.
                 var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(synchronisationWorkerTask.ConnectedSystemId);
+
+                // A Deleting Connected System is fenced (#809): its deletion or Synchronised Deprovisioning
+                // run must not race a run profile execution, so refuse to queue one. This is the single
+                // choke point every run profile path (portal, REST, scheduler) queues through.
+                if (connectedSystem?.Status == ConnectedSystemStatus.Deleting)
+                {
+                    return WorkerTaskCreationResult.Failed(
+                        $"Connected System '{connectedSystem.Name}' is being deleted; run profiles cannot be executed against it.");
+                }
+
                 var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfile = runProfiles.Single(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
                 var activity = new Activity
@@ -158,12 +179,16 @@ namespace JIM.Application.Servers
                 // Connected System deletion requires tracking with an activity for audit purposes.
                 // The TargetName must be populated since the Connected System will be deleted.
                 // Core: only .Name is read for activity context.
+                // The operation type records which deletion mode ran (#809): Deprovision for Synchronised
+                // Deprovisioning, Delete for the immediate deletion, so the audit trail distinguishes them.
                 var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(deleteConnectedSystemTask.ConnectedSystemId);
                 var activity = new Activity
                 {
                     TargetName = connectedSystem?.Name ?? $"Connected System {deleteConnectedSystemTask.ConnectedSystemId}",
                     TargetType = ActivityTargetType.ConnectedSystem,
-                    TargetOperationType = ActivityTargetOperationType.Delete,
+                    TargetOperationType = deleteConnectedSystemTask.SynchronisedDeprovisioning
+                        ? ActivityTargetOperationType.Deprovision
+                        : ActivityTargetOperationType.Delete,
                     ConnectedSystemId = deleteConnectedSystemTask.ConnectedSystemId,
                 };
 
@@ -171,6 +196,12 @@ namespace JIM.Application.Servers
                 // runs the deletion (the reason is transient on the task and never persisted there).
                 if (!string.IsNullOrWhiteSpace(deleteConnectedSystemTask.ChangeReason))
                     activity.ChangeReason = deleteConnectedSystemTask.ChangeReason.Trim();
+
+                // A finish-immediately deletion on a fenced system abandons the remaining Synchronised
+                // Deprovisioning work (#809); record that on the Activity at queue time so the audit trail
+                // says so however the task ends.
+                if (deleteConnectedSystemTask.AbandonsDeprovisioningRun)
+                    activity.Message = ConnectedSystemServer.SynchronisedDeprovisioningAbandonedMessage;
 
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 

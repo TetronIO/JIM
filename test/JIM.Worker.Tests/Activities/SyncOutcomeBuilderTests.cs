@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Enums;
 using JIM.Models.Transactional;
 using JIM.Worker.Processors;
+using JIM.Application.Services;
 
 namespace JIM.Worker.Tests.Activities;
 
