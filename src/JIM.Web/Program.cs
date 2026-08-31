@@ -16,6 +16,7 @@ using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.PostgresData;
 using JIM.Utilities;
+using JIM.Web.Extensions;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Hubs;
 using JIM.Web.Logging;
@@ -1106,7 +1107,7 @@ static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrinc
 /// </summary>
 static void RecordSuccessfulSignInEvent(HttpContext httpContext, MetaverseObject user)
 {
-    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString();
+    var clientIp = httpContext.Connection.RemoteIpAddress.ToNormalisedString();
     var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
     if (factory == null)
     {
@@ -1135,7 +1136,7 @@ static void RecordSuccessfulSignInEvent(HttpContext httpContext, MetaverseObject
 /// </summary>
 static void RecordFailedSignInEvent(HttpContext httpContext, string reason)
 {
-    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString();
+    var clientIp = httpContext.Connection.RemoteIpAddress.ToNormalisedString();
     var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
     if (factory == null)
     {

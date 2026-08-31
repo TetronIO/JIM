@@ -9,6 +9,7 @@ using System.Text.Encodings.Web;
 using JIM.Application;
 using JIM.Models.Core;
 using JIM.Models.Security;
+using JIM.Web.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Serilog;
@@ -69,7 +70,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
         // ForwardedHeaders middleware (when configured) rewrites RemoteIpAddress to the real client address even
         // behind a reverse proxy, so this is proxy-truthful for free; see docs/administration/security-headers.md.
-        var clientIp = Context.Connection.RemoteIpAddress?.ToString();
+        var clientIp = Context.Connection.RemoteIpAddress.ToNormalisedString();
 
         // Validate the key format
         if (string.IsNullOrWhiteSpace(providedKey) || !providedKey.StartsWith(ApiKeyPrefix))
