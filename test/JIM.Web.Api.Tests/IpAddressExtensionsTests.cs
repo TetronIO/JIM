@@ -19,9 +19,9 @@ public class IpAddressExtensionsTests
     [Test]
     public void ToNormalisedString_NullAddress_ReturnsNull()
     {
-        IPAddress? address = null;
-
-        Assert.That(address.ToNormalisedString(), Is.Null);
+        // Static-form call: CodeQL reads extension syntax on a null receiver as a null dereference, but a null
+        // receiver is precisely the case under test.
+        Assert.That(IpAddressExtensions.ToNormalisedString(null), Is.Null);
     }
 
     [Test]
