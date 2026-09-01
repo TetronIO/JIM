@@ -650,7 +650,7 @@ public class SyncRepository : ISyncRepository
         return result;
     }
 
-    public Task<List<int>> GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    public virtual Task<List<int>> GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(Guid metaverseObjectId)
     {
         if (!_csosByMvo.TryGetValue(metaverseObjectId, out var csoIds))
             return Task.FromResult(new List<int>());
@@ -1181,6 +1181,16 @@ public class SyncRepository : ISyncRepository
     {
         var result = _mvos.Values
             .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId))
+            .Select(mvo => mvo.Id)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public virtual Task<List<Guid>> GetMetaverseObjectIdsWithStrandedValuesContributedBySyncRuleAsync(int syncRuleId, int connectedSystemId)
+    {
+        var result = _mvos.Values
+            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId))
+            .Where(mvo => !_csos.Values.Any(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == connectedSystemId))
             .Select(mvo => mvo.Id)
             .ToList();
         return Task.FromResult(result);

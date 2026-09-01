@@ -546,6 +546,19 @@ public interface IMetaverseRepository
     Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId);
 
     /// <summary>
+    /// The distinct ids of Metaverse Objects holding at least one attribute value contributed by the given
+    /// Synchronisation Rule (selected by provenance, <c>ContributedBySyncRuleId</c>) where the object holds
+    /// no Connected System Object of the given Connected System: stranded by an earlier Connector Space
+    /// clear, which hard-deletes Connected System Objects without obsoletion and so never recalls the
+    /// values it leaves behind (#1549). Drives the stranded-value sweep, which reuses the #1537/#809 recall
+    /// engine against exactly this candidate set.
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose contributed values select the candidate objects.</param>
+    /// <param name="connectedSystemId">The Connected System whose Connector Space was cleared; an object is a
+    /// candidate only while it holds none of this system's Connected System Objects.</param>
+    Task<List<Guid>> GetMetaverseObjectIdsWithStrandedValuesContributedBySyncRuleAsync(int syncRuleId, int connectedSystemId);
+
+    /// <summary>
     /// Severs the provenance of a Synchronisation Rule's contributed Metaverse attribute values: clears
     /// <see cref="MetaverseObjectAttributeValue.ContributedBySyncRuleId"/> while retaining the denormalised
     /// <see cref="MetaverseObjectAttributeValue.ContributedBySystemId"/>, matching what rule deletion's

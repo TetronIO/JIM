@@ -36,4 +36,18 @@ public class SyncRuleDeletionRecallResult
     /// How many Pending Exports the recall staged for mapped target systems.
     /// </summary>
     public int PendingExportsStaged { get; set; }
+
+    /// <summary>
+    /// How many Metaverse Objects had their recall skipped because no remaining joined Connected System
+    /// carries an enabled import Synchronisation Rule for the object's type (#1570 last-known-state
+    /// preservation): their values were kept as-is rather than withdrawn. Only ever non-zero when the recall
+    /// scope is a disappearance (IsDeliberateWithdrawal false) and the caller supplied a
+    /// RemainingImportSourceEvaluator.
+    /// </summary>
+    public int MetaverseObjectsPreserved { get; set; }
+
+    /// <summary>
+    /// How many attribute values were preserved rather than recalled under the #1570 gate above.
+    /// </summary>
+    public int ValuesPreserved { get; set; }
 }

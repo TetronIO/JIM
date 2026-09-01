@@ -142,6 +142,14 @@ public partial class ConnectedSystemServer
     /// <param name="skipMetaverseObjectsPendingDeletion">Whether to leave Metaverse Objects already marked for
     /// deferred deletion untouched (true for the deprovisioning residue pass: their single-source values were
     /// deliberately frozen for the grace window by the per-object pass, and housekeeping owns their removal).</param>
+    /// <param name="affectedMetaverseObjectIds">The candidate Metaverse Object ids, when the caller has
+    /// already selected them (the stranded-value sweep's join-absence selector, #1549); null re-selects via
+    /// GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync as before.</param>
+    /// <param name="remainingImportSourceEvaluator">When supplied AND the scope is not a deliberate
+    /// withdrawal, gates each object's recall on the #1570 last-known-state preservation check: an object
+    /// with no remaining enabled import source for its type keeps its values instead of being recalled. Null
+    /// (the #1537/#809 callers) preserves today's behaviour: the gate is never consulted.</param>
+    /// <param name="preservedDetailMessage">The outcome wording for values preserved by the gate above.</param>
     internal async Task<SyncRuleDeletionRecallResult> RecallSyncRuleContributedValuesAsync(
         int syncRuleId,
         ContributorRecallScope recallScope,
@@ -153,12 +161,16 @@ public partial class ConnectedSystemServer
         string reElectedDetailMessage,
         string clearedDetailMessage,
         bool trackActivityProgress,
-        bool skipMetaverseObjectsPendingDeletion = false)
+        bool skipMetaverseObjectsPendingDeletion = false,
+        IReadOnlyList<Guid>? affectedMetaverseObjectIds = null,
+        RemainingImportSourceEvaluator? remainingImportSourceEvaluator = null,
+        string? preservedDetailMessage = null)
     {
         const int batchSize = 500;
         var result = new SyncRuleDeletionRecallResult();
         var survivorObjectTypes = new List<Models.Staging.ConnectedSystemObjectType>();
-        var affectedMvoIds = await Application.SyncRepo.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(syncRuleId);
+        var affectedMvoIds = affectedMetaverseObjectIds
+            ?? await Application.SyncRepo.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(syncRuleId);
 
         foreach (var batch in affectedMvoIds.Chunk(batchSize))
         {
@@ -186,6 +198,24 @@ public partial class ConnectedSystemServer
                     .ToList();
                 if (recalledValues.Count == 0)
                     continue;
+
+                // The #1570 last-known-state preservation gate: only consulted for a disappearance scope
+                // (never a deliberate withdrawal, where the administrator's consequences were already
+                // surfaced), and only when the caller supplied an evaluator. An object with no remaining
+                // joined system carrying an enabled import Synchronisation Rule for its type keeps its
+                // values as-is; recalling them would blank a live target account or feed an expression-based
+                // mapping with nulls.
+                if (remainingImportSourceEvaluator != null && !recallScope.IsDeliberateWithdrawal && mvo.Type != null)
+                {
+                    var remainingConnectedSystemIds = await Application.SyncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvo.Id);
+                    if (!await remainingImportSourceEvaluator.AnyImportSourceRemainsAsync(remainingConnectedSystemIds, mvo.Type.Id))
+                    {
+                        executionItems.Add(BuildPreservedExecutionItem(mvo, preservedDetailMessage, recalledValues.Count));
+                        result.MetaverseObjectsPreserved++;
+                        result.ValuesPreserved += recalledValues.Count;
+                        continue;
+                    }
+                }
 
                 mvo.PendingAttributeValueRemovals.AddRange(recalledValues);
 
@@ -311,6 +341,36 @@ public partial class ConnectedSystemServer
         item.OutcomeSummary = string.Join(",", item.SyncOutcomes
             .GroupBy(o => o.OutcomeType)
             .Select(g => $"{g.Key}:{g.Count()}"));
+        return item;
+    }
+
+    /// <summary>
+    /// Builds the per-object Run Profile Execution Item for the #1570 preservation gate: a single
+    /// ValuesPreserved outcome, so an object whose recall was skipped still gets a durable, auditable record
+    /// naming why its values were left alone.
+    /// </summary>
+    private static ActivityRunProfileExecutionItem BuildPreservedExecutionItem(
+        MetaverseObject mvo, string? preservedDetailMessage, int preservedCount)
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.AttributeFlow,
+            DisplayNameSnapshot = mvo.NameOrId,
+            ObjectTypeSnapshot = mvo.Type?.Name
+        };
+
+        item.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved,
+            TargetEntityId = mvo.Id,
+            TargetEntityDescription = mvo.NameOrId,
+            DetailMessage = preservedDetailMessage,
+            DetailCount = preservedCount,
+            Ordinal = 0
+        });
+
+        item.OutcomeSummary = $"{ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved}:1";
         return item;
     }
 }

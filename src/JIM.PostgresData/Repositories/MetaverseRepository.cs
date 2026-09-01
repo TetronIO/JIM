@@ -3427,6 +3427,22 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<Guid>> GetMetaverseObjectIdsWithStrandedValuesContributedBySyncRuleAsync(int syncRuleId, int connectedSystemId)
+    {
+        // Mirrors GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync, adding a NOT EXISTS join-absence
+        // predicate: a candidate object must hold no Connected System Object of the cleared system. EF Core
+        // translates the negated Any() to a parameterised NOT EXISTS; the in-memory test provider cannot
+        // honour this faithfully (no real foreign keys), so this method needs RequiresPostgres coverage.
+        return await Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+            .Where(av => !Repository.Database.ConnectedSystemObjects
+                .Any(cso => cso.MetaverseObjectId == av.MetaverseObject.Id && cso.ConnectedSystemId == connectedSystemId))
+            .Select(av => av.MetaverseObject.Id)
+            .Distinct()
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<int> SeverContributedValueProvenanceAsync(int syncRuleId, int? metaverseAttributeId = null)
     {
         var query = Repository.Database.MetaverseObjectAttributeValues

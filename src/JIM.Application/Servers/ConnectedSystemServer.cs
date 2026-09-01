@@ -6386,10 +6386,28 @@ public partial class ConnectedSystemServer
         // Use the shared method that handles all CSO dependencies properly.
         var result = await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
 
+        // Arm the stranded-value sweep (#1549): the clear just hard-deleted every Connected System Object of
+        // this system without obsoletion, so any Metaverse attribute value it contributed survives with live
+        // provenance and no joined Connected System Object of this system. The next Full Synchronisation of
+        // this system reads the flag and recalls exactly those values.
+        await Application.Repository.ConnectedSystems.SetStrandedValueSweepPendingAsync(connectedSystemId, pending: true);
+
         Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs",
             connectedSystemId, result.PendingExportsRemoved, result.ConnectedSystemObjectsRemoved);
 
         return result;
+    }
+
+    /// <summary>
+    /// Sets or clears the stranded-value sweep flag (#1549) on a Connected System. Public wrapper over the
+    /// repository's narrow status-mark update, so callers above the application layer (the worker's Full
+    /// Synchronisation pass, clearing the flag on completion) never reach the repository directly.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose flag is being set.</param>
+    /// <param name="pending">The new value of the flag.</param>
+    public async Task SetStrandedValueSweepPendingAsync(int connectedSystemId, bool pending)
+    {
+        await Application.Repository.ConnectedSystems.SetStrandedValueSweepPendingAsync(connectedSystemId, pending);
     }
         
     /// <summary>
