@@ -1574,41 +1574,26 @@ function Reset-JIMForNextScenario {
         }
     }
 
-    # 3b. Clean OpenLDAP test data (yellowstone.local / glitterband.local), used by the OpenLDAP directory type.
-    # Unlike the JIM database (volume removed above) and Samba AD (OUs deleted above), the OpenLDAP directory has
-    # no other cross-scenario reset: it is a long-lived container whose data volume persists between scenarios.
-    # Without this, each OpenLDAP scenario imports the accumulated objects of every earlier OpenLDAP scenario;
-    # that is why the "six-user" Scenario14-AttributePriority actually synchronised ~50,000 stale objects and hit
-    # the Metaverse Object update concurrency failure. Delete the People/Groups subtrees (all users and groups) and
-    # recreate the empty base OUs the next scenario's populate expects, symmetric with the Samba AD OU cleanup above.
-    $openLdapRunning = docker ps --filter "name=openldap-primary" --format '{{.Names}}' 2>$null
-    if ($openLdapRunning) {
-        Write-Host "${GRAY}  Cleaning OpenLDAP test data...${NC}"
-        $openLdapPurge = @'
-uri="ldap://localhost:1389"
-pw="Test@123!"
-for suffix in dc=yellowstone,dc=local dc=glitterband,dc=local; do
-  admin="cn=admin,$suffix"
-  ldapdelete -r -x -H "$uri" -D "$admin" -w "$pw" "ou=People,$suffix" "ou=Groups,$suffix" >/dev/null 2>&1 || true
-  ldapadd -x -H "$uri" -D "$admin" -w "$pw" >/dev/null 2>&1 <<LDIF || true
-dn: ou=People,$suffix
-objectClass: organizationalUnit
-ou: People
-
-dn: ou=Groups,$suffix
-objectClass: organizationalUnit
-ou: Groups
-LDIF
-done
-'@
-        # This .ps1 uses CRLF line endings, so the here-string above carries a trailing CR on
-        # every line. Passed to bash, each CR becomes part of the command: the LDAP URI parses
-        # as "ldap://localhost:1389\r" (rejected), and the heredoc terminator "LDIF\r" never
-        # matches "LDIF". Every ldapdelete/ldapadd then fails, '|| true' and Out-Null swallow the
-        # errors, and the purge silently no-ops, letting OpenLDAP pollution accumulate across
-        # scenarios. Strip CR so bash receives clean LF-terminated lines.
-        docker exec openldap-primary bash -c ($openLdapPurge -replace "`r", "") 2>&1 | Out-Null
-    }
+    # 3b. No OpenLDAP cleanup is needed here, and none belongs here.
+    #
+    # An earlier version of this reset purged ou=People / ou=Groups in both OpenLDAP suffixes with
+    # `ldapdelete -r`, on the belief that the openldap-primary data volume survives between scenarios
+    # and that the purge was the only thing cleaning it. It is not. An "-Scenario All" sweep re-invokes
+    # this script once per scenario (see the loop below), passing only -SkipBuild and never -SkipReset,
+    # so every scenario runs Step 1 in full: Step 1 takes the integration compose project down with -v,
+    # force-removes openldap-primary by name, and removes every volume matching 'jim-integration',
+    # which includes jim-integration-openldap-primary-data. The container and its directory are
+    # recreated from the base (or per-scenario snapshot) image at the start of every scenario.
+    #
+    # The purge deleted one entry at a time over LDAP, so it cost O(entries): ~15 minutes at
+    # Scale100k50Groups, spent cleaning state that the next scenario's Step 1 destroyed seconds later.
+    # See #961, which records the runtime proof: 250 marker entries injected into each suffix were gone
+    # before the next scenario's first import, with no purge in between.
+    #
+    # If a scenario ever appears to inherit an earlier scenario's OpenLDAP objects, the cause is not a
+    # missing purge here. Check the snapshot image environment variables instead; a leaked
+    # $env:OPENLDAP_IMAGE_PRIMARY once initialised a fresh volume from a populated snapshot image,
+    # which is what the explicit clearing further down guards against.
 
     # 4. Generate new API key and update .env
     Write-Host "${GRAY}  Generating new API key...${NC}"
