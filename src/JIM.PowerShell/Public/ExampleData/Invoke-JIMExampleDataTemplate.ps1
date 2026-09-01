@@ -129,68 +129,17 @@ function Invoke-JIMExampleDataTemplate {
                         Write-Verbose "Waiting for data generation to complete (no timeout)"
                     }
 
-                    $startTime = Get-Date
                     $activityId = $response.activityId
-                    $completed = $false
-                    $lastStatus = ''
 
-                    $consecutiveAuthFailures = 0
-                    $maxAuthFailures = 3
-
-                    while (-not $completed -and (-not $hasTimeout -or ((Get-Date) - $startTime).TotalSeconds -lt $Timeout)) {
-                        Start-Sleep -Seconds 2
-
-                        try {
-                            # Lightweight progress endpoint (issue #202): status, counts, phase
-                            # message, throughput and ETA without the cost of the full detail read.
-                            $activityProgress = Invoke-JIMApi -Endpoint "/api/v1/activities/$activityId/progress"
-
-                            # Reset auth failure counter on successful call
-                            $consecutiveAuthFailures = 0
-
-                            # Update progress
-                            $elapsed = [int]((Get-Date) - $startTime).TotalSeconds
-                            $status = $activityProgress.status ?? 'Running'
-
-                            if ($status -ne $lastStatus) {
-                                Write-Verbose "Status: $status"
-                                $lastStatus = $status
-                            }
-
-                            $progressParams = Get-JIMActivityProgressDisplay -Progress $activityProgress -ActivityLabel "Executing Data Generation Template" -ElapsedSeconds $elapsed
-                            Write-Progress @progressParams
-
-                            # Check if completed (matches ActivityStatus enum names)
-                            if ($status -in @('Complete', 'CompleteWithWarning', 'CompleteWithError', 'FailedWithError', 'Cancelled')) {
-                                $completed = $true
-                            }
-                        }
-                        catch {
-                            $errorMsg = "$_"
-
-                            # Detect authentication failures and stop polling rather than spamming
-                            if ($errorMsg -match 'Authentication failed|session may have expired|API key may be invalid') {
-                                $consecutiveAuthFailures++
-
-                                if ($consecutiveAuthFailures -ge $maxAuthFailures) {
-                                    Write-Progress -Activity "Executing Data Generation Template" -Completed
-                                    throw "Authentication failed while monitoring activity $activityId. The operation was submitted successfully and may still be running on the server. Use Get-JIMActivity -Id $activityId to check its status after re-authenticating with Connect-JIM."
-                                }
-
-                                # Brief warning on first/second failure - Invoke-JIMApi may have already
-                                # refreshed the token transparently, so give it another chance
-                                Write-Warning "Authentication error while checking activity status (attempt $consecutiveAuthFailures of $maxAuthFailures). Retrying..."
-                            }
-                            else {
-                                # Non-auth errors: warn but continue polling
-                                Write-Warning "Error checking activity status: $errorMsg"
-                            }
-                        }
+                    $waitParams = @{
+                        ActivityId    = "$activityId"
+                        ActivityLabel = 'Executing Data Generation Template'
                     }
+                    if ($hasTimeout) { $waitParams.Timeout = $Timeout }
 
-                    Write-Progress -Activity "Executing Data Generation Template" -Completed
+                    $finalStatus = Wait-JIMActivityCompletion @waitParams
 
-                    if (-not $completed -and $hasTimeout) {
+                    if (-not $finalStatus -and $hasTimeout) {
                         throw "Timeout waiting for data generation after $Timeout seconds. Activity ID: $activityId. The operation may still be running in the background."
                     }
                 }

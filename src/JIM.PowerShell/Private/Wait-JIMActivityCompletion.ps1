@@ -12,8 +12,10 @@ function Wait-JIMActivityCompletion {
         reaches one of the terminal statuses, then returns that status so the caller can decide what
         a failure means in its own terms.
 
-        A transient polling failure is not fatal: it is written to the verbose stream and the wait
-        continues, because an Activity that is still running outlives a dropped request.
+        A transient polling failure is not fatal: it is warned about and the wait continues, because an
+        Activity that is still running outlives a dropped request. Repeated authentication failures are,
+        because every further poll would fail the same way; the caller is told the operation is still
+        running on the server and how to check on it once re-authenticated.
 
     .PARAMETER ActivityId
         The Activity to wait for.
@@ -26,6 +28,11 @@ function Wait-JIMActivityCompletion {
 
     .PARAMETER PollIntervalSeconds
         Seconds between polls. Defaults to 2.
+
+    .PARAMETER AbortSentinelPath
+        Optional path to a cooperative abort sentinel. When the file exists and is non-empty, a test
+        harness has decided the run should fail (typically because an error watcher saw an [ERR] line in
+        JIM's logs), and the wait throws rather than polling to its natural end.
 
     .OUTPUTS
         The Activity's terminal status as a string, or $null if the timeout elapsed first.
@@ -43,7 +50,9 @@ function Wait-JIMActivityCompletion {
         [int]$Timeout,
 
         [ValidateRange(1, [int]::MaxValue)]
-        [int]$PollIntervalSeconds = 2
+        [int]$PollIntervalSeconds = 2,
+
+        [string]$AbortSentinelPath
     )
 
     # Matches the ActivityStatus enum names the progress endpoint returns.
@@ -53,9 +62,23 @@ function Wait-JIMActivityCompletion {
     $startTime = Get-Date
     $lastStatus = ''
 
+    # Invoke-JIMApi may have refreshed the token transparently, so a single authentication failure is
+    # worth another attempt; three in a row is not.
+    $consecutiveAuthFailures = 0
+    $maxAuthFailures = 3
+
     while ($true) {
+        if ($AbortSentinelPath -and (Test-Path $AbortSentinelPath)) {
+            $sentinelInfo = Get-Item $AbortSentinelPath -ErrorAction SilentlyContinue
+            if ($sentinelInfo -and $sentinelInfo.Length -gt 0) {
+                Write-Progress -Activity $ActivityLabel -Completed
+                throw "Wait aborted for '$ActivityLabel': JIM error watcher reported errors (see $AbortSentinelPath). Activity ID: $ActivityId."
+            }
+        }
+
         try {
             $activityProgress = Invoke-JIMApi -Endpoint "/api/v1/activities/$ActivityId/progress"
+            $consecutiveAuthFailures = 0
             $status = "$($activityProgress.status ?? 'Running')"
 
             if ($status -ne $lastStatus) {
@@ -73,7 +96,21 @@ function Wait-JIMActivityCompletion {
             }
         }
         catch {
-            Write-Verbose "Could not read progress for Activity ${ActivityId}: $_"
+            $errorMsg = "$_"
+
+            if ($errorMsg -match 'Authentication failed|session may have expired|API key may be invalid') {
+                $consecutiveAuthFailures++
+
+                if ($consecutiveAuthFailures -ge $maxAuthFailures) {
+                    Write-Progress -Activity $ActivityLabel -Completed
+                    throw "Authentication failed while monitoring activity $ActivityId. The operation was submitted successfully and may still be running on the server. Use Get-JIMActivity -Id $ActivityId to check its status after re-authenticating with Connect-JIM."
+                }
+
+                Write-Warning "Authentication error while checking activity status (attempt $consecutiveAuthFailures of $maxAuthFailures). Retrying..."
+            }
+            else {
+                Write-Warning "Error checking activity status: $errorMsg"
+            }
         }
 
         if ($hasTimeout -and ((Get-Date) - $startTime).TotalSeconds -ge $Timeout) {

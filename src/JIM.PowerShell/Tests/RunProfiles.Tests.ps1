@@ -490,5 +490,52 @@ Describe 'Start-JIMRunProfile -Wait progress polling' {
                 }
             }
         }
+
+        It 'Aborts the wait when the harness error-watcher sentinel is set' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $sentinel = Join-Path ([System.IO.Path]::GetTempPath()) "jim-abort-$([guid]::NewGuid()).txt"
+                Set-Content -Path $sentinel -Value '[ERR] something went wrong' -NoNewline
+                $env:JIM_RUNPROFILE_ABORT_SENTINEL = $sentinel
+                try {
+                    Mock Invoke-JIMApi {
+                        if ($Endpoint -like '*/execute') {
+                            return [PSCustomObject]@{ activityId = '11111111-1111-1111-1111-111111111111'; taskId = '22222222-2222-2222-2222-222222222222' }
+                        }
+                        if ($Endpoint -like '*/progress') { return [PSCustomObject]@{ status = 'InProgress' } }
+                        return $null
+                    }
+
+                    { Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Wait -Timeout 30 } |
+                        Should -Throw '*error watcher reported errors*'
+                }
+                finally {
+                    $env:JIM_RUNPROFILE_ABORT_SENTINEL = $null
+                    Remove-Item $sentinel -ErrorAction SilentlyContinue
+                }
+            }
+        }
+
+        It 'Stops polling and explains itself after repeated authentication failures' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:authPollCount = 0
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/execute') {
+                        return [PSCustomObject]@{ activityId = '11111111-1111-1111-1111-111111111111'; taskId = '22222222-2222-2222-2222-222222222222' }
+                    }
+                    if ($Endpoint -like '*/progress') {
+                        $script:authPollCount++
+                        throw 'Authentication failed'
+                    }
+                    return $null
+                }
+
+                { Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Wait -Timeout 120 -WarningAction SilentlyContinue } |
+                    Should -Throw '*Authentication failed while monitoring activity*'
+
+                $script:authPollCount | Should -Be 3
+            }
+        }
     }
 }
