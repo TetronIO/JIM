@@ -36,6 +36,14 @@ public class ServiceSettings
     public string? SSOUniqueIdentifierClaimType { get; set; }
 
     /// <summary>
+    /// The id of <see cref="SSOUniqueIdentifierMetaverseAttribute"/>. The scalar exists so persistence can update
+    /// the reference by key rather than by attaching the navigation instance: the attribute it names is routinely
+    /// already tracked by the saving context (the factory reset's seeding pass loads every Metaverse Attribute
+    /// tracked before advancing the authentication epoch), and attaching a second instance of it throws.
+    /// </summary>
+    public int? SSOUniqueIdentifierMetaverseAttributeId { get; set; }
+
+    /// <summary>
     /// The MetaverseAttribute that the SSOUniqueIdentifierClaimType will map to when mapping IDP users to JIM users when authenticating with JIM.
     /// </summary>
     public MetaverseAttribute? SSOUniqueIdentifierMetaverseAttribute { get; set; }
