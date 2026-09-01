@@ -861,12 +861,12 @@ public partial class ConnectedSystemServer
         if (newMode == ObjectMatchingRuleMode.SyncRule)
         {
             // Switching to Advanced Mode - copy matching rules to import Synchronisation Rules
-            result = await SwitchToAdvancedModeAsync(connectedSystem, initiatedBy, initiatedByApiKey);
+            result = await SwitchToAdvancedModeAsync(connectedSystem);
         }
         else
         {
             // Switching to Simple Mode - migrate rules from Synchronisation Rules to object types
-            result = await SwitchToSimpleModeAsync(connectedSystem, initiatedBy);
+            result = await SwitchToSimpleModeAsync(connectedSystem);
         }
 
         if (!result.Success)
@@ -900,13 +900,12 @@ public partial class ConnectedSystemServer
         return result;
     }
 
-    private async Task<ObjectMatchingModeSwitchResult> SwitchToAdvancedModeAsync(
-        ConnectedSystem connectedSystem,
-        MetaverseObject? initiatedBy,
-        ApiKey? initiatedByApiKey)
+    private async Task<ObjectMatchingModeSwitchResult> SwitchToAdvancedModeAsync(ConnectedSystem connectedSystem)
     {
         var syncRulesUpdated = 0;
-        var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+        // Change-tracked because the copies below are persisted through UpdateSyncRuleAsync, which refuses a
+        // detached rule (nothing would save).
+        var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true, withChangeTracking: true);
         var importSyncRules = syncRules.Where(sr => sr.Direction == SyncRuleDirection.Import).ToList();
 
         foreach (var syncRule in importSyncRules)
@@ -937,10 +936,11 @@ public partial class ConnectedSystemServer
                 syncRule.ObjectMatchingRules.Add(newRule);
             }
 
-            if (initiatedByApiKey != null)
-                await CreateOrUpdateSyncRuleAsync(syncRule, initiatedByApiKey);
-            else
-                await CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            // Saved through the repository directly, not CreateOrUpdateSyncRuleAsync: the full save path's
+            // simple-mode validation clears a Synchronisation Rule's own matching rules, and the system's mode
+            // only flips to Advanced after this migration, so it would clear the very rules just copied. The
+            // switch's own Activity and configuration change capture record the operation.
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
             syncRulesUpdated++;
         }
 
@@ -974,14 +974,14 @@ public partial class ConnectedSystemServer
         return ObjectMatchingModeSwitchResult.ToAdvancedMode(syncRulesUpdated, warnings);
     }
 
-    private async Task<ObjectMatchingModeSwitchResult> SwitchToSimpleModeAsync(
-        ConnectedSystem connectedSystem,
-        MetaverseObject? initiatedBy)
+    private async Task<ObjectMatchingModeSwitchResult> SwitchToSimpleModeAsync(ConnectedSystem connectedSystem)
     {
         var migrations = new List<ObjectTypeMatchingRuleMigration>();
         var objectTypesUpdated = 0;
 
-        var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+        // Change-tracked because the clears below are persisted through UpdateSyncRuleAsync, which refuses a
+        // detached rule; tracked removal also cascade-deletes the cleared rules rather than orphaning them.
+        var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true, withChangeTracking: true);
         var importSyncRules = syncRules.Where(sr => sr.Direction == SyncRuleDirection.Import).ToList();
 
         // Group Synchronisation Rules by object type
@@ -8585,9 +8585,11 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
     /// <param name="includeDisabledSyncRules">Controls whether to return Synchronisation Rules that are disabled</param>
-    public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules)
+    /// <param name="withChangeTracking">Track the returned rules for mutation on this JimApplication instance;
+    /// required by callers that go on to save them, since <c>UpdateSyncRuleAsync</c> refuses a detached rule.</param>
+    public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules);
+        return await Application.Repository.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules, withChangeTracking);
     }
 
     /// <summary>
