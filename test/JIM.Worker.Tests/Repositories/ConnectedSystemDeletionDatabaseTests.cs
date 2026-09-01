@@ -299,4 +299,61 @@ public class ConnectedSystemDeletionDatabaseTests
             Assert.That(persisted.ConnectedSystemRunProfileId, Is.Null, "the Run Profile reference stays severed");
         }
     }
+
+    /// <summary>
+    /// An Object Matching Rule can be orphaned of both parents: EF Core nulls the optional owner foreign key when
+    /// a rule is removed from its owner's collection rather than deleted, which is what the Synchronisation Rule
+    /// save path's clears did before #1589. The deletion sequence removes a system's matching rules by scope, so
+    /// an orphan matched neither arm, its source's reference to a Connected System attribute refused the attribute
+    /// delete with 23503, and the whole deletion rolled back: the system could never be deleted. The sweep must
+    /// remove orphans reaching the system through their sources, because existing deployments may already hold them.
+    /// </summary>
+    [Test]
+    public async Task DeleteConnectedSystemAsync_WithAnOrphanedObjectMatchingRule_DeletesItAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (systemId, _) = await SeedSystemAsync(suffix);
+
+        int orphanedRuleId;
+        await using (var ctx = NewContext())
+        {
+            var objectType = new ConnectedSystemObjectType { ConnectedSystemId = systemId, Name = "user", Selected = true };
+            ctx.ConnectedSystemObjectTypes.Add(objectType);
+            await ctx.SaveChangesAsync();
+
+            var attribute = new ConnectedSystemObjectTypeAttribute { ConnectedSystemObjectType = objectType, Name = "employeeId" };
+            ctx.ConnectedSystemAttributes.Add(attribute);
+            await ctx.SaveChangesAsync();
+
+            // The orphan: no owning Object Type, no owning Synchronisation Rule, one source still referencing
+            // the system's attribute. Exactly what a pre-fix save-path clear left behind.
+            var orphanedRule = new ObjectMatchingRule
+            {
+                Order = 0,
+                Sources = [new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttributeId = attribute.Id }]
+            };
+            ctx.ObjectMatchingRules.Add(orphanedRule);
+            await ctx.SaveChangesAsync();
+            orphanedRuleId = orphanedRule.Id;
+        }
+
+        await using (var deleteCtx = NewContext())
+        {
+            var repository = new PostgresDataRepository(deleteCtx);
+
+            Assert.That(async () => await repository.ConnectedSystems.DeleteConnectedSystemAsync(systemId),
+                Throws.Nothing,
+                "an orphaned Object Matching Rule must not make a Connected System undeletable; its source's " +
+                "attribute reference has to be swept before the attributes are deleted");
+        }
+
+        await using var assertCtx = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await assertCtx.ConnectedSystems.AnyAsync(cs => cs.Id == systemId), Is.False,
+                "the Connected System itself is gone");
+            Assert.That(await assertCtx.ObjectMatchingRules.AnyAsync(r => r.Id == orphanedRuleId), Is.False,
+                "the orphan goes with it rather than being left behind");
+        }
+    }
 }

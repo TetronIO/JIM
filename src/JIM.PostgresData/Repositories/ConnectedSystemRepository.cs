@@ -6760,6 +6760,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                  OR ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
+        // 10b. Sweep Object Matching Rules orphaned of both parents whose sources still reference this system's
+        //      attributes. The save path used to sever rules from their owner rather than delete them (#1589),
+        //      leaving parentless rows the scoped statement above cannot match; their sources then refuse the
+        //      attribute delete at step 12 and the whole deletion rolls back. The save path now deletes properly,
+        //      but existing deployments may already hold orphans, so the sequence has to clean them or the system
+        //      can never be deleted. Their Sources are removed automatically via ON DELETE CASCADE.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ObjectMatchingRules"" omr
+              WHERE omr.""ConnectedSystemObjectTypeId"" IS NULL
+                AND omr.""SyncRuleId"" IS NULL
+                AND EXISTS (
+                    SELECT 1 FROM ""ObjectMatchingRuleSources"" s
+                    INNER JOIN ""ConnectedSystemAttributes"" a ON s.""ConnectedSystemAttributeId"" = a.""Id""
+                    INNER JOIN ""ConnectedSystemObjectTypes"" ot ON a.""ConnectedSystemObjectTypeId"" = ot.""Id""
+                    WHERE s.""ObjectMatchingRuleId"" = omr.""Id"" AND ot.""ConnectedSystemId"" = {0}
+                )",
+            connectedSystemId);
+
         // 11. Delete Synchronisation Rules
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0}",
