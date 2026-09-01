@@ -288,10 +288,10 @@ Deletes a Synchronisation Rule and all associated configuration, including attri
 
 ```powershell
 # By ID (default)
-Remove-JIMSyncRule -Id <int> [-KeepContributedValues] [-Force] [-ChangeReason <string>] [-PassThru]
+Remove-JIMSyncRule -Id <int> [-KeepContributedValues] [-Wait] [-Timeout <int>] [-Force] [-ChangeReason <string>] [-PassThru]
 
 # By input object
-Remove-JIMSyncRule -InputObject <PSCustomObject> [-KeepContributedValues] [-Force] [-ChangeReason <string>] [-PassThru]
+Remove-JIMSyncRule -InputObject <PSCustomObject> [-KeepContributedValues] [-Wait] [-Timeout <int>] [-Force] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -301,6 +301,8 @@ Remove-JIMSyncRule -InputObject <PSCustomObject> [-KeepContributedValues] [-Forc
 | `Id` | `int` | Yes (ById set) | | The ID of the Synchronisation Rule to delete. Accepts pipeline input. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Synchronisation Rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
 | `KeepContributedValues` | `switch` | No | `$false` | Keeps the Metaverse attribute values the rule contributed instead of recalling them. The kept values lose their provenance, so nothing can ever recall them. Omit to recall (the default): the rule is disabled immediately and the recall runs as a queued background operation, with the rule deleted as its final step. |
+| `Wait` | `switch` | No | `$false` | Waits for a queued contributed-values recall to finish before returning, so the rule really has gone when the cmdlet does. Without it, anything the script does next (reading the rule back, reordering the attribute's contributors) races the recall. No effect when the deletion completes immediately. |
+| `Timeout` | `int` | No | | Maximum seconds to wait when `-Wait` is supplied. Omit to wait indefinitely. A recall still running at the timeout is reported as an error; it continues on the server regardless. |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt (and the impact lookup that would populate it) |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with the deletion and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the deleted Synchronisation Rule object before removal |
@@ -333,6 +335,14 @@ Remove-JIMSyncRule -Id 5 -Force
 $recall = Remove-JIMSyncRule -Id 5 -Force
 Get-JIMActivity -Id $recall.RecallActivityId
 ```
+
+```powershell title="Delete a contributing rule and wait for the recall to land"
+Remove-JIMSyncRule -Id 5 -Force -Wait
+Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 3 -MappingId @(7, 9)
+```
+
+Without `-Wait`, the reorder races the recall: until it lands, the rule still counts as a contributor, and
+the API refuses a priority order that omits it.
 
 ```powershell title="Delete a rule KEEPING the values it contributed"
 Remove-JIMSyncRule -Id 5 -KeepContributedValues
