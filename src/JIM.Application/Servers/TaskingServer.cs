@@ -162,6 +162,17 @@ namespace JIM.Application.Servers
                 // every crud operation requires tracking with an activity...
                 // Core: only .Name is read for activity context.
                 var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+
+                // A Deleting Connected System is fenced (#809): its Connector Space must not be cleared while
+                // its own deletion or Synchronised Deprovisioning run is in flight, mirroring the fencing
+                // already applied to run profile execution above. This is the single choke point every clear
+                // path (portal, REST, PowerShell) queues through.
+                if (connectedSystem?.Status == ConnectedSystemStatus.Deleting)
+                {
+                    return WorkerTaskCreationResult.Failed(
+                        $"Connected System '{connectedSystem.Name}' is being deleted; its Connector Space cannot be cleared.");
+                }
+
                 var activity = new Activity
                 {
                     TargetName = connectedSystem?.Name,

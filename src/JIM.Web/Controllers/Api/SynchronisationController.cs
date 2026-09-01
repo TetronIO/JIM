@@ -2540,16 +2540,21 @@ public class SynchronisationController(
     /// Clear the connector space for a Connected System
     /// </summary>
     /// <remarks>
-    /// Removes all Connected System Objects and their Attributes from the connector space. Typically used before re-importing data. This is a destructive operation.
+    /// Queues the clear as a background task, exactly as the portal does: removing every Connected System
+    /// Object and its Attributes from the connector space is tracked by an Activity (target, operation type,
+    /// cleared counts on completion) rather than run inline with no audit trail. Typically used before
+    /// re-importing data. This is a destructive operation. The response is always 202 Accepted with the
+    /// Activity and Worker Task ids for tracking.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System to clear.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the cleared CSOs. Default: true (recommended for re-import scenarios).</param>
-    /// <response code="200">Connector space cleared successfully.</response>
-    /// <response code="400">Clear operation failed.</response>
-    /// <response code="401">User is not authenticated.</response>
+    /// <returns>The queued clear's tracking ids.</returns>
+    /// <response code="202">Connector Space clear has been queued.</response>
+    /// <response code="400">Clear operation could not be queued.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
     /// <response code="404">Connected System not found.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/clear", Name = "ClearConnectorSpace")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectorSpaceClearResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -2560,31 +2565,55 @@ public class SynchronisationController(
         _logger.LogInformation("Clear connector space requested for Connected System: {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
 
-        try
+        // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        // Get the current user from the JWT claims (may be null for API key auth)
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
-            var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
-            if (connectedSystem == null)
+            _logger.LogWarning("Could not identify user from JWT claims for Clear Connector Space request");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // Create and queue the clear task
+        // Use API key for attribution when authenticated via API key
+        ClearConnectedSystemObjectsWorkerTask workerTask;
+        if (initiatedBy != null)
+        {
+            workerTask = ClearConnectedSystemObjectsWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, deleteChangeHistory);
+        }
+        else
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey == null)
             {
-                return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+                _logger.LogError("Failed to resolve API key for Clear Connector Space request");
+                return BadRequest(new { error = "Failed to identify initiating API key" });
             }
+            workerTask = ClearConnectedSystemObjectsWorkerTask.ForApiKey(connectedSystemId, apiKey.Id, apiKey.Name, deleteChangeHistory);
+        }
 
-            await _application.ConnectedSystems.ClearConnectedSystemObjectsAsync(connectedSystemId, deleteChangeHistory);
+        var result = await _application.Tasking.CreateWorkerTaskAsync(workerTask);
+        if (!result.Success)
+        {
+            _logger.LogWarning("Clear Connector Space request blocked: {Error}", LogSanitiser.Sanitise(result.ErrorMessage));
+            return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Validation failed."));
+        }
 
-            _logger.LogInformation("Connector space cleared for Connected System: {Id}", connectedSystemId);
-            return Ok();
-        }
-        catch (InvalidOperationException ex)
+        _logger.LogInformation("Clear Connector Space queued: ConnectedSystem={SystemId}, TaskId={TaskId}, ActivityId={ActivityId}",
+            connectedSystemId, workerTask.Id, workerTask.Activity?.Id);
+
+        var response = new ConnectorSpaceClearResponse
         {
-            _logger.LogWarning(ex, "Clear connector space failed for Connected System: {Id}", connectedSystemId);
-            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Clear connector space failed for Connected System: {Id}", connectedSystemId);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                ApiErrorResponse.InternalError($"Clear operation failed: {ex.Message}"));
-        }
+            ActivityId = workerTask.Activity?.Id ?? Guid.Empty,
+            TaskId = workerTask.Id,
+            Message = $"Connector Space clear for '{connectedSystem.Name}' has been queued."
+        };
+
+        return Accepted(response);
     }
 
     /// <summary>
