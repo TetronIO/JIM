@@ -191,6 +191,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Saving an export Synchronisation Rule no longer clears its Object Matching Rules on a system in advanced matching mode. Advanced-mode export matching reads exactly those rules to join an identity being provisioned to an account that already exists, but any whole-rule save (the portal editor, the REST update, `Set-JIMSyncRule`) silently wiped them, so editing any other property of the rule removed the join-instead-of-duplicate protection. The clear now applies only in simple matching mode, where such rules are inert, matching how import rules are treated. (#1589)
+
 - 🐛 Switching a Connected System's matching mode now works under API key authentication. The REST endpoint accepted an API key but attributed the switch to nobody, and the audit rule that every Activity names a security principal (rightly) refused it, so `Switch-JIMMatchingMode` and the `matching-mode` endpoint always failed for automation; the switch could only ever be made from the portal or by a signed-in API caller. The switch's Activities are now attributed to the calling API key, like every other write on the surface. (#1569)
 
 - 🐛 A factory reset failed with a 409 error on any deployment with SSO configured: the reset's final step, which invalidates existing portal sessions, tripped over the built-in configuration restore it had just run and rolled the session-invalidation save back. The Service Settings update now records the SSO unique identifier reference by key, and the reset completes.

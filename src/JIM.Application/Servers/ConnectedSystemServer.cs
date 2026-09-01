@@ -8676,8 +8676,13 @@ public partial class ConnectedSystemServer
         else
         {
             // export rule cannot have these properties:
-            syncRule.ObjectMatchingRules.Clear();
             syncRule.ProjectToMetaverse = null;
+
+            // Matching rules on an export Synchronisation Rule follow the system's matching mode, exactly like
+            // the import branch above: in Simple Mode the engine consults the Connected System Object Type's
+            // rules, so rules held here are inert and are cleared; in Advanced Mode export matching reads the
+            // export rule's own rules (SelectExportMatchingRules), so they must survive the save (#1589).
+            await ClearInertExportMatchingRulesAsync(syncRule);
         }
 
         // Only a newly created account has never had a password, so a rule that creates none cannot deliver an
@@ -8847,8 +8852,11 @@ public partial class ConnectedSystemServer
         }
         else
         {
-            syncRule.ObjectMatchingRules.Clear();
             syncRule.ProjectToMetaverse = null;
+
+            // Mode-aware, mirroring the user-initiated overload: Advanced Mode export matching reads the export
+            // rule's own rules, so only Simple Mode's inert rules are cleared (#1589).
+            await ClearInertExportMatchingRulesAsync(syncRule);
         }
 
         // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
@@ -9309,6 +9317,29 @@ public partial class ConnectedSystemServer
     /// is discovering the duplicate identities by hand, months later.
     /// </remarks>
     /// <exception cref="InvalidDataException">The rule cannot work, with the reason.</exception>
+    /// <summary>
+    /// Clears an export Synchronisation Rule's own Object Matching Rules when the Connected System is in simple
+    /// matching mode, where the engine consults the Connected System Object Type's rules and these would be
+    /// silently inert. In advanced mode they are what export matching reads, so they are left alone (#1589).
+    /// </summary>
+    private async Task ClearInertExportMatchingRulesAsync(SyncRule syncRule)
+    {
+        if (syncRule.ObjectMatchingRules.Count == 0 || syncRule.ConnectedSystemId <= 0)
+            return;
+
+        // Core: only ObjectMatchingRuleMode (a scalar on the entity) is read below.
+        var connectedSystem = syncRule.ConnectedSystem ??
+            await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId);
+
+        if (connectedSystem?.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
+            return;
+
+        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from export Synchronisation Rule {Id} " +
+            "because Connected System {CsId} is in Simple Mode",
+            syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
+        syncRule.ObjectMatchingRules.Clear();
+    }
+
     private static void EnsureObjectMatchingRuleIsWorkable(ObjectMatchingRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
