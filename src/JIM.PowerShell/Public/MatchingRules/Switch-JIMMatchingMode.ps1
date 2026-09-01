@@ -10,8 +10,14 @@ function Switch-JIMMatchingMode {
         Switches between simple mode (matching rules on object types) and advanced mode
         (matching rules on Synchronisation Rules) for a Connected System.
 
-        When switching to advanced mode, matching rules are copied from object types to Synchronisation Rules.
-        When switching to simple mode, matching rules are migrated from Synchronisation Rules to object types.
+        When switching to advanced mode, matching rules are copied from object types to import
+        Synchronisation Rules. The object types' own rules are retained but no longer consulted,
+        and export Synchronisation Rules receive nothing, so export matching stops until rules
+        are added to them; the switch warns about both.
+        When switching to simple mode, matching rules are migrated from Synchronisation Rules to
+        object types. Where an object type already has rules, those take precedence and the
+        Synchronisation Rules' own rules are discarded; the switch warns when that happens.
+        All warnings are surfaced on the PowerShell warning stream.
 
     .PARAMETER ConnectedSystemId
         The unique identifier of the Connected System.

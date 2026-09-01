@@ -5272,6 +5272,13 @@ public class SynchronisationController(
             _logger.LogWarning(ex, "Failed to create Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+        catch (InvalidDataException ex)
+        {
+            // The application layer refuses a rule that could never work (#1458) or whose scope the system's
+            // matching mode would never consult (#1569); both are the caller's configuration to correct.
+            _logger.LogWarning(ex, "Refused Object Matching Rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
     }
 
     /// <summary>
@@ -5392,6 +5399,12 @@ public class SynchronisationController(
         catch (ArgumentException ex)
         {
             _logger.LogWarning(ex, "Failed to update Object Matching Rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        catch (InvalidDataException ex)
+        {
+            // The application layer refuses a rule edited into a shape that could never work (#1458).
+            _logger.LogWarning(ex, "Refused Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -5595,6 +5608,13 @@ public class SynchronisationController(
             _logger.LogWarning(ex, "Failed to create Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+        catch (InvalidDataException ex)
+        {
+            // The application layer refuses a rule that could never work (#1458) or whose scope the system's
+            // matching mode would never consult (#1569); both are the caller's configuration to correct.
+            _logger.LogWarning(ex, "Refused Object Matching Rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
     }
 
     /// <summary>
@@ -5703,6 +5723,12 @@ public class SynchronisationController(
         catch (ArgumentException ex)
         {
             _logger.LogWarning(ex, "Failed to update Object Matching Rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        catch (InvalidDataException ex)
+        {
+            // The application layer refuses a rule edited into a shape that could never work (#1458).
+            _logger.LogWarning(ex, "Refused Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }

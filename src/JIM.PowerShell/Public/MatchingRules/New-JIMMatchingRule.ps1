@@ -11,6 +11,11 @@ function New-JIMMatchingRule {
         Object Matching Rules define how objects from a Connected System are correlated
         with Metaverse Objects during import (join) and export (provisioning) operations.
 
+        The Connected System must be in simple matching mode: JIM refuses to create a
+        per-object-type rule on a system in advanced matching mode, because such a rule
+        would never be consulted. Switch the mode first with Switch-JIMMatchingMode, or
+        use New-JIMSyncRuleMatchingRule to create a per-Synchronisation Rule rule instead.
+
     .PARAMETER ConnectedSystemId
         The unique identifier of the Connected System.
 
@@ -57,6 +62,7 @@ function New-JIMMatchingRule {
         Get-JIMMatchingRule
         Set-JIMMatchingRule
         Remove-JIMMatchingRule
+        Switch-JIMMatchingMode
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     [OutputType([PSCustomObject])]

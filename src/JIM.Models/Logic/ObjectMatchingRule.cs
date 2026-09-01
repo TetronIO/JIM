@@ -156,6 +156,32 @@ public class ObjectMatchingRule : IAuditable
     }
 
     /// <summary>
+    /// Why a rule of the given scope would never be consulted under the Connected System's active matching mode,
+    /// in the terms an administrator would use, or null when scope and mode agree.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="DescribeInvalidity"/> is deliberately mode-blind: it validates the rule's own shape, which this
+    /// method cannot know because the active mode lives on the Connected System. The synchronisation engine only
+    /// consults the scope the mode names, so a rule of the other scope is silently inert: synchronisation joins
+    /// nothing, no error, no warning (#1569). Creation refuses such a rule with this message; rules of the other
+    /// scope that already exist (retained by a mode switch for a later switch back) remain editable and deletable.
+    /// </remarks>
+    /// <param name="activeMode">The owning Connected System's current matching mode.</param>
+    /// <param name="ruleIsSyncRuleScoped">True when the rule belongs to a Synchronisation Rule; false when it
+    /// belongs to a Connected System Object Type.</param>
+    /// <param name="connectedSystemName">The owning Connected System's name, for the message.</param>
+    public static string? DescribeScopeMismatch(ObjectMatchingRuleMode activeMode, bool ruleIsSyncRuleScoped, string connectedSystemName)
+    {
+        if (activeMode == ObjectMatchingRuleMode.ConnectedSystem && ruleIsSyncRuleScoped)
+            return $"Connected System '{connectedSystemName}' is in simple matching mode: Object Matching Rules are defined per Connected System Object Type, and a rule scoped to a Synchronisation Rule would never be consulted. Define the rule on the Connected System Object Type instead, or switch the system to advanced matching mode first.";
+
+        if (activeMode == ObjectMatchingRuleMode.SyncRule && !ruleIsSyncRuleScoped)
+            return $"Connected System '{connectedSystemName}' is in advanced matching mode: Object Matching Rules are defined per Synchronisation Rule, and a rule scoped to a Connected System Object Type would never be consulted. Define the rule on the Synchronisation Rule instead, or switch the system to simple matching mode first.";
+
+        return null;
+    }
+
+    /// <summary>
     /// Helper method to provide a description for the user on what type of source configuration this is.
     /// </summary>
     public SyncRuleMappingSourcesType GetSourceType()

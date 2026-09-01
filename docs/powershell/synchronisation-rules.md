@@ -992,6 +992,7 @@ With `-PassThru`, returns the Connected System Object reflecting the new mode. W
 - `ConnectedSystem` mode defines matching rules at the object type level; all Synchronisation Rules for that object type share the same matching configuration.
 - `SyncRule` mode defines matching rules on each Synchronisation Rule independently, providing fine-grained control.
 - When switching modes, existing rules are migrated automatically. Review the migrated rules after switching to confirm they are correct.
+- The switch warns about anything it strands, on the PowerShell warning stream. Switching to `SyncRule` mode retains the per-object-type rules unconsulted (they resume effect on a switch back) and copies nothing onto export Synchronisation Rules, so export matching stops for them until rules are added. Switching to `ConnectedSystem` mode discards the Synchronisation Rules' own rules where the object type already has rules of its own.
 
 ### Examples
 
@@ -1050,6 +1051,8 @@ Get-JIMMatchingRule -ConnectedSystemId 1 -Id 5
 ### New-JIMMatchingRule
 
 Creates a new matching rule for a Connected System Object Type. The source is a Connected System attribute, matched against the rule's target metaverse attribute.
+
+The Connected System must be in simple matching mode: JIM refuses to create a per-object-type rule on a system in advanced matching mode, because the synchronisation engine would never consult it. Switch the mode first with [Switch-JIMMatchingMode](#switch-jimmatchingmode), or use [New-JIMSyncRuleMatchingRule](#new-jimsyncrulematchingrule) instead.
 
 #### Syntax
 
@@ -1238,6 +1241,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId <int>
 #### Notes
 
 - The Metaverse Object Type is derived from the Synchronisation Rule, so you do not need to specify it explicitly.
+- The Connected System must be in advanced matching mode: JIM refuses to create a per-Synchronisation-Rule rule on a system in simple matching mode, because the synchronisation engine would never consult it. Switch the mode first with [Switch-JIMMatchingMode](#switch-jimmatchingmode), or use [New-JIMMatchingRule](#new-jimmatchingrule) instead.
 
 #### Examples
 
