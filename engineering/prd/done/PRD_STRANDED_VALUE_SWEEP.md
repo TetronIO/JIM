@@ -1,6 +1,6 @@
 # Stranded Contributed Values: Flag-Gated Recall Sweep after a Connector Space Clear
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-09-01
 - **Author:** Jay Van der Zant (design artefact and exploration by Claude)
 - **Issue:** [#1549](https://github.com/TetronIO/JIM/issues/1549)

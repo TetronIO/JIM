@@ -1,8 +1,8 @@
 # Stranded Value Sweep: Implementation Plan
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#1549](https://github.com/TetronIO/JIM/issues/1549)
-- **PRD:** [PRD_STRANDED_VALUE_SWEEP.md](../../prd/doing/PRD_STRANDED_VALUE_SWEEP.md)
+- **PRD:** [PRD_STRANDED_VALUE_SWEEP.md](../../prd/done/PRD_STRANDED_VALUE_SWEEP.md)
 
 ## Overview
 
