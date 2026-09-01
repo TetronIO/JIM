@@ -147,83 +147,20 @@ function Start-JIMRunProfile {
                     Write-Verbose "Waiting for Run Profile execution to complete (no timeout)"
                 }
 
-                $startTime = Get-Date
                 $activityId = $response.activityId
-                $completed = $false
-                $lastStatus = ''
 
-                $consecutiveAuthFailures = 0
-                $maxAuthFailures = 3
-
-                # Cooperative abort: if JIM_RUNPROFILE_ABORT_SENTINEL points to
-                # a file that exists and is non-empty, a test harness has decided
-                # the run should fail (typically because an error watcher saw an
-                # [ERR] line in JIM logs). Break out of the wait and throw so the
-                # scenario fails fast instead of polling indefinitely.
-                $abortSentinel = $env:JIM_RUNPROFILE_ABORT_SENTINEL
-
-                while (-not $completed -and (-not $hasTimeout -or ((Get-Date) - $startTime).TotalSeconds -lt $Timeout)) {
-                    Start-Sleep -Seconds 2
-
-                    if ($abortSentinel -and (Test-Path $abortSentinel)) {
-                        $sentinelInfo = Get-Item $abortSentinel -ErrorAction SilentlyContinue
-                        if ($sentinelInfo -and $sentinelInfo.Length -gt 0) {
-                            Write-Progress -Activity "Executing Run Profile" -Completed
-                            throw "Run Profile wait aborted: JIM error watcher reported errors (see $abortSentinel). Activity ID: $activityId."
-                        }
-                    }
-
-                    try {
-                        # Lightweight progress endpoint (issue #202): status, counts, phase
-                        # message, throughput and ETA without the cost of the full detail read.
-                        $activityProgress = Invoke-JIMApi -Endpoint "/api/v1/activities/$activityId/progress"
-
-                        # Reset auth failure counter on successful call
-                        $consecutiveAuthFailures = 0
-
-                        # Update progress
-                        $elapsed = [int]((Get-Date) - $startTime).TotalSeconds
-                        $status = $activityProgress.status ?? 'Running'
-
-                        if ($status -ne $lastStatus) {
-                            Write-Verbose "Status: $status"
-                            $lastStatus = $status
-                        }
-
-                        $progressParams = Get-JIMActivityProgressDisplay -Progress $activityProgress -ActivityLabel "Executing Run Profile" -ElapsedSeconds $elapsed
-                        Write-Progress @progressParams
-
-                        # Check if completed (matches ActivityStatus enum names)
-                        if ($status -in @('Complete', 'CompleteWithWarning', 'CompleteWithError', 'FailedWithError', 'Cancelled')) {
-                            $completed = $true
-                        }
-                    }
-                    catch {
-                        $errorMsg = "$_"
-
-                        # Detect authentication failures and stop polling rather than spamming
-                        if ($errorMsg -match 'Authentication failed|session may have expired|API key may be invalid') {
-                            $consecutiveAuthFailures++
-
-                            if ($consecutiveAuthFailures -ge $maxAuthFailures) {
-                                Write-Progress -Activity "Executing Run Profile" -Completed
-                                throw "Authentication failed while monitoring activity $activityId. The operation was submitted successfully and may still be running on the server. Use Get-JIMActivity -Id $activityId to check its status after re-authenticating with Connect-JIM."
-                            }
-
-                            # Brief warning on first/second failure - Invoke-JIMApi may have already
-                            # refreshed the token transparently, so give it another chance
-                            Write-Warning "Authentication error while checking activity status (attempt $consecutiveAuthFailures of $maxAuthFailures). Retrying..."
-                        }
-                        else {
-                            # Non-auth errors: warn but continue polling
-                            Write-Warning "Error checking activity status: $errorMsg"
-                        }
-                    }
+                $waitParams = @{
+                    ActivityId    = "$activityId"
+                    ActivityLabel = 'Executing Run Profile'
                 }
+                if ($hasTimeout) { $waitParams.Timeout = $Timeout }
+                # Cooperative abort: a test harness sets this when its error watcher sees an [ERR] line
+                # in JIM's logs, so the scenario fails fast instead of polling to the run's natural end.
+                if ($env:JIM_RUNPROFILE_ABORT_SENTINEL) { $waitParams.AbortSentinelPath = $env:JIM_RUNPROFILE_ABORT_SENTINEL }
 
-                Write-Progress -Activity "Executing Run Profile" -Completed
+                $finalStatus = Wait-JIMActivityCompletion @waitParams
 
-                if (-not $completed -and $hasTimeout) {
+                if (-not $finalStatus -and $hasTimeout) {
                     throw "Timeout waiting for Run Profile execution after $Timeout seconds. Activity ID: $activityId. The operation may still be running in the background."
                 }
             }
