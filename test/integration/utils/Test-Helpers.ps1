@@ -1938,6 +1938,70 @@ function Assert-ActivitySuccess {
     throw "Activity '$Name' did not complete successfully. Status: $status (ActivityId: $ActivityId)"
 }
 
+function Remove-SyncRuleAndWait {
+    <#
+    .SYNOPSIS
+        Removes a Synchronisation Rule and waits until it has actually gone.
+
+    .DESCRIPTION
+        Remove-JIMSyncRule answers 202 Accepted with a RecallActivityId when the rule still contributes
+        Metaverse attribute values: the rule is disabled immediately, and it is deleted as the final step
+        of a queued Worker recall task that withdraws its values and re-elects the surviving contributors.
+        A test that asserts the rule has gone the moment the cmdlet returns is racing that task, and loses;
+        Scenario 14's ScopedExceptionAuthority failed exactly that way, sub-second, every run.
+
+        This waits for the rule to disappear, then asserts the recall Activity itself succeeded, so a
+        recall that fails is reported as a failure rather than as a rule that never went away. A rule
+        contributing nothing deletes synchronously and is asserted absent immediately.
+
+    .PARAMETER Id
+        The id of the Synchronisation Rule to remove.
+
+    .PARAMETER Name
+        The rule's name, used to poll for its absence and to phrase failures.
+
+    .PARAMETER TimeoutSeconds
+        How long to wait for the recall to delete the rule. Defaults to 120.
+
+    .EXAMPLE
+        Remove-SyncRuleAndWait -Id $exceptionRule.id -Name $exceptionRuleName
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$Id,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$false)]
+        [int]$TimeoutSeconds = 120
+    )
+
+    $removal = Remove-JIMSyncRule -Id $Id -Force
+
+    if ($removal -and $removal.RecallActivityId) {
+        Write-Host "  Contributed-values recall queued for '$Name' (Activity: $($removal.RecallActivityId)); the rule is deleted as its final step" -ForegroundColor Gray
+
+        $gone = Wait-ForCondition -TimeoutSeconds $TimeoutSeconds -IntervalSeconds 2 `
+            -Description "Synchronisation Rule '$Name' to be deleted by its contributed-values recall" `
+            -Condition { -not (@(Get-JIMSyncRule) | Where-Object { $_.name -eq $Name }) }
+
+        if (-not $gone) {
+            $recallActivity = Get-JIMActivity -Id $removal.RecallActivityId
+            throw "'$Name' was still present ${TimeoutSeconds}s after removal; its contributed-values recall " +
+                "(Activity $($removal.RecallActivityId)) is '$($recallActivity.status)'."
+        }
+
+        Assert-ActivitySuccess -ActivityId $removal.RecallActivityId -Name "Contributed-values recall for '$Name'"
+        return
+    }
+
+    if (@(Get-JIMSyncRule) | Where-Object { $_.name -eq $Name }) {
+        throw "'$Name' is still present after removal, and no contributed-values recall was queued to explain it."
+    }
+}
+
+
 function Assert-ImportedObjectCount {
     <#
     .SYNOPSIS
