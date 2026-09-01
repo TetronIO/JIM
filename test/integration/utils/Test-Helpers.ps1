@@ -1950,9 +1950,9 @@ function Remove-SyncRuleAndWait {
         A test that asserts the rule has gone the moment the cmdlet returns is racing that task, and loses;
         Scenario 14's ScopedExceptionAuthority failed exactly that way, sub-second, every run.
 
-        This waits for the rule to disappear, then asserts the recall Activity itself succeeded, so a
-        recall that fails is reported as a failure rather than as a rule that never went away. A rule
-        contributing nothing deletes synchronously and is asserted absent immediately.
+        Remove-JIMSyncRule -Wait does the waiting, and reports a recall that ends badly rather than leaving
+        it to surface as a rule that never went away; this adds the name-based absence check the scenarios
+        assert on. A rule contributing nothing deletes synchronously and is asserted absent immediately.
 
     .PARAMETER Id
         The id of the Synchronisation Rule to remove.
@@ -1977,27 +1977,14 @@ function Remove-SyncRuleAndWait {
         [int]$TimeoutSeconds = 120
     )
 
-    $removal = Remove-JIMSyncRule -Id $Id -Force
-
-    if ($removal -and $removal.RecallActivityId) {
-        Write-Host "  Contributed-values recall queued for '$Name' (Activity: $($removal.RecallActivityId)); the rule is deleted as its final step" -ForegroundColor Gray
-
-        $gone = Wait-ForCondition -TimeoutSeconds $TimeoutSeconds -IntervalSeconds 2 `
-            -Description "Synchronisation Rule '$Name' to be deleted by its contributed-values recall" `
-            -Condition { -not (@(Get-JIMSyncRule) | Where-Object { $_.name -eq $Name }) }
-
-        if (-not $gone) {
-            $recallActivity = Get-JIMActivity -Id $removal.RecallActivityId
-            throw "'$Name' was still present ${TimeoutSeconds}s after removal; its contributed-values recall " +
-                "(Activity $($removal.RecallActivityId)) is '$($recallActivity.status)'."
-        }
-
-        Assert-ActivitySuccess -ActivityId $removal.RecallActivityId -Name "Contributed-values recall for '$Name'"
-        return
-    }
+    # Remove-JIMSyncRule -Wait blocks until any queued contributed-values recall has finished, reports a
+    # recall that ends badly, and confirms the rule itself is gone. This wraps it with the name-based
+    # absence check the scenarios assert on.
+    $removeParams = @{ Id = $Id; Force = $true; Wait = $true; Timeout = $TimeoutSeconds }
+    Remove-JIMSyncRule @removeParams -ErrorAction Stop | Out-Null
 
     if (@(Get-JIMSyncRule) | Where-Object { $_.name -eq $Name }) {
-        throw "'$Name' is still present after removal, and no contributed-values recall was queued to explain it."
+        throw "'$Name' is still present after removal."
     }
 }
 
