@@ -312,6 +312,37 @@ public class ObjectMatchingModeTests
     }
 
     [Test]
+    public async Task SwitchObjectMatchingModeAsync_ApiKeyInitiator_SwitchesAndAttributesTheActivityAsync()
+    {
+        // Automation authenticates with an API key, and every Activity must be attributed to a security principal.
+        // The switch previously only accepted a user, so Switch-JIMMatchingMode and the REST endpoint failed the
+        // attribution check under API key authentication and the mode could not be switched by script at all.
+        var (connectedSystem, _, _) = BuildSystemForAdvancedSwitch();
+        Activity? capturedActivity = null;
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a => capturedActivity = a)
+            .Returns(Task.CompletedTask);
+        var apiKey = new JIM.Models.Security.ApiKey
+        {
+            Id = Guid.NewGuid(),
+            Name = "AutomationKey",
+            KeyHash = "hash",
+            KeyPrefix = "test",
+            IsEnabled = true,
+            Created = DateTime.UtcNow
+        };
+
+        var result = await _jim.ConnectedSystems.SwitchObjectMatchingModeAsync(
+            connectedSystem, ObjectMatchingRuleMode.SyncRule, apiKey);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(connectedSystem.ObjectMatchingRuleMode, Is.EqualTo(ObjectMatchingRuleMode.SyncRule));
+        Assert.That(capturedActivity, Is.Not.Null);
+        Assert.That(capturedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
+        Assert.That(capturedActivity.InitiatedByName, Is.EqualTo("AutomationKey"));
+    }
+
+    [Test]
     public async Task SwitchObjectMatchingModeAsync_SameMode_ReturnsNoChangeAsync()
     {
         // Arrange

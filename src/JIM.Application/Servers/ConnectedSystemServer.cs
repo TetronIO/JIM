@@ -811,10 +811,37 @@ public partial class ConnectedSystemServer
     /// <param name="newMode">The new Object Matching Rule mode</param>
     /// <param name="initiatedBy">The user initiating the change</param>
     /// <returns>Result containing details about the switch operation</returns>
-    public async Task<ObjectMatchingModeSwitchResult> SwitchObjectMatchingModeAsync(
+    public Task<ObjectMatchingModeSwitchResult> SwitchObjectMatchingModeAsync(
         ConnectedSystem connectedSystem,
         ObjectMatchingRuleMode newMode,
         MetaverseObject? initiatedBy)
+    {
+        return SwitchObjectMatchingModeInternalAsync(connectedSystem, newMode, initiatedBy, initiatedByApiKey: null);
+    }
+
+    /// <summary>
+    /// Switches the Object Matching Rule mode for a Connected System (initiated by API key).
+    /// Every Activity must be attributed to a security principal, so the API key initiator has to reach the
+    /// Activities this switch creates; without this overload the switch could not be performed by automation at all.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System to update</param>
+    /// <param name="newMode">The new Object Matching Rule mode</param>
+    /// <param name="initiatedByApiKey">The API key initiating the change</param>
+    /// <returns>Result containing details about the switch operation</returns>
+    public Task<ObjectMatchingModeSwitchResult> SwitchObjectMatchingModeAsync(
+        ConnectedSystem connectedSystem,
+        ObjectMatchingRuleMode newMode,
+        ApiKey initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
+        return SwitchObjectMatchingModeInternalAsync(connectedSystem, newMode, initiatedBy: null, initiatedByApiKey);
+    }
+
+    private async Task<ObjectMatchingModeSwitchResult> SwitchObjectMatchingModeInternalAsync(
+        ConnectedSystem connectedSystem,
+        ObjectMatchingRuleMode newMode,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -834,7 +861,7 @@ public partial class ConnectedSystemServer
         if (newMode == ObjectMatchingRuleMode.SyncRule)
         {
             // Switching to Advanced Mode - copy matching rules to import Synchronisation Rules
-            result = await SwitchToAdvancedModeAsync(connectedSystem, initiatedBy);
+            result = await SwitchToAdvancedModeAsync(connectedSystem, initiatedBy, initiatedByApiKey);
         }
         else
         {
@@ -847,7 +874,10 @@ public partial class ConnectedSystemServer
 
         // Update the Connected System mode
         connectedSystem.ObjectMatchingRuleMode = newMode;
-        AuditHelper.SetUpdated(connectedSystem, initiatedBy);
+        if (initiatedByApiKey != null)
+            AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
+        else
+            AuditHelper.SetUpdated(connectedSystem, initiatedBy);
 
         // Create activity for tracking
         var activity = new Activity
@@ -857,7 +887,10 @@ public partial class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id
         };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        if (initiatedByApiKey != null)
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        else
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
@@ -869,7 +902,8 @@ public partial class ConnectedSystemServer
 
     private async Task<ObjectMatchingModeSwitchResult> SwitchToAdvancedModeAsync(
         ConnectedSystem connectedSystem,
-        MetaverseObject? initiatedBy)
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
     {
         var syncRulesUpdated = 0;
         var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
@@ -903,7 +937,10 @@ public partial class ConnectedSystemServer
                 syncRule.ObjectMatchingRules.Add(newRule);
             }
 
-            await CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            if (initiatedByApiKey != null)
+                await CreateOrUpdateSyncRuleAsync(syncRule, initiatedByApiKey);
+            else
+                await CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
             syncRulesUpdated++;
         }
 
