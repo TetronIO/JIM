@@ -87,7 +87,10 @@ public class SyncOutcomeTypeOrdinalTests
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] = 38,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] = 39,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = 40,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = 41
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = 41,
+
+        // Recall gate observability (#1570): values preserved as last known state because no import source remains.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved] = 42
     };
 
     [Test]

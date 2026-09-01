@@ -50,6 +50,9 @@ public static class ConnectedSystemObjectObsoletionService
     /// scope for the run-time sync path, the deleted-system scope for the deprovisioning run.</param>
     /// <param name="priorityContext">The attribute priority contributor cache (#91); when null, surviving-contributor
     /// re-election is skipped (recalled values are simply cleared).</param>
+    /// <param name="remainingImportSourceEvaluator">Answers whether any remaining joined system is still a
+    /// contributing source for the object's type; selects between recalling sole-contributed values and preserving
+    /// them as last known state (#1570). Create one per run; it caches the Synchronisation Rule map.</param>
     /// <param name="syncEngine">The synchronisation decision engine, for the out-of-scope action, pending-change
     /// application and the re-election re-flow.</param>
     /// <param name="syncRepository">The synchronisation repository, for joined-system discovery and survivor hydration.</param>
@@ -73,6 +76,7 @@ public static class ConnectedSystemObjectObsoletionService
         List<SyncRule> activeSyncRules,
         ContributorRecallScope recallScope,
         AttributePriorityContext? priorityContext,
+        RemainingImportSourceEvaluator remainingImportSourceEvaluator,
         ISyncEngine syncEngine,
         ISyncRepository syncRepository,
         Func<ConnectedSystemObject, SyncRule, bool> isCsoInScopeForImportRule,
@@ -183,15 +187,23 @@ public static class ConnectedSystemObjectObsoletionService
             deletionExecutionItem.DeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson;
 
         // Recall the obsoleting system's contributed attributes (where the object type opts in), re-electing a
-        // surviving contributor where one exists. A configured deletion grace period no longer skips recall wholesale:
-        // an attribute with another contributor is handed to the survivor (a safe change-of-value, not a clear), while
-        // an attribute with no other contributor is frozen (preserved) for the grace window, so identity-critical
-        // single-source values that feed expression-based exports (e.g. an LDAP Distinguished Name) are not cleared
-        // mid-grace. Recall is still skipped entirely when the MVO will be deleted immediately, since the work would be
-        // discarded when the MVO is deleted moments later (#390).
-        var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gp && gp > TimeSpan.Zero;
+        // surviving contributor where one exists. An attribute with another contributor is always handed to the
+        // survivor (a safe change-of-value, not a clear); the question the freeze answers is what happens to the
+        // values with NO surviving contributor, and the rule is: recall them only when a remaining joined system is
+        // still a contributing source for the object's type (#1570). A source remaining means the object is actively
+        // managed and the departed system's leftovers are pure staleness, which nothing would otherwise ever revisit
+        // (the stranding defect). The freeze holds in the two situations where an immediate recall does damage:
+        // a deletion is pending (scheduled by this disconnection or an earlier one), where recall would churn target
+        // systems ahead of a deletion that removes everything anyway and would gut an object whose source may return
+        // within the grace window; and no import source remains (only provisioned targets hold the join), where the
+        // frozen values are the target account's last known state and recalling them would blank live accounts and
+        // feed expression-based mappings such as a Distinguished Name with nothing. Recall is still skipped entirely
+        // when the MVO will be deleted immediately, since the work would be discarded when the MVO is deleted moments
+        // later (#390).
+        var mvoDeletionPending = mvoDeletionFate == MvoDeletionFate.DeletionScheduled || mvo.DeletionEligibleDate != null;
         var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
         var recallClearedAttributeCount = 0;
+        var preservedNoSourceAttributeCount = 0;
         if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !skipRecallForImmediateDeletion)
         {
             // Find all MVO attribute values contributed by this Connected System and mark them for removal
@@ -225,14 +237,31 @@ public static class ConnectedSystemObjectObsoletionService
                     expressionEvaluator);
             }
 
-            if (hasGracePeriod)
+            // The no-source preservation applies only to disappearances, never to a deliberate deletion of a
+            // Synchronisation Rule or Connected System: there the administrator explicitly ordered the
+            // withdrawal (its consequences were surfaced before confirming), and the deprovisioning run's
+            // residue pass would sweep preserved values by provenance moments later anyway.
+            var noImportSourceRemains = !recallScope.IsDeliberateWithdrawal
+                && mvo.Type != null
+                && !await remainingImportSourceEvaluator.AnyImportSourceRemainsAsync(remainingConnectedSystemIds, mvo.Type.Id);
+            if (mvoDeletionPending || noImportSourceRemains)
             {
-                // A deletion grace period is active: an attribute with no surviving contributor must be frozen
-                // (preserved) until the grace window resolves, not cleared. Re-elected attributes are still replaced
-                // (their leaver value stays marked for removal); only the leaver's non-re-elected values are unmarked.
-                var reElectedDuringGrace = mvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
-                foreach (var frozen in contributedAttributes.Where(av => !reElectedDuringGrace.Contains(av.AttributeId)))
+                // Freeze: an attribute with no surviving contributor is preserved, not cleared, either until the
+                // grace window resolves (pending deletion) or as the object's last known state (no import source
+                // remains). Re-elected attributes are still replaced (their leaver value stays marked for
+                // removal); only the leaver's non-re-elected values are unmarked.
+                var reElectedDuringFreeze = mvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
+                var frozenValues = contributedAttributes.Where(av => !reElectedDuringFreeze.Contains(av.AttributeId)).ToList();
+                foreach (var frozen in frozenValues)
                     mvo.PendingAttributeValueRemovals.Remove(frozen);
+
+                // A pending deletion already explains itself via the MvoDeletionScheduled outcome below; the
+                // no-source preservation is otherwise silent, so it gets its own outcome (#1570).
+                if (!mvoDeletionPending)
+                {
+                    preservedNoSourceAttributeCount = frozenValues.Count;
+                    result.PreservedNoSourceAttributeCount = preservedNoSourceAttributeCount;
+                }
             }
 
             // Apply attribute changes and queue the MVO for export evaluation and persistence.
@@ -323,7 +352,8 @@ public static class ConnectedSystemObjectObsoletionService
             }
 
             // In Detailed mode, surface recalled attributes with no surviving contributor (#91): genuinely cleared
-            // (not re-elected, not frozen under a grace period), so the blank is an event an admin may act on.
+            // (not re-elected, not frozen for a pending deletion's grace window), so the blank is an event an admin
+            // may act on.
             if (syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                 && recallClearedAttributeCount > 0)
             {
@@ -331,6 +361,20 @@ public static class ConnectedSystemObjectObsoletionService
                     ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
                     targetEntityDescription: mvoDisplayName,
                     detailCount: recallClearedAttributeCount);
+            }
+
+            // In Detailed mode, surface values preserved because no import source remains (#1570): without this
+            // outcome the preservation is silent, and "why does this object still have values" has no answer in
+            // the causality view.
+            if (syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+                && preservedNoSourceAttributeCount > 0)
+            {
+                SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved,
+                    targetEntityDescription: mvoDisplayName,
+                    detailCount: preservedNoSourceAttributeCount,
+                    detailMessage: "No remaining Connected System carries an enabled import Synchronisation Rule for this " +
+                        "Metaverse Object's type, so the disconnecting system's values were preserved as last known state.");
             }
 
             // The id is captured here, before the record is deleted: ActivityRunProfileExecutionItems'

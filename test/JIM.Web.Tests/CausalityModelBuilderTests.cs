@@ -85,6 +85,7 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved] = CausalityLane.Identity,
 
             // Configuration change preview types. Nothing writes these during a run, so they never reach a lane
             // in practice; they land in Identity via the default arm, which is the correct home for them anyway

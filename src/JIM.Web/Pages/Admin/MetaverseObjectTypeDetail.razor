@@ -97,6 +97,14 @@
                     </MudItem>
                 </MudGrid>
 
+                @* Configuration advisory (#1570): provisioned targets count as connectors under When Last
+                   Connector Disconnected, so objects outlive their last source and keep its values. Reacts
+                   to the selected rule, so the advice appears while the administrator is still deciding. *@
+                @if (GetDeletionRuleAdvisory() is { } deletionRuleAdvisory)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">@deletionRuleAdvisory</MudAlert>
+                }
+
                 @if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected)
                 {
                     @* Deletion Trigger mode (#119): whether every selected source must disconnect, or any one *@
@@ -704,6 +712,17 @@
             .Select(g => (Id: g.Key, Name: g.First().ConnectedSystemName))
             .OrderBy(s => s.Name)
             .ToList();
+    }
+
+    /// <summary>
+    /// The configuration advisory for the currently selected deletion rule (#1570), or null when none
+    /// applies. Computed from the export rule headers the page already holds (pre-scoped to this type and
+    /// the Export direction), so the advice tracks the select as the administrator changes it.
+    /// </summary>
+    private string? GetDeletionRuleAdvisory()
+    {
+        var typeHasProvisioningExport = _exportRuleHeaders?.Any(h => h.Enabled && h.ProvisionToConnectedSystem == true) == true;
+        return JIM.Application.Services.DeletionRuleConfigurationAdvisor.GetAdvisory(_deletionRule, typeHasProvisioningExport);
     }
 
     private void InitialiseDeletionRulesState()

@@ -93,6 +93,7 @@ public partial class ConnectedSystemServer
         var expressionEvaluator = new DynamicExpressoEvaluator();
         var exportEvaluationCache = await Application.ExportEvaluation.BuildExportEvaluationCacheAsync(allSyncRules);
         var recallScope = ContributorRecallScope.ForDeletedConnectedSystem(task.ConnectedSystemId);
+        var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(Application.SyncRepo);
         var survivorObjectTypes = new List<ConnectedSystemObjectType>();
         var systemNamesById = await Application.SyncRepo.GetConnectedSystemNamesAsync();
         var syncOutcomeTrackingLevel = await Application.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
@@ -123,8 +124,9 @@ public partial class ConnectedSystemServer
                     break;
 
                 await ProcessDeprovisioningBatchAsync(task, activity, page.Results, systemSyncRules, recallScope,
-                    priorityContext, syncEngine, syncServer, expressionEvaluator, exportEvaluationCache,
-                    survivorObjectTypes, systemNamesById, syncOutcomeTrackingLevel, connectedSystem.Name, result);
+                    priorityContext, remainingImportSourceEvaluator, syncEngine, syncServer, expressionEvaluator,
+                    exportEvaluationCache, survivorObjectTypes, systemNamesById, syncOutcomeTrackingLevel,
+                    connectedSystem.Name, result);
 
                 // Persist the checkpoint AFTER the batch is fully persisted: a crash between the two
                 // re-processes the batch, which is safe (idempotent per object, delete-then-create export
@@ -224,6 +226,7 @@ public partial class ConnectedSystemServer
         List<SyncRule> systemSyncRules,
         ContributorRecallScope recallScope,
         AttributePriorityContext priorityContext,
+        RemainingImportSourceEvaluator remainingImportSourceEvaluator,
         SyncEngine syncEngine,
         SyncServer syncServer,
         DynamicExpressoEvaluator expressionEvaluator,
@@ -311,6 +314,7 @@ public partial class ConnectedSystemServer
                 systemSyncRules,
                 recallScope,
                 priorityContext,
+                remainingImportSourceEvaluator,
                 syncEngine,
                 Application.SyncRepo,
                 (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),

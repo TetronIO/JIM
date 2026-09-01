@@ -29,11 +29,22 @@ public sealed class ContributorRecallScope
 
     private ContributorRecallScope(
         Func<SyncRule, bool> isEligibleContributorRule,
-        Func<ConnectedSystemObject, bool> isEligibleSurvivor)
+        Func<ConnectedSystemObject, bool> isEligibleSurvivor,
+        bool isDeliberateWithdrawal)
     {
         _isEligibleContributorRule = isEligibleContributorRule;
         _isEligibleSurvivor = isEligibleSurvivor;
+        IsDeliberateWithdrawal = isDeliberateWithdrawal;
     }
+
+    /// <summary>
+    /// Whether an administrator explicitly ordered this contribution withdrawn (a Synchronisation Rule or
+    /// Connected System deletion), as opposed to the source merely disappearing from an import. The recall
+    /// gate's last-known-state preservation (#1570) applies only to disappearances: it exists to protect
+    /// live target accounts from a transient source outage, and a deliberate deletion is neither transient
+    /// nor unconsented (its consequences were surfaced before the administrator confirmed).
+    /// </summary>
+    public bool IsDeliberateWithdrawal { get; }
 
     /// <summary>
     /// The obsoletion/withdrawal scope (#91): the leaver's whole Connected System is excluded from
@@ -45,7 +56,8 @@ public sealed class ContributorRecallScope
         ArgumentNullException.ThrowIfNull(leaver);
         return new ContributorRecallScope(
             rule => rule.ConnectedSystemId != leaver.ConnectedSystemId,
-            cso => cso.Id != leaver.Id);
+            cso => cso.Id != leaver.Id,
+            isDeliberateWithdrawal: false);
     }
 
     /// <summary>
@@ -59,7 +71,8 @@ public sealed class ContributorRecallScope
     {
         return new ContributorRecallScope(
             rule => rule.Id != syncRuleId,
-            _ => true);
+            _ => true,
+            isDeliberateWithdrawal: true);
     }
 
     /// <summary>
@@ -73,7 +86,8 @@ public sealed class ContributorRecallScope
     {
         return new ContributorRecallScope(
             rule => rule.ConnectedSystemId != connectedSystemId,
-            cso => cso.ConnectedSystemId != connectedSystemId);
+            cso => cso.ConnectedSystemId != connectedSystemId,
+            isDeliberateWithdrawal: true);
     }
 
     /// <summary>

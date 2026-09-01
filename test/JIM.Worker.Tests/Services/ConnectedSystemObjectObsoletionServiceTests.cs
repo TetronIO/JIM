@@ -27,6 +27,7 @@ namespace JIM.Worker.Tests.Services;
 public class ConnectedSystemObjectObsoletionServiceTests
 {
     private const int SystemId = 11;
+    private const int SurvivingSourceSystemId = 12;
 
     private Mock<ISyncRepository> _syncRepository = null!;
     private Mock<IExpressionEvaluator> _expressionEvaluator = null!;
@@ -79,9 +80,22 @@ public class ConnectedSystemObjectObsoletionServiceTests
         };
         _mvo.ConnectedSystemObjects.Add(_cso);
 
+        // A second joined system carrying an enabled import Synchronisation Rule for the type, so the recall
+        // gate (#1570) sees a surviving source and the recall path is exercised. The preserve-path test
+        // overrides both mocks to model a departure that leaves no source behind.
         _syncRepository
             .Setup(r => r.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(_mvo.Id))
-            .ReturnsAsync([SystemId]);
+            .ReturnsAsync([SystemId, SurvivingSourceSystemId]);
+        _syncRepository
+            .Setup(r => r.GetAllSyncRulesAsync(It.IsAny<bool>()))
+            .ReturnsAsync([new SyncRule
+            {
+                Id = 500,
+                ConnectedSystemId = SurvivingSourceSystemId,
+                MetaverseObjectTypeId = mvoType.Id,
+                Direction = SyncRuleDirection.Import,
+                Enabled = true
+            }]);
     }
 
     private Task<ConnectedSystemObjectObsoletionResult> ProcessAsync(
@@ -94,6 +108,7 @@ public class ConnectedSystemObjectObsoletionServiceTests
             activeSyncRules: [],
             ContributorRecallScope.ForObsoletingConnectedSystemObject(cso),
             priorityContext: null,
+            new RemainingImportSourceEvaluator(_syncRepository.Object),
             _syncEngine,
             _syncRepository.Object,
             isCsoInScopeForImportRule: (_, _) => true,
@@ -164,8 +179,40 @@ public class ConnectedSystemObjectObsoletionServiceTests
             // The deletion-rule verdict flows through as data, evaluated with the leaver excluded from
             // the remaining-system list, and the pre-recall snapshot was captured while the value stood.
             Assert.That(result.MvoDeletionDecision?.Fate, Is.EqualTo(MvoDeletionFate.NotDeleted));
-            Assert.That(remainingIdsSeen, Is.Empty);
+            Assert.That(remainingIdsSeen, Is.EqualTo(new[] { SurvivingSourceSystemId }));
             Assert.That(snapshotValueIdsAtCapture, Is.EqualTo(new[] { _contributedValue.Id }));
+        }
+    }
+
+    [Test]
+    public async Task ProcessObsoleteCso_NoImportSourceRemains_PreservesValuesAndRecordsOutcomeAsync()
+    {
+        // The departing system is the object's last contributing source (nothing else is joined), and the
+        // deletion rule declines: sole-contributed values must be preserved as last known state, not
+        // recalled, and the preservation must be visible as a ValuesPreserved outcome (#1570).
+        _syncRepository
+            .Setup(r => r.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(_mvo.Id))
+            .ReturnsAsync([SystemId]);
+        _syncRepository
+            .Setup(r => r.GetAllSyncRulesAsync(It.IsAny<bool>()))
+            .ReturnsAsync([]);
+
+        var result = await ProcessAsync(_cso);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_mvo.AttributeValues, Is.EqualTo(new[] { _contributedValue }),
+                "no import source remains, so the sole-contributed value must be preserved as last known state");
+            Assert.That(result.MvoAttributeChange, Is.Null, "a wholly preserved recall stages no attribute change");
+            Assert.That(result.ExportEvaluation, Is.Null, "a wholly preserved recall stages no export evaluation");
+            Assert.That(result.PreservedNoSourceAttributeCount, Is.EqualTo(1));
+            Assert.That(result.ExecutionItems[0].SyncOutcomes.Any(o =>
+                    o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved && o.DetailCount == 1),
+                Is.True, "the preservation must be stated on the disconnection's execution item");
+
+            // The disconnection itself still proceeds in full.
+            Assert.That(result.CsoDeletions, Has.Count.EqualTo(1));
+            Assert.That(_cso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined));
         }
     }
 

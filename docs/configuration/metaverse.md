@@ -24,6 +24,9 @@ Each object type has its own rules for when its objects should be deleted from t
 - **When Last Connector Disconnected**<br /> Objects are deleted once no Connected System Objects remain linked to them.
 - **When Authoritative Source Disconnected**<br /> Objects are deleted when the authoritative source system(s) you select disconnect, even while target-system links remain. This is the usual choice for source-to-target topologies, where an HR system leaving should deprovision the identity everywhere.
 
+!!! warning "Provisioned target accounts count as connectors"
+    Under **When Last Connector Disconnected**, an account JIM has provisioned to a target system is a connector like any other. An object of a type with provisioning export Synchronisation Rules therefore outlives its last source while a target account exists, and the departed source's attribute values are preserved on it as last known state rather than recalled (see [when the winning source disconnects](../concepts/attribute-priority.md#-when-the-winning-source-disconnects-or-withdraws)). Nothing is lost, but nothing is deprovisioned either. If the departure of your source of record should remove the target accounts, use **When Authoritative Source Disconnected** and list the source system(s). JIM shows this advisory on the Object Type's Deletion Rules panel when the combination applies, returns it on the REST object type responses, and `New-JIMMetaverseObjectType` and `Set-JIMMetaverseObjectType` surface it as a warning.
+
 #### Authoritative source trigger modes
 
 When the rule is **When Authoritative Source Disconnected**, a **Deletion Trigger** choice governs how the selected sources trigger deletion:
