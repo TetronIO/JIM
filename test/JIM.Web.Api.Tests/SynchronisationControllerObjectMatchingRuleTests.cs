@@ -202,7 +202,7 @@ public class SynchronisationControllerObjectMatchingRuleTests
         // The endpoint's auth gate accepts an API key, but it previously handed the application layer a null user,
         // and activity attribution (rightly) refuses an unattributed Activity. Switch-JIMMatchingMode therefore
         // never worked under API key authentication, which is how automation authenticates.
-        _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(ConnectedSystemId, true)).ReturnsAsync([]);
+        _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(ConnectedSystemId, true, true)).ReturnsAsync([]);
         _connectedSystemRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
 
         var result = await _controller.SwitchObjectMatchingModeAsync(ConnectedSystemId,

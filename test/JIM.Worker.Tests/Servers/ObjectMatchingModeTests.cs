@@ -125,7 +125,7 @@ public class ObjectMatchingModeTests
             ObjectMatchingRules = new List<ObjectMatchingRule>()
         };
 
-        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true))
+        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true, true))
             .ReturnsAsync(new List<SyncRule> { importSyncRule, exportSyncRule });
 
         _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>()))
@@ -200,7 +200,7 @@ public class ObjectMatchingModeTests
             }
         };
 
-        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true))
+        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true, true))
             .ReturnsAsync(new List<SyncRule> { syncRuleWithExistingRules });
 
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>()))
@@ -303,12 +303,34 @@ public class ObjectMatchingModeTests
             ObjectMatchingRules = new List<ObjectMatchingRule>()
         };
 
-        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true))
+        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true, true))
             .ReturnsAsync(new List<SyncRule> { importSyncRule, exportSyncRule });
         _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
 
         return (connectedSystem, importSyncRule, exportSyncRule);
+    }
+
+    [Test]
+    public async Task SwitchObjectMatchingModeAsync_ToAdvancedMode_CopiedRulesSurviveTheSimpleModeSaveValidationAsync()
+    {
+        // The production shape: a Synchronisation Rule loaded from the database carries its Connected System
+        // navigation. The copy used to route through the full Synchronisation Rule save path, whose simple-mode
+        // validation clears a rule's own matching rules, and the system's mode only flips after the migration, so
+        // the switch cleared the very rules it had just copied and reported success. The unit tests never saw it
+        // because their rules carried no navigation, which skipped the validation's mode lookup.
+        var (connectedSystem, importSyncRule, exportSyncRule) = BuildSystemForAdvancedSwitch();
+        importSyncRule.ConnectedSystem = connectedSystem;
+        exportSyncRule.ConnectedSystem = connectedSystem;
+
+        var result = await _jim.ConnectedSystems.SwitchObjectMatchingModeAsync(
+            connectedSystem, ObjectMatchingRuleMode.SyncRule, _initiatedBy);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(importSyncRule.ObjectMatchingRules, Has.Count.EqualTo(1),
+            "the copied rules must survive the switch; the save path's simple-mode validation must not see them");
+        _mockCsRepo.Verify(r => r.GetSyncRulesAsync(1, true, true), Times.AtLeastOnce,
+            "the switch mutates the Synchronisation Rules it loads, so it must load them change-tracked");
     }
 
     [Test]
@@ -421,7 +443,7 @@ public class ObjectMatchingModeTests
             }
         };
 
-        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true))
+        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true, true))
             .ReturnsAsync(new List<SyncRule> { importSyncRule });
 
         _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>()))
@@ -501,7 +523,7 @@ public class ObjectMatchingModeTests
             }
         };
 
-        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true))
+        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true, true))
             .ReturnsAsync(new List<SyncRule> { importSyncRule });
         _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
@@ -607,7 +629,7 @@ public class ObjectMatchingModeTests
             }
         };
 
-        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true))
+        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true, true))
             .ReturnsAsync(new List<SyncRule> { syncRuleA1, syncRuleA2, syncRuleB });
 
         _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>()))
@@ -681,7 +703,7 @@ public class ObjectMatchingModeTests
             }
         };
 
-        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true))
+        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true, true))
             .ReturnsAsync(new List<SyncRule> { importSyncRule });
 
         _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>()))
@@ -729,7 +751,7 @@ public class ObjectMatchingModeTests
             ObjectMatchingRules = new List<ObjectMatchingRule>() // No matching rules
         };
 
-        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true))
+        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true, true))
             .ReturnsAsync(new List<SyncRule> { importSyncRule });
 
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>()))
