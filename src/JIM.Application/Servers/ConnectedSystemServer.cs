@@ -1072,11 +1072,11 @@ public partial class ConnectedSystemServer
                 }
             }
 
-            // Clear matching rules from all Synchronisation Rules for this object type
-            // (will be done automatically by CreateOrUpdateSyncRuleAsync due to Simple Mode validation)
+            // Clear matching rules from all Synchronisation Rules for this object type, deleting the rows
+            // outright; a plain collection Clear() would orphan them (see RemoveSyncRuleObjectMatchingRulesAsync).
             foreach (var syncRule in objectTypeGroup.Where(sr => sr.ObjectMatchingRules.Count > 0))
             {
-                syncRule.ObjectMatchingRules.Clear();
+                await RemoveSyncRuleObjectMatchingRulesAsync(syncRule);
                 await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
                 migration.SyncRulesCleared++;
             }
@@ -8668,7 +8668,7 @@ public partial class ConnectedSystemServer
                         Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from Synchronisation Rule {Id} " +
                             "because Connected System {CsId} is in Simple Mode",
                             syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
-                        syncRule.ObjectMatchingRules.Clear();
+                        await RemoveSyncRuleObjectMatchingRulesAsync(syncRule);
                     }
                 }
             }
@@ -8845,7 +8845,7 @@ public partial class ConnectedSystemServer
                         Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from Synchronisation Rule {Id} " +
                             "because Connected System {CsId} is in Simple Mode",
                             syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
-                        syncRule.ObjectMatchingRules.Clear();
+                        await RemoveSyncRuleObjectMatchingRulesAsync(syncRule);
                     }
                 }
             }
@@ -9318,6 +9318,24 @@ public partial class ConnectedSystemServer
     /// </remarks>
     /// <exception cref="InvalidDataException">The rule cannot work, with the reason.</exception>
     /// <summary>
+    /// Removes a Synchronisation Rule's own Object Matching Rules so the rows are deleted, never orphaned.
+    /// </summary>
+    /// <remarks>
+    /// A plain <c>ObjectMatchingRules.Clear()</c> is not enough: both owner foreign keys on an Object Matching
+    /// Rule are optional, and EF Core answers a severed optional relationship by nulling the foreign key rather
+    /// than deleting the row. The parentless rule is then invisible to every scope the engine or the portal
+    /// reads, and its sources' references to Connected System attributes block the owning Connected System's
+    /// deletion outright (#1589). Rules not yet persisted have no row to delete and are simply dropped from the
+    /// collection.
+    /// </remarks>
+    private async Task RemoveSyncRuleObjectMatchingRulesAsync(SyncRule syncRule)
+    {
+        foreach (var rule in syncRule.ObjectMatchingRules.Where(r => r.Id > 0).ToList())
+            await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
+        syncRule.ObjectMatchingRules.Clear();
+    }
+
+    /// <summary>
     /// Clears an export Synchronisation Rule's own Object Matching Rules when the Connected System is in simple
     /// matching mode, where the engine consults the Connected System Object Type's rules and these would be
     /// silently inert. In advanced mode they are what export matching reads, so they are left alone (#1589).
@@ -9337,7 +9355,7 @@ public partial class ConnectedSystemServer
         Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from export Synchronisation Rule {Id} " +
             "because Connected System {CsId} is in Simple Mode",
             syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
-        syncRule.ObjectMatchingRules.Clear();
+        await RemoveSyncRuleObjectMatchingRulesAsync(syncRule);
     }
 
     private static void EnsureObjectMatchingRuleIsWorkable(ObjectMatchingRule rule)
