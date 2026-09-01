@@ -5818,7 +5818,12 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        var result = await _application.ConnectedSystems.SwitchObjectMatchingModeAsync(connectedSystem, request.Mode, initiatedBy);
+        // The switch creates Activities, and every Activity must be attributed to a security principal, so an API
+        // key caller has to reach the API key overload; handing it a null user fails the attribution check.
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.ConnectedSystems.SwitchObjectMatchingModeAsync(connectedSystem, request.Mode, apiKey)
+            : await _application.ConnectedSystems.SwitchObjectMatchingModeAsync(connectedSystem, request.Mode, initiatedBy);
 
         if (!result.Success)
         {

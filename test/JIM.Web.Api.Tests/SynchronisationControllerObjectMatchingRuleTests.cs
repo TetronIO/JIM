@@ -196,6 +196,24 @@ public class SynchronisationControllerObjectMatchingRuleTests
         _connectedSystemRepo.Verify(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Once);
     }
 
+    [Test]
+    public async Task SwitchObjectMatchingMode_ApiKeyAuthenticated_SwitchesInsteadOfFailingAttributionAsync()
+    {
+        // The endpoint's auth gate accepts an API key, but it previously handed the application layer a null user,
+        // and activity attribution (rightly) refuses an unattributed Activity. Switch-JIMMatchingMode therefore
+        // never worked under API key authentication, which is how automation authenticates.
+        _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(ConnectedSystemId, true)).ReturnsAsync([]);
+        _connectedSystemRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
+
+        var result = await _controller.SwitchObjectMatchingModeAsync(ConnectedSystemId,
+            new SwitchObjectMatchingModeRequest { Mode = ObjectMatchingRuleMode.SyncRule });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var switchResult = (JIM.Models.Staging.DTOs.ObjectMatchingModeSwitchResult)((OkObjectResult)result).Value!;
+        Assert.That(switchResult.Success, Is.True);
+        Assert.That(switchResult.NewMode, Is.EqualTo(ObjectMatchingRuleMode.SyncRule));
+    }
+
     private static CreateSyncRuleObjectMatchingRuleRequest SyncRuleScopedRequest() => new()
     {
         TargetMetaverseAttributeId = EmployeeIdMetaverseAttributeId,
