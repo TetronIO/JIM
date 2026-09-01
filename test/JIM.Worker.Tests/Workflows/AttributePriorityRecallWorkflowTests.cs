@@ -233,12 +233,14 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
     }
 
     [Test]
-    public async Task Recall_HigherPriorityObsoletedUnderGracePeriod_ReElectsSurvivorButFreezesSingleSourceAttributesAsync()
+    public async Task Recall_ObsoletedUnderGraceButDeletionDeclined_ClearsSoleSourceInsteadOfStrandingAsync()
     {
-        // A deletion grace period is configured. Today the grace period freezes all recall, so a multi-source
-        // attribute would be left stale at the departed source's value. With per-attribute re-election: the
-        // multi-source Description is handed to the surviving Training source, while single-source HR attributes
-        // (no survivor) are still frozen (preserved) for the grace window rather than cleared.
+        // A deletion grace period is configured on the type, but the deletion rule DECLINES for this object
+        // (DeletionRule=Manual here; remaining connectors or trigger-mode semantics decline the same way), so
+        // the Metaverse Object survives. The grace freeze must not apply to a survivor: freezing here strands
+        // the sole-contributed HR DisplayName with severed provenance forever, since no deletion is coming and
+        // nothing in ordinary synchronisation ever revisits it (#1570). The multi-source Description still
+        // hands over to the surviving Training source, and the sole-source DisplayName is genuinely cleared.
         var ctx = await SetUpTwoContributorsToDescriptionAsync(
             hrDescriptionPriority: 1, trainingDescriptionPriority: 2, deletionGracePeriod: TimeSpan.FromDays(7));
 
@@ -248,17 +250,91 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
         await MarkCsoObsoleteAsync(ctx.HrCso);
         var deltaActivity = await RunDeltaSyncReturningActivityAsync(ctx.Hr);
         Assert.That(deltaActivity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
-            Is.False, "re-election under a grace period must complete without unhandled errors");
+            Is.False, "re-election under a declined deletion must complete without unhandled errors");
 
         var mvo = SyncRepo.MetaverseObjects.Values.Single();
 
         var description = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
         Assert.That(description?.StringValue, Is.EqualTo(TrainingDescription),
-            "the multi-source Description must be re-elected to the surviving Training source even under a grace period");
+            "the multi-source Description must be re-elected to the surviving Training source");
+
+        var displayName = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDisplayNameAttributeId && !av.NullValue);
+        Assert.That(displayName, Is.Null,
+            "the deletion rule declined, so the surviving Metaverse Object must not keep the sole-contributed " +
+            "HR DisplayName: nothing asserts it any more and nothing would ever recall it (#1570)");
+    }
+
+    [Test]
+    public async Task Recall_ObsoletedWithDeletionScheduled_FreezesSoleSourceForGraceWindowAsync()
+    {
+        // The deletion rule genuinely SCHEDULES deletion (HR is an authoritative source in Specific sources
+        // mode, with a grace period), so the Metaverse Object is pending deletion for the grace window even
+        // though Training remains joined. Here the freeze is correct and must survive the #1570 narrowing:
+        // the sole-contributed HR DisplayName is preserved mid-grace (identity-critical single-source values
+        // feed expression-based exports), while the multi-source Description still hands over.
+        var ctx = await SetUpTwoContributorsToDescriptionAsync(
+            hrDescriptionPriority: 1, trainingDescriptionPriority: 2, deletionGracePeriod: TimeSpan.FromDays(7));
+        ctx.MvType.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        ctx.MvType.DeletionTriggerMode = AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect;
+        ctx.MvType.DeletionTriggerConnectedSystemIds = new List<int> { ctx.Hr.Id };
+        await DbContext.SaveChangesAsync();
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+
+        await MarkCsoObsoleteAsync(ctx.HrCso);
+        var deltaActivity = await RunDeltaSyncReturningActivityAsync(ctx.Hr);
+        Assert.That(deltaActivity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            Is.False, "re-election under a scheduled deletion must complete without unhandled errors");
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(mvo.DeletionEligibleDate, Is.Not.Null,
+            "the authoritative source disconnecting must schedule the Metaverse Object's deletion for after the grace period");
+
+        var description = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
+        Assert.That(description?.StringValue, Is.EqualTo(TrainingDescription),
+            "the multi-source Description must be re-elected to the surviving Training source even mid-grace");
 
         var displayName = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDisplayNameAttributeId && !av.NullValue);
         Assert.That(displayName, Is.Not.Null,
-            "single-source HR DisplayName has no surviving contributor, so it is frozen (preserved) for the grace window, not cleared");
+            "a deletion is pending, so the sole-contributed HR DisplayName is frozen (preserved) for the grace window, not cleared");
+    }
+
+    [Test]
+    public async Task Recall_SecondSystemObsoletedWhileDeletionPending_FreezesItsSoleContributionAsync()
+    {
+        // The already-pending case: HR (an authoritative source) disconnects first and schedules the deletion.
+        // Training then obsoletes during the grace window; its own deletion-rule evaluation declines (Training
+        // is not a listed source), but a deletion IS already pending, so recalling Training's sole contribution
+        // would be churn discarded at deletion, and the freeze must still apply.
+        var ctx = await SetUpTwoContributorsToDescriptionAsync(
+            hrDescriptionPriority: 1, trainingDescriptionPriority: 2, deletionGracePeriod: TimeSpan.FromDays(7));
+        ctx.MvType.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        ctx.MvType.DeletionTriggerMode = AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect;
+        ctx.MvType.DeletionTriggerConnectedSystemIds = new List<int> { ctx.Hr.Id };
+        await DbContext.SaveChangesAsync();
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+
+        // HR leaves: deletion scheduled; Description hands over to Training (proven by the test above).
+        await MarkCsoObsoleteAsync(ctx.HrCso);
+        await RunDeltaSyncReturningActivityAsync(ctx.Hr);
+
+        // Training leaves mid-grace: its evaluation declines (not a listed source), but the pending deletion
+        // must still freeze its sole-contributed Description.
+        await MarkCsoObsoleteAsync(ctx.TrainingCso);
+        var trainingDelta = await RunDeltaSyncReturningActivityAsync(ctx.Training);
+        Assert.That(trainingDelta.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            Is.False, "the second system's obsoletion mid-grace must complete without unhandled errors");
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(mvo.DeletionEligibleDate, Is.Not.Null,
+            "the deletion scheduled by HR's disconnection must still be pending");
+
+        var description = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
+        Assert.That(description?.StringValue, Is.EqualTo(TrainingDescription),
+            "a deletion is pending, so Training's sole-contributed Description is frozen (preserved) for the grace window, not cleared");
     }
 
     [Test]
@@ -362,12 +438,12 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
     }
 
     [Test]
-    public async Task ScopeExit_GracePeriodWithSurvivor_HandsOverAndFreezesOnlySoleSourceAsync()
+    public async Task ScopeExit_GraceConfiguredButDeletionDeclined_HandsOverAndClearsSoleSourceAsync()
     {
-        // A deletion grace period is configured. The multi-source Description must still be handed to the
-        // surviving Training source (a safe change-of-value, not a clear), while the single-source HR DisplayName
-        // (no survivor) is frozen (preserved) for the grace window rather than cleared - mirroring the obsoletion
-        // path's grace refinement.
+        // The scope-exit sibling of the obsoletion decline test above (#1570): a grace period is configured on
+        // the type but the deletion rule declines (DeletionRule=Manual), so the Metaverse Object survives. The
+        // multi-source Description must still hand over to the surviving Training source, and the sole-source
+        // HR DisplayName must be genuinely cleared rather than frozen into a stranded value nothing asserts.
         var ctx = await SetUpTwoContributorsToDescriptionWithScopingAsync(
             hrDescriptionPriority: 1, trainingDescriptionPriority: 2, deletionGracePeriod: TimeSpan.FromDays(7));
 
@@ -378,17 +454,53 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
         var fullSync2Activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         Assert.That(fullSync2Activity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
-            Is.False, "scope-exit re-election under a grace period must complete without unhandled errors");
+            Is.False, "scope-exit re-election under a declined deletion must complete without unhandled errors");
 
         var mvo = SyncRepo.MetaverseObjects.Values.Single();
 
         var description = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
         Assert.That(description?.StringValue, Is.EqualTo(TrainingDescription),
-            "the multi-source Description must be re-elected to the surviving Training source even under a grace period");
+            "the multi-source Description must be re-elected to the surviving Training source");
+
+        var displayName = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDisplayNameAttributeId && !av.NullValue);
+        Assert.That(displayName, Is.Null,
+            "the deletion rule declined, so the surviving Metaverse Object must not keep the sole-contributed " +
+            "HR DisplayName: nothing asserts it any more and nothing would ever recall it (#1570)");
+    }
+
+    [Test]
+    public async Task ScopeExit_DeletionScheduled_FreezesSoleSourceForGraceWindowAsync()
+    {
+        // The scope-exit sibling of the scheduled-deletion pinning test: HR is an authoritative source in
+        // Specific sources mode with a grace period, so its scope exit schedules the deletion, and the freeze
+        // must still preserve the sole-contributed HR DisplayName for the grace window.
+        var ctx = await SetUpTwoContributorsToDescriptionWithScopingAsync(
+            hrDescriptionPriority: 1, trainingDescriptionPriority: 2, deletionGracePeriod: TimeSpan.FromDays(7));
+        ctx.MvType.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        ctx.MvType.DeletionTriggerMode = AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect;
+        ctx.MvType.DeletionTriggerConnectedSystemIds = new List<int> { ctx.Hr.Id };
+        await DbContext.SaveChangesAsync();
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+
+        await PushHrOutOfScopeAsync(ctx);
+        var fullSync2Activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        Assert.That(fullSync2Activity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            Is.False, "scope-exit re-election under a scheduled deletion must complete without unhandled errors");
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(mvo.DeletionEligibleDate, Is.Not.Null,
+            "the authoritative source's scope exit must schedule the Metaverse Object's deletion for after the grace period");
+
+        var description = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
+        Assert.That(description?.StringValue, Is.EqualTo(TrainingDescription),
+            "the multi-source Description must be re-elected to the surviving Training source even mid-grace");
 
         var displayName = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDisplayNameAttributeId && !av.NullValue);
         Assert.That(displayName, Is.Not.Null,
-            "single-source HR DisplayName has no surviving contributor, so it is frozen (preserved) for the grace window, not cleared");
+            "a deletion is pending, so the sole-contributed HR DisplayName is frozen (preserved) for the grace window, not cleared");
     }
 
     [Test]
@@ -493,6 +605,7 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
         ConnectedSystem Hr,
         ConnectedSystem Training,
         ConnectedSystemObject HrCso,
+        ConnectedSystemObject TrainingCso,
         MetaverseObjectType MvType,
         int MvDescriptionAttributeId,
         int MvDisplayNameAttributeId,
@@ -705,7 +818,7 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
             AttributeId = trainingDescriptionAttr.Id, Attribute = trainingDescriptionAttr, StringValue = trainingDescriptionValue, ConnectedSystemObject = trainingCso
         });
 
-        return new TwoContributorContext(hrSystem, trainingSystem, hrCso, mvType, mvDescriptionAttr.Id, mvDisplayNameAttr.Id, trainingImportRule.Id);
+        return new TwoContributorContext(hrSystem, trainingSystem, hrCso, trainingCso, mvType, mvDescriptionAttr.Id, mvDisplayNameAttr.Id, trainingImportRule.Id);
     }
 
     /// <summary>

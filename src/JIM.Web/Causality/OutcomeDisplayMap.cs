@@ -77,6 +77,11 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor] =
             new OutcomeDisplay("Value cleared", "MVO No Contributor", CausalityTone.Warning, Icons.Material.Filled.HighlightOff),
 
+        // #1570: values kept as last known state because no import source remains to assert the object;
+        // the preserving counterpart of NoContributor above, and just as worth drawing the eye to.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved] =
+            new OutcomeDisplay("Values preserved", "MVO Values Preserved", CausalityTone.Warning, Icons.Material.Filled.AcUnit),
+
         // Configuration change preview (#827): transitions a proposed configuration would cause. Nothing writes
         // these during a run, so they never reach an Activity's causality views; they are mapped because this is
         // the one place an outcome type's vocabulary lives, and a preview surface rendering through it should

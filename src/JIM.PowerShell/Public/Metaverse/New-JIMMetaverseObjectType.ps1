@@ -12,6 +12,12 @@ function New-JIMMetaverseObjectType {
         new type is created with BuiltIn = false so it can be removed via Reset-JIMSystem
         during test teardown or by administrators in the UI later.
 
+        When the deletion rule is WhenLastConnectorDisconnected and enabled provisioning export
+        Synchronisation Rules exist for the type, the API attaches a configuration advisory (provisioned
+        target accounts count as connectors, so objects outlive their last source and keep its values as
+        last known state) and the cmdlet surfaces it as a warning; the returned object carries it as
+        DeletionRuleAdvisory.
+
     .PARAMETER Name
         The singular name of the new Object Type. Must be unique. Example: "User", "Group".
 
@@ -178,6 +184,12 @@ function New-JIMMetaverseObjectType {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/metaverse/object-types" -Method 'POST' -Body $body
 
                 Write-Verbose "Created Metaverse Object Type: $Name with ID: $($result.id)"
+
+                # Configuration advisory (#1570): the API attaches advice when the stored deletion rule will
+                # keep objects alive after their last source departs (provisioned targets count as connectors).
+                if ($result.deletionRuleAdvisory) {
+                    Write-Warning $result.deletionRuleAdvisory
+                }
 
                 $result
             }

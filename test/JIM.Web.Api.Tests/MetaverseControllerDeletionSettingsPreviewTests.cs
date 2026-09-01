@@ -69,6 +69,9 @@ public class MetaverseControllerDeletionSettingsPreviewTests
         _repository.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
         _repository.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
+        // The deletion-rule configuration advisory (#1570) reads every Synchronisation Rule when building
+        // an object type response; no rules means no advisory.
+        _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(It.IsAny<bool>())).ReturnsAsync([]);
         _repository.Setup(r => r.ApiKeys).Returns(_apiKeyRepo.Object);
         _repository.Setup(r => r.ConfigurationChangePreviews).Returns(_previewRepo.Object);
         _repository.Setup(r => r.Tasking).Returns(_taskingRepo.Object);

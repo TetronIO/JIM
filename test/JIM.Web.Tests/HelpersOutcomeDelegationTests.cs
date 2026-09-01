@@ -37,6 +37,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, "CSO Deprovisioned")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull, "MVO Null Asserted")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, "MVO No Contributor")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved, "MVO Values Preserved")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope, "Would Fall In Scope")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, "Would Fall Out Of Scope")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, "Would Become Deletion Eligible")]
@@ -108,6 +109,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, Color.Error)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, Color.Error)]
@@ -161,6 +163,7 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned] = Icons.Material.Filled.CloudOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull] = Icons.Material.Filled.DoNotDisturbOn,
             [ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor] = Icons.Material.Filled.HighlightOff,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved] = Icons.Material.Filled.AcUnit,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope] = Icons.Material.Filled.FilterAlt,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope] = Icons.Material.Filled.FilterAltOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] = Icons.Material.Filled.DeleteOutline,

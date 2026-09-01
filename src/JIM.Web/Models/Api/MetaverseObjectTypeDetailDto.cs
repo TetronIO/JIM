@@ -31,6 +31,16 @@ public class MetaverseObjectTypeDetailDto
     public List<MetaverseAttributeSummaryDto> Attributes { get; set; } = new();
 
     /// <summary>
+    /// A configuration advisory for the stored deletion rule, or null when none applies (#1570). Set when
+    /// the rule is WhenLastConnectorDisconnected and enabled provisioning export Synchronisation Rules
+    /// exist for the type: provisioned target accounts then count as connectors, so an object outlives its
+    /// last source and keeps that source's values as last known state. PowerShell surfaces this as a
+    /// warning; act on it by moving to WhenAuthoritativeSourceDisconnected where target accounts should be
+    /// deprovisioned when the source of record departs.
+    /// </summary>
+    public string? DeletionRuleAdvisory { get; set; }
+
+    /// <summary>
     /// Creates a detailed DTO from a MetaverseObjectType entity.
     /// </summary>
     public static MetaverseObjectTypeDetailDto FromEntity(MetaverseObjectType entity)

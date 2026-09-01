@@ -1156,9 +1156,11 @@ public class FullSyncTests
     // todo: Onward updates/exports as a result of MVO changes (export scenario)
 
     /// <summary>
-    /// Tests that when a joined CSO is obsoleted and RemoveContributedAttributesOnObsoletion is true (default),
-    /// the MVO attributes contributed by that CSO are added to PendingAttributeValueRemovals,
-    /// the CSO-MVO join is broken, and the CSO is deleted.
+    /// Tests that when a joined CSO is obsoleted with RemoveContributedAttributesOnObsoletion enabled but the
+    /// departing system is the object's LAST contributing source (nothing else is joined) and the deletion rule
+    /// declines (Manual), the contributed values are preserved as last known state rather than recalled (#1570):
+    /// no source remains to stand behind a recall, so clearing would strand the object as an empty husk. The
+    /// disconnection itself still proceeds in full (join broken, CSO deleted).
     /// </summary>
     [Test]
     public async Task CsoObsoleteWithRemoveContributedAttributesEnabledTestAsync()
@@ -1225,14 +1227,14 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify that the contributed attributes were actually removed from the MVO
-        // (ApplyPendingMetaverseObjectAttributeChanges is called during obsoletion to apply the removals)
-        Assert.That(mvo.AttributeValues, Is.Empty,
-            "Expected MVO attribute values to be empty after recall (both attributes contributed by this system).");
+        // verify that the contributed values were preserved as last known state (#1570): the departing system
+        // was the object's last contributing source, so there is no source left to stand behind a recall.
+        Assert.That(mvo.AttributeValues, Has.Count.EqualTo(2),
+            "Expected both contributed values to be preserved: no import source remains to stand behind a recall (#1570).");
 
-        // verify that pending removals were cleared after being applied
+        // verify no removals were left staged (the freeze unmarks them before anything is applied)
         Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty,
-            "Expected pending attribute value removals to be cleared after being applied.");
+            "Expected no pending attribute value removals: the preserve path stages none.");
 
         // verify the CSO-MVO join was broken
         Assert.That(cso.MetaverseObject, Is.Null, "Expected CSO-MVO join to be broken.");
@@ -1297,6 +1299,26 @@ public class FullSyncTests
                 MetaverseAttributeId = employeeIdMvAttr.Id
             }}
         });
+
+        // A remaining source must stand behind the recall for it to fire (#1570): make the target system
+        // bidirectional by giving it an enabled import Synchronisation Rule for the User type, as a real
+        // AD-style system would carry. Without one the recall gate preserves the values as last known state
+        // instead (the scenario CsoObsoleteWithRemoveContributedAttributesEnabledTestAsync pins).
+        var targetImportRule = new SyncRule
+        {
+            Id = 990,
+            Name = "Target User Import Synchronisation Rule",
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObjectTypeId = targetUserType.Id,
+            ConnectedSystemObjectType = targetUserType,
+            MetaverseObjectTypeId = mvUserType.Id,
+            MetaverseObjectType = mvUserType,
+            Direction = SyncRuleDirection.Import,
+            Enabled = true
+        };
+        SyncRulesData.Add(targetImportRule);
+        SyncRepo.SeedSyncRule(targetImportRule);
 
         // Set up source CSO joined to MVO
         var sourceCso = ConnectedSystemObjectsData[0];

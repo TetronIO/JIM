@@ -52,6 +52,9 @@ public class MetaverseControllerObjectTypeTriggerModeTests
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        // The deletion-rule configuration advisory (#1570) reads every Synchronisation Rule when building
+        // an object type response; no rules means no advisory.
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRulesAsync(It.IsAny<bool>())).ReturnsAsync([]);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
         _mockLogger = new Mock<ILogger<MetaverseController>>();
         _application = new JimApplication(_mockRepository.Object);

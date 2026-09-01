@@ -269,7 +269,17 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// Metaverse Object when its obsolete object is next synchronised, rather than withdrawn. They stop tracking
     /// anything at that point, which is the part a proposal that reads as "keep the data" does not say.
     /// </summary>
-    WouldRetainContributedValues
+    WouldRetainContributedValues,
+
+    /// <summary>
+    /// A disconnection left the Metaverse Object with no remaining Connected System carrying an enabled import
+    /// Synchronisation Rule for its type, so the departed system's sole-contributed values were preserved as last
+    /// known state rather than recalled (#1570): recalling them would blank live target accounts and feed
+    /// expression-based mappings (such as a Distinguished Name) with nothing. Emitted during obsoletion and
+    /// out-of-scope disconnection so an administrator can see why the values remain; the sibling of
+    /// <see cref="NoContributor"/>, which reports the values that were genuinely cleared.
+    /// </summary>
+    ValuesPreserved
 }
 
 /// <summary>
