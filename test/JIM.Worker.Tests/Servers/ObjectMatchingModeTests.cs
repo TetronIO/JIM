@@ -220,6 +220,98 @@ public class ObjectMatchingModeTests
     }
 
     [Test]
+    public async Task SwitchObjectMatchingModeAsync_ToAdvancedMode_WarnsThatObjectTypeRulesAreNoLongerConsultedAsync()
+    {
+        // Switching to Advanced Mode copies type-scoped rules onto import Synchronisation Rules but deliberately
+        // leaves the originals on the object type (they resume effect on a switch back). Without a warning that
+        // stranding is silent (#1569): the portal still lists the type rules, and nothing says they are inert.
+        var (connectedSystem, _, _) = BuildSystemForAdvancedSwitch();
+
+        var result = await _jim.ConnectedSystems.SwitchObjectMatchingModeAsync(
+            connectedSystem, ObjectMatchingRuleMode.SyncRule, _initiatedBy);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Warnings, Has.Some.Contains("no longer consulted").And.Some.Contains("person"),
+            "the switch must say the retained type-scoped rules are now inert");
+    }
+
+    [Test]
+    public async Task SwitchObjectMatchingModeAsync_ToAdvancedMode_WarnsWhenExportSyncRuleLosesMatchingAsync()
+    {
+        // Export matching in Advanced Mode consults only the export Synchronisation Rule's own rules, and the
+        // switch copies nothing onto export rules. An export rule whose object type previously supplied matching
+        // therefore stops matching entirely: provisioning proceeds as though no match existed, which is how
+        // duplicate accounts get created. That regression must be named at switch time (#1569).
+        var (connectedSystem, _, exportSyncRule) = BuildSystemForAdvancedSwitch();
+
+        var result = await _jim.ConnectedSystems.SwitchObjectMatchingModeAsync(
+            connectedSystem, ObjectMatchingRuleMode.SyncRule, _initiatedBy);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Warnings, Has.Some.Contains(exportSyncRule.Name).And.Some.Contains("export matching"),
+            "the switch must name each export Synchronisation Rule left with no matching rules");
+    }
+
+    /// <summary>
+    /// A system in Simple Mode with one type-scoped rule, one import Synchronisation Rule with no rules of its own
+    /// (so the switch copies onto it) and one export Synchronisation Rule with none (which the switch never touches).
+    /// </summary>
+    private (ConnectedSystem ConnectedSystem, SyncRule ImportSyncRule, SyncRule ExportSyncRule) BuildSystemForAdvancedSwitch()
+    {
+        var csObjectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = "person",
+            ObjectMatchingRules = new List<ObjectMatchingRule>
+            {
+                new()
+                {
+                    Id = 1,
+                    Order = 0,
+                    TargetMetaverseAttributeId = 100,
+                    Sources = new List<ObjectMatchingRuleSource> { new() { Id = 1, Order = 0, ConnectedSystemAttributeId = 10 } }
+                }
+            }
+        };
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            ObjectMatchingRuleMode = ObjectMatchingRuleMode.ConnectedSystem,
+            ObjectTypes = new List<ConnectedSystemObjectType> { csObjectType },
+            ConnectorDefinition = _connectorDefinition
+        };
+
+        var importSyncRule = new SyncRule
+        {
+            Id = 1,
+            Name = "Import Users",
+            Direction = SyncRuleDirection.Import,
+            ConnectedSystemId = 1,
+            ConnectedSystemObjectTypeId = 1,
+            ObjectMatchingRules = new List<ObjectMatchingRule>()
+        };
+
+        var exportSyncRule = new SyncRule
+        {
+            Id = 2,
+            Name = "Export Users",
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystemId = 1,
+            ConnectedSystemObjectTypeId = 1,
+            ObjectMatchingRules = new List<ObjectMatchingRule>()
+        };
+
+        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true))
+            .ReturnsAsync(new List<SyncRule> { importSyncRule, exportSyncRule });
+        _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
+
+        return (connectedSystem, importSyncRule, exportSyncRule);
+    }
+
+    [Test]
     public async Task SwitchObjectMatchingModeAsync_SameMode_ReturnsNoChangeAsync()
     {
         // Arrange
@@ -326,6 +418,72 @@ public class ObjectMatchingModeTests
         Assert.That(importSyncRule.ObjectMatchingRules.Count, Is.EqualTo(0));
 
         Assert.That(connectedSystem.ObjectMatchingRuleMode, Is.EqualTo(ObjectMatchingRuleMode.ConnectedSystem));
+    }
+
+    [Test]
+    public async Task SwitchObjectMatchingModeAsync_ToSimpleMode_WarnsWhenObjectTypeRulesTakePrecedenceAsync()
+    {
+        // When the object type already carries rules, the switch keeps them and discards every Synchronisation
+        // Rule's own rules rather than migrating them. That is destructive and previously silent (#1569): the
+        // administrator who configured the Synchronisation Rule rules has to be told they did not survive.
+        var csObjectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = "person",
+            ObjectMatchingRules = new List<ObjectMatchingRule>
+            {
+                new()
+                {
+                    Id = 5,
+                    Order = 0,
+                    TargetMetaverseAttributeId = 100,
+                    Sources = new List<ObjectMatchingRuleSource> { new() { Id = 5, Order = 0, ConnectedSystemAttributeId = 10 } }
+                }
+            }
+        };
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule,
+            ObjectTypes = new List<ConnectedSystemObjectType> { csObjectType },
+            ConnectorDefinition = _connectorDefinition
+        };
+
+        var importSyncRule = new SyncRule
+        {
+            Id = 1,
+            Name = "Import Users",
+            Direction = SyncRuleDirection.Import,
+            ConnectedSystemId = 1,
+            ConnectedSystemObjectTypeId = 1,
+            ObjectMatchingRules = new List<ObjectMatchingRule>
+            {
+                new()
+                {
+                    Id = 6,
+                    Order = 0,
+                    TargetMetaverseAttributeId = 200,
+                    Sources = new List<ObjectMatchingRuleSource> { new() { Id = 6, Order = 0, ConnectedSystemAttributeId = 20 } }
+                }
+            }
+        };
+
+        _mockCsRepo.Setup(r => r.GetSyncRulesAsync(1, true))
+            .ReturnsAsync(new List<SyncRule> { importSyncRule });
+        _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
+
+        var result = await _jim.ConnectedSystems.SwitchObjectMatchingModeAsync(
+            connectedSystem, ObjectMatchingRuleMode.ConnectedSystem, _initiatedBy);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(csObjectType.ObjectMatchingRules.Single().TargetMetaverseAttributeId, Is.EqualTo(100),
+            "the existing type-scoped rules take precedence and survive unchanged");
+        Assert.That(importSyncRule.ObjectMatchingRules, Is.Empty, "the Synchronisation Rule's rules are cleared");
+        Assert.That(result.Warnings, Has.Some.Contains("person").And.Some.Contains("discarded"),
+            "the discarded Synchronisation Rule rules must be named in the warnings");
     }
 
     [Test]

@@ -907,8 +907,34 @@ public partial class ConnectedSystemServer
             syncRulesUpdated++;
         }
 
-        Log.Information("SwitchToAdvancedModeAsync: Copied matching rules to {Count} Synchronisation Rule(s)", syncRulesUpdated);
-        return ObjectMatchingModeSwitchResult.ToAdvancedMode(syncRulesUpdated);
+        // The switch strands two things silently without these warnings (#1569): the type-scoped rules it
+        // deliberately retains (so a later switch back restores them), and export Synchronisation Rules, which it
+        // never copies onto even though advanced-mode export matching reads only the export rule's own rules.
+        var warnings = new List<string>();
+
+        var objectTypesWithRetainedRules = connectedSystem.ObjectTypes?
+            .Where(ot => ot.ObjectMatchingRules.Count > 0)
+            .OrderBy(ot => ot.Name)
+            .Select(ot => $"'{ot.Name}'")
+            .ToList() ?? [];
+        if (objectTypesWithRetainedRules.Count > 0)
+            warnings.Add($"The Object Matching Rules on Connected System Object Type(s) {string.Join(", ", objectTypesWithRetainedRules)} " +
+                "are no longer consulted in advanced matching mode. They are retained, and resume effect if the system returns to simple matching mode.");
+
+        foreach (var exportSyncRule in syncRules.Where(sr => sr.Direction == SyncRuleDirection.Export && sr.ObjectMatchingRules.Count == 0).OrderBy(sr => sr.Name))
+        {
+            var exportObjectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == exportSyncRule.ConnectedSystemObjectTypeId);
+            if (exportObjectType == null || exportObjectType.ObjectMatchingRules.Count == 0)
+                continue;
+
+            warnings.Add($"Export Synchronisation Rule '{exportSyncRule.Name}' has no Object Matching Rules of its own, so export matching " +
+                "will not be attempted for it in advanced matching mode and provisioning will proceed as though no match existed. " +
+                "Add Object Matching Rules to it if exported objects should join existing accounts.");
+        }
+
+        Log.Information("SwitchToAdvancedModeAsync: Copied matching rules to {Count} Synchronisation Rule(s), with {WarningCount} warning(s)",
+            syncRulesUpdated, warnings.Count);
+        return ObjectMatchingModeSwitchResult.ToAdvancedMode(syncRulesUpdated, warnings);
     }
 
     private async Task<ObjectMatchingModeSwitchResult> SwitchToSimpleModeAsync(
@@ -996,6 +1022,16 @@ public partial class ConnectedSystemServer
                         "(selected from {SyncRuleCount} Synchronisation Rules with {UniqueConfigs} unique configuration(s))",
                         migration.MatchingRulesSet, objectType.Name, migration.SyncRulesWithMatchingRules,
                         migration.UniqueSyncRuleConfigurations);
+                }
+                else
+                {
+                    // The object type's existing rules take precedence, so the Synchronisation Rules' own rules
+                    // are about to be cleared below without being migrated; that loss must be warned about (#1569).
+                    migration.ObjectTypeRulesTookPrecedence = true;
+
+                    Log.Warning("SwitchToSimpleModeAsync: Object type {ObjectType} already had matching rules; the rules on " +
+                        "{SyncRuleCount} Synchronisation Rule(s) were discarded rather than migrated",
+                        objectType.Name, migration.SyncRulesWithMatchingRules);
                 }
             }
 
@@ -9244,11 +9280,76 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Refuses a new Object Matching Rule whose scope the Connected System's matching mode would never consult.
+    /// </summary>
+    /// <remarks>
+    /// The engine only reads the scope the mode names (type-scoped rules in simple mode, Synchronisation Rule
+    /// scoped rules in advanced mode), so a rule of the other scope is silently inert: synchronisation joins
+    /// nothing and nothing reports why (#1569). Creation is the only guarded operation: mode switches deliberately
+    /// retain rules of the outgoing scope so a later switch back restores them, and those retained rules must stay
+    /// editable and deletable.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The rule's scope and the system's mode disagree, with the remedy.</exception>
+    private async Task EnsureObjectMatchingRuleScopeMatchesModeAsync(ObjectMatchingRule rule)
+    {
+        var connectedSystem = await ResolveObjectMatchingRuleConnectedSystemAsync(rule);
+
+        // An unresolvable owner means the referenced parent does not exist; storage fails on the foreign key
+        // regardless, so there is no mode to disagree with here.
+        if (connectedSystem == null)
+            return;
+
+        var mismatch = ObjectMatchingRule.DescribeScopeMismatch(
+            connectedSystem.ObjectMatchingRuleMode,
+            ruleIsSyncRuleScoped: rule.SyncRuleId.HasValue || rule.SyncRule != null,
+            connectedSystem.Name);
+        if (mismatch != null)
+            throw new InvalidDataException(mismatch);
+    }
+
+    /// <summary>
+    /// Resolves the Connected System that owns an Object Matching Rule, preferring loaded navigations and falling
+    /// back to repository lookups, whichever parent (Synchronisation Rule or Connected System Object Type) the
+    /// rule carries.
+    /// </summary>
+    private async Task<ConnectedSystem?> ResolveObjectMatchingRuleConnectedSystemAsync(ObjectMatchingRule rule)
+    {
+        if (rule.SyncRule?.ConnectedSystem != null)
+            return rule.SyncRule.ConnectedSystem;
+
+        if (rule.SyncRule != null)
+            return await GetConnectedSystemCoreAsync(rule.SyncRule.ConnectedSystemId);
+
+        if (rule.SyncRuleId.HasValue)
+        {
+            var syncRule = await GetSyncRuleAsync(rule.SyncRuleId.Value);
+            if (syncRule != null)
+                return syncRule.ConnectedSystem ?? await GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId);
+        }
+
+        if (rule.ConnectedSystemObjectType?.ConnectedSystem != null)
+            return rule.ConnectedSystemObjectType.ConnectedSystem;
+
+        if (rule.ConnectedSystemObjectType != null)
+            return await GetConnectedSystemCoreAsync(rule.ConnectedSystemObjectType.ConnectedSystemId);
+
+        if (rule.ConnectedSystemObjectTypeId.HasValue)
+        {
+            var objectType = await Application.Repository.ConnectedSystems.GetObjectTypeAsync(rule.ConnectedSystemObjectTypeId.Value);
+            if (objectType != null)
+                return await GetConnectedSystemCoreAsync(objectType.ConnectedSystemId);
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Creates a new Object Matching Rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
         EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleScopeMatchesModeAsync(rule);
 
         var activity = new Activity
         {
@@ -9270,6 +9371,7 @@ public partial class ConnectedSystemServer
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
         EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleScopeMatchesModeAsync(rule);
 
         var activity = new Activity
         {

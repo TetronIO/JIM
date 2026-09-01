@@ -12,6 +12,11 @@ function New-JIMSyncRuleMatchingRule {
         rather than per-object type. The Metaverse Object Type is derived from
         the Synchronisation Rule automatically.
 
+        The Connected System must be in advanced matching mode: JIM refuses to create a
+        Synchronisation Rule scoped rule on a system in simple matching mode, because such
+        a rule would never be consulted. Switch the mode first with Switch-JIMMatchingMode,
+        or use New-JIMMatchingRule to create a per-object-type rule instead.
+
     .PARAMETER SyncRuleId
         The unique identifier of the Synchronisation Rule.
 
@@ -46,6 +51,7 @@ function New-JIMSyncRuleMatchingRule {
         Get-JIMSyncRuleMatchingRule
         Set-JIMSyncRuleMatchingRule
         Remove-JIMSyncRuleMatchingRule
+        Switch-JIMMatchingMode
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     [OutputType([PSCustomObject])]
