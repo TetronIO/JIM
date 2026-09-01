@@ -1446,6 +1446,7 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 - Metaverse Objects are **not** deleted; their links to this Connected System are severed.
 - By default, change history is also deleted. Use `-KeepChangeHistory` to retain it for auditing purposes.
 - Without `-Wait`, the cmdlet returns as soon as the clear is queued; a script that immediately re-imports, or reads the Connector Space back, races the clear task.
+- The clear arms a stranded-value sweep that runs automatically at this Connected System's next Full Synchronisation, recalling any Metaverse attribute value the system contributed whose object never returned. Run a Full Import before that synchronisation so objects that do return can reclaim their values first. See [Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space).
 
 ---
 

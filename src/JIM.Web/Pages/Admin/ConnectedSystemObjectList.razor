@@ -282,7 +282,8 @@
 
             <MudText>
                 Deleting the Connected System Objects does not cause objects to be deleted in the external system.
-                It just removes the objects from JIM. A full-import on this Connected System and full-synchronisation on all Connected Systems is needed to rebuild the correct state.
+                It just removes the objects from JIM. Run a Full Import on this Connected System, then a Full Synchronisation on all Connected Systems, to rebuild state.
+                Values contributed by objects that do not return are recalled automatically at the next Full Synchronisation of this Connected System. Run the import first; synchronising before it would recall values the import would immediately re-assert.
             </MudText>
 
             <MudText Class="mt-3">

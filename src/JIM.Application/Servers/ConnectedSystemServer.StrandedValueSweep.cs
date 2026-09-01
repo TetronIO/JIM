@@ -146,4 +146,51 @@ public partial class ConnectedSystemServer
 
         return result;
     }
+
+    /// <summary>
+    /// The caller-facing entry point for a Full Synchronisation run: reads
+    /// <see cref="ConnectedSystem.StrandedValueSweepPending"/> and returns null immediately when it is
+    /// false, so every ordinary run (the overwhelming majority) pays exactly one boolean read and never
+    /// constructs the sweep's support set. When the flag is set, runs <see cref="ExecuteStrandedValueSweepAsync"/>,
+    /// appends its outcome to the run's Activity Message as a new sentence, persists the Activity, and
+    /// returns the result so the caller can log or report on it further if it chooses to.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System whose Full Synchronisation run has just completed
+    /// its ordinary passes.</param>
+    /// <param name="activity">The Full Synchronisation run's Activity; its Message gains the sweep's summary
+    /// sentence when the sweep runs.</param>
+    public async Task<StrandedValueSweepResult?> ExecuteStrandedValueSweepIfArmedAsync(ConnectedSystem connectedSystem, Activity activity)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(activity);
+        if (!connectedSystem.StrandedValueSweepPending)
+            return null;
+
+        var result = await ExecuteStrandedValueSweepAsync(connectedSystem, activity);
+
+        var sweepMessage = BuildSweepActivityMessage(result);
+        activity.Message = string.IsNullOrEmpty(activity.Message) ? sweepMessage : activity.Message + " " + sweepMessage;
+        await Application.Repository.Activity.UpdateActivityAsync(activity);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Composes the stranded-value sweep's summary sentence for the Full Synchronisation Activity's Message:
+    /// that the sweep ran because a Connector Space clear armed it, and what it found, including the
+    /// zero-findings case explicitly (#1549 Functional Requirement 11). Internal and static so the wording
+    /// is directly testable without constructing a sweep.
+    /// </summary>
+    /// <param name="result">The completed sweep's counters.</param>
+    internal static string BuildSweepActivityMessage(StrandedValueSweepResult result)
+    {
+        if (result.MetaverseObjectsProcessed == 0 && result.MetaverseObjectsPreserved == 0)
+            return "Stranded-value sweep executed (armed by a Connector Space clear): no stranded values were found.";
+
+        return "Stranded-value sweep executed (armed by a Connector Space clear): " +
+            $"{result.ValuesRecalled:N0} stranded value(s) recalled across {result.MetaverseObjectsProcessed:N0} Metaverse Object(s) " +
+            $"({result.AttributesReElected:N0} re-elected to a surviving contributor, {result.AttributesCleared:N0} cleared with no remaining contributor); " +
+            $"{result.MetaverseObjectsPreserved:N0} Metaverse Object(s) preserved as last known state ({result.ValuesPreserved:N0} value(s)); " +
+            $"{result.PendingExportsStaged:N0} Pending Export(s) staged.";
+    }
 }

@@ -368,6 +368,11 @@ public class Worker : BackgroundService
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
                                                             var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter);
                                                             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+                                                            // Stranded-value sweep (#1549): runs only when an earlier Connector Space clear armed
+                                                            // this system (StrandedValueSweepPending); every other Full Synchronisation run pays
+                                                            // one boolean read. Delta Synchronisation deliberately does not call this.
+                                                            await taskJim.ConnectedSystems.ExecuteStrandedValueSweepIfArmedAsync(connectedSystem, newWorkerTask.Activity);
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.Export:

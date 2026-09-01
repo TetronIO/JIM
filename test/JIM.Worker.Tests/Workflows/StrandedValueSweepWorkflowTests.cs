@@ -2,12 +2,14 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Workflows;
@@ -284,6 +286,148 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
             Assert.That(result.ValuesRecalled, Is.EqualTo(1), "the value must be recalled unconditionally under a deliberate scope");
             Assert.That(GetAttributeValue(strandedMvo, ctx.MvDescriptionAttr.Id), Is.Null);
         }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // ExecuteStrandedValueSweepIfArmedAsync: the caller-facing armed-check wrapper (#1549)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepIfArmedAsync_NotArmed_ReturnsNullAndTouchesNothingAsync()
+    {
+        var system = await CreateConnectedSystemAsync("HR Source");
+        Assert.That(system.StrandedValueSweepPending, Is.False, "precondition: a freshly created system is not armed");
+        var activity = await BuildActivityAsync(system.Id);
+        var originalMessage = activity.Message;
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepIfArmedAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Null, "an unarmed system must not run the sweep");
+            Assert.That(activity.Message, Is.EqualTo(originalMessage), "the Activity Message must be untouched when the sweep does not run");
+            Assert.That(_spySyncRepo.StrandedSelectorCalledForRuleIds, Is.Empty, "the sweep's support set must not be constructed when unarmed");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepIfArmedAsync_Armed_RunsSweepAppendsMessageAndReturnsResultAsync()
+    {
+        var ctx = await SetUpImportRuleAsync();
+        var secondSystem = await AddSecondImportSourceAsync(ctx);
+        var strandedMvo = SeedStrandedMetaverseObject(ctx, StrandedValue);
+        JoinMvoToSystem(strandedMvo, secondSystem.System);
+        var system = await ArmSweepAsync(ctx.System);
+        var activity = await BuildActivityAsync(system.Id);
+        activity.Message = "Sync complete: 1 objects processed.";
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepIfArmedAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result!.ValuesRecalled, Is.EqualTo(1));
+            Assert.That(system.StrandedValueSweepPending, Is.False);
+            Assert.That(activity.Message, Does.StartWith("Sync complete: 1 objects processed."),
+                "the sweep's summary must be appended, not replace, the existing message");
+            Assert.That(activity.Message, Does.Contain("Stranded-value sweep executed (armed by a Connector Space clear)"));
+            Assert.That(activity.Message, Does.Contain(ConnectedSystemServer.BuildSweepActivityMessage(result)),
+                "the appended text must match BuildSweepActivityMessage's composition exactly");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepIfArmedAsync_ArmedNoFindings_AppendsZeroFindingsMessageAsync()
+    {
+        var ctx = await SetUpImportRuleAsync();
+        // No stranded Metaverse Object seeded: nothing for the selector to find.
+        var system = await ArmSweepAsync(ctx.System);
+        var activity = await BuildActivityAsync(system.Id);
+        activity.Message = null;
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepIfArmedAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(activity.Message, Is.EqualTo(
+                "Stranded-value sweep executed (armed by a Connector Space clear): no stranded values were found."),
+                "with no prior message, the sweep's sentence becomes the whole message");
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // BuildSweepActivityMessage: message composition (#1549 Functional Requirement 11)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void BuildSweepActivityMessage_ZeroFindings_StatesNoStrandedValuesFound()
+    {
+        var result = new StrandedValueSweepResult();
+
+        var message = ConnectedSystemServer.BuildSweepActivityMessage(result);
+
+        Assert.That(message, Is.EqualTo(
+            "Stranded-value sweep executed (armed by a Connector Space clear): no stranded values were found."));
+    }
+
+    [Test]
+    public void BuildSweepActivityMessage_ZeroFindings_MetaverseObjectsPreservedAlsoZero_IsRequiredForZeroWording()
+    {
+        // MetaverseObjectsProcessed is zero but MetaverseObjectsPreserved is not: this is NOT the zero-findings
+        // case (values were found and preserved), so the full wording must be used, not the short form.
+        var result = new StrandedValueSweepResult
+        {
+            MetaverseObjectsProcessed = 0,
+            MetaverseObjectsPreserved = 1,
+            ValuesPreserved = 1
+        };
+
+        var message = ConnectedSystemServer.BuildSweepActivityMessage(result);
+
+        Assert.That(message, Does.Not.Contain("no stranded values were found"));
+        Assert.That(message, Does.Contain("1 Metaverse Object(s) preserved as last known state (1 value(s))"));
+    }
+
+    [Test]
+    public void BuildSweepActivityMessage_WithFindings_StatesAllCountersInWords()
+    {
+        var result = new StrandedValueSweepResult
+        {
+            SyncRulesSwept = 2,
+            MetaverseObjectsProcessed = 3,
+            ValuesRecalled = 4,
+            AttributesReElected = 1,
+            AttributesCleared = 3,
+            MetaverseObjectsPreserved = 5,
+            ValuesPreserved = 6,
+            PendingExportsStaged = 7
+        };
+
+        var message = ConnectedSystemServer.BuildSweepActivityMessage(result);
+
+        Assert.That(message, Is.EqualTo(
+            "Stranded-value sweep executed (armed by a Connector Space clear): " +
+            "4 stranded value(s) recalled across 3 Metaverse Object(s) " +
+            "(1 re-elected to a surviving contributor, 3 cleared with no remaining contributor); " +
+            "5 Metaverse Object(s) preserved as last known state (6 value(s)); " +
+            "7 Pending Export(s) staged."));
+    }
+
+    [Test]
+    public void BuildSweepActivityMessage_LargeCounters_UsesThousandsSeparators()
+    {
+        var result = new StrandedValueSweepResult
+        {
+            MetaverseObjectsProcessed = 12345,
+            ValuesRecalled = 12345,
+            AttributesCleared = 12345
+        };
+
+        var message = ConnectedSystemServer.BuildSweepActivityMessage(result);
+
+        Assert.That(message, Does.Contain("12,345 stranded value(s) recalled across 12,345 Metaverse Object(s)"));
+        Assert.That(message, Does.Contain("12,345 cleared with no remaining contributor"));
     }
 
     // -----------------------------------------------------------------------------------------------------------------
