@@ -392,6 +392,15 @@ public interface ISyncRepository
     Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId);
 
     /// <summary>
+    /// The distinct ids of Metaverse Objects holding at least one attribute value contributed by the given
+    /// Synchronisation Rule where the object holds no Connected System Object of the given Connected System:
+    /// stranded by an earlier Connector Space clear (#1549). Drives the stranded-value sweep.
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose contributed values select the candidate objects.</param>
+    /// <param name="connectedSystemId">The Connected System whose Connector Space was cleared.</param>
+    Task<List<Guid>> GetMetaverseObjectIdsWithStrandedValuesContributedBySyncRuleAsync(int syncRuleId, int connectedSystemId);
+
+    /// <summary>
     /// The cached display names of the given Metaverse Objects, keyed by id, for naming a referenced
     /// object in an export's unresolved-reference message without loading it (issue #1398). Objects
     /// that do not exist are absent from the result.

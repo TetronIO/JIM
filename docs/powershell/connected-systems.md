@@ -1388,14 +1388,16 @@ Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMConnectedSystemCapabili
 
 Removes all connector space objects (CSOs) and associated data from a Connected System without deleting the system itself. The Connected System configuration, schema, and Synchronisation Rules are preserved.
 
+The clear runs as a queued background task, tracked by an Activity, exactly like the portal: the cmdlet returns as soon as the task is queued rather than running the deletion inline, so the operation is audited and trackable regardless of which surface started it. Use `-Wait` to block until it has finished.
+
 ### Syntax
 
 ```powershell
 # ById (default)
-Clear-JIMConnectedSystem -Id <int> [-KeepChangeHistory] [-Force]
+Clear-JIMConnectedSystem -Id <int> [-KeepChangeHistory] [-Wait] [-Timeout <int>] [-Force]
 
 # ByInputObject
-Clear-JIMConnectedSystem -InputObject <PSCustomObject> [-KeepChangeHistory] [-Force]
+Clear-JIMConnectedSystem -InputObject <PSCustomObject> [-KeepChangeHistory] [-Wait] [-Timeout <int>] [-Force]
 ```
 
 ### Parameters
@@ -1405,11 +1407,19 @@ Clear-JIMConnectedSystem -InputObject <PSCustomObject> [-KeepChangeHistory] [-Fo
 | `Id` | `int` | Yes (ById) | | Connected System identifier |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
 | `KeepChangeHistory` | `switch` | No | `$false` | Preserves change history records; by default, change history is also deleted |
+| `Wait` | `switch` | No | `$false` | Waits for the queued clear to finish before returning |
+| `Timeout` | `int` | No | | Maximum seconds to wait when `-Wait` is supplied. Omit to wait indefinitely |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
 
 ### Output
 
-None.
+A tracking object for the queued clear:
+
+| Property | Type | Description |
+|----------|------|--------------|
+| `ActivityId` | `guid` | The clear Activity's id; monitor it with `Get-JIMActivity` |
+| `TaskId` | `guid` | The queued Worker Task's id |
+| `Message` | `string` | A human-readable confirmation naming the Connected System |
 
 ### Examples
 
@@ -1419,6 +1429,10 @@ Clear-JIMConnectedSystem -Id 3
 
 ```powershell title="Clear without confirmation, keeping history"
 Clear-JIMConnectedSystem -Id 3 -KeepChangeHistory -Force
+```
+
+```powershell title="Clear and wait for it to finish"
+Clear-JIMConnectedSystem -Id 3 -Force -Wait
 ```
 
 ```powershell title="Pipeline: clear a system by name"
@@ -1431,6 +1445,8 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 - Removes all CSOs, attribute values, Pending Exports, and deferred references from the Connected System.
 - Metaverse Objects are **not** deleted; their links to this Connected System are severed.
 - By default, change history is also deleted. Use `-KeepChangeHistory` to retain it for auditing purposes.
+- Without `-Wait`, the cmdlet returns as soon as the clear is queued; a script that immediately re-imports, or reads the Connector Space back, races the clear task.
+- The clear arms a stranded-value sweep that runs automatically at this Connected System's next Full Synchronisation, recalling any Metaverse attribute value the system contributed whose object never returned. Run a Full Import before that synchronisation so objects that do return can reclaim their values first. See [Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space).
 
 ---
 
