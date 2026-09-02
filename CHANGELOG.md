@@ -195,6 +195,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Clearing a Connector Space no longer leaves values contributed by departed source objects stranded on the Metaverse forever: the next Full Synchronisation of the cleared system now recalls them automatically, handing an attribute to a surviving contributor where one exists, clearing it where none does, and preserving values as last known state where no import source remains, with the outcome reported on the run's Activity. (#1549)
+
 - 🐛 Clearing a Synchronisation Rule's Object Matching Rules now deletes the rows rather than orphaning them. Every save-path clear (the simple-mode validation on import and export rules, and the switch to simple matching mode) severed the rules from their owner instead of deleting them, leaving parentless rows no surface could see; their references to Connected System attributes then blocked deleting the Connected System entirely, with the whole deletion rolling back. The deletion sequence also sweeps any orphans already present, so systems stranded by the old behaviour become deletable again. (#1589)
 
 - 🐛 Saving an export Synchronisation Rule no longer clears its Object Matching Rules on a system in advanced matching mode. Advanced-mode export matching reads exactly those rules to join an identity being provisioned to an account that already exists, but any whole-rule save (the portal editor, the REST update, `Set-JIMSyncRule`) silently wiped them, so editing any other property of the rule removed the join-instead-of-duplicate protection. The clear now applies only in simple matching mode, where such rules are inert, matching how import rules are treated. (#1589)

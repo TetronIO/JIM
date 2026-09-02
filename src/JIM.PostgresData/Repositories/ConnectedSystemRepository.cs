@@ -2974,6 +2974,31 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task SetStrandedValueSweepPendingAsync(int connectedSystemId, bool pending)
+    {
+        // A narrow status-mark update (exempt from the bulk column-list rule): a single scope flag, set by
+        // every clear and cleared by the sweep on completion. Deliberately no tracked-instance fix-up: the
+        // clear and sweep callers set the property on their own in-memory instance where they need it observed.
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectedSystems""
+                  SET ""StrandedValueSweepPending"" = {0}
+                  WHERE ""Id"" = {1}",
+                pending,
+                connectedSystemId);
+            return;
+        }
+
+        // The in-memory test provider does not support raw SQL; narrow tracked fallback with the same semantics.
+        var connectedSystem = await Repository.Database.ConnectedSystems
+            .AsTracking()
+            .SingleAsync(cs => cs.Id == connectedSystemId);
+        connectedSystem.StrandedValueSweepPending = pending;
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<int> DeletePendingExportsForConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
         if (connectedSystemObjectIds.Count == 0)
