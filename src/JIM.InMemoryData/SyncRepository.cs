@@ -1015,7 +1015,14 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult<MetaverseObject?>(null);
     }
 
-    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
+    // Virtual so tests can simulate the identity split a real EF load produces (the SamePageJoinConflict
+    // page-flush regression coverage): production's matching query and an already-loaded CSO's own
+    // MetaverseObject navigation are separate database round trips, so a CSO obsoleted earlier in the same
+    // page and a CSO joining via matching can end up with two distinct CLR instances of the same MVO row.
+    // This dictionary-backed store returns the one stored reference for every lookup, so it cannot
+    // reproduce that split on its own; a spy overriding this method can clone the match to reproduce it
+    // deterministically. Matches the virtual precedent on the update/delete methods above.
+    public virtual Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
         ConnectedSystemObject connectedSystemObject,
         MetaverseObjectType metaverseObjectType,
         ObjectMatchingRule rule)
@@ -1333,7 +1340,10 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
+    // Virtual so tests can spy on the single-entity update path (the grace-deletion-marker page-flush
+    // regression coverage), matching the batch-update spy precedent above: production code must never
+    // reach this method mid-page for a grace-period deletion (see SyncTaskProcessorBase.MarkMvoForDeletionAsync).
+    public virtual Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         FixupMvoAttributeValues(metaverseObject);
         _mvos[metaverseObject.Id] = metaverseObject;
