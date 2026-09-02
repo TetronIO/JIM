@@ -1,8 +1,9 @@
 # Connected System Synchronised Deprovisioning - Implementation Plan
 
-- **Status:** Planned
+- **Status:** Done
+- **Note:** Phases 1-5 delivered across #1562, #1565, #1567 and the closing PR; the #134/#827 preview adapter consumes the Phase 1 seam later.
 - **Issue:** [#809](https://github.com/TetronIO/JIM/issues/809)
-- **PRD:** [`engineering/prd/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../prd/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (all five decisions resolved, 2026-08-29)
+- **PRD:** [`engineering/prd/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../../prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (all five decisions resolved, 2026-08-29)
 
 ## Overview
 
@@ -35,33 +36,33 @@ Phase 1's extraction gives JimApplication a callable "obsolete this CSO against 
 
 TDD red-first throughout; British English; Title Case domain nouns; changelog + docs with the behaviour.
 
-### Phase 1: Obsoletion core extraction and impact summary
+### Phase 1: Obsoletion core extraction and impact summary ✅
 
 - Extract the reusable core of `ProcessObsoleteConnectedSystemObjectAsync` into JIM.Application (collaborators parameterised, exactly the `ContributorReElectionService` extraction pattern), with the processor delegating; behaviour-preserving, proven by the existing obsoletion suites before and after.
 - `ContributorRecallScope.ForDeletedConnectedSystem(connectedSystemId)`: every contributor from the deleted system is ineligible; any other system's joined object is a survivor.
 - Extend `GetDeletionPreviewAsync` with the deprovisioning impact counts (contributed values/objects, deletion-rule-eligible Metaverse Objects), count-query only.
 
-### Phase 2: The deprovisioning run
+### Phase 2: The deprovisioning run ✅
 
 - Task flag + migration; TaskingServer Activity branch wording; Worker dispatch case extension.
 - Executor with the three passes above, checkpointing, fencing, RPEIs, batch summary logging.
 - Workflow tests: surviving-contributor takeover across systems; sole-contributor clear; deletion rule fires for last-connector Metaverse Objects (and grace period holds); exports staged; residue pass catches a cleared-space value; failure partway leaves the system fenced and retryable; resume from checkpoint does not double-process; immediate mode byte-for-byte unchanged.
 
-### Phase 3: REST and PowerShell
+### Phase 3: REST and PowerShell ✅
 
-- **Retry/abort decision carried in from Phase 2**: after a failed run the system stays fenced (deliberate), and `DeleteAsync` refuses a Deleting system, so the surfaces must give the administrator an explicit retry (re-queue from checkpoint) and, if we choose to offer it, an abort that un-fences; decide and deliver both here.
+- **Failed-run exits (decided 2026-08-31): retry or finish immediately.** Re-issuing the deprovisioning delete on a fenced system resumes the run from its checkpoint; issuing the immediate delete on a fenced system abandons the remaining deprovisioning and completes the deletion (remaining contributed data kept, warned). No un-fencing abort: a half-deprovisioned system never returns to service.
 
 - `DELETE connected-systems/{id}` gains the mode (deprovision default; the existing 200/202 split carries the tracking DTO); deprovisioning always queues.
 - `Remove-JIMConnectedSystem`: mode parameter (deprovision default), impact-stating `ShouldProcess` text, tracking output with the Activity id; help carries the immediate-mode warning. Pester.
 - OpenAPI regeneration.
 
-### Phase 4: Portal
+### Phase 4: Portal ✅
 
 - `DeleteConnectedSystemDialog` gains the two-option radio group (deprovision pre-selected; selecting immediate reveals its warning), above the existing counts/name-to-confirm/change-history affordances, per the UX artefact. The count tier doubles as the impact statement until the #827 preview adapter lands; the dialog carries a disabled "Preview attribute impact" affordance labelled as coming, so the layout does not shift when it does.
 - Queued state: snackbar with "View Activity"; the Connected System page shows a deprovisioning-in-progress banner (Activity link, system fenced) while the task runs.
 - bUnit for the dialog logic (in scope: `Shared/`); full-stack runtime verification of both modes.
 
-### Phase 5: Documentation and changelog
+### Phase 5: Documentation and changelog ✅
 
 - `docs/configuration/connected-systems.md` deletion section rewritten around the choice; concepts cross-links (attribute-priority, jml-lifecycle).
 - Changelog: ✨ the choice and the queued deprovisioning run; the immediate mode's behaviour unchanged.

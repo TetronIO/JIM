@@ -212,6 +212,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
         => _repo.Metaverse.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(syncRuleId);
 
+    public Task<List<Guid>> GetMetaverseObjectIdsWithStrandedValuesContributedBySyncRuleAsync(int syncRuleId, int connectedSystemId)
+        => _repo.Metaverse.GetMetaverseObjectIdsWithStrandedValuesContributedBySyncRuleAsync(syncRuleId, connectedSystemId);
+
     public Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids)
         => _repo.Metaverse.GetMetaverseObjectDisplayNamesAsync(ids);
 

@@ -138,6 +138,14 @@ public readonly struct MetaverseObjectChangeResult
     public string? SyncRuleName { get; init; }
 
     /// <summary>
+    /// How many of the disconnecting system's values were preserved as last known state because no remaining
+    /// joined system carries an enabled import Synchronisation Rule for the object's type (#1570), for the
+    /// caller to surface as a ValuesPreserved outcome. Zero when the freeze was for a pending deletion, which
+    /// explains itself via the deletion outcome instead. Only populated for DisconnectedOutOfScope.
+    /// </summary>
+    public int PreservedNoSourceAttributeCount { get; init; }
+
+    /// <summary>
     /// Creates a result indicating no changes occurred.
     /// </summary>
     public static MetaverseObjectChangeResult NoChanges() => new() { HasChanges = false };
@@ -203,6 +211,7 @@ public readonly struct MetaverseObjectChangeResult
     /// <param name="mvoDeletionGracePeriod">The grace period applied when the deletion was scheduled (#1086).</param>
     /// <param name="mvoDeletionPolicySnapshotJson">The serialised decision-time deletion policy snapshot, when the evaluation recorded an outcome (#119).</param>
     /// <param name="mvoDeletionEligibleDate">When a scheduled deletion becomes due (UTC), for the outcome node's detail message (#119).</param>
+    /// <param name="preservedNoSourceAttributeCount">How many values were preserved as last known state because no import source remains (#1570).</param>
     public static MetaverseObjectChangeResult DisconnectedOutOfScope(
         int? attributeFlowCount = null,
         MvoDeletionFate mvoDeletionFate = MvoDeletionFate.NotDeleted,
@@ -215,7 +224,8 @@ public readonly struct MetaverseObjectChangeResult
         string? mvoDeletionReason = null,
         TimeSpan? mvoDeletionGracePeriod = null,
         string? mvoDeletionPolicySnapshotJson = null,
-        DateTime? mvoDeletionEligibleDate = null) => new()
+        DateTime? mvoDeletionEligibleDate = null,
+        int preservedNoSourceAttributeCount = 0) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.DisconnectedOutOfScope,
@@ -231,7 +241,8 @@ public readonly struct MetaverseObjectChangeResult
         MvoDeletionReason = mvoDeletionReason,
         MvoDeletionGracePeriod = mvoDeletionGracePeriod,
         MvoDeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson,
-        MvoDeletionEligibleDate = mvoDeletionEligibleDate
+        MvoDeletionEligibleDate = mvoDeletionEligibleDate,
+        PreservedNoSourceAttributeCount = preservedNoSourceAttributeCount
     };
 
     /// <summary>

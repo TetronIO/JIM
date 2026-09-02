@@ -84,4 +84,12 @@ public class ConnectedSystemObjectObsoletionResult
     /// other value remains (#91's NoContributor observability count).
     /// </summary>
     public int RecallClearedAttributeCount { get; set; }
+
+    /// <summary>
+    /// How many of the disconnecting system's values were preserved as last known state because no remaining
+    /// joined system carries an enabled import Synchronisation Rule for the object's type (#1570's
+    /// ValuesPreserved observability count). Zero when the freeze was for a pending deletion, which explains
+    /// itself via the deletion outcome instead.
+    /// </summary>
+    public int PreservedNoSourceAttributeCount { get; set; }
 }

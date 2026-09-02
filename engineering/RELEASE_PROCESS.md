@@ -73,24 +73,26 @@ git push origin main --tags
 
 3. **Update the version**: Edit the `VERSION` file
 
-4. **Commit changes**:
+4. **Freeze the released migrations**: run `pwsh -File ./scripts/Update-ReleasedMigrationsManifest.ps1 -Version <version>` to append every migration shipping in this release to `src/JIM.PostgresData/Migrations/released-migrations.lock`. A listed migration has been applied to customer databases and is immutable; `ReleasedMigrationImmutabilityTests` (JIM.Worker.Tests) fails the build if one is later renamed, regenerated, edited or deleted, or if a new migration is sequenced before the newest released one. The script refuses to run if a frozen migration has already been changed; stop the release and investigate if it does.
+
+5. **Commit changes**:
    ```bash
-   git add VERSION CHANGELOG.md
+   git add VERSION CHANGELOG.md src/JIM.PostgresData/Migrations/released-migrations.lock
    git commit -m "Release v0.3.0"
    git push origin main
    ```
 
-5. **Create the release tag**:
+6. **Create the release tag**:
    ```bash
    git tag v0.3.0
    git push origin v0.3.0
    ```
 
-6. **Authorise the tag on the self-hosted runner group**: the release workflow runs on the self-hosted runner, and the `tetron-trusted` org runner group's workflow allowlist pins `release.yml` to a specific tag ref (the API refuses refs that do not exist, so this must follow the tag push). Until this is done the release jobs sit queued. The `/release` skill carries the exact `gh api` command; it needs the `admin:org` scope.
+7. **Authorise the tag on the self-hosted runner group**: the release workflow runs on the self-hosted runner, and the `tetron-trusted` org runner group's workflow allowlist pins `release.yml` to a specific tag ref (the API refuses refs that do not exist, so this must follow the tag push). Until this is done the release jobs sit queued. The `/release` skill carries the exact `gh api` command; it needs the `admin:org` scope.
 
-7. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
+8. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
 
-8. **Verify the release**: Once complete, verify:
+9. **Verify the release**: Once complete, verify:
    - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example`)
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery

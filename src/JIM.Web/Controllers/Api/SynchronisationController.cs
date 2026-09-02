@@ -2474,14 +2474,26 @@ public class SynchronisationController(
     /// Delete a Connected System
     /// </summary>
     /// <remarks>
-    /// Small systems (fewer than 1,000 CSOs) are deleted immediately and return 200 OK. Larger systems, or systems with a running sync, are queued as a background job and return 202 Accepted with tracking IDs. Use the deletion-preview endpoint first to understand the impact.
+    /// By default the deletion runs as <b>Deprovision through synchronisation</b> (recommended): the system is
+    /// fenced and a background run processes every Connected System Object through the synchronisation engine's
+    /// obsoletion semantics (attribute recall with surviving-contributor re-election, Metaverse Object Deletion
+    /// Rule evaluation, Pending Export staging) before the deletion completes; the response is always 202
+    /// Accepted with tracking IDs. Pass <c>synchronisedDeprovisioning=false</c> for <b>Delete immediately and
+    /// keep contributed data</b>: small systems (fewer than 1,000 CSOs) delete synchronously and return 200 OK,
+    /// larger systems or systems with a running sync queue and return 202; contributed attribute values are kept
+    /// without provenance (they can never be recalled) and downstream systems are not corrected. On a system
+    /// whose deprovisioning run failed partway (it remains fenced), re-issuing the default deletes RETRIES the
+    /// run, resuming from its checkpoint, and <c>synchronisedDeprovisioning=false</c> FINISHES the deletion
+    /// immediately, abandoning the remaining deprovisioning (recorded on the Activity). Use the
+    /// deletion-preview endpoint first to understand the impact.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System to delete.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity and the configuration change history tombstone. Supplied as a query parameter because HTTP DELETE bodies are awkward for clients.</param>
+    /// <param name="synchronisedDeprovisioning">True (the default) to deprovision through synchronisation; false to delete immediately and keep contributed data.</param>
     /// <returns>The result of the deletion request including outcome and tracking IDs.</returns>
-    /// <response code="200">Deletion completed immediately.</response>
-    /// <response code="202">Deletion has been queued as a background job.</response>
+    /// <response code="200">Deletion completed immediately (immediate mode, small system only).</response>
+    /// <response code="202">Deletion has been queued as a background job; the result carries the Activity and Worker Task ids to track it by. Always the case for the default deprovisioning mode.</response>
     /// <response code="400">Deletion failed.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("connected-systems/{connectedSystemId:int}", Name = "DeleteConnectedSystem")]
@@ -2492,10 +2504,11 @@ public class SynchronisationController(
     public async Task<IActionResult> DeleteConnectedSystemAsync(
         int connectedSystemId,
         [FromQuery] bool deleteChangeHistory = false,
-        [FromQuery] string? changeReason = null)
+        [FromQuery] string? changeReason = null,
+        [FromQuery] bool synchronisedDeprovisioning = true)
     {
-        _logger.LogInformation("Deletion requested for Connected System: {Id}, deleteChangeHistory={DeleteHistory}",
-            connectedSystemId, deleteChangeHistory);
+        _logger.LogInformation("Deletion requested for Connected System: {Id}, deleteChangeHistory={DeleteHistory}, synchronisedDeprovisioning={Deprovision}",
+            connectedSystemId, deleteChangeHistory, synchronisedDeprovisioning);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
@@ -2507,8 +2520,8 @@ public class SynchronisationController(
 
         var apiKey = await GetCurrentApiKeyAsync();
         var result = apiKey != null
-            ? await _application.ConnectedSystems.DeleteAsync(connectedSystemId, apiKey, deleteChangeHistory, changeReason)
-            : await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory, changeReason);
+            ? await _application.ConnectedSystems.DeleteAsync(connectedSystemId, apiKey, deleteChangeHistory, changeReason, synchronisedDeprovisioning)
+            : await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory, changeReason, synchronisedDeprovisioning);
 
         if (!result.Success)
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Deletion failed."));
@@ -2527,16 +2540,21 @@ public class SynchronisationController(
     /// Clear the connector space for a Connected System
     /// </summary>
     /// <remarks>
-    /// Removes all Connected System Objects and their Attributes from the connector space. Typically used before re-importing data. This is a destructive operation.
+    /// Queues the clear as a background task, exactly as the portal does: removing every Connected System
+    /// Object and its Attributes from the connector space is tracked by an Activity (target, operation type,
+    /// cleared counts on completion) rather than run inline with no audit trail. Typically used before
+    /// re-importing data. This is a destructive operation. The response is always 202 Accepted with the
+    /// Activity and Worker Task ids for tracking.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System to clear.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the cleared CSOs. Default: true (recommended for re-import scenarios).</param>
-    /// <response code="200">Connector space cleared successfully.</response>
-    /// <response code="400">Clear operation failed.</response>
-    /// <response code="401">User is not authenticated.</response>
+    /// <returns>The queued clear's tracking ids.</returns>
+    /// <response code="202">Connector Space clear has been queued.</response>
+    /// <response code="400">Clear operation could not be queued.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
     /// <response code="404">Connected System not found.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/clear", Name = "ClearConnectorSpace")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectorSpaceClearResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -2547,31 +2565,55 @@ public class SynchronisationController(
         _logger.LogInformation("Clear connector space requested for Connected System: {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
 
-        try
+        // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        // Get the current user from the JWT claims (may be null for API key auth)
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
-            var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
-            if (connectedSystem == null)
+            _logger.LogWarning("Could not identify user from JWT claims for Clear Connector Space request");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // Create and queue the clear task
+        // Use API key for attribution when authenticated via API key
+        ClearConnectedSystemObjectsWorkerTask workerTask;
+        if (initiatedBy != null)
+        {
+            workerTask = ClearConnectedSystemObjectsWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, deleteChangeHistory);
+        }
+        else
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey == null)
             {
-                return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+                _logger.LogError("Failed to resolve API key for Clear Connector Space request");
+                return BadRequest(new { error = "Failed to identify initiating API key" });
             }
+            workerTask = ClearConnectedSystemObjectsWorkerTask.ForApiKey(connectedSystemId, apiKey.Id, apiKey.Name, deleteChangeHistory);
+        }
 
-            await _application.ConnectedSystems.ClearConnectedSystemObjectsAsync(connectedSystemId, deleteChangeHistory);
+        var result = await _application.Tasking.CreateWorkerTaskAsync(workerTask);
+        if (!result.Success)
+        {
+            _logger.LogWarning("Clear Connector Space request blocked: {Error}", LogSanitiser.Sanitise(result.ErrorMessage));
+            return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Validation failed."));
+        }
 
-            _logger.LogInformation("Connector space cleared for Connected System: {Id}", connectedSystemId);
-            return Ok();
-        }
-        catch (InvalidOperationException ex)
+        _logger.LogInformation("Clear Connector Space queued: ConnectedSystem={SystemId}, TaskId={TaskId}, ActivityId={ActivityId}",
+            connectedSystemId, workerTask.Id, workerTask.Activity?.Id);
+
+        var response = new ConnectorSpaceClearResponse
         {
-            _logger.LogWarning(ex, "Clear connector space failed for Connected System: {Id}", connectedSystemId);
-            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Clear connector space failed for Connected System: {Id}", connectedSystemId);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                ApiErrorResponse.InternalError($"Clear operation failed: {ex.Message}"));
-        }
+            ActivityId = workerTask.Activity?.Id ?? Guid.Empty,
+            TaskId = workerTask.Id,
+            Message = $"Connector Space clear for '{connectedSystem.Name}' has been queued."
+        };
+
+        return Accepted(response);
     }
 
     /// <summary>
@@ -5259,6 +5301,13 @@ public class SynchronisationController(
             _logger.LogWarning(ex, "Failed to create Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+        catch (InvalidDataException ex)
+        {
+            // The application layer refuses a rule that could never work (#1458) or whose scope the system's
+            // matching mode would never consult (#1569); both are the caller's configuration to correct.
+            _logger.LogWarning(ex, "Refused Object Matching Rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
     }
 
     /// <summary>
@@ -5379,6 +5428,12 @@ public class SynchronisationController(
         catch (ArgumentException ex)
         {
             _logger.LogWarning(ex, "Failed to update Object Matching Rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        catch (InvalidDataException ex)
+        {
+            // The application layer refuses a rule edited into a shape that could never work (#1458).
+            _logger.LogWarning(ex, "Refused Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -5582,6 +5637,13 @@ public class SynchronisationController(
             _logger.LogWarning(ex, "Failed to create Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+        catch (InvalidDataException ex)
+        {
+            // The application layer refuses a rule that could never work (#1458) or whose scope the system's
+            // matching mode would never consult (#1569); both are the caller's configuration to correct.
+            _logger.LogWarning(ex, "Refused Object Matching Rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
     }
 
     /// <summary>
@@ -5692,6 +5754,12 @@ public class SynchronisationController(
             _logger.LogWarning(ex, "Failed to update Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+        catch (InvalidDataException ex)
+        {
+            // The application layer refuses a rule edited into a shape that could never work (#1458).
+            _logger.LogWarning(ex, "Refused Object Matching Rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
     }
 
     /// <summary>
@@ -5779,7 +5847,12 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        var result = await _application.ConnectedSystems.SwitchObjectMatchingModeAsync(connectedSystem, request.Mode, initiatedBy);
+        // The switch creates Activities, and every Activity must be attributed to a security principal, so an API
+        // key caller has to reach the API key overload; handing it a null user fails the attribution check.
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.ConnectedSystems.SwitchObjectMatchingModeAsync(connectedSystem, request.Mode, apiKey)
+            : await _application.ConnectedSystems.SwitchObjectMatchingModeAsync(connectedSystem, request.Mode, initiatedBy);
 
         if (!result.Success)
         {

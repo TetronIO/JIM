@@ -13,6 +13,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Logic;
 using JIM.Models.Search;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -50,6 +51,9 @@ public class MetaverseControllerObjectTypeTests
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
+        // The deletion-rule configuration advisory (#1570) reads every Synchronisation Rule when building
+        // an object type response; no rules means no advisory.
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRulesAsync(It.IsAny<bool>())).ReturnsAsync([]);
         _mockLogger = new Mock<ILogger<MetaverseController>>();
         _application = new JimApplication(_mockRepository.Object);
         _controller = new MetaverseController(_mockLogger.Object, _application);
@@ -874,6 +878,43 @@ public class MetaverseControllerObjectTypeTests
         var dto = result!.Value as MetaverseObjectTypeDetailDto;
         Assert.That(dto, Is.Not.Null);
         Assert.That(dto!.Icon, Is.EqualTo("Person"));
+    }
+
+    [Test]
+    public async Task GetObjectTypeAsync_LastConnectorRuleWithProvisioningExport_AttachesDeletionRuleAdvisory()
+    {
+        // The advisory wiring (#1570): the response must carry the configuration advisory when the type
+        // uses When Last Connector Disconnected and an enabled provisioning export rule targets it.
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            BuiltIn = true,
+            DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            Attributes = new List<MetaverseAttribute>()
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(objectType);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRulesAsync(It.IsAny<bool>()))
+            .ReturnsAsync([new SyncRule
+            {
+                Id = 9,
+                Name = "AD Export",
+                ConnectedSystemId = 3,
+                MetaverseObjectTypeId = 1,
+                Direction = SyncRuleDirection.Export,
+                Enabled = true,
+                ProvisionToConnectedSystem = true
+            }]);
+
+        var result = await _controller.GetObjectTypeAsync(1) as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        var dto = result!.Value as MetaverseObjectTypeDetailDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.DeletionRuleAdvisory, Is.Not.Null.And.Contain("When Authoritative Source Disconnected"),
+            "the object type response must carry the deletion rule advisory when the combination applies");
     }
 
     [Test]

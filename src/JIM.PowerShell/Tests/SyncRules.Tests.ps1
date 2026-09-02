@@ -611,6 +611,16 @@ Describe 'Remove-JIMSyncRule' {
         It 'Should have a KeepContributedValues switch parameter' {
             $command.Parameters['KeepContributedValues'].SwitchParameter | Should -BeTrue
         }
+
+        It 'Should have a Wait switch parameter' {
+            $command.Parameters['Wait'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should have a Timeout parameter constrained to positive seconds' {
+            $param = $command.Parameters['Timeout']
+            $param.ParameterType | Should -Be ([int])
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] -and $_.MinRange -eq 1 } | Should -Not -BeNullOrEmpty
+        }
     }
 
     Context 'Contributed-values recall choice (#1537)' {
@@ -784,6 +794,109 @@ Describe 'Remove-JIMSyncRule' {
                 $result = Remove-JIMSyncRule -Id 1 -Force
 
                 $result | Should -BeNullOrEmpty
+            }
+        }
+
+        It 'Waits for the contributed-values recall to complete when -Wait is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:progressCalls = 0
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') {
+                        return [PSCustomObject]@{
+                            RecallActivityId    = [guid]'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                            AffectedValueCount  = 3
+                            AffectedObjectCount = 3
+                        }
+                    }
+                    if ($Endpoint -match 'activities/.+/progress') {
+                        $script:progressCalls++
+                        if ($script:progressCalls -lt 2) { return [PSCustomObject]@{ status = 'Running' } }
+                        return [PSCustomObject]@{ status = 'Complete' }
+                    }
+                    if ($script:progressCalls -ge 2) {
+                        # The rule is gone once the recall has finished; the cmdlet confirms that.
+                        throw 'Not found'
+                    }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                Remove-JIMSyncRule -Id 1 -Force -Wait
+
+                $script:progressCalls | Should -BeGreaterOrEqual 2
+            }
+        }
+
+        It 'Does not poll the recall Activity when -Wait is not supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') {
+                        return [PSCustomObject]@{
+                            RecallActivityId    = [guid]'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                            AffectedValueCount  = 3
+                            AffectedObjectCount = 3
+                        }
+                    }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                Remove-JIMSyncRule -Id 1 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Endpoint -match 'progress' }
+            }
+        }
+
+        It 'Reports an error when the recall Activity ends in failure under -Wait' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') {
+                        return [PSCustomObject]@{
+                            RecallActivityId    = [guid]'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                            AffectedValueCount  = 3
+                            AffectedObjectCount = 3
+                        }
+                    }
+                    if ($Endpoint -match 'activities/.+/progress') { return [PSCustomObject]@{ status = 'FailedWithError' } }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                { Remove-JIMSyncRule -Id 1 -Force -Wait -ErrorAction Stop } | Should -Throw '*FailedWithError*'
+            }
+        }
+
+        It 'Reports an error when the rule survives a completed recall under -Wait' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') {
+                        return [PSCustomObject]@{
+                            RecallActivityId    = [guid]'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+                            AffectedValueCount  = 3
+                            AffectedObjectCount = 3
+                        }
+                    }
+                    if ($Endpoint -match 'activities/.+/progress') { return [PSCustomObject]@{ status = 'Complete' } }
+                    # The rule is still readable after the recall said it was done.
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                { Remove-JIMSyncRule -Id 1 -Force -Wait -ErrorAction Stop } | Should -Throw '*still present*'
+            }
+        }
+
+        It 'Does not wait when the deletion completed immediately and queued no recall' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR Import' }
+                }
+
+                Remove-JIMSyncRule -Id 1 -Force -Wait
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Endpoint -match 'progress' }
             }
         }
     }

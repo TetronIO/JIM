@@ -199,7 +199,7 @@ public static class CausalityModelBuilder
             SyncRuleName = outcome.SyncRuleName,
             Links = links,
             AttributeRows = GetAttributeRows(outcome, recordAttributeRows, identityAttributeRows),
-            Operation = OutcomeDisplayMap.GetEventOperation(outcome.OutcomeType, exportReasonCode),
+            Operation = OutcomeDisplayMap.GetEventOperation(outcome.OutcomeType, exportReasonCode, outcome.StagedChangeType),
             Children = childOutcomes
                 .Select(c => BuildEvent(c, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
                     livePendingExportIds, chain))

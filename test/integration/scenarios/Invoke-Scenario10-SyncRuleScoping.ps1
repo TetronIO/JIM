@@ -290,6 +290,17 @@ function Reset-JIMForCascadeTest {
     # creates them cleanly.
     Remove-LDAPTestUsers -Users $BaseUsers -DirectoryConfig $DirectoryConfig
 
+    # The factory reset also truncates JIM's Trusted Certificates (they are customer data), and the
+    # runner only trusts the directory's CA once, at environment setup. Setup-Scenario10 validates the
+    # LDAPS settings against the directory when it configures the Connected System, so without
+    # re-trusting the CA here every post-reset setup fails with "One or more Connected System settings
+    # are invalid" (TestDirectoryConnectivity certificate validation). OpenLDAP runs plain LDAP in the
+    # integration environment and needs no certificate.
+    if ($DirectoryConfig.UseSSL) {
+        Write-Host "  Re-trusting $($DirectoryConfig.ContainerName)'s CA (the reset removed it)..." -ForegroundColor Gray
+        Add-SambaCertificateToJimStore -ContainerName $DirectoryConfig.ContainerName -JIMUrl $JIMUrl -ApiKey $ApiKey
+    }
+
     # Re-run setup to rebuild connected systems, sync rules, run profiles, etc.
     Write-Host "  Re-running Setup-Scenario10..." -ForegroundColor Gray
     & "$PSScriptRoot/../Setup-Scenario10.ps1" `

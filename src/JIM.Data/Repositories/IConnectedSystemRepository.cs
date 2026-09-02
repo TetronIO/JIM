@@ -1215,6 +1215,16 @@ public interface IConnectedSystemRepository
     public Task<int> ObsoleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
+    /// Sets or clears <see cref="ConnectedSystem.StrandedValueSweepPending"/> (#1549): a narrow single-column
+    /// status-mark update, set true by every successful Connector Space clear and cleared by the stranded-value
+    /// sweep on completion. Deliberately immune to context tracking behaviour: callers that need the change
+    /// reflected on an in-memory instance set the property themselves.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose flag is being set.</param>
+    /// <param name="pending">The new value of the flag.</param>
+    public Task SetStrandedValueSweepPendingAsync(int connectedSystemId, bool pending);
+
+    /// <summary>
     /// Deletes the Pending Exports (and their attribute value changes) targeting the given Connected System
     /// Objects, exactly as import-detected deletions delete them: an export against an object the source no
     /// longer holds must never run (#1485).

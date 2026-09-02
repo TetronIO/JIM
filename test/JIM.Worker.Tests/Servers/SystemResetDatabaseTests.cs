@@ -497,6 +497,66 @@ public class SystemResetDatabaseTests
     }
 
     /// <summary>
+    /// A deployment with SSO configured has <see cref="ServiceSettings.SSOUniqueIdentifierMetaverseAttribute"/>
+    /// pointing at a built-in Metaverse Attribute (JIM.Web's InitialiseSsoAsync sets it at startup), and JIM.Web's
+    /// DbContext runs NoTracking. The reset's final step advances the authentication epoch by loading the Service
+    /// Settings (whose query includes that attribute untracked) and saving them back, on the same DbContext the
+    /// seeding pipeline has just used to load every Metaverse Attribute AsTracking. Assigning the untracked
+    /// navigation instance onto the tracked singleton then attaches a second instance of an already-tracked
+    /// attribute, and the whole reset fails with "The instance of entity type 'MetaverseAttribute' cannot be
+    /// tracked because another instance with the same key value for {'Id'} is already being tracked" (surfaced to
+    /// API callers as a 409; found by Scenario10-SyncRuleScoping's factory resets). The existing reset tests never
+    /// set the SSO attribute, which is why they could not see it.
+    /// </summary>
+    [Test]
+    public async Task ResetSystemAsync_SsoUniqueIdentifierIsABuiltInAttribute_ResetSucceedsAndPreservesTheReferenceAsync()
+    {
+        TestUtilities.SetEnvironmentVariables();
+
+        // Arrange: apply the built-in configuration exactly as worker startup does.
+        await using (var ctx = NewContext())
+        {
+            using var jim = new JimApplication(new PostgresDataRepository(ctx));
+            await jim.Seeding.ApplyBuiltInConfigurationAsync();
+        }
+
+        // Point the SSO unique identifier at a built-in attribute, as InitialiseSsoAsync does on a
+        // deployment with SSO configured.
+        await using (var ctx = NewContext())
+        {
+            var objectIdentifier = await ctx.MetaverseAttributes.AsTracking()
+                .SingleAsync(a => a.Name == Constants.BuiltInAttributes.ObjectIdentifier);
+            var settings = await ctx.ServiceSettings.AsTracking().SingleAsync();
+            settings.SSOUniqueIdentifierClaimType = "sub";
+            settings.SSOUniqueIdentifierMetaverseAttribute = objectIdentifier;
+            await ctx.SaveChangesAsync();
+        }
+
+        // Act: the reset, through the application server on a NoTracking context, mirroring JIM.Web.
+        await using (var ctx = NewContext())
+        {
+            using var jim = new JimApplication(new PostgresDataRepository(ctx));
+            await jim.System.ResetSystemAsync(
+                ActivityInitiatorType.ApiKey, Guid.NewGuid(), "Infrastructure Key", includeAdministrators: false);
+        }
+
+        // Assert: the reference to the (preserved, built-in) attribute survives the reset, and the
+        // authentication epoch was advanced, proving the final Service Settings save committed.
+        await using var verify = NewContext();
+        var afterReset = await verify.ServiceSettings
+            .Include(ss => ss.SSOUniqueIdentifierMetaverseAttribute)
+            .SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(afterReset.SSOUniqueIdentifierMetaverseAttribute, Is.Not.Null,
+                "the SSO unique identifier reference points at a built-in attribute the reset preserves; it must survive");
+            Assert.That(afterReset.SSOUniqueIdentifierMetaverseAttribute!.Name, Is.EqualTo(Constants.BuiltInAttributes.ObjectIdentifier));
+            Assert.That(afterReset.SessionsValidFromUtc, Is.Not.Null,
+                "the reset must advance the authentication epoch so existing portal sessions are invalidated");
+        }
+    }
+
+    /// <summary>
     /// A factory reset must remove custom configuration that has child rows, which is the ordinary shape of it
     /// rather than an edge case: a Predefined Search filters via criteria groups, a Connector Definition declares
     /// settings, an Example Data Set holds values, and an Example Data Template covers Object Types (issue #1477).

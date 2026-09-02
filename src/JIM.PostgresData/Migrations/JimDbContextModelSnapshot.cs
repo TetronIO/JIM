@@ -460,6 +460,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ParentSyncOutcomeId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("StagedChangeType")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("SyncRuleId")
                         .HasColumnType("integer");
 
@@ -2794,6 +2797,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("StrandedValueSweepPending")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("UnresolvedReferenceHandling")
                         .HasColumnType("integer");
 
@@ -4232,6 +4238,9 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.Tasking.DeleteConnectedSystemWorkerTask", b =>
                 {
                     b.HasBaseType("JIM.Models.Tasking.WorkerTask");
+
+                    b.Property<bool>("AbandonsDeprovisioningRun")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid?>("CheckpointConnectedSystemObjectId")
                         .HasColumnType("uuid");

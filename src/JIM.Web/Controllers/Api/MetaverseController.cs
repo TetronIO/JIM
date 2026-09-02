@@ -8,6 +8,7 @@ using JIM.Models.Staging;
 using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Application.Exceptions;
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
@@ -75,7 +76,19 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (objectType == null)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
 
-        return Ok(MetaverseObjectTypeDetailDto.FromEntity(objectType));
+        return Ok(await BuildObjectTypeDetailDtoAsync(objectType));
+    }
+
+    /// <summary>
+    /// Builds the detail DTO with its deletion-rule configuration advisory (#1570) attached, so every
+    /// surface reading an Object Type (portal, REST consumers, PowerShell) sees the same advice.
+    /// </summary>
+    private async Task<MetaverseObjectTypeDetailDto> BuildObjectTypeDetailDtoAsync(MetaverseObjectType objectType)
+    {
+        var dto = MetaverseObjectTypeDetailDto.FromEntity(objectType);
+        dto.DeletionRuleAdvisory = DeletionRuleConfigurationAdvisor.GetAdvisory(
+            objectType.DeletionRule, objectType.Id, await _application.ConnectedSystems.GetSyncRulesAsync());
+        return dto;
     }
 
     /// <summary>
@@ -159,7 +172,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         _logger.LogInformation("Created Metaverse Object Type: {Id} ({Name})", objectType.Id, LogSanitiser.Sanitise(objectType.Name));
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, includeChildObjects: false);
-        return Created($"/api/v1/metaverse/object-types/{objectType.Id}", MetaverseObjectTypeDetailDto.FromEntity(result!));
+        return Created($"/api/v1/metaverse/object-types/{objectType.Id}", await BuildObjectTypeDetailDtoAsync(result!));
     }
 
     /// <summary>
@@ -253,7 +266,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             objectType.Id, LogSanitiser.Sanitise(objectType.Name), objectType.DeletionRule.ToString(), objectType.DeletionGracePeriod?.ToString());
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
-        return Ok(MetaverseObjectTypeDetailDto.FromEntity(result!));
+        return Ok(await BuildObjectTypeDetailDtoAsync(result!));
     }
 
     /// <summary>

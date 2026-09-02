@@ -2974,6 +2974,31 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task SetStrandedValueSweepPendingAsync(int connectedSystemId, bool pending)
+    {
+        // A narrow status-mark update (exempt from the bulk column-list rule): a single scope flag, set by
+        // every clear and cleared by the sweep on completion. Deliberately no tracked-instance fix-up: the
+        // clear and sweep callers set the property on their own in-memory instance where they need it observed.
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectedSystems""
+                  SET ""StrandedValueSweepPending"" = {0}
+                  WHERE ""Id"" = {1}",
+                pending,
+                connectedSystemId);
+            return;
+        }
+
+        // The in-memory test provider does not support raw SQL; narrow tracked fallback with the same semantics.
+        var connectedSystem = await Repository.Database.ConnectedSystems
+            .AsTracking()
+            .SingleAsync(cs => cs.Id == connectedSystemId);
+        connectedSystem.StrandedValueSweepPending = pending;
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<int> DeletePendingExportsForConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
         if (connectedSystemObjectIds.Count == 0)
@@ -6632,6 +6657,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var ownsTransaction = Repository.Database.Database.CurrentTransaction == null;
         await using var transaction = ownsTransaction ? await Repository.Database.Database.BeginTransactionAsync() : null;
 
+        // Capture the id sets the audit-severing statements key on BEFORE their rows are deleted, so any
+        // TRACKED Activity instances can be fixed up to match the database once the deletion commits (raw
+        // SQL bypasses the change tracker; see the tracker fix-up after the commit below).
+        var severedSyncRuleIds = await Repository.Database.SyncRules
+            .Where(sr => sr.ConnectedSystemId == connectedSystemId)
+            .Select(sr => sr.Id)
+            .ToListAsync();
+        var severedRunProfileIds = await Repository.Database.ConnectedSystemRunProfiles
+            .Where(rp => rp.ConnectedSystemId == connectedSystemId)
+            .Select(rp => rp.Id)
+            .ToListAsync();
+
         // 1. Delete all CSOs and their dependencies (also nulls the unresolved-reference and, on the preserve-history
         //    path, the change FKs that point at CSOs / CSO attribute values).
         await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
@@ -6748,6 +6785,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                  OR ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
+        // 10b. Sweep Object Matching Rules orphaned of both parents whose sources still reference this system's
+        //      attributes. The save path used to sever rules from their owner rather than delete them (#1589),
+        //      leaving parentless rows the scoped statement above cannot match; their sources then refuse the
+        //      attribute delete at step 12 and the whole deletion rolls back. The save path now deletes properly,
+        //      but existing deployments may already hold orphans, so the sequence has to clean them or the system
+        //      can never be deleted. Their Sources are removed automatically via ON DELETE CASCADE.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ObjectMatchingRules"" omr
+              WHERE omr.""ConnectedSystemObjectTypeId"" IS NULL
+                AND omr.""SyncRuleId"" IS NULL
+                AND EXISTS (
+                    SELECT 1 FROM ""ObjectMatchingRuleSources"" s
+                    INNER JOIN ""ConnectedSystemAttributes"" a ON s.""ConnectedSystemAttributeId"" = a.""Id""
+                    INNER JOIN ""ConnectedSystemObjectTypes"" ot ON a.""ConnectedSystemObjectTypeId"" = ot.""Id""
+                    WHERE s.""ObjectMatchingRuleId"" = omr.""Id"" AND ot.""ConnectedSystemId"" = {0}
+                )",
+            connectedSystemId);
+
         // 11. Delete Synchronisation Rules
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0}",
@@ -6795,7 +6850,49 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         Repository.Database.Database.SetCommandTimeout(previousTimeout);
 
+        // Mirror the audit-severing raw SQL onto any TRACKED Activity instances. The worker's long-lived
+        // context holds the task's Activity tracked, and the completion write that follows this deletion
+        // marks the whole entity Modified (UpdateDetachedSafe), so without this fix-up it re-asserts the
+        // deleted system id and PostgreSQL refuses with 23503, poisoning every later SaveChangesAsync on
+        // the context (the first #809 Synchronised Deprovisioning run died exactly this way, after
+        // "system deleted"). Raw SQL writes must fix up tracked instances; the code issuing the SQL owns it.
+        FixUpTrackedActivitiesAfterConnectedSystemDelete(connectedSystemId, severedSyncRuleIds, severedRunProfileIds);
+
         Log.Information("DeleteConnectedSystemAsync: Completed bulk deletion for Connected System {Id}", connectedSystemId);
+    }
+
+    /// <summary>
+    /// Re-synchronises tracked <see cref="JIM.Models.Activities.Activity"/> instances with the audit-severing UPDATEs the
+    /// Connected System deletion issued as raw SQL: any tracked Activity referencing the deleted system,
+    /// one of its Synchronisation Rules, or one of its Run Profiles has that foreign key nulled in memory,
+    /// exactly as the database now holds it. Enumeration runs with change detection suspended, because
+    /// <c>ChangeTracker.Entries()</c> otherwise triggers <c>DetectChanges()</c>, which can attach untracked
+    /// graphs hanging off tracked navigations mid-operation (see the tracker-surgery rule in src/CLAUDE.md).
+    /// </summary>
+    private void FixUpTrackedActivitiesAfterConnectedSystemDelete(
+        int connectedSystemId,
+        IReadOnlyCollection<int> severedSyncRuleIds,
+        IReadOnlyCollection<int> severedRunProfileIds)
+    {
+        var changeTracker = Repository.Database.ChangeTracker;
+        var autoDetectChangesWasEnabled = changeTracker.AutoDetectChangesEnabled;
+        changeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            foreach (var trackedActivity in changeTracker.Entries<JIM.Models.Activities.Activity>().Select(entry => entry.Entity))
+            {
+                if (trackedActivity.ConnectedSystemId == connectedSystemId)
+                    trackedActivity.ConnectedSystemId = null;
+                if (trackedActivity.SyncRuleId.HasValue && severedSyncRuleIds.Contains(trackedActivity.SyncRuleId.Value))
+                    trackedActivity.SyncRuleId = null;
+                if (trackedActivity.ConnectedSystemRunProfileId.HasValue && severedRunProfileIds.Contains(trackedActivity.ConnectedSystemRunProfileId.Value))
+                    trackedActivity.ConnectedSystemRunProfileId = null;
+            }
+        }
+        finally
+        {
+            changeTracker.AutoDetectChangesEnabled = autoDetectChangesWasEnabled;
+        }
     }
 
     /// <summary>

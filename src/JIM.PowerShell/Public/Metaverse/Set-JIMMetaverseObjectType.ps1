@@ -12,6 +12,12 @@ function Set-JIMMetaverseObjectType {
         automatically deleted). Built-in types (User, Group) accept deletion-rule changes but reject
         changes to Name, Plural Name and Icon.
 
+        When the stored deletion rule is WhenLastConnectorDisconnected and enabled provisioning export
+        Synchronisation Rules exist for the type, the API attaches a configuration advisory (provisioned
+        target accounts count as connectors, so objects outlive their last source and keep its values as
+        last known state) and the cmdlet surfaces it as a warning; the returned object carries it as
+        DeletionRuleAdvisory.
+
     .PARAMETER Id
         The unique identifier of the Object Type to update.
 
@@ -262,6 +268,12 @@ function Set-JIMMetaverseObjectType {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/metaverse/object-types/$Id" -Method 'PUT' -Body $body
 
                 Write-Verbose "Updated Metaverse Object Type: $Id"
+
+                # Configuration advisory (#1570): the API attaches advice when the stored deletion rule will
+                # keep objects alive after their last source departs (provisioned targets count as connectors).
+                if ($result.deletionRuleAdvisory) {
+                    Write-Warning $result.deletionRuleAdvisory
+                }
 
                 if ($PassThru) {
                     $result

@@ -1,6 +1,7 @@
 # Connected System Deletion: Synchronised Deprovisioning and Attribute Impact Preview
 
-- **Status:** Planned
+- **Status:** Done
+- **Note:** The #134 attribute impact preview is deliberately deferred to the #827 framework (see Decisions); the delete dialog reserves its affordance.
 - **Created:** 2026-07-07
 - **Author:** Jay Van der Zant
 - **Issues:** [#809](https://github.com/TetronIO/JIM/issues/809) (execution: synchronised deprovisioning), [#134](https://github.com/TetronIO/JIM/issues/134) (preview: attribute impact analysis)

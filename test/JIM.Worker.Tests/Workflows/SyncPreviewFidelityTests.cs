@@ -194,14 +194,17 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
 
     /// <summary>
     /// Flattens a tree into a comparable shape description: one line per node in sibling order, carrying
-    /// depth, outcome type, detail count and child count.
+    /// depth, outcome type, detail count, staged change kind and child count. StagedChangeType is included
+    /// so a preview's Export queued node is proven to carry the same staged kind (#1561 follow-up) the real
+    /// synchronisation would record, not just the same outcome type and count.
     /// </summary>
     private static string DescribeTree(IEnumerable<SyncOutcomeNode> nodes, int depth = 0)
     {
         var lines = new List<string>();
         foreach (var node in nodes)
         {
-            lines.Add($"{new string(' ', depth * 2)}{node.OutcomeType} (count: {node.DetailCount?.ToString() ?? "-"}, children: {node.Children.Count})");
+            lines.Add($"{new string(' ', depth * 2)}{node.OutcomeType} (count: {node.DetailCount?.ToString() ?? "-"}, " +
+                $"staged: {node.StagedChangeType?.ToString() ?? "-"}, children: {node.Children.Count})");
             if (node.Children.Count > 0)
                 lines.Add(DescribeTree(node.Children.OrderBy(c => c.Ordinal), depth + 1));
         }

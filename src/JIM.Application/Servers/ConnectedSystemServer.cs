@@ -811,10 +811,37 @@ public partial class ConnectedSystemServer
     /// <param name="newMode">The new Object Matching Rule mode</param>
     /// <param name="initiatedBy">The user initiating the change</param>
     /// <returns>Result containing details about the switch operation</returns>
-    public async Task<ObjectMatchingModeSwitchResult> SwitchObjectMatchingModeAsync(
+    public Task<ObjectMatchingModeSwitchResult> SwitchObjectMatchingModeAsync(
         ConnectedSystem connectedSystem,
         ObjectMatchingRuleMode newMode,
         MetaverseObject? initiatedBy)
+    {
+        return SwitchObjectMatchingModeInternalAsync(connectedSystem, newMode, initiatedBy, initiatedByApiKey: null);
+    }
+
+    /// <summary>
+    /// Switches the Object Matching Rule mode for a Connected System (initiated by API key).
+    /// Every Activity must be attributed to a security principal, so the API key initiator has to reach the
+    /// Activities this switch creates; without this overload the switch could not be performed by automation at all.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System to update</param>
+    /// <param name="newMode">The new Object Matching Rule mode</param>
+    /// <param name="initiatedByApiKey">The API key initiating the change</param>
+    /// <returns>Result containing details about the switch operation</returns>
+    public Task<ObjectMatchingModeSwitchResult> SwitchObjectMatchingModeAsync(
+        ConnectedSystem connectedSystem,
+        ObjectMatchingRuleMode newMode,
+        ApiKey initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
+        return SwitchObjectMatchingModeInternalAsync(connectedSystem, newMode, initiatedBy: null, initiatedByApiKey);
+    }
+
+    private async Task<ObjectMatchingModeSwitchResult> SwitchObjectMatchingModeInternalAsync(
+        ConnectedSystem connectedSystem,
+        ObjectMatchingRuleMode newMode,
+        MetaverseObject? initiatedBy,
+        ApiKey? initiatedByApiKey)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -834,12 +861,12 @@ public partial class ConnectedSystemServer
         if (newMode == ObjectMatchingRuleMode.SyncRule)
         {
             // Switching to Advanced Mode - copy matching rules to import Synchronisation Rules
-            result = await SwitchToAdvancedModeAsync(connectedSystem, initiatedBy);
+            result = await SwitchToAdvancedModeAsync(connectedSystem);
         }
         else
         {
             // Switching to Simple Mode - migrate rules from Synchronisation Rules to object types
-            result = await SwitchToSimpleModeAsync(connectedSystem, initiatedBy);
+            result = await SwitchToSimpleModeAsync(connectedSystem);
         }
 
         if (!result.Success)
@@ -847,7 +874,10 @@ public partial class ConnectedSystemServer
 
         // Update the Connected System mode
         connectedSystem.ObjectMatchingRuleMode = newMode;
-        AuditHelper.SetUpdated(connectedSystem, initiatedBy);
+        if (initiatedByApiKey != null)
+            AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
+        else
+            AuditHelper.SetUpdated(connectedSystem, initiatedBy);
 
         // Create activity for tracking
         var activity = new Activity
@@ -857,7 +887,10 @@ public partial class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id
         };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        if (initiatedByApiKey != null)
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        else
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
@@ -867,12 +900,12 @@ public partial class ConnectedSystemServer
         return result;
     }
 
-    private async Task<ObjectMatchingModeSwitchResult> SwitchToAdvancedModeAsync(
-        ConnectedSystem connectedSystem,
-        MetaverseObject? initiatedBy)
+    private async Task<ObjectMatchingModeSwitchResult> SwitchToAdvancedModeAsync(ConnectedSystem connectedSystem)
     {
         var syncRulesUpdated = 0;
-        var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+        // Change-tracked because the copies below are persisted through UpdateSyncRuleAsync, which refuses a
+        // detached rule (nothing would save).
+        var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true, withChangeTracking: true);
         var importSyncRules = syncRules.Where(sr => sr.Direction == SyncRuleDirection.Import).ToList();
 
         foreach (var syncRule in importSyncRules)
@@ -903,22 +936,52 @@ public partial class ConnectedSystemServer
                 syncRule.ObjectMatchingRules.Add(newRule);
             }
 
-            await CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            // Saved through the repository directly, not CreateOrUpdateSyncRuleAsync: the full save path's
+            // simple-mode validation clears a Synchronisation Rule's own matching rules, and the system's mode
+            // only flips to Advanced after this migration, so it would clear the very rules just copied. The
+            // switch's own Activity and configuration change capture record the operation.
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
             syncRulesUpdated++;
         }
 
-        Log.Information("SwitchToAdvancedModeAsync: Copied matching rules to {Count} Synchronisation Rule(s)", syncRulesUpdated);
-        return ObjectMatchingModeSwitchResult.ToAdvancedMode(syncRulesUpdated);
+        // The switch strands two things silently without these warnings (#1569): the type-scoped rules it
+        // deliberately retains (so a later switch back restores them), and export Synchronisation Rules, which it
+        // never copies onto even though advanced-mode export matching reads only the export rule's own rules.
+        var warnings = new List<string>();
+
+        var objectTypesWithRetainedRules = connectedSystem.ObjectTypes?
+            .Where(ot => ot.ObjectMatchingRules.Count > 0)
+            .OrderBy(ot => ot.Name)
+            .Select(ot => $"'{ot.Name}'")
+            .ToList() ?? [];
+        if (objectTypesWithRetainedRules.Count > 0)
+            warnings.Add($"The Object Matching Rules on Connected System Object Type(s) {string.Join(", ", objectTypesWithRetainedRules)} " +
+                "are no longer consulted in advanced matching mode. They are retained, and resume effect if the system returns to simple matching mode.");
+
+        foreach (var exportSyncRule in syncRules.Where(sr => sr.Direction == SyncRuleDirection.Export && sr.ObjectMatchingRules.Count == 0).OrderBy(sr => sr.Name))
+        {
+            var exportObjectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == exportSyncRule.ConnectedSystemObjectTypeId);
+            if (exportObjectType == null || exportObjectType.ObjectMatchingRules.Count == 0)
+                continue;
+
+            warnings.Add($"Export Synchronisation Rule '{exportSyncRule.Name}' has no Object Matching Rules of its own, so export matching " +
+                "will not be attempted for it in advanced matching mode and provisioning will proceed as though no match existed. " +
+                "Add Object Matching Rules to it if exported objects should join existing accounts.");
+        }
+
+        Log.Information("SwitchToAdvancedModeAsync: Copied matching rules to {Count} Synchronisation Rule(s), with {WarningCount} warning(s)",
+            syncRulesUpdated, warnings.Count);
+        return ObjectMatchingModeSwitchResult.ToAdvancedMode(syncRulesUpdated, warnings);
     }
 
-    private async Task<ObjectMatchingModeSwitchResult> SwitchToSimpleModeAsync(
-        ConnectedSystem connectedSystem,
-        MetaverseObject? initiatedBy)
+    private async Task<ObjectMatchingModeSwitchResult> SwitchToSimpleModeAsync(ConnectedSystem connectedSystem)
     {
         var migrations = new List<ObjectTypeMatchingRuleMigration>();
         var objectTypesUpdated = 0;
 
-        var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
+        // Change-tracked because the clears below are persisted through UpdateSyncRuleAsync, which refuses a
+        // detached rule; tracked removal also cascade-deletes the cleared rules rather than orphaning them.
+        var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true, withChangeTracking: true);
         var importSyncRules = syncRules.Where(sr => sr.Direction == SyncRuleDirection.Import).ToList();
 
         // Group Synchronisation Rules by object type
@@ -997,13 +1060,23 @@ public partial class ConnectedSystemServer
                         migration.MatchingRulesSet, objectType.Name, migration.SyncRulesWithMatchingRules,
                         migration.UniqueSyncRuleConfigurations);
                 }
+                else
+                {
+                    // The object type's existing rules take precedence, so the Synchronisation Rules' own rules
+                    // are about to be cleared below without being migrated; that loss must be warned about (#1569).
+                    migration.ObjectTypeRulesTookPrecedence = true;
+
+                    Log.Warning("SwitchToSimpleModeAsync: Object type {ObjectType} already had matching rules; the rules on " +
+                        "{SyncRuleCount} Synchronisation Rule(s) were discarded rather than migrated",
+                        objectType.Name, migration.SyncRulesWithMatchingRules);
+                }
             }
 
-            // Clear matching rules from all Synchronisation Rules for this object type
-            // (will be done automatically by CreateOrUpdateSyncRuleAsync due to Simple Mode validation)
+            // Clear matching rules from all Synchronisation Rules for this object type, deleting the rows
+            // outright; a plain collection Clear() would orphan them (see RemoveSyncRuleObjectMatchingRulesAsync).
             foreach (var syncRule in objectTypeGroup.Where(sr => sr.ObjectMatchingRules.Count > 0))
             {
-                syncRule.ObjectMatchingRules.Clear();
+                await RemoveSyncRuleObjectMatchingRulesAsync(syncRule);
                 await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
                 migration.SyncRulesCleared++;
             }
@@ -1122,11 +1195,90 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Recorded on the delete Activity when an immediate deletion is issued against a system already fenced
+    /// by a Synchronised Deprovisioning run: the finish-immediately exit (#809). Customer-facing wording; the
+    /// audit trail must say what was and was not done for the objects the abandoned run never reached.
+    /// </summary>
+    public const string SynchronisedDeprovisioningAbandonedMessage =
+        "A Synchronised Deprovisioning run was abandoned partway and the deletion completed immediately. " +
+        "The remaining contributed attribute values were kept without provenance (they can no longer be recalled), " +
+        "surviving contributors were not re-elected, and downstream systems were not corrected.";
+
+    /// <summary>
+    /// Evaluates a deletion request against a system already fenced (Status = Deleting), per the #809
+    /// failed-run exit decision. Returns the result to answer with, or null when the request should proceed
+    /// through the ordinary flow (re-queue for a deprovisioning retry; complete the deletion for
+    /// finish-immediately). There is deliberately no un-fencing abort: a half-deprovisioned system never
+    /// returns to service.
+    /// </summary>
+    /// <param name="existingDeletionTask">The persisted deletion task for the system, if one survives. A
+    /// surviving task means the run is queued or executing, its checkpoint intact; a failed run's task row
+    /// is removed at the worker's boundary, so no task means the retry must queue afresh.</param>
+    /// <param name="synchronisedDeprovisioning">The mode of the incoming request.</param>
+    /// <param name="connectedSystemId">The fenced system, for logging.</param>
+    private static ConnectedSystemDeletionResult? EvaluateFencedDeletionRequest(
+        DeleteConnectedSystemWorkerTask? existingDeletionTask,
+        bool synchronisedDeprovisioning,
+        int connectedSystemId)
+    {
+        if (synchronisedDeprovisioning)
+        {
+            // RETRY: re-issuing the deprovisioning delete resumes the run.
+            if (existingDeletionTask == null)
+                return null; // a failed run left no task; the caller queues a fresh one (completed batches deleted their objects, so the new run resumes from where the data stands).
+
+            if (!existingDeletionTask.SynchronisedDeprovisioning)
+            {
+                Log.Warning("DeleteAsync: Connected System {Id} is fenced with an immediate deletion task {TaskId} queued; a deprovisioning retry cannot supersede it.",
+                    connectedSystemId, existingDeletionTask.Id);
+                return ConnectedSystemDeletionResult.Failed(
+                    "An immediate deletion is already queued for this Connected System and will complete without deprovisioning; a Synchronised Deprovisioning request cannot supersede it.");
+            }
+
+            if (existingDeletionTask.Activity == null)
+            {
+                // Fast/hard: a persisted deletion task without its Activity is an integrity fault; attaching
+                // to it would leave the caller with nothing to monitor.
+                Log.Error("DeleteAsync: Connected System {Id} has deprovisioning task {TaskId} persisted with no Activity; refusing the retry.",
+                    connectedSystemId, existingDeletionTask.Id);
+                return ConnectedSystemDeletionResult.Failed(
+                    "The queued Synchronised Deprovisioning task for this Connected System carries no Activity; investigate the task queue before retrying.");
+            }
+
+            // The run is already queued or executing; the retry attaches to it (checkpoint intact) rather
+            // than queuing a second run against the same system.
+            Log.Information("DeleteAsync: Connected System {Id} is fenced with deprovisioning task {TaskId} persisted; the retry attaches to it.",
+                connectedSystemId, existingDeletionTask.Id);
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(existingDeletionTask.Id, existingDeletionTask.Activity.Id);
+        }
+
+        // FINISH-IMMEDIATELY: the immediate delete on a fenced system abandons the remaining deprovisioning
+        // work and completes the deletion. A run actively executing cannot be raced by a bulk delete, so
+        // that one case refuses; a queued (not yet started) run is cancelled by the caller before proceeding.
+        if (existingDeletionTask is { Status: WorkerTaskStatus.Processing })
+        {
+            Log.Warning("DeleteAsync: Connected System {Id} has deletion task {TaskId} currently executing; refusing the immediate deletion.",
+                connectedSystemId, existingDeletionTask.Id);
+            return ConnectedSystemDeletionResult.Failed(
+                "A deletion task for this Connected System is currently executing; wait for it to complete or fail before requesting the immediate deletion.");
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Deletes a Connected System and all its related data.
     /// Implements the queue-based deletion approach:
     /// 1. Sets status to Deleting (blocks new operations)
     /// 2. If sync is running, queues deletion to run after sync completes
     /// 3. Otherwise, executes deletion (sync or async based on CSO count)
+    /// <para>
+    /// A system already fenced (Status = Deleting) takes the failed-run exits instead (#809):
+    /// deprovisioning mode RETRIES the run (attaching to the persisted task where one survives, its
+    /// checkpoint intact, or queueing afresh), and immediate mode FINISHES the deletion immediately,
+    /// abandoning the remaining deprovisioning work with the abandonment recorded on the Activity. There is
+    /// no un-fencing abort: a half-deprovisioned system never returns to service.
+    /// </para>
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
@@ -1151,17 +1303,35 @@ public partial class ConnectedSystemServer
             return ConnectedSystemDeletionResult.Failed($"Connected System with ID {connectedSystemId} not found.");
         }
 
-        // Check if already being deleted
-        if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
+        // A system already fenced (Status = Deleting) is a failed-run exit (#809): deprovisioning mode is
+        // the RETRY, immediate mode is FINISH-IMMEDIATELY. There is no un-fencing abort.
+        var alreadyFenced = connectedSystem.Status == ConnectedSystemStatus.Deleting;
+        if (alreadyFenced)
         {
-            Log.Warning("DeleteAsync: Connected System {Id} is already being deleted", connectedSystemId);
-            return ConnectedSystemDeletionResult.Failed("Connected System is already being deleted.");
+            var existingDeletionTask = await Application.Tasking.GetDeleteConnectedSystemWorkerTaskAsync(connectedSystemId);
+            var fencedRefusalOrAttachment = EvaluateFencedDeletionRequest(existingDeletionTask, synchronisedDeprovisioning, connectedSystemId);
+            if (fencedRefusalOrAttachment != null)
+                return fencedRefusalOrAttachment;
+
+            if (!synchronisedDeprovisioning && existingDeletionTask != null)
+            {
+                // Finish-immediately abandons the queued (not yet started) deprovisioning run: cancel its
+                // task and Activity before completing the deletion through the ordinary flow below.
+                Log.Information("DeleteAsync: Connected System {Id}: cancelling queued deletion task {TaskId}; the immediate deletion abandons the remaining deprovisioning work.",
+                    connectedSystemId, existingDeletionTask.Id);
+                await Application.Tasking.CancelWorkerTaskAsync(existingDeletionTask);
+            }
+        }
+        else
+        {
+            // Set status to Deleting to block new operations
+            connectedSystem.Status = ConnectedSystemStatus.Deleting;
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
         }
 
-        // Set status to Deleting to block new operations
-        connectedSystem.Status = ConnectedSystemStatus.Deleting;
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
-        Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
+        // The finish-immediately exit must be recorded on the Activity and must never un-fence on failure.
+        var abandonsDeprovisioningRun = alreadyFenced && !synchronisedDeprovisioning;
 
         // Check for running sync operations
         var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
@@ -1174,6 +1344,7 @@ public partial class ConnectedSystemServer
             var deleteTask = initiatedBy != null
                 ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning);
+            deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
@@ -1208,6 +1379,7 @@ public partial class ConnectedSystemServer
             var deleteTask = initiatedBy != null
                 ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
@@ -1225,7 +1397,9 @@ public partial class ConnectedSystemServer
         {
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // The finish-immediately exit (#809) must leave the abandonment on the audit trail.
+            Message = abandonsDeprovisioningRun ? SynchronisedDeprovisioningAbandonedMessage : null
             // ConnectedSystemId intentionally not set - the CS will be deleted before activity completes
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -1252,9 +1426,19 @@ public partial class ConnectedSystemServer
             // Mark activity as failed
             await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
 
-            // Reset status so deletion can be retried
-            connectedSystem.Status = ConnectedSystemStatus.Active;
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            if (alreadyFenced)
+            {
+                // The system was fenced by a deprovisioning run before this request: the fence must hold on
+                // failure so a half-deprovisioned system never returns to service (#809). The deletion stays
+                // retryable through the fenced-system exits.
+                Log.Warning("DeleteAsync: Connected System {Id} deletion failed; keeping the Deleting fence (the system was part-way through Synchronised Deprovisioning).", connectedSystemId);
+            }
+            else
+            {
+                // Reset status so deletion can be retried
+                connectedSystem.Status = ConnectedSystemStatus.Active;
+                await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            }
 
             return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
         }
@@ -1278,17 +1462,35 @@ public partial class ConnectedSystemServer
             return ConnectedSystemDeletionResult.Failed($"Connected System with ID {connectedSystemId} not found.");
         }
 
-        // Check if already being deleted
-        if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
+        // A system already fenced (Status = Deleting) is a failed-run exit (#809): deprovisioning mode is
+        // the RETRY, immediate mode is FINISH-IMMEDIATELY. There is no un-fencing abort.
+        var alreadyFenced = connectedSystem.Status == ConnectedSystemStatus.Deleting;
+        if (alreadyFenced)
         {
-            Log.Warning("DeleteAsync: Connected System {Id} is already being deleted", connectedSystemId);
-            return ConnectedSystemDeletionResult.Failed("Connected System is already being deleted.");
+            var existingDeletionTask = await Application.Tasking.GetDeleteConnectedSystemWorkerTaskAsync(connectedSystemId);
+            var fencedRefusalOrAttachment = EvaluateFencedDeletionRequest(existingDeletionTask, synchronisedDeprovisioning, connectedSystemId);
+            if (fencedRefusalOrAttachment != null)
+                return fencedRefusalOrAttachment;
+
+            if (!synchronisedDeprovisioning && existingDeletionTask != null)
+            {
+                // Finish-immediately abandons the queued (not yet started) deprovisioning run: cancel its
+                // task and Activity before completing the deletion through the ordinary flow below.
+                Log.Information("DeleteAsync: Connected System {Id}: cancelling queued deletion task {TaskId}; the immediate deletion abandons the remaining deprovisioning work.",
+                    connectedSystemId, existingDeletionTask.Id);
+                await Application.Tasking.CancelWorkerTaskAsync(existingDeletionTask);
+            }
+        }
+        else
+        {
+            // Set status to Deleting to block new operations
+            connectedSystem.Status = ConnectedSystemStatus.Deleting;
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
         }
 
-        // Set status to Deleting to block new operations
-        connectedSystem.Status = ConnectedSystemStatus.Deleting;
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
-        Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
+        // The finish-immediately exit must be recorded on the Activity and must never un-fence on failure.
+        var abandonsDeprovisioningRun = alreadyFenced && !synchronisedDeprovisioning;
 
         // Check for running sync operations
         var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
@@ -1298,6 +1500,7 @@ public partial class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning);
+            deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
@@ -1326,6 +1529,7 @@ public partial class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
@@ -1340,7 +1544,9 @@ public partial class ConnectedSystemServer
         {
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // The finish-immediately exit (#809) must leave the abandonment on the audit trail.
+            Message = abandonsDeprovisioningRun ? SynchronisedDeprovisioningAbandonedMessage : null
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -1361,8 +1567,17 @@ public partial class ConnectedSystemServer
             var errorMessage = GetFullExceptionMessage(ex);
             await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
 
-            connectedSystem.Status = ConnectedSystemStatus.Active;
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            if (alreadyFenced)
+            {
+                // The fence must hold on failure so a half-deprovisioned system never returns to service
+                // (#809); the deletion stays retryable through the fenced-system exits.
+                Log.Warning("DeleteAsync: Connected System {Id} deletion failed; keeping the Deleting fence (the system was part-way through Synchronised Deprovisioning).", connectedSystemId);
+            }
+            else
+            {
+                connectedSystem.Status = ConnectedSystemStatus.Active;
+                await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            }
 
             return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
         }
@@ -6171,10 +6386,28 @@ public partial class ConnectedSystemServer
         // Use the shared method that handles all CSO dependencies properly.
         var result = await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
 
+        // Arm the stranded-value sweep (#1549): the clear just hard-deleted every Connected System Object of
+        // this system without obsoletion, so any Metaverse attribute value it contributed survives with live
+        // provenance and no joined Connected System Object of this system. The next Full Synchronisation of
+        // this system reads the flag and recalls exactly those values.
+        await Application.Repository.ConnectedSystems.SetStrandedValueSweepPendingAsync(connectedSystemId, pending: true);
+
         Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs",
             connectedSystemId, result.PendingExportsRemoved, result.ConnectedSystemObjectsRemoved);
 
         return result;
+    }
+
+    /// <summary>
+    /// Sets or clears the stranded-value sweep flag (#1549) on a Connected System. Public wrapper over the
+    /// repository's narrow status-mark update, so callers above the application layer (the worker's Full
+    /// Synchronisation pass, clearing the flag on completion) never reach the repository directly.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose flag is being set.</param>
+    /// <param name="pending">The new value of the flag.</param>
+    public async Task SetStrandedValueSweepPendingAsync(int connectedSystemId, bool pending)
+    {
+        await Application.Repository.ConnectedSystems.SetStrandedValueSweepPendingAsync(connectedSystemId, pending);
     }
         
     /// <summary>
@@ -8370,9 +8603,11 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
     /// <param name="includeDisabledSyncRules">Controls whether to return Synchronisation Rules that are disabled</param>
-    public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules)
+    /// <param name="withChangeTracking">Track the returned rules for mutation on this JimApplication instance;
+    /// required by callers that go on to save them, since <c>UpdateSyncRuleAsync</c> refuses a detached rule.</param>
+    public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules);
+        return await Application.Repository.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules, withChangeTracking);
     }
 
     /// <summary>
@@ -8451,7 +8686,7 @@ public partial class ConnectedSystemServer
                         Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from Synchronisation Rule {Id} " +
                             "because Connected System {CsId} is in Simple Mode",
                             syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
-                        syncRule.ObjectMatchingRules.Clear();
+                        await RemoveSyncRuleObjectMatchingRulesAsync(syncRule);
                     }
                 }
             }
@@ -8459,8 +8694,13 @@ public partial class ConnectedSystemServer
         else
         {
             // export rule cannot have these properties:
-            syncRule.ObjectMatchingRules.Clear();
             syncRule.ProjectToMetaverse = null;
+
+            // Matching rules on an export Synchronisation Rule follow the system's matching mode, exactly like
+            // the import branch above: in Simple Mode the engine consults the Connected System Object Type's
+            // rules, so rules held here are inert and are cleared; in Advanced Mode export matching reads the
+            // export rule's own rules (SelectExportMatchingRules), so they must survive the save (#1589).
+            await ClearInertExportMatchingRulesAsync(syncRule);
         }
 
         // Only a newly created account has never had a password, so a rule that creates none cannot deliver an
@@ -8623,15 +8863,18 @@ public partial class ConnectedSystemServer
                         Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from Synchronisation Rule {Id} " +
                             "because Connected System {CsId} is in Simple Mode",
                             syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
-                        syncRule.ObjectMatchingRules.Clear();
+                        await RemoveSyncRuleObjectMatchingRulesAsync(syncRule);
                     }
                 }
             }
         }
         else
         {
-            syncRule.ObjectMatchingRules.Clear();
             syncRule.ProjectToMetaverse = null;
+
+            // Mode-aware, mirroring the user-initiated overload: Advanced Mode export matching reads the export
+            // rule's own rules, so only Simple Mode's inert rules are cleared (#1589).
+            await ClearInertExportMatchingRulesAsync(syncRule);
         }
 
         // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
@@ -9092,6 +9335,47 @@ public partial class ConnectedSystemServer
     /// is discovering the duplicate identities by hand, months later.
     /// </remarks>
     /// <exception cref="InvalidDataException">The rule cannot work, with the reason.</exception>
+    /// <summary>
+    /// Removes a Synchronisation Rule's own Object Matching Rules so the rows are deleted, never orphaned.
+    /// </summary>
+    /// <remarks>
+    /// A plain <c>ObjectMatchingRules.Clear()</c> is not enough: both owner foreign keys on an Object Matching
+    /// Rule are optional, and EF Core answers a severed optional relationship by nulling the foreign key rather
+    /// than deleting the row. The parentless rule is then invisible to every scope the engine or the portal
+    /// reads, and its sources' references to Connected System attributes block the owning Connected System's
+    /// deletion outright (#1589). Rules not yet persisted have no row to delete and are simply dropped from the
+    /// collection.
+    /// </remarks>
+    private async Task RemoveSyncRuleObjectMatchingRulesAsync(SyncRule syncRule)
+    {
+        foreach (var rule in syncRule.ObjectMatchingRules.Where(r => r.Id > 0).ToList())
+            await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
+        syncRule.ObjectMatchingRules.Clear();
+    }
+
+    /// <summary>
+    /// Clears an export Synchronisation Rule's own Object Matching Rules when the Connected System is in simple
+    /// matching mode, where the engine consults the Connected System Object Type's rules and these would be
+    /// silently inert. In advanced mode they are what export matching reads, so they are left alone (#1589).
+    /// </summary>
+    private async Task ClearInertExportMatchingRulesAsync(SyncRule syncRule)
+    {
+        if (syncRule.ObjectMatchingRules.Count == 0 || syncRule.ConnectedSystemId <= 0)
+            return;
+
+        // Core: only ObjectMatchingRuleMode (a scalar on the entity) is read below.
+        var connectedSystem = syncRule.ConnectedSystem ??
+            await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId);
+
+        if (connectedSystem?.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
+            return;
+
+        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from export Synchronisation Rule {Id} " +
+            "because Connected System {CsId} is in Simple Mode",
+            syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
+        await RemoveSyncRuleObjectMatchingRulesAsync(syncRule);
+    }
+
     private static void EnsureObjectMatchingRuleIsWorkable(ObjectMatchingRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
@@ -9102,11 +9386,76 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Refuses a new Object Matching Rule whose scope the Connected System's matching mode would never consult.
+    /// </summary>
+    /// <remarks>
+    /// The engine only reads the scope the mode names (type-scoped rules in simple mode, Synchronisation Rule
+    /// scoped rules in advanced mode), so a rule of the other scope is silently inert: synchronisation joins
+    /// nothing and nothing reports why (#1569). Creation is the only guarded operation: mode switches deliberately
+    /// retain rules of the outgoing scope so a later switch back restores them, and those retained rules must stay
+    /// editable and deletable.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The rule's scope and the system's mode disagree, with the remedy.</exception>
+    private async Task EnsureObjectMatchingRuleScopeMatchesModeAsync(ObjectMatchingRule rule)
+    {
+        var connectedSystem = await ResolveObjectMatchingRuleConnectedSystemAsync(rule);
+
+        // An unresolvable owner means the referenced parent does not exist; storage fails on the foreign key
+        // regardless, so there is no mode to disagree with here.
+        if (connectedSystem == null)
+            return;
+
+        var mismatch = ObjectMatchingRule.DescribeScopeMismatch(
+            connectedSystem.ObjectMatchingRuleMode,
+            ruleIsSyncRuleScoped: rule.SyncRuleId.HasValue || rule.SyncRule != null,
+            connectedSystem.Name);
+        if (mismatch != null)
+            throw new InvalidDataException(mismatch);
+    }
+
+    /// <summary>
+    /// Resolves the Connected System that owns an Object Matching Rule, preferring loaded navigations and falling
+    /// back to repository lookups, whichever parent (Synchronisation Rule or Connected System Object Type) the
+    /// rule carries.
+    /// </summary>
+    private async Task<ConnectedSystem?> ResolveObjectMatchingRuleConnectedSystemAsync(ObjectMatchingRule rule)
+    {
+        if (rule.SyncRule?.ConnectedSystem != null)
+            return rule.SyncRule.ConnectedSystem;
+
+        if (rule.SyncRule != null)
+            return await GetConnectedSystemCoreAsync(rule.SyncRule.ConnectedSystemId);
+
+        if (rule.SyncRuleId.HasValue)
+        {
+            var syncRule = await GetSyncRuleAsync(rule.SyncRuleId.Value);
+            if (syncRule != null)
+                return syncRule.ConnectedSystem ?? await GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId);
+        }
+
+        if (rule.ConnectedSystemObjectType?.ConnectedSystem != null)
+            return rule.ConnectedSystemObjectType.ConnectedSystem;
+
+        if (rule.ConnectedSystemObjectType != null)
+            return await GetConnectedSystemCoreAsync(rule.ConnectedSystemObjectType.ConnectedSystemId);
+
+        if (rule.ConnectedSystemObjectTypeId.HasValue)
+        {
+            var objectType = await Application.Repository.ConnectedSystems.GetObjectTypeAsync(rule.ConnectedSystemObjectTypeId.Value);
+            if (objectType != null)
+                return await GetConnectedSystemCoreAsync(objectType.ConnectedSystemId);
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Creates a new Object Matching Rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
         EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleScopeMatchesModeAsync(rule);
 
         var activity = new Activity
         {
@@ -9128,6 +9477,7 @@ public partial class ConnectedSystemServer
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
         EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleScopeMatchesModeAsync(rule);
 
         var activity = new Activity
         {

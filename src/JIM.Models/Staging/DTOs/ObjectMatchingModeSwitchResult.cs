@@ -43,13 +43,14 @@ public class ObjectMatchingModeSwitchResult
     /// </summary>
     public string? ErrorMessage { get; set; }
 
-    public static ObjectMatchingModeSwitchResult ToAdvancedMode(int syncRulesUpdated)
+    public static ObjectMatchingModeSwitchResult ToAdvancedMode(int syncRulesUpdated, List<string>? warnings = null)
     {
         return new ObjectMatchingModeSwitchResult
         {
             Success = true,
             NewMode = ObjectMatchingRuleMode.SyncRule,
-            SyncRulesUpdated = syncRulesUpdated
+            SyncRulesUpdated = syncRulesUpdated,
+            Warnings = warnings ?? new List<string>()
         };
     }
 
@@ -69,6 +70,15 @@ public class ObjectMatchingModeSwitchResult
             result.Warnings.Add($"Object type '{migration.ObjectTypeName}' had {migration.UniqueSyncRuleConfigurations} " +
                 $"different matching rule configurations across {migration.SyncRuleCount} Synchronisation Rules. " +
                 $"The most common configuration was used.");
+        }
+
+        // Add warnings for any object types whose existing rules took precedence: the Synchronisation Rules' own
+        // rules were cleared without being migrated, and that loss was previously silent (#1569).
+        foreach (var migration in migrations.Where(m => m.ObjectTypeRulesTookPrecedence))
+        {
+            result.Warnings.Add($"Object type '{migration.ObjectTypeName}' already had Object Matching Rules, so they remain " +
+                $"in effect and the rules on {migration.SyncRulesWithMatchingRules} Synchronisation Rule(s) were discarded " +
+                $"rather than migrated.");
         }
 
         return result;
@@ -127,6 +137,12 @@ public class ObjectTypeMatchingRuleMigration
     /// Whether the matching rules diverged across Synchronisation Rules (required best-guess selection).
     /// </summary>
     public bool RulesDiverged => UniqueSyncRuleConfigurations > 1;
+
+    /// <summary>
+    /// Whether the object type's pre-existing matching rules took precedence, meaning the Synchronisation Rules'
+    /// own rules were discarded rather than migrated (#1569).
+    /// </summary>
+    public bool ObjectTypeRulesTookPrecedence { get; set; }
 
     /// <summary>
     /// Number of matching rules that were set on the object type.

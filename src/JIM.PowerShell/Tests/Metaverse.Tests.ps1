@@ -1057,6 +1057,34 @@ Describe 'Set-JIMMetaverseObjectType' {
         }
     }
 
+    Context 'Deletion rule advisory (#1570)' {
+
+        It 'Surfaces the deletion rule advisory the API attaches as a warning' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; deletionRuleAdvisory = 'Provisioned target accounts count as connectors under When Last Connector Disconnected.' } }
+
+                Set-JIMMetaverseObjectType -Id 5 -DeletionRule WhenLastConnectorDisconnected -Confirm:$false `
+                    -WarningVariable advisoryWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $advisoryWarnings | Should -HaveCount 1
+                $advisoryWarnings[0].Message | Should -Match 'Provisioned target accounts'
+            }
+        }
+
+        It 'Emits no warning when the API attaches no advisory' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5 } }
+
+                Set-JIMMetaverseObjectType -Id 5 -DeletionRule Manual -Confirm:$false `
+                    -WarningVariable advisoryWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $advisoryWarnings | Should -BeNullOrEmpty
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll { $help = Get-Help Set-JIMMetaverseObjectType -Full }

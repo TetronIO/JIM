@@ -119,6 +119,45 @@ public class ObjectMatchingRuleValidityTests
     }
 
     [Test]
+    public void CreateObjectMatchingRuleAsync_SyncRuleScopedRuleWhileSystemInSimpleMode_IsRefusedAsync()
+    {
+        // The #1569 footgun: the system only consults type-scoped rules in simple mode, so a Synchronisation
+        // Rule-scoped rule created against it is silently inert; synchronisation joins nothing and nothing reports
+        // why. Refusal must name the active mode so the administrator knows which switch to reach for.
+        var rule = AdvancedModeRule(ObjectMatchingRuleMode.ConnectedSystem);
+
+        Assert.That(async () => await _jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, ApiKey()),
+            Throws.TypeOf<InvalidDataException>().And.Message.Contains("simple matching mode"));
+
+        _connectedSystemRepo.Verify(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Never,
+            "a rule the active matching mode would never consult must not reach the database");
+    }
+
+    [Test]
+    public void CreateObjectMatchingRuleAsync_TypeScopedRuleWhileSystemInAdvancedMode_IsRefusedAsync()
+    {
+        // The inverse direction: in advanced mode only each Synchronisation Rule's own rules are consulted, so a
+        // new type-scoped rule would be equally inert.
+        var rule = SimpleModeRule();
+        rule.ConnectedSystemObjectType!.ConnectedSystem!.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+
+        Assert.That(async () => await _jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, ApiKey()),
+            Throws.TypeOf<InvalidDataException>().And.Message.Contains("advanced matching mode"));
+
+        _connectedSystemRepo.Verify(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRuleAsync_SyncRuleScopedRuleWhileSystemInAdvancedMode_IsStoredAsync()
+    {
+        var rule = AdvancedModeRule(ObjectMatchingRuleMode.SyncRule);
+
+        await _jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, ApiKey());
+
+        _connectedSystemRepo.Verify(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Once);
+    }
+
+    [Test]
     public void UpdateObjectMatchingRuleAsync_RuleEditedIntoAnUnworkableShape_IsRefusedAsync()
     {
         // Storage refuses the same shapes on the way in and on the way out; a rule edited into uselessness is no
@@ -147,6 +186,30 @@ public class ObjectMatchingRuleValidityTests
         },
         MetaverseObjectTypeId = 3,
         MetaverseObjectType = new MetaverseObjectType { Id = 3, Name = "Person" },
+        TargetMetaverseAttributeId = 201,
+        TargetMetaverseAttribute = new MetaverseAttribute
+        {
+            Id = 201,
+            Name = "Employee ID",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued
+        },
+        Sources = [new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttributeId = 101 }]
+    };
+
+    private static ObjectMatchingRule AdvancedModeRule(ObjectMatchingRuleMode systemMode) => new()
+    {
+        Id = 11,
+        Order = 0,
+        SyncRuleId = 42,
+        SyncRule = new SyncRule
+        {
+            Id = 42,
+            Name = "Import Users",
+            Direction = SyncRuleDirection.Import,
+            ConnectedSystemId = 3,
+            ConnectedSystem = new ConnectedSystem { Id = 3, Name = "AD", ObjectMatchingRuleMode = systemMode }
+        },
         TargetMetaverseAttributeId = 201,
         TargetMetaverseAttribute = new MetaverseAttribute
         {

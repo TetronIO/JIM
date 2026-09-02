@@ -23,6 +23,9 @@ function Remove-JIMSyncRule {
         cmdlet quantifies the contributed values so the confirmation states the impact of the choice
         (-Force skips both the lookup and the prompt).
 
+        Use -Wait to block until a queued recall has finished, so the rule really has gone by the time the
+        cmdlet returns; without it, anything the caller does next races the recall task.
+
     .PARAMETER Id
         The unique identifier of the Synchronisation Rule to delete.
 
@@ -37,6 +40,16 @@ function Remove-JIMSyncRule {
         values remain in place with no provenance, so nothing can ever recall them; surviving lower-priority
         contributors are not re-elected. Omit this switch to recall the values (the default), which withdraws
         them via a queued Worker task before the rule is deleted.
+
+    .PARAMETER Wait
+        Waits for a queued contributed-values recall to finish before returning, so the rule really has
+        gone when the cmdlet does. Without it the cmdlet returns as soon as the recall is queued, and a
+        caller that immediately reads the rule back, or reorders the attribute's contributors, races the
+        recall task. Has no effect when the deletion completes immediately.
+
+    .PARAMETER Timeout
+        Maximum seconds to wait when -Wait is supplied. Omit to wait indefinitely. A recall that has not
+        finished by the timeout is reported as an error; it continues on the server regardless.
 
     .PARAMETER Force
         Suppresses confirmation prompts.
@@ -82,6 +95,14 @@ function Remove-JIMSyncRule {
         recall can ever withdraw them. Only choose this when the values should outlive the rule.
 
     .EXAMPLE
+        Remove-JIMSyncRule -Id 1 -Force -Wait
+        Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 3 -MappingId @(7, 9)
+
+        Removes a contributing Synchronisation Rule and waits for its recall to finish before reordering
+        the attribute's surviving contributors. Without -Wait the reorder races the recall, and is
+        refused while the deleted rule still counts as a contributor.
+
+    .EXAMPLE
         Get-JIMSyncRule | Where-Object { $_.name -like "Test*" } | Remove-JIMSyncRule -Force
 
         Force-deletes every Synchronisation Rule whose name starts with "Test". Review the matches first by
@@ -110,6 +131,11 @@ function Remove-JIMSyncRule {
         [switch]$KeepContributedValues,
 
         [switch]$Force,
+
+        [switch]$Wait,
+
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$Timeout,
 
         [switch]$PassThru
     )
@@ -179,6 +205,41 @@ function Remove-JIMSyncRule {
                     # deleted as the task's final step; surface the tracking object so scripts can monitor
                     # the recall Activity.
                     Write-Verbose "Queued a contributed-values recall for Synchronisation Rule ${ruleId}; Activity: $($result.RecallActivityId)"
+                    if ($Wait) {
+                        $waitParams = @{
+                            ActivityId    = "$($result.RecallActivityId)"
+                            ActivityLabel = "Recalling values contributed by '$($existing.name)'"
+                        }
+                        if ($PSBoundParameters.ContainsKey('Timeout')) { $waitParams.Timeout = $Timeout }
+                        $recallStatus = Wait-JIMActivityCompletion @waitParams
+
+                        # The rule is deleted as the recall's final step, so anything short of a clean
+                        # completion leaves it in place: say so rather than let the caller assume it has gone.
+                        if (-not $recallStatus) {
+                            Write-Error ("The contributed-values recall for '$($existing.name)' had not finished after ${Timeout}s. " +
+                                "The Synchronisation Rule is deleted as the recall's final step, so it may still exist. " +
+                                "Activity: $($result.RecallActivityId).")
+                        }
+                        elseif ($recallStatus -notin @('Complete', 'CompleteWithWarning')) {
+                            Write-Error ("The contributed-values recall for '$($existing.name)' ended with status '$recallStatus'. " +
+                                "The Synchronisation Rule is deleted as the recall's final step, so it may still exist. " +
+                                "Activity: $($result.RecallActivityId).")
+                        }
+                        else {
+                            # Confirm the deletion rather than infer it from the Activity's status.
+                            $survivor = $null
+                            try {
+                                $survivor = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$ruleId"
+                            }
+                            catch {
+                                Write-Verbose "Synchronisation Rule $ruleId is gone, as expected."
+                            }
+                            if ($survivor) {
+                                Write-Error ("The contributed-values recall for '$($existing.name)' completed, but the " +
+                                    "Synchronisation Rule is still present (id $ruleId). Activity: $($result.RecallActivityId).")
+                            }
+                        }
+                    }
                     $result
                 }
                 else {

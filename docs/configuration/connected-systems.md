@@ -61,6 +61,17 @@ A system that is imported but rarely synchronised is the case worth watching, be
 
 Only the first import to find an object missing records a deletion against it. Later imports that find it still missing change nothing and record nothing, because nothing has happened: the object was already obsolete when they started.
 
+### Clearing the connector space
+
+Clearing a Connected System's connector space removes every CSO (and, unless you choose to keep it, their change history) without deleting the Connected System itself; its configuration, schema, and Synchronisation Rules survive. Clearing is a hard delete rather than an obsoletion: unlike the deprovisioning path above, no Metaverse Object Deletion Rule or grace period runs, so the removal is immediate. The portal's Connector Space page, `POST /connected-systems/{id}/clear`, and [`Clear-JIMConnectedSystem`](../powershell/connected-systems.md#clear-jimconnectedsystem) all queue the same tracked background task.
+
+Because a clear skips obsoletion, any Metaverse attribute value the cleared system contributed keeps its provenance and keeps exporting downstream even though nothing joins it to the system any more. For the common case, a Full Import that brings every object straight back, this is exactly what you want: the join re-forms and nothing changes. It only matters when an object never returns, for example a source population that shrank during the clear, or a system you are decommissioning without deleting: without something to notice the gap, those values would stay stranded indefinitely.
+
+JIM closes that gap itself. Clearing arms a **stranded-value sweep** that runs automatically as part of this Connected System's next Full Synchronisation. The sweep finds Metaverse attribute values this system contributed with no CSO of this system still joined, and recalls them exactly as an obsoletion would have: a value with a surviving contributor is re-elected to it, and a value with none is cleared. Where a Metaverse Object's only remaining connections carry no import source for its type (for example, only a provisioned target account remains), its values are preserved as last known state rather than recalled, matching the [deletion behaviour](metaverse.md#deletion-behaviour) preservation rule. The sweep's outcome, findings included, is always stated on the Full Synchronisation run's Activity, and a run that finds nothing says so explicitly.
+
+!!! tip "Import before you synchronise"
+    Run a Full Import on the cleared system before running a Full Synchronisation on it. Synchronising first sweeps every value the system had ever contributed as stranded (correctly, since nothing has re-joined yet), and a subsequent import then re-asserts them all over again. Importing first lets re-joined objects claim their values back, so the sweep only recalls what genuinely never returned.
+
 ## Partitions and containers
 
 A **partition** is a top-level logical division of a connector space that mirrors a boundary defined by the external system. Partitions exist in JIM primarily to service LDAP-style directories and their naming contexts (NCs): the discrete directory trees that an LDAP server hosts. The separate domain partitions within an Active Directory forest, or the distinct naming contexts exposed by an OpenLDAP server, each surface as a partition in JIM.
@@ -571,8 +582,12 @@ Changing a Connected System's settings, schema, or partition selection is confir
 
 **Removing a Connected System:**
 
-1. Run a deletion preview to understand the impact (which Metaverse Objects become disconnected, which Synchronisation Rules become invalid)
-2. Delete the Connected System. Small systems are removed immediately; larger systems, or a system with a running sync, are queued and run as a background activity.
+Deleting a Connected System asks what should happen to everything it managed, with the impact quantified in the delete dialog before you choose:
+
+- **Deprovision through synchronisation** (the default on every surface): each of the system's objects is processed as though it had disconnected through a normal synchronisation. Contributed values are recalled or handed to surviving contributors per [Attribute Priority](../concepts/attribute-priority.md), Metaverse Object deletion rules are evaluated for objects losing their last connector, and downstream systems receive corrective exports. The run is queued and Activity-tracked; monitor it from the Operations page via the link the dialog surfaces, and the system is deleted as the run's final step. While it runs, the system is fenced: excluded from scheduled runs and read-only.
+- **Delete immediately and keep contributed data**: the system is removed at once. Values it contributed remain in place with no record of where they came from and nothing will ever recall them; deletion rules are evaluated in bulk for objects losing their last connector, but no per-object synchronisation processing occurs and downstream systems are not corrected. The dialog's warning states this before you confirm. Small systems are removed synchronously; larger systems, or a system with a running sync, are queued as a background activity.
+
+If a deprovisioning run stops before completing, the system stays fenced and consistent: deleting it again with deprovisioning resumes from where the run stopped, and deleting immediately finishes the removal at once (keeping whatever contributed data remained). A half-deprovisioned system never returns to service.
 
 Deleting a Connected System records a final snapshot of its configuration in the [configuration change history](activities.md#configuration-change-history), so a decommissioned system's last-known state, and who removed it, remain auditable after it is gone. You can attach an optional reason in the admin portal delete dialog, with `Remove-JIMConnectedSystem -ChangeReason`, or via the REST API. As with all such snapshots, connector secrets are recorded as changed but never stored.
 

@@ -107,4 +107,50 @@ public class ContributorRecallScopeTests
     }
 
     #endregion
+
+    #region ForStrandedContribution (#1549) characterisation
+
+    [Test]
+    public void ForStrandedContribution_RuleBelongingToSweptSystem_IsNotEligibleForReElection()
+    {
+        var scope = ContributorRecallScope.ForStrandedContribution(DeletedSystemId);
+
+        var sweptSystemRule = new SyncRule { Id = 1, ConnectedSystemId = DeletedSystemId };
+
+        Assert.That(scope.IsEligibleContributorRule(sweptSystemRule), Is.False,
+            "every contributing Synchronisation Rule of the swept Connected System must not be re-elected: it is the very system whose values are being recalled");
+    }
+
+    [Test]
+    public void ForStrandedContribution_RuleBelongingToAnotherSystem_IsEligibleForReElection()
+    {
+        var scope = ContributorRecallScope.ForStrandedContribution(DeletedSystemId);
+
+        var otherSystemRule = new SyncRule { Id = 2, ConnectedSystemId = OtherSystemId };
+
+        Assert.That(scope.IsEligibleContributorRule(otherSystemRule), Is.True);
+    }
+
+    [Test]
+    public void ForStrandedContribution_CsoBelongingToAnotherSystem_IsASurvivor()
+    {
+        var scope = ContributorRecallScope.ForStrandedContribution(DeletedSystemId);
+
+        var otherSystemCso = new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = OtherSystemId };
+
+        Assert.That(scope.IsEligibleSurvivor(otherSystemCso), Is.True);
+    }
+
+    [Test]
+    public void ForStrandedContribution_IsDeliberateWithdrawal_IsFalse()
+    {
+        // The clear was a deliberate act on the Connector Space, but no individual object's disappearance
+        // was ever confirmed (the clear bypasses obsoletion entirely), so the sweep behaves like an
+        // import-detected disappearance and the #1570 last-known-state preservation gate must apply.
+        var scope = ContributorRecallScope.ForStrandedContribution(DeletedSystemId);
+
+        Assert.That(scope.IsDeliberateWithdrawal, Is.False);
+    }
+
+    #endregion
 }

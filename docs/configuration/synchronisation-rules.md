@@ -134,6 +134,23 @@ Advanced mode rule does not name one, because the Synchronisation Rule that owns
 JIM refuses to save a rule that could never match, naming what is missing. If any rule already stored has that
 shape, the Matching tab says so and names it, so it can be removed and recreated.
 
+The active mode also decides which rules the synchronisation engine consults: type-scoped rules in simple mode,
+each Synchronisation Rule's own rules in advanced mode. A rule of the other scope would be silently inert, so JIM
+refuses to create one, naming the active mode and the remedy (create the rule in the scope the mode consults, or
+switch the mode first). Rules of the other scope that already exist, retained by a mode switch, stay editable and
+deletable so a later switch back can restore them.
+
+Switching the mode warns about anything it strands:
+
+- **To advanced mode**: the type-scoped rules are retained but no longer consulted (they resume effect on a switch
+  back), and export Synchronisation Rules receive no copied rules, so export matching stops for them until rules
+  are added; provisioning proceeds as though no match existed.
+- **To simple mode**: where an object type already has rules, those take precedence and the Synchronisation Rules'
+  own rules are discarded rather than migrated.
+
+The warnings appear in the portal after the switch, in the REST response's `warnings` list, and on the PowerShell
+warning stream from `Switch-JIMMatchingMode`.
+
 ### Previewing a behaviour change
 
 The five behaviour toggles are the settings whose consequences are hardest to picture, because none of them names a

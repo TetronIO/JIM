@@ -109,6 +109,8 @@ Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralNam
     - **WhenLastConnectorDisconnected**<br /> The object is marked for deletion when all connectors are removed
     - **WhenAuthoritativeSourceDisconnected**<br /> The object is marked for deletion when its authoritative sources disconnect. `DeletionTriggerMode` controls whether every selected source must disconnect first (`AllSourcesDisconnect`) or any one selected source disconnecting is enough (`SpecificSourcesDisconnect`)
 
+    Under `WhenLastConnectorDisconnected`, provisioned target accounts count as connectors, so an object of a type with provisioning export Synchronisation Rules outlives its last source while a target account exists; see [deletion behaviour](../configuration/metaverse.md#deletion-behaviour). When that combination applies, the cmdlet surfaces the API's advisory as a warning, and the returned object carries it as `DeletionRuleAdvisory`.
+
 #### Output
 
 When `-PassThru` is specified, returns the updated object type definition. Otherwise, no output.

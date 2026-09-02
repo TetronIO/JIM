@@ -55,7 +55,15 @@ When you add a new import mapping to an attribute that already has contributors,
 
 ## 🔁 When the winning source disconnects or withdraws
 
-If the source that currently provides an attribute's value disconnects (its object is removed from that Connected System) or falls out of its Synchronisation Rule's scope, JIM does not simply blank the attribute. It re-elects the next contributor: a still-connected, in-scope lower-priority source takes over, and its value flows into the Metaverse in place of the departed one. Only when no other source contributes is the attribute cleared.
+If the source that currently provides an attribute's value disconnects (its object is removed from that Connected System) or falls out of its Synchronisation Rule's scope, JIM does not simply blank the attribute. It re-elects the next contributor: a still-connected, in-scope lower-priority source takes over, and its value flows into the Metaverse in place of the departed one.
+
+Where no other contributor supplies the attribute, one principle decides what happens to it: **JIM recalls a value only while a source remains to stand behind the object; otherwise it preserves the object's last known state or completes the deletion.** Three situations follow from it, checked in this order:
+
+- **A deletion is pending**<br /> The object type's Deletion Rule has scheduled the Metaverse Object's deletion (see [deletion behaviour](../configuration/metaverse.md#deletion-behaviour)). The departed source's sole-contributed values are preserved for the grace window: recalling them would send clears to every target system moments before deprovisioning removes the accounts anyway, and if the source reappears within the window (the grace period's purpose) the object is exactly as it was, with nothing churned downstream.
+- **Another source remains**<br /> A remaining Connected System still carries an enabled import Synchronisation Rule for the object's type, so the object is still actively managed. The departed source's sole-contributed values are recalled (cleared): nothing asserts them any more, and leaving them in place would keep stale data on a live identity forever.
+- **No source remains**<br /> Only provisioned target systems (or nothing at all) still hold the object. Its values are preserved as **last known state**: they are what the target accounts are built from (including expression-based values such as a Distinguished Name), and clearing them because a source had an outage would damage live accounts. If a source-of-record departure should instead deprovision the target accounts, that is the **When Authoritative Source Disconnected** Deletion Rule's job; JIM advises you of exactly this when you configure **When Last Connector Disconnected** for a type that provisions targets.
+
+A deliberate removal is different from a disappearance: deleting an Attribute Flow mapping, a Synchronisation Rule or a whole Connected System asks you what should happen to the contributed values, and the choice you make is carried out in full; the last-known-state preservation above never overrides it.
 
 This means an authoritative source leaving hands an attribute down to the next source rather than dropping it, so downstream systems receive the fallback value instead of an unintended clear. The next contributor is resolved exactly as in normal flow, so if it has **"Null is a value"** set and supplies no value, the attribute is asserted null rather than handed further down.
 
@@ -67,6 +75,8 @@ Removing the flow itself behaves the same way, with one deliberate distinction b
 
 Deleting a whole **Synchronisation Rule** offers the same choice with one mechanical difference: the deletion itself would sever the provenance the recall depends on, so the recall cannot wait for a synchronisation. Choosing recall disables the rule immediately and queues the recall as a background operation, visible on the Operations page as its own Activity with per-object outcomes; surviving contributors are re-elected, resulting changes are staged as Pending Exports, and deleting the rule is the operation's final step. Choosing keep deletes the rule at once and leaves the values in place with no provenance, exactly as for a kept mapping.
 
+Deleting a whole **Connected System** extends the same choice to everything the system contributed: deprovisioning through synchronisation processes each of its objects as a normal disconnection (recall, re-election, deletion rules, downstream exports), while deleting immediately keeps the contributed data behind the same kind of stated warning. See [Removing a Connected System](../configuration/connected-systems.md).
+
 **Disabling** a mapping, or its whole Synchronisation Rule, is a pause rather than a removal. A disabled flow contributes nothing, so a surviving contributor still takes the attribute over exactly as above; but where the disabled flow was the only contributor, its values are retained rather than cleared, ready for the flow to be re-enabled. To withdraw a sole contributor's values, delete the mapping instead.
 
 ## 🔍 Seeing resolution decisions
@@ -75,8 +85,9 @@ Synchronisation Activities record notable resolution outcomes against each objec
 
 - **MVO Null Asserted**<br /> A contributor with "Null is a value" positively asserted a blank for one or more attributes. The blank is deliberate and authoritative.
 - **MVO No Contributor**<br /> An attribute value was cleared because no contributor supplied a replacement: the last contributing source withdrew its value, or disconnected with no surviving contributor to re-elect. An attribute that was already blank is never reported, so these outcomes only appear when a run actually removed something.
+- **MVO Values Preserved**<br /> A disconnection left the Metaverse Object with no remaining source, so the departed system's values were preserved as last known state rather than recalled (the third situation above). The outcome states how many values were kept and why, so "why does this object still have values" is answered from the run that decided it.
 
-Together these distinguish the two kinds of blank an administrator may need to investigate: one that was asserted on purpose, and one that happened because every source fell away.
+Together these distinguish the blanks and survivals an administrator may need to investigate: a blank asserted on purpose, a blank that happened because every source fell away, and a value that outlived its source deliberately.
 
 The same provenance is visible per value: retrieving a Metaverse Object through the REST API or `Get-JIMMetaverseObject` returns, for each attribute value, the Connected System and the exact Synchronisation Rule that won resolution and contributed it. An asserted null appears as a value row flagged `nullValue` with provenance but no value, so automation can distinguish a deliberate blank from an attribute that simply has no contributor; consumers should treat such a row as "no value present", never as a value.
 

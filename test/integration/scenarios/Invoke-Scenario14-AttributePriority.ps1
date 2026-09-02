@@ -2471,10 +2471,10 @@ userPassword: Test@123!
             # first), so the original Primary=1/Secondary=2 must be set back explicitly, exactly as
             # PriorityReorderPropagation restores its own reorder.
             Write-Host "Removing the exception Synchronisation Rule..." -ForegroundColor Gray
-            Remove-JIMSyncRule -Id $exceptionRule.id -Force | Out-Null
-            if (@(Get-JIMSyncRule) | Where-Object { $_.name -eq $exceptionRuleName }) {
-                throw "'$exceptionRuleName' still present after removal."
-            }
+            # The exception rule contributes Dave's winning Description, so its deletion is queued behind a
+            # contributed-values recall and only lands as that task's final step; assert absence after it,
+            # not before (see Remove-SyncRuleAndWait).
+            Remove-SyncRuleAndWait -Id $exceptionRule.id -Name $exceptionRuleName
 
             Set-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserType.id `
                 -MappingId @($plainPrimaryContributor.mappingId, $secondaryContributor.mappingId) | Out-Null
@@ -2692,11 +2692,8 @@ userPassword: Test@123!
             # Restore, exactly as ScopedExceptionAuthority does: removing the rule densifies the list, so
             # the original Primary=1/Secondary=2 is set back explicitly.
             Write-Host "Removing the disabled exception Synchronisation Rule..." -ForegroundColor Gray
-            Remove-JIMSyncRule -Id $disabledSlotRule.id -Force | Out-Null
+            Remove-SyncRuleAndWait -Id $disabledSlotRule.id -Name $disabledSlotRuleName
             $disabledSlotRule = $null
-            if (@(Get-JIMSyncRule) | Where-Object { $_.name -eq $disabledSlotRuleName }) {
-                throw "'$disabledSlotRuleName' still present after removal."
-            }
 
             Set-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserType.id `
                 -MappingId @($plainPrimaryContributor.mappingId, $secondaryContributor.mappingId) | Out-Null
@@ -3132,11 +3129,15 @@ userPassword: Test@123!
             # then the exception topology, then the directory values this step edited, then one
             # Primary import and synchronisation to put the Metaverse back where the step found it.
             Write-Host "Removing the Primary export rule, Export Run Profile and exception rule..." -ForegroundColor Gray
-            Remove-JIMSyncRule -Id $primaryExportRule.id -Force | Out-Null
+            Remove-SyncRuleAndWait -Id $primaryExportRule.id -Name $primaryExportRuleName
             $primaryExportRule = $null
             Remove-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryExportProfile.id -Force | Out-Null
             $primaryExportProfile = $null
-            Remove-JIMSyncRule -Id $writebackExceptionRule.id -Force | Out-Null
+            # The writeback exception rule contributes Dave's winning Description, so its deletion is queued
+            # behind a contributed-values recall. The priority restore below lists the two surviving
+            # contributors, and the API rejects a list that omits a mapping still contributing, so the
+            # recall has to have finished before it runs.
+            Remove-SyncRuleAndWait -Id $writebackExceptionRule.id -Name $writebackExceptionRuleName
             $writebackExceptionRule = $null
 
             Set-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserType.id `

@@ -1317,15 +1317,25 @@ public class MetaverseRepository : IMetaverseRepository
 
     /// <summary>
     /// As <see cref="GetMetaverseObjectAsync"/>, but additionally eager-loads the per-value Attribute
-    /// Priority provenance navigations (the contributing Connected System and Synchronisation Rule).
-    /// This is a deliberately separate, heavier retrieval for the single-object read paths (the REST
-    /// API and Metaverse Object views) that surface provenance. The base <see cref="GetMetaverseObjectAsync"/>
+    /// Priority provenance navigations (the contributing Connected System and Synchronisation Rule),
+    /// plus the joined Connected System Object references that JIM.Web's MetaverseObjectDto's
+    /// ConnectedSystemObjects mapping needs (#1606): each joined object's Connected System,
+    /// and just enough of its Attribute Values to resolve <see cref="ConnectedSystemObject.NameOrId"/>
+    /// (the ranked naming attributes, plus the external id and secondary external id values). This is a
+    /// deliberately separate, heavier retrieval for the single-object read paths (the REST API and
+    /// Metaverse Object views) that surface provenance. The base <see cref="GetMetaverseObjectAsync"/>
     /// is on the synchronisation join hot path (FindMetaverseObjectUsingMatchingRuleAsync, per-CSO
     /// during sync); the sync engine reads provenance via the FK scalars (ContributedBySyncRuleId), never
-    /// these navigations, so it must not pay for the two extra split-query round-trips these includes add.
+    /// these navigations, so it must not pay for the extra split-query round-trips these includes add.
     /// </summary>
     public async Task<MetaverseObject?> GetMetaverseObjectWithProvenanceAsync(Guid id)
     {
+        // Lowered once so the filtered include below can Contains() against it; kept in step with
+        // ObjectNaming.ConnectedSystemNameAttributes rather than hand-copied (#1606).
+        var connectedSystemNameAttributesLower = ObjectNaming.ConnectedSystemNameAttributes.
+            Select(name => name.ToLower()).
+            ToList();
+
         return await Repository.Database.MetaverseObjects.
             AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(mo => mo.Type).
@@ -1342,6 +1352,25 @@ public class MetaverseRepository : IMetaverseRepository
             ThenInclude(av => av.ContributedBySystem).
             Include(mo => mo.AttributeValues).
             ThenInclude(av => av.ContributedBySyncRule).
+            Include(mo => mo.ConnectedSystemObjects).
+            ThenInclude(cso => cso.ConnectedSystem).
+            // ExternalIdAttributeValue/SecondaryExternalIdAttributeValue on ConnectedSystemObject are
+            // [NotMapped] computed properties resolved from AttributeValues by AttributeId, not real
+            // navigations, so they cannot be Include()d directly; the filter below loads the underlying
+            // rows those properties (and Name, via the ranked naming attributes) resolve from, bounding
+            // the load to at most a handful of values per joined object rather than its full graph.
+            // Matched via the value's own Attribute.IsExternalId/IsSecondaryExternalId flags rather than
+            // comparing against the parent cso's ExternalIdAttributeId/SecondaryExternalIdAttributeId
+            // scalars (equivalent per the flags' own contract: ConnectedSystemObject.ExternalIdAttributeId
+            // is always the id of the object type's IsExternalId attribute), because a filtered Include's
+            // predicate cannot correlate back to the parent entity: EF cannot translate a reference to
+            // "cso" from inside cso.AttributeValues.Where(...).
+            Include(mo => mo.ConnectedSystemObjects).
+            ThenInclude(cso => cso.AttributeValues.Where(av =>
+                connectedSystemNameAttributesLower.Contains(av.Attribute.Name.ToLower()) ||
+                av.Attribute.IsExternalId ||
+                av.Attribute.IsSecondaryExternalId)).
+            ThenInclude(av => av.Attribute).
             SingleOrDefaultAsync(mo => mo.Id == id);
     }
 
@@ -3421,6 +3450,22 @@ public class MetaverseRepository : IMetaverseRepository
     {
         return await Repository.Database.MetaverseObjectAttributeValues
             .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+            .Select(av => av.MetaverseObject.Id)
+            .Distinct()
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetMetaverseObjectIdsWithStrandedValuesContributedBySyncRuleAsync(int syncRuleId, int connectedSystemId)
+    {
+        // Mirrors GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync, adding a NOT EXISTS join-absence
+        // predicate: a candidate object must hold no Connected System Object of the cleared system. EF Core
+        // translates the negated Any() to a parameterised NOT EXISTS; the in-memory test provider cannot
+        // honour this faithfully (no real foreign keys), so this method needs RequiresPostgres coverage.
+        return await Repository.Database.MetaverseObjectAttributeValues
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+            .Where(av => !Repository.Database.ConnectedSystemObjects
+                .Any(cso => cso.MetaverseObjectId == av.MetaverseObject.Id && cso.ConnectedSystemId == connectedSystemId))
             .Select(av => av.MetaverseObject.Id)
             .Distinct()
             .ToListAsync();

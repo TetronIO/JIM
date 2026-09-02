@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -381,7 +382,7 @@ public partial class SyncRepository
             SELECT so."Id", so."ActivityRunProfileExecutionItemId", so."ParentSyncOutcomeId",
                    so."OutcomeType", so."TargetEntityId", so."TargetEntityDescription",
                    so."DetailCount", so."DetailMessage", so."Ordinal", so."ConnectedSystemObjectChangeId",
-                   so."SyncRuleId", so."SyncRuleName"
+                   so."SyncRuleId", so."SyncRuleName", so."StagedChangeType"
             FROM "ActivityRunProfileExecutionItemSyncOutcomes" so
             INNER JOIN "ActivityRunProfileExecutionItems" rpei
                 ON rpei."Id" = so."ActivityRunProfileExecutionItemId"
@@ -449,7 +450,8 @@ public partial class SyncRepository
                 Ordinal = reader.GetInt32(8),
                 ConnectedSystemObjectChangeId = reader.IsDBNull(9) ? null : reader.GetGuid(9),
                 SyncRuleId = reader.IsDBNull(10) ? null : reader.GetInt32(10),
-                SyncRuleName = reader.IsDBNull(11) ? null : reader.GetString(11)
+                SyncRuleName = reader.IsDBNull(11) ? null : reader.GetString(11),
+                StagedChangeType = reader.IsDBNull(12) ? null : (PendingExportChangeType)reader.GetInt32(12)
             });
         }
 
@@ -874,7 +876,7 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertSyncOutcomesRawAsync(List<ActivityRunProfileExecutionItemSyncOutcome> outcomes)
     {
-        const int columnsPerRow = 12;
+        const int columnsPerRow = 13;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(outcomes, chunkSize))
@@ -888,7 +890,7 @@ public partial class SyncRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11})");
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12})");
 
                 var outcome = chunk[i];
                 parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = outcome.Id });
@@ -903,6 +905,7 @@ public partial class SyncRepository
                 parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)outcome.ConnectedSystemObjectChangeId ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)outcome.SyncRuleId ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)outcome.SyncRuleName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = outcome.StagedChangeType.HasValue ? (object)(int)outcome.StagedChangeType.Value : DBNull.Value });
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -1035,6 +1038,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (outcome.SyncRuleName is not null)
                 await writer.WriteAsync(outcome.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (outcome.StagedChangeType.HasValue)
+                await writer.WriteAsync((int)outcome.StagedChangeType.Value, NpgsqlTypes.NpgsqlDbType.Integer);
             else
                 await writer.WriteNullAsync();
         }

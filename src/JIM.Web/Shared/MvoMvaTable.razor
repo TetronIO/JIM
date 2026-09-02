@@ -40,7 +40,7 @@
                     }
                     else
                     {
-                        <TextValueDisplay Value="@GetDisplayValue(context.Item)" />
+                        <TextValueDisplay Value="@GetDisplayValue(context.Item)" Class="jim-text-code" />
                     }
                 </CellTemplate>
             </TemplateColumn>
@@ -79,7 +79,7 @@ else
                     <MudText Typo="Typo.button">Value</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
-                    <TextValueDisplay Value="@GetDisplayValue(context.Item)" />
+                    <TextValueDisplay Value="@GetDisplayValue(context.Item)" Class="jim-text-code" />
                 </CellTemplate>
             </TemplateColumn>
         </Columns>

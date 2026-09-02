@@ -1938,6 +1938,57 @@ function Assert-ActivitySuccess {
     throw "Activity '$Name' did not complete successfully. Status: $status (ActivityId: $ActivityId)"
 }
 
+function Remove-SyncRuleAndWait {
+    <#
+    .SYNOPSIS
+        Removes a Synchronisation Rule and waits until it has actually gone.
+
+    .DESCRIPTION
+        Remove-JIMSyncRule answers 202 Accepted with a RecallActivityId when the rule still contributes
+        Metaverse attribute values: the rule is disabled immediately, and it is deleted as the final step
+        of a queued Worker recall task that withdraws its values and re-elects the surviving contributors.
+        A test that asserts the rule has gone the moment the cmdlet returns is racing that task, and loses;
+        Scenario 14's ScopedExceptionAuthority failed exactly that way, sub-second, every run.
+
+        Remove-JIMSyncRule -Wait does the waiting, and reports a recall that ends badly rather than leaving
+        it to surface as a rule that never went away; this adds the name-based absence check the scenarios
+        assert on. A rule contributing nothing deletes synchronously and is asserted absent immediately.
+
+    .PARAMETER Id
+        The id of the Synchronisation Rule to remove.
+
+    .PARAMETER Name
+        The rule's name, used to poll for its absence and to phrase failures.
+
+    .PARAMETER TimeoutSeconds
+        How long to wait for the recall to delete the rule. Defaults to 120.
+
+    .EXAMPLE
+        Remove-SyncRuleAndWait -Id $exceptionRule.id -Name $exceptionRuleName
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$Id,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$false)]
+        [int]$TimeoutSeconds = 120
+    )
+
+    # Remove-JIMSyncRule -Wait blocks until any queued contributed-values recall has finished, reports a
+    # recall that ends badly, and confirms the rule itself is gone. This wraps it with the name-based
+    # absence check the scenarios assert on.
+    $removeParams = @{ Id = $Id; Force = $true; Wait = $true; Timeout = $TimeoutSeconds }
+    Remove-JIMSyncRule @removeParams -ErrorAction Stop | Out-Null
+
+    if (@(Get-JIMSyncRule) | Where-Object { $_.name -eq $Name }) {
+        throw "'$Name' is still present after removal."
+    }
+}
+
+
 function Assert-ImportedObjectCount {
     <#
     .SYNOPSIS

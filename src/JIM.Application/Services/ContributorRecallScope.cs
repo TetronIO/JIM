@@ -18,9 +18,11 @@ namespace JIM.Application.Services;
 /// other rules of the same Connected System are legitimate survivors, because no ordinary flow accompanies the
 /// deletion recall;</item>
 /// <item>a Connected System being deleted (#809): the whole system is leaving, so every one of its rules is
-/// ineligible and none of its objects counts as a survivor.</item>
+/// ineligible and none of its objects counts as a survivor;</item>
+/// <item>a stranded-value sweep after a Connector Space clear (#1549): the swept system's own rules are
+/// ineligible, mirroring the deleted-system scope, but the system was never actually deleted; no individual
+/// object's disappearance was ever confirmed.</item>
 /// </list>
-/// Future recall scopes (#1549 stranded values) add factories here rather than forking the core.
 /// </summary>
 public sealed class ContributorRecallScope
 {
@@ -29,11 +31,22 @@ public sealed class ContributorRecallScope
 
     private ContributorRecallScope(
         Func<SyncRule, bool> isEligibleContributorRule,
-        Func<ConnectedSystemObject, bool> isEligibleSurvivor)
+        Func<ConnectedSystemObject, bool> isEligibleSurvivor,
+        bool isDeliberateWithdrawal)
     {
         _isEligibleContributorRule = isEligibleContributorRule;
         _isEligibleSurvivor = isEligibleSurvivor;
+        IsDeliberateWithdrawal = isDeliberateWithdrawal;
     }
+
+    /// <summary>
+    /// Whether an administrator explicitly ordered this contribution withdrawn (a Synchronisation Rule or
+    /// Connected System deletion), as opposed to the source merely disappearing from an import. The recall
+    /// gate's last-known-state preservation (#1570) applies only to disappearances: it exists to protect
+    /// live target accounts from a transient source outage, and a deliberate deletion is neither transient
+    /// nor unconsented (its consequences were surfaced before the administrator confirmed).
+    /// </summary>
+    public bool IsDeliberateWithdrawal { get; }
 
     /// <summary>
     /// The obsoletion/withdrawal scope (#91): the leaver's whole Connected System is excluded from
@@ -45,7 +58,8 @@ public sealed class ContributorRecallScope
         ArgumentNullException.ThrowIfNull(leaver);
         return new ContributorRecallScope(
             rule => rule.ConnectedSystemId != leaver.ConnectedSystemId,
-            cso => cso.Id != leaver.Id);
+            cso => cso.Id != leaver.Id,
+            isDeliberateWithdrawal: false);
     }
 
     /// <summary>
@@ -59,7 +73,8 @@ public sealed class ContributorRecallScope
     {
         return new ContributorRecallScope(
             rule => rule.Id != syncRuleId,
-            _ => true);
+            _ => true,
+            isDeliberateWithdrawal: true);
     }
 
     /// <summary>
@@ -73,7 +88,27 @@ public sealed class ContributorRecallScope
     {
         return new ContributorRecallScope(
             rule => rule.ConnectedSystemId != connectedSystemId,
-            cso => cso.ConnectedSystemId != connectedSystemId);
+            cso => cso.ConnectedSystemId != connectedSystemId,
+            isDeliberateWithdrawal: true);
+    }
+
+    /// <summary>
+    /// The stranded-contribution sweep scope (#1549): every contributing Synchronisation Rule of the swept
+    /// Connected System is excluded from re-election, and (defensively; a stranded Metaverse Object holds
+    /// none of the system's Connected System Objects by definition, so this can never actually exclude one)
+    /// none of its joined Connected System Objects counts as a survivor. <see cref="IsDeliberateWithdrawal"/>
+    /// is deliberately false: the Connector Space clear was a deliberate act on the Connected System, but no
+    /// individual object's disappearance was ever confirmed by anyone (the clear bypasses obsoletion
+    /// entirely), so the sweep behaves like an import-detected disappearance and the #1570 last-known-state
+    /// preservation gate applies exactly as it would for an ordinary disconnect.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose Connector Space was cleared.</param>
+    public static ContributorRecallScope ForStrandedContribution(int connectedSystemId)
+    {
+        return new ContributorRecallScope(
+            rule => rule.ConnectedSystemId != connectedSystemId,
+            cso => cso.ConnectedSystemId != connectedSystemId,
+            isDeliberateWithdrawal: false);
     }
 
     /// <summary>

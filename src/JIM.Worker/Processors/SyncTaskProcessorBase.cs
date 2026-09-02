@@ -65,6 +65,10 @@ public abstract class SyncTaskProcessorBase
     // resolution among value contributors) is live but no asserted-null markers are written yet.
     protected AttributePriorityContext? _attributePriorityContext;
 
+    // Per-run recall gate (#1570): whether any remaining joined system is still a contributing source for a
+    // disconnecting Metaverse Object's type. Created lazily at first disconnection; caches the rule map for the run.
+    protected RemainingImportSourceEvaluator? _remainingImportSourceEvaluator;
+
     // Object type IDs that have inbound import rules with reference attribute mappings.
     // Used to skip reference attribute queueing for unchanged CSOs whose types have no reference rules.
     protected HashSet<int>? _objectTypesWithReferenceRules;
@@ -566,6 +570,13 @@ public abstract class SyncTaskProcessorBase
                             existingRpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null), changeResult);
                     }
 
+                    // Defensive parity with the new-RPEI branch below (#1570): surface values preserved because no
+                    // import source remains. Outside the recall guard above, because a wholly preserved
+                    // disconnection stages no removals at all and would otherwise be silent.
+                    if (changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope)
+                        AddValuesPreservedOutcomeForScopeExit(existingRpei,
+                            existingRpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null), changeResult);
+
                     // Defensive parity with the new-RPEI branch below (#1086): when the deletion rule was
                     // triggered by an out-of-scope disconnect whose RPEI already exists, record the MVO
                     // deletion fate outcome here too, so the deletion is never silently absent from the
@@ -672,6 +683,11 @@ public abstract class SyncTaskProcessorBase
                         // the NoContributor emission on the obsoletion path's Disconnected RPEI.
                         if (changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope)
                             AddNoContributorOutcomeForScopeExit(runProfileExecutionItem, rootOutcome, changeResult);
+
+                        // In Detailed mode, surface values preserved because no import source remains (#1570),
+                        // mirroring the ValuesPreserved emission on the obsoletion path's Disconnected RPEI.
+                        if (changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope)
+                            AddValuesPreservedOutcomeForScopeExit(runProfileExecutionItem, rootOutcome, changeResult);
 
                         // Add MVO deletion fate outcome for DisconnectedOutOfScope when the deletion rule
                         // was triggered. The outcome carries the deleted Metaverse Object's id and display
@@ -801,6 +817,33 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Emits a ValuesPreserved child outcome for a scope-exit disconnection whose sole-contributed values were
+    /// preserved as last known state because no remaining joined system carries an enabled import Synchronisation
+    /// Rule for the object's type (#1570). Without it the preservation is silent, and "why does this object still
+    /// have values" has no answer in the causality view. Mirrors the emission on the obsoletion path's
+    /// Disconnected RPEI. A no-op outside Detailed tracking, when no root outcome exists to attach to, or when
+    /// nothing was preserved for this reason (a pending deletion's freeze explains itself via the deletion outcome).
+    /// </summary>
+    private void AddValuesPreservedOutcomeForScopeExit(
+        ActivityRunProfileExecutionItem rpei,
+        ActivityRunProfileExecutionItemSyncOutcome? rootOutcome,
+        MetaverseObjectChangeResult changeResult)
+    {
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+            || rootOutcome == null
+            || changeResult.PreservedNoSourceAttributeCount <= 0
+            || rpei.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved))
+            return;
+
+        SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved,
+            targetEntityDescription: changeResult.DisconnectedMvoDisplayName,
+            detailCount: changeResult.PreservedNoSourceAttributeCount,
+            detailMessage: "No remaining Connected System carries an enabled import Synchronisation Rule for this " +
+                "Metaverse Object's type, so the disconnecting system's values were preserved as last known state.");
+    }
+
+    /// <summary>
     /// Builds the RPEI error message for a failed attribute-flow expression. The expression is sanitised
     /// (CWE-117) because it is administrator-authored but still untrusted; the inner exception message
     /// (from the expression evaluator) describes the concrete failure.
@@ -852,11 +895,13 @@ public abstract class SyncTaskProcessorBase
         // (immediate-deletion queueing with cross-object dedup, grace-period persistence with Activity
         // initiator attribution) and is shared with the withdrawal-recall path; the core drives when it
         // runs and consumes its verdict.
+        _remainingImportSourceEvaluator ??= new RemainingImportSourceEvaluator(_syncRepo);
         var result = await ConnectedSystemObjectObsoletionService.ProcessObsoleteConnectedSystemObjectAsync(
             connectedSystemObject,
             activeSyncRules,
             ContributorRecallScope.ForObsoletingConnectedSystemObject(connectedSystemObject),
             _attributePriorityContext,
+            _remainingImportSourceEvaluator,
             _syncEngine,
             _syncRepo,
             _syncServer.IsCsoInScopeForImportRule,
@@ -1659,7 +1704,8 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: provisionedParent.TargetEntityDescription,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString());
+                            detailMessage: peCsId.ToString(),
+                            stagedChangeType: pendingExport.ChangeType);
                     }
                     else if (exportParent != null)
                     {
@@ -1671,7 +1717,8 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString());
+                            detailMessage: peCsId.ToString(),
+                            stagedChangeType: pendingExport.ChangeType);
                     }
                     else
                     {
@@ -1682,7 +1729,8 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString());
+                            detailMessage: peCsId.ToString(),
+                            stagedChangeType: pendingExport.ChangeType);
                     }
 
                     // Snapshot PE attribute changes so the Causality Tree can render detail
@@ -1711,7 +1759,8 @@ public abstract class SyncTaskProcessorBase
                         targetEntityId: pe.Id,
                         targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name,
                         detailCount: pe.AttributeValueChanges.Count,
-                        detailMessage: pe.ConnectedSystemId.ToString());
+                        detailMessage: pe.ConnectedSystemId.ToString(),
+                        stagedChangeType: pe.ChangeType);
 
                     await SnapshotPendingExportChangesAsync(peOutcome, pe);
                 }
@@ -3320,7 +3369,8 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
-                    detailMessage: pendingExport.ConnectedSystemId.ToString());
+                    detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                    stagedChangeType: pendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(nestedOutcome, pendingExport);
                 // The deletion item's id is assigned here where missing, because the RPEI flush that would
                 // otherwise assign it runs after this method; the flush only fills ids in where absent.
@@ -3355,7 +3405,8 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
-                    detailMessage: pendingExport.ConnectedSystemId.ToString());
+                    detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                    stagedChangeType: pendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(cascadeOutcome, pendingExport);
                 cascadeEffectOutcome = cascadeOutcome;
             }
@@ -3557,7 +3608,8 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: stagedPendingExport.Id,
                     targetEntityDescription: targetSystemName,
                     detailCount: stagedPendingExport.AttributeValueChanges.Count,
-                    detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
+                    detailMessage: stagedPendingExport.ConnectedSystemId.ToString(),
+                    stagedChangeType: stagedPendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
                 effectOutcome = recallOutcome;
             }
@@ -4397,17 +4449,19 @@ public abstract class SyncTaskProcessorBase
                 var mvoDeletionFate = mvoDeletionDecision.Fate;
 
                 // Check if we should remove contributed attributes based on the object type setting.
-                // A configured deletion grace period no longer skips recall wholesale: an attribute with another
-                // contributor is handed to the survivor below (a safe change-of-value, not a clear), while an
-                // attribute with no other contributor is frozen (preserved) for the grace window, so identity-
-                // critical single-source values are not cleared mid-grace (mirrors
-                // ProcessObsoleteConnectedSystemObjectAsync). Recall is still skipped entirely when the MVO will
+                // An attribute with another contributor is handed to the survivor below (a safe change-of-value,
+                // not a clear); an attribute with no other contributor is recalled only when a remaining joined
+                // system is still a contributing source for the object's type (#1570), and is otherwise frozen
+                // (preserved), either for a pending deletion's grace window or as the object's last known state
+                // when only provisioned targets hold the join (mirrors ProcessObsoleteConnectedSystemObjectAsync,
+                // where the rationale is spelt out in full). Recall is still skipped entirely when the MVO will
                 // be deleted immediately, since the work would be discarded when the MVO is deleted moments later
                 // (#390).
                 int attributeChangeCount = 0;
+                var preservedNoSourceAttributeCount = 0;
                 List<MetaverseObjectAttributeValue>? recalledAttributeValues = null;
                 List<MetaverseObjectAttributeValue>? recalledAttributeAdditions = null;
-                var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero;
+                var mvoDeletionPending = mvoDeletionFate == MvoDeletionFate.DeletionScheduled || mvo.DeletionEligibleDate != null;
                 var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
                 if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !skipRecallForImmediateDeletion)
                 {
@@ -4429,15 +4483,24 @@ public abstract class SyncTaskProcessorBase
                     // contributor is still cleared (the survivor re-flow adds nothing for it).
                     await ReElectSurvivingContributorsAsync(mvo, contributedAttributes, connectedSystemObject);
 
-                    if (hasGracePeriod)
+                    _remainingImportSourceEvaluator ??= new RemainingImportSourceEvaluator(_syncRepo);
+                    var noImportSourceRemains = mvo.Type != null
+                        && !await _remainingImportSourceEvaluator.AnyImportSourceRemainsAsync(remainingConnectedSystemIds, mvo.Type.Id);
+                    if (mvoDeletionPending || noImportSourceRemains)
                     {
-                        // A deletion grace period is active: an attribute with no surviving contributor must be
-                        // frozen (preserved) until the grace window resolves, not cleared. Re-elected attributes
-                        // are still replaced (their leaver value stays marked for removal); only the leaver's
-                        // non-re-elected values are unmarked.
-                        var reElectedDuringGrace = mvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
-                        foreach (var frozen in contributedAttributes.Where(av => !reElectedDuringGrace.Contains(av.AttributeId)))
+                        // Freeze: an attribute with no surviving contributor is preserved, not cleared, either
+                        // until the grace window resolves (pending deletion) or as the object's last known state
+                        // (no import source remains). Re-elected attributes are still replaced (their leaver
+                        // value stays marked for removal); only the leaver's non-re-elected values are unmarked.
+                        var reElectedDuringFreeze = mvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
+                        var frozenValues = contributedAttributes.Where(av => !reElectedDuringFreeze.Contains(av.AttributeId)).ToList();
+                        foreach (var frozen in frozenValues)
                             mvo.PendingAttributeValueRemovals.Remove(frozen);
+
+                        // A pending deletion explains itself via the deletion outcome; the no-source
+                        // preservation gets its own ValuesPreserved outcome downstream (#1570).
+                        if (!mvoDeletionPending)
+                            preservedNoSourceAttributeCount = frozenValues.Count;
                     }
 
                     attributeChangeCount = mvo.PendingAttributeValueRemovals.Count + mvo.PendingAttributeValueAdditions.Count;
@@ -4503,7 +4566,8 @@ public abstract class SyncTaskProcessorBase
                     mvoDeletionPolicySnapshotJson: mvoDeletionPolicySnapshotJson,
                     // The MVO has been marked by this point, so its computed due date is the
                     // decision-time value the outcome node should state (#119).
-                    mvoDeletionEligibleDate: mvo.DeletionEligibleDate);
+                    mvoDeletionEligibleDate: mvo.DeletionEligibleDate,
+                    preservedNoSourceAttributeCount: preservedNoSourceAttributeCount);
         }
     }
 

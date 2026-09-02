@@ -187,6 +187,17 @@ public class ConnectedSystem : IAuditable
             : PendingInitialPassword.DefaultTimeToLive;
 
     /// <summary>
+    /// Set when the Connector Space is cleared: clearing hard-deletes Connected System Objects without
+    /// obsoletion, so Metaverse attribute values contributed by source objects that never return survive
+    /// with live provenance and no joined Connected System Object, indefinitely stranded (#1549). Consumed
+    /// by the next Full Synchronisation, which recalls the stranded values (surviving-contributor
+    /// re-election or a No Contributor clear, per the shipped #1537/#809 recall engine) and clears this flag
+    /// on completion. Default false; a migration self-heal sets it true for every existing system so
+    /// pre-feature strays are swept once.
+    /// </summary>
+    public bool StrandedValueSweepPending { get; set; }
+
+    /// <summary>
     /// EF back-link.
     /// </summary>
     public List<Activity>? Activities { get; set; }

@@ -40,6 +40,17 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// The persisted deletion task for a Connected System (any status), with its Activity, or null when
+        /// none is queued or processing. Used by the fenced-system deletion exits (#809): a surviving task
+        /// means the run is queued or executing (its checkpoint intact); no task on a fenced system means a
+        /// run failed and its row was removed at the worker's boundary.
+        /// </summary>
+        public async Task<DeleteConnectedSystemWorkerTask?> GetDeleteConnectedSystemWorkerTaskAsync(int connectedSystemId)
+        {
+            return await Application.Repository.Tasking.GetDeleteConnectedSystemWorkerTaskAsync(connectedSystemId);
+        }
+
+        /// <summary>
         /// Retrieves a list of the current tasks, with any inherited task information formatted into the name,
         /// i.e. Connected System name and Connected System Run Profile name for a SynchronisationWorkerTask.
         /// </summary>
@@ -151,6 +162,17 @@ namespace JIM.Application.Servers
                 // every crud operation requires tracking with an activity...
                 // Core: only .Name is read for activity context.
                 var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+
+                // A Deleting Connected System is fenced (#809): its Connector Space must not be cleared while
+                // its own deletion or Synchronised Deprovisioning run is in flight, mirroring the fencing
+                // already applied to run profile execution above. This is the single choke point every clear
+                // path (portal, REST, PowerShell) queues through.
+                if (connectedSystem?.Status == ConnectedSystemStatus.Deleting)
+                {
+                    return WorkerTaskCreationResult.Failed(
+                        $"Connected System '{connectedSystem.Name}' is being deleted; its Connector Space cannot be cleared.");
+                }
+
                 var activity = new Activity
                 {
                     TargetName = connectedSystem?.Name,
@@ -185,6 +207,12 @@ namespace JIM.Application.Servers
                 // runs the deletion (the reason is transient on the task and never persisted there).
                 if (!string.IsNullOrWhiteSpace(deleteConnectedSystemTask.ChangeReason))
                     activity.ChangeReason = deleteConnectedSystemTask.ChangeReason.Trim();
+
+                // A finish-immediately deletion on a fenced system abandons the remaining Synchronised
+                // Deprovisioning work (#809); record that on the Activity at queue time so the audit trail
+                // says so however the task ends.
+                if (deleteConnectedSystemTask.AbandonsDeprovisioningRun)
+                    activity.Message = ConnectedSystemServer.SynchronisedDeprovisioningAbandonedMessage;
 
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
