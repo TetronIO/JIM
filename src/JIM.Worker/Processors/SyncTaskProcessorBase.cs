@@ -892,9 +892,9 @@ public abstract class SyncTaskProcessorBase
         // and folds the staged output into the page-flush accumulators, so run-time behaviour is unchanged.
         // The Metaverse Object deletion rule is evaluated AND applied via ProcessMvoDeletionRuleAsync,
         // left in this processor because applying the decision is entangled with the flush machinery here
-        // (immediate-deletion queueing with cross-object dedup, grace-period persistence with Activity
-        // initiator attribution) and is shared with the withdrawal-recall path; the core drives when it
-        // runs and consumes its verdict.
+        // (immediate-deletion queueing with cross-object dedup, grace-period marker queueing onto the
+        // page-flush MVO update batch with Activity initiator attribution) and is shared with the
+        // withdrawal-recall path; the core drives when it runs and consumes its verdict.
         _remainingImportSourceEvaluator ??= new RemainingImportSourceEvaluator(_syncRepo);
         var result = await ConnectedSystemObjectObsoletionService.ProcessObsoleteConnectedSystemObjectAsync(
             connectedSystemObject,
@@ -925,7 +925,10 @@ public abstract class SyncTaskProcessorBase
             _obsoleteCsosToDelete.Add((cso, executionItem));
         if (result.MvoAttributeChange is { } mvoChange)
             _pendingMvoChanges.Add((mvoChange.Mvo, mvoChange.Additions, mvoChange.Removals, mvoChange.ChangeType, mvoChange.ExecutionItem, null));
-        if (result.MvoToUpdate != null)
+        // Dedupe: ProcessMvoDeletionRuleAsync (invoked earlier inside the core, via the
+        // processMvoDeletionRuleAsync delegate) may already have queued this same MVO instance for its
+        // grace-period deletion markers, ahead of the attribute-recall change staged here.
+        if (result.MvoToUpdate != null && !_pendingMvoUpdates.Contains(result.MvoToUpdate))
             _pendingMvoUpdates.Add(result.MvoToUpdate);
         if (result.ExportEvaluation is { } exportEvaluation)
             _pendingExportEvaluations.Add((exportEvaluation.Mvo, exportEvaluation.ChangedAttributes, exportEvaluation.RemovedAttributes));
@@ -1066,7 +1069,8 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Applies an MVO deletion decision from the engine — handles I/O (queuing immediate deletion or persisting grace period).
+    /// Applies an MVO deletion decision from the engine — handles I/O (queuing immediate deletion or
+    /// queueing the grace-period markers onto the page-flush MVO update batch).
     /// </summary>
     private async Task<MvoDeletionFate> ApplyMvoDeletionDecisionAsync(MetaverseObject mvo, MvoDeletionDecision decision, int disconnectingSystemId, string? policySnapshotJson)
     {
@@ -1090,12 +1094,14 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Processes MVO deletion based on grace period configuration.
     /// For 0-grace-period: queues for immediate synchronous deletion at page flush.
-    /// For grace period > 0: marks for deferred deletion by housekeeping.
+    /// For grace period > 0: marks for deferred deletion by housekeeping, queueing the marker fields onto
+    /// the ordinary page-flush MVO update batch rather than persisting them immediately (see the grace
+    /// branch below for why).
     /// </summary>
     /// <param name="mvo">The Metaverse Object to process for deletion.</param>
     /// <param name="reason">A description of why the MVO is being deleted (for logging).</param>
     /// <param name="triggeringSystemId">The Connected System whose disconnection triggered the deletion (#119).</param>
-    /// <param name="policySnapshotJson">The decision-time policy snapshot to persist at mark-time so housekeeping can carry it onto the final deletion record (#119).</param>
+    /// <param name="policySnapshotJson">The decision-time policy snapshot to queue at mark-time so housekeeping can carry it onto the final deletion record (#119).</param>
     private async Task<MvoDeletionFate> MarkMvoForDeletionAsync(MetaverseObject mvo, string reason, int triggeringSystemId, string? policySnapshotJson)
     {
         var gracePeriod = mvo.Type!.DeletionGracePeriod;
@@ -1143,8 +1149,24 @@ public abstract class SyncTaskProcessorBase
                 "MarkMvoForDeletionAsync: MVO {MvoId} marked for deletion ({Reason}). Eligible after {GracePeriod}. Initiator: {Initiator}. Triggered by system {TriggeringSystemId}.",
                 mvo.Id, reason, gracePeriod.Value, _activity.InitiatedByName ?? "Unknown", triggeringSystemId);
 
-            // Persist the LastConnectorDisconnectedDate, initiator info, triggering system and snapshot
-            await _syncRepo.UpdateMetaverseObjectAsync(mvo);
+            // Queue the LastConnectorDisconnectedDate, initiator info, triggering system and snapshot for
+            // the page-flush batch update rather than persisting immediately here. This method runs during
+            // Pass 1, before the flush sets AutoDetectChangesEnabled=false, so an immediate SaveChangesAsync
+            // on the shared sync DbContext would still walk every tracked entity's navigation properties -
+            // including the tracked Activity's RunProfileExecutionItems collection, which holds this page's
+            // RPEIs (created moments earlier for this CSO's disconnection). DetectChanges finds them as new
+            // and inserts them early; the page flush's own raw-SQL RPEI insert then collides on the same Id
+            // ("duplicate key value violates unique constraint"), failing the whole Activity. The marker
+            // fields are plain scalar columns, so the ordinary batch MVO update
+            // (PersistPendingMetaverseObjectsAsync -> UpdateMetaverseObjectsAsync) persists them correctly:
+            // it uses UpdateDetachedSafe (Entry().State = Modified on the MVO alone), which never triggers a
+            // context-wide DetectChanges. Guard against double-queueing: this method is reached via
+            // ProcessMvoDeletionRuleAsync, called both from the CSO obsoletion path (whose caller,
+            // ProcessObsoleteConnectedSystemObjectAsync, separately queues the same MVO for any
+            // attribute-recall changes once this call returns) and from HandleCsoOutOfScopeAsync, either of
+            // which may already have queued this same MVO instance.
+            if (!_pendingMvoUpdates.Contains(mvo))
+                _pendingMvoUpdates.Add(mvo);
             return MvoDeletionFate.DeletionScheduled;
         }
     }
