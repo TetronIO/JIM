@@ -6,8 +6,10 @@ using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Worker.Processors;
+using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Workflows;
@@ -279,7 +281,286 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// Regression coverage for issue #1610: <c>HandleCsoOutOfScopeAsync</c> carried the identical
+    /// mid-page hazard as the grace-period deletion path fixed above (#1613), for a joined CSO falling
+    /// out of its import Synchronisation Rule's scope (<c>InboundOutOfScopeAction.Disconnect</c>) rather
+    /// than being obsoleted. Before the fix, the Disconnect branch applied the recalled attribute changes
+    /// and called the single-entity <c>UpdateMetaverseObjectAsync</c> directly, mid-page, while
+    /// <c>AutoDetectChangesEnabled</c> is still true; in production that walks the tracked Activity's
+    /// freshly-added RPEIs and inserts them early, colliding with the page flush's own raw-SQL RPEI
+    /// insert. The fix routes the same MVO onto the page-flush batch via <c>QueueMvoForUpdate</c> instead.
+    /// <para>
+    /// This scenario uses a second, unscoped Connected System (Training) that joins the same Metaverse
+    /// Object via matching but never contributes the recalled attribute (Description). That is what makes
+    /// this a genuine clear rather than a freeze: <c>HandleCsoOutOfScopeAsync</c> preserves a
+    /// no-surviving-contributor attribute instead of clearing it whenever no import-capable Connected
+    /// System remains joined to the Metaverse Object (or a deletion is pending), and a single-source
+    /// topology always falls into that case. Training remaining joined (with an import rule for the same
+    /// Metaverse Object Type) is what keeps a surviving import source in play, so Description is asserted
+    /// gone rather than frozen.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task FullSync_OutOfScopeDisconnectWithSurvivingImportSource_QueuesRecallOnTheBatchFlushInsteadOfMidPageSaveAsync()
+    {
+        const string SharedEmployeeId = "EMP001";
+        const string HrDescription = "HR Description";
+
+        // Arrange: HR (scoped on EmployeeId, contributes DisplayName/EmployeeId/Description) and
+        // Training (unscoped, contributes only EmployeeId - the join key), joined to the same MVO.
+        var hrSystem = await CreateConnectedSystemAsync("HR Source");
+        var hrExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var hrDisplayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
+        var hrEmployeeIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
+        var hrDescriptionAttr = new ConnectedSystemObjectTypeAttribute { Name = "Description", Type = AttributeDataType.Text, Selected = true };
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "HrUser",
+            new List<ConnectedSystemObjectTypeAttribute> { hrExternalIdAttr, hrDisplayNameAttr, hrEmployeeIdAttr, hrDescriptionAttr });
+        hrType.RemoveContributedAttributesOnObsoletion = true;
+
+        var trainingSystem = await CreateConnectedSystemAsync("Training Source");
+        var trainingExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var trainingEmployeeIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
+        var trainingType = await CreateCsoTypeAsync(trainingSystem.Id, "TrainingRecord",
+            new List<ConnectedSystemObjectTypeAttribute> { trainingExternalIdAttr, trainingEmployeeIdAttr });
+
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync("Person", MetaverseObjectDeletionRule.Manual);
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
+        var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
+        var mvDescriptionAttr = new MetaverseAttribute
+        {
+            Name = "Description",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+        DbContext.MetaverseAttributes.Add(mvDescriptionAttr);
+        await DbContext.SaveChangesAsync();
+        mvType.Attributes.Add(mvDescriptionAttr);
+
+        var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+        hrImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = hrImportRule,
+            SyncRuleId = hrImportRule.Id,
+            TargetMetaverseAttribute = mvDisplayNameAttr,
+            TargetMetaverseAttributeId = mvDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = hrDisplayNameAttr, ConnectedSystemAttributeId = hrDisplayNameAttr.Id } }
+        });
+        hrImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = hrImportRule,
+            SyncRuleId = hrImportRule.Id,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = hrEmployeeIdAttr, ConnectedSystemAttributeId = hrEmployeeIdAttr.Id } }
+        });
+        hrImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = hrImportRule,
+            SyncRuleId = hrImportRule.Id,
+            TargetMetaverseAttribute = mvDescriptionAttr,
+            TargetMetaverseAttributeId = mvDescriptionAttr.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = hrDescriptionAttr, ConnectedSystemAttributeId = hrDescriptionAttr.Id } }
+        });
+        hrImportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    ConnectedSystemAttribute = hrEmployeeIdAttr,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = SharedEmployeeId,
+                    CaseSensitive = true
+                }
+            }
+        });
+        await DbContext.SaveChangesAsync();
+
+        // CaseSensitive: the in-memory store does not support EF.Functions.ILike (PostgreSQL-specific).
+        var trainingImportRule = await CreateImportSyncRuleAsync(trainingSystem.Id, trainingType, mvType, "Training Import", enableProjection: false);
+        trainingImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            SyncRule = trainingImportRule,
+            SyncRuleId = trainingImportRule.Id,
+            Order = 0,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = { new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = trainingEmployeeIdAttr, ConnectedSystemAttributeId = trainingEmployeeIdAttr.Id } }
+        });
+        await DbContext.SaveChangesAsync();
+
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", SharedEmployeeId);
+        hrCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = hrDescriptionAttr.Id, Attribute = hrDescriptionAttr, StringValue = HrDescription, ConnectedSystemObject = hrCso
+        });
+        var trainingCso = await CreateCsoAsync(trainingSystem.Id, trainingType, "unused", SharedEmployeeId);
+
+        // Full Sync both: HR projects and flows Description; Training joins via the EmployeeId match
+        // without ever contributing Description, so it counts as a surviving import source only.
+        await RunFullSyncAsync(hrSystem);
+        await RunFullSyncAsync(trainingSystem);
+
+        var reloadedHrCso = await ReloadEntityAsync(hrCso);
+        Assert.That(reloadedHrCso.MetaverseObjectId, Is.Not.Null, "precondition: HR CSO must be joined after Full Sync");
+        var mvoId = reloadedHrCso.MetaverseObjectId!.Value;
+
+        var mvoBefore = SyncRepo.MetaverseObjects[mvoId];
+        Assert.That(
+            mvoBefore.AttributeValues.SingleOrDefault(av => av.AttributeId == mvDescriptionAttr.Id && !av.NullValue)?.StringValue,
+            Is.EqualTo(HrDescription), "precondition: Description flowed from HR while in scope");
+
+        // Isolate the assertion to the scope-exit run.
+        _spySyncRepo.SingleMvoUpdateCallCount = 0;
+        _spySyncRepo.BatchMvoUpdateIds.Clear();
+
+        // Act: push HR out of scope and re-sync just HR. This drives HandleCsoOutOfScopeAsync's
+        // Disconnect branch mid-page.
+        var empIdValue = reloadedHrCso.AttributeValues.Single(av => av.AttributeId == hrEmployeeIdAttr.Id);
+        empIdValue.StringValue = "OUT_OF_SCOPE";
+        reloadedHrCso.LastUpdated = DateTime.UtcNow;
+        await RunFullSyncAsync(hrSystem);
+
+        var mvo = SyncRepo.MetaverseObjects[mvoId];
+        var hrCsoAfter = SyncRepo.ConnectedSystemObjects[reloadedHrCso.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            // The interaction assertion: before the fix, HandleCsoOutOfScopeAsync's Disconnect branch
+            // called the single-entity UpdateMetaverseObjectAsync directly after ApplyPendingMetaverseObjectAttributeChanges,
+            // so this assertion fails with a call count of 1.
+            Assert.That(_spySyncRepo.SingleMvoUpdateCallCount, Is.Zero,
+                "An out-of-scope disconnect must never persist the Metaverse Object via the single-entity update " +
+                "path mid-page. In production that path performs Database.Update() + an immediate " +
+                "SaveChangesAsync while AutoDetectChangesEnabled is still true, which walks the tracked " +
+                "Activity's RunProfileExecutionItems collection and inserts this page's RPEIs early; the page " +
+                "flush's own raw-SQL RPEI insert then collides on the same Id.");
+            Assert.That(_spySyncRepo.BatchMvoUpdateIds, Does.Contain(mvoId),
+                "The recalled attribute changes must instead be queued onto the ordinary page-flush batch " +
+                "update (PersistPendingMetaverseObjectsAsync -> UpdateMetaverseObjectsAsync).");
+
+            // The observable-state assertions: the fix must not merely avoid the dangerous call, the
+            // recall and the join break must still land correctly via the batch path.
+            Assert.That(hrCsoAfter.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined), "the CSO's join must be broken");
+            Assert.That(hrCsoAfter.MetaverseObjectId, Is.Null, "the CSO's MVO reference must be cleared");
+
+            var description = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == mvDescriptionAttr.Id && !av.NullValue);
+            Assert.That(description, Is.Null,
+                "Description has no surviving contributor (Training never mapped it), so the recall must " +
+                "genuinely clear it via the batch flush, not merely avoid the dangerous call");
+        }
+    }
+
+    /// <summary>
+    /// Companion regression for #1610: when the CSO falling out of scope is the Metaverse Object's LAST
+    /// remaining connector and a deletion grace period is configured, <c>ProcessMvoDeletionRuleAsync</c>
+    /// (called earlier in <c>HandleCsoOutOfScopeAsync</c>'s Disconnect branch) already queues the SAME MVO
+    /// instance via <c>QueueMvoForUpdate</c> for the grace-period markers, before the fix's own
+    /// <c>QueueMvoForUpdate</c> call runs at the end of the method. Both calls pass the identical CLR
+    /// reference (there is only one load in this call), so <c>QueueMvoForUpdate</c>'s
+    /// <c>ReferenceEquals</c> short-circuit must silently no-op the second call rather than adding a
+    /// duplicate batch entry.
+    /// </summary>
+    [Test]
+    public async Task FullSync_OutOfScopeDisconnectTriggersGraceDeletion_ConsolidatesOntoOneBatchEntryAsync()
+    {
+        // Arrange: a single source, scoped import rule, and a WhenLastConnectorDisconnected deletion
+        // rule with a grace period.
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            gracePeriod: TimeSpan.FromDays(30));
+        var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
+        var csoEmployeeIdAttr = sourceType.Attributes.First(a => a.Name == "EmployeeId");
+        importRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    ConnectedSystemAttribute = csoEmployeeIdAttr,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "EMP001",
+                    CaseSensitive = true
+                }
+            }
+        });
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+
+        await RunFullSyncAsync(sourceSystem);
+
+        cso = await ReloadEntityAsync(cso);
+        Assert.That(cso.MetaverseObjectId, Is.Not.Null, "precondition: the CSO must be joined to an MVO after Full Sync");
+        var mvoId = cso.MetaverseObjectId!.Value;
+
+        _spySyncRepo.SingleMvoUpdateCallCount = 0;
+        _spySyncRepo.BatchMvoUpdateIds.Clear();
+
+        // Act: fall out of scope. The CSO is the sole (and therefore last) connector, so the deletion
+        // rule schedules a grace-period deletion in the same call that also breaks the join.
+        var empIdValue = cso.AttributeValues.Single(av => av.Attribute?.Name == "EmployeeId");
+        empIdValue.StringValue = "OUT_OF_SCOPE";
+        cso.LastUpdated = DateTime.UtcNow;
+        await RunFullSyncAsync(sourceSystem);
+
+        var mvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
+        var csoAfter = SyncRepo.ConnectedSystemObjects[cso.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_spySyncRepo.SingleMvoUpdateCallCount, Is.Zero,
+                "An out-of-scope disconnect that also schedules a grace-period deletion must never persist " +
+                "the Metaverse Object via the single-entity update path mid-page.");
+            Assert.That(_spySyncRepo.BatchMvoUpdateIds.Count(id => id == mvoId), Is.EqualTo(1),
+                "QueueMvoForUpdate must collapse the deletion rule's enqueue and the Disconnect branch's own " +
+                "enqueue onto the SAME MVO instance silently (ReferenceEquals short-circuit): exactly one " +
+                "entry must ever reach the page-flush batch update, not two.");
+
+            Assert.That(mvo, Is.Not.Null, "grace period > 0 defers deletion; the MVO must still exist");
+            Assert.That(mvo!.LastConnectorDisconnectedDate, Is.Not.Null,
+                "the grace-period marker must be persisted via the batch flush");
+            Assert.That(csoAfter.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined), "the CSO's join must be broken");
+            Assert.That(csoAfter.MetaverseObjectId, Is.Null, "the CSO's MVO reference must be cleared");
+        }
+    }
+
     #region helpers
+
+    /// <summary>
+    /// Runs a Full Sync for a Connected System. Reloads the entity first so a caller that mutated it
+    /// via a different tracked instance (or a prior sync) still passes a valid reference to the processor.
+    /// </summary>
+    /// <remarks>
+    /// Clears DbContext's change tracker after the run. The sync engine itself never touches DbContext
+    /// for MVOs (it goes through <c>SyncRepo</c>, the in-memory fake), but EF's own navigation fixup can
+    /// still reach a newly-created MVO through a tracked configuration entity (e.g. its Metaverse Object
+    /// Type) during the next <c>DetectChanges()</c>. Left tracked across two systems' Full Syncs, a stale
+    /// instance from an earlier one collides with the <c>SpySyncRepository</c>'s deliberately-cloned
+    /// instance a later system's matching-rule join returns (see
+    /// <see cref="SpySyncRepository.FindMetaverseObjectUsingMatchingRuleAsync"/>): DbContext reports
+    /// "another instance with the same key value is already being tracked" on the next
+    /// <c>ChangeTracker.Entries()</c> call (inside <see cref="WorkflowTestBase.CreateRunProfileAsync"/>) -
+    /// a test-harness artefact, not the production behaviour under test. <c>Clear()</c> (rather than a
+    /// targeted per-entity detach) is what actually prevents it: it drops every tracked reference,
+    /// including whatever fixup already wired into a still-tracked entity's navigation collection, without
+    /// itself running <c>DetectChanges()</c>.
+    /// </remarks>
+    private async Task RunFullSyncAsync(ConnectedSystem connectedSystem)
+    {
+        var reloaded = await ReloadEntityAsync(connectedSystem);
+        var profile = await CreateRunProfileAsync(reloaded.Id, $"{reloaded.Name} Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        DbContext.ChangeTracker.Clear();
+    }
 
     /// <summary>
     /// Creates a Metaverse Object Type with specific deletion rule settings. Duplicated from
