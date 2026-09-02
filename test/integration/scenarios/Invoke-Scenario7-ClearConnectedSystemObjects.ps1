@@ -173,17 +173,9 @@ function Get-JIMMetaverseObjectByEmployeeId {
 
 # -----------------------------------------------------------------------------------------------------------------
 # Helper: Count live ConnectedSystemObjects rows joined to a Metaverse Object, optionally restricted to
-# one Connected System, via direct psql query.
-#
-# Not via the REST API: GET /api/v1/metaverse/objects/{id} (Get-JIMMetaverseObject -Id) is backed by
-# MetaverseRepository.GetMetaverseObjectWithProvenanceAsync, which does not .Include(mo =>
-# mo.ConnectedSystemObjects) - it was written for #91's Attribute Priority provenance (contributing
-# Connected System / Synchronisation Rule per value) and never gained that navigation. As a result
-# MetaverseObjectDto.ConnectedSystemObjects is ALWAYS an empty array on the wire, regardless of the
-# object's actual join state. This is a pre-existing gap unrelated to the stranded-value sweep this
-# scenario tests (predates it by several months; see the final report for the write-up), so this
-# scenario queries the database directly instead of asserting against the broken field, following the
-# existing Assert-ExportRpeisHaveCsoLink precedent for "the API doesn't expose it (yet), psql does".
+# one Connected System, via the Metaverse Object detail endpoint (GET /api/v1/metaverse/objects/{id}),
+# whose ConnectedSystemObjects field is now populated by MetaverseRepository.GetMetaverseObjectWithProvenanceAsync
+# (fixed under #1606; it previously always returned an empty array).
 # -----------------------------------------------------------------------------------------------------------------
 function Get-JoinedConnectedSystemObjectCount {
     param(
@@ -194,15 +186,14 @@ function Get-JoinedConnectedSystemObjectCount {
         [int]$ConnectedSystemId
     )
 
-    $systemFilter = if ($PSBoundParameters.ContainsKey('ConnectedSystemId')) { "AND ""ConnectedSystemId"" = $ConnectedSystemId" } else { "" }
-    $query = "SELECT COUNT(*) FROM ""ConnectedSystemObjects"" WHERE ""MetaverseObjectId"" = '$MvoId' $systemFilter;"
+    $mvo = Get-JIMMetaverseObject -Id $MvoId
+    $connectedSystemObjects = @($mvo.connectedSystemObjects)
 
-    $result = docker compose exec -T jim.database psql -t -A -U jim -d jim -c $query 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Get-JoinedConnectedSystemObjectCount: psql query failed for MVO $($MvoId): $result"
+    if ($PSBoundParameters.ContainsKey('ConnectedSystemId')) {
+        $connectedSystemObjects = @($connectedSystemObjects | Where-Object { $_.connectedSystemId -eq $ConnectedSystemId })
     }
 
-    return [int]($result | Out-String).Trim()
+    return $connectedSystemObjects.Count
 }
 
 try {
