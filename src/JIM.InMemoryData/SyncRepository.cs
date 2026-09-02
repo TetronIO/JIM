@@ -1015,7 +1015,14 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult<MetaverseObject?>(null);
     }
 
-    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
+    // Virtual so tests can simulate the identity split a real EF load produces (the SamePageJoinConflict
+    // page-flush regression coverage): production's matching query and an already-loaded CSO's own
+    // MetaverseObject navigation are separate database round trips, so a CSO obsoleted earlier in the same
+    // page and a CSO joining via matching can end up with two distinct CLR instances of the same MVO row.
+    // This dictionary-backed store returns the one stored reference for every lookup, so it cannot
+    // reproduce that split on its own; a spy overriding this method can clone the match to reproduce it
+    // deterministically. Matches the virtual precedent on the update/delete methods above.
+    public virtual Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
         ConnectedSystemObject connectedSystemObject,
         MetaverseObjectType metaverseObjectType,
         ObjectMatchingRule rule)

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -270,6 +271,85 @@ public class MetaverseObjectBulkUpdateDatabaseTests
         await seed.SaveChangesAsync();
 
         return (system.Id, firstRule.Id, secondRule.Id);
+    }
+
+    /// <summary>
+    /// Real-PostgreSQL coverage for the SamePageJoinConflict defensive collapse in
+    /// <c>UpdateMetaverseObjectsBulkAsync</c>: two distinct <see cref="MetaverseObject"/> CLR instances for the
+    /// SAME Id reaching one batch update call must not corrupt the write. This is the flush-side backstop for
+    /// SyncTaskProcessorBase's page-flush accumulator, whose own queue-time dedup guard
+    /// (<c>QueueMvoForUpdate</c>) is meant to prevent this shape from ever reaching here at all; this test
+    /// proves the method survives a regression of that guard rather than aborting the whole Activity.
+    /// <para>
+    /// Pre-fix, this reproduces the real integration failure from Scenario 5's SamePageJoinConflict step:
+    /// PostgreSQL applies a duplicate-keyed <c>UPDATE ... FROM (VALUES ...)</c> row nondeterministically
+    /// (here, observably losing the deletion markers when the attribute-flow instance's row wins), and if
+    /// the two instances happened to contribute the identical new attribute value Id twice, the raw SQL
+    /// INSERT (no <c>ON CONFLICT</c>) would fail outright on <c>PK_MetaverseObjectAttributeValues</c>. The
+    /// in-memory provider cannot reproduce either failure mode (no constraints, no VALUES-list semantics),
+    /// so only a real round trip proves the collapse works.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectsAsync_DistinctInstancesForSameId_CollapsesAndPreservesDeletionMarkersAsync()
+    {
+        var ids = await SeedTypeAsync();
+
+        await using var ctx = NewContext();
+        var repo = new PostgresDataRepository(ctx);
+        var personType = await ctx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
+
+        // Seed the MVO as it would exist before the conflicting page: one existing, unrelated attribute value.
+        var existingValue = TextValue(ids.DepartmentId, "Sales");
+        var seedMvo = new MetaverseObject { Type = personType!, AttributeValues = { existingValue } };
+        await repo.Sync.CreateMetaverseObjectsAsync(new[] { seedMvo });
+        var mvoId = seedMvo.Id;
+
+        // Instance A: what MarkMvoForDeletionAsync's grace branch queues - the obsoleting CSO's own,
+        // already-loaded MVO instance, carrying only the scalar deletion markers.
+        var deletionOnlyInstance = new MetaverseObject
+        {
+            Id = mvoId,
+            Type = personType!,
+            AttributeValues = { existingValue },
+            LastConnectorDisconnectedDate = DateTime.UtcNow,
+            DeletionInitiatedByType = ActivityInitiatorType.System,
+            DeletionTriggeredBySystemId = 7,
+            DeletionTriggeredBySystemName = "HR System",
+            DeletionPolicySnapshotJson = """{"deletionRule":"WhenLastConnectorDisconnected"}"""
+        };
+
+        // Instance C: what the join/Attribute Flow path queues - a separately-loaded instance (no deletion
+        // markers, as a fresh load performed before Pass 1's in-memory-only marker write would see) that
+        // has flowed a new attribute value onto it.
+        var newValue = TextValue(ids.DisplayNameId, "Alice Example");
+        var attributeFlowInstance = new MetaverseObject
+        {
+            Id = mvoId,
+            Type = personType!,
+            AttributeValues = { existingValue, newValue }
+        };
+
+        // Must not throw, and must not silently corrupt either side's state.
+        await repo.Sync.UpdateMetaverseObjectsAsync(new[] { deletionOnlyInstance, attributeFlowInstance });
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.MetaverseObjects
+            .AsNoTracking()
+            .Include(o => o.AttributeValues)
+            .SingleAsync(o => o.Id == mvoId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.LastConnectorDisconnectedDate, Is.Not.Null,
+                "the deletion markers carried only by the discarded instance must survive the collapse");
+            Assert.That(persisted.DeletionTriggeredBySystemId, Is.EqualTo(7));
+            Assert.That(persisted.DeletionPolicySnapshotJson, Is.Not.Null.And.Not.Empty);
+            Assert.That(persisted.AttributeValues.Count(av => av.AttributeId == ids.DisplayNameId), Is.EqualTo(1),
+                "the join's flowed attribute value must be inserted exactly once, not lost or duplicated");
+            Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DepartmentId), Is.True,
+                "the pre-existing, untouched value must survive");
+        }
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Worker.Processors;
 using NUnit.Framework;
@@ -133,6 +134,151 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// Regression coverage for the SamePageJoinConflict identity-split bug: when a page's Pass 1 schedules a
+    /// grace-period deletion on a Metaverse Object (via the obsoleting CSO's own, already-loaded MVO
+    /// instance) and Pass 2 joins a DIFFERENT CSO to that same Metaverse Object via matching (which, in
+    /// production, performs a separate database load and so returns a distinct CLR instance of the same
+    /// row), the previous reference-equality <c>Contains()</c> guard on <c>_pendingMvoUpdates</c> could not
+    /// see the collision: both instances were queued, and the real-PostgreSQL batch flush either applied a
+    /// nondeterministic UPDATE (duplicate-keyed VALUES row) or failed outright on a duplicate-key attribute
+    /// value INSERT, aborting the whole Activity.
+    /// <para>
+    /// The in-memory <see cref="JIM.InMemoryData.SyncRepository"/>'s matching lookup returns the exact
+    /// object reference it has stored, so it cannot reproduce the identity split on its own: Pass 1 and
+    /// Pass 2 would operate on the SAME instance, masking the bug entirely. <see cref="SpySyncRepository"/>
+    /// overrides the matching lookup to return a clone instead, deterministically reproducing what a
+    /// genuine separate EF load produces in production, so this test can drive the real two-pass page
+    /// pipeline (<see cref="SyncDeltaSyncTaskProcessor.PerformDeltaSyncAsync"/>) and still observe the
+    /// collision. This is the "workflow level" reproduction the fix's test plan asked for; the
+    /// alternative would have been calling the (deliberately private) QueueMvoForUpdate consolidation
+    /// helper directly via a lower-level harness, which this achieves without needing to loosen that
+    /// method's accessibility.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task DeltaSync_GracePeriodDeletionWithSamePageJoin_ConsolidatesOntoOneMvoInstanceAsync()
+    {
+        const string RekeyedDisplayName = "John Smith II";
+
+        // Arrange: an import Synchronisation Rule that both projects (for the first CSO) and matches on
+        // EmployeeId (so a second CSO can rekey the same identity by joining, rather than projecting a
+        // brand new Metaverse Object).
+        var sourceSystem = await CreateConnectedSystemAsync("Source HR System");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            gracePeriod: TimeSpan.FromDays(30));
+        var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
+
+        var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
+        var csoEmployeeIdAttr = sourceType.Attributes.First(a => a.Name == "EmployeeId");
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
+        var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
+
+        importRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = importRule,
+            SyncRuleId = importRule.Id,
+            TargetMetaverseAttribute = mvDisplayNameAttr,
+            TargetMetaverseAttributeId = mvDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = csoDisplayNameAttr,
+                ConnectedSystemAttributeId = csoDisplayNameAttr.Id
+            }}
+        });
+        importRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = importRule,
+            SyncRuleId = importRule.Id,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = csoEmployeeIdAttr,
+                ConnectedSystemAttributeId = csoEmployeeIdAttr.Id
+            }}
+        });
+        // CaseSensitive: the in-memory store does not support EF.Functions.ILike (PostgreSQL-specific).
+        importRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            SyncRule = importRule,
+            SyncRuleId = importRule.Id,
+            Order = 0,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = { new ObjectMatchingRuleSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = csoEmployeeIdAttr,
+                ConnectedSystemAttributeId = csoEmployeeIdAttr.Id
+            }}
+        });
+        await DbContext.SaveChangesAsync();
+
+        var csoA = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", employeeId: "E100");
+
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        csoA = await ReloadEntityAsync(csoA);
+        Assert.That(csoA.MetaverseObjectId, Is.Not.Null, "precondition: CSO A must be projected to an MVO after Full Sync");
+        var mvoId = csoA.MetaverseObjectId!.Value;
+
+        // Isolate the assertion to the delta sync run below.
+        _spySyncRepo.SingleMvoUpdateCallCount = 0;
+        _spySyncRepo.BatchMvoUpdateIds.Clear();
+
+        // Obsolete CSO A (Pass 1 will schedule the grace-period deletion) and, in the SAME page, seed a
+        // second CSO that rekeys the same identity via matching (Pass 2 will join it).
+        await MarkCsoAsObsoleteAsync(csoA);
+        var csoB = await CreateCsoAsync(sourceSystem.Id, sourceType, RekeyedDisplayName, employeeId: "E100", lastUpdated: DateTime.UtcNow);
+
+        var deltaSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+
+        // Act: process both CSOs in one page. Pass 1 obsoletes CSO A and queues its own MVO instance for
+        // the grace-period deletion markers; Pass 2 joins CSO B via matching, which (via the spy) returns a
+        // distinct clone of the same MVO row rather than the stored instance - the SamePageJoinConflict shape.
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, deltaSyncProfile, deltaSyncActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        var mvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo, Is.Not.Null, "the MVO must still exist (grace period > 0 defers deletion to housekeeping)");
+            Assert.That(mvo!.LastConnectorDisconnectedDate, Is.Not.Null,
+                "the grace-period deletion marker queued from CSO A's obsoletion must survive consolidation " +
+                "with the distinct MVO instance CSO B's join queued for the same Id");
+            Assert.That(mvo.DeletionTriggeredBySystemId, Is.EqualTo(sourceSystem.Id),
+                "the triggering system marker must survive consolidation");
+            Assert.That(mvo.DeletionPolicySnapshotJson, Is.Not.Null.And.Not.Empty,
+                "the decision-time policy snapshot must survive consolidation");
+
+            // The join's flowed attribute state must also survive: CSO B's DisplayName, not CSO A's stale
+            // one, proves the fix kept the attribute-bearing instance rather than discarding it in favour
+            // of the deletion-only one.
+            var displayNameValue = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == mvDisplayNameAttr.Id);
+            Assert.That(displayNameValue?.StringValue, Is.EqualTo(RekeyedDisplayName),
+                "CSO B's flowed DisplayName must survive consolidation, proving the join's Attribute Flow was not discarded");
+
+            // The observable proof that QueueMvoForUpdate deduped by Id rather than merely producing a
+            // correct-by-luck final dictionary state: exactly one entry for this MVO Id must ever have
+            // reached the batch flush call.
+            Assert.That(_spySyncRepo.BatchMvoUpdateIds.Count(id => id == mvoId), Is.EqualTo(1),
+                "QueueMvoForUpdate must dedupe by Id: only one entry for this MVO should ever reach the " +
+                "page-flush batch update, not two distinct instances of it");
+        }
+    }
+
     #region helpers
 
     /// <summary>
@@ -201,8 +347,9 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
 
     /// <summary>
     /// Spies on both Metaverse Object update paths so the test can assert which one a grace-period
-    /// deletion actually uses. Both base methods are virtual for exactly this purpose (see
-    /// <c>JIM.InMemoryData.SyncRepository</c>).
+    /// deletion actually uses, and reproduces the identity split a real EF load produces so the
+    /// SamePageJoinConflict regression coverage can drive the real two-pass page pipeline. All three base
+    /// methods are virtual for exactly this purpose (see <c>JIM.InMemoryData.SyncRepository</c>).
     /// </summary>
     private sealed class SpySyncRepository : JIM.InMemoryData.SyncRepository
     {
@@ -221,6 +368,38 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
             var list = metaverseObjects.ToList();
             BatchMvoUpdateIds.AddRange(list.Select(mvo => mvo.Id));
             return base.UpdateMetaverseObjectsAsync(list);
+        }
+
+        /// <summary>
+        /// Returns a clone of the matched Metaverse Object rather than the stored reference. Production's
+        /// matching query and an already-loaded CSO's own MetaverseObject navigation are separate database
+        /// round trips returning distinct CLR instances of the same row; this dictionary-backed store
+        /// would otherwise return the identical stored reference for both, masking the identity-split bug
+        /// entirely. Deliberately does NOT copy the deletion-marker fields: a genuine separate load
+        /// performed before Pass 1's in-memory-only marker write would not see them either.
+        /// </summary>
+        public override async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
+            ConnectedSystemObject connectedSystemObject,
+            MetaverseObjectType metaverseObjectType,
+            ObjectMatchingRule rule)
+        {
+            var match = await base.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, rule);
+            if (match == null)
+                return null;
+
+            return new MetaverseObject
+            {
+                Id = match.Id,
+                Created = match.Created,
+                LastUpdated = match.LastUpdated,
+                Type = match.Type,
+                AttributeValues = new List<MetaverseObjectAttributeValue>(match.AttributeValues),
+                Roles = match.Roles,
+                Status = match.Status,
+                Origin = match.Origin,
+                ConnectedSystemObjects = new List<ConnectedSystemObject>(match.ConnectedSystemObjects),
+                CachedDisplayName = match.CachedDisplayName
+            };
         }
     }
 
