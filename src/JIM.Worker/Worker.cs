@@ -414,7 +414,7 @@ public class Worker : BackgroundService
                                                         // but must never stamp this: the gate exists precisely because only a Full Import proves
                                                         // every object that should be present was looked for.
                                                         if (runProfile.RunType == ConnectedSystemRunType.FullImport &&
-                                                            FullImportSuccessEvaluator.IsSuccessfulFullImport(completionResult.Status, completionResult.ObjectLevelErrorCount))
+                                                            FullImportSuccessEvaluator.IsSuccessfulFullImport(completionResult.Status, completionResult.ObjectLevelErrorCount, newWorkerTask.Activity.DetectedDeletionsWithheld ?? 0))
                                                         {
                                                             await taskJim.ConnectedSystems.RecordSuccessfulFullImportAsync(connectedSystem, DateTime.UtcNow);
                                                         }

@@ -47,9 +47,9 @@ function Set-JIMRunProfile {
         of them; there is no partial attempt. Only valid on an Export Run Profile; the API rejects
         it otherwise. Pass a number to set the limit, 0 to refuse creates outright, or $null to
         clear the limit (no limit). Omit the parameter entirely to leave the current value
-        unchanged. Setting any one of -MaxCreates, -MaxUpdates or -MaxDeletes fetches the Run
-        Profile's other two current values and sends all three together, so the ones you did not
-        pass are preserved exactly.
+        unchanged. Setting any one of -MaxCreates, -MaxUpdates, -MaxDeletes, -MaxDetectedDeletions
+        or -MaxDetectedDeletionsPercent fetches the Run Profile's other four current values and
+        sends all five together, so the ones you did not pass are preserved exactly.
 
     .PARAMETER MaxUpdates
         Run Profile Safeguards: sets the most updates that may be pending for a single Export run
@@ -58,6 +58,22 @@ function Set-JIMRunProfile {
     .PARAMETER MaxDeletes
         Run Profile Safeguards: sets the most deletes that may be pending for a single Export run
         to attempt any of them. Same all-or-nothing semantics as -MaxCreates.
+
+    .PARAMETER MaxDetectedDeletions
+        Run Profile Safeguards: sets the most Connected System Objects a single Full Import run
+        may newly mark as deleted. If more would be newly marked than this, JIM marks NONE of
+        them; there is no partial marking. Only valid on a Full Import Run Profile; the API
+        rejects it otherwise. Pass a number to set the limit, 0 to refuse to mark anything as
+        deleted, or $null to clear the limit (no limit). Omit the parameter entirely to leave the
+        current value unchanged. Setting any one of -MaxCreates, -MaxUpdates, -MaxDeletes,
+        -MaxDetectedDeletions or -MaxDetectedDeletionsPercent fetches the Run Profile's other four
+        current values and sends all five together, so the ones you did not pass are preserved
+        exactly.
+
+    .PARAMETER MaxDetectedDeletionsPercent
+        Run Profile Safeguards: sets the most Connected System Objects a single Full Import run
+        may newly mark as deleted, as a share (0 to 100) of the Connected System Objects in the
+        run's scope when it starts. Same all-or-nothing semantics as -MaxDetectedDeletions.
 
     .PARAMETER PassThru
         If specified, returns the updated Run Profile object.
@@ -99,6 +115,18 @@ function Set-JIMRunProfile {
         Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDeletes $null
 
         Clears the delete limit, leaving Max creates and Max updates exactly as they were.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 7 -MaxDetectedDeletionsPercent 10
+
+        Sets a 10% deletion detection limit on a Full Import Run Profile, leaving Max detected
+        deletions exactly as it was.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 7 -MaxDetectedDeletions $null -MaxDetectedDeletionsPercent $null
+
+        Clears both deletion detection limits, so the Full Import's deletion detection is
+        unrestricted again.
 
     .LINK
         Get-JIMRunProfile
@@ -148,6 +176,12 @@ function Set-JIMRunProfile {
         [Parameter()]
         [Nullable[int]]$MaxDeletes,
 
+        [Parameter()]
+        [Nullable[int]]$MaxDetectedDeletions,
+
+        [Parameter()]
+        [Nullable[int]]$MaxDetectedDeletionsPercent,
+
         [switch]$PassThru
     )
 
@@ -174,13 +208,20 @@ function Set-JIMRunProfile {
 
         # Run Profile Safeguards: validated here (not via ValidateRange, which misbehaves with
         # $null) so a negative value fails fast rather than reaching the API as a 400.
-        foreach ($safeguard in @('MaxCreates', 'MaxUpdates', 'MaxDeletes')) {
+        foreach ($safeguard in @('MaxCreates', 'MaxUpdates', 'MaxDeletes', 'MaxDetectedDeletions')) {
             if ($PSBoundParameters.ContainsKey($safeguard)) {
                 $value = $PSBoundParameters[$safeguard]
                 if ($null -ne $value -and $value -lt 0) {
                     Write-Error "$safeguard cannot be negative."
                     return
                 }
+            }
+        }
+
+        if ($PSBoundParameters.ContainsKey('MaxDetectedDeletionsPercent')) {
+            if ($null -ne $MaxDetectedDeletionsPercent -and ($MaxDetectedDeletionsPercent -lt 0 -or $MaxDetectedDeletionsPercent -gt 100)) {
+                Write-Error "MaxDetectedDeletionsPercent must be between 0 and 100."
+                return
             }
         }
 
@@ -210,12 +251,13 @@ function Set-JIMRunProfile {
             $body.verifyImportContentHashes = $VerifyImportContentHashes
         }
 
-        # Run Profile Safeguards: the update contract replaces all three members together, so
-        # binding any one of -MaxCreates/-MaxUpdates/-MaxDeletes means fetching the Run Profile's
-        # current safeguards first and overwriting only the bound members with the new values; an
-        # explicit $null clears that member ($PSBoundParameters.ContainsKey is true for a
-        # parameter passed $null).
-        if ($PSBoundParameters.ContainsKey('MaxCreates') -or $PSBoundParameters.ContainsKey('MaxUpdates') -or $PSBoundParameters.ContainsKey('MaxDeletes')) {
+        # Run Profile Safeguards: the update contract replaces all five members together, so
+        # binding any one of -MaxCreates/-MaxUpdates/-MaxDeletes/-MaxDetectedDeletions/
+        # -MaxDetectedDeletionsPercent means fetching the Run Profile's current safeguards first
+        # and overwriting only the bound members with the new values; an explicit $null clears
+        # that member ($PSBoundParameters.ContainsKey is true for a parameter passed $null).
+        if ($PSBoundParameters.ContainsKey('MaxCreates') -or $PSBoundParameters.ContainsKey('MaxUpdates') -or $PSBoundParameters.ContainsKey('MaxDeletes') -or
+            $PSBoundParameters.ContainsKey('MaxDetectedDeletions') -or $PSBoundParameters.ContainsKey('MaxDetectedDeletionsPercent')) {
             $currentProfiles = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$csId/run-profiles"
             $currentProfile = $currentProfiles | Where-Object { $_.id -eq $profileId }
             $currentSafeguards = $currentProfile.safeguards
@@ -224,6 +266,8 @@ function Set-JIMRunProfile {
                 maxCreates = if ($PSBoundParameters.ContainsKey('MaxCreates')) { $MaxCreates } else { $currentSafeguards.maxCreates }
                 maxUpdates = if ($PSBoundParameters.ContainsKey('MaxUpdates')) { $MaxUpdates } else { $currentSafeguards.maxUpdates }
                 maxDeletes = if ($PSBoundParameters.ContainsKey('MaxDeletes')) { $MaxDeletes } else { $currentSafeguards.maxDeletes }
+                maxDetectedDeletions = if ($PSBoundParameters.ContainsKey('MaxDetectedDeletions')) { $MaxDetectedDeletions } else { $currentSafeguards.maxDetectedDeletions }
+                maxDetectedDeletionsPercent = if ($PSBoundParameters.ContainsKey('MaxDetectedDeletionsPercent')) { $MaxDetectedDeletionsPercent } else { $currentSafeguards.maxDetectedDeletionsPercent }
             }
         }
 

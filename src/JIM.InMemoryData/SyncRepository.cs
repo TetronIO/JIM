@@ -279,7 +279,7 @@ public class SyncRepository : ISyncRepository
             cso = null;
 
         // Cloned per #1079 Regression B - see CloneForHydration. Callers such as
-        // SyncImportTaskProcessor.ObsoleteConnectedSystemObjectAsync add the result to the
+        // SyncImportTaskProcessor.ApplyDeletionCandidateAsync add the result to the
         // update-path working set and later release its AttributeValues.
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }

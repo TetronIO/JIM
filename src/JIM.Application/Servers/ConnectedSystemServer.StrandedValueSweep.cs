@@ -11,6 +11,7 @@ using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -456,12 +457,11 @@ public partial class ConnectedSystemServer
     /// <param name="maxMissingPercentThreshold">The configured maximum missing share, as a whole-number percentage.</param>
     internal static bool IsReconciliationRefused(int recordedCount, int missingCount, int maxMissingPercentThreshold)
     {
-        if (recordedCount <= 0)
-            return false;
-
-        // Widened to long: cross-multiplication of two ordinary int counts cannot overflow int at any
-        // realistic scale, but the widening costs nothing and removes the theoretical risk outright.
-        return (long)missingCount * 100 > (long)maxMissingPercentThreshold * recordedCount;
+        // Shared with the #1618 Run Profile Safeguards Full Import deletion detection limit
+        // (JIM.Models.Utility.ShareThreshold), so the two thresholds cannot drift apart. A recordedCount
+        // of zero or less never refuses; ShareThreshold.Exceeds already treats a non-positive base the
+        // same way.
+        return ShareThreshold.Exceeds(missingCount, recordedCount, maxMissingPercentThreshold);
     }
 
     /// <summary>

@@ -108,12 +108,12 @@ public class RunProfileSafeguardsPersistenceDatabaseTests
         }
 
         var persisted = await ReadBackAsync(runProfileId);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.MaxCreates, Is.EqualTo(5), "Max creates must survive the update's property copy");
             Assert.That(persisted.MaxUpdates, Is.EqualTo(0), "A limit of zero is a real value and must survive the update");
             Assert.That(persisted.MaxDeletes, Is.EqualTo(100), "Max deletes must survive the update's property copy");
-        });
+        }
     }
 
     [Test]
@@ -137,5 +137,74 @@ public class RunProfileSafeguardsPersistenceDatabaseTests
 
         var persisted = await ReadBackAsync(runProfileId);
         Assert.That(persisted.MaxDeletes, Is.Null, "Clearing a limit through the update must persist as null, not keep the old value");
+    }
+
+    /// <summary>
+    /// Seeds a Connected System with one Full Import Run Profile carrying no limits, and returns the
+    /// Run Profile's id.
+    /// </summary>
+    private async Task<int> SeedFullImportRunProfileAsync()
+    {
+        await using var seed = NewContext();
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var system = new ConnectedSystem { Name = "Contoso AD", ConnectorDefinition = connectorDefinition };
+        var runProfile = new ConnectedSystemRunProfile { Name = "Full Import from AD", RunType = ConnectedSystemRunType.FullImport, ConnectedSystemId = 0 };
+        seed.AddRange(connectorDefinition, system);
+        await seed.SaveChangesAsync();
+        runProfile.ConnectedSystemId = system.Id;
+        seed.Add(runProfile);
+        await seed.SaveChangesAsync();
+        return runProfile.Id;
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemRunProfileAsync_DeletionDetectionLimitsSetOnADetachedCopy_PersistsBothAsync()
+    {
+        var runProfileId = await SeedFullImportRunProfileAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var detached = await ctx.ConnectedSystemRunProfiles.AsNoTracking().SingleAsync(rp => rp.Id == runProfileId);
+            detached.MaxDetectedDeletions = 500;
+            detached.MaxDetectedDeletionsPercent = 0;
+            await repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(detached);
+        }
+
+        var persisted = await ReadBackAsync(runProfileId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.MaxDetectedDeletions, Is.EqualTo(500), "Max detected deletions must survive the update's property copy");
+            Assert.That(persisted.MaxDetectedDeletionsPercent, Is.EqualTo(0), "A limit of zero is a real value and must survive the update");
+        }
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemRunProfileAsync_DeletionDetectionLimitsClearedOnADetachedCopy_PersistsTheClearAsync()
+    {
+        var runProfileId = await SeedFullImportRunProfileAsync();
+        await using (var ctx = NewContext())
+        {
+            var tracked = await ctx.ConnectedSystemRunProfiles.SingleAsync(rp => rp.Id == runProfileId);
+            tracked.MaxDetectedDeletions = 500;
+            tracked.MaxDetectedDeletionsPercent = 10;
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var detached = await ctx.ConnectedSystemRunProfiles.AsNoTracking().SingleAsync(rp => rp.Id == runProfileId);
+            detached.MaxDetectedDeletions = null;
+            detached.MaxDetectedDeletionsPercent = null;
+            await repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(detached);
+        }
+
+        var persisted = await ReadBackAsync(runProfileId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.MaxDetectedDeletions, Is.Null, "Clearing the limit through the update must persist as null, not keep the old value");
+            Assert.That(persisted.MaxDetectedDeletionsPercent, Is.Null, "Clearing the limit through the update must persist as null, not keep the old value");
+        }
     }
 }

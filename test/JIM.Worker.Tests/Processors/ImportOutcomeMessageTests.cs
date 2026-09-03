@@ -36,4 +36,65 @@ public class ImportOutcomeMessageTests
 
         Assert.That(message, Is.EqualTo("Import complete: 50 objects (0 created, 3 updated, 47 unchanged, 1 error)"));
     }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // ForRefusedDeletionDetection: Run Profile Safeguards (#1618, Layer 2)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void ForRefusedDeletionDetection_PercentLimitTripped_NamesThePercentLimit()
+    {
+        var message = ImportOutcomeMessage.ForRefusedDeletionDetection(count: 4120, baseCount: 10000, maxCount: null, maxPercent: 10);
+
+        Assert.That(message, Is.EqualTo(
+            "Deletion detection found 4,120 objects (41% of 10,000) no longer in the Connected System, above this Run Profile's " +
+            "limit of 10%; none were marked as deleted. Check the Connected System's scope and the connector's filters, or raise " +
+            "the limit, then run the Full Import again."));
+    }
+
+    [Test]
+    public void ForRefusedDeletionDetection_CountLimitTripped_NamesTheCountLimit()
+    {
+        var message = ImportOutcomeMessage.ForRefusedDeletionDetection(count: 501, baseCount: 10000, maxCount: 500, maxPercent: null);
+
+        Assert.That(message, Is.EqualTo(
+            "Deletion detection found 501 objects (5% of 10,000) no longer in the Connected System, above this Run Profile's " +
+            "limit of 500; none were marked as deleted. Check the Connected System's scope and the connector's filters, or raise " +
+            "the limit, then run the Full Import again."));
+    }
+
+    [Test]
+    public void ForRefusedDeletionDetection_BothLimitsTripped_NamesBothLimits()
+    {
+        var message = ImportOutcomeMessage.ForRefusedDeletionDetection(count: 4120, baseCount: 10000, maxCount: 500, maxPercent: 10);
+
+        Assert.That(message, Does.Contain("above this Run Profile's limits of 500 and 10%;"));
+    }
+
+    [Test]
+    public void ForRefusedDeletionDetection_OnlyCountLimitConfiguredButPercentAlsoTrips_NamesOnlyWhatConfigured()
+    {
+        // A limit that was never configured (null) cannot have tripped, whatever the numbers say, so it
+        // is never named even when the arithmetic would otherwise call it tripped.
+        var message = ImportOutcomeMessage.ForRefusedDeletionDetection(count: 4120, baseCount: 10000, maxCount: 500, maxPercent: null);
+
+        Assert.That(message, Does.Contain("above this Run Profile's limit of 500;"));
+    }
+
+    [Test]
+    public void ForRefusedDeletionDetection_SingleObject_UsesSingularWording()
+    {
+        var message = ImportOutcomeMessage.ForRefusedDeletionDetection(count: 1, baseCount: 10, maxCount: 0, maxPercent: null);
+
+        Assert.That(message, Does.StartWith("Deletion detection found 1 object (10% of 10) no longer in the Connected System"));
+    }
+
+    [Test]
+    public void ForRefusedDeletionDetection_PercentRoundsToNearestWholeNumber()
+    {
+        var message = ImportOutcomeMessage.ForRefusedDeletionDetection(count: 1, baseCount: 3, maxCount: 0, maxPercent: null);
+
+        // 1 of 3 is 33.33...%, which rounds to 33%.
+        Assert.That(message, Does.Contain("(33% of 3)"));
+    }
 }

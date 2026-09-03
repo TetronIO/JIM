@@ -93,6 +93,14 @@ An **Export** Activity carries how many Pending Exports of each change type were
 
 All three are populated (zero when nothing was withheld) on every Export Activity, and empty for every other kind.
 
+A **Full Import** Activity that ran deletion detection carries how many Connected System Objects were withheld by the Run Profile's [Safeguards](../configuration/run-profiles.md#full-import) (`-Id` only):
+
+| Property | Type | Description |
+|---|---|---|
+| `DetectedDeletionsWithheld` | `Int32` | How many Connected System Objects the Run Profile's Max detected deletions/Max detected deletions percent limits withheld this run. `0` when nothing was withheld. |
+
+Populated (zero when nothing was withheld) on every Full Import Activity that ran deletion detection; empty on every other kind, including a Full Import that imported zero objects and so skipped deletion detection entirely.
+
 When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ExternalIdValue`, `DisplayName`, `ConnectedSystemObjectType`, `ObjectChangeType`, `ErrorType`, and `OutcomeSummary`.
 
 When using the **Follow** parameter set, progress renders to the host while following; when following ends, the final activity object is emitted (the same shape as **ById**).

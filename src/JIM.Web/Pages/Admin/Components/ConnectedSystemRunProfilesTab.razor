@@ -66,6 +66,18 @@
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max deletes @context.Item.MaxDeletes</MudChip>
                         </MudTooltip>
                     }
+                    @if (context.Item.MaxDetectedDeletions.HasValue)
+                    {
+                        <MudTooltip Text="If a Full Import would mark more than this many objects as deleted, it marks none and completes with a warning." Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max detected deletions @context.Item.MaxDetectedDeletions</MudChip>
+                        </MudTooltip>
+                    }
+                    @if (context.Item.MaxDetectedDeletionsPercent.HasValue)
+                    {
+                        <MudTooltip Text="If a Full Import would mark more than this many objects as deleted, it marks none and completes with a warning." Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max detected deletions @(context.Item.MaxDetectedDeletionsPercent)%</MudChip>
+                        </MudTooltip>
+                    }
                 </CellTemplate>
             </TemplateColumn>
             @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions)
@@ -239,6 +251,25 @@
                             <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="ms-1 mud-text-secondary" />
                         </MudTooltip>
                     </div>
+
+                    <MudPaper Outlined="true" Class="pa-4 mt-5">
+                        <MudText Typo="Typo.subtitle2">Safeguards</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">If a Full Import would mark more objects as deleted than either limit, it marks none.</MudText>
+                        <MudGrid Spacing="3">
+                            <MudItem xs="6">
+                                <MudNumericField T="int?" @bind-Value="_newRunProfile.MaxDetectedDeletions" Label="Max detected deletions"
+                                                 Variant="Variant.Outlined" Min="0" Clearable="true" Placeholder="No limit" />
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudNumericField T="int?" @bind-Value="_newRunProfile.MaxDetectedDeletionsPercent" Label="Max detected deletions (% of Connector Space)"
+                                                 Variant="Variant.Outlined" Min="0" Max="100" Clearable="true" Placeholder="No limit" />
+                            </MudItem>
+                        </MudGrid>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                            Measured against the objects in this run's scope when it starts. Objects the import did see are still updated.
+                            Fix the connector's scope or raise a limit, then run again.
+                        </MudText>
+                    </MudPaper>
                 }
 
                 @if (_newRunProfile.RunType == ConnectedSystemRunType.Export)
@@ -331,6 +362,25 @@
                             <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="ms-1 mud-text-secondary" />
                         </MudTooltip>
                     </div>
+
+                    <MudPaper Outlined="true" Class="pa-4 mt-5">
+                        <MudText Typo="Typo.subtitle2">Safeguards</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">If a Full Import would mark more objects as deleted than either limit, it marks none.</MudText>
+                        <MudGrid Spacing="3">
+                            <MudItem xs="6">
+                                <MudNumericField T="int?" @bind-Value="_editRunProfile.MaxDetectedDeletions" Label="Max detected deletions"
+                                                 Variant="Variant.Outlined" Min="0" Clearable="true" Placeholder="No limit" />
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudNumericField T="int?" @bind-Value="_editRunProfile.MaxDetectedDeletionsPercent" Label="Max detected deletions (% of Connector Space)"
+                                                 Variant="Variant.Outlined" Min="0" Max="100" Clearable="true" Placeholder="No limit" />
+                            </MudItem>
+                        </MudGrid>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                            Measured against the objects in this run's scope when it starts. Objects the import did see are still updated.
+                            Fix the connector's scope or raise a limit, then run again.
+                        </MudText>
+                    </MudPaper>
                 }
 
                 @if (_editRunProfile.RunType == ConnectedSystemRunType.Export)
@@ -473,7 +523,9 @@
             VerifyImportContentHashes = _newRunProfile.RunType == ConnectedSystemRunType.FullImport && _newRunProfile.VerifyImportContentHashes,
             MaxCreates = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxCreates : null,
             MaxUpdates = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxUpdates : null,
-            MaxDeletes = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxDeletes : null
+            MaxDeletes = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxDeletes : null,
+            MaxDetectedDeletions = _newRunProfile.RunType == ConnectedSystemRunType.FullImport ? _newRunProfile.MaxDetectedDeletions : null,
+            MaxDetectedDeletionsPercent = _newRunProfile.RunType == ConnectedSystemRunType.FullImport ? _newRunProfile.MaxDetectedDeletionsPercent : null
         };
 
         try
@@ -512,7 +564,9 @@
             VerifyImportContentHashes = runProfile.VerifyImportContentHashes,
             MaxCreates = runProfile.MaxCreates,
             MaxUpdates = runProfile.MaxUpdates,
-            MaxDeletes = runProfile.MaxDeletes
+            MaxDeletes = runProfile.MaxDeletes,
+            MaxDetectedDeletions = runProfile.MaxDetectedDeletions,
+            MaxDetectedDeletionsPercent = runProfile.MaxDetectedDeletionsPercent
         };
         _editRunProfileDialogVisible = true;
         return Task.CompletedTask;
@@ -536,6 +590,12 @@
             _editRunProfileOriginal.MaxCreates = _editRunProfile.MaxCreates;
             _editRunProfileOriginal.MaxUpdates = _editRunProfile.MaxUpdates;
             _editRunProfileOriginal.MaxDeletes = _editRunProfile.MaxDeletes;
+        }
+
+        if (_editRunProfileOriginal.RunType == ConnectedSystemRunType.FullImport)
+        {
+            _editRunProfileOriginal.MaxDetectedDeletions = _editRunProfile.MaxDetectedDeletions;
+            _editRunProfileOriginal.MaxDetectedDeletionsPercent = _editRunProfile.MaxDetectedDeletionsPercent;
         }
 
         try

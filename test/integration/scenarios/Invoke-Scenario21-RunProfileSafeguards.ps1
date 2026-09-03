@@ -287,7 +287,8 @@ try {
         $refusedImportActivity = Get-JIMActivity -Id $refusedImportResult.activityId
         Assert-Equal -Expected "CompleteWithWarning" -Actual ([string]$refusedImportActivity.status) -Message "The refused Full Import completed with a warning"
         Assert-Equal -Expected 1 -Actual ([int]$refusedImportActivity.detectedDeletionsWithheld) -Message "The Activity records one detected deletion withheld"
-        Assert-Equal -Expected 0 -Actual ([int]$refusedImportActivity.totalDeleted) -Message "Nothing was marked as deleted"
+        $refusedImportStats = Get-JIMActivityStats -ActivityId $refusedImportResult.activityId
+        Assert-Equal -Expected 0 -Actual ([int]$refusedImportStats.totalCsoDeletes) -Message "Nothing was marked as deleted"
         Assert-Condition -Condition ($refusedImportActivity.warningMessage -like '*Deletion detection found 1 object*') -Message "The warning names the count (got: $($refusedImportActivity.warningMessage))"
         Assert-Condition -Condition ($refusedImportActivity.warningMessage -like '*limit of 10%*') -Message "The warning names the limit (got: $($refusedImportActivity.warningMessage))"
         Assert-Condition -Condition ($refusedImportActivity.warningMessage -like '*none were marked as deleted*') -Message "The warning states nothing was marked (got: $($refusedImportActivity.warningMessage))"
@@ -302,7 +303,8 @@ try {
         Assert-ActivitySuccess -ActivityId $appliedImportResult.activityId -Name "CSV Full Import (Test 2 applied)"
         $appliedImportActivity = Get-JIMActivity -Id $appliedImportResult.activityId
         Assert-Equal -Expected 0 -Actual ([int]$appliedImportActivity.detectedDeletionsWithheld) -Message "Nothing was withheld once the limit allows the departure"
-        Assert-Equal -Expected 1 -Actual ([int]$appliedImportActivity.totalDeleted) -Message "The departed employee was marked as deleted"
+        $appliedImportStats = Get-JIMActivityStats -ActivityId $appliedImportResult.activityId
+        Assert-Equal -Expected 1 -Actual ([int]$appliedImportStats.totalCsoDeletes) -Message "The departed employee was marked as deleted"
 
         $csvSystemAfterApplied = Get-JIMConnectedSystem -Id $config.CSVSystemId
         Assert-Condition -Condition (([string]$csvSystemAfterApplied.lastSuccessfulFullImportCompletedAt) -ne ([string]$lastSuccessfulImportBefore)) -Message "A Full Import that applied its detection moves LastSuccessfulFullImportCompletedAt"

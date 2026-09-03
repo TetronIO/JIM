@@ -1,8 +1,8 @@
 # Run Profile Safeguards: Implementation Plan
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#1618](https://github.com/TetronIO/JIM/issues/1618)
-- **PRD:** [PRD_RUN_PROFILE_SAFEGUARDS.md](../../prd/doing/PRD_RUN_PROFILE_SAFEGUARDS.md)
+- **PRD:** [PRD_RUN_PROFILE_SAFEGUARDS.md](../../prd/done/PRD_RUN_PROFILE_SAFEGUARDS.md)
 
 ## Overview
 
@@ -25,7 +25,7 @@ Implementation is orchestrated: a sub-agent implements each layer from this plan
 11. **Docs and changelog.** `docs/configuration/run-profiles.md` Safeguards section (the three export limits now; Layer 2 adds the import limits to the same section), with recommended values and a "Letting a legitimate mass change through" paragraph: a second Export Run Profile with no limit, run by hand and kept out of Schedules, because raising a limit and forgetting to restore it removes the safeguard; `docs/configuration/activities.md`; `docs/powershell/run-profiles.md`; `docs/powershell/activities.md`; `docs/concepts/synchronisation-pipeline.md` one paragraph under Export. One ✨ changelog entry under `[Unreleased]` covering the feature; Layer 2 amends it rather than adding a second.
 12. **Tests, red first.** Ledger unit tests (step 2); `ExportExecutionTests`-style tests through the in-memory harness: one over the limit withholds the whole type with every export still `Pending` and no execution item, equal to the limit attempts all, zero withholds all, a withheld type stays withheld in the deferred pass while an allowed type completes there, the files path honours the decision, the batch exclusion never reads a withheld row; `ExportExecutionParallelBatchTests` gains one withheld case; message tests; validator tests; API tests; Pester; Scenario 21 Test 1 (below).
 
-## Phase 2: Full Import deletion limits (branch `feature/run-profile-safeguards-stack-import-limit`)
+## Phase 2: Full Import deletion limits (branch `feature/run-profile-safeguards-stack-import-limit`) ✅
 
 1. **Model and migration.** `ConnectedSystemRunProfile` gains `int? MaxDetectedDeletions` and `int? MaxDetectedDeletionsPercent`; `Activity` gains `int? DetectedDeletionsWithheld` (zero on a Full Import that applied its detection, the withheld count on one that refused, null elsewhere). Migration `AddRunProfileDeletionDetectionLimits`. `ConnectedSystemRepository.UpdateConnectedSystemRunProfileAsync` copies properties onto the tracked row by hand: add both new properties to that copy, and extend `RunProfileSafeguardsPersistenceDatabaseTests` (RequiresPostgres) to prove they persist and clear. Layer 1's first Scenario 21 run found the three export limits missing from exactly that copy.
 2. **Shared helper.** `ShareThreshold.Exceeds(long count, long baseCount, int maxPercent)` in `JIM.Models` (long cross-multiplication; a base of zero never exceeds). `ConnectedSystemServer.StrandedValueSweep.IsReconciliationRefused` delegates to it; its tests stay green.

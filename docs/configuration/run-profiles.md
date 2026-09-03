@@ -50,6 +50,8 @@ Full Import automatically skips loading and comparing objects whose content has 
 
 ## Safeguards
 
+### Export
+
 An **Export** Run Profile can carry a limit on how many creates, updates and deletes a single run may attempt against the Connected System: **Max creates**, **Max updates** and **Max deletes**. Each is optional and independent; leave any of them blank for no limit, or set one to `0` to refuse that change type outright. The three limits are only valid on an Export Run Profile; setting one on any other run type is rejected.
 
 **A run that would exceed a limit attempts none of that change type.** JIM counts how many of each change type are pending at the start of the run; if a type's count is more than its limit, JIM attempts none of that type at all this run and leaves every one of them exactly where they were: still Pending, untouched. There is no partial attempt: JIM never processes up to the limit and stops partway. Other change types are unaffected and continue normally, whether they carry their own limit or none. The Activity for a run that withheld anything completes as **Complete with warning**, naming the limit, how many were pending, and what to do next, and the Activity's `exportCreatesWithheld` / `exportUpdatesWithheld` / `exportDeletesWithheld` counters record exactly how many were withheld (see [Activities](activities.md)). Resuming needs no action beyond raising or clearing the limit, or reducing what is pending, then running the Export Run Profile again.
@@ -67,6 +69,16 @@ Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDeletes $null
 A limit exists to stop a run nobody meant to be this big; it is not meant to be raised every time a genuine bulk operation comes along. If you know in advance that a run will legitimately exceed a limit (a planned bulk deprovisioning, a large onboarding batch), run a **second Export Run Profile against the same Connected System with no limit set**, and trigger it by hand rather than adding it to a Schedule. This gets the large, deliberate change through without touching the limited Run Profile that protects your regular scheduled runs.
 
 Raising or clearing the limited Run Profile's own limit works too, but is the weaker option: it is easy to forget to put the limit back afterwards, and until you do, the safeguard is gone for every run that Run Profile makes, scheduled or not. A second, unlimited Run Profile kept out of Schedules cannot be forgotten in the same way, because it is never run except when you choose to run it.
+
+### Full Import
+
+A **Full Import** Run Profile can carry a limit on how many Connected System Objects a single run's deletion detection may newly mark as deleted: **Max detected deletions** (a count) and **Max detected deletions percent** (a share, 0 to 100, of the Connected System Objects in the run's scope when it starts). Each is optional and independent; leave either blank for no limit, or set one to `0` to refuse to mark anything as deleted. Both are only valid on a Full Import Run Profile; setting either on any other run type is rejected.
+
+**A run that would exceed either limit marks nothing as deleted.** JIM works out which Connected System Objects would newly be marked as deleted (excluding objects this run already saw, and objects already marked from an earlier run); if that count is more than Max detected deletions, or more than Max detected deletions percent of the Connected System Objects in scope, JIM marks none of them: every one stays exactly as it was. Objects the import did see are still created and updated as normal; only the marking of missing objects as deleted is withheld. There is no partial marking. The Activity for a refused detection completes as **Complete with warning**, naming the limit, how many objects were found missing and what share that is, and what to do next, and the Activity's `detectedDeletionsWithheld` counter records exactly how many were withheld (see [Activities](activities.md)). Resuming needs no action beyond raising or clearing the limit, or fixing the Connected System's scope or the connector's filters, then running the Full Import again.
+
+A refused detection also means the run does not count as a successful Full Import for the [post-clear reconciliation gate](connected-systems.md#clearing-the-connector-space): the Connected System's last successful Full Import time is not stamped, so the stranded-value sweep stays shut until a Full Import passes.
+
+**Recommended values:** set **Max detected deletions percent** to a small share (for example, 5 to 10%) on a Full Import Run Profile against a large Connected System; a broken filter or base DN dropping a plausible-looking fraction of the population is easier to catch as a share than as a raw count. For a small Connected System, where a single genuine departure is already a large share of it, prefer **Max detected deletions** as a count instead: a percentage limit trips (or fails to trip) on rounding rather than on anything meaningful once the population is only a handful of objects.
 
 ## Asynchronous execution
 

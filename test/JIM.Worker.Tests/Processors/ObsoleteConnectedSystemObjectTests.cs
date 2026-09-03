@@ -20,10 +20,11 @@ namespace JIM.Worker.Tests.Processors;
 /// Deletion detection must be able to obsolete an object whatever type its anchor is.
 ///
 /// <c>ProcessConnectedSystemObjectDeletionsAsync</c> works out which Connected System Objects are no
-/// longer present and hands each one's anchor to <c>ObsoleteConnectedSystemObjectAsync</c>, which
-/// dispatches on the anchor's runtime type to fetch the object it must mark obsolete. An anchor type
-/// missing from that dispatch does not fail: it falls through to a null object, logs
-/// "not found. No work to do." and returns, so the object is never obsoleted and the following
+/// longer present and, via <c>ResolveDeletionCandidateAsync</c> (Run Profile Safeguards, #1618 Layer
+/// 2's resolve-then-apply split), hands each one's anchor to a lookup that dispatches on the anchor's
+/// runtime type to fetch the object; <c>ApplyDeletionCandidateAsync</c> then does the marking. An
+/// anchor type missing from the lookup's dispatch does not fail: it falls through to a null object,
+/// logs "not found. No work to do." and returns, so the object is never obsoleted and the following
 /// synchronisation never deletes it. Nothing is reported, and the run completes successfully.
 ///
 /// That was the state of the LongNumber anchor: the deletion-detection switch had handled it since it
@@ -47,7 +48,7 @@ public class ObsoleteConnectedSystemObjectTests
     private const int Anchor = 40711;
 
     [Test]
-    public async Task ObsoleteConnectedSystemObjectAsync_LongAnchor_ObsoletesTheObjectAsync()
+    public async Task ResolveAndApplyDeletionCandidateAsync_LongAnchor_ObsoletesTheObjectAsync()
     {
         // A bigint identity column, which is the ordinary shape of a large table's primary key.
         const long anchor = 9_007_199_254_740_993L;
@@ -60,7 +61,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public async Task ObsoleteConnectedSystemObjectAsync_DecimalAnchor_ObsoletesTheObjectAsync()
+    public async Task ResolveAndApplyDeletionCandidateAsync_DecimalAnchor_ObsoletesTheObjectAsync()
     {
         var anchor = decimal.Parse("4200.00", CultureInfo.InvariantCulture);
         var result = await ObsoleteByAnchorAsync(anchor, av => av.DecimalValue = anchor);
@@ -70,7 +71,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public async Task ObsoleteConnectedSystemObjectAsync_IntAnchor_ObsoletesTheObjectAsync()
+    public async Task ResolveAndApplyDeletionCandidateAsync_IntAnchor_ObsoletesTheObjectAsync()
     {
         // A control: Number has always been dispatched, so this passing while the others fail is what
         // shows the fixture itself is sound and the defect is the missing arm rather than the harness.
@@ -81,7 +82,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public async Task ObsoleteConnectedSystemObjectAsync_ObjectNotYetObsolete_RecordsTheDeletionAsync()
+    public async Task ResolveAndApplyDeletionCandidateAsync_ObjectNotYetObsolete_RecordsTheDeletionAsync()
     {
         // The first import to find the object missing is the one entitled to report it, and the pair of
         // tests below only mean anything against this: they assert absence, so without a control showing
@@ -98,7 +99,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public async Task ObsoleteConnectedSystemObjectAsync_ObjectAlreadyObsolete_ReportsAndChangesNothingAsync()
+    public async Task ResolveAndApplyDeletionCandidateAsync_ObjectAlreadyObsolete_ReportsAndChangesNothingAsync()
     {
         var result = await ObsoleteByAnchorAsync(Anchor, av => av.IntValue = Anchor,
             status: ConnectedSystemObjectStatus.Obsolete);
@@ -115,7 +116,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public async Task ObsoleteConnectedSystemObjectAsync_ObjectAlreadyObsolete_StillClearsStalePendingExportsAsync()
+    public async Task ResolveAndApplyDeletionCandidateAsync_ObjectAlreadyObsolete_StillClearsStalePendingExportsAsync()
     {
         // Export evaluation does not exclude Obsolete objects, so a synchronisation on a *different*
         // Connected System can stage an export against one between imports. Clearing those is the one
@@ -134,7 +135,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public void ObsoleteConnectedSystemObjectAsync_AnchorTypeItCannotDispatch_ThrowsRatherThanDoingNothing()
+    public void ResolveDeletionCandidateAsync_AnchorTypeItCannotDispatch_ThrowsRatherThanDoingNothing()
     {
         // The arm that let LongNumber through silently. A type this method cannot fetch by is a
         // programming error in deletion detection, and deletion detection is the phase that decides
@@ -224,17 +225,37 @@ public class ObsoleteConnectedSystemObjectTests
             workerTask,
             cancellationTokenSource);
 
-        const string methodName = "ObsoleteConnectedSystemObjectAsync";
-        var method = typeof(SyncImportTaskProcessor).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
+        // Run Profile Safeguards (#1618, Layer 2) split deletion detection into a resolve phase (no
+        // side effects; dispatches on the anchor's runtime type) and an apply phase (acts on an
+        // already-resolved candidate). Invoking both in sequence, exactly as the production
+        // orchestrator does once it has decided the run's limits are not exceeded, exercises the same
+        // combined behaviour the single method used to.
+        const string resolveMethodName = "ResolveDeletionCandidateAsync";
+        var resolveMethod = typeof(SyncImportTaskProcessor).GetMethod(resolveMethodName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException(
-                $"SyncImportTaskProcessor.{methodName} was not found. If it has been renamed or its signature has " +
-                "changed, update this fixture to invoke the current production method; do not reimplement its " +
+                $"SyncImportTaskProcessor.{resolveMethodName} was not found. If it has been renamed or its signature " +
+                "has changed, update this fixture to invoke the current production method; do not reimplement its " +
                 "anchor-type dispatch here, because that dispatch is the behaviour under test.");
 
+        const string applyMethodName = "ApplyDeletionCandidateAsync";
+        var applyMethod = typeof(SyncImportTaskProcessor).GetMethod(applyMethodName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException(
+                $"SyncImportTaskProcessor.{applyMethodName} was not found. If it has been renamed or its signature " +
+                "has changed, update this fixture to invoke the current production method; do not reimplement its " +
+                "obsoleting behaviour here, because that behaviour is what these tests pin.");
+
         var toBeUpdated = new List<ConnectedSystemObject>();
-        var task = (Task)method.MakeGenericMethod(typeof(T))
-            .Invoke(processor, [anchor, ExternalIdAttributeId, toBeUpdated, new HashSet<Guid>()])!;
-        await task;
+
+        var resolveTask = (Task)resolveMethod.MakeGenericMethod(typeof(T))
+            .Invoke(processor, [anchor, ExternalIdAttributeId, new HashSet<Guid>()])!;
+        await resolveTask;
+        var cso = (ConnectedSystemObject?)resolveTask.GetType().GetProperty("Result")!.GetValue(resolveTask);
+
+        if (cso != null)
+        {
+            var applyTask = (Task)applyMethod.Invoke(processor, [cso, toBeUpdated])!;
+            await applyTask;
+        }
 
         const string fieldName = "_activityRunProfileExecutionItems";
         var executionItems = (List<ActivityRunProfileExecutionItem>)(typeof(SyncImportTaskProcessor)

@@ -1197,4 +1197,41 @@ public class ActivitiesControllerTests
     }
 
     #endregion
+
+    #region Run Profile Safeguards detected deletions withheld statistic (#1618, Layer 2)
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_FullImportActivity_CarriesDetectedDeletionsWithheld()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            ConnectedSystemRunType = ConnectedSystemRunType.FullImport,
+            DetectedDeletionsWithheld = 4120
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        Assert.That(dto.DetectedDeletionsWithheld, Is.EqualTo(4120));
+    }
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_NonFullImportActivity_LeavesDetectedDeletionsWithheldNull()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            ConnectedSystemRunType = ConnectedSystemRunType.Export
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        Assert.That(dto.DetectedDeletionsWithheld, Is.Null);
+    }
+
+    #endregion
 }

@@ -23,21 +23,39 @@ public static class RunProfileSafeguardsValidator
     {
         ArgumentNullException.ThrowIfNull(runProfile);
 
-        return ValidateField(nameof(runProfile.MaxCreates), runProfile.MaxCreates, runProfile.RunType)
-            ?? ValidateField(nameof(runProfile.MaxUpdates), runProfile.MaxUpdates, runProfile.RunType)
-            ?? ValidateField(nameof(runProfile.MaxDeletes), runProfile.MaxDeletes, runProfile.RunType);
+        return ValidateField(nameof(runProfile.MaxCreates), runProfile.MaxCreates, runProfile.RunType, ConnectedSystemRunType.Export, "an Export")
+            ?? ValidateField(nameof(runProfile.MaxUpdates), runProfile.MaxUpdates, runProfile.RunType, ConnectedSystemRunType.Export, "an Export")
+            ?? ValidateField(nameof(runProfile.MaxDeletes), runProfile.MaxDeletes, runProfile.RunType, ConnectedSystemRunType.Export, "an Export")
+            ?? ValidateField(nameof(runProfile.MaxDetectedDeletions), runProfile.MaxDetectedDeletions, runProfile.RunType, ConnectedSystemRunType.FullImport, "a Full Import")
+            ?? ValidatePercentField(runProfile.MaxDetectedDeletionsPercent, runProfile.RunType);
     }
 
-    private static string? ValidateField(string fieldName, int? value, ConnectedSystemRunType runType)
+    private static string? ValidateField(string fieldName, int? value, ConnectedSystemRunType runType, ConnectedSystemRunType requiredRunType, string requiredRunTypeArticleAndName)
     {
         if (value == null)
             return null;
 
-        if (runType != ConnectedSystemRunType.Export)
-            return $"{fieldName} can only be set on an Export Run Profile.";
+        if (runType != requiredRunType)
+            return $"{fieldName} can only be set on {requiredRunTypeArticleAndName} Run Profile.";
 
         if (value < 0)
             return $"{fieldName} cannot be negative.";
+
+        return null;
+    }
+
+    private static string? ValidatePercentField(int? value, ConnectedSystemRunType runType)
+    {
+        const string fieldName = nameof(ConnectedSystemRunProfile.MaxDetectedDeletionsPercent);
+
+        if (value == null)
+            return null;
+
+        if (runType != ConnectedSystemRunType.FullImport)
+            return $"{fieldName} can only be set on a Full Import Run Profile.";
+
+        if (value is < 0 or > 100)
+            return $"{fieldName} must be between 0 and 100.";
 
         return null;
     }
