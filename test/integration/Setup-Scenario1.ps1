@@ -1391,14 +1391,36 @@ try {
     $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
 
     if ($mvUserType) {
-        # Configure deletion rules with a grace period
-        # This allows the Reconnection test to work - when a user is removed from HR
-        # and re-added within the grace period, their MVO is preserved
+        # HR is authoritative for identity in this topology: the HR CSV supplies every
+        # identity attribute (Account Name, Last Name, Display Name, Email...), Training
+        # only contributes complementary attributes, and the LDAP directory is an
+        # export-only provisioning target. WhenLastConnectorDisconnected is the wrong rule
+        # here: removing a person from HR leaves the Training and LDAP connectors still
+        # joined, so the Metaverse Object would never become eligible for deletion, and
+        # the recall logic would instead withdraw every HR-contributed value because
+        # another import source (Training) still stands behind the object - leaving a
+        # leaver as a Metaverse Object holding only training values, whose export then
+        # tries to clear the directory's uid/sn and rename the entry to an empty RDN.
+        #
+        # WhenAuthoritativeSourceDisconnected with the HR CSV as the sole trigger system
+        # anchors deprovisioning on HR disconnection instead: HR leaving schedules deletion
+        # (deferred by the grace period below), never recall, and identity-critical target
+        # attributes are never withdrawn. SpecificSourcesDisconnect is the correct trigger
+        # mode for a single-source trigger list: deletion is scheduled as soon as that one
+        # listed source disconnects, rather than waiting for every listed source to (there
+        # is only one, so the two modes are equivalent here, but SpecificSourcesDisconnect
+        # states the intent correctly for when a second trigger system is ever added).
+        #
+        # The 7-day grace period lets the Reconnection test (Test 4) prove that a rehire
+        # within the window cancels the scheduled deletion and rejoins the same Metaverse
+        # Object, rather than deleting it outright or provisioning a duplicate.
         Set-JIMMetaverseObjectType -Id $mvUserType.id `
-            -DeletionRule WhenLastConnectorDisconnected `
+            -DeletionRule WhenAuthoritativeSourceDisconnected `
+            -DeletionTriggerConnectedSystemIds @($csvSystem.id) `
+            -DeletionTriggerMode SpecificSourcesDisconnect `
             -DeletionGracePeriod ([TimeSpan]::FromDays(7)) | Out-Null
 
-        Write-Host "  ✓ Deletion rule configured: WhenLastConnectorDisconnected with 7-day grace period" -ForegroundColor Green
+        Write-Host "  ✓ Deletion rule configured: WhenAuthoritativeSourceDisconnected (HR CSV Source authoritative) with 7-day grace period" -ForegroundColor Green
     }
     else {
         Write-Host "  ⚠ Could not find User object type in Metaverse" -ForegroundColor Yellow
@@ -1406,7 +1428,7 @@ try {
 }
 catch {
     Write-Host "  ⚠ Could not configure deletion rules: $_" -ForegroundColor Yellow
-    Write-Host "    Reconnection test may fail without grace period configured" -ForegroundColor DarkYellow
+    Write-Host "    Leaver and Reconnection tests may fail without deletion rules configured" -ForegroundColor DarkYellow
 }
 
 # Step 7: Create Run Profiles

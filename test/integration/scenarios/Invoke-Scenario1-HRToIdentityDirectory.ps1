@@ -7,7 +7,16 @@
 
 .DESCRIPTION
     Validates provisioning users from HR system (CSV) to identity directory (Samba AD).
-    Tests the complete ILM lifecycle: Joiner, Mover, Leaver, and Reconnection patterns.
+    Tests the complete ILM lifecycle: Joiner, Mover, Leaver and Reconnection patterns.
+
+    HR is the authoritative source for deprovisioning in this topology (Setup-Scenario1.ps1
+    configures WhenAuthoritativeSourceDisconnected with the HR CSV Source as the sole trigger
+    system): HR disconnection schedules deletion after a 7-day grace period rather than
+    recalling HR-contributed values, even though the Training and LDAP connectors remain
+    joined. Test 3 (Leaver) proves the Metaverse Object is preserved, not recalled, during the
+    grace period; Test 4 (Reconnection) proves a rejoin within the grace period cancels the
+    scheduled deletion and rejoins the same Metaverse Object, rather than provisioning a
+    duplicate.
 
     HR CSV includes Company attribute: "Panoply" for employees, partner companies for contractors.
     Partner companies: Nexus Dynamics, Akinya, Rockhopper, Stellar Logistics, Vertex Solutions.
@@ -1097,152 +1106,250 @@ try {
         } # end else (non-OpenLDAP)
     }
 
-    # Test 3: Leaver (Deprovisioning)
+    # Test 3: Leaver (HR-Authoritative Deprovisioning)
+    #
+    # HR is the authoritative deletion trigger for this topology (Setup-Scenario1.ps1 Step 6d:
+    # WhenAuthoritativeSourceDisconnected, HR CSV Source as the sole trigger system). Removing the
+    # person from HR must schedule the Metaverse Object for deletion (deferred by the 7-day grace
+    # period), not recall its HR-contributed values, even though the Training and LDAP connectors
+    # remain joined. This proves #1570 situation 1 (deletion pending -> preserve for the grace
+    # window) end-to-end:
+    #   - the Metaverse Object is marked pending deletion
+    #   - its HR-contributed values (Account Name, Last Name, Display Name) are preserved
+    #   - no recall/attribute-clearing export is staged for the directory
+    #   - the directory account is left untouched (uid/sn/cn intact)
     if ($Step -eq "Leaver" -or $Step -eq "All") {
         $step3Start = Get-Date
-        Write-TestSection "Test 3: Leaver (Deprovisioning)"
+        Write-TestSection "Test 3: Leaver (HR-Authoritative Deprovisioning)"
 
-        # Use the first user (index 1) for leaver test - same user used in mover tests
-        $leaverUser = New-TestUser -Index 1
-        $userToRemove = $leaverUser.SamAccountName
+        $leaverSuccess = $true
+        $leaverErrorMessage = ""
 
-        Write-Host "Removing user from CSV..." -ForegroundColor Gray
+        try {
+            # Use the first user (index 1) for leaver test - same user used in mover tests
+            $leaverUser = New-TestUser -Index 1
+            $userToRemove = $leaverUser.SamAccountName
 
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $csvContent = Get-Content $csvPath
+            # Capture the live HR values before removal (a prior Mover test run may have changed
+            # title/displayName/department) - these are what must be preserved on the Metaverse
+            # Object, and on the directory account, throughout the grace period.
+            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csv = Import-Csv $csvPath
+            $leaverRow = $csv | Where-Object { $_.samAccountName -eq $userToRemove }
+            if (-not $leaverRow) { throw "Could not find $userToRemove in the HR CSV before removal" }
+            $expectedAccountName = $leaverRow.samAccountName
+            $expectedLastName = $leaverRow.lastName
+            $expectedDisplayName = $leaverRow.displayName
 
-        $filteredContent = $csvContent | Where-Object { $_ -notmatch [regex]::Escape($userToRemove) }
-        $filteredContent | Set-Content $csvPath
+            Write-Host "Removing user from CSV..." -ForegroundColor Gray
+            $csv = @($csv | Where-Object { $_.samAccountName -ne $userToRemove })
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            Write-Host "  OK Removed $userToRemove from CSV" -ForegroundColor Green
 
-        Write-Host "  ✓ Removed $userToRemove from CSV" -ForegroundColor Green
+            # Copy updated CSV
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
 
-        # Copy updated CSV
-        Copy-CsvToConnectorFiles -SourcePath $csvPath
+            # Run the CSV side of the sequence first, in isolation, so staged Pending Exports can
+            # be inspected before the LDAP Export step below would flush them - proving nothing
+            # was staged to clear the directory account, rather than merely observing the outcome
+            # after it has already been exported and confirmed.
+            Write-Host "Triggering CSV import and sync..." -ForegroundColor Gray
+            $leaverImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $leaverImportResult.activityId -Name "CSV Full Import (Leaver)"
+            # Outcome graph: validate disconnection outcomes for leaver (#363 Phase 4b)
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $leaverImportResult.activityId -Name "CSV Full Import (Leaver)" -ExpectedOutcomeType "DeletionDetected"
 
-        # Trigger sync sequence with progress output
-        Write-Host "Triggering sync sequence:" -ForegroundColor Gray
-        $leaverSyncResults = Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus
-        Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
+            $leaverSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $leaverSyncResult.activityId -Name "CSV Delta Sync (Leaver)"
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $leaverSyncResult.activityId -Name "CSV Delta Sync (Leaver)" -ExpectedOutcomeType "Disconnected"
+            Write-Host "  OK CSV import and sync completed" -ForegroundColor Green
 
-        # Outcome graph: validate disconnection outcomes for leaver (#363 Phase 4b)
-        $leaverImportStep = $leaverSyncResults.Steps | Where-Object { $_.Name -eq "CSV Full Import" }
-        if ($leaverImportStep) {
-            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $leaverImportStep.ActivityId -Name "CSV Full Import (Leaver)" -ExpectedOutcomeType "DeletionDetected"
+            # Locate the Metaverse Object. Account Name must still resolve it: HR-contributed
+            # identity values are preserved, not recalled, while deletion is pending.
+            $leaverMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Account Name" -AttributeValue $expectedAccountName -ErrorAction SilentlyContinue) | Select-Object -First 1
+            if (-not $leaverMvo) { throw "Could not find the Metaverse Object for $userToRemove by Account Name after HR disconnection (expected it to be preserved, pending deletion)" }
+
+            # Assert: the Metaverse Object is marked pending deletion (deferred by the 7-day grace
+            # period), not deleted outright and not silently orphaned.
+            $leaverMvoDetail = Get-JIMMetaverseObject -Id $leaverMvo.id -ErrorAction SilentlyContinue
+            if (-not $leaverMvoDetail -or -not ($leaverMvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') -or -not $leaverMvoDetail.isPendingDeletion) {
+                throw "Expected Metaverse Object $($leaverMvo.id) to be marked isPendingDeletion=true after HR (the authoritative source) disconnected"
+            }
+            Write-Host "  OK Metaverse Object marked pending deletion (grace period active, not yet deleted)" -ForegroundColor Green
+
+            # Assert: HR-contributed identity values are preserved during the grace window, not
+            # recalled (#1570 situation 1: deletion pending -> preserve).
+            Assert-MvoAttributeValue -MvoId $leaverMvo.id -AttributeName "Account Name" -ExpectedValue $expectedAccountName -Name "Leaver Account Name preserved"
+            Assert-MvoAttributeValue -MvoId $leaverMvo.id -AttributeName "Last Name" -ExpectedValue $expectedLastName -Name "Leaver Last Name preserved"
+            Assert-MvoAttributeValue -MvoId $leaverMvo.id -AttributeName "Display Name" -ExpectedValue $expectedDisplayName -Name "Leaver Display Name preserved"
+            Write-Host "  OK HR-contributed values preserved on the Metaverse Object (not recalled)" -ForegroundColor Green
+
+            # Assert: no recall/attribute-clearing export was staged for the directory. Search by
+            # Display Name (Pending Export search matches the source Metaverse Object's resolved
+            # display name, not arbitrary CSV field values).
+            $leaverPendingExports = @(Get-JIMPendingExport -ConnectedSystemId $config.LDAPSystemId -Search $expectedDisplayName -All -ErrorAction SilentlyContinue)
+            if ($leaverPendingExports.Count -gt 0) {
+                throw "Found $($leaverPendingExports.Count) Pending Export(s) staged for '$expectedDisplayName' on $($DirectoryConfig.ConnectedSystemName) after HR disconnection; recall must not touch identity-critical target attributes when deletion is pending"
+            }
+            Write-Host "  OK No Pending Exports staged for the directory (no recall attempted)" -ForegroundColor Green
+
+            # Run the LDAP-facing half of the sequence so downstream connector state stays
+            # consistent for the tests that follow, and to prove the directory account is
+            # genuinely untouched end-to-end (not merely un-staged).
+            Write-Host "Triggering LDAP export/import/sync (directory should remain unchanged)..." -ForegroundColor Gray
+            $leaverExportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $leaverExportResult.activityId -Name "LDAP Export (Leaver)"
+            Start-Sleep -Seconds 5
+            $leaverConfirmImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $leaverConfirmImportResult.activityId -Name "LDAP Delta Import (Leaver confirm)"
+            $leaverConfirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $leaverConfirmSyncResult.activityId -Name "LDAP Delta Sync (Leaver confirm)"
+
+            if ($config.CrossDomainSystemId -and $config.CrossDomainExportProfileId) {
+                $leaverCrossDomainExportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainExportProfileId -Wait -PassThru
+                Assert-ExportSuccess -ActivityId $leaverCrossDomainExportResult.activityId -Name "Cross-Domain Export (Leaver)"
+                $leaverCrossDomainImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainImportProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $leaverCrossDomainImportResult.activityId -Name "Cross-Domain Import (Leaver confirm)"
+                $leaverCrossDomainSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainDeltaSyncProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $leaverCrossDomainSyncResult.activityId -Name "Cross-Domain Delta Sync (Leaver confirm)"
+            }
+            Write-Host "  OK Sync sequence completed" -ForegroundColor Green
+
+            # Assert: the directory account is untouched - still present, identity attributes intact.
+            $directoryName = $DirectoryConfig.ConnectedSystemName
+            $leaverDirectoryUser = Get-LDAPUser -UserIdentifier $userToRemove -DirectoryConfig $DirectoryConfig
+            if (-not $leaverDirectoryUser) { throw "User '$userToRemove' was removed from $directoryName; HR disconnection during the grace period must not deprovision the directory account" }
+
+            $accountNameAttr = if ($isOpenLDAP) { "uid" } else { "sAMAccountName" }
+            Assert-DirectoryAttribute -DirectoryUser $leaverDirectoryUser -AttributeName $accountNameAttr -ExpectedValue $expectedAccountName -Label "Leaver"
+            Assert-DirectoryAttribute -DirectoryUser $leaverDirectoryUser -AttributeName "sn" -ExpectedValue $expectedLastName -Label "Leaver"
+            Assert-DirectoryAttribute -DirectoryUser $leaverDirectoryUser -AttributeName "cn" -ExpectedValue $expectedDisplayName -Label "Leaver"
+            Write-Host "  OK Directory account for $userToRemove untouched in $directoryName (uid/sn/cn intact)" -ForegroundColor Green
+            Write-Host "    Note: account will be deprovisioned after the 7-day grace period elapses" -ForegroundColor DarkGray
         }
-        $leaverSyncStep = $leaverSyncResults.Steps | Where-Object { $_.Name -eq "CSV Delta Sync" }
-        if ($leaverSyncStep) {
-            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $leaverSyncStep.ActivityId -Name "CSV Delta Sync (Leaver)" -ExpectedOutcomeType "Disconnected"
+        catch {
+            $leaverSuccess = $false
+            $leaverErrorMessage = $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
         }
 
-        # Validate user state in the directory
-        # With a 7-day grace period configured, the MVO won't be deleted immediately,
-        # so the user should still exist in the directory but the CSO should be disconnected
-        $directoryName = $DirectoryConfig.ConnectedSystemName
-        Write-Host "Validating leaver state in $directoryName..." -ForegroundColor Gray
-
-        $leaverExists = Test-LDAPUserExists -UserIdentifier $userToRemove -DirectoryConfig $DirectoryConfig
-
-        if ($leaverExists) {
-            # User still exists - expected with grace period
-            Write-Host "  ✓ User $userToRemove still exists in $directoryName (within grace period)" -ForegroundColor Green
-            Write-Host "    Note: User will be deleted after 7-day grace period expires" -ForegroundColor DarkGray
+        if ($leaverSuccess) {
             $testResults.Steps += @{ Name = "Leaver"; Success = $true }
         }
         else {
-            # User was deleted - unexpected with grace period, but not a failure
-            Write-Host "  ✓ User $userToRemove deleted from $directoryName" -ForegroundColor Green
-            $testResults.Steps += @{ Name = "Leaver"; Success = $true }
-        }
-        $stepTimings["3. Leaver"] = (Get-Date) - $step3Start
-    }
-
-    # Test 4: Reconnection (Delete and Restore)
-    if ($Step -eq "Reconnection" -or $Step -eq "All") {
-        $step4Start = Get-Date
-        Write-TestSection "Test 4: Reconnection (Delete and Restore)"
-
-        Write-Host "Testing delete and restore before grace period..." -ForegroundColor Gray
-
-        # Create test user
-        $reconnectUser = New-TestUser -Index 8888
-        $reconnectUser.EmployeeId = "EMP888888"
-        $reconnectUser.SamAccountName = "test.reconnect"
-        $reconnectUser.Email = "test.reconnect@$($DirectoryConfig.Domain)"
-        $reconnectUser.FirstName = "Test"
-        $reconnectUser.LastName = "Reconnect"
-        $reconnectUser.Department = "IT"
-        $reconnectUser.Title = "Developer"
-
-        # Add to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($reconnectUser.SamAccountName)@$($DirectoryConfig.Domain)"
-
-        # Use Import-Csv/Export-Csv to ensure correct column handling
-        $csv = Import-Csv $csvPath
-        $newUser = [PSCustomObject]@{
-            employeeId = $reconnectUser.EmployeeId
-            firstName = $reconnectUser.FirstName
-            lastName = $reconnectUser.LastName
-            email = $reconnectUser.Email
-            department = $reconnectUser.Department
-            title = $reconnectUser.Title
-            company = $reconnectUser.Company
-            samAccountName = $reconnectUser.SamAccountName
-            displayName = "$($reconnectUser.FirstName) $($reconnectUser.LastName)"
-            status = "Active"
-            userPrincipalName = $upn
-            employeeType = $reconnectUser.EmployeeType
-            employeeEndDate = ""
-        }
-        $csv = @($csv) + $newUser
-        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        Copy-CsvToConnectorFiles -SourcePath $csvPath
-
-        # Initial sync - uses Delta Sync for efficiency (baseline already established)
-        Write-Host "  Initial sync (provisioning new user):" -ForegroundColor Gray
-        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
-        Write-Host "  ✓ Initial sync completed" -ForegroundColor Green
-
-        # Verify user was created in the directory
-        $reconnectExists = Test-LDAPUserExists -UserIdentifier "test.reconnect" -DirectoryConfig $DirectoryConfig
-        if (-not $reconnectExists) {
-            Write-Host "  ✗ User was not created in directory during initial sync" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User not provisioned during initial sync" }
+            $testResults.Steps += @{ Name = "Leaver"; Success = $false; Error = $leaverErrorMessage }
             if (-not $ContinueOnError) {
                 Write-Host ""
                 Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
                 exit 1
             }
-            $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
         }
-        else {
-            Write-Host "  ✓ User exists in directory after initial sync" -ForegroundColor Green
+        $stepTimings["3. Leaver"] = (Get-Date) - $step3Start
+    }
 
-            # Remove user (simulating quit)
+    # Test 4: Reconnection (Rejoin Cancels Pending Deletion)
+    #
+    # HR is the sole deletion-trigger source (Setup-Scenario1.ps1 Step 6d), so removing the person
+    # from HR schedules the Metaverse Object for deletion after the 7-day grace period rather than
+    # deleting it outright. This proves the rejoin-cancellation mechanism Scenario 4's
+    # AuthoritativeRejoinCancellation step exercises at unit scale, in Scenario 1's end-to-end
+    # lifecycle: a rehire within the grace window must cancel the scheduled deletion, rejoin the
+    # SAME Metaverse Object (not project a duplicate), and leave the directory account correct.
+    if ($Step -eq "Reconnection" -or $Step -eq "All") {
+        $step4Start = Get-Date
+        Write-TestSection "Test 4: Reconnection (Rejoin Cancels Pending Deletion)"
+
+        Write-Host "Testing delete and restore before the 7-day grace period elapses..." -ForegroundColor Gray
+
+        $reconnectSuccess = $true
+        $reconnectErrorMessage = ""
+
+        try {
+            # Create test user
+            $reconnectUser = New-TestUser -Index 8888
+            $reconnectUser.EmployeeId = "EMP888888"
+            $reconnectUser.SamAccountName = "test.reconnect"
+            $reconnectUser.Email = "test.reconnect@$($DirectoryConfig.Domain)"
+            $reconnectUser.FirstName = "Test"
+            $reconnectUser.LastName = "Reconnect"
+            $reconnectUser.Department = "IT"
+            $reconnectUser.Title = "Developer"
+
+            # Add to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
+            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $upn = "$($reconnectUser.SamAccountName)@$($DirectoryConfig.Domain)"
+
+            # Use Import-Csv/Export-Csv to ensure correct column handling
+            $csv = Import-Csv $csvPath
+            $newUser = [PSCustomObject]@{
+                employeeId = $reconnectUser.EmployeeId
+                firstName = $reconnectUser.FirstName
+                lastName = $reconnectUser.LastName
+                email = $reconnectUser.Email
+                department = $reconnectUser.Department
+                title = $reconnectUser.Title
+                company = $reconnectUser.Company
+                samAccountName = $reconnectUser.SamAccountName
+                displayName = "$($reconnectUser.FirstName) $($reconnectUser.LastName)"
+                status = "Active"
+                userPrincipalName = $upn
+                employeeType = $reconnectUser.EmployeeType
+                employeeEndDate = ""
+            }
+            $csv = @($csv) + $newUser
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
+
+            # Initial sync - uses Delta Sync for efficiency (baseline already established)
+            Write-Host "  Initial sync (provisioning new user):" -ForegroundColor Gray
+            Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
+            Write-Host "  OK Initial sync completed" -ForegroundColor Green
+
+            # Verify user was created in the directory
+            $reconnectExists = Test-LDAPUserExists -UserIdentifier "test.reconnect" -DirectoryConfig $DirectoryConfig
+            if (-not $reconnectExists) { throw "User was not created in directory during initial sync" }
+            Write-Host "  OK User exists in directory after initial sync" -ForegroundColor Green
+
+            # Capture the Metaverse Object ID so the eventual rejoin can be proven to land on the
+            # SAME object rather than projecting a new one.
+            $reconnectMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Account Name" -AttributeValue "test.reconnect" -ErrorAction SilentlyContinue) | Select-Object -First 1
+            if (-not $reconnectMvo) { throw "Could not find the Metaverse Object for test.reconnect after initial provisioning" }
+            $reconnectMvoId = $reconnectMvo.id
+            Write-Host "  Metaverse Object ID: $reconnectMvoId" -ForegroundColor Gray
+
+            # Remove user (simulating quit). HR is the authoritative deletion trigger, so this
+            # schedules the Metaverse Object for deletion after the 7-day grace period rather than
+            # deleting it immediately. Only the CSV side of the sequence is needed: no
+            # directory-facing change is expected while the grace period is active.
             Write-Host "  Removing user (simulating quit)..." -ForegroundColor Gray
             $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.reconnect" }
             $csvContent | Set-Content $csvPath
             Copy-CsvToConnectorFiles -SourcePath $csvPath
 
-            # Only need CSV import/sync for removal - no LDAP export needed
             Write-Host "    [1/2] CSV Full Import..." -ForegroundColor DarkGray
             $removalImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $removalImportResult.activityId -Name "CSV Import (Reconnection removal)"
-            Write-Host "    [2/2] CSV Delta Sync (marks CSO obsolete)..." -ForegroundColor DarkGray
+            Write-Host "    [2/2] CSV Delta Sync (marks the Metaverse Object pending deletion)..." -ForegroundColor DarkGray
             $removalSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $removalSyncResult.activityId -Name "CSV Delta Sync (Reconnection removal)"
-            Write-Host "  ✓ Removal sync completed" -ForegroundColor Green
+            Write-Host "  OK Removal sync completed" -ForegroundColor Green
+
+            # Assert: the Metaverse Object is marked pending deletion (deferred by the grace
+            # period), not deleted outright.
+            $reconnectMvoAfterRemoval = Get-JIMMetaverseObject -Id $reconnectMvoId -ErrorAction SilentlyContinue
+            if (-not $reconnectMvoAfterRemoval -or -not ($reconnectMvoAfterRemoval.PSObject.Properties.Name -contains 'isPendingDeletion') -or -not $reconnectMvoAfterRemoval.isPendingDeletion) {
+                throw "Expected Metaverse Object $reconnectMvoId to be marked isPendingDeletion=true after HR disconnected"
+            }
+            Write-Host "  OK Metaverse Object marked pending deletion (7-day grace period active)" -ForegroundColor Green
 
             # Verify user still exists in directory (grace period should prevent deletion)
             $stillExistsAfterRemoval = Test-LDAPUserExists -UserIdentifier "test.reconnect" -DirectoryConfig $DirectoryConfig
-            if ($stillExistsAfterRemoval) {
-                Write-Host "  ✓ User still in directory after removal (grace period active)" -ForegroundColor Green
-            }
-            else {
-                Write-Host "  ⚠ User missing from directory after removal sync" -ForegroundColor Yellow
-            }
+            if (-not $stillExistsAfterRemoval) { throw "User was removed from the directory during the grace period; HR disconnection should schedule deletion, not deprovision immediately" }
+            Write-Host "  OK User still in directory after removal (grace period active)" -ForegroundColor Green
 
-            # Restore user (simulating rehire before grace period)
+            # Restore user (simulating rehire before the grace period elapses). HR is the sole
+            # deletion-trigger source, so its rejoin must cancel the scheduled deletion and land on
+            # the SAME Metaverse Object.
             Write-Host "  Restoring user (simulating rehire)..." -ForegroundColor Gray
             # Re-add user using proper CSV parsing
             $csv = Import-Csv $csvPath
@@ -1251,26 +1358,52 @@ try {
             Copy-CsvToConnectorFiles -SourcePath $csvPath
 
             Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
-            Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
+            Write-Host "  OK Restore sync completed" -ForegroundColor Green
 
-            # Verify user still exists (reconnection should preserve directory account)
+            # Assert: the directory account survived the whole cycle.
             $reconnectPreserved = Test-LDAPUserExists -UserIdentifier "test.reconnect" -DirectoryConfig $DirectoryConfig
+            if (-not $reconnectPreserved) { throw "Reconnection failed - user lost in directory" }
+            Write-Host "  OK Reconnection successful - user preserved in directory" -ForegroundColor Green
 
-            if ($reconnectPreserved) {
-                Write-Host "  ✓ Reconnection successful - user preserved in directory" -ForegroundColor Green
-                $testResults.Steps += @{ Name = "Reconnection"; Success = $true }
+            # Assert: the rejoin landed on the SAME Metaverse Object, not a new projection.
+            $reconnectMvoAfterRestore = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Account Name" -AttributeValue "test.reconnect" -ErrorAction SilentlyContinue) | Select-Object -First 1
+            if (-not $reconnectMvoAfterRestore -or $reconnectMvoAfterRestore.id -ne $reconnectMvoId) {
+                $foundId = if ($reconnectMvoAfterRestore) { $reconnectMvoAfterRestore.id } else { "<not found>" }
+                throw "Rejoin landed on a different Metaverse Object (expected $reconnectMvoId, found $foundId) instead of joining the one marked for deletion"
             }
-            else {
-                Write-Host "  ✗ Reconnection failed - user lost in directory" -ForegroundColor Red
-                $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User deleted instead of preserved" }
-                if (-not $ContinueOnError) {
-                    Write-Host ""
-                    Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
-                    exit 1
-                }
-            }
-            $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
+            Write-Host "  OK Rejoin landed on the same Metaverse Object ($reconnectMvoId)" -ForegroundColor Green
+
+            # Assert: the scheduled deletion was cancelled by the rejoin.
+            $reconnectMvoAfterRestoreDetail = Get-JIMMetaverseObject -Id $reconnectMvoId -ErrorAction SilentlyContinue
+            $isStillPending = $reconnectMvoAfterRestoreDetail -and ($reconnectMvoAfterRestoreDetail.PSObject.Properties.Name -contains 'isPendingDeletion') -and $reconnectMvoAfterRestoreDetail.isPendingDeletion
+            if ($isStillPending) { throw "Metaverse Object $reconnectMvoId is still marked pending deletion after HR (the triggering source) rejoined; the scheduled deletion should be cancelled" }
+            Write-Host "  OK Scheduled deletion cancelled - Metaverse Object no longer pending deletion" -ForegroundColor Green
+
+            # Assert: the directory account remains correct (identity attributes intact).
+            $accountNameAttr = if ($isOpenLDAP) { "uid" } else { "sAMAccountName" }
+            $reconnectDirectoryUser = Get-LDAPUser -UserIdentifier "test.reconnect" -DirectoryConfig $DirectoryConfig
+            if (-not $reconnectDirectoryUser) { throw "Could not read test.reconnect back from the directory to verify its identity attributes" }
+            Assert-DirectoryAttribute -DirectoryUser $reconnectDirectoryUser -AttributeName $accountNameAttr -ExpectedValue $reconnectUser.SamAccountName -Label "Reconnection"
+            Assert-DirectoryAttribute -DirectoryUser $reconnectDirectoryUser -AttributeName "sn" -ExpectedValue $reconnectUser.LastName -Label "Reconnection"
         }
+        catch {
+            $reconnectSuccess = $false
+            $reconnectErrorMessage = $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+
+        if ($reconnectSuccess) {
+            $testResults.Steps += @{ Name = "Reconnection"; Success = $true }
+        }
+        else {
+            $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = $reconnectErrorMessage }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
+        }
+        $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
     }
 
     # Test 5: Initial Export Only Attribute Flows (#223)

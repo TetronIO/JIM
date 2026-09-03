@@ -449,6 +449,15 @@ public partial class SyncRepository
         if (metaverseObjects.Count == 0)
             return;
 
+        // Defensive collapse (belt and braces): the page-flush accumulator (SyncTaskProcessorBase's
+        // QueueMvoForUpdate) is meant to dedupe by Id before this method ever sees the list, but this is
+        // the last line of defence before the batch UPDATE/INSERT below, which cannot tolerate a duplicate
+        // Id at all - a duplicate-keyed VALUES row makes the UPDATE nondeterministic (PostgreSQL picks an
+        // arbitrary row) and a duplicate attribute value Id in the INSERT fails outright on the unique
+        // constraint, aborting the whole Activity. Collapsing here means a future queueing-site regression
+        // degrades to a logged consolidation instead of a failed Activity.
+        metaverseObjects = CollapseDuplicateMvoEntries(metaverseObjects);
+
         // Pre-generate ids for newly added attribute values and fix up reference FKs from in-memory
         // navigations, mirroring the create path so the raw insert below has everything it needs.
         foreach (var mvo in metaverseObjects)
@@ -502,7 +511,23 @@ public partial class SyncRepository
             }
 
             if (attributeValuesToInsert.Count > 0)
-                await BulkInsertMvoAttributeValuesViaEfAsync(attributeValuesToInsert);
+            {
+                // Final guard: dedupe by value Id. The Id-collapse above removes whole duplicate MVO
+                // entries, but if two entries somehow still contribute the same newly-created attribute
+                // value Id (the collision this method exists to survive, not merely tolerate), the INSERT
+                // below is a raw SQL statement with no ON CONFLICT clause and would fail outright on the
+                // unique constraint. Deduping here is strictly defensive; queue-time consolidation is the
+                // fix, this is the belt-and-braces backstop.
+                var dedupedInserts = DeduplicateByValueId(attributeValuesToInsert);
+                if (dedupedInserts.Count != attributeValuesToInsert.Count)
+                    Log.Warning(
+                        "UpdateMetaverseObjectsBulkAsync: Collapsed {DuplicateCount} duplicate attribute value id(s) " +
+                        "from the insert batch (an upstream page-flush queueing defect); investigate SyncTaskProcessorBase's " +
+                        "QueueMvoForUpdate dedup guard.",
+                        attributeValuesToInsert.Count - dedupedInserts.Count);
+
+                await BulkInsertMvoAttributeValuesViaEfAsync(dedupedInserts);
+            }
 
             if (attributeValueIdsToDelete.Count > 0)
                 await DeleteMetaverseObjectAttributeValuesByIdsAsync(attributeValueIdsToDelete);
@@ -524,6 +549,82 @@ public partial class SyncRepository
         //    here as raw SQL (a duplicate-key violation). Detaching is the definitive guard against recurrence: unlike
         //    re-attaching as Unchanged (the create path's bridge), a detached entity cannot be re-persisted by EF at all.
         DetachPersistedMvoGraphs(metaverseObjects);
+    }
+
+    /// <summary>
+    /// Collapses entries that share an Id but are distinct object instances (see the SamePageJoinConflict
+    /// note on <c>SyncTaskProcessorBase.QueueMvoForUpdate</c>, JIM.Worker), keeping the later entry and
+    /// copying any deletion-marker scalars the earlier entry carried across before it is dropped. Ordinary
+    /// callers reach this method with an already-deduped list, so the common case is a same-size list
+    /// returned untouched; this only does work when the upstream queue-time guard has regressed.
+    /// </summary>
+    private static List<MetaverseObject> CollapseDuplicateMvoEntries(List<MetaverseObject> metaverseObjects)
+    {
+        if (metaverseObjects.Count < 2)
+            return metaverseObjects;
+
+        var byId = new Dictionary<Guid, MetaverseObject>(metaverseObjects.Count);
+        var order = new List<Guid>(metaverseObjects.Count);
+        var duplicateCount = 0;
+
+        foreach (var mvo in metaverseObjects)
+        {
+            if (!byId.TryGetValue(mvo.Id, out var existing))
+            {
+                byId[mvo.Id] = mvo;
+                order.Add(mvo.Id);
+                continue;
+            }
+
+            if (ReferenceEquals(existing, mvo))
+                continue;
+
+            duplicateCount++;
+
+            // Preserve deletion-marker scalars from whichever entry carries them: only one of the
+            // colliding instances is expected to have gone through the grace-period deletion-marking
+            // path, and the survivor must not silently lose that state.
+            if (existing.LastConnectorDisconnectedDate.HasValue && !mvo.LastConnectorDisconnectedDate.HasValue)
+            {
+                mvo.LastConnectorDisconnectedDate = existing.LastConnectorDisconnectedDate;
+                mvo.DeletionInitiatedByType = existing.DeletionInitiatedByType;
+                mvo.DeletionInitiatedById = existing.DeletionInitiatedById;
+                mvo.DeletionInitiatedByName = existing.DeletionInitiatedByName;
+                mvo.DeletionTriggeredBySystemId = existing.DeletionTriggeredBySystemId;
+                mvo.DeletionTriggeredBySystemName = existing.DeletionTriggeredBySystemName;
+                mvo.DeletionPolicySnapshotJson = existing.DeletionPolicySnapshotJson;
+            }
+
+            byId[mvo.Id] = mvo;
+        }
+
+        if (duplicateCount > 0)
+            Log.Warning(
+                "UpdateMetaverseObjectsBulkAsync: Collapsed {DuplicateCount} duplicate Metaverse Object id(s) from the " +
+                "batch (an upstream page-flush queueing defect - distinct object instances queued for the same Id); " +
+                "investigate SyncTaskProcessorBase's QueueMvoForUpdate dedup guard.",
+                duplicateCount);
+
+        return order.Select(id => byId[id]).ToList();
+    }
+
+    /// <summary>
+    /// Dedupes newly-created attribute value inserts by value Id, keeping the first occurrence. Belt-and-braces
+    /// backstop for <see cref="UpdateMetaverseObjectsBulkAsync"/>'s raw SQL INSERT, which has no ON CONFLICT
+    /// clause and fails outright on a duplicate Id.
+    /// </summary>
+    private static List<(Guid MvoId, MetaverseObjectAttributeValue Value)> DeduplicateByValueId(
+        List<(Guid MvoId, MetaverseObjectAttributeValue Value)> values)
+    {
+        var seen = new HashSet<Guid>(values.Count);
+        var result = new List<(Guid MvoId, MetaverseObjectAttributeValue Value)>(values.Count);
+        foreach (var entry in values)
+        {
+            if (seen.Add(entry.Value.Id))
+                result.Add(entry);
+        }
+
+        return result;
     }
 
     /// <summary>
