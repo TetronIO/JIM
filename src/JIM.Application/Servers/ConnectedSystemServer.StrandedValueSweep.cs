@@ -103,18 +103,12 @@ public partial class ConnectedSystemServer
         // #1605 Functional Requirement 9: the re-join shortfall check. Runs before anything else touches the
         // Connector Space or the Metaverse: a broken re-import (a filter or base DN change) must never be
         // mistaken for a genuine mass departure, and this is the only point that can tell the two apart.
-        // The joined-systems lookup reuses the same per-object query the obsoletion path already uses for
-        // "remaining connected systems" (ConnectedSystemObjectObsoletionService, #1537's deletion recall),
-        // rather than a bespoke batched query: the sweep's recorded set is bounded by what one clear joined,
-        // and consistency with the established lookup matters more here than shaving round trips.
+        // Both queries are set-based (recorded count; recorded-but-not-rejoined set via a single correlated
+        // NOT EXISTS), so the shortfall decision costs two round trips regardless of population size - a
+        // Connector Space with 100,000 objects joined at clear time must not pay one query per object before
+        // the sweep decides anything.
         var recordedMvoIds = await Application.Repository.ConnectedSystems.GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsAsync(connectedSystem.Id);
-        var joinedSystemIdsByMvoId = new Dictionary<Guid, List<int>>();
-        foreach (var recordedId in recordedMvoIds)
-            joinedSystemIdsByMvoId[recordedId] = await Application.SyncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(recordedId);
-
-        var missingMvoIds = recordedMvoIds
-            .Where(id => !joinedSystemIdsByMvoId[id].Contains(connectedSystem.Id))
-            .ToList();
+        var missingMvoIds = await Application.Repository.ConnectedSystems.GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync(connectedSystem.Id);
 
         var maxMissingPercent = await Application.ServiceSettings.GetPostClearReconciliationMaxMissingPercentAsync();
         if (IsReconciliationRefused(recordedMvoIds.Count, missingMvoIds.Count, maxMissingPercent))
@@ -198,7 +192,7 @@ public partial class ConnectedSystemServer
         if (missingMvoIds.Count > 0)
         {
             await EvaluateDeletionRulesForMissingObjectsAsync(
-                connectedSystem, activity, missingMvoIds, joinedSystemIdsByMvoId, syncEngine, exportEvaluationCache, result);
+                connectedSystem, activity, missingMvoIds, syncEngine, exportEvaluationCache, result);
         }
 
         // #1605 Functional Requirement 10: the state-convergent zero-join pass. Metaverse-wide, not scoped
@@ -237,12 +231,19 @@ public partial class ConnectedSystemServer
     /// sequence (capture reference-recall context, evaluate deletions, delete, stage reference-recall
     /// exports). Objects already pending deletion are skipped, so an earlier decision's markers are never
     /// overwritten. Records one Run Profile Execution Item per evaluated object whose fate is not NotDeleted.
+    /// <para>
+    /// Looks up each object's remaining joined systems individually here, via the same per-object query the
+    /// obsoletion path uses for "remaining connected systems" (<c>ConnectedSystemObjectObsoletionService</c>,
+    /// #1537's deletion recall) - deliberately NOT pre-computed for the whole recorded set: this method only
+    /// ever sees <paramref name="missingMvoIds"/>, which is bounded by how many objects actually failed to
+    /// rejoin (departures), unlike the recorded set itself, which is bounded by what the clear joined. A
+    /// Connector Space that mostly came back pays this lookup only for the objects that did not.
+    /// </para>
     /// </summary>
     private async Task EvaluateDeletionRulesForMissingObjectsAsync(
         ConnectedSystem connectedSystem,
         Activity activity,
         List<Guid> missingMvoIds,
-        Dictionary<Guid, List<int>> joinedSystemIdsByMvoId,
         SyncEngine syncEngine,
         ExportEvaluationCache exportEvaluationCache,
         StrandedValueSweepResult result)
@@ -269,9 +270,10 @@ public partial class ConnectedSystemServer
             // Already pending deletion is filtered out here: an earlier decision's markers stand.
             foreach (var mvo in pageMvos.Where(m => m.LastConnectorDisconnectedDate == null))
             {
-                var remainingConnectedSystemIds = joinedSystemIdsByMvoId.TryGetValue(mvo.Id, out var joinedIds)
-                    ? (IReadOnlyCollection<int>)joinedIds
-                    : Array.Empty<int>();
+                // Per-object, but bounded by this page's departures rather than the whole recorded set;
+                // the cleared system is excluded from the result by construction (that is what makes the
+                // object "missing" in the first place).
+                var remainingConnectedSystemIds = await Application.SyncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvo.Id);
 
                 var (decision, policySnapshotJson) = MetaverseObjectDeletionRuleApplier.Apply(
                     syncEngine, mvo, connectedSystem.Id, remainingConnectedSystemIds, systemNamesById, connectedSystem.Name,

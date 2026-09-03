@@ -1528,12 +1528,29 @@ public interface IConnectedSystemRepository
 
     /// <summary>
     /// The Metaverse Object ids recorded by <see cref="DeleteAllConnectedSystemObjectsAndDependenciesAsync"/>
-    /// for the given Connected System's most recent clear (#1605), for the post-clear reconciliation sweep's
-    /// re-join shortfall check and Deletion Rule evaluation. Empty when the system has never been cleared
-    /// with reconciliation recording, or its record set has already been consumed and deleted.
+    /// for the given Connected System's most recent clear (#1605): the full recorded set, rejoined or not.
+    /// Used by the post-clear reconciliation sweep purely for the recorded count that anchors the re-join
+    /// shortfall percentage; <see cref="GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync"/>
+    /// is what the sweep evaluates against. Empty when the system has never been cleared with reconciliation
+    /// recording, or its record set has already been consumed and deleted.
     /// </summary>
     /// <param name="connectedSystemId">The Connected System whose recorded join set is wanted.</param>
     Task<List<Guid>> GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// The subset of <see cref="GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsAsync"/> that have NOT
+    /// rejoined this Connected System: no <see cref="JIM.Models.Staging.ConnectedSystemObject"/> with a
+    /// matching <c>MetaverseObjectId</c> and this system's id currently exists. Set-based (a single
+    /// correlated NOT EXISTS query, expressed as EF LINQ so it translates on PostgreSQL and runs unmodified
+    /// against the EF in-memory provider the workflow test harness uses) so the #1605 Functional Requirement
+    /// 9 shortfall check, and the Deletion Rule evaluation pass that follows it, cost one query each
+    /// regardless of how many objects were recorded at the clear. A Connector Space with 100,000 joined
+    /// objects at clear time must not pay 100,000 round trips before the sweep decides anything; only the
+    /// (much smaller, departures-bounded) objects this returns are looked up individually afterwards, for
+    /// their remaining joined systems.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose non-rejoined recorded objects are wanted.</param>
+    Task<List<Guid>> GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync(int connectedSystemId);
 
     /// <summary>
     /// Deletes the given Connected System's <see cref="JIM.Models.Staging.ConnectorSpaceClearJoinRecord"/>

@@ -6688,6 +6688,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<Guid>> GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync(int connectedSystemId)
+    {
+        // A single correlated NOT EXISTS query (EF translates the nested .Any() this way on PostgreSQL),
+        // so the #1605 shortfall check costs one round trip regardless of how many objects were recorded.
+        // Plain EF LINQ rather than raw SQL specifically so it also runs, unmodified, against the EF
+        // in-memory provider the workflow test harness uses.
+        return await Repository.Database.ConnectorSpaceClearJoinRecords
+            .AsNoTracking()
+            .Where(r => r.ConnectedSystemId == connectedSystemId)
+            .Where(r => !Repository.Database.ConnectedSystemObjects.Any(cso =>
+                cso.MetaverseObjectId == r.MetaverseObjectId && cso.ConnectedSystemId == connectedSystemId))
+            .Select(r => r.MetaverseObjectId)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
     public async Task DeleteConnectorSpaceClearJoinRecordsAsync(int connectedSystemId)
     {
         // Reached from the end of every completed sweep (ExecuteStrandedValueSweepAsync), so the in-memory

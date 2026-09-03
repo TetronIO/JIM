@@ -873,7 +873,7 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
     }
 
     // Note: the state-convergent zero-join pass (#1605 Functional Requirement 10) is covered by
-    // MetaverseZeroJoinPassDatabaseTests (RequiresPostgres), not here: it queries
+    // PostClearReconciliationDatabaseTests (RequiresPostgres), not here: it queries
     // Repository.Database.MetaverseObjects directly (a real EF/SQL query, by design - it has to scan the
     // whole Metaverse for historical strays), which this fixture's fake, dictionary-backed SyncRepository
     // cannot see. Metaverse Objects created via SeedPlainMetaverseObject/SeedStrandedMetaverseObject in this
@@ -1009,6 +1009,13 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
     /// <summary>
     /// Joins a Connected System Object of the given system to the Metaverse Object, WITHOUT running an
     /// actual synchronisation: enough for the #1570 gate's joined-systems lookup to see the connection.
+    /// Dual-seeded: the fake <see cref="SyncRepo"/> (what the #1570 per-object lookup and most of this
+    /// fixture's assertions read) and the real EF-backed <see cref="DbContext"/> (what the #1605 set-based
+    /// re-join query - <c>GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync</c> - reads,
+    /// since it is plain EF LINQ against ConnectedSystemObjects, not a call through SyncRepo). The DbContext
+    /// copy carries only the scalar MetaverseObjectId FK, not the MetaverseObject navigation, so adding it
+    /// cannot walk the graph into the Metaverse Object itself (which most callers here seed only into the
+    /// fake repository).
     /// </summary>
     private void JoinMvoToSystem(MetaverseObject mvo, ConnectedSystem system)
     {
@@ -1021,6 +1028,15 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
             Status = ConnectedSystemObjectStatus.Normal
         };
         SyncRepo.SeedConnectedSystemObject(cso);
+
+        DbContext.ConnectedSystemObjects.Add(new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = system.Id,
+            MetaverseObjectId = mvo.Id,
+            Status = ConnectedSystemObjectStatus.Normal
+        });
+        DbContext.SaveChanges();
     }
 
     /// <summary>

@@ -277,6 +277,73 @@ public class PostClearReconciliationDatabaseTests
     }
 
     // -------------------------------------------------------------------------------------------------------
+    // Set-based re-join shortfall query (#1605 Functional Requirement 9)
+    // -------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync_RecordedObjectRejoined_ExcludedAsync()
+    {
+        var system = await SeedConnectedSystemAsync($"Rejoined {Guid.NewGuid():N}");
+        var typeId = await SeedMetaverseObjectTypeAsync();
+        var mvoId = await SeedMetaverseObjectAsync(typeId, joinedSystems: system);
+        await SeedJoinRecordAsync(system.SystemId, mvoId);
+
+        await using var context = NewContext();
+        var repository = new PostgresDataRepository(context);
+        var missing = await repository.ConnectedSystems.GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync(system.SystemId);
+
+        Assert.That(missing, Does.Not.Contain(mvoId), "a live Connected System Object of the same system means the object rejoined");
+    }
+
+    [Test]
+    public async Task GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync_RecordedObjectJoinedToDifferentSystemOnly_IncludedAsync()
+    {
+        var clearedSystem = await SeedConnectedSystemAsync($"Cleared {Guid.NewGuid():N}");
+        var otherSystem = await SeedConnectedSystemAsync($"Other {Guid.NewGuid():N}");
+        var typeId = await SeedMetaverseObjectTypeAsync();
+        // Joined to the OTHER system only: never rejoined the cleared one.
+        var mvoId = await SeedMetaverseObjectAsync(typeId, joinedSystems: otherSystem);
+        await SeedJoinRecordAsync(clearedSystem.SystemId, mvoId);
+
+        await using var context = NewContext();
+        var repository = new PostgresDataRepository(context);
+        var missing = await repository.ConnectedSystems.GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync(clearedSystem.SystemId);
+
+        Assert.That(missing, Contains.Item(mvoId), "a join to a different system does not count as a re-join to the cleared one");
+    }
+
+    [Test]
+    public async Task GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync_RecordedObjectWithNoJoins_IncludedAsync()
+    {
+        var system = await SeedConnectedSystemAsync($"NoJoins {Guid.NewGuid():N}");
+        var typeId = await SeedMetaverseObjectTypeAsync();
+        var mvoId = await SeedMetaverseObjectAsync(typeId);
+        await SeedJoinRecordAsync(system.SystemId, mvoId);
+
+        await using var context = NewContext();
+        var repository = new PostgresDataRepository(context);
+        var missing = await repository.ConnectedSystems.GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync(system.SystemId);
+
+        Assert.That(missing, Contains.Item(mvoId));
+    }
+
+    /// <summary>
+    /// Writes a single ConnectorSpaceClearJoinRecord directly, independent of an actual clear, so the
+    /// set-based re-join query's three selection cases can be composed without needing a full clear cycle.
+    /// </summary>
+    private async Task SeedJoinRecordAsync(int connectedSystemId, Guid metaverseObjectId)
+    {
+        await using var seed = NewContext();
+        seed.ConnectorSpaceClearJoinRecords.Add(new ConnectorSpaceClearJoinRecord
+        {
+            ConnectedSystemId = connectedSystemId,
+            MetaverseObjectId = metaverseObjectId,
+            ClearedAt = DateTime.UtcNow
+        });
+        await seed.SaveChangesAsync();
+    }
+
+    // -------------------------------------------------------------------------------------------------------
     // State-convergent zero-join pass query (#1605 Functional Requirement 10)
     // -------------------------------------------------------------------------------------------------------
 
