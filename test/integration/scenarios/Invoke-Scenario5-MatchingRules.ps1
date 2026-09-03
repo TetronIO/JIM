@@ -14,9 +14,13 @@
     - Edge cases: null values, case sensitivity
     - Outbound (export-time) matching: a Metaverse Object provisioned into a Connected System
       JOINS a pre-existing, unjoined account created out-of-band instead of provisioning a duplicate
+    - Same-page rejoin cancellation (#1612): within a single sync page, a source disconnecting (which
+      schedules a grace-period Metaverse Object deletion) and a NEW same-system source rejoining the
+      SAME identity (which should cancel that scheduled deletion, per #119) must leave the object alive
+      with every deletion marker cleared, not just when the disconnect and rejoin happen on separate runs
 
 .PARAMETER Step
-    Which test step to execute (Projection, Join, DuplicatePrevention, MultiplRules, All)
+    Which test step to execute (Projection, Join, DuplicatePrevention, MultiplRules, SamePageRejoinCancellation, All)
 
 .PARAMETER Template
     Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
@@ -39,7 +43,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "SamePageJoinConflict", "CaseSensitivity", "ExportMatchJoin", "All")]
+    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "SamePageJoinConflict", "SamePageRejoinCancellation", "CaseSensitivity", "ExportMatchJoin", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -962,6 +966,217 @@ try {
         Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray
     }
 
+    # Test 5c: Same-Page Rejoin Cancellation (probe for #1612). Pass 1 of a sync page obsoletes a CSO
+    # whose source row vanished, scheduling a grace-period Metaverse Object deletion (WhenAuthoritativeSourceDisconnected, CSV as the trigger source).
+    # Pass 2 of the SAME page has a different CSO from the SAME Connected System match/join that same MVO via
+    # the Object Matching Rule. Across separate runs, a rejoin correctly cancels a scheduled deletion (#119;
+    # see Scenario 1's Reconnection step and Scenario 4's AuthoritativeRejoinCancellation step). #1612 suspects
+    # this does NOT hold within one page, because Pass 2 evaluates a different in-memory instance of the MVO
+    # than the one Pass 1 scheduled the deletion on: the cancellation is applied to an instance whose change is
+    # then discarded rather than flushed, so the database-committed scheduling from Pass 1 survives the page.
+    #
+    # Reuses the SamePageJoinConflict mechanics immediately above (seed one CSO/MVO, then in a single later
+    # page remove the seed row and add a new row with a NEW hrId but the SAME employeeId), but with only ONE
+    # rekeyed CSO rather than two: here there is nothing to conflict over, only a disconnect and a rejoin
+    # landing on the same MVO in the same page. Scenario 4 cannot express this at all: its CSV uses employeeId
+    # as the external id, so one system cannot both obsolete and rejoin the same identity within one page.
+    #
+    # These assertions describe the CORRECT behaviour (deletion cancelled), not necessarily the current one:
+    # the isPendingDeletion/marker assertion below is expected to FAIL on current code if the defect is live.
+    if ($Step -eq "SamePageRejoinCancellation" -or $Step -eq "All") {
+        Write-TestSection "Test 5c: Same-Page Rejoin Cancellation (#1612 probe)"
+
+        Write-Host "Testing: within ONE sync page, a source disconnecting (scheduling grace-period deletion)" -ForegroundColor Gray
+        Write-Host "  and a NEW same-system source rejoining the same identity must cancel that scheduled" -ForegroundColor Gray
+        Write-Host "  deletion, leaving the object alive with every deletion marker cleared" -ForegroundColor Gray
+
+        $srpUserObjectType = Get-JIMMetaverseObjectType -Name "User"
+
+        # Capture the current deletion rule configuration so it can be restored once this step is done;
+        # later steps (Case Sensitivity, ExportMatchJoin) rely on Setup-Scenario1's baseline configuration.
+        $srpPreviousDeletionRule = $srpUserObjectType.deletionRule
+        $srpPreviousGracePeriod = $srpUserObjectType.deletionGracePeriod
+        $srpPreviousTriggerIds = $srpUserObjectType.deletionTriggerConnectedSystemIds
+        $srpPreviousTriggerMode = $srpUserObjectType.deletionTriggerMode
+
+        try {
+            # WhenAuthoritativeSourceDisconnected anchored on the CSV system: the disconnection schedules the
+            # deletion regardless of the directory connector this step deliberately leaves joined. Under
+            # WhenLastConnectorDisconnected that surviving connector would mean no deletion is scheduled at
+            # all (values preserved instead), and the cancellation assertion below would pass vacuously.
+            Write-Host "  Configuring User deletion rule: WhenAuthoritativeSourceDisconnected (CSV source), 1-hour grace period..." -ForegroundColor Gray
+            Set-JIMMetaverseObjectType -Id $srpUserObjectType.id `
+                -DeletionRule "WhenAuthoritativeSourceDisconnected" `
+                -DeletionTriggerConnectedSystemIds @($config.CSVSystemId) `
+                -DeletionTriggerMode SpecificSourcesDisconnect `
+                -DeletionGracePeriod ([TimeSpan]::FromHours(1)) | Out-Null
+
+            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $srpEmployeeId = "EMP900050"
+            $srpSam = "test.samepage.rejoin"
+            $srpDisplayName = "Test SamePage Rejoin"
+            $srpDepartment = "Information Technology"  # one of the OUs Scenario 5 pre-creates for Samba AD
+
+            $srpUser = New-TestUser -Index 9050
+            $srpUser.EmployeeId = $srpEmployeeId
+            $srpUser.SamAccountName = $srpSam
+            $srpUser.Email = "$srpSam@panoply.local"
+            $srpUser.DisplayName = $srpDisplayName
+            $srpUser.Department = $srpDepartment
+
+            # Local helper: append a fully-populated HR CSV row for the shared identity, varying only hrId.
+            $addSrpRow = {
+                param($rows, $hrId)
+                return @($rows) + [PSCustomObject]@{
+                    hrId = $hrId; employeeId = $srpUser.EmployeeId; firstName = $srpUser.FirstName; lastName = $srpUser.LastName
+                    email = $srpUser.Email; department = $srpUser.Department; title = $srpUser.Title; company = $srpUser.Company
+                    samAccountName = $srpUser.SamAccountName; displayName = $srpUser.DisplayName; status = "Active"
+                    userPrincipalName = "$($srpUser.SamAccountName)@panoply.local"; employeeType = $srpUser.EmployeeType; employeeEndDate = ""
+                }
+            }
+
+            # Phase 1 (seed): baseline + one seed row. Import + sync projects a committed MVO. Then export to
+            # AD and confirm with an import, so the MVO carries a real, joined Connected System Object on a
+            # system the HR-side rekey below never touches - proving that rekey does not collaterally disturb it.
+            Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination $csvPath -Force
+            $csv = & $addSrpRow (Import-Csv $csvPath) "00009050-0000-0000-0000-000000000000"
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
+
+            Write-Host "  Seeding $srpSam (EmployeeId=$srpEmployeeId)..." -ForegroundColor Gray
+            $srpSeedImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $srpSeedImport.activityId -Name "CSV Import (SamePageRejoinCancellation - seed)"
+            $srpSeedSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $srpSeedSync.activityId -Name "CSV Full Sync (SamePageRejoinCancellation - seed)"
+
+            Write-Host "  Provisioning to AD so the object carries a real connector the rekey never touches..." -ForegroundColor Gray
+            $srpExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $srpExport.activityId -Name "LDAP Export (SamePageRejoinCancellation - seed)"
+            $srpLdapImport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $srpLdapImport.activityId -Name "LDAP Import (SamePageRejoinCancellation - confirm)"
+
+            # Find the MVO by an exact Account Name match (-Search only filters by display name;
+            # -AttributeName/-AttributeValue is the exact-match attribute filter Scenario 1 also uses).
+            $srpMvos = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Account Name" -AttributeValue $srpSam -ErrorAction SilentlyContinue)
+            $srpMvo = $srpMvos | Select-Object -First 1
+            if (-not $srpMvo) {
+                $testResults.Steps += @{ Name = "SamePageRejoinCancellation"; Success = $false; Error = "Could not find seeded MVO by Account Name '$srpSam'" }
+                throw "SamePageRejoinCancellation setup failed: could not find seeded MVO for $srpSam"
+            }
+            $srpMvoId = $srpMvo.id
+            Write-Host "  MVO ID: $srpMvoId" -ForegroundColor Gray
+
+            # Phase 2 (rekey): in ONE CSV write, remove the seed row and add a row with a NEW hrId but the
+            # SAME employeeId (and same samAccountName/displayName). One import brings the obsoletion and the
+            # rejoining CSO together; one sync then runs, in a SINGLE page, Pass 1 (the seed CSO's source row
+            # vanished -> obsolete -> schedule grace-period deletion) and Pass 2 (the new CSO matches the same
+            # MVO on employeeId -> join).
+            Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination $csvPath -Force
+            $csv = & $addSrpRow (Import-Csv $csvPath) "00009051-0000-0000-0000-000000000000"
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
+
+            Write-Host "  Re-keying: obsolete the seed CSO and introduce the rejoining CSO in one import..." -ForegroundColor Gray
+            $srpRekeyImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $srpRekeyImport.activityId -Name "CSV Import (SamePageRejoinCancellation - rekey)"
+
+            Write-Host "  Synchronising the disconnect + rejoin in a single page..." -ForegroundColor Gray
+            $srpRekeySync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $srpRekeySync.activityId -Name "CSV Full Sync (SamePageRejoinCancellation - rekey)"
+
+            # Assert 1: the Metaverse Object still exists, with the SAME id (the rejoin landed on the marked
+            # object, not on a fresh projection).
+            $srpMvoAfter = Get-JIMMetaverseObject -Id $srpMvoId -ErrorAction SilentlyContinue
+            if (-not $srpMvoAfter) {
+                $testResults.Steps += @{ Name = "SamePageRejoinCancellation"; Success = $false; Error = "MVO $srpMvoId no longer exists after the same-page disconnect+rejoin" }
+                throw "SamePageRejoinCancellation Assert 1 failed: MVO $srpMvoId no longer exists"
+            }
+            if ($srpMvoAfter.id -ne $srpMvoId) {
+                $testResults.Steps += @{ Name = "SamePageRejoinCancellation"; Success = $false; Error = "Rejoin landed on a different MVO ($($srpMvoAfter.id)) instead of the marked one ($srpMvoId)" }
+                throw "SamePageRejoinCancellation Assert 1 failed: rejoin landed on a different MVO"
+            }
+            Write-Host "  PASSED: the same Metaverse Object survived the same-page disconnect+rejoin" -ForegroundColor Green
+
+            # Assert 2 (the #1612 assertion): isPendingDeletion=false and every deletion marker cleared.
+            # lastConnectorDisconnectedDate and isPendingDeletion come from the MVO detail API; the
+            # trigger/policy/initiator markers are not exposed on that DTO, so Get-MvoDeletionMarkers reads
+            # them off the MetaverseObjects table directly (same pattern as Scenario 4's #119 trigger-mode
+            # tests). This is expected to FAIL on current code if #1612 is live: Pass 2 cancels the deletion
+            # against a different in-memory MVO instance than the one Pass 1 scheduled it on, so Pass 1's
+            # database-committed scheduling survives the page uncancelled.
+            $srpMarkers = Get-MvoDeletionMarkers -MvoId $srpMvoId
+            $srpMarkerFailures = @()
+            if ($srpMvoAfter.isPendingDeletion) { $srpMarkerFailures += "isPendingDeletion=true" }
+            if ($srpMvoAfter.lastConnectorDisconnectedDate) { $srpMarkerFailures += "lastConnectorDisconnectedDate=$($srpMvoAfter.lastConnectorDisconnectedDate)" }
+            if ($srpMarkers.IsMarkedForDeletion) { $srpMarkerFailures += "IsMarkedForDeletion=true" }
+            if ($null -ne $srpMarkers.TriggeredBySystemId) { $srpMarkerFailures += "DeletionTriggeredBySystemId=$($srpMarkers.TriggeredBySystemId)" }
+            if ($srpMarkers.TriggeredBySystemName) { $srpMarkerFailures += "DeletionTriggeredBySystemName=$($srpMarkers.TriggeredBySystemName)" }
+            if ($srpMarkers.HasPolicySnapshot) { $srpMarkerFailures += "DeletionPolicySnapshotJson is set" }
+            if ($srpMarkers.InitiatedByType -ne 0) { $srpMarkerFailures += "DeletionInitiatedByType=$($srpMarkers.InitiatedByType)" }
+            if ($srpMarkers.InitiatedById) { $srpMarkerFailures += "DeletionInitiatedById=$($srpMarkers.InitiatedById)" }
+            if ($srpMarkers.InitiatedByName) { $srpMarkerFailures += "DeletionInitiatedByName=$($srpMarkers.InitiatedByName)" }
+
+            if ($srpMarkerFailures.Count -gt 0) {
+                $srpFailureText = $srpMarkerFailures -join "; "
+                Write-Host "  ✗ Deletion markers not cleared after a same-page rejoin (#1612): $srpFailureText" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "SamePageRejoinCancellation"; Success = $false; Error = "Deletion markers not cleared after a same-page rejoin (#1612): $srpFailureText" }
+                throw "SamePageRejoinCancellation Assert 2 failed (#1612): a same-page rejoin did not cancel the grace-period deletion scheduled earlier in the same page ($srpFailureText)"
+            }
+            Write-Host "  PASSED: same-page rejoin cancelled the scheduled deletion and cleared every marker (#1612)" -ForegroundColor Green
+
+            # Assert 3: the rejoining CSO (carrying the new hrId) is joined to the MVO.
+            $srpJoinedCso = $srpMvoAfter.connectedSystemObjects | Where-Object { $_.connectedSystemId -eq $config.CSVSystemId } | Select-Object -First 1
+            if (-not $srpJoinedCso) {
+                $testResults.Steps += @{ Name = "SamePageRejoinCancellation"; Success = $false; Error = "No joined CSV Connected System Object on the MVO after the rejoin" }
+                throw "SamePageRejoinCancellation Assert 3 failed: MVO has no joined CSV CSO after the rejoin"
+            }
+            Write-Host "  PASSED: the rejoining CSO is joined to the MVO ($($srpJoinedCso.displayName))" -ForegroundColor Green
+
+            # Assert 4: the sync Activity's execution items recorded the disconnect and the join. They are
+            # also expected to record MvoDeletionScheduled on the disconnect item: that outcome describes what
+            # Pass 1 genuinely did in isolation and is not itself a #1612 defect signal (the defect is Pass 2
+            # failing to see and cancel that scheduling, asserted above, not whether Pass 1 recorded it).
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $srpRekeySync.activityId -Name "Full Sync (SamePageRejoinCancellation)" -ExpectedOutcomeType "Disconnected"
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $srpRekeySync.activityId -Name "Full Sync (SamePageRejoinCancellation)" -ExpectedOutcomeType "Joined"
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $srpRekeySync.activityId -Name "Full Sync (SamePageRejoinCancellation)" -ExpectedOutcomeType "MvoDeletionScheduled"
+            Write-Host "  PASSED: execution items recorded Disconnected, Joined and MvoDeletionScheduled outcomes" -ForegroundColor Green
+
+            # Assert 5: nothing deprovisioned the directory account (the HR-side rekey never touched LDAP).
+            $srpDirExists = Test-LDAPUserExists -UserIdentifier $srpSam -DirectoryConfig $DirectoryConfig
+            if (-not $srpDirExists) {
+                $testResults.Steps += @{ Name = "SamePageRejoinCancellation"; Success = $false; Error = "Directory account $srpSam no longer exists after the same-page rejoin" }
+                throw "SamePageRejoinCancellation Assert 5 failed: directory account $srpSam was deprovisioned"
+            }
+            Write-Host "  PASSED: the directory account is untouched" -ForegroundColor Green
+
+            $testResults.Steps += @{ Name = "SamePageRejoinCancellation"; Success = $true }
+        }
+        finally {
+            # Restore the User Metaverse Object Type's deletion rule to whatever this step found it at,
+            # so later steps (Case Sensitivity, ExportMatchJoin) see Setup-Scenario1's baseline configuration.
+            Write-Host "  Restoring User deletion rule to its previous configuration..." -ForegroundColor Gray
+            $srpRestoreParams = @{
+                Id = $srpUserObjectType.id
+                DeletionRule = $srpPreviousDeletionRule
+            }
+            if ($srpPreviousGracePeriod) { $srpRestoreParams.DeletionGracePeriod = [TimeSpan]$srpPreviousGracePeriod }
+            if ($srpPreviousTriggerIds -and $srpPreviousTriggerIds.Count -gt 0) { $srpRestoreParams.DeletionTriggerConnectedSystemIds = $srpPreviousTriggerIds }
+            if ($srpPreviousTriggerMode) { $srpRestoreParams.DeletionTriggerMode = $srpPreviousTriggerMode }
+            Set-JIMMetaverseObjectType @srpRestoreParams | Out-Null
+
+            # Clean up test user rows from the CSV so later steps start from the scenario baseline.
+            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            if (Test-Path $csvPath) {
+                $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.samepage.rejoin" }
+                $csvContent | Set-Content $csvPath
+                Copy-CsvToConnectorFiles -SourcePath $csvPath
+                $srpCleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+                $srpCleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+            }
+            Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray
+        }
+    }
+
     # Test 6: Case Sensitivity
     # Tests that case-insensitive matching (default) works correctly and that
     # case-sensitive matching can be enabled when needed.
@@ -1374,10 +1589,10 @@ employeeID: $omjEmployeeId
         }
 
         # Clean up: remove the HR CSV row and the directory account. The Metaverse Object Type's default
-        # deletion rule (WhenLastConnectorDisconnected, 7-day grace period - set in Setup-Scenario1.ps1) means
-        # removing only the CSV connector will NOT deprovision the LDAP side (the LDAP connector is still
-        # attached), so the out-of-band-created directory account must be deleted directly rather than
-        # relying on the export sync rule's OutboundDeprovisionAction=Delete cascade.
+        # deletion rule (WhenAuthoritativeSourceDisconnected anchored on the HR CSV, 7-day grace period - set in
+        # Setup-Scenario1.ps1) means removing the CSV row only schedules the deletion: nothing deprovisions the
+        # LDAP side until housekeeping acts after the grace period, so the out-of-band-created directory account
+        # must be deleted directly rather than relying on the export sync rule's OutboundDeprovisionAction=Delete cascade.
         Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination $csvPath -Force
         Copy-CsvToConnectorFiles -SourcePath $csvPath
         $omjCleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
