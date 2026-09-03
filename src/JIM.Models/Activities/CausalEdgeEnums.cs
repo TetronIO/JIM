@@ -127,5 +127,16 @@ public enum CausalReasonCode
     /// On a queueing edge: the staged change was a delete. Distinguished so the export item's chain can lead
     /// with the Identity's deletion rather than a generic "a change was staged".
     /// </summary>
-    ExportDeleteStaged = 7
+    ExportDeleteStaged = 7,
+
+    /// <summary>
+    /// The post-clear reconciliation sweep's state-convergent zero-join pass (#1605): a Metaverse Object
+    /// held no joined Connected System Object at all, and its type's Deletion Rule is state-convergent
+    /// (When Last Connector Disconnected, or When Authoritative Source Disconnected in the all-sources
+    /// trigger mode), so the object was given its rule from state rather than from a specific system's
+    /// disconnection event. Distinguished from <see cref="LastConnectorDisconnected"/> because there was no
+    /// triggering system to attribute the decision to: the object may have reached zero joins long before
+    /// this pass found it (a clear that predates the feature, or several disconnections over time).
+    /// </summary>
+    NoConnectorRemainsStateConvergence = 8
 }

@@ -1510,8 +1510,13 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The ID of the Connected System.</param>
     /// <param name="deleteChangeHistory">If true, deletes ConnectedSystemObjectChanges. If false, nulls the CSO FK.</param>
-    /// <returns>Counts of Pending Exports and Connected System Objects removed.</returns>
-    Task<ClearConnectedSystemResult> DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory);
+    /// <param name="recordJoinsForReconciliation">Whether to record a <see cref="JIM.Models.Staging.ConnectorSpaceClearJoinRecord"/>
+    /// (#1605) for every joined Connected System Object as step zero of this method's own transaction, before
+    /// anything is removed. True for a Connector Space clear, whose join set the post-clear reconciliation
+    /// sweep needs; false for Connected System deletion, where recording joins for a system about to cease to
+    /// exist is pointless.</param>
+    /// <returns>Counts of Pending Exports, Connected System Objects and join records removed/written.</returns>
+    Task<ClearConnectedSystemResult> DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory, bool recordJoinsForReconciliation);
 
     /// <summary>
     /// Deletes a Connected System and all its related data using bulk SQL operations for performance.
@@ -1520,6 +1525,24 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The ID of the Connected System to delete.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false);
+
+    /// <summary>
+    /// The Metaverse Object ids recorded by <see cref="DeleteAllConnectedSystemObjectsAndDependenciesAsync"/>
+    /// for the given Connected System's most recent clear (#1605), for the post-clear reconciliation sweep's
+    /// re-join shortfall check and Deletion Rule evaluation. Empty when the system has never been cleared
+    /// with reconciliation recording, or its record set has already been consumed and deleted.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose recorded join set is wanted.</param>
+    Task<List<Guid>> GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Deletes the given Connected System's <see cref="JIM.Models.Staging.ConnectorSpaceClearJoinRecord"/>
+    /// rows (#1605): called once the post-clear reconciliation sweep completes (the record has served its
+    /// purpose), and as a step of Connected System deletion (ahead of the system row itself, which the
+    /// record's foreign key would otherwise block).
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose join records are being removed.</param>
+    Task DeleteConnectorSpaceClearJoinRecordsAsync(int connectedSystemId);
 
     /// <summary>
     /// Gets the count of Synchronisation Rules for a Connected System.

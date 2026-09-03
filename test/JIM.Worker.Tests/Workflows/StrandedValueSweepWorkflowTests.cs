@@ -356,7 +356,9 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
         {
             Assert.That(result, Is.Not.Null);
             Assert.That(activity.Message, Is.EqualTo(
-                "Stranded-value sweep executed (armed by a Connector Space clear): no stranded values were found."),
+                "Stranded-value sweep executed (armed by a Connector Space clear): no stranded values were found; " +
+                "0 Metaverse Object(s) evaluated against their Deletion Rules: 0 marked for deletion, 0 deleted; " +
+                "0 object(s) with no connector remaining marked for deletion; 0 Pending Export(s) staged."),
                 "with no prior message, the sweep's sentence becomes the whole message");
         }
     }
@@ -497,7 +499,9 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
         var message = ConnectedSystemServer.BuildSweepActivityMessage(result);
 
         Assert.That(message, Is.EqualTo(
-            "Stranded-value sweep executed (armed by a Connector Space clear): no stranded values were found."));
+            "Stranded-value sweep executed (armed by a Connector Space clear): no stranded values were found; " +
+            "0 Metaverse Object(s) evaluated against their Deletion Rules: 0 marked for deletion, 0 deleted; " +
+            "0 object(s) with no connector remaining marked for deletion; 0 Pending Export(s) staged."));
     }
 
     [Test]
@@ -540,6 +544,8 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
             "4 stranded value(s) recalled across 3 Metaverse Object(s) " +
             "(1 re-elected to a surviving contributor, 3 cleared with no remaining contributor); " +
             "5 Metaverse Object(s) preserved as last known state (6 value(s)); " +
+            "0 Metaverse Object(s) evaluated against their Deletion Rules: 0 marked for deletion, 0 deleted; " +
+            "0 object(s) with no connector remaining marked for deletion; " +
             "7 Pending Export(s) staged."));
     }
 
@@ -581,6 +587,300 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
             Assert.That(reloaded.LastSuccessfulFullImportCompletedAt, Is.EqualTo(completedAt), "the change must be persisted");
         }
     }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // IsReconciliationRefused: the #1605 Functional Requirement 9 shortfall predicate, tested directly
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void IsReconciliationRefused_ZeroRecorded_ReturnsFalse()
+    {
+        Assert.That(ConnectedSystemServer.IsReconciliationRefused(recordedCount: 0, missingCount: 0, maxMissingPercentThreshold: 10), Is.False);
+    }
+
+    [Test]
+    public void IsReconciliationRefused_MissingExactlyAtThreshold_ReturnsFalse()
+    {
+        // 10 of 100 missing is exactly the 10% threshold; the check is strictly greater, so this must not refuse.
+        Assert.That(ConnectedSystemServer.IsReconciliationRefused(recordedCount: 100, missingCount: 10, maxMissingPercentThreshold: 10), Is.False);
+    }
+
+    [Test]
+    public void IsReconciliationRefused_OneAboveThreshold_ReturnsTrue()
+    {
+        Assert.That(ConnectedSystemServer.IsReconciliationRefused(recordedCount: 100, missingCount: 11, maxMissingPercentThreshold: 10), Is.True);
+    }
+
+    [Test]
+    public void IsReconciliationRefused_AllMissing_ReturnsTrue()
+    {
+        Assert.That(ConnectedSystemServer.IsReconciliationRefused(recordedCount: 3, missingCount: 3, maxMissingPercentThreshold: 10), Is.True);
+    }
+
+    [Test]
+    public void IsReconciliationRefused_NoneMissing_ReturnsFalse()
+    {
+        Assert.That(ConnectedSystemServer.IsReconciliationRefused(recordedCount: 100, missingCount: 0, maxMissingPercentThreshold: 10), Is.False);
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // BuildSweepRefusedMessage: message composition (#1605 Functional Requirement 9)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void BuildSweepRefusedMessage_StatesCountsPercentThresholdAndRemedy()
+    {
+        var armedAt = new DateTime(2026, 9, 3, 8, 30, 15, DateTimeKind.Utc);
+
+        var message = ConnectedSystemServer.BuildSweepRefusedMessage(missingCount: 34, recordedCount: 100, armedAt: armedAt, thresholdPercent: 10);
+
+        Assert.That(message, Is.EqualTo(
+            "Stranded-value sweep refused: 34 of 100 objects joined before the clear on 2026-09-03 08:30:15 UTC " +
+            "have not returned (34%), above the 10% allowed by the 'Sync.PostClearReconciliation.MaxMissingPercent' " +
+            "setting. Re-import the Connected System, or raise the setting, then run a Full Synchronisation."));
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // AppendSweepSentence: the punctuation fix (observed at runtime: "Sync complete: 2 objects Stranded-value...")
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void AppendSweepSentence_NoPriorMessage_ReturnsSentenceAlone()
+    {
+        Assert.That(ConnectedSystemServer.AppendSweepSentence(null, "Stranded-value sweep executed."), Is.EqualTo("Stranded-value sweep executed."));
+        Assert.That(ConnectedSystemServer.AppendSweepSentence(string.Empty, "Stranded-value sweep executed."), Is.EqualTo("Stranded-value sweep executed."));
+    }
+
+    [Test]
+    public void AppendSweepSentence_PriorMessageMissingTerminatingPunctuation_InsertsFullStop()
+    {
+        var result = ConnectedSystemServer.AppendSweepSentence("Sync complete: 2 objects", "Stranded-value sweep executed (armed by a Connector Space clear): ...");
+
+        Assert.That(result, Is.EqualTo("Sync complete: 2 objects. Stranded-value sweep executed (armed by a Connector Space clear): ..."));
+    }
+
+    [Test]
+    public void AppendSweepSentence_PriorMessageEndsWithFullStop_JoinsWithSingleSpace()
+    {
+        var result = ConnectedSystemServer.AppendSweepSentence("Sync complete: 2 objects.", "Stranded-value sweep executed.");
+
+        Assert.That(result, Is.EqualTo("Sync complete: 2 objects. Stranded-value sweep executed."));
+    }
+
+    [Test]
+    public void AppendSweepSentence_PriorMessageEndsWithExclamationOrQuestionMark_JoinsWithSingleSpace()
+    {
+        Assert.That(ConnectedSystemServer.AppendSweepSentence("Sync complete!", "Next."), Is.EqualTo("Sync complete! Next."));
+        Assert.That(ConnectedSystemServer.AppendSweepSentence("Really?", "Next."), Is.EqualTo("Really? Next."));
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Re-join shortfall check, end to end (#1605 Functional Requirement 9)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepAsync_ShortfallAboveThreshold_RefusesAndTouchesNothingAsync()
+    {
+        // Ten objects recorded at the clear; only one has rejoined. 90% missing is far above the default 10%
+        // threshold (no ServiceSetting row seeded, so the default applies).
+        var ctx = await SetUpImportRuleAsync();
+        var recordedMvos = new List<MetaverseObject>();
+        for (var i = 0; i < 10; i++)
+        {
+            var mvo = SeedPlainMetaverseObject(ctx);
+            recordedMvos.Add(mvo);
+            await SeedJoinRecordAsync(ctx.System, mvo.Id);
+        }
+        // Rejoin exactly one of them.
+        JoinMvoToSystem(recordedMvos[0], ctx.System);
+
+        var system = await ArmSweepAsync(ctx.System);
+        var armedAt = system.StrandedValueSweepArmedAt!.Value;
+        var activity = await BuildActivityAsync(system.Id);
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Refused, Is.True);
+            Assert.That(result.RefuseReason, Is.EqualTo(ConnectedSystemServer.BuildSweepRefusedMessage(9, 10, armedAt, 10)));
+            Assert.That(result.MetaverseObjectsProcessed, Is.Zero, "no value recall may run while refused");
+            Assert.That(result.MetaverseObjectsEvaluatedForDeletion, Is.Zero, "no Deletion Rule evaluation may run while refused");
+            Assert.That(system.StrandedValueSweepArmedAt, Is.EqualTo(armedAt), "the arming must be left exactly as it was");
+            Assert.That((await DbContext.ConnectorSpaceClearJoinRecords.Where(r => r.ConnectedSystemId == ctx.System.Id).ToListAsync()).Count,
+                Is.EqualTo(10), "the join records must be left in place for a later retry");
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Deletion Rule evaluation for recorded objects that did not return (#1605 Functional Requirement 7)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepAsync_RecordedObjectManualRule_NotEvaluatedForDeletionAsync()
+    {
+        var ctx = await SetUpImportRuleAsync();
+        ctx.MvType.DeletionRule = MetaverseObjectDeletionRule.Manual;
+        await DbContext.SaveChangesAsync();
+        var mvo = SeedPlainMetaverseObject(ctx);
+        await SeedJoinRecordAsync(ctx.System, mvo.Id);
+        await SeedMaxMissingPercentAsync(100);
+        var system = await ArmSweepAsync(ctx.System);
+        var activity = await BuildActivityAsync(system.Id);
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Refused, Is.False);
+            Assert.That(result.MetaverseObjectsMarkedForDeletion, Is.Zero);
+            Assert.That(result.MetaverseObjectsDeleted, Is.Zero);
+            Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null, "a Manual rule must never mark the object for deletion");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepAsync_LastConnectorRuleWithRemainingJoin_NotEvaluatedForDeletionAsync()
+    {
+        // The recorded object never rejoined the CLEARED system, but it does hold a CURRENT join to a
+        // different, still-connected system: WhenLastConnectorDisconnected must not fire while any connector
+        // remains, regardless of which one.
+        var ctx = await SetUpImportRuleAsync();
+        var secondSystem = await AddSecondImportSourceAsync(ctx);
+        var mvo = SeedPlainMetaverseObject(ctx);
+        JoinMvoToSystem(mvo, secondSystem.System);
+        await SeedJoinRecordAsync(ctx.System, mvo.Id);
+        await SeedMaxMissingPercentAsync(100);
+        var system = await ArmSweepAsync(ctx.System);
+        var activity = await BuildActivityAsync(system.Id);
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MetaverseObjectsEvaluatedForDeletion, Is.EqualTo(1));
+            Assert.That(result.MetaverseObjectsMarkedForDeletion, Is.Zero);
+            Assert.That(result.MetaverseObjectsDeleted, Is.Zero);
+            Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null, "a remaining connector must prevent the marking");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepAsync_LastConnectorRuleNoRemainingJoinWithGrace_MarkedWithTriggerAndSnapshotAsync()
+    {
+        var ctx = await SetUpImportRuleAsync();
+        ctx.MvType.DeletionGracePeriod = TimeSpan.FromDays(7);
+        await DbContext.SaveChangesAsync();
+        var mvo = SeedPlainMetaverseObject(ctx);
+        await SeedJoinRecordAsync(ctx.System, mvo.Id);
+        await SeedMaxMissingPercentAsync(100);
+        var system = await ArmSweepAsync(ctx.System);
+        var activity = await BuildActivityAsync(system.Id);
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MetaverseObjectsMarkedForDeletion, Is.EqualTo(1));
+            Assert.That(result.MetaverseObjectsDeleted, Is.Zero);
+            Assert.That(mvo.LastConnectorDisconnectedDate, Is.Not.Null);
+            Assert.That(mvo.DeletionTriggeredBySystemId, Is.EqualTo(ctx.System.Id), "the cleared system is the trigger");
+            Assert.That(mvo.DeletionTriggeredBySystemName, Is.EqualTo(ctx.System.Name));
+            Assert.That(mvo.DeletionPolicySnapshotJson, Is.Not.Null.And.Not.Empty, "the decision-time policy snapshot must be recorded");
+            var item = activity.RunProfileExecutionItems.SingleOrDefault(i => i.SyncOutcomes.Any(o => o.TargetEntityId == mvo.Id));
+            Assert.That(item, Is.Not.Null, "an execution item must be recorded for the marked object");
+            Assert.That(item!.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepAsync_LastConnectorRuleNoGrace_DeletedImmediatelyWithMvoDeletedItemAsync()
+    {
+        var ctx = await SetUpImportRuleAsync();
+        ctx.MvType.DeletionGracePeriod = null;
+        await DbContext.SaveChangesAsync();
+        var mvo = SeedPlainMetaverseObject(ctx);
+        var mvoId = mvo.Id;
+        await SeedJoinRecordAsync(ctx.System, mvoId);
+        await SeedMaxMissingPercentAsync(100);
+        var system = await ArmSweepAsync(ctx.System);
+        var activity = await BuildActivityAsync(system.Id);
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MetaverseObjectsDeleted, Is.EqualTo(1));
+            Assert.That(result.MetaverseObjectsMarkedForDeletion, Is.Zero);
+            Assert.That((await Jim.SyncRepo.GetMetaverseObjectsByIdsForUpdateAsync(new[] { mvoId })).Count, Is.Zero, "a no-grace fate must delete the object immediately");
+            var item = activity.RunProfileExecutionItems.SingleOrDefault(i => i.SyncOutcomes.Any(o => o.TargetEntityId == mvoId));
+            Assert.That(item, Is.Not.Null);
+            Assert.That(item!.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepAsync_AuthoritativeSourceSpecificModeClearedSystemListed_FiresDespiteRemainingJoinAsync()
+    {
+        // Specific-sources mode fires on ANY listed source's disconnection, even with other connectors
+        // (including non-listed ones) still joined.
+        var ctx = await SetUpImportRuleAsync();
+        var secondSystem = await AddSecondImportSourceAsync(ctx);
+        ctx.MvType.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        ctx.MvType.DeletionTriggerMode = AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect;
+        ctx.MvType.DeletionTriggerConnectedSystemIds = new List<int> { ctx.System.Id };
+        ctx.MvType.DeletionGracePeriod = null;
+        await DbContext.SaveChangesAsync();
+        var mvo = SeedPlainMetaverseObject(ctx);
+        JoinMvoToSystem(mvo, secondSystem.System);
+        var mvoId = mvo.Id;
+        await SeedJoinRecordAsync(ctx.System, mvoId);
+        await SeedMaxMissingPercentAsync(100);
+        var system = await ArmSweepAsync(ctx.System);
+        var activity = await BuildActivityAsync(system.Id);
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MetaverseObjectsDeleted, Is.EqualTo(1), "Specific mode fires even though the second system's connector remains");
+            Assert.That((await Jim.SyncRepo.GetMetaverseObjectsByIdsForUpdateAsync(new[] { mvoId })).Count, Is.Zero);
+        }
+    }
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepAsync_RejoinBeforeSweep_SkippedAsync()
+    {
+        // Recorded at the clear, but the object rejoined the cleared system before the sweep ran: nothing to
+        // evaluate.
+        var ctx = await SetUpImportRuleAsync();
+        ctx.MvType.DeletionGracePeriod = null;
+        await DbContext.SaveChangesAsync();
+        var mvo = SeedPlainMetaverseObject(ctx);
+        JoinMvoToSystem(mvo, ctx.System);
+        await SeedJoinRecordAsync(ctx.System, mvo.Id);
+        var system = await ArmSweepAsync(ctx.System);
+        var activity = await BuildActivityAsync(system.Id);
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Refused, Is.False, "a fully rejoined recorded set has nothing missing");
+            Assert.That(result.MetaverseObjectsEvaluatedForDeletion, Is.Zero, "a rejoined object must never be evaluated for deletion");
+            Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null);
+        }
+    }
+
+    // Note: the state-convergent zero-join pass (#1605 Functional Requirement 10) is covered by
+    // MetaverseZeroJoinPassDatabaseTests (RequiresPostgres), not here: it queries
+    // Repository.Database.MetaverseObjects directly (a real EF/SQL query, by design - it has to scan the
+    // whole Metaverse for historical strays), which this fixture's fake, dictionary-backed SyncRepository
+    // cannot see. Metaverse Objects created via SeedPlainMetaverseObject/SeedStrandedMetaverseObject in this
+    // file exist only in that fake, so a zero-join-pass assertion here would either silently find nothing or
+    // require a second, parallel EF-backed seed of the same data - real-PostgreSQL coverage is more honest
+    // and is what the query needs anyway (RequiresPostgres per src/CLAUDE.md's EF In-Memory Database
+    // Limitation and the #1605 PRD's own coverage constraint).
 
     // -----------------------------------------------------------------------------------------------------------------
     // Topology builders
@@ -657,6 +957,53 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
         });
         SyncRepo.SeedMetaverseObject(strandedMvo);
         return strandedMvo;
+    }
+
+    /// <summary>
+    /// A plain Projected Metaverse Object of the context's type with no attribute values and no joins, for
+    /// the Deletion Rule evaluation and zero-join pass tests, which care about marking/deletion outcomes
+    /// rather than attribute recall.
+    /// </summary>
+    private MetaverseObject SeedPlainMetaverseObject(ImportRuleContext ctx)
+    {
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = ctx.MvType, Created = DateTime.UtcNow };
+        SyncRepo.SeedMetaverseObject(mvo);
+        return mvo;
+    }
+
+    /// <summary>
+    /// Records that the given Metaverse Object was joined to the system at the moment of a (simulated)
+    /// clear, exactly as the clear's own transaction would have written via
+    /// <c>ConnectedSystemRepository.DeleteAllConnectedSystemObjectsAndDependenciesAsync</c>'s step zero.
+    /// </summary>
+    private async Task SeedJoinRecordAsync(ConnectedSystem system, Guid metaverseObjectId)
+    {
+        DbContext.ConnectorSpaceClearJoinRecords.Add(new ConnectorSpaceClearJoinRecord
+        {
+            ConnectedSystemId = system.Id,
+            MetaverseObjectId = metaverseObjectId,
+            ClearedAt = DateTime.UtcNow.AddMinutes(-10)
+        });
+        await DbContext.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Raises the re-join shortfall threshold so a test's small, deliberately mostly-missing recorded set
+    /// does not itself trip the #1605 Functional Requirement 9 refusal; the shortfall check has its own
+    /// dedicated tests above.
+    /// </summary>
+    private async Task SeedMaxMissingPercentAsync(int percent)
+    {
+        DbContext.ServiceSettingItems.Add(new JIM.Models.Core.ServiceSetting
+        {
+            Key = JIM.Models.Core.Constants.SettingKeys.PostClearReconciliationMaxMissingPercent,
+            DisplayName = "Post-clear reconciliation: maximum missing share",
+            Description = "test",
+            Category = JIM.Models.Core.ServiceSettingCategory.Synchronisation,
+            ValueType = JIM.Models.Core.ServiceSettingValueType.Integer,
+            DefaultValue = percent.ToString()
+        });
+        await DbContext.SaveChangesAsync();
     }
 
     /// <summary>

@@ -54,7 +54,8 @@ public class StrandedValueSweepResult
     public int ValuesPreserved { get; set; }
 
     /// <summary>
-    /// How many Pending Exports the sweep staged for mapped target systems.
+    /// How many Pending Exports the sweep staged for mapped target systems (value recall, Deletion Rule
+    /// evaluation and the zero-join pass all contribute to this total).
     /// </summary>
     public int PendingExportsStaged { get; set; }
 
@@ -70,4 +71,43 @@ public class StrandedValueSweepResult
     /// Message. Null unless <see cref="Skipped"/> is true.
     /// </summary>
     public string? SkipReason { get; set; }
+
+    /// <summary>
+    /// True when the gate was open but the re-join shortfall check (#1605 Functional Requirement 9)
+    /// refused the reconciliation: too great a share of the objects recorded at the clear have not
+    /// rejoined. Neither the value recall, the Deletion Rule evaluation nor the zero-join pass ran; the
+    /// arming and the join record both stay in place so a later run can retry once the administrator has
+    /// re-imported, or raised the threshold setting. Every counter above is zero when this is true.
+    /// </summary>
+    public bool Refused { get; set; }
+
+    /// <summary>
+    /// The sentence explaining why the sweep refused, appended to the Full Synchronisation Activity's
+    /// Message. Null unless <see cref="Refused"/> is true.
+    /// </summary>
+    public string? RefuseReason { get; set; }
+
+    /// <summary>
+    /// How many recorded Metaverse Objects that still lack a re-join were evaluated against their type's
+    /// Deletion Rule (#1605 Functional Requirement 7).
+    /// </summary>
+    public int MetaverseObjectsEvaluatedForDeletion { get; set; }
+
+    /// <summary>
+    /// How many of those evaluated objects were marked for deletion after a grace period.
+    /// </summary>
+    public int MetaverseObjectsMarkedForDeletion { get; set; }
+
+    /// <summary>
+    /// How many of those evaluated objects were deleted immediately (no grace period configured).
+    /// </summary>
+    public int MetaverseObjectsDeleted { get; set; }
+
+    /// <summary>
+    /// How many Metaverse Objects the state-convergent zero-join pass (#1605 Functional Requirement 10)
+    /// marked for deletion: Projected objects with no joined Connected System Object at all, whose type's
+    /// Deletion Rule is state-convergent. Always a marking (never an immediate delete); housekeeping
+    /// removes a no-grace object on its next tick.
+    /// </summary>
+    public int MetaverseObjectsMarkedWithNoConnector { get; set; }
 }
