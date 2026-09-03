@@ -135,6 +135,36 @@
     </MudAlert>
 }
 
+@* ─── Stranded-value sweep armed notice ───
+   Armed by every Connector Space clear (#1549) and gated on a genuine Full Import since (#1605): says which
+   of the two waiting states the system is in, so an administrator does not have to read the Activity
+   history to know whether the next Full Synchronisation will do anything. *@
+@if (_connectedSystem != null && _connectedSystem.StrandedValueSweepArmedAt is { } armedAt)
+{
+    var lastImport = _connectedSystem.LastSuccessfulFullImportCompletedAt;
+    var sweepReady = lastImport.HasValue && lastImport.Value > armedAt;
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-6">
+        @if (sweepReady)
+        {
+            var lastImportAt = lastImport!.Value;
+            <span>
+                A stranded-value sweep is armed: the Connector Space was cleared on @armedAt.ToFriendlyDate() UTC
+                and a Full Import completed on @lastImportAt.ToFriendlyDate() UTC. The next Full Synchronisation
+                of this Connected System will recall values contributed by objects that did not return.
+            </span>
+        }
+        else
+        {
+            <span>
+                A stranded-value sweep is armed: the Connector Space was cleared on @armedAt.ToFriendlyDate() UTC.
+                It will run at the first Full Synchronisation after a Full Import of this Connected System
+                completes successfully; a Full Synchronisation run before then does nothing beyond ordinary
+                synchronisation.
+            </span>
+        }
+    </MudAlert>
+}
+
 @* ─── Configuration drift notice ─── *@
 @if (_drift is { HasPendingChanges: true })
 {

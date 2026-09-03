@@ -1704,6 +1704,116 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// The state-convergent zero-join pass (#1605 Functional Requirement 10): finds every Projected
+    /// Metaverse Object with no joined Connected System Object at all, no existing deletion marking, and a
+    /// type whose Deletion Rule is state-convergent (When Last Connector Disconnected, or When Authoritative
+    /// Source Disconnected with no configured trigger sources or in the all-sources trigger mode), and marks
+    /// it for deletion with a null triggering system, since there is no specific disconnection event to
+    /// attribute the decision to. Always a marking, never an immediate delete, even for a no-grace type:
+    /// housekeeping's next tick deletes it (<c>GetMetaverseObjectsEligibleForDeletionAsync</c> treats a null
+    /// grace period as immediately eligible), which keeps this pass a pure, idempotent state scan rather
+    /// than a second place that flushes deletions.
+    /// <para>
+    /// Runs metaverse-wide, not scoped to one Connected System: it exists to find historical strays (a clear
+    /// that predates this feature, or several disconnections over time) as much as objects the current run
+    /// just orphaned. Called from both the post-clear reconciliation sweep and
+    /// <see cref="ConnectedSystemServer.ExecuteDeletionAsync"/>, which is why the caller supplies its own
+    /// description of what found them for the execution item's detail message.
+    /// </para>
+    /// </summary>
+    /// <param name="activity">The run's Activity: source of the initiator triad recorded on each marking,
+    /// and the target of the Run Profile Execution Items this pass records.</param>
+    /// <param name="causeDescription">Names the caller for the execution item's detail message, e.g. "the
+    /// post-clear reconciliation" or "the Connected System deletion".</param>
+    /// <returns>The number of Metaverse Objects marked.</returns>
+    public async Task<int> MarkStateConvergentZeroJoinMvosForDeletionAsync(Activity activity, string causeDescription)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        const int pageSize = 10_000;
+        var markedCount = 0;
+        var cursor = Guid.Empty;
+
+        while (true)
+        {
+            var page = await Application.Repository.Metaverse.GetStateConvergentZeroJoinMetaverseObjectsAsync(cursor, pageSize);
+            if (page.Count == 0)
+                break;
+
+            cursor = page[^1].Id;
+
+            // The policy facts (rule, mode, grace period) are identical per object type, so one snapshot and
+            // one marking call serve every object of that type on this page.
+            var executionItems = new List<ActivityRunProfileExecutionItem>();
+            foreach (var group in page.GroupBy(mvo => mvo.Type!.Id))
+            {
+                var groupTemplate = group.First();
+                var type = groupTemplate.Type!;
+                var gracePeriod = type.DeletionGracePeriod;
+                var deletionEligibleDate = gracePeriod.HasValue && gracePeriod.Value > TimeSpan.Zero
+                    ? DateTime.UtcNow.Add(gracePeriod.Value)
+                    : (DateTime?)null;
+
+                var snapshot = new MvoDeletionPolicySnapshot
+                {
+                    DeletionRule = type.DeletionRule,
+                    TriggerMode = type.DeletionTriggerMode,
+                    GracePeriod = gracePeriod,
+                    ReasonCode = CausalReasonCode.NoConnectorRemainsStateConvergence,
+                    DeletionEligibleDate = deletionEligibleDate
+                    // TriggeringSystemId/Name deliberately left null: there is no disconnection event.
+                };
+                var policySnapshotJson = snapshot.ToJson();
+
+                var groupMvoIds = group.Select(mvo => mvo.Id).ToList();
+                markedCount += await Application.Repository.Metaverse.MarkMvosAsDisconnectedWithNoTriggerAsync(
+                    groupMvoIds, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName, policySnapshotJson);
+
+                executionItems.AddRange(group.Select(mvo => BuildZeroJoinExecutionItem(mvo, causeDescription, policySnapshotJson)));
+            }
+
+            if (executionItems.Count > 0)
+                await Application.Activities.AddRunProfileExecutionItemsAsync(activity, executionItems);
+
+            if (page.Count < pageSize)
+                break;
+        }
+
+        Log.Information("MarkStateConvergentZeroJoinMvosForDeletionAsync: Marked {Count} MVO(s) for deletion ({Cause})", markedCount, causeDescription);
+
+        return markedCount;
+    }
+
+    /// <summary>
+    /// Builds the per-object Run Profile Execution Item for a state-convergent zero-join marking (#1605):
+    /// a single MvoDeletionScheduled outcome, mirroring the shape of a synchronisation-triggered deletion
+    /// marking but with a detail message naming state convergence rather than a triggering system.
+    /// </summary>
+    private static ActivityRunProfileExecutionItem BuildZeroJoinExecutionItem(MetaverseObject mvo, string causeDescription, string? policySnapshotJson)
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.AttributeFlow,
+            DisplayNameSnapshot = mvo.NameOrId,
+            ObjectTypeSnapshot = mvo.Type?.Name,
+            DeletionPolicySnapshotJson = policySnapshotJson
+        };
+
+        item.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled,
+            TargetEntityId = mvo.Id,
+            TargetEntityDescription = mvo.NameOrId,
+            DetailMessage = $"No connector remains; marked by {causeDescription}.",
+            Ordinal = 0
+        });
+
+        item.OutcomeSummary = $"{ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled}:1";
+        return item;
+    }
+
+    /// <summary>
     /// Builds the serialised decision-time deletion policy snapshot (#119) for an MVO marked because its
     /// Connected System is being deleted, mirroring the worker path's snapshot content: the rule, trigger
     /// mode, selected sources, grace period, the deleted system as the triggering system, and the listed

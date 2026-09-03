@@ -1096,4 +1096,55 @@ public class ActivitiesControllerTests
     }
 
     #endregion
+
+    #region Connector Space clear statistics (#1605)
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_ClearActivity_CarriesEveryClearStatistic()
+    {
+        // Read parity: the portal's Clear Summary panel shows all three counts, so the REST API (and the
+        // PowerShell module reading it) must expose them too. Before #1605 none of the three were mapped,
+        // so a script could not see what a queued clear had actually done.
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Clear,
+            ClearedPendingExportCount = 37,
+            ClearedConnectedSystemObjectCount = 4212,
+            ClearedJoinRecordCount = 4180
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ClearedPendingExportCount, Is.EqualTo(37));
+            Assert.That(dto.ClearedConnectedSystemObjectCount, Is.EqualTo(4212));
+            Assert.That(dto.ClearedJoinRecordCount, Is.EqualTo(4180),
+                "the post-clear reconciliation's tracked-object count must reach the API, not just the portal");
+        }
+    }
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_NonClearActivity_LeavesEveryClearStatisticNull()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Execute
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ClearedPendingExportCount, Is.Null);
+            Assert.That(dto.ClearedConnectedSystemObjectCount, Is.Null);
+            Assert.That(dto.ClearedJoinRecordCount, Is.Null);
+        }
+    }
+
+    #endregion
 }

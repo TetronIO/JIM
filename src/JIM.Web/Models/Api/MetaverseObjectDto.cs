@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Sync;
 
 namespace JIM.Web.Models.Api;
 
@@ -19,6 +21,14 @@ public class MetaverseObjectDto
     public DateTime? LastConnectorDisconnectedDate { get; set; }
     public bool IsPendingDeletion { get; set; }
     public DateTime? DeletionEligibleDate { get; set; }
+
+    /// <summary>
+    /// The Connected System whose disconnection triggered a pending deletion, or null when the object is
+    /// not pending deletion, was marked by the #1605 state-convergent zero-join pass (no single system
+    /// triggered it), or predates trigger attribution.
+    /// </summary>
+    public string? DeletionTriggeredBySystemName { get; set; }
+
     public MetaverseObjectTypeDto Type { get; set; } = null!;
     public List<MetaverseObjectAttributeValueDto> AttributeValues { get; set; } = new();
     public List<ConnectedSystemObjectReferenceDto> ConnectedSystemObjects { get; set; } = new();
@@ -39,6 +49,7 @@ public class MetaverseObjectDto
             LastConnectorDisconnectedDate = entity.LastConnectorDisconnectedDate,
             IsPendingDeletion = entity.IsPendingDeletion,
             DeletionEligibleDate = entity.DeletionEligibleDate,
+            DeletionTriggeredBySystemName = entity.DeletionTriggeredBySystemName,
             Type = MetaverseObjectTypeDto.FromEntity(entity.Type),
             AttributeValues = entity.AttributeValues
                 .Select(MetaverseObjectAttributeValueDto.FromEntity)
@@ -211,11 +222,21 @@ public class PendingDeletionDto
     public string? DeletionTriggeredBySystemName { get; set; }
 
     /// <summary>
+    /// Why the rule decided to mark this object for deletion (#1605), read back from the decision-time
+    /// policy snapshot. <see cref="CausalReasonCode.NoConnectorRemainsStateConvergence"/> means the object
+    /// was found by the state-convergent zero-join pass rather than a specific system's disconnection, so a
+    /// null <see cref="DeletionTriggeredBySystemName"/> is honest, not a missing fact. <see cref="CausalReasonCode.NotSet"/>
+    /// when the snapshot is absent or predates reason-code capture.
+    /// </summary>
+    public CausalReasonCode ReasonCode { get; set; } = CausalReasonCode.NotSet;
+
+    /// <summary>
     /// Creates a DTO from a MetaverseObject entity.
     /// </summary>
     public static PendingDeletionDto FromEntity(MetaverseObject entity)
     {
         var connectorCount = entity.ConnectedSystemObjects?.Count ?? 0;
+        var reasonCode = MvoDeletionPolicySnapshot.FromJson(entity.DeletionPolicySnapshotJson)?.ReasonCode ?? CausalReasonCode.NotSet;
         var daysUntilDeletion = entity.DeletionEligibleDate.HasValue
             ? (int)Math.Ceiling((entity.DeletionEligibleDate.Value - DateTime.UtcNow).TotalDays)
             : (int?)null;
@@ -251,7 +272,8 @@ public class PendingDeletionDto
             ConnectedSystemObjectCount = connectorCount,
             Status = status,
             DeletionTriggeredBySystemId = entity.DeletionTriggeredBySystemId,
-            DeletionTriggeredBySystemName = entity.DeletionTriggeredBySystemName
+            DeletionTriggeredBySystemName = entity.DeletionTriggeredBySystemName,
+            ReasonCode = reasonCode
         };
     }
 }

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903080313_ReplaceStrandedValueSweepPendingWithArmedAt")]
+    partial class ReplaceStrandedValueSweepPendingWithArmedAt
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -76,9 +79,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text");
 
                     b.Property<int?>("ClearedConnectedSystemObjectCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ClearedJoinRecordCount")
                         .HasColumnType("integer");
 
                     b.Property<int?>("ClearedPendingExportCount")
@@ -3776,24 +3776,6 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ConnectorPartitions");
                 });
 
-            modelBuilder.Entity("JIM.Models.Staging.ConnectorSpaceClearJoinRecord", b =>
-                {
-                    b.Property<int>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("MetaverseObjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("ClearedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("ConnectedSystemId", "MetaverseObjectId");
-
-                    b.HasIndex("ConnectedSystemId");
-
-                    b.ToTable("ConnectorSpaceClearJoinRecords");
-                });
-
             modelBuilder.Entity("JIM.Models.Tasking.WorkerTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5430,15 +5412,6 @@ namespace JIM.PostgresData.Migrations
                         .WithMany("Settings")
                         .HasForeignKey("ConnectorDefinitionId")
                         .OnDelete(DeleteBehavior.Cascade);
-                });
-
-            modelBuilder.Entity("JIM.Models.Staging.ConnectorSpaceClearJoinRecord", b =>
-                {
-                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
-                        .WithMany()
-                        .HasForeignKey("ConnectedSystemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.WorkerTask", b =>

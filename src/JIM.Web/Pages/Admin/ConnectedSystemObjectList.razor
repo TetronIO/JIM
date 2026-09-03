@@ -281,13 +281,29 @@
             </MudAlert>
 
             <MudText>
-                Deleting the Connected System Objects does not cause objects to be deleted in the external system.
-                It just removes the objects from JIM. Run a Full Import on this Connected System, then a Full Synchronisation on all Connected Systems, to rebuild state.
-                Values contributed by objects that do not return are recalled automatically at the next Full Synchronisation of this Connected System. Run the import first; synchronising before it would recall values the import would immediately re-assert.
+                Clearing does not touch the external system. It discards the Connector Space objects, their
+                Metaverse joins, and any Pending Exports to this Connected System; the Metaverse itself is not
+                changed by the clear.
             </MudText>
 
             <MudText Class="mt-3">
-                The deletes will be executed via a task and may take some time. Check the <MudLink Href="/admin/operations" Target="_blank">Operations</MudLink> page or refresh this one to see progress.
+                Run a Full Import to rebuild the Connector Space. At the first Full Synchronisation after that
+                import completes successfully, Metaverse values contributed by objects that did not return are
+                recalled automatically. Each Metaverse object's type Deletion Rule is then applied for objects
+                that did not return, with its configured grace period.
+            </MudText>
+
+            <MudText Class="mt-3">
+                Note: A Full Synchronisation run before then does nothing beyond ordinary synchronisation. The
+                reconciliation refuses, leaving everything as it was, if far fewer objects return than were
+                cleared; re-import the rest, or raise the allowed share in Service Settings, then run a Full
+                Synchronisation again.
+            </MudText>
+
+            <MudText Class="mt-3">
+                Any Metaverse Object deletes will be executed via a task and may take some time to process.
+                Check the <MudLink Href="/admin/operations" Target="_blank">Operations</MudLink> page or refresh
+                this one to see progress.
             </MudText>
 
             <MudCheckBox @bind-Value="_clearDeleteChangeHistory" Class="mt-4" Color="Color.Primary">

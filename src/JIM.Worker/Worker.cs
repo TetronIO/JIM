@@ -405,7 +405,20 @@ public class Worker : BackgroundService
                                                     // Task completed. Determine final status based on execution results.
                                                     // Skip if cancelled — the activity is already marked Cancelled by CancelWorkerTaskAsync.
                                                     if (!cancellationTokenSource.IsCancellationRequested)
-                                                        await CompleteActivityBasedOnExecutionResultsAsync(taskJim, newWorkerTask.Activity);
+                                                    {
+                                                        var completionResult = await CompleteActivityBasedOnExecutionResultsAsync(taskJim, newWorkerTask.Activity);
+
+                                                        // #1605: a Full Import that genuinely completed successfully arms the stranded-value
+                                                        // sweep's gate, so the next Full Synchronisation of this system can tell a re-imported
+                                                        // Connector Space apart from an empty or half-rebuilt one. Delta Import shares this case
+                                                        // but must never stamp this: the gate exists precisely because only a Full Import proves
+                                                        // every object that should be present was looked for.
+                                                        if (runProfile.RunType == ConnectedSystemRunType.FullImport &&
+                                                            FullImportSuccessEvaluator.IsSuccessfulFullImport(completionResult.Status, completionResult.ObjectLevelErrorCount))
+                                                        {
+                                                            await taskJim.ConnectedSystems.RecordSuccessfulFullImportAsync(connectedSystem, DateTime.UtcNow);
+                                                        }
+                                                    }
                                                 }
                                                 catch (OperationCanceledException) when (cancellationTokenSource.IsCancellationRequested)
                                                 {
@@ -473,6 +486,7 @@ public class Worker : BackgroundService
                                             // store removal stats on the activity before completing
                                             newWorkerTask.Activity.ClearedPendingExportCount = clearResult.PendingExportsRemoved;
                                             newWorkerTask.Activity.ClearedConnectedSystemObjectCount = clearResult.ConnectedSystemObjectsRemoved;
+                                            newWorkerTask.Activity.ClearedJoinRecordCount = clearResult.JoinRecordsWritten;
 
                                             // task completed successfully, complete the activity
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
@@ -1410,8 +1424,14 @@ public class Worker : BackgroundService
     /// recomputed from the collection. If empty but TotalErrors is already set, the pre-computed
     /// stats are used directly.
     /// </summary>
-    private async Task CompleteActivityBasedOnExecutionResultsAsync(JimApplication jim, Activity activity)
+    /// <returns>
+    /// The Activity's final status, and how many Run Profile Execution Items recorded an object-level
+    /// error: the pair the #1605 Full Import gate needs (<see cref="FullImportSuccessEvaluator"/>) to decide
+    /// whether a Full Import run counts as successful, without that caller re-deriving the same counts.
+    /// </returns>
+    private async Task<(ActivityStatus Status, int ObjectLevelErrorCount)> CompleteActivityBasedOnExecutionResultsAsync(JimApplication jim, Activity activity)
     {
+        var objectLevelErrorCount = 0;
         try
         {
             // Summary stats are accumulated incrementally during FlushRpeisAsync calls.
@@ -1426,6 +1446,7 @@ public class Worker : BackgroundService
             // This avoids loading RPEIs into memory (which causes OOM at scale) and provides
             // precise has-errors/all-errors detection for all processor types uniformly.
             var (totalWithErrors, totalRpeis, totalUnhandledErrors) = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
+            objectLevelErrorCount = totalWithErrors;
 
             var hasItems = totalRpeis > 0;
             var hasErrors = totalWithErrors > 0;
@@ -1468,6 +1489,8 @@ public class Worker : BackgroundService
             Log.Error(ex, "CompleteActivityBasedOnExecutionResultsAsync: Failed to complete activity {ActivityId}, attempting to mark as failed", activity.Id);
             await SafeFailActivityAsync(jim, activity, ex, "Failed to complete activity after sync run");
         }
+
+        return (activity.Status, objectLevelErrorCount);
     }
 
     /// <summary>

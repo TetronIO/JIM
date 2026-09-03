@@ -1609,6 +1609,15 @@ public partial class ConnectedSystemServer
             // Mark orphaned MVOs for deletion before deleting the Connected System
             // This sets LastConnectorDisconnectedDate so housekeeping will delete them after grace period
             await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
+
+            // The state-convergent zero-join pass (#1605 Functional Requirement 10/11): finds Metaverse
+            // Objects with no joined Connected System Object at all (from THIS deletion, an earlier
+            // Connector Space clear this system's own deletion never followed up on, or several
+            // disconnections over time) and gives them their type's Deletion Rule from state. Metaverse-wide
+            // by design, not scoped to this system, so it also closes the "cleared, then deleted with no
+            // intervening Full Synchronisation" gap for Synchronised Deprovisioning, which reaches this
+            // method as its own final step.
+            await Application.Metaverse.MarkStateConvergentZeroJoinMvosForDeletionAsync(activity, "the Connected System deletion");
         }
 
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId, deleteChangeHistory);
@@ -6383,31 +6392,37 @@ public partial class ConnectedSystemServer
             throw new InvalidOperationException($"Connected System {connectedSystemId} is being deleted and cannot be cleared.");
         }
 
-        // Use the shared method that handles all CSO dependencies properly.
-        var result = await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
+        // Use the shared method that handles all CSO dependencies properly. Records a post-clear
+        // reconciliation join record (#1605) for every object joined at the moment of the clear; the
+        // Connected System deletion path passes false, since a system about to cease to exist has nothing
+        // for a later sweep to reconcile against.
+        var result = await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(
+            connectedSystemId, deleteChangeHistory, recordJoinsForReconciliation: true);
 
-        // Arm the stranded-value sweep (#1549): the clear just hard-deleted every Connected System Object of
-        // this system without obsoletion, so any Metaverse attribute value it contributed survives with live
-        // provenance and no joined Connected System Object of this system. The next Full Synchronisation of
-        // this system reads the flag and recalls exactly those values.
-        await Application.Repository.ConnectedSystems.SetStrandedValueSweepPendingAsync(connectedSystemId, pending: true);
+        // Arm the stranded-value sweep (#1549) with this clear's UTC time: the clear just hard-deleted every
+        // Connected System Object of this system without obsoletion, so any Metaverse attribute value it
+        // contributed survives with live provenance and no joined Connected System Object of this system.
+        // The sweep only runs once a Full Import of this system has completed successfully later than this
+        // timestamp (#1605), so a Full Synchronisation run before the re-import cannot mistake an empty or
+        // half-rebuilt Connector Space for a genuine departure.
+        await Application.Repository.ConnectedSystems.SetStrandedValueSweepArmedAtAsync(connectedSystemId, DateTime.UtcNow);
 
-        Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs",
-            connectedSystemId, result.PendingExportsRemoved, result.ConnectedSystemObjectsRemoved);
+        Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs, recorded {JoinRecords} for post-clear reconciliation",
+            connectedSystemId, result.PendingExportsRemoved, result.ConnectedSystemObjectsRemoved, result.JoinRecordsWritten);
 
         return result;
     }
 
     /// <summary>
-    /// Sets or clears the stranded-value sweep flag (#1549) on a Connected System. Public wrapper over the
-    /// repository's narrow status-mark update, so callers above the application layer (the worker's Full
-    /// Synchronisation pass, clearing the flag on completion) never reach the repository directly.
+    /// Sets or clears the stranded-value sweep arming (#1549/#1605) on a Connected System. Public wrapper
+    /// over the repository's narrow status-mark update, so callers above the application layer never reach
+    /// the repository directly.
     /// </summary>
-    /// <param name="connectedSystemId">The Connected System whose flag is being set.</param>
-    /// <param name="pending">The new value of the flag.</param>
-    public async Task SetStrandedValueSweepPendingAsync(int connectedSystemId, bool pending)
+    /// <param name="connectedSystemId">The Connected System whose arming is being set.</param>
+    /// <param name="armedAt">The UTC time the sweep was armed, or null to clear the arming.</param>
+    public async Task SetStrandedValueSweepArmedAtAsync(int connectedSystemId, DateTime? armedAt)
     {
-        await Application.Repository.ConnectedSystems.SetStrandedValueSweepPendingAsync(connectedSystemId, pending);
+        await Application.Repository.ConnectedSystems.SetStrandedValueSweepArmedAtAsync(connectedSystemId, armedAt);
     }
         
     /// <summary>
