@@ -266,12 +266,9 @@ public partial class ConnectedSystemServer
             var pendingImmediateDeletions = new List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)>();
             var executionItems = new List<ActivityRunProfileExecutionItem>();
 
-            foreach (var mvo in pageMvos)
+            // Already pending deletion is filtered out here: an earlier decision's markers stand.
+            foreach (var mvo in pageMvos.Where(m => m.LastConnectorDisconnectedDate == null))
             {
-                // Already pending deletion: an earlier decision's markers stand.
-                if (mvo.LastConnectorDisconnectedDate != null)
-                    continue;
-
                 var remainingConnectedSystemIds = joinedSystemIdsByMvoId.TryGetValue(mvo.Id, out var joinedIds)
                     ? (IReadOnlyCollection<int>)joinedIds
                     : Array.Empty<int>();

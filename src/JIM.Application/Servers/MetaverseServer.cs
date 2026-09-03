@@ -1769,8 +1769,7 @@ public class MetaverseServer
                 markedCount += await Application.Repository.Metaverse.MarkMvosAsDisconnectedWithNoTriggerAsync(
                     groupMvoIds, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName, policySnapshotJson);
 
-                foreach (var mvo in group)
-                    executionItems.Add(BuildZeroJoinExecutionItem(mvo, causeDescription, policySnapshotJson));
+                executionItems.AddRange(group.Select(mvo => BuildZeroJoinExecutionItem(mvo, causeDescription, policySnapshotJson)));
             }
 
             if (executionItems.Count > 0)
