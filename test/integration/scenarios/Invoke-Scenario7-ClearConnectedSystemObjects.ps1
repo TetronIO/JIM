@@ -50,8 +50,8 @@
           honoured) and its values are preserved as before
         - Assert: a surviving employee's Metaverse Object and values are unaffected
         - Assert: a further Full Synchronisation does not report another sweep (arming cleared)
-        - Restores the threshold setting and the User type's Deletion Rule afterwards, so later
-          scenarios are unaffected
+        - Restores the threshold setting and the User type's Deletion Rule (captured before the
+          change) afterwards, so later scenarios are unaffected
 
 .PARAMETER Step
     Which test step to execute
@@ -413,6 +413,10 @@ try {
         Write-TestStep "4b" "Set the User type's Deletion Rule to fire on the CSV system alone"
         $userType = Get-JIMMetaverseObjectType -Name "User"
         Assert-NotNull -Value $userType -Message "The built-in User Metaverse Object Type exists"
+        # Capture the type's current deletion settings so step 4n restores exactly what the scenario
+        # setup configured, whatever that is (Setup-Scenario1 has changed its baseline before, #1614).
+        $userTypeBefore = Get-JIMMetaverseObjectType -Id $userType.id
+        Assert-NotNull -Value $userTypeBefore.deletionRule -Message "The User type's current Deletion Rule is readable for later restoration"
         Set-JIMMetaverseObjectType -Id $userType.id `
             -DeletionRule WhenAuthoritativeSourceDisconnected `
             -DeletionTriggerConnectedSystemIds $config.CSVSystemId `
@@ -539,9 +543,14 @@ try {
         # scenarios (and a re-run of this one) are unaffected.
         Write-TestStep "4n" "Restore the threshold setting and the User type's Deletion Rule"
         Reset-JIMServiceSetting -Key $maxMissingPercentKey | Out-Null
-        Set-JIMMetaverseObjectType -Id $userType.id `
-            -DeletionRule WhenLastConnectorDisconnected `
-            -DeletionGracePeriod $userTypeGracePeriod | Out-Null
+        $restoreParams = @{
+            Id           = $userType.id
+            DeletionRule = [string]$userTypeBefore.deletionRule
+        }
+        if ($null -ne $userTypeBefore.deletionGracePeriod) { $restoreParams.DeletionGracePeriod = [TimeSpan]$userTypeBefore.deletionGracePeriod }
+        if ($userTypeBefore.deletionTriggerConnectedSystemIds) { $restoreParams.DeletionTriggerConnectedSystemIds = [int[]]$userTypeBefore.deletionTriggerConnectedSystemIds }
+        if ($null -ne $userTypeBefore.deletionTriggerMode) { $restoreParams.DeletionTriggerMode = [string]$userTypeBefore.deletionTriggerMode }
+        Set-JIMMetaverseObjectType @restoreParams | Out-Null
 
         Write-Host "  ✓ Test 4 PASSED: post-clear reconciliation refuses on a shortfall, then recalls values and applies Deletion Rules once re-imported" -ForegroundColor Green
         $testResults.Steps += @{ Name = "StrandedSweep"; Success = $true }
