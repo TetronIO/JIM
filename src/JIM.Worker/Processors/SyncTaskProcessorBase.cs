@@ -78,9 +78,22 @@ public abstract class SyncTaskProcessorBase
     // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
     protected int _totalCsoAlreadyCurrentCount;
 
+    // Page-wide Metaverse Object identity map (#1612): resolves every load of a given MVO row, within one
+    // sync page, onto a single canonical CLR instance. See MetaverseObjectPageIdentityMap's own remarks for
+    // why this is needed (Pass 1's obsoletion-driven deletion markers and Pass 2's separate matching-rule
+    // load can otherwise return distinct instances of the same row) and ClearPageTrackingState below for
+    // its lifetime, which must track the EF change tracker's exactly.
+    protected readonly MetaverseObjectPageIdentityMap _mvoIdentityMap = new();
+
     // Batch collections for deferred MVO persistence and export evaluation
     protected readonly List<MetaverseObject> _pendingMvoCreates = [];
     protected readonly List<MetaverseObject> _pendingMvoUpdates = [];
+
+    // Side index for QueueMvoForUpdate's Id membership check: a page can hold thousands of Metaverse
+    // Objects, and FindIndex over _pendingMvoUpdates on every queue call would make queueing O(n) per call
+    // (O(n^2)) over a page. Kept in lockstep with _pendingMvoUpdates: every Add goes through
+    // QueueMvoForUpdate, and both are cleared together in PersistPendingMetaverseObjectsAsync.
+    private readonly HashSet<Guid> _pendingMvoUpdateIds = [];
     protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> ChangedAttributes, HashSet<MetaverseObjectAttributeValue>? RemovedAttributes)> _pendingExportEvaluations = [];
 
     // Batch collections for deferred Pending Export operations (avoid per-CSO database calls)
@@ -253,6 +266,29 @@ public abstract class SyncTaskProcessorBase
     /// No-op in production (null by default).
     /// </summary>
     internal Action? OnCsoProcessedInPass2 { get; set; }
+
+    /// <summary>
+    /// Test hook: the page identity map's cumulative absorption count (#1612). Production code never reads
+    /// this directly; tests use it to assert that a same-page identity split was actually absorbed by the
+    /// map rather than reaching <see cref="QueueMvoForUpdate"/> as a second instance.
+    /// </summary>
+    internal int MvoIdentityMapAbsorbedCountForTests => _mvoIdentityMap.AbsorbedCount;
+
+    /// <summary>
+    /// Test hook: exercises <see cref="QueueMvoForUpdate"/> directly, bypassing the page identity map, so
+    /// tests can drive its tripwire consolidation path without needing a load site that genuinely bypasses
+    /// the map (which the map's own coverage is designed to prevent from occurring in practice). Production
+    /// code never calls this.
+    /// </summary>
+    internal void QueueMvoForUpdateForTests(MetaverseObject mvo) => QueueMvoForUpdate(mvo);
+
+    /// <summary>
+    /// Test hook: a read-only view of the page-flush MVO update batch. Pairs with
+    /// <see cref="QueueMvoForUpdateForTests"/> so tests can assert on the batch's contents after driving it
+    /// directly. Production code never reads this; the real consumer is
+    /// <see cref="PersistPendingMetaverseObjectsAsync"/>.
+    /// </summary>
+    internal IReadOnlyList<MetaverseObject> PendingMvoUpdatesForTests => _pendingMvoUpdates;
 
     /// <summary>
     /// Narrates the run as steps an administrator can follow (#454). Never null; callers that do
@@ -746,6 +782,13 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ErrorStackTrace = expressionEx.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
+            // The joined MVO (if any) is the page's one canonical instance (#1612): a later CSO in this same
+            // page that joins the same MVO would otherwise inherit this CSO's stale, never-applied pending
+            // values alongside its own when it calls ApplyPendingMetaverseObjectAttributeChanges. Clearing
+            // here, not just discarding the reference, keeps "the MVO is left untouched" true for every CSO
+            // that shares it for the rest of the page.
+            ClearStalePendingAttributeChanges(connectedSystemObject.MetaverseObject);
+
             Log.Error(expressionEx, "ProcessActiveConnectedSystemObjectAsync: Expression evaluation error during pass 2 for {CsoId}. Target attribute '{Attribute}', expression '{Expression}'.",
                 connectedSystemObject.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
         }
@@ -763,6 +806,10 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ErrorMessage = missingInputEx.Message +
                 " Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.";
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            // See the identical guard in the ExpressionEvaluationError catch above: the MVO is the page's
+            // shared canonical instance, so a later same-page joiner must not inherit this CSO's leftovers.
+            ClearStalePendingAttributeChanges(connectedSystemObject.MetaverseObject);
 
             Log.Warning("ProcessActiveConnectedSystemObjectAsync: Expression not evaluated for {CsoId}; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
                 connectedSystemObject.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
@@ -782,6 +829,25 @@ public abstract class SyncTaskProcessorBase
             Log.Error(e, "ProcessActiveConnectedSystemObjectAsync: Unhandled error during pass 2 for {CsoId}.",
                 connectedSystemObject.Id);
         }
+    }
+
+    /// <summary>
+    /// Clears an errored CSO's never-applied pending attribute value lists from its joined Metaverse Object,
+    /// if any. Attribute Flow stages additions/removals on the MVO's <c>PendingAttributeValueAdditions</c> /
+    /// <c>PendingAttributeValueRemovals</c> before an expression throws; on the pre-#1612 assumption that
+    /// every CSO in a page held its own distinct MVO instance, leaving those lists unapplied was harmless -
+    /// the instance was simply discarded. With the page identity map (#1612), the MVO is the one shared
+    /// canonical instance for its Id, so a LATER Connected System Object in the same page that joins the
+    /// same MVO and calls <c>ApplyPendingMetaverseObjectAttributeChanges</c> would otherwise silently apply
+    /// this failed CSO's stale pending values alongside its own. A no-op when the CSO was not joined.
+    /// </summary>
+    private static void ClearStalePendingAttributeChanges(MetaverseObject? mvo)
+    {
+        if (mvo == null)
+            return;
+
+        mvo.PendingAttributeValueAdditions.Clear();
+        mvo.PendingAttributeValueRemovals.Clear();
     }
 
     /// <summary>
@@ -1165,9 +1231,12 @@ public abstract class SyncTaskProcessorBase
             // context-wide DetectChanges. This method is reached via ProcessMvoDeletionRuleAsync, called both
             // from the CSO obsoletion path (whose caller, ProcessObsoleteConnectedSystemObjectAsync,
             // separately queues the same MVO for any attribute-recall changes once this call returns) and
-            // from HandleCsoOutOfScopeAsync, either of which may already have queued this same MVO instance;
-            // QueueMvoForUpdate dedupes by Id, so a later Pass 2 load of the same MVO under a different CLR
-            // instance (e.g. a same-page join) is consolidated rather than double-queued.
+            // from HandleCsoOutOfScopeAsync, either of which may already have queued this same MVO instance.
+            // A later Pass 2 load of the same MVO (e.g. a same-page join) is resolved onto THIS instance by
+            // the page identity map (#1612) before it ever reaches EstablishJoinAsync or QueueMvoForUpdate,
+            // so the markers set here are visible to the rejoin's cancellation check and no consolidation is
+            // needed for the ordinary case; QueueMvoForUpdate's own dedupe is a tripwire for a load site
+            // that bypasses the map, not the mechanism this depends on.
             QueueMvoForUpdate(mvo);
             return MvoDeletionFate.DeletionScheduled;
         }
@@ -1191,59 +1260,66 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Queues a Metaverse Object for the page-flush batch update (<see cref="_pendingMvoUpdates"/>),
-    /// deduplicating by Id rather than by CLR reference. Every <c>_pendingMvoUpdates.Add</c> in this class
-    /// must go through this helper rather than adding directly.
+    /// Clears both the EF change tracker and the page identity map (#1612) together. Every existing
+    /// <c>_syncRepo.ClearChangeTracker()</c> call site in the sync processors must go through this method
+    /// instead of calling the repository directly: the identity map's lifetime is "while the change tracker
+    /// holds this page's Metaverse Object instances", so the two must always be cleared in lockstep. Leaving
+    /// the map stale past a tracker clear would resolve a later load onto an instance the tracker (and
+    /// therefore the database) no longer agrees with.
+    /// </summary>
+    protected void ClearPageTrackingState()
+    {
+        _syncRepo.ClearChangeTracker();
+        _mvoIdentityMap.Clear();
+    }
+
+    /// <summary>
+    /// Queues a Metaverse Object for the page-flush batch update (<see cref="_pendingMvoUpdates"/>), keyed
+    /// by Id via <see cref="_pendingMvoUpdateIds"/> so a page holding thousands of objects does not pay an
+    /// O(n) scan on the common (first-sight) path. Every <c>_pendingMvoUpdates.Add</c> in this class must go
+    /// through this helper rather than adding directly.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Each page is processed in two ordered passes (see PerformFullSyncAsync/PerformDeltaSyncAsync):
     /// Pass 1 tears down obsolete CSOs (and, via <see cref="MarkMvoForDeletionAsync"/>, schedules
     /// grace-period MVO deletions), then Pass 2 processes joins, projections and Attribute Flow for every
-    /// other CSO in the page. Neither pass shares a per-page MVO identity map, so when a CSO obsoleted in
-    /// Pass 1 schedules a grace-period deletion on an MVO, and a different CSO in the same page joins to
-    /// that same MVO in Pass 2, the two passes load and queue two DISTINCT CLR instances of the same
-    /// database row. The previous reference-equality <c>Contains()</c> guard could not see this: both
-    /// instances passed the guard and both were queued, so the batch flush
-    /// (<c>SyncRepository.UpdateMetaverseObjectsBulkAsync</c>) either issued a nondeterministic UPDATE
-    /// (PostgreSQL picks an arbitrary row from a duplicate-keyed VALUES list) or a duplicate-key failure on
-    /// the attribute-value INSERT, aborting the whole Activity.
+    /// other CSO in the page. Every load of a Metaverse Object anywhere in the page - Pass 1's CSO
+    /// navigation, Pass 2's matching-rule join, a newly persisted projection - is resolved through
+    /// <see cref="_mvoIdentityMap"/> onto one canonical CLR instance per Id (#1612). The identity map is now
+    /// the PRIMARY mechanism that prevents a same-page Id from ever being queued under two distinct
+    /// instances; the consolidation below is a tripwire for a load site that bypasses it, not the fix
+    /// itself. Its Warning log firing at all, on a real page, would mean the map missed a load site; it
+    /// staying silent across full integration sweeps is what confirms the map's coverage is complete.
     /// </para>
     /// <para>
-    /// This method dedupes by Id instead. On a collision it keeps the newest (this call's) instance:
-    /// Pass 1's deletion-only instance never carries flowed attribute changes (<see
-    /// cref="MarkMvoForDeletionAsync"/> only sets scalar marker fields), whereas every other queueing site
-    /// in this class - this one included - has already applied its Attribute Flow to the instance it
-    /// queues, and Pass 1 always completes before Pass 2 (and before the deferred/cross-page reference
-    /// passes) within a page. Discarding the older instance therefore never loses attribute state. What the
-    /// older instance CAN carry that a newer one does not is the deletion-marker scalars, so those are
-    /// copied across before the older instance is dropped.
-    /// </para>
-    /// <para>
-    /// The structural fix - a page-level MVO identity lookup so only one instance is ever loaded per Id -
-    /// would remove the need for this consolidation entirely, but is a larger change than this guard;
-    /// consolidating at queue time (with a matching defensive collapse in
-    /// <c>UpdateMetaverseObjectsBulkAsync</c> should a future queueing site regress) is the belt-and-braces
-    /// fix for now. The Warning log is the tripwire for other split shapes this reasoning has not covered.
+    /// On a collision this keeps the newest (this call's) instance: an earlier-queued deletion-only instance
+    /// never carries flowed attribute changes (<see cref="MarkMvoForDeletionAsync"/> only sets scalar marker
+    /// fields), whereas every other queueing site in this class - this one included - has already applied
+    /// its Attribute Flow to the instance it queues. What the older instance CAN carry that a newer one does
+    /// not is the deletion-marker scalars, so those are copied across before the older instance is dropped
+    /// (<see cref="CopyMvoDeletionMarkersIfMissing"/>). A matching defensive collapse in
+    /// <c>SyncRepository.UpdateMetaverseObjectsBulkAsync</c> is the last-line backstop should this tripwire
+    /// itself somehow be reached with state it cannot reconcile.
     /// </para>
     /// </remarks>
     private void QueueMvoForUpdate(MetaverseObject mvo)
     {
-        var existingIndex = _pendingMvoUpdates.FindIndex(m => m.Id == mvo.Id);
-        if (existingIndex < 0)
+        if (_pendingMvoUpdateIds.Add(mvo.Id))
         {
             _pendingMvoUpdates.Add(mvo);
             return;
         }
 
+        var existingIndex = _pendingMvoUpdates.FindIndex(m => m.Id == mvo.Id);
         var existing = _pendingMvoUpdates[existingIndex];
         if (ReferenceEquals(existing, mvo))
             return;
 
         Log.Warning(
             "QueueMvoForUpdate: MVO {MvoId} was queued twice in this page flush with distinct object " +
-            "instances (an identity split from separate loads across the sync page's passes). " +
-            "Consolidating onto one instance before the batch update.",
+            "instances (a load site bypassed the page identity map, #1612). Consolidating onto one instance " +
+            "before the batch update.",
             mvo.Id);
 
         CopyMvoDeletionMarkersIfMissing(from: existing, to: mvo);
@@ -1253,8 +1329,8 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Copies deletion-marker scalars (see <see cref="ClearMvoDeletionMarkers"/>) from one Metaverse Object
     /// instance to another, only when the source carries them and the destination does not. Used by
-    /// <see cref="QueueMvoForUpdate"/> to preserve a grace-period deletion recorded on an instance that is
-    /// about to be dropped in favour of a newer instance queued for the same MVO Id.
+    /// <see cref="QueueMvoForUpdate"/>'s tripwire consolidation to preserve a grace-period deletion recorded
+    /// on an instance that is about to be dropped in favour of a newer instance queued for the same MVO Id.
     /// </summary>
     private static void CopyMvoDeletionMarkersIfMissing(MetaverseObject from, MetaverseObject to)
     {
@@ -1937,6 +2013,13 @@ public abstract class SyncTaskProcessorBase
         {
             await _syncRepo.CreateMetaverseObjectsAsync(_pendingMvoCreates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Created {Count} MVOs in batch", _pendingMvoCreates.Count);
+
+            // Register each newly-Id'd MVO with the page identity map (#1612) so a later same-page load of
+            // the same row (a rejoin further down the page, or cross-page reference resolution) resolves
+            // onto this instance rather than treating it as unseen.
+            foreach (var created in _pendingMvoCreates)
+                _mvoIdentityMap.Register(created);
+
             _pendingMvoCreates.Clear();
         }
 
@@ -1967,6 +2050,7 @@ public abstract class SyncTaskProcessorBase
                 await _syncRepo.FixupMvoReferenceValueIdsAsync(refFixups);
 
             _pendingMvoUpdates.Clear();
+            _pendingMvoUpdateIds.Clear();
         }
 
         // Batch update CSOs that had JoinType/DateJoined/MetaverseObjectId changed during
@@ -2342,8 +2426,8 @@ public abstract class SyncTaskProcessorBase
         // fallback path it may still hold stragglers.
         var rpeiCountBeforeClear = _activity.RunProfileExecutionItems.Count;
         _activity.RunProfileExecutionItems.Clear();
-        _syncRepo.ClearChangeTracker();
-        Log.Debug("ResolveCrossPageReferences: Cleared change tracker and {RpeiCount} in-memory RPEIs from activity",
+        ClearPageTrackingState();
+        Log.Debug("ResolveCrossPageReferences: Cleared change tracker, page identity map and {RpeiCount} in-memory RPEIs from activity",
             rpeiCountBeforeClear);
 
         // Build Synchronisation Rule lookup (keyed by ID) for O(1) access
@@ -2387,6 +2471,12 @@ public abstract class SyncTaskProcessorBase
             {
                 reloadedCsos = await _syncRepo.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
             }
+
+            // Resolve every reloaded CSO's MetaverseObject navigation through the page identity map (#1612):
+            // this batch's own reload is itself a fresh database round trip, so a CSO whose MVO this batch
+            // also touches elsewhere (or a later batch after ClearChangeTracker) must land on one canonical
+            // instance, not a distinct one per reload.
+            _mvoIdentityMap.Seed(reloadedCsos);
 
             // Index reloaded CSOs by ID for O(1) lookup
             var csosById = reloadedCsos.ToDictionary(c => c.Id);
@@ -2673,14 +2763,14 @@ public abstract class SyncTaskProcessorBase
                 _syncRepo.SetAutoDetectChangesEnabled(true);
             }
 
-            // Clear the change tracker between batches to prevent entity tracking conflicts.
-            // Each batch loads CSOs, MVOs, MetaverseObjectType, MetaverseAttribute, and other
-            // entities into the tracker. Without clearing, subsequent batches encounter identity
+            // Clear the change tracker (and the page identity map, #1612) between batches to prevent entity
+            // tracking conflicts. Each batch loads CSOs, MVOs, MetaverseObjectType, MetaverseAttribute, and
+            // other entities into the tracker. Without clearing, subsequent batches encounter identity
             // conflicts when the same shared entities (e.g., MetaverseObjectType) are loaded again.
             // All batch data has been fully persisted above, so clearing is safe.
             // The Activity entity will be re-attached by UpdateActivityAsync's detached handling.
             if (batchIndex < totalBatches - 1)
-                _syncRepo.ClearChangeTracker();
+                ClearPageTrackingState();
         }
 
         // Explicitly delete removed MVO attribute values via raw SQL.
@@ -2709,14 +2799,14 @@ public abstract class SyncTaskProcessorBase
 
         _unresolvedCrossPageReferences.Clear();
 
-        // Clear the change tracker after cross-page resolution completes.
+        // Clear the change tracker (and the page identity map, #1612) after cross-page resolution completes.
         // The tracker contains entities loaded by the cross-page CSO query with deep Include chains
         // that bring in MetaverseAttribute and MetaverseObjectType instances. Multiple MVOs sharing
         // the same type/attributes create separate in-memory instances that conflict when any
         // subsequent SaveChangesAsync triggers DetectChanges. Clearing removes all tracked entities
         // so the caller's next SaveChangesAsync starts with a clean tracker.
         // The Activity entity will be re-attached by UpdateActivityAsync's detached entity handling.
-        _syncRepo.ClearChangeTracker();
+        ClearPageTrackingState();
 
         span.SetSuccess();
     }
@@ -2995,7 +3085,7 @@ public abstract class SyncTaskProcessorBase
             // reconsidered next sweep (fail-safe).
             await _syncRepo.ClearMetaverseObjectScopeReviewPendingAsync(flaggedIds);
 
-            _syncRepo.ClearChangeTracker();
+            ClearPageTrackingState();
             totalProcessed += mvos.Count;
             _activity.ObjectsProcessed = totalProcessed;
 
@@ -3967,13 +4057,24 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Calls the matching engine and translates MultipleMatchesException into SyncJoinException.
+    /// Calls the matching engine and translates MultipleMatchesException into SyncJoinException. Resolves
+    /// the match through the page identity map (#1612): a matching-rule lookup is a separate database load
+    /// from whatever CSO navigation already brought a Metaverse Object into this page (an obsoleting CSO's
+    /// own MVO in Pass 1, an earlier join in Pass 2), and a separate load is the shape that CAN return a
+    /// distinct CLR instance of the same row. On real PostgreSQL, JIM's single tracking DbContext already
+    /// resolves both loads to one instance via EF's own identity map, so this is hardening against a future
+    /// change to how Metaverse Objects are loaded, not a fix for an observed production defect (see
+    /// <c>docs/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
+    /// Hardening). Resolving here means every downstream use of the returned Metaverse Object (join
+    /// establishment, deletion-marker checks, attribute flow) sees the one canonical instance the page is
+    /// tracking state on, regardless of how it was loaded.
     /// </summary>
     private async Task<MetaverseObject?> FindMatchingMvoForJoinAsync(ConnectedSystemObject connectedSystemObject, List<ObjectMatchingRule> matchingRules)
     {
         try
         {
-            return await _syncServer.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules);
+            var match = await _syncServer.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules);
+            return match == null ? null : _mvoIdentityMap.Resolve(match);
         }
         catch (JIM.Models.Exceptions.MultipleMatchesException ex)
         {
@@ -4656,8 +4757,11 @@ public abstract class SyncTaskProcessorBase
                 // mid-page: an immediate context-wide SaveChangesAsync here early-inserts this page's
                 // freshly created RPEIs (still tracked on the shared Activity), which then collides with
                 // the page flush's own raw-SQL RPEI insert (#1610; same mechanism as #1613's grace-period
-                // fix). See QueueMvoForUpdate's doc comment for the full mechanism, including how it
-                // consolidates with an MVO already queued for a grace-period deletion marker above.
+                // fix). This is the SAME instance ProcessMvoDeletionRuleAsync (above) may already have
+                // queued for a grace-period deletion marker: the page identity map (#1612) guarantees `mvo`
+                // is the one canonical CLR instance for its Id, so QueueMvoForUpdate's own by-Id check is
+                // what silently no-ops this second call rather than double-queueing. See QueueMvoForUpdate's
+                // doc comment for the full mechanism.
                 if (!skipRecallForImmediateDeletion)
                 {
                     ApplyPendingMetaverseObjectAttributeChanges(mvo);
