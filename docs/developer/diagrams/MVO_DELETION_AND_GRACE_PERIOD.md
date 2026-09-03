@@ -130,6 +130,8 @@ Cancellation clears every deletion marker together (`ClearMvoDeletionMarkers`): 
 
 `QueueMvoForUpdate`'s own by-Id consolidation (with a `Warning` log) is now a tripwire for a load site that bypasses the identity map, rather than the primary defence against a same-page collision.
 
+**Only the `EstablishJoinAsync` path records a sync outcome for the cancellation (#1620).** Before the markers are cleared, `EstablishJoinAsync` captures them (the scheduled date, the decision-time policy snapshot, the triggering system name, and the object type's Deletion Rule and trigger mode) and threads them through `MetaverseObjectChangeResult` to whichever site builds the item's `Joined` root outcome, which attaches an `MvoDeletionCancelled` child carrying a detail message and the carried-through policy snapshot. The `FlushPendingMvoDeletionsAsync` same-page reconnect check is a different case entirely: it rescues an MVO queued for *immediate* (zero-grace-period) deletion, which was never scheduled and so never recorded an `MvoDeletionScheduled` outcome to cancel; nothing to un-happen means nothing new to record, and the causality tree exists only for a grace-period deletion in the first place.
+
 ## Immediate Deletion (Zero Grace Period)
 
 ```mermaid

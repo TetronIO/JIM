@@ -705,6 +705,19 @@ public abstract class SyncTaskProcessorBase
                             syncRuleId: changeResult.SyncRuleId,
                             syncRuleName: changeResult.SyncRuleName);
 
+                        // A pure join (no accompanying Attribute Flow) that cancelled a previously scheduled
+                        // deletion (#1620). Not gated to Detailed mode, matching MvoDeletionScheduled's own
+                        // treatment: it is an audit signal in its own right, not incidental detail.
+                        if (changeResult.ChangeType == ObjectChangeType.Joined
+                            && changeResult.CancelledMvoDeletionDetailMessage != null)
+                        {
+                            SyncOutcomeBuilder.AddChildOutcome(runProfileExecutionItem, rootOutcome,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled,
+                                targetEntityId: mvoId,
+                                targetEntityDescription: mvoDescription,
+                                detailMessage: changeResult.CancelledMvoDeletionDetailMessage);
+                        }
+
                         // In Detailed mode, add AttributeFlow child under DisconnectedOutOfScope when attributes were recalled.
                         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                             && changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope
@@ -1381,6 +1394,13 @@ public abstract class SyncTaskProcessorBase
         var wasProjected = false;
         SyncRule? projectionSyncRule = null;
 
+        // Populated by AttemptJoinAsync/EstablishJoinAsync when the join cancels a previously scheduled
+        // grace-period deletion (#1620); threaded onto the returned MetaverseObjectChangeResult.Joined()
+        // so whichever site ends up building the Joined root outcome (below, or the caller when this join
+        // is the sole change) can attach the MvoDeletionCancelled child.
+        string? cancelledMvoDeletionDetailMessage = null;
+        string? cancelledMvoDeletionPolicySnapshotJson = null;
+
         // Get import Synchronisation Rules for this CSO type
         var importSyncRules = activeSyncRules
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
@@ -1418,7 +1438,8 @@ public abstract class SyncTaskProcessorBase
 
             using (Diagnostics.Sync.StartSpan("AttemptJoin"))
             {
-                wasJoined = await AttemptJoinAsync(scopedSyncRules, connectedSystemObject);
+                (wasJoined, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson) =
+                    await AttemptJoinAsync(scopedSyncRules, connectedSystemObject);
             }
 
             // were we able to join to an existing MVO?
@@ -1580,6 +1601,17 @@ public abstract class SyncTaskProcessorBase
                         syncRuleId: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Id : null,
                         syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null);
 
+                    // Not gated to Detailed mode: like the MvoDeletionScheduled outcome it counterparts, this
+                    // is an audit signal in its own right, not incidental detail (#1620).
+                    if (changeType == ObjectChangeType.Joined && cancelledMvoDeletionDetailMessage != null)
+                    {
+                        SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled,
+                            targetEntityId: mvoId,
+                            targetEntityDescription: mvoDescription,
+                            detailMessage: cancelledMvoDeletionDetailMessage);
+                    }
+
                     // In Detailed mode, add a separate AttributeFlow child under Projected/Joined
                     if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                         && changeType is ObjectChangeType.Projected or ObjectChangeType.Joined
@@ -1662,7 +1694,8 @@ public abstract class SyncTaskProcessorBase
             }
             if (wasJoined)
             {
-                return MetaverseObjectChangeResult.Joined(attributesAdded, attributesRemoved);
+                return MetaverseObjectChangeResult.Joined(attributesAdded, attributesRemoved,
+                    cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson);
             }
             if (attributesAdded > 0 || attributesRemoved > 0)
             {
@@ -3992,10 +4025,14 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     /// <param name="activeSyncRules">The active Synchronisation Rules that contain all possible join rules to be evaluated.</param>
     /// <param name="connectedSystemObject">The Connected System Object to try and find a matching Metaverse Object for.</param>
-    /// <returns>True if a join was established, false if no matching MVO was found.</returns>
+    /// <returns>
+    /// Whether a join was established, plus (#1620) the MvoDeletionCancelled facts from
+    /// <see cref="EstablishJoinAsync"/> when the join cancelled a previously scheduled deletion; both null
+    /// when no join was found or no deletion was cancelled.
+    /// </returns>
     /// <exception cref="SyncJoinException">Thrown when a join cannot be established due to ambiguous match or existing join.</exception>
     /// <exception cref="InvalidDataException">Thrown if an unsupported join state is found preventing processing.</exception>
-    protected async Task<bool> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    protected async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         var isSimpleMode = _connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem;
         var attemptedMatching = false;
@@ -4041,7 +4078,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         // No join could be established.
-        return false;
+        return (false, null, null);
     }
 
     /// <summary>
@@ -4089,7 +4126,16 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Validates join constraints and establishes the join between a CSO and MVO.
     /// </summary>
-    private async Task<bool> EstablishJoinAsync(ConnectedSystemObject connectedSystemObject, MetaverseObject mvo)
+    /// <returns>
+    /// Whether the join was established, plus (#1620) the MvoDeletionCancelled detail message and the
+    /// carried-through decision-time policy snapshot when the join cancelled a previously scheduled
+    /// deletion; both null for an ordinary join. Returned rather than attached to an outcome directly
+    /// because the Joined root outcome this must be a child of is not always built here: it is built
+    /// in-line when Attribute Flow accompanies the join, and by the caller (<see cref="ProcessActiveConnectedSystemObjectAsync"/>)
+    /// when the join is the sole change, so the facts travel back through <see cref="MetaverseObjectChangeResult"/>
+    /// to whichever site builds the root.
+    /// </returns>
+    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> EstablishJoinAsync(ConnectedSystemObject connectedSystemObject, MetaverseObject mvo)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
         var existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(
@@ -4145,12 +4191,27 @@ public abstract class SyncTaskProcessorBase
         // If the MVO was marked for deletion (reconnection scenario), cancel the scheduled deletion only
         // when the rejoin falsifies the trigger condition under the configured mode semantics (#119): a
         // system whose rejoin does not undo the triggering disconnection must not rescue the object.
+        string? cancelledMvoDeletionDetailMessage = null;
+        string? cancelledMvoDeletionPolicySnapshotJson = null;
         if (mvo.LastConnectorDisconnectedDate.HasValue)
         {
             if (_syncEngine.ShouldCancelScheduledDeletion(mvo, connectedSystemObject.ConnectedSystemId))
             {
                 Log.Information("EstablishJoinAsync: Clearing deletion markers for MVO {MvoId} as system {SystemId} has reconnected and the trigger condition no longer holds.",
                     mvo.Id, connectedSystemObject.ConnectedSystemId);
+
+                // Capture the marker facts BEFORE ClearMvoDeletionMarkers wipes them (#1620), so the
+                // causality tree can state what was cancelled and why. The policy snapshot travels
+                // through unchanged; DeletionEligibleDate is computed from LastConnectorDisconnectedDate
+                // and must be read here, before it is cleared below.
+                cancelledMvoDeletionPolicySnapshotJson = mvo.DeletionPolicySnapshotJson;
+                cancelledMvoDeletionDetailMessage = ConnectedSystemObjectObsoletionService.BuildMvoDeletionCancelledDetailMessage(
+                    rejoiningSystemName: _connectedSystem.Name,
+                    triggeringSystemName: mvo.DeletionTriggeredBySystemName,
+                    deletionEligibleDate: mvo.DeletionEligibleDate,
+                    deletionRule: mvo.Type?.DeletionRule,
+                    triggerMode: mvo.Type?.DeletionTriggerMode);
+
                 ClearMvoDeletionMarkers(mvo);
             }
             else
@@ -4161,7 +4222,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         Log.Debug("EstablishJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
-        return true;
+        return (true, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson);
     }
 
     /// <summary>

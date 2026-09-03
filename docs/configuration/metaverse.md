@@ -44,6 +44,8 @@ Rather than deleting immediately when the Deletion Rule triggers, a configurable
 
 If the identity reappears during the grace period, the scheduled deletion is cancelled; but only when the reappearance undoes what triggered it. Under **When Last Connector Disconnected**, any system reconnecting cancels. Under **When Authoritative Source Disconnected**, a reconnection from any selected source cancels in All sources mode, while in Specific mode only the system whose disconnection scheduled the deletion cancels it. An unrelated system reconnecting never rescues an object whose trigger condition still holds.
 
+When a reconnection cancels a scheduled deletion, JIM records it on the reconnecting record's [Lineage](activities.md#execution-items): the system that rejoined, when the deletion had been due, and the Deletion Rule that permitted the cancellation. Without this, an administrator reading the Lineage would see a deletion scheduled and then nothing, with no way to tell whether it was cancelled or simply has not run yet.
+
 #### Previewing a deletion settings change
 
 Deletion settings are the one change in JIM that can make existing Metaverse Objects eligible for deletion the moment it is saved, with no synchronisation run in between. **Preview Changes**, beside Save on the Object Type's Deletion Rules panel, answers what the change would actually do before you make it.

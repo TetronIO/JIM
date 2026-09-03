@@ -2907,7 +2907,13 @@ public class FullSyncTests
     /// Runs a Full Synchronisation on system 1 for the rejoin scenario and asserts the join was established,
     /// so the cancellation assertions that follow are exercising a real rejoin.
     /// </summary>
-    private async Task RunFullSyncForRejoinAsync(MetaverseObject mvo)
+    private async Task RunFullSyncForRejoinAsync(MetaverseObject mvo) => await RunFullSyncForRejoinAndReturnActivityAsync(mvo);
+
+    /// <summary>
+    /// As <see cref="RunFullSyncForRejoinAsync"/>, additionally returning the Activity so callers can
+    /// inspect the rejoining item's recorded sync outcomes (#1620).
+    /// </summary>
+    private async Task<Activity> RunFullSyncForRejoinAndReturnActivityAsync(MetaverseObject mvo)
     {
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
@@ -2917,6 +2923,61 @@ public class FullSyncTests
 
         var cso = ConnectedSystemObjectsData[0];
         Assert.That(cso.MetaverseObject, Is.EqualTo(mvo), "Expected the CSO to rejoin the MVO before asserting cancellation behaviour");
+        return activity;
+    }
+
+    /// <summary>
+    /// #1620: when a rejoin cancels a scheduled deletion, the cancellation is recorded on the rejoining
+    /// item's Lineage as an MvoDeletionCancelled outcome, a child of the item's Joined root, naming the
+    /// rejoining Connected System in its detail message. Without this, the causality tree records that a
+    /// deletion was scheduled and then falls silent: the object is alive with no recorded reason.
+    /// </summary>
+    [Test]
+    public async Task ScheduledDeletionCancellation_TriggeringSystemRejoins_RecordsMvoDeletionCancelledOutcomeAsync()
+    {
+        var mvo = ArrangeScheduledDeletionRejoinScenario(
+            AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            triggerConnectedSystemIds: [1, 2],
+            deletionTriggeredBySystemId: 1,
+            deletionTriggeredBySystemName: "Dummy Source System");
+
+        var activity = await RunFullSyncForRejoinAndReturnActivityAsync(mvo);
+
+        var rpei = activity.RunProfileExecutionItems.Single(r => r.ConnectedSystemObject == ConnectedSystemObjectsData[0]);
+        var joinedRoot = rpei.SyncOutcomes.SingleOrDefault(o =>
+            o.ParentSyncOutcome == null && o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
+        Assert.That(joinedRoot, Is.Not.Null, "The rejoin must record a Joined root outcome");
+
+        var cancelled = joinedRoot!.Children.SingleOrDefault(c =>
+            c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled);
+        Assert.That(cancelled, Is.Not.Null,
+            "A rejoin that cancels a scheduled deletion must record an MvoDeletionCancelled child of the Joined root");
+        Assert.That(cancelled!.DetailMessage, Does.Contain("Dummy Source System"),
+            "The detail message must name the rejoining Connected System");
+    }
+
+    /// <summary>
+    /// #1620: a rejoin that the trigger mode does NOT recognise as undoing the scheduling disconnection
+    /// must not fabricate an MvoDeletionCancelled outcome; the scheduled deletion (and its marker fields)
+    /// remain in force, per <see cref="ScheduledDeletionCancellation_SpecificMode_DifferentListedSourceRejoins_RetainsMarkersAsync"/>.
+    /// </summary>
+    [Test]
+    public async Task ScheduledDeletionCancellation_DifferentListedSourceRejoins_NoMvoDeletionCancelledOutcomeAsync()
+    {
+        var mvo = ArrangeScheduledDeletionRejoinScenario(
+            AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            triggerConnectedSystemIds: [1, 2],
+            deletionTriggeredBySystemId: 2,
+            deletionTriggeredBySystemName: "Dummy Target System");
+
+        var activity = await RunFullSyncForRejoinAndReturnActivityAsync(mvo);
+
+        var noneRecorded = activity.RunProfileExecutionItems
+            .SelectMany(r => r.SyncOutcomes)
+            .All(o => o.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled);
+        Assert.That(noneRecorded, Is.True,
+            "A rejoin that does not cancel the scheduled deletion under the configured trigger mode must not " +
+            "record an MvoDeletionCancelled outcome");
     }
 
     #endregion

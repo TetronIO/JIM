@@ -453,4 +453,65 @@ public static class ConnectedSystemObjectObsoletionService
         if (period.Minutes > 0) parts.Add($"{period.Minutes} minute{(period.Minutes != 1 ? "s" : "")}");
         return parts.Count > 0 ? string.Join(", ", parts) : "0";
     }
+
+    /// <summary>
+    /// Builds the detail message for an <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled"/>
+    /// outcome node: which system's rejoin cancelled the scheduled deletion, when the deletion had been due,
+    /// which system's earlier disconnection had triggered it, and the Deletion Rule in force at the time
+    /// (#1620), e.g. "Scheduled deletion (due 8 September 2026 UTC, triggered by HR CSV Source disconnecting)
+    /// cancelled: HR CSV Source rejoined; rule When Authoritative Source Disconnected, mode Specific Sources
+    /// Disconnect."
+    /// </summary>
+    /// <param name="rejoiningSystemName">The Connected System whose Connected System Object rejoined the Metaverse Object.</param>
+    /// <param name="triggeringSystemName">The Connected System whose disconnection originally triggered the scheduled deletion, when recorded (null for rows marked before #119).</param>
+    /// <param name="deletionEligibleDate">When the cancelled deletion had been due, captured before the marker was cleared.</param>
+    /// <param name="deletionRule">The Metaverse Object Type's Deletion Rule at decision time, when the Type is known.</param>
+    /// <param name="triggerMode">The Deletion Trigger Mode at decision time; only meaningful (and only rendered) for <see cref="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected"/>.</param>
+    public static string BuildMvoDeletionCancelledDetailMessage(
+        string rejoiningSystemName,
+        string? triggeringSystemName,
+        DateTime? deletionEligibleDate,
+        MetaverseObjectDeletionRule? deletionRule,
+        AuthoritativeSourceTriggerMode? triggerMode)
+    {
+        var dueClause = deletionEligibleDate.HasValue
+            ? $"due {deletionEligibleDate.Value:d MMMM yyyy} UTC"
+            : "due immediately";
+        var triggerClause = !string.IsNullOrWhiteSpace(triggeringSystemName)
+            ? $", triggered by {triggeringSystemName} disconnecting"
+            : string.Empty;
+
+        var ruleClause = string.Empty;
+        if (deletionRule.HasValue)
+        {
+            var ruleLabel = FormatDeletionRule(deletionRule.Value);
+            ruleClause = deletionRule.Value == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected && triggerMode.HasValue
+                ? $"; rule {ruleLabel}, mode {FormatTriggerMode(triggerMode.Value)}"
+                : $"; rule {ruleLabel}";
+        }
+
+        return $"Scheduled deletion ({dueClause}{triggerClause}) cancelled: {rejoiningSystemName} rejoined{ruleClause}.";
+    }
+
+    /// <summary>
+    /// Formats a Deletion Rule for the cancellation detail message, matching the labels used on the
+    /// Metaverse Object Type edit page.
+    /// </summary>
+    private static string FormatDeletionRule(MetaverseObjectDeletionRule rule) => rule switch
+    {
+        MetaverseObjectDeletionRule.Manual => "Manual",
+        MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => "When Last Connector Disconnected",
+        MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => "When Authoritative Source Disconnected",
+        _ => rule.ToString()
+    };
+
+    /// <summary>
+    /// Formats a Deletion Trigger Mode for the cancellation detail message.
+    /// </summary>
+    private static string FormatTriggerMode(AuthoritativeSourceTriggerMode mode) => mode switch
+    {
+        AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect => "Specific Sources Disconnect",
+        AuthoritativeSourceTriggerMode.AllSourcesDisconnect => "All Sources Disconnect",
+        _ => mode.ToString()
+    };
 }
