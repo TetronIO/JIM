@@ -26,6 +26,12 @@
     + LDAP CSO). Removing a user from one source disconnects only that source's CSO. The other
     connectors remain joined.
 
+    Three-situation preservation model (#1570; see docs/concepts/attribute-priority.md "When the
+    winning source disconnects or withdraws"): a departed source's sole-contributed values are either
+    recalled (a remaining import source stands behind the object; Tests 1, 5), frozen for a pending
+    deletion's grace window (Test 4b), or preserved as the object's last known state when no import
+    source remains at all (Test 1b). All three situations have dedicated coverage below.
+
     Test 1: WhenLastConnectorDisconnected + Recall (Training source, end-to-end)
         - Provision user via HR + Training, export Training attrs to LDAP
         - Remove training record, run Training import+sync (obsoletes Training CSO)
@@ -34,6 +40,17 @@
         - Assert: HR-contributed attributes retained on MVO
         - Assert: Pending exports created on LDAP to clear Training attrs
         - Assert: LDAP export succeeds, AD user functional, Training attrs cleared from AD
+
+    Test 1b: WhenLastConnectorDisconnected + No Import Source Remains -> Preserved as Last Known State
+        - Contrast with Test 1: the HR CSV source (the sole import source) disconnects while the LDAP
+          CSO remains joined. LDAP carries no enabled import Synchronisation Rule for User, so once CSV
+          disconnects, no import source remains behind the object (#1570 situation 3)
+        - Assert: MVO still exists (LDAP CSO still joined - not the last connector) and is NOT marked
+          for deletion
+        - Assert: HR-contributed attributes (e.g. Department, used in the DN expression) are preserved
+          as last known state rather than recalled, and nothing is staged to LDAP as a result
+        - Assert: the CSV Sync Activity records the 'MVO Values Preserved' (ValuesPreserved) outcome
+        - Assert: the AD user remains functional (its DN, built from the preserved Department, intact)
 
     Test 2: WhenLastConnectorDisconnected + RemoveContributedAttributesOnObsoletion=false + GracePeriod=0
         - Remove user from HR CSV, run CSV import+sync only
@@ -55,6 +72,18 @@
         - Assert: MVO is deleted after grace period elapses
         - Assert: housekeeping deletion cascade honours the export rule's Delete action
           (delete Pending Export staged, directory account removed)
+
+    Test 4b: WhenAuthoritativeSourceDisconnected + GracePeriod=1 hour + Recall Enabled -> Preserved
+    for the Grace Window
+        - Contrast with Test 4 (which sets RemoveContributedAttributesOnObsoletion=false and so never
+          reaches the recall/freeze logic): here recall is ENABLED on the authoritative CSV source, but
+          the disconnection also schedules the MVO's deletion, so the sole-contributed attributes are
+          frozen for the grace window rather than recalled (#1570 situation 1)
+        - Assert: MVO marked for deletion (isPendingDeletion=true), CSV-contributed attributes still
+          present (frozen, not recalled), nothing staged to LDAP as a result
+        - Assert: the CSV Sync Activity records MvoDeletionScheduled (the queryable audit signal for
+          this situation) but NOT ValuesPreserved, which situation 3 reserves (a pending deletion
+          already explains the freeze via its own outcome)
 
     Test 5: Manual + Recall (Training source, end-to-end)
         - Same as Test 1 but with Manual deletion rule
@@ -148,9 +177,11 @@ param(
     [Parameter(Mandatory=$false)]
     [ValidateSet(
         "WhenLastConnectorRecall",
+        "NoSourceRemainsPreserves",
         "WhenLastConnectorNoRecall",
         "AuthoritativeImmediate",
         "AuthoritativeGracePeriod",
+        "PendingDeletionPreserves",
         "ManualRecall",
         "ManualNoRecall",
         "InternalProtection",
@@ -995,7 +1026,9 @@ try {
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
     $testUsers = @(
         "test.wlcd.recall", "test.wlcd.norecall",
+        "test.nosource.preserve",
         "test.auth.immediate", "test.auth.grace",
+        "test.pending.preserve",
         "test.manual.recall", "test.manual.norecall",
         "test.deprov.provdelete", "test.deprov.provdisc",
         "test.deprov.joindelete", "test.deprov.joindisc",
@@ -1209,6 +1242,127 @@ try {
         }
 
         $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $true }
+    }
+
+    # =============================================================================================================
+    # Test 1b: No Import Source Remains -> Values Preserved as Last Known State (#1570 situation 3)
+    # =============================================================================================================
+    # Contrast with Test 1 (recall): here the LAST import source disconnects and NO import source remains
+    # joined afterwards (the LDAP CSO stays joined, but LDAP is an export-only target for the User type, so
+    # it does not count as a source). WhenLastConnectorDisconnected therefore does NOT delete the MVO (the
+    # LDAP CSO still counts as a connector), but the departed CSV CSO's sole-contributed attributes are no
+    # longer recalled either: with nothing left to stand behind the object, JIM preserves them as the last
+    # known state the target account (and any expression-based mapping built from them, e.g. a DN) was
+    # built from, rather than recalling them and blanking a live account.
+    # =============================================================================================================
+    if ($Step -eq "NoSourceRemainsPreserves" -or $Step -eq "All") {
+        Write-TestSection "Test 1b: No Import Source Remains - Values Preserved as Last Known State"
+        Write-Host "DeletionRule: WhenLastConnectorDisconnected, GracePeriod: 0" -ForegroundColor Gray
+        Write-Host "RemoveContributedAttributesOnObsoletion: true (on CSV object type)" -ForegroundColor Gray
+        Write-Host "Expected: MVO remains (LDAP CSO still joined), but CSV-contributed attributes are" -ForegroundColor Gray
+        Write-Host "          preserved as last known state (NOT recalled) because no import source remains" -ForegroundColor Gray
+        Write-Host ""
+
+        Invoke-DrainPendingExports -Config $config
+
+        # Configure deletion rules - recall enabled on the CSV (default) object type. LDAP has no enabled
+        # import Synchronisation Rule for User, so once CSV disconnects, no import source remains.
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
+            -DeletionRule "WhenLastConnectorDisconnected" `
+            -GracePeriod ([TimeSpan]::Zero) `
+            -RemoveContributedAttributesOnObsoletion $true `
+            -RecallConnectedSystemId $config.CSVSystemId
+
+        # Provision a test user via HR CSV only (no Training join - CSV is the sole import source)
+        $test1bMvo = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "PRES001" `
+            -SamAccountName "test.nosource.preserve" `
+            -DisplayName "Test NoSource Preserve" `
+            -TestName "Test1b"
+
+        $test1bMvoId = $test1bMvo.id
+        Write-Host "  MVO ID: $test1bMvoId" -ForegroundColor Gray
+
+        # Record pending export count before disconnect
+        Invoke-DrainPendingExports -Config $config
+        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports before: $pendingExportsBefore" -ForegroundColor Gray
+
+        # Remove user from CSV - CSV-only cycle, inlined (rather than via Invoke-RemoveUserFromSource) so
+        # this step can capture the Sync Activity id and query its RPEI outcomes below (Assert 5)
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csv = Import-Csv $csvPath
+        $csv = @($csv | Where-Object { $_.samAccountName -ne "test.nosource.preserve" })
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+        Write-Host "  Removed test.nosource.preserve from CSV" -ForegroundColor Gray
+
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (Test1b removal)"
+
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "CSV Sync (Test1b removal)"
+
+        Start-Sleep -Seconds 3
+
+        # Assert 1: MVO still exists (LDAP CSO still joined - not the "last connector")
+        $mvoStillExists = Test-MvoExists -DisplayName "Test NoSource Preserve" -ObjectTypeName "User"
+        if (-not $mvoStillExists) {
+            $testResults.Steps += @{ Name = "NoSourceRemainsPreserves"; Success = $false; Error = "MVO deleted when LDAP CSO still joined" }
+            throw "Test 1b Assert 1 failed: MVO deleted when LDAP CSO still joined"
+        }
+        Write-Host "  PASSED: MVO still exists (LDAP CSO still joined)" -ForegroundColor Green
+
+        # Assert 2: MVO is NOT marked for deletion (WhenLastConnectorDisconnected did not trigger; contrast
+        # with the PendingDeletionPreserves test, where a deletion IS scheduled)
+        $mvoDetail = Get-JIMMetaverseObject -Id $test1bMvoId -ErrorAction SilentlyContinue
+        $isPending = $mvoDetail -and ($mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') -and $mvoDetail.isPendingDeletion
+        if ($isPending) {
+            $testResults.Steps += @{ Name = "NoSourceRemainsPreserves"; Success = $false; Error = "MVO marked isPendingDeletion=true despite LDAP CSO still joined" }
+            throw "Test 1b Assert 2 failed: MVO isPendingDeletion=true despite LDAP CSO still joined (WhenLastConnectorDisconnected should not have triggered)"
+        }
+        Write-Host "  PASSED: MVO isPendingDeletion=false (no deletion scheduled)" -ForegroundColor Green
+
+        # Assert 3: CSV-contributed attribute (Department) is STILL present - preserved as last known
+        # state, not recalled, because no import source remains to stand behind the object
+        $deptValue = $null
+        if ($mvoDetail -and $mvoDetail.attributeValues) {
+            $deptAttr = $mvoDetail.attributeValues | Where-Object { $_.attributeName -eq 'Department' } | Select-Object -First 1
+            if ($deptAttr) { $deptValue = $deptAttr.stringValue }
+        }
+        if ($deptValue) {
+            Write-Host "  PASSED: CSV-contributed attribute 'Department' preserved as last known state: $deptValue" -ForegroundColor Green
+        } else {
+            $testResults.Steps += @{ Name = "NoSourceRemainsPreserves"; Success = $false; Error = "CSV-contributed attribute 'Department' was recalled despite no import source remaining" }
+            throw "Test 1b Assert 3 failed: CSV-contributed attribute 'Department' was recalled despite no import source remaining (should be preserved as last known state)"
+        }
+
+        # Assert 4: no new pending exports - the freeze means nothing was staged to LDAP as a recall clear
+        $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+        if ($pendingExportsAfter -gt $pendingExportsBefore) {
+            $testResults.Steps += @{ Name = "NoSourceRemainsPreserves"; Success = $false; Error = "Pending exports created despite values being preserved (not recalled)" }
+            throw "Test 1b Assert 4 failed: Pending exports were created on LDAP despite the preserved values not changing"
+        }
+        Write-Host "  PASSED: No pending exports created (nothing recalled, nothing staged)" -ForegroundColor Green
+
+        # Assert 5: the disconnecting CSV Sync Activity recorded the 'MVO Values Preserved' audit outcome
+        # (ValuesPreserved), the queryable signal for this situation (#1570)
+        Assert-ActivityItemsHaveOutcomeSummary -ActivityId $syncResult.activityId -Name "CSV Sync (Test1b no-source preservation)" `
+            -ExpectedOutcomeType "ValuesPreserved"
+
+        # Assert 6: the directory account remains functional after an export cycle (the DN/identity built
+        # from the preserved attribute is not damaged)
+        $noopExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Assert-ExportSuccess -ActivityId $noopExport.activityId -Name "LDAP Export (Test1b no-op)"
+        Start-Sleep -Seconds 2
+        if (-not (Test-LDAPUserExists -UserIdentifier 'test.nosource.preserve' -DirectoryConfig $DirectoryConfig)) {
+            $testResults.Steps += @{ Name = "NoSourceRemainsPreserves"; Success = $false; Error = "Directory account missing after preservation (last known state should keep the account intact)" }
+            throw "Test 1b Assert 6 failed: directory account test.nosource.preserve missing after values were preserved as last known state"
+        }
+        Write-Host "  PASSED: Directory account remains intact (built from preserved last known state)" -ForegroundColor Green
+
+        $testResults.Steps += @{ Name = "NoSourceRemainsPreserves"; Success = $true }
     }
 
     # =============================================================================================================
@@ -1529,6 +1683,133 @@ try {
         Write-Host "  PASSED: Directory account deprovisioned via housekeeping deletion cascade (Delete action)" -ForegroundColor Green
 
         $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $true }
+    }
+
+    # =============================================================================================================
+    # Test 4b: Deletion Pending -> Values Preserved for the Grace Window (#1570 situation 1)
+    # =============================================================================================================
+    # Contrast with Test 4 (which sets RemoveContributedAttributesOnObsoletion=false and so never reaches
+    # the recall/freeze logic at all). Here recall IS enabled on the authoritative CSV source, but because
+    # the disconnection also schedules the MVO's deletion (a non-zero grace period), the sole-contributed
+    # attributes are frozen rather than recalled: recalling them would send clears to LDAP moments before
+    # the grace period's deprovisioning removes the account anyway, and if the CSV source reappears within
+    # the window the object must be exactly as it was, with nothing churned downstream in the meantime.
+    # The 'MVO Values Preserved' outcome does NOT fire here (by design: the sibling MvoDeletionScheduled
+    # outcome already explains the freeze; see ConnectedSystemObjectObsoletionService.cs), so this test
+    # asserts MvoDeletionScheduled as the queryable audit signal instead, and asserts ValuesPreserved is
+    # absent to lock in that distinction against situation 3 (NoSourceRemainsPreserves, above).
+    # =============================================================================================================
+    if ($Step -eq "PendingDeletionPreserves" -or $Step -eq "All") {
+        Write-TestSection "Test 4b: Deletion Pending - Values Preserved for the Grace Window"
+        Write-Host "DeletionRule: WhenAuthoritativeSourceDisconnected, GracePeriod: 1 hour" -ForegroundColor Gray
+        Write-Host "RemoveContributedAttributesOnObsoletion: true (on CSV object type)" -ForegroundColor Gray
+        Write-Host "Expected: MVO marked for deletion, CSV-contributed attributes frozen (NOT recalled)," -ForegroundColor Gray
+        Write-Host "          nothing staged to LDAP as a recall clear" -ForegroundColor Gray
+        Write-Host ""
+
+        Invoke-DrainPendingExports -Config $config
+
+        # Configure deletion rules - CSV authoritative, 1-hour grace period (long enough that housekeeping
+        # cannot race the assertions below), recall ENABLED (contrast with Test 4, which disables it)
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
+            -DeletionRule "WhenAuthoritativeSourceDisconnected" `
+            -GracePeriod ([TimeSpan]::FromHours(1)) `
+            -DeletionTriggerConnectedSystemIds "$($config.CSVSystemId)" `
+            -RemoveContributedAttributesOnObsoletion $true `
+            -RecallConnectedSystemId $config.CSVSystemId
+
+        # Provision a test user via HR CSV (creates MVO + CSV CSO + LDAP CSO)
+        $test4bMvo = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "PRES002" `
+            -SamAccountName "test.pending.preserve" `
+            -DisplayName "Test Pending Preserve" `
+            -TestName "Test4b"
+
+        $test4bMvoId = $test4bMvo.id
+        Write-Host "  MVO ID: $test4bMvoId" -ForegroundColor Gray
+
+        # Record pending export count before disconnect
+        Invoke-DrainPendingExports -Config $config
+        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports before: $pendingExportsBefore" -ForegroundColor Gray
+
+        # Remove user from CSV - CSV-only cycle, inlined (rather than via Invoke-RemoveUserFromSource) so
+        # this step can capture the Sync Activity id and query its RPEI outcomes below (Assert 4)
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csv = Import-Csv $csvPath
+        $csv = @($csv | Where-Object { $_.samAccountName -ne "test.pending.preserve" })
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+        Write-Host "  Removed test.pending.preserve from CSV" -ForegroundColor Gray
+
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (Test4b removal)"
+
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "CSV Sync (Test4b removal)"
+
+        Start-Sleep -Seconds 3
+
+        # Assert 1: MVO still exists (1-hour grace period not elapsed)
+        $mvoStillExists = Test-MvoExists -DisplayName "Test Pending Preserve" -ObjectTypeName "User"
+        if (-not $mvoStillExists) {
+            $mvoStillExistsById = Test-MvoExistsById -MvoId $test4bMvoId
+            if ($mvoStillExistsById) {
+                $testResults.Steps += @{ Name = "PendingDeletionPreserves"; Success = $false; Error = "Display-name search missed MVO but ID lookup found it" }
+                throw "Test 4b Assert 1 inconclusive: display-name search missed MVO $test4bMvoId but ID lookup found it"
+            }
+            $testResults.Steps += @{ Name = "PendingDeletionPreserves"; Success = $false; Error = "MVO deleted immediately despite 1-hour grace period" }
+            throw "Test 4b Assert 1 failed: MVO $test4bMvoId was deleted immediately despite the 1-hour grace period"
+        }
+        Write-Host "  PASSED: MVO still exists (grace period not yet elapsed)" -ForegroundColor Green
+
+        # Assert 2: MVO is marked pending deletion, and its CSV-contributed attribute (Department) is
+        # STILL present - frozen for the grace window, not recalled
+        $mvoDetail = Get-JIMMetaverseObject -Id $test4bMvoId -ErrorAction SilentlyContinue
+        $isPending = $mvoDetail -and ($mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') -and $mvoDetail.isPendingDeletion
+        if (-not $isPending) {
+            $testResults.Steps += @{ Name = "PendingDeletionPreserves"; Success = $false; Error = "MVO isPendingDeletion=false (should be marked for deferred deletion)" }
+            throw "Test 4b Assert 2 failed: MVO isPendingDeletion=false (should be marked for deferred deletion)"
+        }
+        Write-Host "  PASSED: MVO isPendingDeletion=true (marked for deferred deletion)" -ForegroundColor Green
+
+        $deptValue = $null
+        if ($mvoDetail -and $mvoDetail.attributeValues) {
+            $deptAttr = $mvoDetail.attributeValues | Where-Object { $_.attributeName -eq 'Department' } | Select-Object -First 1
+            if ($deptAttr) { $deptValue = $deptAttr.stringValue }
+        }
+        if ($deptValue) {
+            Write-Host "  PASSED: CSV-contributed attribute 'Department' frozen (not recalled) for the grace window: $deptValue" -ForegroundColor Green
+        } else {
+            $testResults.Steps += @{ Name = "PendingDeletionPreserves"; Success = $false; Error = "CSV-contributed attribute 'Department' was recalled despite the deletion being merely pending" }
+            throw "Test 4b Assert 2 failed: CSV-contributed attribute 'Department' was recalled despite the deletion being merely pending (should be frozen for the grace window)"
+        }
+
+        # Assert 3: no pending exports were created as a result of the (declined) recall
+        $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+        if ($pendingExportsAfter -gt $pendingExportsBefore) {
+            $testResults.Steps += @{ Name = "PendingDeletionPreserves"; Success = $false; Error = "Pending exports created despite values being frozen (not recalled)" }
+            throw "Test 4b Assert 3 failed: Pending exports were created on LDAP despite the frozen values not changing"
+        }
+        Write-Host "  PASSED: No pending exports created (nothing recalled, nothing staged ahead of the grace window)" -ForegroundColor Green
+
+        # Assert 4: the disconnecting CSV Sync Activity recorded MvoDeletionScheduled - the audit signal
+        # for this situation - but NOT ValuesPreserved, which is deliberately reserved for situation 3
+        # (no import source remains; see NoSourceRemainsPreserves above) because a pending deletion already
+        # explains the freeze via its own outcome
+        Assert-ActivityItemsHaveOutcomeSummary -ActivityId $syncResult.activityId -Name "CSV Sync (Test4b pending-deletion preservation)" `
+            -ExpectedOutcomeType "MvoDeletionScheduled"
+
+        $items = @(Get-JIMActivity -Id $syncResult.activityId -ExecutionItems | Select-Object -First 100)
+        $valuesPreservedItems = @($items | Where-Object { $_.outcomeSummary -match "ValuesPreserved:" })
+        if ($valuesPreservedItems.Count -gt 0) {
+            $testResults.Steps += @{ Name = "PendingDeletionPreserves"; Success = $false; Error = "ValuesPreserved outcome recorded despite a deletion being pending (MvoDeletionScheduled should be the sole explaining outcome)" }
+            throw "Test 4b Assert 4 failed: ValuesPreserved outcome recorded despite a deletion being pending; MvoDeletionScheduled alone should explain the freeze"
+        }
+        Write-Host "  PASSED: MvoDeletionScheduled recorded as the sole explaining outcome (ValuesPreserved correctly absent)" -ForegroundColor Green
+
+        $testResults.Steps += @{ Name = "PendingDeletionPreserves"; Success = $true }
     }
 
     # =============================================================================================================
