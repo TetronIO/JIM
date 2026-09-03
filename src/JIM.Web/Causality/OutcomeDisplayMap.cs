@@ -50,6 +50,11 @@ public static class OutcomeDisplayMap
             new OutcomeDisplay("Identity deleted", "MVO Deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove),
         [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled] =
             new OutcomeDisplay("Identity deletion scheduled", "MVO Deletion Scheduled", CausalityTone.Warning, Icons.Material.Filled.HourglassBottom),
+        // The survival counterpart of MvoDeletionScheduled above (#1620): a rejoin undid the disconnection
+        // that scheduled it, so the object lives on. Success-toned (the object survived) and the
+        // "hourglass disabled" icon reads as the same hourglass, stopped, rather than a new symbol.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled] =
+            new OutcomeDisplay("Deletion cancelled", "MVO Deletion Cancelled", CausalityTone.Success, Icons.Material.Filled.HourglassDisabled),
         [ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection] =
             new OutcomeDisplay("Drift corrected", "CSO Drift Corrected", CausalityTone.Warning, Icons.Material.Filled.CompareArrows),
 
@@ -349,10 +354,11 @@ public static class OutcomeDisplayMap
                 GetQueueingDecisionOperation(CausalReasonCode.ExportDeleteStaged),
             // Every Would* preview (nothing executed), ExportConfirmed/ExportFailed (confirming or
             // failing an export is not itself an object operation),
-            // DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled (a state change,
-            // not an operation this map states an icon for), AssertedNull/NoContributor (attribute-priority
-            // housekeeping, not an object operation) and anything unmapped all fall through here: null
-            // rather than a guess. PendingExportCreated never reaches this switch; it is handled above.
+            // DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled/MvoDeletionCancelled
+            // (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
+            // (attribute-priority housekeeping, not an object operation) and anything unmapped all fall
+            // through here: null rather than a guess. PendingExportCreated never reaches this switch; it is
+            // handled above.
             _ => null
         };
     }

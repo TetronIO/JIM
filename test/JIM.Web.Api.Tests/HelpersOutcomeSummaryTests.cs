@@ -182,5 +182,26 @@ public class HelpersOutcomeSummaryTests
         Assert.That(result, Is.EqualTo(Icons.Material.Filled.HourglassBottom));
     }
 
+    [Test]
+    public void GetOutcomeTypeMudBlazorColor_MvoDeletionCancelled_ReturnsSuccess()
+    {
+        var result = Helpers.GetOutcomeTypeMudBlazorColor(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled);
+        Assert.That(result, Is.EqualTo(Color.Success));
+    }
+
+    [Test]
+    public void GetOutcomeTypeDisplayName_MvoDeletionCancelled_ReturnsMvoDeletionCancelled()
+    {
+        var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled);
+        Assert.That(result, Is.EqualTo("MVO Deletion Cancelled"));
+    }
+
+    [Test]
+    public void GetOutcomeTypeIcon_MvoDeletionCancelled_ReturnsHourglassDisabled()
+    {
+        var result = Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled);
+        Assert.That(result, Is.EqualTo(Icons.Material.Filled.HourglassDisabled));
+    }
+
     #endregion
 }

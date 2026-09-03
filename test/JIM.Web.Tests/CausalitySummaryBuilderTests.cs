@@ -201,6 +201,25 @@ public class CausalitySummaryBuilderTests
         Assert.That(identity.Href, Is.EqualTo($"/t/people/v/{CausalityTestData.MvoId}"));
     }
 
+    /// <summary>
+    /// #1620: when the rejoin also cancelled a previously scheduled grace-period deletion, the one-line
+    /// summary states it as its own clause, so the sentence does not merely say "joined" while the
+    /// causality tree beneath it separately explains a cancelled deletion.
+    /// </summary>
+    [Test]
+    public void Build_JoinShapeWithCancelledDeletion_NamesTheCancellationInTheSentence()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var joined = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled,
+            parent: joined, ordinal: 0);
+
+        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
+
+        Assert.That(RenderSentence(summary.Segments), Does.Contain("its scheduled deletion was cancelled"));
+    }
+
     [Test]
     public void Build_LegacyLeaverWithoutAttribution_FallsBackToUnnamedRuleAndIdentity()
     {

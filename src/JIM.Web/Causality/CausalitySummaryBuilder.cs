@@ -149,6 +149,10 @@ public static class CausalitySummaryBuilder
             }
         }
 
+        var deletionCancelledClause = BuildDeletionCancelledClause(allEvents);
+        if (deletionCancelledClause != null)
+            clauses.Add(deletionCancelledClause);
+
         var attributeFlowClause = BuildAttributeFlowClause(allEvents);
         if (attributeFlowClause != null)
             clauses.Add(attributeFlowClause);
@@ -158,6 +162,18 @@ public static class CausalitySummaryBuilder
             clauses.Add(exportClause);
 
         return clauses;
+    }
+
+    /// <summary>
+    /// The clause stating a scheduled grace-period deletion was cancelled by this join (#1620), when the
+    /// join carries an MvoDeletionCancelled child outcome.
+    /// </summary>
+    private static List<SummarySegment>? BuildDeletionCancelledClause(IReadOnlyList<CausalityEvent> allEvents)
+    {
+        var cancelled = allEvents.FirstOrDefault(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled);
+        return cancelled == null
+            ? null
+            : [new SummarySegment.Text("its scheduled deletion was cancelled")];
     }
 
     private static List<SummarySegment>? BuildAttributeFlowClause(IReadOnlyList<CausalityEvent> allEvents)

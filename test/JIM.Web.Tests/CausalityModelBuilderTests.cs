@@ -83,6 +83,7 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.Exported] = CausalityLane.Downstream,
             [ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned] = CausalityLane.Downstream,
             [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved] = CausalityLane.Identity,
