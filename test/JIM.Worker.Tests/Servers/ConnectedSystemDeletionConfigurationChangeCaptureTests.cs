@@ -72,6 +72,9 @@ public class ConnectedSystemDeletionConfigurationChangeCaptureTests
         _mvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<MetaverseObject>());
         _mvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>())).ReturnsAsync(0);
+        // #1605 state-convergent zero-join pass: no candidates by default.
+        _mvRepo.Setup(r => r.GetStateConvergentZeroJoinMetaverseObjectsAsync(It.IsAny<Guid>(), It.IsAny<int>()))
+            .ReturnsAsync(new List<MetaverseObject>());
 
         _taskingRepo.Setup(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>())).Returns(Task.CompletedTask);
 

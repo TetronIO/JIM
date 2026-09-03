@@ -485,6 +485,26 @@ public class ActivityDetailDto
     public ConfigurationSnapshot? ConfigurationChangeSnapshot { get; set; }
 
     /// <summary>
+    /// For a Connector Space clear, how many Pending Exports to the Connected System the clear discarded;
+    /// null for every other kind of activity.
+    /// </summary>
+    public int? ClearedPendingExportCount { get; set; }
+
+    /// <summary>
+    /// For a Connector Space clear, how many Connected System Objects the clear deleted; null for every
+    /// other kind of activity.
+    /// </summary>
+    public int? ClearedConnectedSystemObjectCount { get; set; }
+
+    /// <summary>
+    /// For a Connector Space clear, how many Metaverse Objects were joined at the moment of the clear and
+    /// so recorded for the post-clear reconciliation to expect back (#1605); null for every other kind of
+    /// activity. Not a removal: these objects are what the next Full Synchronisation compares against once
+    /// a Full Import has rebuilt the Connector Space.
+    /// </summary>
+    public int? ClearedJoinRecordCount { get; set; }
+
+    /// <summary>
     /// Creates a detail DTO from an Activity entity.
     /// </summary>
     public static ActivityDetailDto FromEntity(
@@ -529,7 +549,10 @@ public class ActivityDetailDto
             ScheduledByScheduleName = activity.ScheduledByScheduleName,
             ChangeReason = activity.ChangeReason,
             ConfigurationChangeVersion = activity.ConfigurationChangeVersion,
-            ConfigurationChangeSnapshot = ConfigurationSnapshotService.Deserialise(activity.ConfigurationChangeSnapshot)
+            ConfigurationChangeSnapshot = ConfigurationSnapshotService.Deserialise(activity.ConfigurationChangeSnapshot),
+            ClearedPendingExportCount = activity.ClearedPendingExportCount,
+            ClearedConnectedSystemObjectCount = activity.ClearedConnectedSystemObjectCount,
+            ClearedJoinRecordCount = activity.ClearedJoinRecordCount
         };
     }
 }

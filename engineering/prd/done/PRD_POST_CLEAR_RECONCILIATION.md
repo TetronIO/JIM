@@ -1,6 +1,6 @@
 # Post-Clear Reconciliation: Full Import Gate and Deletion Rule Evaluation after a Connector Space Clear
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-09-03
 - **Author:** Jay Van der Zant (design artefacts and exploration by Claude)
 - **Issue:** [#1605](https://github.com/TetronIO/JIM/issues/1605)

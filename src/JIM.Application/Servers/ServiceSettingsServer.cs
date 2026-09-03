@@ -161,6 +161,16 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// The maximum share (as a whole-number percentage) of objects recorded at a Connector Space clear
+        /// that may still be missing a re-join before the post-clear reconciliation sweep refuses to run
+        /// (#1605). Default: 10.
+        /// </summary>
+        public async Task<int> GetPostClearReconciliationMaxMissingPercentAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.PostClearReconciliationMaxMissingPercent, 10);
+        }
+
+        /// <summary>
         /// Gets whether CSO change tracking is enabled.
         /// When enabled, ConnectedSystemObjectChange records are created for CSO create/update/delete operations.
         /// </summary>

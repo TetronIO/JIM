@@ -325,6 +325,7 @@ public static class ConfigurationChangeClassifier
     {
         [Constants.SettingKeys.PartitionValidationMode] = B,
         [Constants.SettingKeys.SyncPageSize] = C,
+        [Constants.SettingKeys.PostClearReconciliationMaxMissingPercent] = C,
 
         // Where a configuration change preview is evaluated, not what it evaluates. Moving the threshold changes
         // how quickly a preview comes back, never what it says; both dispatch paths run the same orchestration.

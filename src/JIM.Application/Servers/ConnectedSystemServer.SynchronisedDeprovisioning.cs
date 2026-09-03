@@ -256,23 +256,21 @@ public partial class ConnectedSystemServer
         var pendingMvoDeletions = new List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)>();
         var preRecallAttributeSnapshots = new Dictionary<Guid, List<MetaverseObjectAttributeValue>>();
 
-        // The Metaverse Object deletion rule delegate: evaluates via the engine and applies the decision at
+        // The Metaverse Object deletion rule delegate: evaluates and applies the marking fields via the
+        // shared applier (also used by the post-clear reconciliation sweep, #1605), then queues the fate at
         // application level, mirroring the worker processor's MarkMvoForDeletionAsync semantics: a
         // grace-period identity is marked for deferred deletion (housekeeping deletes it after the window),
         // an immediate one is queued for this batch's deletion flush.
         async Task<(MvoDeletionDecision Decision, string? PolicySnapshotJson)> ProcessMvoDeletionRuleAsync(
             MetaverseObject mvo, int disconnectingSystemId, IReadOnlyCollection<int> remainingConnectedSystemIds)
         {
-            var disconnectingSystemName = systemNamesById.GetValueOrDefault(disconnectingSystemId, connectedSystemName);
-            var decision = syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingConnectedSystemIds, disconnectingSystemName);
-            var policySnapshotJson = BuildDeprovisioningMvoDeletionPolicySnapshotJson(
-                mvo, disconnectingSystemId, remainingConnectedSystemIds, decision, systemNamesById, disconnectingSystemName);
+            var (decision, policySnapshotJson) = MetaverseObjectDeletionRuleApplier.Apply(
+                syncEngine, mvo, disconnectingSystemId, remainingConnectedSystemIds, systemNamesById, connectedSystemName,
+                activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName);
 
             switch (decision.Fate)
             {
                 case MvoDeletionFate.DeletedImmediately:
-                    mvo.DeletionTriggeredBySystemId = disconnectingSystemId;
-                    mvo.DeletionTriggeredBySystemName = disconnectingSystemName;
                     if (!pendingMvoDeletions.Any(d => d.Mvo.Id == mvo.Id))
                     {
                         // Use the pre-recall snapshot for the deletion change record where one was captured
@@ -286,16 +284,6 @@ public partial class ConnectedSystemServer
                     break;
 
                 case MvoDeletionFate.DeletionScheduled:
-                    // Grace period configured: mark for deferred deletion by housekeeping, capturing the
-                    // initiator triad and the decision-time policy snapshot (#119) exactly as the worker
-                    // path does.
-                    mvo.DeletionTriggeredBySystemId = disconnectingSystemId;
-                    mvo.DeletionTriggeredBySystemName = disconnectingSystemName;
-                    mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
-                    mvo.DeletionInitiatedByType = activity.InitiatedByType;
-                    mvo.DeletionInitiatedById = activity.InitiatedById;
-                    mvo.DeletionInitiatedByName = activity.InitiatedByName;
-                    mvo.DeletionPolicySnapshotJson = policySnapshotJson;
                     graceMarkedMvos.Add(mvo);
                     break;
             }
@@ -435,59 +423,5 @@ public partial class ConnectedSystemServer
             "{PendingExportCount} recall Pending Export(s) staged.",
             task.ConnectedSystemId, batch.Count, mvosToPersist.Count, pendingMvoDeletions.Count,
             graceMarkedMvos.Count, stagedPendingExports.Count);
-    }
-
-    /// <summary>
-    /// Builds the serialised decision-time deletion policy snapshot (#119) for a deletion rule evaluation in
-    /// the deprovisioning run, mirroring the worker processor's snapshot semantics: produced whenever the
-    /// evaluation records an outcome (triggered, or evaluated against the source list without triggering);
-    /// null for a plain non-event or an untyped Metaverse Object.
-    /// </summary>
-    private static string? BuildDeprovisioningMvoDeletionPolicySnapshotJson(
-        MetaverseObject mvo,
-        int disconnectingSystemId,
-        IReadOnlyCollection<int> remainingConnectedSystemIds,
-        MvoDeletionDecision decision,
-        IReadOnlyDictionary<int, string> systemNamesById,
-        string disconnectingSystemName)
-    {
-        var type = mvo.Type;
-        if (type == null)
-            return null;
-
-        var triggerIds = type.DeletionTriggerConnectedSystemIds ?? [];
-        var evaluatedAgainstSourceList = type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
-            && triggerIds.Contains(disconnectingSystemId);
-        if (decision.Fate == MvoDeletionFate.NotDeleted && !evaluatedAgainstSourceList)
-            return null;
-
-        var snapshot = new MvoDeletionPolicySnapshot
-        {
-            DeletionRule = type.DeletionRule,
-            TriggerMode = type.DeletionTriggerMode,
-            GracePeriod = type.DeletionGracePeriod,
-            TriggeringSystemId = disconnectingSystemId,
-            TriggeringSystemName = disconnectingSystemName,
-            ReasonCode = decision.ReasonCode,
-            DeletionEligibleDate = decision.Fate == MvoDeletionFate.DeletionScheduled && decision.GracePeriod.HasValue
-                ? DateTime.UtcNow.Add(decision.GracePeriod.Value)
-                : null
-        };
-
-        foreach (var sourceSystemId in triggerIds)
-        {
-            snapshot.SelectedSourceSystemIds.Add(sourceSystemId);
-            snapshot.SelectedSourceSystemNames.Add(systemNamesById.GetValueOrDefault(sourceSystemId, $"Connected System {sourceSystemId}"));
-        }
-
-        // The listed sources still holding a joined Connected System Object at decision time, distinct (a
-        // source with two joined objects is one remaining source).
-        foreach (var remainingSourceSystemId in remainingConnectedSystemIds.Where(triggerIds.Contains).Distinct())
-        {
-            snapshot.RemainingConnectedSourceSystemIds.Add(remainingSourceSystemId);
-            snapshot.RemainingConnectedSourceSystemNames.Add(systemNamesById.GetValueOrDefault(remainingSourceSystemId, $"Connected System {remainingSourceSystemId}"));
-        }
-
-        return snapshot.ToJson();
     }
 }

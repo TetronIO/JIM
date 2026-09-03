@@ -267,6 +267,15 @@ public static class Constants
         /// </summary>
         public const string ConfigurationChangePreviewFullDataSetPromptThreshold = "Preview.FullDataSetPromptThreshold";
 
+        /// <summary>
+        /// The maximum share (as a whole-number percentage) of objects recorded at a Connector Space clear
+        /// that may still be missing a re-join before the post-clear reconciliation sweep (#1605) refuses to
+        /// run: above this, the sweep assumes the re-import was broken (a filter or base DN change) rather
+        /// than a genuine mass departure, and refuses rather than recalling values and applying Deletion
+        /// Rules to most of the population. Default: 10.
+        /// </summary>
+        public const string PostClearReconciliationMaxMissingPercent = "Sync.PostClearReconciliation.MaxMissingPercent";
+
         // History Settings
         public const string HistoryRetentionPeriod = "History.RetentionPeriod";
 

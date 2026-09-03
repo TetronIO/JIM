@@ -43,6 +43,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectedSystemPasswordSynchronisation> ConnectedSystemPasswordSynchronisations { get; set; } = null!;
     public virtual DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
     public virtual DbSet<ConnectedSystemSettingValue> ConnectedSystemSettingValues { get; set; } = null!;
+    public virtual DbSet<ConnectorSpaceClearJoinRecord> ConnectorSpaceClearJoinRecords { get; set; } = null!;
     public virtual DbSet<ConnectorContainer> ConnectorContainers { get; set; } = null!;
     public virtual DbSet<ConnectorDefinition> ConnectorDefinitions { get; set; } = null!;
     public virtual DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; } = null!;
@@ -377,6 +378,25 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObjectTypeTag>()
             .Property(tag => tag.Value)
             .HasMaxLength(256);
+
+        // The post-clear reconciliation join record (#1605) carries no navigation properties by design: it
+        // is written and read entirely via raw SQL, mirroring the Connected System Objects it derives from.
+        // The composite key is what the clear's own DELETE-then-INSERT replaces on a re-clear; the index on
+        // ConnectedSystemId is what the sweep and the deletion sequence's cleanup step key on. No foreign
+        // key to MetaverseObjects (a deleted Metaverse Object must not block the record; the sweep simply
+        // finds it absent), but a cascading foreign key to ConnectedSystems as belt and braces alongside the
+        // explicit deletion step both the clear's re-run and Connected System deletion already perform.
+        modelBuilder.Entity<ConnectorSpaceClearJoinRecord>()
+            .HasKey(r => new { r.ConnectedSystemId, r.MetaverseObjectId });
+
+        modelBuilder.Entity<ConnectorSpaceClearJoinRecord>()
+            .HasIndex(r => r.ConnectedSystemId);
+
+        modelBuilder.Entity<ConnectorSpaceClearJoinRecord>()
+            .HasOne<ConnectedSystem>()
+            .WithMany()
+            .HasForeignKey(r => r.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // An administrator's auxiliary class selections. Both ends cascade: removing the structural type takes its
         // selections with it, and an auxiliary type that vanishes from the schema on a refresh takes with it every

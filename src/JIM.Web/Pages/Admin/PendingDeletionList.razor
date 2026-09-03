@@ -1,6 +1,8 @@
 @page "/admin/pending-deletions"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
 @using JIM.Models.Core
+@using JIM.Models.Sync
 @using JIM.Utilities
 @using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
@@ -130,7 +132,11 @@
                 </MudTooltip>
             </HeaderTemplate>
             <CellTemplate>
-                @if (string.IsNullOrEmpty(context.Item.TriggeredBySystemName))
+                @if (context.Item.NoConnectorRemains)
+                {
+                    <MudText Class="mud-text-secondary">No connector remains</MudText>
+                }
+                else if (string.IsNullOrEmpty(context.Item.TriggeredBySystemName))
                 {
                     <EmptyValue />
                 }
@@ -302,7 +308,9 @@
                 : (int?)null,
             GracePeriod = mvo.Type?.DeletionGracePeriod,
             ConnectorCount = mvo.ConnectedSystemObjects?.Count ?? 0,
-            TriggeredBySystemName = mvo.DeletionTriggeredBySystemName
+            TriggeredBySystemName = mvo.DeletionTriggeredBySystemName,
+            NoConnectorRemains = MvoDeletionPolicySnapshot.FromJson(mvo.DeletionPolicySnapshotJson)?.ReasonCode
+                == CausalReasonCode.NoConnectorRemainsStateConvergence
         }).ToList();
 
         return new VirtualisedWindow<PendingDeletionItem>(items, result.TotalResults);
@@ -364,8 +372,16 @@
 
         /// <summary>
         /// The name of the Connected System whose disconnection triggered the scheduled deletion (#119).
-        /// Null for deletions scheduled before trigger recording shipped.
+        /// Null for deletions scheduled before trigger recording shipped, or when
+        /// <see cref="NoConnectorRemains"/> is true.
         /// </summary>
         public string? TriggeredBySystemName { get; set; }
+
+        /// <summary>
+        /// True when the #1605 state-convergent zero-join pass marked this object: there was no specific
+        /// system to attribute the decision to, so the "Triggered By" cell says why the trigger is null
+        /// rather than rendering it as an unexplained blank.
+        /// </summary>
+        public bool NoConnectorRemains { get; set; }
     }
 }

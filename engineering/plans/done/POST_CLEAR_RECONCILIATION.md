@@ -1,14 +1,14 @@
 # Post-Clear Reconciliation: Implementation Plan
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#1605](https://github.com/TetronIO/JIM/issues/1605)
-- **PRD:** [PRD_POST_CLEAR_RECONCILIATION.md](../../prd/doing/PRD_POST_CLEAR_RECONCILIATION.md)
+- **PRD:** [PRD_POST_CLEAR_RECONCILIATION.md](../../prd/done/PRD_POST_CLEAR_RECONCILIATION.md)
 
 ## Overview
 
 Two stacked layers deliver #1605 in the #1549 pattern. Layer 1 retrofits the shipped stranded-value sweep with the Full Import gate (armed-at timestamp, last-successful-import timestamp, refusal message, surfaces). Layer 2 adds the join record, Deletion Rule evaluation for recorded objects, the re-join shortfall check, the state-convergent zero-join pass, and the copy. Design rationale: the After the Clear and Orphans of the Clear artefacts linked from the issue.
 
-## Phase 1: The gate (branch `feature/clear-reconciliation-gate`)
+## Phase 1: The gate (branch `feature/clear-reconciliation-gate`) ✅
 
 1. Model: replace `ConnectedSystem.StrandedValueSweepPending` with `StrandedValueSweepArmedAt` (`DateTime?`, UTC) and add `LastSuccessfulFullImportCompletedAt` (`DateTime?`, UTC). Migration: add both columns, `UPDATE ... SET "StrandedValueSweepArmedAt" = now() WHERE "StrandedValueSweepPending"`, drop the bool. `Down` reverses (armed-at not null becomes true).
 2. Repository (`IConnectedSystemRepository` / `ConnectedSystemRepository`): `SetStrandedValueSweepArmedAtAsync(int, DateTime?)` and `SetLastSuccessfulFullImportCompletedAtAsync(int, DateTime)`, both narrow raw-SQL setters with the in-memory fallback, replacing `SetStrandedValueSweepPendingAsync`.
@@ -19,7 +19,7 @@ Two stacked layers deliver #1605 in the #1549 pattern. Layer 1 retrofits the shi
 7. Copy and docs: the clear dialog in `ConnectedSystemObjectList.razor` states the gate; `docs/configuration/connected-systems.md` clearing section replaces the import-first tip with the gate; the two `[Unreleased]` #1549 changelog entries are amended (the feature is unreleased) rather than adding a changed-behaviour entry.
 8. Tests, red first: workflow tests for the three gate states; `RequiresPostgres` tests for the migration backfill and both setters; unit tests for the import-success predicate; Scenario 7 Test 4 gains a Full Synchronisation before the re-import asserting the skipped message and the arming still set, then the existing import-then-sync path asserting the sweep ran.
 
-## Phase 2: Join record, Deletion Rules, shortfall, zero-join pass (branch `feature/clear-reconciliation-gate-stack-deletion-rules`)
+## Phase 2: Join record, Deletion Rules, shortfall, zero-join pass (branch `feature/clear-reconciliation-gate-stack-deletion-rules`) ✅
 
 1. Model and migration: `ConnectorSpaceClearJoinRecord` (`ConnectedSystemId`, `MetaverseObjectId`, `ClearedAt`; composite key; index on `ConnectedSystemId`). Written by `DeleteAllConnectedSystemObjectsAndDependenciesAsync` as its first statement (delete existing rows for the system, then `INSERT ... SELECT` from joined Connected System Objects); deleted by the sweep on completion; deleted as a new step of the Connected System deletion sequence.
 2. Service Setting `Sync.PostClearReconciliation.MaxMissingPercent` (integer, default 10, Synchronisation category), seeded beside `Sync.PageSize`, read through a `ServiceSettingsServer` accessor.

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
@@ -1118,6 +1119,7 @@ public class MetaverseRepository : IMetaverseRepository
         }
         return result;
     }
+
 
     public async Task<List<Guid>> GetMetaverseObjectIdsWithScopeReviewPendingAsync(int maxResults)
     {
@@ -2857,6 +2859,93 @@ public class MetaverseRepository : IMetaverseRepository
             mvoIdList.ToArray());
 
         return rowsAffected;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> MarkMvosAsDisconnectedWithNoTriggerAsync(IEnumerable<Guid> mvoIds, ActivityInitiatorType initiatedByType, Guid? initiatedById, string? initiatedByName, string? deletionPolicySnapshotJson)
+    {
+        var mvoIdList = mvoIds.ToList();
+        if (mvoIdList.Count == 0)
+            return 0;
+
+        var now = DateTime.UtcNow;
+
+        // The state-convergent zero-join pass's sibling of MarkMvosAsDisconnectedAsync above: there is no
+        // triggering system to record (the object simply holds no connector at all), so that pair is left
+        // NULL and the initiator triad from the run's Activity is recorded instead, mirroring the worker
+        // path's MarkMvoForDeletionAsync for a synchronisation-triggered marking.
+        if (Repository.Database.Database.IsRelational())
+        {
+            return await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""MetaverseObjects""
+                  SET ""LastConnectorDisconnectedDate"" = {0},
+                      ""DeletionTriggeredBySystemId"" = NULL,
+                      ""DeletionTriggeredBySystemName"" = NULL,
+                      ""DeletionInitiatedByType"" = {1},
+                      ""DeletionInitiatedById"" = {2},
+                      ""DeletionInitiatedByName"" = {3},
+                      ""DeletionPolicySnapshotJson"" = {4}
+                  WHERE ""Id"" = ANY({5})
+                    AND ""LastConnectorDisconnectedDate"" IS NULL",
+                now,
+                (int)initiatedByType,
+                BulkSqlHelpers.NullableParam(initiatedById, NpgsqlTypes.NpgsqlDbType.Uuid),
+                BulkSqlHelpers.NullableParam(initiatedByName, NpgsqlTypes.NpgsqlDbType.Text),
+                BulkSqlHelpers.NullableParam(deletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text),
+                mvoIdList.ToArray());
+        }
+
+        // The in-memory test provider does not support raw SQL; narrow tracked fallback with the same
+        // idempotency (skip anything already pending deletion) and the same fields written.
+        var markedCount = 0;
+        foreach (var mvo in await Repository.Database.MetaverseObjects
+                     .AsTracking()
+                     .Where(m => mvoIdList.Contains(m.Id) && m.LastConnectorDisconnectedDate == null)
+                     .ToListAsync())
+        {
+            mvo.LastConnectorDisconnectedDate = now;
+            mvo.DeletionTriggeredBySystemId = null;
+            mvo.DeletionTriggeredBySystemName = null;
+            mvo.DeletionInitiatedByType = initiatedByType;
+            mvo.DeletionInitiatedById = initiatedById;
+            mvo.DeletionInitiatedByName = initiatedByName;
+            mvo.DeletionPolicySnapshotJson = deletionPolicySnapshotJson;
+            markedCount++;
+        }
+        await Repository.Database.SaveChangesAsync();
+        return markedCount;
+    }
+
+    /// <summary>
+    /// Builds the single query deciding which MVOs the state-convergent zero-join pass (#1605) may mark:
+    /// shared by <see cref="GetStateConvergentZeroJoinMetaverseObjectsAsync"/> so the query is written once.
+    /// See the interface doc for the predicate.
+    /// </summary>
+    private IQueryable<MetaverseObject> QueryStateConvergentZeroJoinMetaverseObjects()
+    {
+        return Repository.Database.MetaverseObjects
+            .Where(mvo =>
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                mvo.Type != null &&
+                mvo.LastConnectorDisconnectedDate == null &&
+                !mvo.ConnectedSystemObjects.Any() &&
+                (
+                    mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
+                    (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected &&
+                     (mvo.Type.DeletionTriggerConnectedSystemIds.Count == 0 ||
+                      mvo.Type.DeletionTriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect))
+                ));
+    }
+
+    /// <inheritdoc />
+    public async Task<List<MetaverseObject>> GetStateConvergentZeroJoinMetaverseObjectsAsync(Guid afterId, int take)
+    {
+        return await QueryStateConvergentZeroJoinMetaverseObjects()
+            .Where(mvo => mvo.Id > afterId)
+            .OrderBy(mvo => mvo.Id)
+            .Include(mvo => mvo.Type)
+            .Take(take)
+            .ToListAsync();
     }
 
     public async Task<int> GetMetaverseObjectDeletionCandidateCountAsync(int metaverseObjectTypeId) =>
