@@ -10,6 +10,7 @@ using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Workflows;
@@ -18,10 +19,14 @@ namespace JIM.Worker.Tests.Workflows;
 /// Workflow tests for the stranded-value sweep (#1549): clearing a Connector Space hard-deletes Connected
 /// System Objects without obsoletion, so a departed source object's contributed Metaverse attribute values
 /// survive with live provenance and no joined Connected System Object of that system. The next Full
-/// Synchronisation of the cleared system reads StrandedValueSweepPending and, when set, sweeps every
-/// import Synchronisation Rule (enabled and disabled alike) for stranded candidates, skips rules whose type
-/// retains contributed attributes by policy, and recalls the rest through the shipped #1537/#809 recall
-/// engine under the #1570 last-known-state preservation gate.
+/// Synchronisation of the cleared system reads StrandedValueSweepArmedAt and, once the #1605 Full Import
+/// gate is open (a Full Import of the system has completed successfully later than the arming), sweeps
+/// every import Synchronisation Rule (enabled and disabled alike) for stranded candidates, skips rules whose
+/// type retains contributed attributes by policy, and recalls the rest through the shipped #1537/#809
+/// recall engine under the #1570 last-known-state preservation gate. Most fixtures here call
+/// <see cref="ExecuteStrandedValueSweepAsync"/> directly, which does not itself consult the gate (only its
+/// caller-facing wrapper <see cref="ExecuteStrandedValueSweepIfArmedAsync"/> does; see the dedicated gate
+/// region below), so <see cref="ArmSweepAsync"/> arms with the gate already open by default.
 /// </summary>
 [TestFixture]
 public class StrandedValueSweepWorkflowTests : WorkflowTestBase
@@ -72,7 +77,7 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
     public async Task ExecuteStrandedValueSweepAsync_NotArmed_ThrowsAsync()
     {
         var system = await CreateConnectedSystemAsync("HR Source");
-        Assert.That(system.StrandedValueSweepPending, Is.False, "precondition: a freshly created system is not armed");
+        Assert.That(system.StrandedValueSweepArmedAt, Is.Null, "precondition: a freshly created system is not armed");
         var activity = await BuildActivityAsync(system.Id);
 
         Assert.That(async () => await Jim.ConnectedSystems.ExecuteStrandedValueSweepAsync(system, activity),
@@ -99,7 +104,7 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
                 "a rule whose Connected System Object Type has RemoveContributedAttributesOnObsoletion disabled must never be evaluated for stranded values");
             Assert.That(result.SyncRulesSwept, Is.Zero);
             Assert.That(result.MetaverseObjectsProcessed, Is.Zero);
-            Assert.That(system.StrandedValueSweepPending, Is.False, "the flag must still clear even when nothing was swept");
+            Assert.That(system.StrandedValueSweepArmedAt, Is.Null, "the arming must still clear even when nothing was swept");
         }
     }
 
@@ -123,7 +128,7 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
             Assert.That(result.MetaverseObjectsProcessed, Is.Zero);
             Assert.That(result.ValuesRecalled, Is.Zero);
             Assert.That(result.PendingExportsStaged, Is.Zero);
-            Assert.That(system.StrandedValueSweepPending, Is.False, "the flag must clear even on a zero-findings sweep");
+            Assert.That(system.StrandedValueSweepArmedAt, Is.Null, "the arming must clear even on a zero-findings sweep");
         }
     }
 
@@ -151,7 +156,7 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
             Assert.That(result.MetaverseObjectsPreserved, Is.Zero);
             Assert.That(GetAttributeValue(strandedMvo, ctx.MvDescriptionAttr.Id), Is.Null,
                 "the stranded value must be recalled (cleared, no surviving contributor)");
-            Assert.That(system.StrandedValueSweepPending, Is.False);
+            Assert.That(system.StrandedValueSweepArmedAt, Is.Null);
             Assert.That(activity.RunProfileExecutionItems.Count, Is.EqualTo(1), "one Run Profile Execution Item per processed Metaverse Object");
         }
     }
@@ -217,7 +222,7 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
             Assert.That(preservedRpei, Is.Not.Null);
             Assert.That(preservedRpei!.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved),
                 Is.True, "a ValuesPreserved outcome must be recorded so the preservation is auditable");
-            Assert.That(system.StrandedValueSweepPending, Is.False, "the flag must still clear even when values were preserved rather than recalled");
+            Assert.That(system.StrandedValueSweepArmedAt, Is.Null, "the arming must still clear even when values were preserved rather than recalled");
         }
     }
 
@@ -296,7 +301,7 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
     public async Task ExecuteStrandedValueSweepIfArmedAsync_NotArmed_ReturnsNullAndTouchesNothingAsync()
     {
         var system = await CreateConnectedSystemAsync("HR Source");
-        Assert.That(system.StrandedValueSweepPending, Is.False, "precondition: a freshly created system is not armed");
+        Assert.That(system.StrandedValueSweepArmedAt, Is.Null, "precondition: a freshly created system is not armed");
         var activity = await BuildActivityAsync(system.Id);
         var originalMessage = activity.Message;
 
@@ -327,7 +332,7 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
         {
             Assert.That(result, Is.Not.Null);
             Assert.That(result!.ValuesRecalled, Is.EqualTo(1));
-            Assert.That(system.StrandedValueSweepPending, Is.False);
+            Assert.That(system.StrandedValueSweepArmedAt, Is.Null);
             Assert.That(activity.Message, Does.StartWith("Sync complete: 1 objects processed."),
                 "the sweep's summary must be appended, not replace, the existing message");
             Assert.That(activity.Message, Does.Contain("Stranded-value sweep executed (armed by a Connector Space clear)"));
@@ -354,6 +359,130 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
                 "Stranded-value sweep executed (armed by a Connector Space clear): no stranded values were found."),
                 "with no prior message, the sweep's sentence becomes the whole message");
         }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // #1605 Full Import gate: ExecuteStrandedValueSweepIfArmedAsync skips while the gate is closed
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepIfArmedAsync_ArmedNoFullImportYet_SkipsAndKeepsArmingAsync()
+    {
+        var ctx = await SetUpImportRuleAsync();
+        var secondSystem = await AddSecondImportSourceAsync(ctx);
+        var strandedMvo = SeedStrandedMetaverseObject(ctx, StrandedValue);
+        JoinMvoToSystem(strandedMvo, secondSystem.System);
+        var system = await ArmSweepWithGateClosedAsync(ctx.System, lastSuccessfulFullImportCompletedAt: null);
+        var armedAt = system.StrandedValueSweepArmedAt!.Value;
+        var activity = await BuildActivityAsync(system.Id);
+        activity.Message = "Sync complete: 1 objects processed.";
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepIfArmedAsync(system, activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result!.Skipped, Is.True);
+            Assert.That(result.MetaverseObjectsProcessed, Is.Zero, "a gated run must not process anything");
+            Assert.That(result.ValuesRecalled, Is.Zero);
+            Assert.That(system.StrandedValueSweepArmedAt, Is.EqualTo(armedAt), "the arming must be left exactly as it was");
+            Assert.That(_spySyncRepo.StrandedSelectorCalledForRuleIds, Is.Empty, "a gated run must never construct the sweep's support set");
+            Assert.That(GetAttributeValue(strandedMvo, ctx.MvDescriptionAttr.Id), Is.Not.Null, "no value may be recalled while the gate is closed");
+            Assert.That(activity.Message, Does.StartWith("Sync complete: 1 objects processed."),
+                "the skipped sentence must be appended, not replace, the existing message");
+            Assert.That(activity.Message, Does.Contain(ConnectedSystemServer.BuildSweepSkippedMessage(armedAt)),
+                "the appended text must match BuildSweepSkippedMessage's composition exactly");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepIfArmedAsync_LastImportBeforeArming_SkipsAsync()
+    {
+        var ctx = await SetUpImportRuleAsync();
+        var system = await ArmSweepWithGateClosedAsync(ctx.System);
+        // An import that completed BEFORE this clear armed the sweep: stale evidence, not proof of a genuine
+        // re-import since the clear, so the gate must still treat it as closed.
+        system.LastSuccessfulFullImportCompletedAt = system.StrandedValueSweepArmedAt!.Value.AddMinutes(-1);
+        await DbContext.SaveChangesAsync();
+        var activity = await BuildActivityAsync(system.Id);
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepIfArmedAsync(system, activity);
+
+        Assert.That(result!.Skipped, Is.True, "an import older than the arming must not open the gate");
+    }
+
+    [Test]
+    public async Task ExecuteStrandedValueSweepIfArmedAsync_LastImportExactlyAtArming_SkipsAsync()
+    {
+        var ctx = await SetUpImportRuleAsync();
+        var system = await ArmSweepWithGateClosedAsync(ctx.System);
+        // Equal, not later: the gate requires strictly later, so this boundary case must still be closed.
+        system.LastSuccessfulFullImportCompletedAt = system.StrandedValueSweepArmedAt!.Value;
+        await DbContext.SaveChangesAsync();
+        var activity = await BuildActivityAsync(system.Id);
+
+        var result = await Jim.ConnectedSystems.ExecuteStrandedValueSweepIfArmedAsync(system, activity);
+
+        Assert.That(result!.Skipped, Is.True, "an import at exactly the arming time must not open the gate");
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // IsSweepGateOpen: the #1605 gate predicate, tested directly
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void IsSweepGateOpen_NullArmedAt_ReturnsFalse()
+    {
+        Assert.That(ConnectedSystemServer.IsSweepGateOpen(null, DateTime.UtcNow), Is.False);
+    }
+
+    [Test]
+    public void IsSweepGateOpen_ArmedWithNoSuccessfulImport_ReturnsFalse()
+    {
+        Assert.That(ConnectedSystemServer.IsSweepGateOpen(DateTime.UtcNow, null), Is.False);
+    }
+
+    [Test]
+    public void IsSweepGateOpen_ImportBeforeArming_ReturnsFalse()
+    {
+        var armedAt = new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc);
+        var lastImport = armedAt.AddMinutes(-1);
+
+        Assert.That(ConnectedSystemServer.IsSweepGateOpen(armedAt, lastImport), Is.False);
+    }
+
+    [Test]
+    public void IsSweepGateOpen_ImportEqualToArming_ReturnsFalse()
+    {
+        var armedAt = new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc);
+
+        Assert.That(ConnectedSystemServer.IsSweepGateOpen(armedAt, armedAt), Is.False);
+    }
+
+    [Test]
+    public void IsSweepGateOpen_ImportAfterArming_ReturnsTrue()
+    {
+        var armedAt = new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc);
+        var lastImport = armedAt.AddMinutes(1);
+
+        Assert.That(ConnectedSystemServer.IsSweepGateOpen(armedAt, lastImport), Is.True);
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // BuildSweepSkippedMessage: message composition (#1605)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void BuildSweepSkippedMessage_StatesArmedAtAndRemedy()
+    {
+        var armedAt = new DateTime(2026, 9, 3, 8, 30, 15, DateTimeKind.Utc);
+
+        var message = ConnectedSystemServer.BuildSweepSkippedMessage(armedAt);
+
+        Assert.That(message, Is.EqualTo(
+            "Stranded-value sweep armed by a Connector Space clear on 2026-09-03 08:30:15 UTC; skipped: " +
+            "no Full Import of this Connected System has completed successfully since. Run a Full Import, " +
+            "then a Full Synchronisation, to reconcile objects that did not return."));
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -428,6 +557,29 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
 
         Assert.That(message, Does.Contain("12,345 stranded value(s) recalled across 12,345 Metaverse Object(s)"));
         Assert.That(message, Does.Contain("12,345 cleared with no remaining contributor"));
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // RecordSuccessfulFullImportAsync (#1605): the worker's stamp on a genuinely successful Full Import
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task RecordSuccessfulFullImportAsync_PersistsTimestampAndUpdatesInMemoryInstanceAsync()
+    {
+        var system = await CreateConnectedSystemAsync("HR Source");
+        Assert.That(system.LastSuccessfulFullImportCompletedAt, Is.Null, "precondition: a freshly created system has never imported");
+        var completedAt = DateTime.UtcNow;
+
+        await Jim.ConnectedSystems.RecordSuccessfulFullImportAsync(system, completedAt);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(system.LastSuccessfulFullImportCompletedAt, Is.EqualTo(completedAt),
+                "the caller's in-memory instance must observe the change without a re-fetch, matching the sweep's own arming/clearing convention");
+
+            var reloaded = await DbContext.ConnectedSystems.AsNoTracking().SingleAsync(cs => cs.Id == system.Id);
+            Assert.That(reloaded.LastSuccessfulFullImportCompletedAt, Is.EqualTo(completedAt), "the change must be persisted");
+        }
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -524,9 +676,29 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
         SyncRepo.SeedConnectedSystemObject(cso);
     }
 
+    /// <summary>
+    /// Arms the sweep with the #1605 gate already open: a clear ten minutes ago, followed by a successful
+    /// Full Import five minutes ago. Every existing test in this fixture predates the gate and calls
+    /// <see cref="ExecuteStrandedValueSweepAsync"/> directly (which does not itself consult the gate), except
+    /// the <c>ExecuteStrandedValueSweepIfArmedAsync</c> tests, which need the gate open to exercise the "runs
+    /// the sweep" path; see <see cref="ArmSweepWithGateClosedAsync"/> for the skipped path.
+    /// </summary>
     private async Task<ConnectedSystem> ArmSweepAsync(ConnectedSystem system)
     {
-        system.StrandedValueSweepPending = true;
+        system.StrandedValueSweepArmedAt = DateTime.UtcNow.AddMinutes(-10);
+        system.LastSuccessfulFullImportCompletedAt = DateTime.UtcNow.AddMinutes(-5);
+        await DbContext.SaveChangesAsync();
+        return system;
+    }
+
+    /// <summary>
+    /// Arms the sweep with the #1605 gate closed: no Full Import has completed since the arming (either
+    /// because none ever has, or because the most recent one predates the clear).
+    /// </summary>
+    private async Task<ConnectedSystem> ArmSweepWithGateClosedAsync(ConnectedSystem system, DateTime? lastSuccessfulFullImportCompletedAt = null)
+    {
+        system.StrandedValueSweepArmedAt = DateTime.UtcNow.AddMinutes(-5);
+        system.LastSuccessfulFullImportCompletedAt = lastSuccessfulFullImportCompletedAt;
         await DbContext.SaveChangesAsync();
         return system;
     }

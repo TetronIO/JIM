@@ -26,16 +26,21 @@
         - Clear an already-empty connector space (should succeed without error)
         - Verify clearing one CS does not affect CSOs in another CS
 
-    Test 4: Stranded-value sweep after clear-then-partial-re-import
-        - Import and synchronise a full baseline, then clear the connector space (queued, -Wait)
-        - Re-import the CSV with one previously-present employee removed, then run a Full Sync
+    Test 4: Stranded-value sweep after clear-then-partial-re-import (#1605 Full Import gate)
+        - Import and synchronise a full baseline, then clear the connector space (queued, -Wait):
+          arms the sweep
+        - Run a Full Synchronisation BEFORE any re-import: assert the sweep stays armed and the
+          Activity states it was skipped, because no Full Import has completed since the clear
+        - Re-import the CSV with one previously-present employee removed, then run a Full Sync:
+          the #1605 gate is now open, so the sweep actually runs
         - Assert: the Full Synchronisation Activity Message reports "Stranded-value sweep executed"
+        - Assert: the arming is cleared and LastSuccessfulFullImportCompletedAt is stamped
         - Assert: the departed employee's Metaverse Object is preserved as last known state
           (this scenario's topology leaves it with no remaining CSV/import join, only its
           already-provisioned LDAP/Cross-Domain target joins, so the #1570 last-known-state
           preservation gate applies rather than recall/re-election)
         - Assert: a surviving employee's Metaverse Object and values are unaffected
-        - Assert: a second Full Synchronisation does not report another sweep (flag disarmed)
+        - Assert: a second Full Synchronisation does not report another sweep (arming cleared)
 
 .PARAMETER Step
     Which test step to execute
@@ -388,22 +393,34 @@ try {
         $survivingMvoId = $survivingMvoBefore.id
         $survivingDisplayNameBefore = ($survivingMvoBefore.attributeValues | Where-Object { $_.attributeName -eq 'Display Name' }).stringValue
 
-        # Step 4b: Clear the connector space (queued, -Wait) - arms the stranded-value sweep flag
+        # Step 4b: Clear the connector space (queued, -Wait) - arms the stranded-value sweep
         Write-TestStep "4b" "Clear connector space (arms the stranded-value sweep)"
         $clearResult4 = Clear-JIMConnectedSystem -Id $config.CSVSystemId -Force -Wait -Timeout 300
         Assert-ValidActivityId -ActivityId $clearResult4.ActivityId -Message "Clear returned a valid Activity id"
 
-        # Step 4c: Remove the departing employee from the source CSV, so re-import returns everyone else
-        Write-TestStep "4c" "Remove one employee from the source CSV"
+        # Step 4c: A Full Synchronisation run BEFORE any re-import must find the #1605 gate closed
+        # (no Full Import of this system has completed successfully since the clear): the sweep
+        # must not run, must stay armed, and the Activity must say why.
+        Write-TestStep "4c" "Full Synchronisation before any re-import (gate closed, sweep skipped)"
+        $gatedSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $gatedSyncResult.activityId -Name "CSV Full Sync (Test 4, before re-import, gate closed)"
+        $gatedSyncActivity = Get-JIMActivity -Id $gatedSyncResult.activityId
+        Assert-Condition -Condition ($gatedSyncActivity.message -like '*skipped: no Full Import*') -Message "Full Synchronisation Activity Message reports the sweep was skipped (got: $($gatedSyncActivity.message))"
+        $csvSystemAfterGatedSync = Get-JIMConnectedSystem -Id $config.CSVSystemId
+        Assert-NotNull -Value $csvSystemAfterGatedSync.strandedValueSweepArmedAt -Message "The sweep remains armed after a Full Synchronisation run before any re-import"
+
+        # Step 4d: Remove the departing employee from the source CSV, so re-import returns everyone else
+        Write-TestStep "4d" "Remove one employee from the source CSV"
         $partialCsv = @($baselineCsvRows | Where-Object { $_.employeeId -ne $departingEmployeeId })
         Assert-Equal -Expected ($baselineCsvRows.Count - 1) -Actual $partialCsv.Count -Message "Partial CSV has one fewer row than baseline"
         $partialCsv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         Copy-CsvToConnectorFiles -SourcePath $csvPath
         Write-Host "  Removed employeeId $departingEmployeeId from CSV" -ForegroundColor Gray
 
-        # Step 4d: Full Import + Full Sync of the partial CSV - the Full Sync run's Activity
+        # Step 4e: Full Import + Full Sync of the partial CSV - the #1605 gate is now open (a Full
+        # Import has completed successfully since the clear), so the Full Sync run's Activity
         # carries the sweep's outcome, per #1549/#1570
-        Write-TestStep "4d" "Full Import and Full Synchronisation of the partial CSV"
+        Write-TestStep "4e" "Full Import and Full Synchronisation of the partial CSV"
         $partialImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $partialImportResult.activityId -Name "CSV Full Import (Test 4 partial re-import)"
         $partialImportStats = Get-JIMActivityStats -ActivityId $partialImportResult.activityId
@@ -412,12 +429,17 @@ try {
         $partialSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $partialSyncResult.activityId -Name "CSV Full Sync (Test 4 partial re-import, sweep run)"
 
-        # Step 4e: The Full Synchronisation Activity reports the sweep
-        Write-TestStep "4e" "Verify the Full Synchronisation Activity reports the sweep"
+        # Step 4f: The Full Synchronisation Activity reports the sweep, and the Connected System's
+        # gate state confirms it: the arming is cleared, and the successful partial re-import's
+        # Full Import is recorded as the reason the gate opened.
+        Write-TestStep "4f" "Verify the Full Synchronisation Activity reports the sweep"
         $partialSyncActivity = Get-JIMActivity -Id $partialSyncResult.activityId
         Assert-Condition -Condition ($partialSyncActivity.message -like '*Stranded-value sweep executed*') -Message "Full Synchronisation Activity Message reports the sweep (got: $($partialSyncActivity.message))"
+        $csvSystemAfterSweep = Get-JIMConnectedSystem -Id $config.CSVSystemId
+        Assert-Condition -Condition ($null -eq $csvSystemAfterSweep.strandedValueSweepArmedAt) -Message "The sweep's arming is cleared once the gate opens and the sweep runs"
+        Assert-NotNull -Value $csvSystemAfterSweep.lastSuccessfulFullImportCompletedAt -Message "The successful partial re-import's Full Import stamped LastSuccessfulFullImportCompletedAt"
 
-        # Step 4f: The departing employee's Metaverse Object - topology check.
+        # Step 4g: The departing employee's Metaverse Object - topology check.
         #
         # This scenario's CSV system ("HR CSV Source") is the ONLY Connected System that ever
         # IMPORTS into these Metaverse Objects. Setup-Scenario1 also creates export
@@ -437,7 +459,7 @@ try {
         # RemainingImportSourceEvaluator.AnyImportSourceRemainsAsync still answers false and the
         # #1570 last-known-state preservation gate applies: the sweep PRESERVES the departing
         # Metaverse Object's values rather than clearing them.
-        Write-TestStep "4f" "Verify the departing employee's values were preserved (#1570), not cleared"
+        Write-TestStep "4g" "Verify the departing employee's values were preserved (#1570), not cleared"
         $departingMvoAfter = Get-JIMMetaverseObject -Id $departingMvoId
         Assert-NotNull -Value $departingMvoAfter -Message "Departing employee's Metaverse Object still exists after the sweep (preserved, not deleted)"
         $departingDisplayNameAfter = ($departingMvoAfter.attributeValues | Where-Object { $_.attributeName -eq 'Display Name' }).stringValue
@@ -447,8 +469,8 @@ try {
         $departingTotalJoinCount = Get-JoinedConnectedSystemObjectCount -MvoId $departingMvoId
         Assert-Condition -Condition ($departingTotalJoinCount -gt 0) -Message "Departing employee's Metaverse Object still has joined provisioned target Connected System Object(s) (got $departingTotalJoinCount; the PRD Scenario 3 shape driving the preservation case)"
 
-        # Step 4g: The surviving employee's Metaverse Object is untouched, and rejoined to the CSV system
-        Write-TestStep "4g" "Verify the surviving employee's values are intact"
+        # Step 4h: The surviving employee's Metaverse Object is untouched, and rejoined to the CSV system
+        Write-TestStep "4h" "Verify the surviving employee's values are intact"
         $survivingMvoAfter = Get-JIMMetaverseObject -Id $survivingMvoId
         Assert-NotNull -Value $survivingMvoAfter -Message "Surviving employee's Metaverse Object still exists"
         $survivingCsvJoinCount = Get-JoinedConnectedSystemObjectCount -MvoId $survivingMvoId -ConnectedSystemId $config.CSVSystemId
@@ -456,12 +478,12 @@ try {
         $survivingDisplayNameAfter = ($survivingMvoAfter.attributeValues | Where-Object { $_.attributeName -eq 'Display Name' }).stringValue
         Assert-Equal -Expected $survivingDisplayNameBefore -Actual $survivingDisplayNameAfter -Message "Surviving employee's Display Name value is unchanged"
 
-        # Step 4h: A subsequent Full Synchronisation does NOT report another sweep (flag disarmed)
-        Write-TestStep "4h" "Verify a subsequent Full Synchronisation does not re-run the sweep"
+        # Step 4i: A subsequent Full Synchronisation does NOT report another sweep (arming cleared)
+        Write-TestStep "4i" "Verify a subsequent Full Synchronisation does not re-run the sweep"
         $secondSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $secondSyncResult.activityId -Name "CSV Full Sync (Test 4, post-sweep run)"
         $secondSyncActivity = Get-JIMActivity -Id $secondSyncResult.activityId
-        Assert-Condition -Condition ($secondSyncActivity.message -notlike '*Stranded-value sweep executed*') -Message "Second Full Synchronisation Activity Message does not report the sweep (flag was disarmed)"
+        Assert-Condition -Condition ($secondSyncActivity.message -notlike '*Stranded-value sweep executed*') -Message "Second Full Synchronisation Activity Message does not report the sweep (arming was cleared)"
 
         Write-Host "  ✓ Test 4 PASSED: Stranded-value sweep preserves/recalls values correctly after clear-then-partial-re-import" -ForegroundColor Green
         $testResults.Steps += @{ Name = "StrandedSweep"; Success = $true }

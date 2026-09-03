@@ -281,9 +281,12 @@
             </MudAlert>
 
             <MudText>
-                Deleting the Connected System Objects does not cause objects to be deleted in the external system.
-                It just removes the objects from JIM. Run a Full Import on this Connected System, then a Full Synchronisation on all Connected Systems, to rebuild state.
-                Values contributed by objects that do not return are recalled automatically at the next Full Synchronisation of this Connected System. Run the import first; synchronising before it would recall values the import would immediately re-assert.
+                Clearing does not touch the external system. It discards the Connector Space objects, their
+                Metaverse joins, and any Pending Exports to this Connected System; the Metaverse itself is not
+                changed by the clear. Run a Full Import to rebuild the Connector Space. At the first Full
+                Synchronisation after that import completes successfully, values contributed by objects that did
+                not return are recalled automatically. A Full Synchronisation run before then does nothing
+                beyond ordinary synchronisation, and says so on its Activity.
             </MudText>
 
             <MudText Class="mt-3">

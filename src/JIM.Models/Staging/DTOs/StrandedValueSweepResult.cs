@@ -57,4 +57,17 @@ public class StrandedValueSweepResult
     /// How many Pending Exports the sweep staged for mapped target systems.
     /// </summary>
     public int PendingExportsStaged { get; set; }
+
+    /// <summary>
+    /// True when the sweep was armed but the #1605 Full Import gate was closed, so nothing above was
+    /// touched: no recall, no marking, nothing staged. The arming stays in place for the next run. Every
+    /// counter above is zero when this is true.
+    /// </summary>
+    public bool Skipped { get; set; }
+
+    /// <summary>
+    /// The sentence explaining why the sweep was skipped, appended to the Full Synchronisation Activity's
+    /// Message. Null unless <see cref="Skipped"/> is true.
+    /// </summary>
+    public string? SkipReason { get; set; }
 }
