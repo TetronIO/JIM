@@ -328,8 +328,9 @@ try {
     $testResults.Success = $true
     $testResults.EndTime = (Get-Date).ToString("o")
 
-    $passedCount = ($testResults.Steps | Where-Object { $_.Success }).Count
-    $totalCount = $testResults.Steps.Count
+    # Wrapped in @(): a single passing step is one hashtable, whose .Count is its key count, not 1.
+    $passedCount = @($testResults.Steps | Where-Object { $_.Success }).Count
+    $totalCount = @($testResults.Steps).Count
     Write-Host "Passed: $passedCount / $totalCount" -ForegroundColor Green
 
     return $testResults
