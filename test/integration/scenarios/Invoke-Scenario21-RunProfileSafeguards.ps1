@@ -14,13 +14,16 @@
     Test 1: Export limit (Max creates)
         - Full Import and Full Synchronisation of the CSV baseline stage a create to LDAP per user
         - Put Max creates 1 on the LDAP Export Run Profile with Set-JIMRunProfile
-        - Run the export: exactly one create is attempted, the rest are withheld
-        - Assert: the Activity is CompleteWithWarning, its warning names the limit and what remains,
-          its counters carry the withheld creates and zero updates and deletes, and its message
-          reports one success
+        - Run the export: more creates are pending than the limit allows, so none is attempted
+          (a limit that would be exceeded withholds the whole change type; it never processes a
+          head of the queue, which on a frequent Schedule would only delay a wrong mass change)
+        - Assert: the Activity is CompleteWithWarning, its warning names the limit and the pending
+          count, its counters carry every create as withheld and zero updates and deletes, and its
+          message reports no success
+        - Set the limit equal to the pending count and run the export again: at the limit runs in full
+        - Assert: everything is created this time, the Activity is Complete and the counter is zero
         - Clear the limit with -MaxCreates $null (an explicit null clears; an omitted parameter
-          leaves the value alone), run the export again
-        - Assert: everything withheld is created this time, and the counter is zero
+          leaves the value alone) and assert it reads back cleared
 
     Test 2: Full Import deletion-detection limit (Max detected deletions percent)
         - Full Import and Full Synchronisation of the CSV baseline
@@ -210,33 +213,35 @@ try {
         Assert-Equal -Expected 1 -Actual ([int]$exportProfile.safeguards.maxCreates) -Message "Get-JIMRunProfile reports Max creates 1"
         Assert-Condition -Condition ($null -eq $exportProfile.safeguards.maxUpdates -and $null -eq $exportProfile.safeguards.maxDeletes) -Message "Max updates and Max deletes remain unset"
 
-        # Step 1c: Run the capped export
-        Write-TestStep "1c" "Run the export (one create attempted, the rest withheld)"
-        $cappedExportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $cappedExportResult.activityId -Name "LDAP Export (Test 1 capped)" -AllowWarnings
-        $cappedExportActivity = Get-JIMActivity -Id $cappedExportResult.activityId
-        Assert-Equal -Expected "CompleteWithWarning" -Actual ([string]$cappedExportActivity.status) -Message "The capped export completed with a warning"
-        $expectedWithheld = $pendingBefore - 1
-        Assert-Equal -Expected $expectedWithheld -Actual ([int]$cappedExportActivity.exportCreatesWithheld) -Message "The Activity records $expectedWithheld creates withheld"
-        Assert-Equal -Expected 0 -Actual ([int]$cappedExportActivity.exportUpdatesWithheld) -Message "No updates were withheld"
-        Assert-Equal -Expected 0 -Actual ([int]$cappedExportActivity.exportDeletesWithheld) -Message "No deletes were withheld"
-        Assert-Condition -Condition ($cappedExportActivity.warningMessage -like '*Stopped processing creates after 1,*') -Message "The warning names the limit (got: $($cappedExportActivity.warningMessage))"
-        Assert-Condition -Condition ($cappedExportActivity.warningMessage -like "*$expectedWithheld create*remain*pending*") -Message "The warning states what remains pending (got: $($cappedExportActivity.warningMessage))"
-        Assert-Equal -Expected 1 -Actual (Get-ExportSucceededCount -ActivityId $cappedExportResult.activityId) -Message "Exactly one export succeeded"
+        # Step 1c: Run the export with more creates pending than the limit allows: none is attempted
+        Write-TestStep "1c" "Run the export (the limit would be exceeded, so no create is attempted)"
+        $withheldExportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $withheldExportResult.activityId -Name "LDAP Export (Test 1 withheld)" -AllowWarnings
+        $withheldExportActivity = Get-JIMActivity -Id $withheldExportResult.activityId
+        Assert-Equal -Expected "CompleteWithWarning" -Actual ([string]$withheldExportActivity.status) -Message "The withheld export completed with a warning"
+        Assert-Equal -Expected $pendingBefore -Actual ([int]$withheldExportActivity.exportCreatesWithheld) -Message "The Activity records every pending create ($pendingBefore) as withheld"
+        Assert-Equal -Expected 0 -Actual ([int]$withheldExportActivity.exportUpdatesWithheld) -Message "No updates were withheld"
+        Assert-Equal -Expected 0 -Actual ([int]$withheldExportActivity.exportDeletesWithheld) -Message "No deletes were withheld"
+        Assert-Condition -Condition ($withheldExportActivity.warningMessage -like "*Max creates is 1, but $pendingBefore creates were pending*") -Message "The warning names the limit and the pending count (got: $($withheldExportActivity.warningMessage))"
+        Assert-Condition -Condition ($withheldExportActivity.warningMessage -like "*none were attempted and all $pendingBefore remain pending*") -Message "The warning states nothing was attempted (got: $($withheldExportActivity.warningMessage))"
+        Assert-Equal -Expected 0 -Actual (Get-ExportSucceededCount -ActivityId $withheldExportResult.activityId) -Message "No export succeeded"
+        $ldapSystemAfterWithheld = Get-JIMConnectedSystem -Id $config.LDAPSystemId
+        Assert-Equal -Expected $pendingBefore -Actual ([int]$ldapSystemAfterWithheld.pendingExportCount) -Message "Every export is still pending after the withheld run"
 
-        # Step 1d: Clear the limit with an explicit null
-        Write-TestStep "1d" "Clear Max creates with an explicit null"
+        # Step 1d: A limit equal to the pending count runs in full
+        Write-TestStep "1d" "Set Max creates equal to the pending count and run the export (at the limit runs in full)"
+        Set-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -MaxCreates $pendingBefore | Out-Null
+        $atLimitExportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Assert-ExportSuccess -ActivityId $atLimitExportResult.activityId -Name "LDAP Export (Test 1 at the limit)"
+        $atLimitExportActivity = Get-JIMActivity -Id $atLimitExportResult.activityId
+        Assert-Equal -Expected 0 -Actual ([int]$atLimitExportActivity.exportCreatesWithheld) -Message "Nothing was withheld at the limit"
+        Assert-Equal -Expected $pendingBefore -Actual (Get-ExportSucceededCount -ActivityId $atLimitExportResult.activityId) -Message "Every pending create was attempted and succeeded at the limit"
+
+        # Step 1e: Clear the limit with an explicit null
+        Write-TestStep "1e" "Clear Max creates with an explicit null"
         Set-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -MaxCreates $null | Out-Null
         $clearedProfile = Get-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId | Where-Object { $_.id -eq $config.LDAPExportProfileId }
         Assert-Condition -Condition ($null -eq $clearedProfile.safeguards.maxCreates) -Message "Max creates is cleared"
-
-        # Step 1e: Run the export again; the withheld creates go through without any reset
-        Write-TestStep "1e" "Run the export again (the withheld creates are attempted)"
-        $resumedExportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
-        Assert-ExportSuccess -ActivityId $resumedExportResult.activityId -Name "LDAP Export (Test 1 resumed)"
-        $resumedExportActivity = Get-JIMActivity -Id $resumedExportResult.activityId
-        Assert-Equal -Expected 0 -Actual ([int]$resumedExportActivity.exportCreatesWithheld) -Message "Nothing was withheld on the resumed export"
-        Assert-Equal -Expected $expectedWithheld -Actual (Get-ExportSucceededCount -ActivityId $resumedExportResult.activityId) -Message "The resumed export created everything the capped run withheld"
 
         $testResults.Steps += @{ Name = "Export limit (Max creates)"; Success = $true }
         Write-Host "  ✓ Test 1 passed" -ForegroundColor Green

@@ -24,6 +24,7 @@ Traditional ILM solutions carry a delete threshold on their export step for exac
 - Applying the deletion limit to Delta Import. Delta deletes are reported explicitly by the connector and applied page by page as they arrive; holding them back until the end of the run would need buffering this PRD does not ask for. A follow-on issue if wanted.
 - Marking withheld Pending Exports. They stay Pending and unchanged, indistinguishable from exports queued after the run. A Pending Exports page filter is a possible follow-on.
 - Changing what Preview mode reports. Preview lists what would be processed; the limits act at execution.
+- A run-time override of the limits ("run once ignoring safeguards"). An unrestricted Export Run Profile is the release valve; see FR5 and Decision 5.
 - Pausing synchronisation (#1619).
 
 ## User Stories
@@ -38,10 +39,10 @@ Traditional ILM solutions carry a delete threshold on their export step for exac
 ### Functional Requirements
 
 1. **Run Profile fields.** A Run Profile carries five optional whole numbers: Max creates, Max updates and Max deletes (Export run type only); Max detected deletions and Max detected deletions percent (Full Import only; percent is 0 to 100). Null means no limit. Zero is a valid limit ("attempt none of these"). Setting an export limit on a Run Profile that is not an Export, or a detection limit on one that is not a Full Import, is rejected on every surface with a message naming the field, mirroring the existing Verification Mode rule.
-2. **Export counting.** During an Export run, each Pending Export attempted against the connector counts once against its change type's limit, whether it succeeds or fails, and whether it is written in the first pass or the deferred-reference pass. An export withheld because its type's limit has been reached is not attempted, not marked, not failed and not given an execution item; its status stays Pending. Other change types continue to their own limits. Counting is in memory and correct under parallel export batches.
-3. **Export warning.** When any limit was reached, the Activity completes as Complete with warning (unless a stronger outcome applies), and its warning carries one sentence per capped type, for example: "Stopped processing deletes after 100, this Run Profile's limit; 342 deletes remain pending." The completion message counts attempted work as it does today. The progress counters end at the attempted plus withheld total, so the run reads as finished.
+2. **Export decision.** At the start of an Export run, the executable Pending Exports are counted per change type. A type whose count exceeds its limit is withheld in full for that run: none of its exports is attempted, marked, failed or given an execution item, and every one stays Pending. A type whose count is within its limit runs in full, in both the first pass and the deferred-reference pass. Types without a limit run in full. A limit of zero withholds the type whenever anything of it is pending. The decision is made once per run and never changes mid-run, so it holds under parallel export batches without further counting. Processing up to the limit was rejected: on a frequent Schedule it writes the first wrong changes at once and the rest a run at a time, so the limit only delays the damage (Decision 4).
+3. **Export warning.** When any type was withheld, the Activity completes as Complete with warning (unless a stronger outcome applies), and its warning carries one sentence per withheld type, for example: "Max deletes is 100, but 342 deletes were pending, so none were attempted and all 342 remain pending. Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit." The completion message counts attempted work as it does today. The progress counters end at the attempted plus withheld total, so the run reads as finished.
 4. **Export counters.** The Activity records how many exports of each type were withheld (three counters). They are populated, zero when nothing was withheld, on every Export run, and null on every other Activity.
-5. **Resumption.** The next Export run of the Connected System processes the withheld exports in the ordinary order. Nothing needs resetting. Raising or clearing the limit, or fixing the cause, is the whole remedy.
+5. **Resumption and release.** Withheld exports stay Pending and are attempted by the next Export run whose limit allows them, or by an Export Run Profile without the limit. Nothing needs resetting. There is no run-time override: the sanctioned way to let a legitimate mass change through is a second Export Run Profile with no limit, run by hand and kept out of Schedules, so that the limited profile is never raised and forgotten (Decision 5).
 6. **Full Import detection.** Deletion detection first resolves which Connected System Objects in the run's scope would newly be marked as deleted (excluding objects processed by this run and objects already marked), then compares that count with the limits. The detection is refused if the count exceeds Max detected deletions, or if count × 100 exceeds Max detected deletions percent × the number of Connected System Objects in the run's scope at the start of the run. If refused, no object is marked as deleted. Objects the import did see are still created and updated as normal. The existing refusal when the import returned zero objects is unchanged.
 7. **Full Import warning.** A refused detection completes the Activity as Complete with warning, with a message of the form: "Deletion detection found 4,120 objects (41% of 10,000) no longer in the Connected System, above this Run Profile's limit of 10%; none were marked as deleted. Check the Connected System's scope and the connector's filters, or raise the limit, then run the Full Import again." The Activity records the withheld count (one counter; null on every other Activity).
 8. **Gate interaction.** A Full Import that refused its deletion detection is not a successful Full Import for the post-clear reconciliation gate: it does not stamp the Connected System's last successful Full Import time, so the reconciliation sweep stays shut until an import passes.
@@ -54,7 +55,7 @@ Traditional ILM solutions carry a delete threshold on their export step for exac
 
 ### Non-Functional Requirements
 
-- No per-export database query for the limit: the ledger is in memory and thread-safe.
+- One grouped count query per run decides the limits, and withheld types are excluded from the export's paging query, so a large withheld backlog costs a scheduled run one count rather than a scan.
 - The two-phase deletion detection performs no more database work than today's single pass; it changes the order of the same lookups.
 - Migration adds nullable columns only; no backfill, no data rewrite.
 - No new NuGet packages.
@@ -65,13 +66,19 @@ Traditional ILM solutions carry a delete threshold on their export step for exac
 
 **Given**: an Export Run Profile with Max deletes 100 and no other limit; 442 delete, 1,200 update and 12 create Pending Exports.
 **When**: the Run Profile runs.
-**Then**: 100 deletes, 1,200 updates and 12 creates are attempted; 342 deletes remain Pending and untouched; the Activity is Complete with warning, its warning reads "Stopped processing deletes after 100, this Run Profile's limit; 342 deletes remain pending.", and its counters show 342 deletes withheld and zero of the other two. The next Export run attempts the 342.
+**Then**: 1,200 updates and 12 creates are attempted; no delete is attempted and all 442 remain Pending and untouched; the Activity is Complete with warning, its warning reads "Max deletes is 100, but 442 deletes were pending, so none were attempted and all 442 remain pending. Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.", and its counters show 442 deletes withheld and zero of the other two. Every later run of this Run Profile counts again and withholds again while more than 100 deletes are pending. Once the administrator has confirmed the deletes are genuine, an Export Run Profile without the limit attempts them.
 
 ### Scenario 2: A limit of zero
 
 **Given**: an Export Run Profile with Max deletes 0.
-**When**: the Run Profile runs with deletes pending.
+**When**: the Run Profile runs with deletes pending, however few.
 **Then**: no delete is attempted; creates and updates proceed; the warning names the zero limit and the number remaining.
+
+### Scenario 2b: Exactly at the limit
+
+**Given**: an Export Run Profile with Max deletes 442; 442 deletes pending.
+**When**: the Run Profile runs.
+**Then**: all 442 are attempted; the Activity is Complete; the deletes-withheld counter is 0. With 443 pending, none would be attempted.
 
 ### Scenario 3: Full Import trips the share limit
 
@@ -133,18 +140,20 @@ Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDeletes $null
 
 ## Decisions
 
-The issue left three choices to the PRD. Recommended answers, each overridable before implementation starts:
+Five decisions: the first three were left to the PRD by the issue and stand as recommended; the last two were settled during implementation.
 
 1. **Defaults on upgrade and on new Run Profiles: none.** A new Connected System's first export is legitimately a mass create, and its first Full Import after a scope change legitimately detects many deletions; a seeded default would make both look broken to a new administrator, and a limit that is routinely raised to get past initial load is a limit nobody trusts later. The docs recommend values instead. Trade-off: an existing deployment gains no protection until an administrator sets a limit.
 2. **Deletion limit as both a count and a share.** The share catches the catastrophic case at any scale; the count is what a small Connector Space needs, where one genuine departure is a large share. Either can be left blank, and whichever trips first refuses.
-3. **Surface a withheld backlog on the Connected System page.** One notice, derived from the most recent completed Export Activity of the system, so a backlog of deliberately unprocessed deletes cannot sit unnoticed behind a warning-status Activity on a busy Operations page. One query per page load.
+3. **Surface a withheld backlog on the Connected System page.** One notice, derived from the most recent completed Export Activity of the system, so a backlog of deliberately unprocessed deletes cannot sit unnoticed behind a warning-status Activity on a busy Operations page. One query per page load. Under Decision 4 this notice is load-bearing: it is the persistent signal that a type is being withheld run after run.
+4. **A limit that would be exceeded withholds the whole type, never a head of it.** Processing up to the limit turns a safeguard into a rate limiter: on a frequent Schedule the first 100 wrong deletes are written on the first run and the rest follow a run at a time, so the limit only delays the damage. Withholding the type writes nothing wrong and requires an administrator to act, which is the point. The Full Import limit already worked this way, so the whole feature is one rule: if a run would exceed a limit, it does none of that kind of change.
+5. **No run-time override.** The release valve for a legitimate mass change is a second Export Run Profile with no limit, run by hand and kept out of Schedules. Raising a limit to get past it invites forgetting to restore it, and a per-run override would need a fourth surface to carry it.
 
 ## Acceptance Criteria
 
 - [ ] The five limits can be set, read and cleared on all three surfaces, with the run-type validation in FR1.
-- [ ] An Export run honours each limit per change type, counts attempts in both passes, leaves withheld exports Pending and untouched, and completes with the warning and counters in FR3 and FR4. Boundary tests: limit of 0, limit equal to the queue, limit below the queue, no limit.
+- [ ] An Export run decides per change type at the start whether the pending count exceeds the limit, withholds a type in full when it does, leaves withheld exports Pending and untouched in both passes, and completes with the warning and counters in FR3 and FR4. Boundary tests: limit of 0, limit equal to the queue, limit one below the queue, no limit.
 - [ ] A Full Import refuses its deletion detection when either limit is exceeded, marks nothing, updates the objects it saw, completes with the warning and counter in FR7, and does not stamp the last successful Full Import time. Boundary tests: at the limit, one above, one below, for both count and share.
-- [ ] The next run resumes withheld exports without any reset.
+- [ ] A later run whose limit allows the withheld exports, or an Export Run Profile without the limit, attempts them without any reset.
 - [ ] The Activity detail page, Run Profiles tab, dialogs and Connected System notice render as in the mock.
 - [ ] Docs and changelog updated; OpenAPI regenerated; Pester tests for the new parameters.
 - [ ] Runtime verification through the integration runner: one scenario test for the export limit and one for the Full Import limit.
