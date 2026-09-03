@@ -3131,6 +3131,95 @@ function Assert-MvoAttributeValue {
     }
 }
 
+function Get-MvoDeletionMarkers {
+    <#
+    .SYNOPSIS
+        Reads a Metaverse Object's deletion-scheduling markers directly from the database.
+
+    .DESCRIPTION
+        The MVO detail REST API (MetaverseObjectDto) exposes LastConnectorDisconnectedDate and
+        IsPendingDeletion, but does not expose the trigger-recording fields added for #119
+        (DeletionTriggeredBySystemId/Name, DeletionPolicySnapshotJson) or the deletion-initiator
+        audit fields (DeletionInitiatedByType/Id/Name), so tests that need to assert on those read
+        the MetaverseObjects table via psql in the jim.database container instead (same pattern as
+        Assert-ExportRpeisHaveCsoLink). Used by Scenario 4's deletion-rule trigger-mode tests and by
+        Scenario 5's same-page rejoin cancellation probe (#1612).
+
+    .PARAMETER MvoId
+        The Metaverse Object ID (GUID) to inspect.
+
+    .OUTPUTS
+        A hashtable:
+        - TriggeredBySystemId: [int] or $null (DeletionTriggeredBySystemId)
+        - TriggeredBySystemName: [string] or $null (DeletionTriggeredBySystemName)
+        - HasPolicySnapshot: [bool] - whether DeletionPolicySnapshotJson is set
+        - IsMarkedForDeletion: [bool] - whether LastConnectorDisconnectedDate is set
+        - InitiatedByType: [int] - DeletionInitiatedByType (the ActivityInitiatorType enum's numeric
+          value; 0 = NotSet/unset)
+        - InitiatedById: [string] or $null (DeletionInitiatedById)
+        - InitiatedByName: [string] or $null (DeletionInitiatedByName)
+
+    .EXAMPLE
+        $markers = Get-MvoDeletionMarkers -MvoId $mvoId
+        if ($markers.IsMarkedForDeletion) { ... }
+
+    .EXAMPLE
+        $markers = Get-MvoDeletionMarkers -MvoId $mvoId
+        # every marker cleared (a cancelled/never-scheduled deletion):
+        $cleared = -not $markers.IsMarkedForDeletion -and $null -eq $markers.TriggeredBySystemId `
+            -and -not $markers.HasPolicySnapshot -and $markers.InitiatedByType -eq 0
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$MvoId
+    )
+
+    # Validate the id is a well-formed GUID before substituting into SQL. The query interpolates the
+    # id directly because psql -c does not support bind parameters over docker compose exec;
+    # restricting to a GUID closes the only realistic injection vector.
+    $parsedId = [Guid]::Empty
+    if (-not [Guid]::TryParse($MvoId, [ref]$parsedId)) {
+        throw "Get-MvoDeletionMarkers: MvoId '$MvoId' is not a valid GUID."
+    }
+    $safeMvoId = $parsedId.ToString()
+
+    $query = @"
+SELECT COALESCE("DeletionTriggeredBySystemId"::text, ''),
+       COALESCE("DeletionTriggeredBySystemName", ''),
+       CASE WHEN "DeletionPolicySnapshotJson" IS NULL THEN 'f' ELSE 't' END,
+       CASE WHEN "LastConnectorDisconnectedDate" IS NULL THEN 'f' ELSE 't' END,
+       "DeletionInitiatedByType",
+       COALESCE("DeletionInitiatedById"::text, ''),
+       COALESCE("DeletionInitiatedByName", '')
+FROM "MetaverseObjects"
+WHERE "Id" = '$safeMvoId';
+"@
+
+    $row = docker compose exec -T jim.database psql -t -A -F '|' -U jim -d jim -c $query 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Get-MvoDeletionMarkers: psql query failed for MVO $MvoId. Output: $row"
+    }
+
+    $rowText = ($row | Out-String).Trim()
+    if (-not $rowText) {
+        throw "Get-MvoDeletionMarkers: no MetaverseObjects row found for MVO $MvoId."
+    }
+
+    $parts = $rowText.Split('|')
+    if ($parts.Count -lt 7) {
+        throw "Get-MvoDeletionMarkers: unexpected psql output for MVO ${MvoId}: '$rowText'"
+    }
+    return @{
+        TriggeredBySystemId   = if ($parts[0]) { [int]$parts[0] } else { $null }
+        TriggeredBySystemName = if ($parts[1]) { $parts[1] } else { $null }
+        HasPolicySnapshot     = ($parts[2] -eq 't')
+        IsMarkedForDeletion   = ($parts[3] -eq 't')
+        InitiatedByType       = [int]$parts[4]
+        InitiatedById         = if ($parts[5]) { $parts[5] } else { $null }
+        InitiatedByName       = if ($parts[6]) { $parts[6] } else { $null }
+    }
+}
+
 function Get-JimErrorLinePattern {
     <#
     .SYNOPSIS

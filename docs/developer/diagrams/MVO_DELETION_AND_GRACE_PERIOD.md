@@ -122,6 +122,14 @@ flowchart TD
 
 Cancellation clears every deletion marker together (`ClearMvoDeletionMarkers`): `LastConnectorDisconnectedDate`, the `DeletionInitiatedBy*` audit fields, `DeletionTriggeredBySystemId`/`Name`, and `DeletionPolicySnapshotJson`. The null-trigger fallback (cancel on any rejoin) covers rows marked before the triggering system was recorded, rather than stranding a scheduled deletion.
 
+### Same-Page Disconnect-Then-Rejoin Hardening (#1612)
+
+`EstablishJoinAsync` reads `mvo.LastConnectorDisconnectedDate` off whichever Metaverse Object instance the join's matching-rule lookup returned, so the cancellation check above only sees Pass 1's markers if that instance is the SAME one Pass 1 wrote them to. On JIM's single EF Core tracking context, the change tracker's own identity resolution already guarantees this for a same-page disconnect and rekey of the same identity (the two loads resolve to one tracked instance), so the check has always worked correctly against PostgreSQL.
+
+`SyncTaskProcessorBase` now backs that guarantee with an explicit page-wide identity map (`MetaverseObjectPageIdentityMap`) rather than depending solely on the tracking context's behaviour: every Metaverse Object load reachable during a page (a CSO page load, a matching-rule join, cross-page reference resolution, a newly persisted projection) is resolved onto one canonical CLR instance per Id before use. This is defence in depth, not a behavioural fix: it protects the same-page rejoin cancellation, and every other reference-equality-sensitive accumulator in the class (the pending MVO change list, the Pending Export evaluation batch), against a future change to how Metaverse Objects are loaded reintroducing a genuine identity split. The map's lifetime is scoped to match the change tracker's: both are cleared together at every page boundary.
+
+`QueueMvoForUpdate`'s own by-Id consolidation (with a `Warning` log) is now a tripwire for a load site that bypasses the identity map, rather than the primary defence against a same-page collision.
+
 ## Immediate Deletion (Zero Grace Period)
 
 ```mermaid
