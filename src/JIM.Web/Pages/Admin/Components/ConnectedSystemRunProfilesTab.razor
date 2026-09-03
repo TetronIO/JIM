@@ -50,19 +50,19 @@
                     }
                     @if (context.Item.MaxCreates.HasValue)
                     {
-                        <MudTooltip Text="This Export stops attempting creates once it reaches this limit; the rest stay pending for the next run." Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="If more than this many creates are pending when this Export runs, none of them are attempted and the run completes with a warning." Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max creates @context.Item.MaxCreates</MudChip>
                         </MudTooltip>
                     }
                     @if (context.Item.MaxUpdates.HasValue)
                     {
-                        <MudTooltip Text="This Export stops attempting updates once it reaches this limit; the rest stay pending for the next run." Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="If more than this many updates are pending when this Export runs, none of them are attempted and the run completes with a warning." Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max updates @context.Item.MaxUpdates</MudChip>
                         </MudTooltip>
                     }
                     @if (context.Item.MaxDeletes.HasValue)
                     {
-                        <MudTooltip Text="This Export stops attempting deletes once it reaches this limit; the rest stay pending for the next run." Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="If more than this many deletes are pending when this Export runs, none of them are attempted and the run completes with a warning." Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max deletes @context.Item.MaxDeletes</MudChip>
                         </MudTooltip>
                     }
@@ -261,7 +261,8 @@
                             </MudItem>
                         </MudGrid>
                         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-                            When a limit is reached, the remaining changes of that type stay pending for the next run, and the run completes with a warning.
+                            If a run would exceed a limit, it attempts none of that change type; the changes stay pending and the run completes with a warning.
+                            To let a legitimate mass change through, run an Export Run Profile without the limit.
                         </MudText>
                     </MudPaper>
                 }
@@ -352,7 +353,8 @@
                             </MudItem>
                         </MudGrid>
                         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-                            When a limit is reached, the remaining changes of that type stay pending for the next run, and the run completes with a warning.
+                            If a run would exceed a limit, it attempts none of that change type; the changes stay pending and the run completes with a warning.
+                            To let a legitimate mass change through, run an Export Run Profile without the limit.
                         </MudText>
                     </MudPaper>
                 }

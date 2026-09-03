@@ -2937,10 +2937,11 @@ public class ExportExecutionTests
         public int RemainingDeferredCalls;
         public int ExecutableProbeCalls;
 
-        public override Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
+        public override Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+            IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
         {
             Interlocked.Increment(ref BatchLoadCalls);
-            return base.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId);
+            return base.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
         }
 
         public override Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)

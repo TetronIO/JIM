@@ -57,22 +57,36 @@
      (exportActivity.ExportCreatesWithheld ?? 0) + (exportActivity.ExportUpdatesWithheld ?? 0) + (exportActivity.ExportDeletesWithheld ?? 0) is var totalWithheld and > 0)
 {
     var exportRunProfile = _connectedSystem.RunProfiles?.FirstOrDefault(rp => rp.Id == exportActivity.ConnectedSystemRunProfileId);
-    var limitsReached = new List<string>();
-    if ((exportActivity.ExportCreatesWithheld ?? 0) > 0 && exportRunProfile?.MaxCreates is { } maxCreates)
-        limitsReached.Add($"Max creates of {maxCreates:N0}");
-    if ((exportActivity.ExportUpdatesWithheld ?? 0) > 0 && exportRunProfile?.MaxUpdates is { } maxUpdates)
-        limitsReached.Add($"Max updates of {maxUpdates:N0}");
-    if ((exportActivity.ExportDeletesWithheld ?? 0) > 0 && exportRunProfile?.MaxDeletes is { } maxDeletes)
-        limitsReached.Add($"Max deletes of {maxDeletes:N0}");
-    var limitsText = limitsReached.Count > 0 ? string.Join(" and ", limitsReached) : "its limit";
-    var changeNoun = totalWithheld == 1 ? "change" : "changes";
+
+    // Run Profile Safeguards (#1618): a run attempts none of a change type it would exceed the
+    // limit for, so every withheld type here was withheld in full, not partially.
+    var withheldByType = new List<(string Noun, int Count, int? Limit)>();
+    if ((exportActivity.ExportCreatesWithheld ?? 0) > 0)
+        withheldByType.Add(("creates", exportActivity.ExportCreatesWithheld!.Value, exportRunProfile?.MaxCreates));
+    if ((exportActivity.ExportUpdatesWithheld ?? 0) > 0)
+        withheldByType.Add(("updates", exportActivity.ExportUpdatesWithheld!.Value, exportRunProfile?.MaxUpdates));
+    if ((exportActivity.ExportDeletesWithheld ?? 0) > 0)
+        withheldByType.Add(("deletes", exportActivity.ExportDeletesWithheld!.Value, exportRunProfile?.MaxDeletes));
+
+    var changeNoun = withheldByType.Count == 1
+        ? (totalWithheld == 1 ? withheldByType[0].Noun.TrimEnd('s') : withheldByType[0].Noun)
+        : "changes";
+    // The limit may have been raised or cleared since that run, in which case the Run Profile no longer
+    // carries one to name; say so rather than rendering an empty clause. The notice clears itself on the
+    // next completed export either way.
+    var limitsText = string.Join(", ", withheldByType
+        .Where(w => w.Limit.HasValue)
+        .Select(w => $"Max {w.Noun} is {w.Limit!.Value:N0}"));
+    var reasonText = limitsText.Length > 0
+        ? $"{exportActivity.TargetName}'s {limitsText}"
+        : $"{exportActivity.TargetName}'s limit has since been changed, so the next run will decide again";
+    var quantityText = totalWithheld == 1 ? "the 1 pending" : $"all {totalWithheld:N0} pending";
 
     <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-6">
         <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
             <span>
-                The last export withheld @totalWithheld.ToString("N0") @changeNoun:
-                <strong>@exportActivity.TargetName</strong> reached its @limitsText.
-                They remain pending and will be attempted on the next export run.
+                The last export withheld @quantityText @changeNoun: <strong>@reasonText</strong>.
+                They stay pending until the limit is raised or cleared, or an Export Run Profile without the limit runs.
             </span>
             <MudStack Row Spacing="2">
                 <MudButton Variant="Variant.Text" Color="Color.Inherit" DropShadow="false"

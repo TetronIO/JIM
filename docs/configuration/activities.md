@@ -38,11 +38,11 @@ The exact field set depends on the operation; the [interactive API reference](..
 
 ### Run Profile Safeguards (export limits)
 
-Every Export activity carries three withheld counters: `exportCreatesWithheld`, `exportUpdatesWithheld` and `exportDeletesWithheld`. Each is `0` when its Run Profile has no limit for that change type, or the limit was never reached; it is the number of Pending Exports of that type left untouched (still Pending) when the limit was reached. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
+Every Export activity carries three withheld counters: `exportCreatesWithheld`, `exportUpdatesWithheld` and `exportDeletesWithheld`. Each is `0` when its Run Profile has no limit for that change type, or the pending count did not exceed it; otherwise it is every Pending Export of that type left untouched (still Pending), because a run that would exceed a limit attempts none of that change type at all. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
 
-When an Export activity withholds anything, it completes as **Complete with warning**, and its warning message carries one sentence per capped change type, for example:
+When an Export activity withholds anything, it completes as **Complete with warning**, and its warning message carries one sentence per withheld change type, for example:
 
-> Stopped processing deletes after 100, this Run Profile's limit; 342 deletes remain pending.
+> Max deletes is 100, but 342 deletes were pending, so none were attempted and all 342 remain pending. Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.
 
 ## Execution items
 

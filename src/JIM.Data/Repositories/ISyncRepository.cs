@@ -1275,6 +1275,14 @@ public interface ISyncRepository
     Task<int> GetExecutableExportCountAsync(int connectedSystemId);
 
     /// <summary>
+    /// Run Profile Safeguards (#1618): the count of executable Pending Exports per change type,
+    /// same filtering as <see cref="GetExecutableExportCountAsync"/>. Read once at the start of an
+    /// Export run so the ledger can decide, per type, whether the whole type is withheld this run.
+    /// A change type with nothing pending is absent from the dictionary.
+    /// </summary>
+    Task<Dictionary<PendingExportChangeType, int>> GetExecutableExportCountsByChangeTypeAsync(int connectedSystemId);
+
+    /// <summary>
     /// Gets all Pending Exports that are ready for execution.
     /// Applies database-level filtering for status, retry timing, and max retries.
     /// </summary>
@@ -1288,7 +1296,10 @@ public interface ISyncRepository
     /// deferred rows remain in it (issue #985). Uses AsNoTracking in production for minimal EF
     /// overhead.
     /// </summary>
-    Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId);
+    /// <param name="excludedChangeTypes">Run Profile Safeguards (#1618): change types withheld for
+    /// the whole run, excluded at the database level; null or empty excludes nothing.</param>
+    Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+        IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null);
 
     /// <summary>
     /// Collects all remaining executable exports with unresolved references (deferred) strictly

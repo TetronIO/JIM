@@ -545,6 +545,135 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
+    /// Run Profile Safeguards (#1618): a withheld change type must never reach the parallel deferred
+    /// batch dispatcher at all, however many batches an allowed type spans. The ledger's filtering in
+    /// <c>ProcessDeferredExportsAsync</c> runs before <c>exportsToWrite</c> is split into batches, so
+    /// a withheld type is excluded before parallel dispatch, not raced against it.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatches_WithheldTypeNeverReachesDispatchAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+
+        // A resolvable reference target shared by every deferred export below.
+        var referencedMvoId = Guid.NewGuid();
+        SyncRepo.SeedMetaverseObject(new MetaverseObject { Id = referencedMvoId });
+        var referencedCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObjectId = referencedMvoId,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }
+            }
+        };
+        SyncRepo.SeedConnectedSystemObject(referencedCso);
+
+        PendingExport CreateDeferredExport(PendingExportChangeType changeType, DateTime createdAt)
+        {
+            var cso = CreateCso(targetSystem, targetUserType);
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedConnectedSystemObject(cso);
+
+            var export = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = changeType,
+                CreatedAt = createdAt,
+                HasUnresolvedReferences = true,
+                MaxRetries = 3,
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = displayNameAttr.Id,
+                        Attribute = displayNameAttr,
+                        StringValue = "Resolvable",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    },
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = managerAttr.Id,
+                        Attribute = managerAttr,
+                        UnresolvedReferenceValue = referencedMvoId.ToString(),
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            PendingExportsData.Add(export);
+            SyncRepo.SeedPendingExport(export);
+            return export;
+        }
+
+        // 4 allowed-type (Update, no limit) deferred exports: with BatchSize=2 these span 2 batches,
+        // enough for the parallel dispatcher (useParallelBatches requires deferredBatches.Count > 1).
+        var deferredUpdates = Enumerable.Range(0, 4)
+            .Select(i => CreateDeferredExport(PendingExportChangeType.Update, baseTime.AddSeconds(i)))
+            .ToList();
+
+        // 2 withheld-type (Create, limit 1) deferred exports, later in queue order so the primary
+        // loop's fast-path collection (unfiltered by change type) is what gathers them.
+        var deferredCreates = Enumerable.Range(0, 2)
+            .Select(i => CreateDeferredExport(PendingExportChangeType.Create, baseTime.AddSeconds(10 + i)))
+            .ToList();
+
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+
+        var connectorFactoryCalled = false;
+        Func<IConnector> connectorFactory = () =>
+        {
+            connectorFactoryCalled = true;
+            return CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
+        };
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var options = new ExportExecutionOptions
+        {
+            BatchSize = 2,
+            MaxParallelism = 2,
+            MaxCreates = 1
+        };
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            primaryConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None,
+            connectorFactory: connectorFactory,
+            repositoryFactory: repositoryFactory);
+
+        // Assert - the allowed type completed via genuine parallel dispatch
+        Assert.That(connectorFactoryCalled, Is.True, "the 4 allowed-type exports must have gone through the parallel path to prove the guard, not merely the sequential fallback");
+        Assert.That(result.SuccessCount, Is.EqualTo(4));
+        Assert.That(deferredUpdates, Has.All.Matches<PendingExport>(u => u.Status == PendingExportStatus.Exported));
+
+        // Assert - the withheld type never reached any batch, parallel or otherwise
+        Assert.That(result.CreatesWithheld, Is.EqualTo(2));
+        Assert.That(deferredCreates, Has.All.Matches<PendingExport>(c => c.Status == PendingExportStatus.Pending));
+        Assert.That(result.ProcessedExportItems.Any(item => item.ChangeType == PendingExportChangeType.Create), Is.False);
+    }
+
+    /// <summary>
     /// Tests that the ExportExecutionOptions.MaxParallelism defaults to 1 (sequential).
     /// </summary>
     [Test]

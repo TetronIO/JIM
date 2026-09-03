@@ -42,20 +42,22 @@ function Set-JIMRunProfile {
         the freshly computed incoming hash, raising a diagnostic error for any disagreement.
 
     .PARAMETER MaxCreates
-        Run Profile Safeguards: sets the maximum number of creates an Export run may attempt. Only
-        valid on an Export Run Profile; the API rejects it otherwise. Pass a number to set the
-        limit, 0 to attempt none of this change type, or $null to clear the limit (no limit).
-        Omit the parameter entirely to leave the current value unchanged. Setting any one of
-        -MaxCreates, -MaxUpdates or -MaxDeletes fetches the Run Profile's other two current
-        values and sends all three together, so the ones you did not pass are preserved exactly.
+        Run Profile Safeguards: sets the most creates that may be pending for a single Export run
+        to attempt any of them. If more are pending than this when a run starts, JIM attempts NONE
+        of them; there is no partial attempt. Only valid on an Export Run Profile; the API rejects
+        it otherwise. Pass a number to set the limit, 0 to refuse creates outright, or $null to
+        clear the limit (no limit). Omit the parameter entirely to leave the current value
+        unchanged. Setting any one of -MaxCreates, -MaxUpdates or -MaxDeletes fetches the Run
+        Profile's other two current values and sends all three together, so the ones you did not
+        pass are preserved exactly.
 
     .PARAMETER MaxUpdates
-        Run Profile Safeguards: sets the maximum number of updates an Export run may attempt. Same
-        semantics as -MaxCreates.
+        Run Profile Safeguards: sets the most updates that may be pending for a single Export run
+        to attempt any of them. Same all-or-nothing semantics as -MaxCreates.
 
     .PARAMETER MaxDeletes
-        Run Profile Safeguards: sets the maximum number of deletes an Export run may attempt. Same
-        semantics as -MaxCreates.
+        Run Profile Safeguards: sets the most deletes that may be pending for a single Export run
+        to attempt any of them. Same all-or-nothing semantics as -MaxCreates.
 
     .PARAMETER PassThru
         If specified, returns the updated Run Profile object.

@@ -80,9 +80,9 @@ New-JIMRunProfile -ConnectedSystemName <string> -Name <string> -RunType <string>
 | `PartitionId` | `int` | No | | Optional partition to scope this Run Profile to. If omitted, the Run Profile applies to the default partition. |
 | `FilePath` | `string` | No | | Optional file path for file-based connectors. |
 | `VerifyImportContentHashes` | `switch` | No | `$false` | Enables Verification Mode. Only valid when `-RunType` is `FullImport`; the API rejects it otherwise. Runs the honest attribute diff on every object instead of skipping unchanged objects by content hash. |
-| `MaxCreates` | `int` (nullable) | No | No limit | Run Profile Safeguards: the maximum number of creates an Export run may attempt. Only valid when `-RunType` is `Export`. `0` attempts none of this change type. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards). |
-| `MaxUpdates` | `int` (nullable) | No | No limit | Run Profile Safeguards: the maximum number of updates an Export run may attempt. Same rules as `-MaxCreates`. |
-| `MaxDeletes` | `int` (nullable) | No | No limit | Run Profile Safeguards: the maximum number of deletes an Export run may attempt. Same rules as `-MaxCreates`. |
+| `MaxCreates` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most creates that may be pending for a single Export run to attempt any of them. If more are pending than this when the run starts, none are attempted; `0` refuses creates outright. Only valid when `-RunType` is `Export`. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards). |
+| `MaxUpdates` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most updates that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
+| `MaxDeletes` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most deletes that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
 | `PassThru` | `switch` | No | `$false` | Returns the created Run Profile object to the pipeline. |
 
 ### Output
@@ -162,9 +162,9 @@ Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int
 | `PartitionId` | `int` | No | | New partition ID to scope the Run Profile to. |
 | `FilePath` | `string` | No | | New file path for file-based connectors. Omit to leave unchanged. |
 | `VerifyImportContentHashes` | `bool` | No | | Enables or disables Verification Mode. Pass `$true` to enable, `$false` to disable; omit to leave unchanged. Only valid on a Full Import Run Profile; the API rejects `$true` otherwise. |
-| `MaxCreates` | `int` (nullable) | No | | Run Profile Safeguards: sets the maximum number of creates an Export run may attempt. Pass a number to set it, `0` to attempt none of this change type, or `$null` to clear the limit; omit the parameter to leave it unchanged. Only valid on an Export Run Profile. Setting any one of `-MaxCreates`, `-MaxUpdates` or `-MaxDeletes` preserves the other two exactly. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards). |
-| `MaxUpdates` | `int` (nullable) | No | | Run Profile Safeguards: sets the maximum number of updates an Export run may attempt. Same rules as `-MaxCreates`. |
-| `MaxDeletes` | `int` (nullable) | No | | Run Profile Safeguards: sets the maximum number of deletes an Export run may attempt. Same rules as `-MaxCreates`. |
+| `MaxCreates` | `int` (nullable) | No | | Run Profile Safeguards: sets the most creates that may be pending for a single Export run to attempt any of them; if more are pending, the run attempts none of them. Pass a number to set it, `0` to refuse creates outright, or `$null` to clear the limit; omit the parameter to leave it unchanged. Only valid on an Export Run Profile. Setting any one of `-MaxCreates`, `-MaxUpdates` or `-MaxDeletes` preserves the other two exactly. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards). |
+| `MaxUpdates` | `int` (nullable) | No | | Run Profile Safeguards: sets the most updates that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
+| `MaxDeletes` | `int` (nullable) | No | | Run Profile Safeguards: sets the most deletes that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Run Profile object to the pipeline. |
 
 ### Output

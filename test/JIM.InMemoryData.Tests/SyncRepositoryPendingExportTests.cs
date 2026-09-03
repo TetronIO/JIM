@@ -29,6 +29,19 @@ public class SyncRepositoryPendingExportTests
         };
     }
 
+    /// <summary>
+    /// The executable-export predicate requires an Update-type export to carry at least one Pending
+    /// or ExportedNotConfirmed attribute change; Create and Delete exports need none. Call this for
+    /// any Update-type export a test needs the predicate to treat as executable.
+    /// </summary>
+    private static void AddPendingAttributeChange(PendingExport pe) => pe.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+    {
+        Id = Guid.NewGuid(),
+        PendingExportId = pe.Id,
+        AttributeId = 1,
+        Status = PendingExportAttributeChangeStatus.Pending
+    });
+
     [Test]
     public async Task GetPendingExportsAsync_ReturnsForSystemAsync()
     {
@@ -250,4 +263,160 @@ public class SyncRepositoryPendingExportTests
         Assert.That(result, Has.Count.EqualTo(1));
         Assert.That(result[0].Id, Is.EqualTo(matchingPe.Id));
     }
+
+    #region GetExecutableExportCountsByChangeTypeAsync (Run Profile Safeguards, #1618)
+
+    [Test]
+    public async Task GetExecutableExportCountsByChangeTypeAsync_NoPendingExports_ReturnsEmptyDictionaryAsync()
+    {
+        var result = await _repo.GetExecutableExportCountsByChangeTypeAsync(CsId);
+
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetExecutableExportCountsByChangeTypeAsync_MixedChangeTypes_CountsEachTypeSeparatelyAsync()
+    {
+        var create1 = CreatePe();
+        create1.ChangeType = PendingExportChangeType.Create;
+        _repo.SeedPendingExport(create1);
+
+        var create2 = CreatePe();
+        create2.ChangeType = PendingExportChangeType.Create;
+        _repo.SeedPendingExport(create2);
+
+        var delete1 = CreatePe();
+        delete1.ChangeType = PendingExportChangeType.Delete;
+        _repo.SeedPendingExport(delete1);
+
+        var result = await _repo.GetExecutableExportCountsByChangeTypeAsync(CsId);
+
+        Assert.That(result[PendingExportChangeType.Create], Is.EqualTo(2));
+        Assert.That(result[PendingExportChangeType.Delete], Is.EqualTo(1));
+        Assert.That(result.ContainsKey(PendingExportChangeType.Update), Is.False, "a type with nothing pending is absent from the dictionary");
+    }
+
+    [Test]
+    public async Task GetExecutableExportCountsByChangeTypeAsync_AppliesTheSameExecutablePredicateAsTheTotalCountAsync()
+    {
+        // Matches GetExecutableExportCountAsync's own filtering: excludes already-Exported
+        // Create/Delete exports, exports over max retries, and exports for another system.
+        var executableCreate = CreatePe();
+        executableCreate.ChangeType = PendingExportChangeType.Create;
+        _repo.SeedPendingExport(executableCreate);
+
+        var alreadyExportedDelete = CreatePe();
+        alreadyExportedDelete.ChangeType = PendingExportChangeType.Delete;
+        alreadyExportedDelete.Status = PendingExportStatus.Exported;
+        _repo.SeedPendingExport(alreadyExportedDelete);
+
+        var overMaxRetriesDelete = CreatePe();
+        overMaxRetriesDelete.ChangeType = PendingExportChangeType.Delete;
+        overMaxRetriesDelete.ErrorCount = overMaxRetriesDelete.MaxRetries;
+        _repo.SeedPendingExport(overMaxRetriesDelete);
+
+        var otherSystemCreate = CreatePe(connectedSystemId: 2);
+        otherSystemCreate.ChangeType = PendingExportChangeType.Create;
+        _repo.SeedPendingExport(otherSystemCreate);
+
+        var result = await _repo.GetExecutableExportCountsByChangeTypeAsync(CsId);
+
+        Assert.That(result[PendingExportChangeType.Create], Is.EqualTo(1));
+        Assert.That(result.ContainsKey(PendingExportChangeType.Delete), Is.False,
+            "both Delete exports are excluded: one already Exported, one over its retry limit");
+
+        var totalCount = await _repo.GetExecutableExportCountAsync(CsId);
+        Assert.That(result.Values.Sum(), Is.EqualTo(totalCount), "the grouped counts must sum to the same total the ungrouped count query returns");
+    }
+
+    #endregion
+
+    #region GetExecutableExportBatchAsync excludedChangeTypes (Run Profile Safeguards, #1618)
+
+    [Test]
+    public async Task GetExecutableExportBatchAsync_ExcludedChangeTypes_OmitsThoseTypesFromTheBatchAsync()
+    {
+        var create = CreatePe();
+        create.ChangeType = PendingExportChangeType.Create;
+        create.CreatedAt = DateTime.UtcNow.AddMinutes(-2);
+        _repo.SeedPendingExport(create);
+
+        var update = CreatePe();
+        update.ChangeType = PendingExportChangeType.Update;
+        update.CreatedAt = DateTime.UtcNow.AddMinutes(-1);
+        AddPendingAttributeChange(update);
+        _repo.SeedPendingExport(update);
+
+        var delete = CreatePe();
+        delete.ChangeType = PendingExportChangeType.Delete;
+        delete.CreatedAt = DateTime.UtcNow;
+        _repo.SeedPendingExport(delete);
+
+        var result = await _repo.GetExecutableExportBatchAsync(CsId, take: 10, afterCreatedAt: null, afterId: null,
+            excludedChangeTypes: [PendingExportChangeType.Create, PendingExportChangeType.Delete]);
+
+        Assert.That(result.Select(pe => pe.Id), Is.EquivalentTo(new[] { update.Id }));
+    }
+
+    [Test]
+    public async Task GetExecutableExportBatchAsync_NoExcludedChangeTypes_ReturnsEveryTypeAsync()
+    {
+        var create = CreatePe();
+        create.ChangeType = PendingExportChangeType.Create;
+        _repo.SeedPendingExport(create);
+
+        var delete = CreatePe();
+        delete.ChangeType = PendingExportChangeType.Delete;
+        _repo.SeedPendingExport(delete);
+
+        var result = await _repo.GetExecutableExportBatchAsync(CsId, take: 10, afterCreatedAt: null, afterId: null);
+
+        Assert.That(result, Has.Count.EqualTo(2), "omitting excludedChangeTypes must exclude nothing, matching the pre-#1618 signature's behaviour");
+    }
+
+    [Test]
+    public async Task GetExecutableExportBatchAsync_EmptyExcludedChangeTypes_ExcludesNothingAsync()
+    {
+        var create = CreatePe();
+        create.ChangeType = PendingExportChangeType.Create;
+        _repo.SeedPendingExport(create);
+
+        var result = await _repo.GetExecutableExportBatchAsync(CsId, take: 10, afterCreatedAt: null, afterId: null,
+            excludedChangeTypes: []);
+
+        Assert.That(result, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetExecutableExportBatchAsync_ExcludedTypeAlongsideKeysetPaging_CursorStillAdvancesCorrectlyAsync()
+    {
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+
+        var withheldCreate = CreatePe();
+        withheldCreate.ChangeType = PendingExportChangeType.Create;
+        withheldCreate.CreatedAt = baseTime.AddSeconds(1);
+        _repo.SeedPendingExport(withheldCreate);
+
+        var allowedUpdate = CreatePe();
+        allowedUpdate.ChangeType = PendingExportChangeType.Update;
+        allowedUpdate.CreatedAt = baseTime.AddSeconds(2);
+        AddPendingAttributeChange(allowedUpdate);
+        _repo.SeedPendingExport(allowedUpdate);
+
+        // First page: excluding Create must skip straight to the Update, not stop at the excluded row.
+        var firstPage = await _repo.GetExecutableExportBatchAsync(CsId, take: 10, afterCreatedAt: null, afterId: null,
+            excludedChangeTypes: [PendingExportChangeType.Create]);
+
+        Assert.That(firstPage.Select(pe => pe.Id), Is.EquivalentTo(new[] { allowedUpdate.Id }));
+
+        // Paging strictly after the Update's own cursor must find nothing further, including no
+        // re-read of the excluded Create.
+        var lastRow = firstPage[0];
+        var secondPage = await _repo.GetExecutableExportBatchAsync(CsId, take: 10, afterCreatedAt: lastRow.CreatedAt, afterId: lastRow.Id,
+            excludedChangeTypes: [PendingExportChangeType.Create]);
+
+        Assert.That(secondPage, Is.Empty);
+    }
+
+    #endregion
 }

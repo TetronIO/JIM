@@ -33,6 +33,17 @@ public class ExportExecutionServer
     /// </summary>
     public const int DefaultBatchSize = 100;
 
+    /// <summary>
+    /// Every Pending Export change type, for iterating the Run Profile Safeguards (#1618) ledger
+    /// decision per type without re-declaring the three values at each call site.
+    /// </summary>
+    private static readonly PendingExportChangeType[] AllChangeTypes =
+    [
+        PendingExportChangeType.Create,
+        PendingExportChangeType.Update,
+        PendingExportChangeType.Delete
+    ];
+
     private JimApplication Application { get; }
     private ISyncRepository SyncRepo { get; }
 
@@ -154,10 +165,21 @@ public class ExportExecutionServer
             return result;
         }
 
-        // Run Profile Safeguards (#1618): one ledger for the whole run, shared by both passes (the
-        // immediate batches below and the deferred-reference pass) and both connector shapes (calls
-        // and files), so a limit holds regardless of which pass or path an export is attempted on.
-        var changeLimitLedger = new ExportChangeLimitLedger(options.MaxCreates, options.MaxUpdates, options.MaxDeletes);
+        // Run Profile Safeguards (#1618): decide once, up front, which change types this run may
+        // attempt at all. Reading the executable count per change type costs one extra query, so it
+        // is skipped entirely when the Run Profile carries no limits; an uncapped Export run performs
+        // no additional database work. The ledger is shared by both passes (the immediate batches
+        // below and the deferred-reference pass) and both connector shapes (calls and files), so a
+        // withheld type stays withheld regardless of which pass or path meets it.
+        var hasAnyChangeLimit = options.MaxCreates.HasValue || options.MaxUpdates.HasValue || options.MaxDeletes.HasValue;
+        var executablePendingCountsByType = hasAnyChangeLimit
+            ? await SyncRepo.GetExecutableExportCountsByChangeTypeAsync(connectedSystem.Id)
+            : new Dictionary<PendingExportChangeType, int>();
+        var changeLimitLedger = new ExportChangeLimitLedger(options.MaxCreates, options.MaxUpdates, options.MaxDeletes, executablePendingCountsByType);
+
+        // The withheld totals are decided now, at construction, not accumulated as the run
+        // progresses; count them towards processedCount up front too (see the paging loop below) so
+        // the run's progress window still completes even though a withheld type is never attempted.
 
         // Execute exports using the connector with batch-loading
         await ExecuteExportsViaConnectorAsync(connectedSystem, connector, result, options, changeLimitLedger,
@@ -514,6 +536,14 @@ public class ExportExecutionServer
                 var processedCount = 0;
                 var processedIds = new HashSet<Guid>();
 
+                // Run Profile Safeguards (#1618): the change types withheld for the whole run,
+                // decided once by the ledger before this loop starts. Excluded at the database level
+                // (below) so paging never reads, and never has to skip past, a withheld row; their
+                // total is added to processedCount once, here, rather than accumulated per batch,
+                // since none of them will ever be seen by this loop to accumulate from.
+                var excludedChangeTypes = AllChangeTypes.Where(changeLimitLedger.IsWithheld).ToList();
+                processedCount += AllChangeTypes.Sum(changeLimitLedger.Withheld);
+
                 // Sub-phase narration from the connector, carrying the counts JIM owns (issue #637).
                 using var connectorProgress = CreateConnectorProgress(progressCallback, subPhase => new ExportProgressInfo
                 {
@@ -540,7 +570,7 @@ public class ExportExecutionServer
                             .SetTag("take", options.BatchSize))
                         {
                             rawBatch = await SyncRepo.GetExecutableExportBatchAsync(
-                                connectedSystem.Id, options.BatchSize, cursorCreatedAt, cursorId);
+                                connectedSystem.Id, options.BatchSize, cursorCreatedAt, cursorId, excludedChangeTypes);
                         }
 
                         if (rawBatch.Count == 0)
@@ -587,17 +617,12 @@ public class ExportExecutionServer
                     var batchDeferred = eligibleExports.Where(pe => pe.HasUnresolvedReferences).ToList();
                     deferredExports.AddRange(batchDeferred);
 
-                    // Run Profile Safeguards (#1618): reserve capacity from the ledger before this
-                    // batch is marked executing. Withheld exports are dropped from the batch here:
-                    // never marked, never failed, given no execution item, left exactly as found
-                    // (Pending). Their ids are already in processedIds (see the foreach above), so
-                    // the cursor never re-reads them. Counted towards processedCount so the run's
-                    // progress window still completes even though nothing was attempted for them.
-                    var immediateCountBeforeReservation = immediateExports.Count;
+                    // Run Profile Safeguards (#1618): a defensive guard, not the primary mechanism -
+                    // excludedChangeTypes above already keeps a withheld type out of every batch this
+                    // loop reads. Whatever it drops is left exactly as found (Pending), not marked,
+                    // failed, or given an execution item; its withheld total was already added to
+                    // processedCount once, up front, not accumulated here.
                     immediateExports = ReserveAgainstLedger(immediateExports, changeLimitLedger);
-                    var withheldFromBatch = immediateCountBeforeReservation - immediateExports.Count;
-                    if (withheldFromBatch > 0)
-                        processedCount += withheldFromBatch;
 
                     if (immediateExports.Count > 0)
                     {

@@ -50,42 +50,52 @@ public class ExportOutcomeMessageTests
     }
 
     [Test]
-    public void ForWithheld_Deletes_MatchesThePrdWording()
+    public void ForWithheld_Deletes_MatchesTheSpecifiedWording()
     {
-        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, attempted: 100, withheld: 342);
+        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, limit: 100, pending: 342);
 
-        Assert.That(message, Is.EqualTo("Stopped processing deletes after 100, this Run Profile's limit; 342 deletes remain pending."));
+        Assert.That(message, Is.EqualTo(
+            "Max deletes is 100, but 342 deletes were pending, so none were attempted and all 342 remain pending. " +
+            "Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit."));
     }
 
     [Test]
     public void ForWithheld_Creates_UsesTheCreateNoun()
     {
-        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Create, attempted: 5, withheld: 12);
+        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Create, limit: 5, pending: 12);
 
-        Assert.That(message, Is.EqualTo("Stopped processing creates after 5, this Run Profile's limit; 12 creates remain pending."));
+        Assert.That(message, Is.EqualTo(
+            "Max creates is 5, but 12 creates were pending, so none were attempted and all 12 remain pending. " +
+            "Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit."));
     }
 
     [Test]
     public void ForWithheld_Updates_UsesTheUpdateNoun()
     {
-        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Update, attempted: 0, withheld: 7);
+        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Update, limit: 0, pending: 7);
 
-        Assert.That(message, Is.EqualTo("Stopped processing updates after 0, this Run Profile's limit; 7 updates remain pending."));
+        Assert.That(message, Is.EqualTo(
+            "Max updates is 0, but 7 updates were pending, so none were attempted and all 7 remain pending. " +
+            "Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit."));
     }
 
     [Test]
-    public void ForWithheld_ExactlyOneWithheld_UsesTheSingularNoun()
+    public void ForWithheld_ExactlyOnePending_UsesTheSingularNounAndPronoun()
     {
-        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, attempted: 100, withheld: 1);
+        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, limit: 0, pending: 1);
 
-        Assert.That(message, Is.EqualTo("Stopped processing deletes after 100, this Run Profile's limit; 1 delete remains pending."));
+        Assert.That(message, Is.EqualTo(
+            "Max deletes is 0, but 1 delete was pending, so it was not attempted and remains pending. " +
+            "Check what staged it, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit."));
     }
 
     [Test]
-    public void ForWithheld_LargeAttemptedCount_GroupsTheDigits()
+    public void ForWithheld_LargeCounts_GroupTheDigits()
     {
-        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Update, attempted: 10_000, withheld: 2_500);
+        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Update, limit: 10_000, pending: 12_500);
 
-        Assert.That(message, Is.EqualTo("Stopped processing updates after 10,000, this Run Profile's limit; 2,500 updates remain pending."));
+        Assert.That(message, Is.EqualTo(
+            "Max updates is 10,000, but 12,500 updates were pending, so none were attempted and all 12,500 remain pending. " +
+            "Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit."));
     }
 }

@@ -3957,6 +3957,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         tracked.FilePath = runProfile.FilePath;
         tracked.Partition = runProfile.Partition;
         tracked.VerifyImportContentHashes = runProfile.VerifyImportContentHashes;
+        // Run Profile Safeguards (#1618). Every property the entity carries has to be copied here by
+        // hand; one left out is accepted by the API, reported as saved, and never written, which is
+        // exactly how the first Scenario 21 run found these three missing.
+        tracked.MaxCreates = runProfile.MaxCreates;
+        tracked.MaxUpdates = runProfile.MaxUpdates;
+        tracked.MaxDeletes = runProfile.MaxDeletes;
         tracked.LastUpdated = runProfile.LastUpdated;
         tracked.LastUpdatedByType = runProfile.LastUpdatedByType;
         tracked.LastUpdatedById = runProfile.LastUpdatedById;
@@ -4080,9 +4086,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await ExecutableExportsQuery(connectedSystemId).CountAsync();
     }
 
-    public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
+    /// <inheritdoc />
+    public async Task<Dictionary<PendingExportChangeType, int>> GetExecutableExportCountsByChangeTypeAsync(int connectedSystemId)
+    {
+        return await ExecutableExportsQuery(connectedSystemId)
+            .GroupBy(pe => pe.ChangeType)
+            .Select(g => new { ChangeType = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ChangeType, x => x.Count);
+    }
+
+    public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+        IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
     {
         var query = ExecutableExportsQuery(connectedSystemId);
+
+        // Run Profile Safeguards (#1618): a withheld change type is excluded at the database level,
+        // never read into the batch at all, so paging never has to skip past rows this run will not
+        // attempt.
+        if (excludedChangeTypes is { Count: > 0 })
+            query = query.Where(pe => !excludedChangeTypes.Contains(pe.ChangeType));
 
         // Keyset pagination on (CreatedAt, Id): strictly after the last row of the previous
         // batch. Unlike OFFSET paging, the cursor stays valid as executed rows drop out of

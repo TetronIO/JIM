@@ -45,22 +45,26 @@ function New-JIMRunProfile {
         normal, faster Full Imports.
 
     .PARAMETER MaxCreates
-        Run Profile Safeguards: the maximum number of creates an Export run may attempt. Only
-        valid when -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 is a
-        valid limit ("attempt none of these"). When the limit is reached, the remaining creates
-        stay pending for the next run and the run completes with a warning.
+        Run Profile Safeguards: the most creates that may be pending for a single Export run to
+        attempt any of them. If more are pending than this when the run starts, JIM attempts NONE
+        of them; there is no partial attempt. Only valid when -RunType is Export; the API rejects
+        it otherwise. Omit for no limit. 0 refuses creates outright. A run that withholds anything
+        stays pending and completes with a warning naming what to do next: raise or clear the
+        limit, or run an Export Run Profile without one.
 
     .PARAMETER MaxUpdates
-        Run Profile Safeguards: the maximum number of updates an Export run may attempt. Only
-        valid when -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 is a
-        valid limit ("attempt none of these").
+        Run Profile Safeguards: the most updates that may be pending for a single Export run to
+        attempt any of them. Same all-or-nothing behaviour as -MaxCreates. Only valid when
+        -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 refuses updates
+        outright.
 
     .PARAMETER MaxDeletes
-        Run Profile Safeguards: the maximum number of deletes an Export run may attempt. Only
-        valid when -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 is a
-        valid limit ("attempt none of these"). Recommended for Export Run Profiles against
-        production directories: a small share of the target's population catches a mass
-        deprovisioning before it completes.
+        Run Profile Safeguards: the most deletes that may be pending for a single Export run to
+        attempt any of them. Same all-or-nothing behaviour as -MaxCreates. Only valid when
+        -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 refuses deletes
+        outright. Recommended for Export Run Profiles against production directories: a small
+        share of the target's population means a broken filter or rule change withholds the
+        whole deprovisioning attempt and warns you, rather than working through the directory.
 
     .PARAMETER PassThru
         If specified, returns the created Run Profile object.
@@ -93,8 +97,8 @@ function New-JIMRunProfile {
     .EXAMPLE
         New-JIMRunProfile -ConnectedSystemId 1 -Name "Export" -RunType Export -MaxDeletes 100
 
-        Creates an Export Run Profile that stops after 100 deletes, leaving the remainder pending
-        for the next run.
+        Creates an Export Run Profile that attempts no deletes at all on a run where more than 100
+        are pending, leaving every one of them pending instead.
 
     .LINK
         Get-JIMRunProfile

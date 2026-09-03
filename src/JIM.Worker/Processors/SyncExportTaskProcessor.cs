@@ -584,8 +584,9 @@ public class SyncExportTaskProcessor
         }
 
         // Run Profile Safeguards (#1618): populated (zero when nothing was withheld) on every Export
-        // run. Whenever the ledger's Reserve algorithm withheld anything of a type, it had already
-        // consumed the whole of that type's limit, so the limit itself is what was "attempted".
+        // run. A run that would exceed a limit attempts none of that change type; the withheld count
+        // is therefore the whole of what was pending for that type at the start of the run, not a
+        // partial figure.
         _activity.ExportCreatesWithheld = result.CreatesWithheld;
         _activity.ExportUpdatesWithheld = result.UpdatesWithheld;
         _activity.ExportDeletesWithheld = result.DeletesWithheld;

@@ -220,6 +220,15 @@ public interface IConnectedSystemRepository
     public Task<int> GetExecutableExportCountAsync(int connectedSystemId);
 
     /// <summary>
+    /// Run Profile Safeguards (#1618): the count of executable Pending Exports per change type,
+    /// using the same database-level filtering as <see cref="GetExecutableExportCountAsync"/> (one
+    /// GROUP BY over the identical predicate, not three separate counts). Read once at the start of
+    /// an Export run so the ledger can decide, per type, whether the whole type is withheld this run.
+    /// A change type with nothing pending is absent from the dictionary.
+    /// </summary>
+    public Task<Dictionary<PendingExportChangeType, int>> GetExecutableExportCountsByChangeTypeAsync(int connectedSystemId);
+
+    /// <summary>
     /// Retrieves a single batch of Pending Exports that are ready for execution, using AsNoTracking
     /// for minimal memory overhead. Uses the same database-level filtering as <see cref="GetExecutableExportsAsync"/>.
     /// Pages via keyset pagination ordered by (CreatedAt, Id) so batch collection stays a single
@@ -229,8 +238,12 @@ public interface IConnectedSystemRepository
     /// <param name="take">Maximum number of rows to return.</param>
     /// <param name="afterCreatedAt">CreatedAt of the last row of the previous batch, or null to start from the beginning.</param>
     /// <param name="afterId">Id of the last row of the previous batch, or null to start from the beginning.</param>
+    /// <param name="excludedChangeTypes">Run Profile Safeguards (#1618): change types withheld for the
+    /// whole run. Excluded at the database level so paging never reads, and never has to skip past,
+    /// rows this run will not attempt; null or empty excludes nothing.</param>
     /// <returns>Untracked Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId);
+    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+        IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null);
 
     /// <summary>
     /// Collects all remaining executable exports with unresolved references (deferred) strictly
