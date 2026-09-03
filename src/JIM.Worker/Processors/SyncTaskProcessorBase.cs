@@ -4649,12 +4649,19 @@ public abstract class SyncTaskProcessorBase
                 connectedSystemObject.DateJoined = null;
                 Log.Verbose("HandleCsoOutOfScopeAsync: Broke join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvoId);
 
-                // Apply pending attribute changes and update MVO (skip when MVO is about to be
-                // deleted immediately — the update would be a wasted database round trip).
+                // Apply pending attribute changes and queue the MVO onto the page-flush batch update
+                // (skip when MVO is about to be deleted immediately - the update would be a wasted
+                // database round trip). QueueMvoForUpdate defers persistence to
+                // PersistPendingMetaverseObjectsAsync -> UpdateMetaverseObjectsAsync rather than saving
+                // mid-page: an immediate context-wide SaveChangesAsync here early-inserts this page's
+                // freshly created RPEIs (still tracked on the shared Activity), which then collides with
+                // the page flush's own raw-SQL RPEI insert (#1610; same mechanism as #1613's grace-period
+                // fix). See QueueMvoForUpdate's doc comment for the full mechanism, including how it
+                // consolidates with an MVO already queued for a grace-period deletion marker above.
                 if (!skipRecallForImmediateDeletion)
                 {
                     ApplyPendingMetaverseObjectAttributeChanges(mvo);
-                    await _syncRepo.UpdateMetaverseObjectAsync(mvo);
+                    QueueMvoForUpdate(mvo);
                 }
 
                 return MetaverseObjectChangeResult.DisconnectedOutOfScope(
