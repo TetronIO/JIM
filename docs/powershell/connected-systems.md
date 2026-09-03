@@ -207,6 +207,30 @@ Get-JIMConnectedSystem -All |
     Select-Object Name, ParkedInitialPasswordCount, ExpiredInitialPasswordCount
 ```
 
+#### Stranded-value sweep (ById only)
+
+Whether a stranded-value sweep is armed following a Connector Space clear, and what it is waiting for. See
+[Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space).
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `StrandedValueSweepArmedAt` | `datetime?` | When the Connector Space was last cleared, or `$null` if no sweep is armed |
+| `LastSuccessfulFullImportCompletedAt` | `datetime?` | When the most recent Full Import of this Connected System completed successfully, or `$null` if none ever has |
+
+The sweep runs at the first Full Synchronisation after `LastSuccessfulFullImportCompletedAt` is later than
+`StrandedValueSweepArmedAt`. A Full Synchronisation run before that leaves the arming in place and states so
+on its Activity.
+
+```powershell title="Find systems with a stranded-value sweep waiting on a Full Import"
+Get-JIMConnectedSystem |
+    ForEach-Object { Get-JIMConnectedSystem -Id $_.Id } |
+    Where-Object {
+        $_.StrandedValueSweepArmedAt -and
+        (-not $_.LastSuccessfulFullImportCompletedAt -or $_.LastSuccessfulFullImportCompletedAt -le $_.StrandedValueSweepArmedAt)
+    } |
+    Select-Object Name, StrandedValueSweepArmedAt, LastSuccessfulFullImportCompletedAt
+```
+
 !!! warning "Check `IsDeterminable` before treating `HasPendingChanges` as false"
     `HasPendingChanges` is also `$false` when JIM cannot tell: when the Connected System has never completed a Full
     Synchronisation, and when configuration change tracking is switched off. Scripts that gate a run on
@@ -1443,10 +1467,10 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 
 - Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation.
 - Removes all CSOs, attribute values, Pending Exports, and deferred references from the Connected System.
-- Metaverse Objects are **not** deleted; their links to this Connected System are severed.
+- Metaverse Objects are **not** deleted by the clear itself; their links to this Connected System are severed.
 - By default, change history is also deleted. Use `-KeepChangeHistory` to retain it for auditing purposes.
 - Without `-Wait`, the cmdlet returns as soon as the clear is queued; a script that immediately re-imports, or reads the Connector Space back, races the clear task.
-- The clear arms a stranded-value sweep that runs automatically at this Connected System's next Full Synchronisation, recalling any Metaverse attribute value the system contributed whose object never returned. Run a Full Import before that synchronisation so objects that do return can reclaim their values first. See [Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space).
+- The clear records which Metaverse Objects were joined and arms the stranded-value sweep, which runs automatically at this Connected System's next Full Synchronisation once a Full Import has completed successfully: it recalls any Metaverse attribute value the system contributed whose object never returned, and applies that object type's Deletion Rule to objects that never returned. Run a Full Import before that synchronisation so objects that do return can reclaim their values and avoid the Deletion Rule firing on them. If far fewer objects return than were cleared, the sweep refuses rather than deleting most of the population; see `Sync.PostClearReconciliation.MaxMissingPercent` in [`Get-JIMServiceSetting`](service-settings.md). See [Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space).
 
 ---
 

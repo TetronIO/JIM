@@ -26,16 +26,32 @@
         - Clear an already-empty connector space (should succeed without error)
         - Verify clearing one CS does not affect CSOs in another CS
 
-    Test 4: Stranded-value sweep after clear-then-partial-re-import
-        - Import and synchronise a full baseline, then clear the connector space (queued, -Wait)
-        - Re-import the CSV with one previously-present employee removed, then run a Full Sync
-        - Assert: the Full Synchronisation Activity Message reports "Stranded-value sweep executed"
-        - Assert: the departed employee's Metaverse Object is preserved as last known state
-          (this scenario's topology leaves it with no remaining CSV/import join, only its
-          already-provisioned LDAP/Cross-Domain target joins, so the #1570 last-known-state
-          preservation gate applies rather than recall/re-election)
+    Test 4: Post-clear reconciliation after clear-then-partial-re-import (#1605 layers 1 and 2)
+        - Import and synchronise a full baseline
+        - Set the User Metaverse Object Type's Deletion Rule to WhenAuthoritativeSourceDisconnected,
+          listing the CSV system as the sole authoritative source in AllSourcesDisconnect mode, keeping
+          its existing 7-day grace period: this makes the rule fire on the CSV system's disconnection
+          even though the departing employee's already-provisioned LDAP/Cross-Domain target joins remain
+          (WhenLastConnectorDisconnected, this scenario's default, never would - see PRD Scenario 3)
+        - Clear the connector space (queued, -Wait): arms the sweep
+        - Run a Full Synchronisation BEFORE any re-import: assert the sweep stays armed and the
+          Activity states it was skipped, because no Full Import has completed since the clear
+        - Remove one employee from the CSV (the Nano template's 3 users make this a 33% shortfall,
+          above the default 10% threshold), Full Import, then Full Synchronisation: the #1605
+          Functional Requirement 9 shortfall check refuses the reconciliation
+        - Assert: the Full Synchronisation Activity Message reports "Stranded-value sweep refused"
+          and the arming is still set
+        - Raise Sync.PostClearReconciliation.MaxMissingPercent to 50 and run another Full
+          Synchronisation: the shortfall no longer refuses, so the sweep executes
+        - Assert: the Full Synchronisation Activity Message reports "Stranded-value sweep executed",
+          the arming is cleared and LastSuccessfulFullImportCompletedAt is stamped
+        - Assert: the departed employee's Metaverse Object still exists, is pending deletion (marked
+          by the Deletion Rule evaluation, the CSV system named as trigger, its 7-day grace period
+          honoured) and its values are preserved as before
         - Assert: a surviving employee's Metaverse Object and values are unaffected
-        - Assert: a second Full Synchronisation does not report another sweep (flag disarmed)
+        - Assert: a further Full Synchronisation does not report another sweep (arming cleared)
+        - Restores the threshold setting and the User type's Deletion Rule (captured before the
+          change) afterwards, so later scenarios are unaffected
 
 .PARAMETER Step
     Which test step to execute
@@ -356,9 +372,11 @@ try {
     # Test 4: Stranded-value sweep after clear-then-partial-re-import
     # =============================================================================================================
     if ($Step -eq "StrandedSweep" -or $Step -eq "All") {
-        Write-TestSection "Test 4: Stranded-Value Sweep After Clear-Then-Partial-Re-Import"
+        Write-TestSection "Test 4: Post-Clear Reconciliation After Clear-Then-Partial-Re-Import"
 
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $maxMissingPercentKey = "Sync.PostClearReconciliation.MaxMissingPercent"
+        $userTypeGracePeriod = [TimeSpan]::FromDays(7)
 
         # Step 4a: Establish a known baseline (works whether the connector space is already
         # empty, e.g. after Test 3, or this test is run standalone via -Step StrandedSweep)
@@ -388,36 +406,89 @@ try {
         $survivingMvoId = $survivingMvoBefore.id
         $survivingDisplayNameBefore = ($survivingMvoBefore.attributeValues | Where-Object { $_.attributeName -eq 'Display Name' }).stringValue
 
-        # Step 4b: Clear the connector space (queued, -Wait) - arms the stranded-value sweep flag
-        Write-TestStep "4b" "Clear connector space (arms the stranded-value sweep)"
+        # Step 4b: Give the User type an authoritative-source rule that fires on the CSV system's
+        # disconnection alone, even though the departing employee's already-provisioned LDAP and
+        # Cross-Domain target joins remain (WhenLastConnectorDisconnected, this type's default per
+        # Setup-Scenario1, never would - see PRD Scenario 3). Keep its existing 7-day grace period.
+        Write-TestStep "4b" "Set the User type's Deletion Rule to fire on the CSV system alone"
+        $userType = Get-JIMMetaverseObjectType -Name "User"
+        Assert-NotNull -Value $userType -Message "The built-in User Metaverse Object Type exists"
+        # Capture the type's current deletion settings so step 4n restores exactly what the scenario
+        # setup configured, whatever that is (Setup-Scenario1 has changed its baseline before, #1614).
+        $userTypeBefore = Get-JIMMetaverseObjectType -Id $userType.id
+        Assert-NotNull -Value $userTypeBefore.deletionRule -Message "The User type's current Deletion Rule is readable for later restoration"
+        Set-JIMMetaverseObjectType -Id $userType.id `
+            -DeletionRule WhenAuthoritativeSourceDisconnected `
+            -DeletionTriggerConnectedSystemIds $config.CSVSystemId `
+            -DeletionTriggerMode AllSourcesDisconnect `
+            -DeletionGracePeriod $userTypeGracePeriod | Out-Null
+
+        # Step 4c: Clear the connector space (queued, -Wait) - arms the sweep
+        Write-TestStep "4c" "Clear connector space (arms the post-clear reconciliation sweep)"
         $clearResult4 = Clear-JIMConnectedSystem -Id $config.CSVSystemId -Force -Wait -Timeout 300
         Assert-ValidActivityId -ActivityId $clearResult4.ActivityId -Message "Clear returned a valid Activity id"
 
-        # Step 4c: Remove the departing employee from the source CSV, so re-import returns everyone else
-        Write-TestStep "4c" "Remove one employee from the source CSV"
+        # Step 4d: A Full Synchronisation run BEFORE any re-import must find the #1605 gate closed
+        # (no Full Import of this system has completed successfully since the clear): the sweep
+        # must not run, must stay armed, and the Activity must say why.
+        Write-TestStep "4d" "Full Synchronisation before any re-import (gate closed, sweep skipped)"
+        $gatedSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $gatedSyncResult.activityId -Name "CSV Full Sync (Test 4, before re-import, gate closed)"
+        $gatedSyncActivity = Get-JIMActivity -Id $gatedSyncResult.activityId
+        Assert-Condition -Condition ($gatedSyncActivity.message -like '*skipped: no Full Import*') -Message "Full Synchronisation Activity Message reports the sweep was skipped (got: $($gatedSyncActivity.message))"
+        $csvSystemAfterGatedSync = Get-JIMConnectedSystem -Id $config.CSVSystemId
+        Assert-NotNull -Value $csvSystemAfterGatedSync.strandedValueSweepArmedAt -Message "The sweep remains armed after a Full Synchronisation run before any re-import"
+
+        # Step 4e: Remove the departing employee from the source CSV, so re-import returns everyone
+        # else. The Nano template's 3 users make this a 33% shortfall, above the default 10% threshold.
+        Write-TestStep "4e" "Remove one employee from the source CSV"
         $partialCsv = @($baselineCsvRows | Where-Object { $_.employeeId -ne $departingEmployeeId })
         Assert-Equal -Expected ($baselineCsvRows.Count - 1) -Actual $partialCsv.Count -Message "Partial CSV has one fewer row than baseline"
         $partialCsv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         Copy-CsvToConnectorFiles -SourcePath $csvPath
         Write-Host "  Removed employeeId $departingEmployeeId from CSV" -ForegroundColor Gray
 
-        # Step 4d: Full Import + Full Sync of the partial CSV - the Full Sync run's Activity
-        # carries the sweep's outcome, per #1549/#1570
-        Write-TestStep "4d" "Full Import and Full Synchronisation of the partial CSV"
+        # Step 4f: Full Import + Full Sync of the partial CSV - the #1605 Functional Requirement 9
+        # gate is now open (a Full Import has completed successfully since the clear), so the
+        # re-join shortfall check runs and, at 33% missing against the default 10% threshold, refuses.
+        Write-TestStep "4f" "Full Import and Full Synchronisation of the partial CSV (shortfall refuses)"
         $partialImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $partialImportResult.activityId -Name "CSV Full Import (Test 4 partial re-import)"
         $partialImportStats = Get-JIMActivityStats -ActivityId $partialImportResult.activityId
         Assert-Equal -Expected ($baselineCsvRows.Count - 1) -Actual $partialImportStats.totalCsoAdds -Message "Partial re-import created a CSO for every surviving employee (got $($partialImportStats.totalCsoAdds) adds)"
 
+        $refusedSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $refusedSyncResult.activityId -Name "CSV Full Sync (Test 4 partial re-import, sweep refused)"
+
+        # Step 4g: The Full Synchronisation Activity reports the refusal, and the arming is untouched.
+        Write-TestStep "4g" "Verify the Full Synchronisation Activity reports the refusal"
+        $refusedSyncActivity = Get-JIMActivity -Id $refusedSyncResult.activityId
+        Assert-Condition -Condition ($refusedSyncActivity.message -like '*Stranded-value sweep refused*') -Message "Full Synchronisation Activity Message reports the refusal (got: $($refusedSyncActivity.message))"
+        $csvSystemAfterRefusal = Get-JIMConnectedSystem -Id $config.CSVSystemId
+        Assert-NotNull -Value $csvSystemAfterRefusal.strandedValueSweepArmedAt -Message "The sweep remains armed after a refused reconciliation"
+
+        # Step 4h: Raise the shortfall threshold so the same 33% missing no longer refuses.
+        Write-TestStep "4h" "Raise the re-join shortfall threshold to 50%"
+        Set-JIMServiceSetting -Key $maxMissingPercentKey -Value "50" | Out-Null
+
+        # Step 4i: Run the Full Synchronisation again - the #1605 gate is still open and the shortfall
+        # no longer refuses, so the sweep executes: value recall (#1549/#1570) and Deletion Rule
+        # evaluation (#1605 Functional Requirement 7) both run.
+        Write-TestStep "4i" "Full Synchronisation again (sweep executes)"
         $partialSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $partialSyncResult.activityId -Name "CSV Full Sync (Test 4 partial re-import, sweep run)"
 
-        # Step 4e: The Full Synchronisation Activity reports the sweep
-        Write-TestStep "4e" "Verify the Full Synchronisation Activity reports the sweep"
+        # Step 4j: The Full Synchronisation Activity reports the sweep, and the Connected System's
+        # gate state confirms it: the arming is cleared, and the successful partial re-import's
+        # Full Import is recorded as the reason the gate opened.
+        Write-TestStep "4j" "Verify the Full Synchronisation Activity reports the sweep"
         $partialSyncActivity = Get-JIMActivity -Id $partialSyncResult.activityId
         Assert-Condition -Condition ($partialSyncActivity.message -like '*Stranded-value sweep executed*') -Message "Full Synchronisation Activity Message reports the sweep (got: $($partialSyncActivity.message))"
+        $csvSystemAfterSweep = Get-JIMConnectedSystem -Id $config.CSVSystemId
+        Assert-Condition -Condition ($null -eq $csvSystemAfterSweep.strandedValueSweepArmedAt) -Message "The sweep's arming is cleared once the gate opens and the sweep runs"
+        Assert-NotNull -Value $csvSystemAfterSweep.lastSuccessfulFullImportCompletedAt -Message "The successful partial re-import's Full Import stamped LastSuccessfulFullImportCompletedAt"
 
-        # Step 4f: The departing employee's Metaverse Object - topology check.
+        # Step 4k: The departing employee's Metaverse Object - topology and Deletion Rule check.
         #
         # This scenario's CSV system ("HR CSV Source") is the ONLY Connected System that ever
         # IMPORTS into these Metaverse Objects. Setup-Scenario1 also creates export
@@ -431,39 +502,57 @@ try {
         #
         # After the clear + partial re-import, the departing Metaverse Object therefore has NO
         # remaining CSV (import) join, but STILL holds its LDAP and Cross-Domain provisioned
-        # target joins: this is exactly PRD Scenario 3's "only provisioned targets remain"
-        # shape, not the more extreme "zero joins at all" case. Neither target system carries
-        # an enabled IMPORT Synchronisation Rule for the User type, so
-        # RemainingImportSourceEvaluator.AnyImportSourceRemainsAsync still answers false and the
-        # #1570 last-known-state preservation gate applies: the sweep PRESERVES the departing
-        # Metaverse Object's values rather than clearing them.
-        Write-TestStep "4f" "Verify the departing employee's values were preserved (#1570), not cleared"
+        # target joins. Values are preserved as last known state (#1570) exactly as before, because
+        # neither target system carries an enabled IMPORT Synchronisation Rule for the User type.
+        # But because step 4b made the CSV system the type's sole authoritative source in
+        # AllSourcesDisconnect mode, the Deletion Rule now fires on the CSV system's disconnection
+        # regardless of the remaining target joins (#1605 Functional Requirement 7): the object is
+        # marked pending deletion, with its 7-day grace period honoured and the CSV system recorded
+        # as the trigger.
+        Write-TestStep "4k" "Verify the departing employee's values were preserved and the object is pending deletion"
         $departingMvoAfter = Get-JIMMetaverseObject -Id $departingMvoId
-        Assert-NotNull -Value $departingMvoAfter -Message "Departing employee's Metaverse Object still exists after the sweep (preserved, not deleted)"
+        Assert-NotNull -Value $departingMvoAfter -Message "Departing employee's Metaverse Object still exists after the sweep (marked, not deleted, per the grace period)"
         $departingDisplayNameAfter = ($departingMvoAfter.attributeValues | Where-Object { $_.attributeName -eq 'Display Name' }).stringValue
         Assert-Equal -Expected $departingDisplayNameBefore -Actual $departingDisplayNameAfter -Message "Departing employee's Display Name value was preserved as last known state"
         $departingCsvJoinCount = Get-JoinedConnectedSystemObjectCount -MvoId $departingMvoId -ConnectedSystemId $config.CSVSystemId
         Assert-Condition -Condition ($departingCsvJoinCount -eq 0) -Message "Departing employee's Metaverse Object has no joined CSV Connected System Object (no import source remains; got $departingCsvJoinCount)"
         $departingTotalJoinCount = Get-JoinedConnectedSystemObjectCount -MvoId $departingMvoId
-        Assert-Condition -Condition ($departingTotalJoinCount -gt 0) -Message "Departing employee's Metaverse Object still has joined provisioned target Connected System Object(s) (got $departingTotalJoinCount; the PRD Scenario 3 shape driving the preservation case)"
+        Assert-Condition -Condition ($departingTotalJoinCount -gt 0) -Message "Departing employee's Metaverse Object still has joined provisioned target Connected System Object(s) (got $departingTotalJoinCount)"
+        Assert-Condition -Condition ($departingMvoAfter.isPendingDeletion -eq $true) -Message "Departing employee's Metaverse Object is pending deletion (got isPendingDeletion=$($departingMvoAfter.isPendingDeletion))"
+        Assert-NotNull -Value $departingMvoAfter.deletionEligibleDate -Message "Departing employee's Metaverse Object has a deletion-eligible date from the 7-day grace period"
+        Assert-Equal -Expected "HR CSV Source" -Actual $departingMvoAfter.deletionTriggeredBySystemName -Message "The CSV system is recorded as the Deletion Rule trigger (got: $($departingMvoAfter.deletionTriggeredBySystemName))"
 
-        # Step 4g: The surviving employee's Metaverse Object is untouched, and rejoined to the CSV system
-        Write-TestStep "4g" "Verify the surviving employee's values are intact"
+        # Step 4l: The surviving employee's Metaverse Object is untouched, and rejoined to the CSV system
+        Write-TestStep "4l" "Verify the surviving employee's values are intact"
         $survivingMvoAfter = Get-JIMMetaverseObject -Id $survivingMvoId
         Assert-NotNull -Value $survivingMvoAfter -Message "Surviving employee's Metaverse Object still exists"
         $survivingCsvJoinCount = Get-JoinedConnectedSystemObjectCount -MvoId $survivingMvoId -ConnectedSystemId $config.CSVSystemId
         Assert-Condition -Condition ($survivingCsvJoinCount -eq 1) -Message "Surviving employee's Metaverse Object rejoined exactly one CSV Connected System Object (got $survivingCsvJoinCount; confirms the Object Matching Rule rejoined the re-imported CSO to the existing Metaverse Object rather than projecting a duplicate)"
         $survivingDisplayNameAfter = ($survivingMvoAfter.attributeValues | Where-Object { $_.attributeName -eq 'Display Name' }).stringValue
         Assert-Equal -Expected $survivingDisplayNameBefore -Actual $survivingDisplayNameAfter -Message "Surviving employee's Display Name value is unchanged"
+        Assert-Condition -Condition ($survivingMvoAfter.isPendingDeletion -eq $false) -Message "Surviving employee's Metaverse Object is not pending deletion"
 
-        # Step 4h: A subsequent Full Synchronisation does NOT report another sweep (flag disarmed)
-        Write-TestStep "4h" "Verify a subsequent Full Synchronisation does not re-run the sweep"
-        $secondSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $secondSyncResult.activityId -Name "CSV Full Sync (Test 4, post-sweep run)"
-        $secondSyncActivity = Get-JIMActivity -Id $secondSyncResult.activityId
-        Assert-Condition -Condition ($secondSyncActivity.message -notlike '*Stranded-value sweep executed*') -Message "Second Full Synchronisation Activity Message does not report the sweep (flag was disarmed)"
+        # Step 4m: A further Full Synchronisation does NOT report another sweep (arming cleared)
+        Write-TestStep "4m" "Verify a further Full Synchronisation does not re-run the sweep"
+        $finalSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $finalSyncResult.activityId -Name "CSV Full Sync (Test 4, post-sweep run)"
+        $finalSyncActivity = Get-JIMActivity -Id $finalSyncResult.activityId
+        Assert-Condition -Condition ($finalSyncActivity.message -notlike '*Stranded-value sweep executed*') -Message "Further Full Synchronisation Activity Message does not report the sweep (arming was cleared)"
 
-        Write-Host "  ✓ Test 4 PASSED: Stranded-value sweep preserves/recalls values correctly after clear-then-partial-re-import" -ForegroundColor Green
+        # Step 4n: Restore the threshold setting and the User type's Deletion Rule, so later
+        # scenarios (and a re-run of this one) are unaffected.
+        Write-TestStep "4n" "Restore the threshold setting and the User type's Deletion Rule"
+        Reset-JIMServiceSetting -Key $maxMissingPercentKey | Out-Null
+        $restoreParams = @{
+            Id           = $userType.id
+            DeletionRule = [string]$userTypeBefore.deletionRule
+        }
+        if ($null -ne $userTypeBefore.deletionGracePeriod) { $restoreParams.DeletionGracePeriod = [TimeSpan]$userTypeBefore.deletionGracePeriod }
+        if ($userTypeBefore.deletionTriggerConnectedSystemIds) { $restoreParams.DeletionTriggerConnectedSystemIds = [int[]]$userTypeBefore.deletionTriggerConnectedSystemIds }
+        if ($null -ne $userTypeBefore.deletionTriggerMode) { $restoreParams.DeletionTriggerMode = [string]$userTypeBefore.deletionTriggerMode }
+        Set-JIMMetaverseObjectType @restoreParams | Out-Null
+
+        Write-Host "  ✓ Test 4 PASSED: post-clear reconciliation refuses on a shortfall, then recalls values and applies Deletion Rules once re-imported" -ForegroundColor Green
         $testResults.Steps += @{ Name = "StrandedSweep"; Success = $true }
     }
 

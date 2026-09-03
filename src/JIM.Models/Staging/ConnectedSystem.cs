@@ -189,13 +189,27 @@ public class ConnectedSystem : IAuditable
     /// <summary>
     /// Set when the Connector Space is cleared: clearing hard-deletes Connected System Objects without
     /// obsoletion, so Metaverse attribute values contributed by source objects that never return survive
-    /// with live provenance and no joined Connected System Object, indefinitely stranded (#1549). Consumed
-    /// by the next Full Synchronisation, which recalls the stranded values (surviving-contributor
-    /// re-election or a No Contributor clear, per the shipped #1537/#809 recall engine) and clears this flag
-    /// on completion. Default false; a migration self-heal sets it true for every existing system so
-    /// pre-feature strays are swept once.
+    /// with live provenance and no joined Connected System Object, indefinitely stranded (#1549). Holds the
+    /// UTC time of the clear that armed it; null means no sweep is armed. The next Full Synchronisation of
+    /// this system runs the stranded-value sweep (recalling the stranded values: surviving-contributor
+    /// re-election or a No Contributor clear, per the shipped #1537/#809 recall engine) only once
+    /// <see cref="LastSuccessfulFullImportCompletedAt"/> is later than this timestamp (#1605): a Full
+    /// Synchronisation run before a Full Import has genuinely rebuilt the Connector Space would otherwise
+    /// treat every previously joined object as departed. The sweep clears this back to null on completion;
+    /// an interrupted sweep leaves it set, so the arming survives a retry.
     /// </summary>
-    public bool StrandedValueSweepPending { get; set; }
+    public DateTime? StrandedValueSweepArmedAt { get; set; }
+
+    /// <summary>
+    /// The UTC time the most recent Full Import of this Connected System completed successfully (#1605):
+    /// Activity status Complete, or CompleteWithWarning where the warning came only from a connector-level
+    /// warning message with no object-level errors recorded. An import that completed with object-level
+    /// errors, completed with an unhandled error, failed, or was cancelled never stamps this, because an
+    /// object that failed to import was never staged, and the stranded-value sweep must not treat it as
+    /// departed. Compared against <see cref="StrandedValueSweepArmedAt"/> to gate the sweep; null means no
+    /// Full Import of this system has ever completed successfully.
+    /// </summary>
+    public DateTime? LastSuccessfulFullImportCompletedAt { get; set; }
 
     /// <summary>
     /// EF back-link.

@@ -2974,18 +2974,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
-    public async Task SetStrandedValueSweepPendingAsync(int connectedSystemId, bool pending)
+    public async Task SetStrandedValueSweepArmedAtAsync(int connectedSystemId, DateTime? armedAt)
     {
-        // A narrow status-mark update (exempt from the bulk column-list rule): a single scope flag, set by
-        // every clear and cleared by the sweep on completion. Deliberately no tracked-instance fix-up: the
-        // clear and sweep callers set the property on their own in-memory instance where they need it observed.
+        // A narrow status-mark update (exempt from the bulk column-list rule): a single scope timestamp,
+        // set by every clear and cleared (set null) by the sweep on completion. Deliberately no
+        // tracked-instance fix-up: the clear and sweep callers set the property on their own in-memory
+        // instance where they need it observed.
         if (Repository.Database.Database.IsRelational())
         {
             await Repository.Database.Database.ExecuteSqlRawAsync(
                 @"UPDATE ""ConnectedSystems""
-                  SET ""StrandedValueSweepPending"" = {0}
+                  SET ""StrandedValueSweepArmedAt"" = {0}
                   WHERE ""Id"" = {1}",
-                pending,
+                BulkSqlHelpers.NullableParam(armedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
                 connectedSystemId);
             return;
         }
@@ -2994,7 +2995,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var connectedSystem = await Repository.Database.ConnectedSystems
             .AsTracking()
             .SingleAsync(cs => cs.Id == connectedSystemId);
-        connectedSystem.StrandedValueSweepPending = pending;
+        connectedSystem.StrandedValueSweepArmedAt = armedAt;
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task SetLastSuccessfulFullImportCompletedAtAsync(int connectedSystemId, DateTime completedAt)
+    {
+        // A narrow status-mark update (exempt from the bulk column-list rule): a single scope timestamp,
+        // stamped by the worker whenever a Full Import run's Activity completes successfully. Deliberately
+        // no tracked-instance fix-up: the caller sets the property on its own in-memory instance too.
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectedSystems""
+                  SET ""LastSuccessfulFullImportCompletedAt"" = {0}
+                  WHERE ""Id"" = {1}",
+                completedAt,
+                connectedSystemId);
+            return;
+        }
+
+        // The in-memory test provider does not support raw SQL; narrow tracked fallback with the same semantics.
+        var connectedSystem = await Repository.Database.ConnectedSystems
+            .AsTracking()
+            .SingleAsync(cs => cs.Id == connectedSystemId);
+        connectedSystem.LastSuccessfulFullImportCompletedAt = completedAt;
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -6513,10 +6539,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Shared method for deleting CSOs and their immediate dependencies.
     /// Used by both ClearConnectedSystemObjects and DeleteConnectedSystem.
     /// </summary>
-    public async Task<ClearConnectedSystemResult> DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory)
+    public async Task<ClearConnectedSystemResult> DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory, bool recordJoinsForReconciliation)
     {
-        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Starting for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
-            connectedSystemId, deleteChangeHistory);
+        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Starting for Connected System {Id}, deleteChangeHistory={DeleteHistory}, recordJoinsForReconciliation={RecordJoins}",
+            connectedSystemId, deleteChangeHistory, recordJoinsForReconciliation);
 
         // Count Pending Exports and CSOs before deletion so we can report stats
         var pendingExportCount = await Repository.Database.PendingExports
@@ -6530,6 +6556,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // owns and commits its own transaction. Npgsql does not support nested transactions, hence the ownership check.
         var ownsTransaction = Repository.Database.Database.CurrentTransaction == null;
         await using var transaction = ownsTransaction ? await Repository.Database.Database.BeginTransactionAsync() : null;
+
+        // 0. Post-clear reconciliation (#1605): record which Metaverse Objects are joined to this system
+        // RIGHT NOW, before anything below removes the evidence. A re-clear before the sweep has consumed
+        // the previous set replaces it outright (delete then insert) rather than accumulating stale rows.
+        // Deliberately skipped for Connected System deletion (recordJoinsForReconciliation=false): the
+        // system is ceasing to exist, so there is nothing for a later sweep to reconcile against.
+        var joinRecordsWritten = 0;
+        if (recordJoinsForReconciliation)
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""ConnectorSpaceClearJoinRecords"" WHERE ""ConnectedSystemId"" = {0}",
+                connectedSystemId);
+
+            joinRecordsWritten = await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"INSERT INTO ""ConnectorSpaceClearJoinRecords"" (""ConnectedSystemId"", ""MetaverseObjectId"", ""ClearedAt"")
+                  SELECT DISTINCT ""ConnectedSystemId"", ""MetaverseObjectId"", {1}
+                  FROM ""ConnectedSystemObjects""
+                  WHERE ""ConnectedSystemId"" = {0} AND ""MetaverseObjectId"" IS NOT NULL",
+                connectedSystemId, DateTime.UtcNow);
+        }
 
         // 1. Delete PendingExportAttributeValueChanges (child of PendingExport)
         await Repository.Database.Database.ExecuteSqlRawAsync(
@@ -6620,14 +6666,65 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (ownsTransaction)
             await transaction!.CommitAsync();
 
-        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs",
-            connectedSystemId, pendingExportCount, csoCount);
+        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs, wrote {JoinRecords} reconciliation join record(s)",
+            connectedSystemId, pendingExportCount, csoCount, joinRecordsWritten);
 
         return new ClearConnectedSystemResult
         {
             PendingExportsRemoved = pendingExportCount,
-            ConnectedSystemObjectsRemoved = csoCount
+            ConnectedSystemObjectsRemoved = csoCount,
+            JoinRecordsWritten = joinRecordsWritten
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectorSpaceClearJoinRecords
+            .AsNoTracking()
+            .Where(r => r.ConnectedSystemId == connectedSystemId)
+            .Select(r => r.MetaverseObjectId)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync(int connectedSystemId)
+    {
+        // A single correlated NOT EXISTS query (EF translates the nested .Any() this way on PostgreSQL),
+        // so the #1605 shortfall check costs one round trip regardless of how many objects were recorded.
+        // Plain EF LINQ rather than raw SQL specifically so it also runs, unmodified, against the EF
+        // in-memory provider the workflow test harness uses.
+        return await Repository.Database.ConnectorSpaceClearJoinRecords
+            .AsNoTracking()
+            .Where(r => r.ConnectedSystemId == connectedSystemId)
+            .Where(r => !Repository.Database.ConnectedSystemObjects.Any(cso =>
+                cso.MetaverseObjectId == r.MetaverseObjectId && cso.ConnectedSystemId == connectedSystemId))
+            .Select(r => r.MetaverseObjectId)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteConnectorSpaceClearJoinRecordsAsync(int connectedSystemId)
+    {
+        // Reached from the end of every completed sweep (ExecuteStrandedValueSweepAsync), so the in-memory
+        // test provider's raw-SQL limitation applies here too; the established pattern (see
+        // SetStrandedValueSweepArmedAtAsync) is a narrow tracked fallback with the same semantics.
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""ConnectorSpaceClearJoinRecords"" WHERE ""ConnectedSystemId"" = {0}",
+                connectedSystemId);
+            return;
+        }
+
+        var records = await Repository.Database.ConnectorSpaceClearJoinRecords
+            .AsTracking()
+            .Where(r => r.ConnectedSystemId == connectedSystemId)
+            .ToListAsync();
+        if (records.Count == 0)
+            return;
+        Repository.Database.ConnectorSpaceClearJoinRecords.RemoveRange(records);
+        await Repository.Database.SaveChangesAsync();
     }
 
     public async Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false)
@@ -6671,7 +6768,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // 1. Delete all CSOs and their dependencies (also nulls the unresolved-reference and, on the preserve-history
         //    path, the change FKs that point at CSOs / CSO attribute values).
-        await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
+        await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory, recordJoinsForReconciliation: false);
 
         // 2. Sever audit and history foreign keys that reference rows deleted below. These rows are retained for
         //    audit; only the now-dead foreign key is nulled. They must be nulled before their targets are deleted.
@@ -6838,6 +6935,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // against the parent row, which bypasses the cascade and would hit a foreign key violation instead.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemPasswordPolicies"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 15b. Delete post-clear reconciliation join records (#1605). Step 1 above skips writing new ones
+        // for a deletion (recordJoinsForReconciliation=false), but a system deleted after an earlier clear
+        // may still hold rows from that clear; the foreign key to ConnectedSystems would cascade this
+        // anyway, but the sequence removes it explicitly like everything else, ahead of the system row.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectorSpaceClearJoinRecords"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
         // 16. Finally, delete the Connected System itself

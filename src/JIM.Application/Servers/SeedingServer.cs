@@ -1399,6 +1399,18 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        // Post-clear reconciliation (#1605) - the re-join shortfall threshold
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.PostClearReconciliationMaxMissingPercent,
+            DisplayName = "Post-clear reconciliation: maximum missing share",
+            Description = "The maximum share, as a percentage, of objects recorded at a Connector Space clear that may still be missing a re-join before the post-clear reconciliation sweep refuses to run. Above this, the sweep assumes the re-import was broken (a filter or base DN change) rather than a genuine mass departure, and refuses until you re-import the Connected System or raise this setting.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = "10",
+            IsReadOnly = false
+        });
+
         // Configuration change preview (#827) - where a preview runs
         await SeedSettingAsync(new ServiceSetting
         {

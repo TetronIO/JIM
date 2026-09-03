@@ -17,7 +17,8 @@ namespace JIM.Worker.Tests.Repositories;
 /// of the rule's Connected System (join-absence via a parameterised NOT EXISTS). The in-memory test
 /// provider has no real foreign keys and cannot express this predicate faithfully, so this needs a real
 /// provider (per the PRD's explicit requirement). Also covers the paired
-/// <c>SetStrandedValueSweepPendingAsync</c> status-mark update round-trip.
+/// <c>SetStrandedValueSweepArmedAtAsync</c> and <c>SetLastSuccessfulFullImportCompletedAtAsync</c> (#1605)
+/// status-mark update round-trips.
 /// </summary>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -176,7 +177,7 @@ public class StrandedValueSweepSelectorDatabaseTests
     }
 
     [Test]
-    public async Task SetStrandedValueSweepPendingAsync_RoundTripsTrueThenFalseAsync()
+    public async Task SetStrandedValueSweepArmedAtAsync_RoundTripsTimestampThenNullAsync()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         int connectedSystemId;
@@ -191,29 +192,63 @@ public class StrandedValueSweepSelectorDatabaseTests
             await seedCtx.SaveChangesAsync();
             connectedSystemId = system.Id;
 
-            Assert.That(system.StrandedValueSweepPending, Is.False, "precondition: a freshly created system is not armed");
+            Assert.That(system.StrandedValueSweepArmedAt, Is.Null, "precondition: a freshly created system is not armed");
         }
 
+        // Truncated to milliseconds: PostgreSQL's timestamptz has microsecond precision but Npgsql's default
+        // round trip is safe at millisecond granularity, and the test only cares that the exact value survives.
+        var armedAt = new DateTime(2026, 9, 3, 12, 34, 56, 789, DateTimeKind.Utc);
         await using (var setCtx = NewContext())
         {
             var repo = new ConnectedSystemRepository(new PostgresDataRepository(setCtx));
-            await repo.SetStrandedValueSweepPendingAsync(connectedSystemId, pending: true);
+            await repo.SetStrandedValueSweepArmedAtAsync(connectedSystemId, armedAt);
         }
 
         await using (var readCtx = NewContext())
         {
             var armed = await readCtx.ConnectedSystems.SingleAsync(cs => cs.Id == connectedSystemId);
-            Assert.That(armed.StrandedValueSweepPending, Is.True, "the flag must be set true");
+            Assert.That(armed.StrandedValueSweepArmedAt, Is.EqualTo(armedAt), "the arming must round-trip exactly");
         }
 
         await using (var clearCtx = NewContext())
         {
             var repo = new ConnectedSystemRepository(new PostgresDataRepository(clearCtx));
-            await repo.SetStrandedValueSweepPendingAsync(connectedSystemId, pending: false);
+            await repo.SetStrandedValueSweepArmedAtAsync(connectedSystemId, armedAt: null);
         }
 
         await using var finalCtx = NewContext();
         var cleared = await finalCtx.ConnectedSystems.SingleAsync(cs => cs.Id == connectedSystemId);
-        Assert.That(cleared.StrandedValueSweepPending, Is.False, "the flag must be cleared back to false");
+        Assert.That(cleared.StrandedValueSweepArmedAt, Is.Null, "the arming must be cleared back to null");
+    }
+
+    [Test]
+    public async Task SetLastSuccessfulFullImportCompletedAtAsync_RoundTripsTimestampAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        int connectedSystemId;
+        await using (var seedCtx = NewContext())
+        {
+            var definition = new ConnectorDefinition { Name = $"strand-import-def-{suffix}" };
+            seedCtx.ConnectorDefinitions.Add(definition);
+            await seedCtx.SaveChangesAsync();
+
+            var system = new ConnectedSystem { Name = $"strand-import-system-{suffix}", ConnectorDefinitionId = definition.Id };
+            seedCtx.ConnectedSystems.Add(system);
+            await seedCtx.SaveChangesAsync();
+            connectedSystemId = system.Id;
+
+            Assert.That(system.LastSuccessfulFullImportCompletedAt, Is.Null, "precondition: a freshly created system has never imported");
+        }
+
+        var completedAt = new DateTime(2026, 9, 3, 8, 15, 0, 0, DateTimeKind.Utc);
+        await using (var setCtx = NewContext())
+        {
+            var repo = new ConnectedSystemRepository(new PostgresDataRepository(setCtx));
+            await repo.SetLastSuccessfulFullImportCompletedAtAsync(connectedSystemId, completedAt);
+        }
+
+        await using var readCtx = NewContext();
+        var updated = await readCtx.ConnectedSystems.SingleAsync(cs => cs.Id == connectedSystemId);
+        Assert.That(updated.LastSuccessfulFullImportCompletedAt, Is.EqualTo(completedAt), "the timestamp must round-trip exactly");
     }
 }

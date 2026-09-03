@@ -199,7 +199,7 @@ public class SynchronisationControllerClearTests
         // The old synchronous inline path must never run: the clear happens only when the worker
         // processes the queued task.
         _mockConnectedSystemRepo.Verify(
-            r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(It.IsAny<int>(), It.IsAny<bool>()),
+            r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>()),
             Times.Never);
     }
 
@@ -232,7 +232,7 @@ public class SynchronisationControllerClearTests
         }
 
         _mockConnectedSystemRepo.Verify(
-            r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(It.IsAny<int>(), It.IsAny<bool>()),
+            r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>()),
             Times.Never);
     }
 

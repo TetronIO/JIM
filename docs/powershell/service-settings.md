@@ -59,6 +59,10 @@ Get-JIMServiceSetting -Key "ChangeTracking.CsoChanges.Enabled"
 Get-JIMServiceSetting | Where-Object { $_.Category -eq "Sync" }
 ```
 
+```powershell title="Check the post-clear reconciliation shortfall threshold"
+Get-JIMServiceSetting -Key "Sync.PostClearReconciliation.MaxMissingPercent"
+```
+
 ---
 
 ## Set-JIMServiceSetting
@@ -96,6 +100,10 @@ Set-JIMServiceSetting -Key "Sync.PageSize" -Value "500"
 
 ```powershell title="Set a TimeSpan value (history retention)"
 Set-JIMServiceSetting -Key "History.RetentionPeriod" -Value "90.00:00:00" -PassThru
+```
+
+```powershell title="Raise the post-clear reconciliation shortfall threshold to 50%"
+Set-JIMServiceSetting -Key "Sync.PostClearReconciliation.MaxMissingPercent" -Value "50"
 ```
 
 ### Notes

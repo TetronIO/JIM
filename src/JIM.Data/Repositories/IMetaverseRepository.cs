@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
@@ -351,6 +352,37 @@ public interface IMetaverseRepository
     /// <param name="deletionPolicySnapshotJson">The serialised decision-time MvoDeletionPolicySnapshot, or null when the policy facts could not be determined.</param>
     /// <returns>The number of MVOs updated.</returns>
     public Task<int> MarkMvosAsDisconnectedAsync(IEnumerable<Guid> mvoIds, int deletionTriggeredBySystemId, string deletionTriggeredBySystemName, string? deletionPolicySnapshotJson);
+
+    /// <summary>
+    /// Marks MVOs as disconnected with no triggering system (#1605): the state-convergent zero-join pass's
+    /// sibling of <see cref="MarkMvosAsDisconnectedAsync"/>, for objects given their type's Deletion Rule
+    /// from state (no joined Connected System Object at all) rather than from a specific system's
+    /// disconnection. Records the initiator triad from the run's Activity (there is no triggering system to
+    /// attribute it to) and the decision-time policy snapshot. MVOs already pending deletion are skipped so
+    /// an earlier decision's markers are never overwritten.
+    /// </summary>
+    /// <param name="mvoIds">The IDs of the MVOs to mark as disconnected.</param>
+    /// <param name="initiatedByType">The initiator type of the run that found the object had no connector remaining.</param>
+    /// <param name="initiatedById">The initiator id, when the initiator is a Person.</param>
+    /// <param name="initiatedByName">The initiator's display name snapshot.</param>
+    /// <param name="deletionPolicySnapshotJson">The serialised decision-time MvoDeletionPolicySnapshot, or null when the policy facts could not be determined.</param>
+    /// <returns>The number of MVOs updated.</returns>
+    public Task<int> MarkMvosAsDisconnectedWithNoTriggerAsync(IEnumerable<Guid> mvoIds, ActivityInitiatorType initiatedByType, Guid? initiatedById, string? initiatedByName, string? deletionPolicySnapshotJson);
+
+    /// <summary>
+    /// Pages through Projected Metaverse Objects that hold no joined Connected System Object at all, are not
+    /// already pending deletion, and whose type's Deletion Rule is state-convergent (When Last Connector
+    /// Disconnected, or When Authoritative Source Disconnected with no configured trigger sources or in the
+    /// all-sources trigger mode): the historical-strays half of the post-clear reconciliation sweep (#1605
+    /// Functional Requirement 10), which finds objects a clear predating the feature (or several
+    /// disconnections over time) left wholly orphaned with no deletion decision ever made. Specific-sources
+    /// mode is deliberately excluded: it is event-only, and evaluating it from state alone would delete
+    /// objects the rule was never meant to reach. Ordered by id for keyset paging; the caller loops with
+    /// <paramref name="afterId"/> as the cursor until an empty page is returned.
+    /// </summary>
+    /// <param name="afterId">The cursor: only objects with a greater id are returned. Pass <see cref="Guid.Empty"/> for the first page.</param>
+    /// <param name="take">The maximum number of objects to return.</param>
+    public Task<List<MetaverseObject>> GetStateConvergentZeroJoinMetaverseObjectsAsync(Guid afterId, int take);
 
     /// <summary>
     /// Gets MVOs that are pending deletion (have LastConnectorDisconnectedDate set but haven't been deleted yet).

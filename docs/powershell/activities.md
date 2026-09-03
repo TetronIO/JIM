@@ -73,6 +73,16 @@ An Activity that a [Schedule](../configuration/schedules.md) produced also carri
 
 All four are empty for work nobody scheduled.
 
+An Activity for a [Connector Space clear](../configuration/connected-systems.md#clearing-the-connector-space) carries what the clear did, retrieved with `-Id`:
+
+| Property | Type | Description |
+|---|---|---|
+| `ClearedConnectedSystemObjectCount` | `Int32` | How many Connected System Objects the clear deleted. |
+| `ClearedPendingExportCount` | `Int32` | How many Pending Exports to this Connected System the clear discarded. |
+| `ClearedJoinRecordCount` | `Int32` | How many Metaverse Objects were joined at the moment of the clear, and so recorded for the post-clear reconciliation to expect back. Not a removal. |
+
+All three are empty for every other kind of Activity.
+
 When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ExternalIdValue`, `DisplayName`, `ConnectedSystemObjectType`, `ObjectChangeType`, `ErrorType`, and `OutcomeSummary`.
 
 When using the **Follow** parameter set, progress renders to the host while following; when following ends, the final activity object is emitted (the same shape as **ById**).

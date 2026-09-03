@@ -1215,14 +1215,26 @@ public interface IConnectedSystemRepository
     public Task<int> ObsoleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
-    /// Sets or clears <see cref="ConnectedSystem.StrandedValueSweepPending"/> (#1549): a narrow single-column
-    /// status-mark update, set true by every successful Connector Space clear and cleared by the stranded-value
-    /// sweep on completion. Deliberately immune to context tracking behaviour: callers that need the change
-    /// reflected on an in-memory instance set the property themselves.
+    /// Sets or clears <see cref="ConnectedSystem.StrandedValueSweepArmedAt"/> (#1605, replacing the #1549
+    /// boolean flag): a narrow single-column status-mark update, set to the clear's UTC time by every
+    /// successful Connector Space clear, left untouched while a Full Synchronisation finds the gate closed,
+    /// and cleared (set null) by the stranded-value sweep on completion. Deliberately immune to context
+    /// tracking behaviour: callers that need the change reflected on an in-memory instance set the property
+    /// themselves.
     /// </summary>
-    /// <param name="connectedSystemId">The Connected System whose flag is being set.</param>
-    /// <param name="pending">The new value of the flag.</param>
-    public Task SetStrandedValueSweepPendingAsync(int connectedSystemId, bool pending);
+    /// <param name="connectedSystemId">The Connected System whose arming is being set.</param>
+    /// <param name="armedAt">The UTC time the sweep was armed, or null to clear the arming.</param>
+    public Task SetStrandedValueSweepArmedAtAsync(int connectedSystemId, DateTime? armedAt);
+
+    /// <summary>
+    /// Stamps <see cref="ConnectedSystem.LastSuccessfulFullImportCompletedAt"/> (#1605): a narrow
+    /// single-column status-mark update, set by the worker when a Full Import run's Activity completes
+    /// successfully (see the property's own XML doc for exactly what counts as successful). Deliberately
+    /// immune to context tracking behaviour: the caller sets the property on its own in-memory instance too.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose successful Full Import just completed.</param>
+    /// <param name="completedAt">The UTC time the Full Import's Activity completed.</param>
+    public Task SetLastSuccessfulFullImportCompletedAtAsync(int connectedSystemId, DateTime completedAt);
 
     /// <summary>
     /// Deletes the Pending Exports (and their attribute value changes) targeting the given Connected System
@@ -1498,8 +1510,13 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The ID of the Connected System.</param>
     /// <param name="deleteChangeHistory">If true, deletes ConnectedSystemObjectChanges. If false, nulls the CSO FK.</param>
-    /// <returns>Counts of Pending Exports and Connected System Objects removed.</returns>
-    Task<ClearConnectedSystemResult> DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory);
+    /// <param name="recordJoinsForReconciliation">Whether to record a <see cref="JIM.Models.Staging.ConnectorSpaceClearJoinRecord"/>
+    /// (#1605) for every joined Connected System Object as step zero of this method's own transaction, before
+    /// anything is removed. True for a Connector Space clear, whose join set the post-clear reconciliation
+    /// sweep needs; false for Connected System deletion, where recording joins for a system about to cease to
+    /// exist is pointless.</param>
+    /// <returns>Counts of Pending Exports, Connected System Objects and join records removed/written.</returns>
+    Task<ClearConnectedSystemResult> DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory, bool recordJoinsForReconciliation);
 
     /// <summary>
     /// Deletes a Connected System and all its related data using bulk SQL operations for performance.
@@ -1508,6 +1525,41 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The ID of the Connected System to delete.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false);
+
+    /// <summary>
+    /// The Metaverse Object ids recorded by <see cref="DeleteAllConnectedSystemObjectsAndDependenciesAsync"/>
+    /// for the given Connected System's most recent clear (#1605): the full recorded set, rejoined or not.
+    /// Used by the post-clear reconciliation sweep purely for the recorded count that anchors the re-join
+    /// shortfall percentage; <see cref="GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync"/>
+    /// is what the sweep evaluates against. Empty when the system has never been cleared with reconciliation
+    /// recording, or its record set has already been consumed and deleted.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose recorded join set is wanted.</param>
+    Task<List<Guid>> GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// The subset of <see cref="GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsAsync"/> that have NOT
+    /// rejoined this Connected System: no <see cref="JIM.Models.Staging.ConnectedSystemObject"/> with a
+    /// matching <c>MetaverseObjectId</c> and this system's id currently exists. Set-based (a single
+    /// correlated NOT EXISTS query, expressed as EF LINQ so it translates on PostgreSQL and runs unmodified
+    /// against the EF in-memory provider the workflow test harness uses) so the #1605 Functional Requirement
+    /// 9 shortfall check, and the Deletion Rule evaluation pass that follows it, cost one query each
+    /// regardless of how many objects were recorded at the clear. A Connector Space with 100,000 joined
+    /// objects at clear time must not pay 100,000 round trips before the sweep decides anything; only the
+    /// (much smaller, departures-bounded) objects this returns are looked up individually afterwards, for
+    /// their remaining joined systems.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose non-rejoined recorded objects are wanted.</param>
+    Task<List<Guid>> GetConnectorSpaceClearJoinRecordedMetaverseObjectIdsWithoutRejoinAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Deletes the given Connected System's <see cref="JIM.Models.Staging.ConnectorSpaceClearJoinRecord"/>
+    /// rows (#1605): called once the post-clear reconciliation sweep completes (the record has served its
+    /// purpose), and as a step of Connected System deletion (ahead of the system row itself, which the
+    /// record's foreign key would otherwise block).
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose join records are being removed.</param>
+    Task DeleteConnectorSpaceClearJoinRecordsAsync(int connectedSystemId);
 
     /// <summary>
     /// Gets the count of Synchronisation Rules for a Connected System.

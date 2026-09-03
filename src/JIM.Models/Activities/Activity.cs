@@ -485,6 +485,13 @@ public class Activity
     /// </summary>
     public int? ClearedConnectedSystemObjectCount { get; set; }
 
+    /// <summary>
+    /// For ClearConnectedSystem activities: count of objects recorded for the post-clear reconciliation
+    /// sweep (#1605), one per Connected System Object that was joined to a Metaverse Object at the moment
+    /// of the clear.
+    /// </summary>
+    public int? ClearedJoinRecordCount { get; set; }
+
     // results:
     // what would be useful here is to capture two levels of stats, depending on system settings:
     // - result item with operation type (create/update/delete) and link to the Metaverse Object

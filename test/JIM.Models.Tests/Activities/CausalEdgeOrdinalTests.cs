@@ -45,7 +45,8 @@ public class CausalEdgeOrdinalTests
         [CausalReasonCode.AuthoritativeSourceDisconnected] = 4,
         [CausalReasonCode.ExportCreateStaged] = 5,
         [CausalReasonCode.ExportUpdateStaged] = 6,
-        [CausalReasonCode.ExportDeleteStaged] = 7
+        [CausalReasonCode.ExportDeleteStaged] = 7,
+        [CausalReasonCode.NoConnectorRemainsStateConvergence] = 8
     };
 
     [Test]
