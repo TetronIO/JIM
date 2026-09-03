@@ -2974,18 +2974,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
-    public async Task SetStrandedValueSweepPendingAsync(int connectedSystemId, bool pending)
+    public async Task SetStrandedValueSweepArmedAtAsync(int connectedSystemId, DateTime? armedAt)
     {
-        // A narrow status-mark update (exempt from the bulk column-list rule): a single scope flag, set by
-        // every clear and cleared by the sweep on completion. Deliberately no tracked-instance fix-up: the
-        // clear and sweep callers set the property on their own in-memory instance where they need it observed.
+        // A narrow status-mark update (exempt from the bulk column-list rule): a single scope timestamp,
+        // set by every clear and cleared (set null) by the sweep on completion. Deliberately no
+        // tracked-instance fix-up: the clear and sweep callers set the property on their own in-memory
+        // instance where they need it observed.
         if (Repository.Database.Database.IsRelational())
         {
             await Repository.Database.Database.ExecuteSqlRawAsync(
                 @"UPDATE ""ConnectedSystems""
-                  SET ""StrandedValueSweepPending"" = {0}
+                  SET ""StrandedValueSweepArmedAt"" = {0}
                   WHERE ""Id"" = {1}",
-                pending,
+                BulkSqlHelpers.NullableParam(armedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
                 connectedSystemId);
             return;
         }
@@ -2994,7 +2995,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var connectedSystem = await Repository.Database.ConnectedSystems
             .AsTracking()
             .SingleAsync(cs => cs.Id == connectedSystemId);
-        connectedSystem.StrandedValueSweepPending = pending;
+        connectedSystem.StrandedValueSweepArmedAt = armedAt;
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task SetLastSuccessfulFullImportCompletedAtAsync(int connectedSystemId, DateTime completedAt)
+    {
+        // A narrow status-mark update (exempt from the bulk column-list rule): a single scope timestamp,
+        // stamped by the worker whenever a Full Import run's Activity completes successfully. Deliberately
+        // no tracked-instance fix-up: the caller sets the property on its own in-memory instance too.
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectedSystems""
+                  SET ""LastSuccessfulFullImportCompletedAt"" = {0}
+                  WHERE ""Id"" = {1}",
+                completedAt,
+                connectedSystemId);
+            return;
+        }
+
+        // The in-memory test provider does not support raw SQL; narrow tracked fallback with the same semantics.
+        var connectedSystem = await Repository.Database.ConnectedSystems
+            .AsTracking()
+            .SingleAsync(cs => cs.Id == connectedSystemId);
+        connectedSystem.LastSuccessfulFullImportCompletedAt = completedAt;
         await Repository.Database.SaveChangesAsync();
     }
 

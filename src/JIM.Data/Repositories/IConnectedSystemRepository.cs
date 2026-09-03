@@ -1215,14 +1215,26 @@ public interface IConnectedSystemRepository
     public Task<int> ObsoleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
-    /// Sets or clears <see cref="ConnectedSystem.StrandedValueSweepPending"/> (#1549): a narrow single-column
-    /// status-mark update, set true by every successful Connector Space clear and cleared by the stranded-value
-    /// sweep on completion. Deliberately immune to context tracking behaviour: callers that need the change
-    /// reflected on an in-memory instance set the property themselves.
+    /// Sets or clears <see cref="ConnectedSystem.StrandedValueSweepArmedAt"/> (#1605, replacing the #1549
+    /// boolean flag): a narrow single-column status-mark update, set to the clear's UTC time by every
+    /// successful Connector Space clear, left untouched while a Full Synchronisation finds the gate closed,
+    /// and cleared (set null) by the stranded-value sweep on completion. Deliberately immune to context
+    /// tracking behaviour: callers that need the change reflected on an in-memory instance set the property
+    /// themselves.
     /// </summary>
-    /// <param name="connectedSystemId">The Connected System whose flag is being set.</param>
-    /// <param name="pending">The new value of the flag.</param>
-    public Task SetStrandedValueSweepPendingAsync(int connectedSystemId, bool pending);
+    /// <param name="connectedSystemId">The Connected System whose arming is being set.</param>
+    /// <param name="armedAt">The UTC time the sweep was armed, or null to clear the arming.</param>
+    public Task SetStrandedValueSweepArmedAtAsync(int connectedSystemId, DateTime? armedAt);
+
+    /// <summary>
+    /// Stamps <see cref="ConnectedSystem.LastSuccessfulFullImportCompletedAt"/> (#1605): a narrow
+    /// single-column status-mark update, set by the worker when a Full Import run's Activity completes
+    /// successfully (see the property's own XML doc for exactly what counts as successful). Deliberately
+    /// immune to context tracking behaviour: the caller sets the property on its own in-memory instance too.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose successful Full Import just completed.</param>
+    /// <param name="completedAt">The UTC time the Full Import's Activity completed.</param>
+    public Task SetLastSuccessfulFullImportCompletedAtAsync(int connectedSystemId, DateTime completedAt);
 
     /// <summary>
     /// Deletes the Pending Exports (and their attribute value changes) targeting the given Connected System

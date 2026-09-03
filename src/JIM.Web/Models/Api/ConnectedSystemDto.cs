@@ -68,6 +68,20 @@ public class ConnectedSystemDetailDto
     public int? ExpiredInitialPasswordCount { get; set; }
 
     /// <summary>
+    /// When a stranded-value sweep was armed by a Connector Space clear, or null when no sweep is armed.
+    /// The sweep runs at the first Full Synchronisation of this Connected System after
+    /// <see cref="LastSuccessfulFullImportCompletedAt"/> is later than this timestamp; until then it stays
+    /// armed and a Full Synchronisation does nothing beyond ordinary synchronisation.
+    /// </summary>
+    public DateTime? StrandedValueSweepArmedAt { get; set; }
+
+    /// <summary>
+    /// When the most recent Full Import of this Connected System completed successfully, or null if none
+    /// ever has. An import that completed with object-level errors does not count.
+    /// </summary>
+    public DateTime? LastSuccessfulFullImportCompletedAt { get; set; }
+
+    /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
     /// </summary>
     /// <param name="entity">The Connected System entity.</param>
@@ -93,6 +107,8 @@ public class ConnectedSystemDetailDto
             ConfigurationDrift = configurationDrift == null ? null : ConfigurationDriftDto.FromStatus(configurationDrift),
             ParkedInitialPasswordCount = initialPasswordAttention?.ParkedCount,
             ExpiredInitialPasswordCount = initialPasswordAttention?.ExpiredCount,
+            StrandedValueSweepArmedAt = entity.StrandedValueSweepArmedAt,
+            LastSuccessfulFullImportCompletedAt = entity.LastSuccessfulFullImportCompletedAt,
             Id = entity.Id,
             Name = entity.Name,
             Description = entity.Description,

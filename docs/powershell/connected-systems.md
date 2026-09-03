@@ -207,6 +207,30 @@ Get-JIMConnectedSystem -All |
     Select-Object Name, ParkedInitialPasswordCount, ExpiredInitialPasswordCount
 ```
 
+#### Stranded-value sweep (ById only)
+
+Whether a stranded-value sweep is armed following a Connector Space clear, and what it is waiting for. See
+[Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space).
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `StrandedValueSweepArmedAt` | `datetime?` | When the Connector Space was last cleared, or `$null` if no sweep is armed |
+| `LastSuccessfulFullImportCompletedAt` | `datetime?` | When the most recent Full Import of this Connected System completed successfully, or `$null` if none ever has |
+
+The sweep runs at the first Full Synchronisation after `LastSuccessfulFullImportCompletedAt` is later than
+`StrandedValueSweepArmedAt`. A Full Synchronisation run before that leaves the arming in place and states so
+on its Activity.
+
+```powershell title="Find systems with a stranded-value sweep waiting on a Full Import"
+Get-JIMConnectedSystem |
+    ForEach-Object { Get-JIMConnectedSystem -Id $_.Id } |
+    Where-Object {
+        $_.StrandedValueSweepArmedAt -and
+        (-not $_.LastSuccessfulFullImportCompletedAt -or $_.LastSuccessfulFullImportCompletedAt -le $_.StrandedValueSweepArmedAt)
+    } |
+    Select-Object Name, StrandedValueSweepArmedAt, LastSuccessfulFullImportCompletedAt
+```
+
 !!! warning "Check `IsDeterminable` before treating `HasPendingChanges` as false"
     `HasPendingChanges` is also `$false` when JIM cannot tell: when the Connected System has never completed a Full
     Synchronisation, and when configuration change tracking is switched off. Scripts that gate a run on
