@@ -1139,6 +1139,9 @@ try {
             Assert-ActivityItemsHaveOutcomeSummary -ActivityId $srpRekeySync.activityId -Name "Full Sync (SamePageRejoinCancellation)" -ExpectedOutcomeType "Disconnected"
             Assert-ActivityItemsHaveOutcomeSummary -ActivityId $srpRekeySync.activityId -Name "Full Sync (SamePageRejoinCancellation)" -ExpectedOutcomeType "Joined"
             Assert-ActivityItemsHaveOutcomeSummary -ActivityId $srpRekeySync.activityId -Name "Full Sync (SamePageRejoinCancellation)" -ExpectedOutcomeType "MvoDeletionScheduled"
+            # The cancellation is on the record too (#1620): the rejoining item carries MvoDeletionCancelled
+            # under its Joined outcome, so the Lineage says why the object survived its scheduled deletion.
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $srpRekeySync.activityId -Name "Full Sync (SamePageRejoinCancellation)" -ExpectedOutcomeType "MvoDeletionCancelled"
             Write-Host "  PASSED: execution items recorded Disconnected, Joined and MvoDeletionScheduled outcomes" -ForegroundColor Green
 
             # Assert 5: nothing deprovisioned the directory account (the HR-side rekey never touched LDAP).
