@@ -505,6 +505,24 @@ public class ActivityDetailDto
     public int? ClearedJoinRecordCount { get; set; }
 
     /// <summary>
+    /// Run Profile Safeguards (#1618): how many creates the Run Profile's Max creates limit withheld
+    /// this run. Populated (zero when nothing was withheld) on every Export activity; null otherwise.
+    /// </summary>
+    public int? ExportCreatesWithheld { get; set; }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): how many updates the Run Profile's Max updates limit withheld
+    /// this run. Populated (zero when nothing was withheld) on every Export activity; null otherwise.
+    /// </summary>
+    public int? ExportUpdatesWithheld { get; set; }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): how many deletes the Run Profile's Max deletes limit withheld
+    /// this run. Populated (zero when nothing was withheld) on every Export activity; null otherwise.
+    /// </summary>
+    public int? ExportDeletesWithheld { get; set; }
+
+    /// <summary>
     /// Creates a detail DTO from an Activity entity.
     /// </summary>
     public static ActivityDetailDto FromEntity(
@@ -552,7 +570,10 @@ public class ActivityDetailDto
             ConfigurationChangeSnapshot = ConfigurationSnapshotService.Deserialise(activity.ConfigurationChangeSnapshot),
             ClearedPendingExportCount = activity.ClearedPendingExportCount,
             ClearedConnectedSystemObjectCount = activity.ClearedConnectedSystemObjectCount,
-            ClearedJoinRecordCount = activity.ClearedJoinRecordCount
+            ClearedJoinRecordCount = activity.ClearedJoinRecordCount,
+            ExportCreatesWithheld = activity.ExportCreatesWithheld,
+            ExportUpdatesWithheld = activity.ExportUpdatesWithheld,
+            ExportDeletesWithheld = activity.ExportDeletesWithheld
         };
     }
 }

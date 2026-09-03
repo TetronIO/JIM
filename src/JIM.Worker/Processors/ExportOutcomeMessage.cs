@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Transactional;
+
 namespace JIM.Worker.Processors;
 
 /// <summary>
@@ -30,4 +32,29 @@ internal static class ExportOutcomeMessage
 
     internal static string ForPreview(int pendingExports) =>
         $"Preview complete: {pendingExports:N0} export(s) would be processed";
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): the sentence appended to the Activity's warning for each change
+    /// type whose limit was reached this run.
+    /// </summary>
+    /// <param name="type">The change type whose limit stopped further processing.</param>
+    /// <param name="attempted">How many of this type were attempted, which is the Run Profile's own
+    /// limit: the ledger only ever withholds once the whole of that limit has been consumed.</param>
+    /// <param name="withheld">How many of this type remain Pending, untouched, for the next run.</param>
+    internal static string ForWithheld(PendingExportChangeType type, int attempted, int withheld)
+    {
+        var (singular, plural) = type switch
+        {
+            PendingExportChangeType.Create => ("create", "creates"),
+            PendingExportChangeType.Update => ("update", "updates"),
+            PendingExportChangeType.Delete => ("delete", "deletes"),
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported change type for a withheld-export warning.")
+        };
+
+        var remaining = withheld == 1
+            ? $"1 {singular} remains pending"
+            : $"{withheld:N0} {plural} remain pending";
+
+        return $"Stopped processing {plural} after {attempted:N0}, this Run Profile's limit; {remaining}.";
+    }
 }

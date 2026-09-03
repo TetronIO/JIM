@@ -50,6 +50,44 @@
     </MudStack>
 }
 
+@* ─── Run Profile Safeguards withheld-changes notice (#1618) ───
+   Derived from the most recent completed Export Activity, so a backlog of deliberately unprocessed
+   changes cannot sit unnoticed behind a warning-status Activity on a busy Operations page. *@
+@if (_connectedSystem != null && _latestExportActivity is { } exportActivity &&
+     (exportActivity.ExportCreatesWithheld ?? 0) + (exportActivity.ExportUpdatesWithheld ?? 0) + (exportActivity.ExportDeletesWithheld ?? 0) is var totalWithheld and > 0)
+{
+    var exportRunProfile = _connectedSystem.RunProfiles?.FirstOrDefault(rp => rp.Id == exportActivity.ConnectedSystemRunProfileId);
+    var limitsReached = new List<string>();
+    if ((exportActivity.ExportCreatesWithheld ?? 0) > 0 && exportRunProfile?.MaxCreates is { } maxCreates)
+        limitsReached.Add($"Max creates of {maxCreates:N0}");
+    if ((exportActivity.ExportUpdatesWithheld ?? 0) > 0 && exportRunProfile?.MaxUpdates is { } maxUpdates)
+        limitsReached.Add($"Max updates of {maxUpdates:N0}");
+    if ((exportActivity.ExportDeletesWithheld ?? 0) > 0 && exportRunProfile?.MaxDeletes is { } maxDeletes)
+        limitsReached.Add($"Max deletes of {maxDeletes:N0}");
+    var limitsText = limitsReached.Count > 0 ? string.Join(" and ", limitsReached) : "its limit";
+    var changeNoun = totalWithheld == 1 ? "change" : "changes";
+
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-6">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
+            <span>
+                The last export withheld @totalWithheld.ToString("N0") @changeNoun:
+                <strong>@exportActivity.TargetName</strong> reached its @limitsText.
+                They remain pending and will be attempted on the next export run.
+            </span>
+            <MudStack Row Spacing="2">
+                <MudButton Variant="Variant.Text" Color="Color.Inherit" DropShadow="false"
+                           Href="@($"/activity/{exportActivity.Id}")">
+                    View Activity
+                </MudButton>
+                <MudButton Variant="Variant.Text" Color="Color.Inherit" DropShadow="false"
+                           Href="@($"/admin/connected-systems/{_connectedSystem.Id}?t=run-profiles")">
+                    Edit Run Profile
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudAlert>
+}
+
 @* ─── Deletion fence notice (#809) ───
    A system with Status = Deleting is fenced: excluded from scheduled runs, its deletion either underway on
    the worker or stopped partway. The banner is the page's authority on that state; the Danger Zone's delete
@@ -278,6 +316,10 @@ else if (_drift is { TrackingDisabled: true })
     private int _pendingExportCount;
     private int _connectedSystemObjectCount;
     private int _obsoleteConnectedSystemObjectCount;
+
+    // Run Profile Safeguards (#1618): the most recent completed Export Activity, so a backlog of
+    // deliberately unprocessed changes cannot sit unnoticed behind a warning-status Activity.
+    private Activity? _latestExportActivity;
     private int _changeCount;
     private ConfigurationDriftStatus? _drift;
     private List<BreadcrumbItem> _breadcrumbs = null!;
@@ -345,6 +387,7 @@ else if (_drift is { TrackingDisabled: true })
 
         _pendingExportCount = await jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
         _connectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(Id);
+        _latestExportActivity = await jim.Activities.GetLatestCompletedExportActivityAsync(Id);
         _obsoleteConnectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectObsoleteCountAsync(Id);
         _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(Id);
         _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, Id, 1, 1)).TotalResults;

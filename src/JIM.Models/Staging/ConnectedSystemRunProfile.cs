@@ -91,6 +91,30 @@ public class ConnectedSystemRunProfile : IAuditable
     public bool VerifyImportContentHashes { get; set; }
 
     /// <summary>
+    /// Run Profile Safeguards (#1618): the maximum number of creates an Export run may attempt
+    /// against the Connected System. Only honoured when <see cref="RunType"/> is
+    /// <see cref="ConnectedSystemRunType.Export"/>. Null means no limit. Zero is a valid limit:
+    /// the run attempts none of this change type and leaves every create Pending.
+    /// </summary>
+    public int? MaxCreates { get; set; }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): the maximum number of updates an Export run may attempt
+    /// against the Connected System. Only honoured when <see cref="RunType"/> is
+    /// <see cref="ConnectedSystemRunType.Export"/>. Null means no limit. Zero is a valid limit:
+    /// the run attempts none of this change type and leaves every update Pending.
+    /// </summary>
+    public int? MaxUpdates { get; set; }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): the maximum number of deletes an Export run may attempt
+    /// against the Connected System. Only honoured when <see cref="RunType"/> is
+    /// <see cref="ConnectedSystemRunType.Export"/>. Null means no limit. Zero is a valid limit:
+    /// the run attempts none of this change type and leaves every delete Pending.
+    /// </summary>
+    public int? MaxDeletes { get; set; }
+
+    /// <summary>
     /// Back-link to dependent activity objects.
     /// Optional relationship.
     /// Used by EntityFramework.

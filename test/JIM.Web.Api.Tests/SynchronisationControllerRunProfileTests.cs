@@ -306,6 +306,90 @@ public class SynchronisationControllerRunProfileTests
 
     #endregion
 
+    #region CreateRunProfileAsync tests (Run Profile Safeguards, #1618)
+
+    [Test]
+    public async Task CreateRunProfileAsync_SafeguardsOnExportRunProfile_PersistsAndRoundTrips()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = connectedSystemId,
+            Name = "Test System",
+            ConnectorDefinition = new ConnectorDefinition { Name = "Test Connector", SupportsExport = true }
+        };
+        var request = new CreateRunProfileRequest
+        {
+            Name = "Export",
+            RunType = ConnectedSystemRunType.Export,
+            Safeguards = new RunProfileSafeguardsDto { MaxCreates = 5, MaxUpdates = null, MaxDeletes = 100 }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.CreateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()))
+            .Callback<ConnectedSystemRunProfile>(rp => rp.Id = 42)
+            .Returns(Task.CompletedTask);
+
+        var result = await _controller.CreateRunProfileAsync(connectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = ((CreatedAtRouteResult)result).Value as RunProfileDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Safeguards.MaxCreates, Is.EqualTo(5));
+        Assert.That(dto.Safeguards.MaxUpdates, Is.Null);
+        Assert.That(dto.Safeguards.MaxDeletes, Is.EqualTo(100));
+    }
+
+    [Test]
+    public async Task CreateRunProfileAsync_SafeguardsOnNonExportRunProfile_ReturnsBadRequest()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var request = new CreateRunProfileRequest
+        {
+            Name = "Delta Import",
+            RunType = ConnectedSystemRunType.DeltaImport,
+            Safeguards = new RunProfileSafeguardsDto { MaxDeletes = 10 }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+
+        var result = await _controller.CreateRunProfileAsync(connectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.CreateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateRunProfileAsync_NegativeSafeguardValue_ReturnsBadRequest()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = connectedSystemId,
+            Name = "Test System",
+            ConnectorDefinition = new ConnectorDefinition { Name = "Test Connector", SupportsExport = true }
+        };
+        var request = new CreateRunProfileRequest
+        {
+            Name = "Export",
+            RunType = ConnectedSystemRunType.Export,
+            Safeguards = new RunProfileSafeguardsDto { MaxDeletes = -1 }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+
+        var result = await _controller.CreateRunProfileAsync(connectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.CreateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    #endregion
+
     #region UpdateRunProfileAsync tests
 
     [Test]
@@ -522,6 +606,136 @@ public class SynchronisationControllerRunProfileTests
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         var dto = ((OkObjectResult)result).Value as RunProfileDto;
         Assert.That(dto!.VerifyImportContentHashes, Is.True, "an omitted field must leave the existing value unchanged.");
+    }
+
+    #endregion
+
+    #region UpdateRunProfileAsync tests (Run Profile Safeguards, #1618)
+
+    [Test]
+    public async Task UpdateRunProfileAsync_SafeguardsPresent_ReplacesAllThreeMembers()
+    {
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Export",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.Export,
+            PageSize = 100,
+            MaxCreates = 1,
+            MaxUpdates = 2,
+            MaxDeletes = 3
+        };
+        // Replace-all: MaxCreates cleared (null), MaxUpdates changed, MaxDeletes left set to a new value.
+        var request = new UpdateRunProfileRequest
+        {
+            Safeguards = new RunProfileSafeguardsDto { MaxCreates = null, MaxUpdates = 20, MaxDeletes = 30 }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = ((OkObjectResult)result).Value as RunProfileDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Safeguards.MaxCreates, Is.Null, "a null member clears the limit");
+        Assert.That(dto.Safeguards.MaxUpdates, Is.EqualTo(20));
+        Assert.That(dto.Safeguards.MaxDeletes, Is.EqualTo(30));
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_SafeguardsAbsent_LeavesAllThreeMembersUnchanged()
+    {
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Export",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.Export,
+            PageSize = 100,
+            MaxCreates = 1,
+            MaxUpdates = 2,
+            MaxDeletes = 3
+        };
+        var request = new UpdateRunProfileRequest { Name = "Renamed" }; // Safeguards not set
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = ((OkObjectResult)result).Value as RunProfileDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Safeguards.MaxCreates, Is.EqualTo(1));
+        Assert.That(dto.Safeguards.MaxUpdates, Is.EqualTo(2));
+        Assert.That(dto.Safeguards.MaxDeletes, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_SafeguardsOnNonExportRunProfile_ReturnsBadRequest()
+    {
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Delta Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.DeltaImport,
+            PageSize = 100
+        };
+        var request = new UpdateRunProfileRequest { Safeguards = new RunProfileSafeguardsDto { MaxDeletes = 10 } };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_NegativeSafeguardValue_ReturnsBadRequest()
+    {
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Export",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.Export,
+            PageSize = 100
+        };
+        var request = new UpdateRunProfileRequest { Safeguards = new RunProfileSafeguardsDto { MaxCreates = -5 } };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
     }
 
     #endregion

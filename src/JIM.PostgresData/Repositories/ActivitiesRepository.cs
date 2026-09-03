@@ -516,6 +516,20 @@ public class ActivityRepository : IActivityRepository
             .SingleOrDefaultAsync(a => a.Id == id);
     }
 
+    /// <inheritdoc />
+    public async Task<Activity?> GetLatestCompletedExportActivityAsync(int connectedSystemId)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ConnectedSystemId == connectedSystemId
+                        && a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                        && a.ConnectedSystemRunType == ConnectedSystemRunType.Export
+                        && a.Status != ActivityStatus.InProgress)
+            .OrderByDescending(a => a.Created)
+            .ThenByDescending(a => a.Id)
+            .FirstOrDefaultAsync();
+    }
+
     /// <summary>
     /// Gets a page's worth of direct child activities for a given parent activity ID,
     /// ordered by creation date ascending.

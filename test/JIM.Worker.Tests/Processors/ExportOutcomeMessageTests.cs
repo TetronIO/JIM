@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Transactional;
 using JIM.Worker.Processors;
 
 namespace JIM.Worker.Tests.Processors;
@@ -46,5 +47,45 @@ public class ExportOutcomeMessageTests
         var message = ExportOutcomeMessage.ForPreview(pendingExports: 10_000);
 
         Assert.That(message, Is.EqualTo("Preview complete: 10,000 export(s) would be processed"));
+    }
+
+    [Test]
+    public void ForWithheld_Deletes_MatchesThePrdWording()
+    {
+        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, attempted: 100, withheld: 342);
+
+        Assert.That(message, Is.EqualTo("Stopped processing deletes after 100, this Run Profile's limit; 342 deletes remain pending."));
+    }
+
+    [Test]
+    public void ForWithheld_Creates_UsesTheCreateNoun()
+    {
+        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Create, attempted: 5, withheld: 12);
+
+        Assert.That(message, Is.EqualTo("Stopped processing creates after 5, this Run Profile's limit; 12 creates remain pending."));
+    }
+
+    [Test]
+    public void ForWithheld_Updates_UsesTheUpdateNoun()
+    {
+        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Update, attempted: 0, withheld: 7);
+
+        Assert.That(message, Is.EqualTo("Stopped processing updates after 0, this Run Profile's limit; 7 updates remain pending."));
+    }
+
+    [Test]
+    public void ForWithheld_ExactlyOneWithheld_UsesTheSingularNoun()
+    {
+        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, attempted: 100, withheld: 1);
+
+        Assert.That(message, Is.EqualTo("Stopped processing deletes after 100, this Run Profile's limit; 1 delete remains pending."));
+    }
+
+    [Test]
+    public void ForWithheld_LargeAttemptedCount_GroupsTheDigits()
+    {
+        var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Update, attempted: 10_000, withheld: 2_500);
+
+        Assert.That(message, Is.EqualTo("Stopped processing updates after 10,000, this Run Profile's limit; 2,500 updates remain pending."));
     }
 }

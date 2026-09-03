@@ -33,6 +33,14 @@ public interface IActivityRepository
     public Task<Activity?> GetActivityAsync(Guid id);
 
     /// <summary>
+    /// Run Profile Safeguards (#1618): the newest Activity for an Export Run Profile execution against
+    /// this Connected System that is no longer InProgress, so the Connected System page can show a
+    /// notice when the most recent completed export withheld anything. Null when the system has no
+    /// completed Export activity yet.
+    /// </summary>
+    public Task<Activity?> GetLatestCompletedExportActivityAsync(int connectedSystemId);
+
+    /// <summary>
     /// Gets a page's worth of direct child activities for a given parent activity ID,
     /// ordered by creation date ascending.
     /// </summary>

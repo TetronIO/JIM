@@ -36,6 +36,14 @@ Activities for Run Profile executions carry counters relevant to the operation t
 
 The exact field set depends on the operation; the [interactive API reference](../../api/reference/) documents the full schema.
 
+### Run Profile Safeguards (export limits)
+
+Every Export activity carries three withheld counters: `exportCreatesWithheld`, `exportUpdatesWithheld` and `exportDeletesWithheld`. Each is `0` when its Run Profile has no limit for that change type, or the limit was never reached; it is the number of Pending Exports of that type left untouched (still Pending) when the limit was reached. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
+
+When an Export activity withholds anything, it completes as **Complete with warning**, and its warning message carries one sentence per capped change type, for example:
+
+> Stopped processing deletes after 100, this Run Profile's limit; 342 deletes remain pending.
+
 ## Execution items
 
 For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.

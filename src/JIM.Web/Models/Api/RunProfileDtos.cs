@@ -62,6 +62,11 @@ public class RunProfileDto
     public bool VerifyImportContentHashes { get; set; }
 
     /// <summary>
+    /// Run Profile Safeguards (#1618): the limits on what this Run Profile may attempt. Always present.
+    /// </summary>
+    public RunProfileSafeguardsDto Safeguards { get; set; } = new();
+
+    /// <summary>
     /// Creates a DTO from a ConnectedSystemRunProfile entity.
     /// </summary>
     public static RunProfileDto FromEntity(ConnectedSystemRunProfile runProfile)
@@ -76,9 +81,41 @@ public class RunProfileDto
             PartitionName = runProfile.Partition?.Name,
             TargetsDeselectedPartition = runProfile.TargetsADeselectedPartition(),
             FilePath = runProfile.FilePath,
-            VerifyImportContentHashes = runProfile.VerifyImportContentHashes
+            VerifyImportContentHashes = runProfile.VerifyImportContentHashes,
+            Safeguards = new RunProfileSafeguardsDto
+            {
+                MaxCreates = runProfile.MaxCreates,
+                MaxUpdates = runProfile.MaxUpdates,
+                MaxDeletes = runProfile.MaxDeletes
+            }
         };
     }
+}
+
+/// <summary>
+/// Run Profile Safeguards (#1618): the limits an administrator can set on what a Run Profile may
+/// attempt in a single run. Null means no limit; zero is a valid limit ("attempt none of these").
+/// </summary>
+/// <remarks>
+/// Layer 1 (this type) carries the three Export limits only. Layer 2 adds <c>MaxDetectedDeletions</c>
+/// and <c>MaxDetectedDeletionsPercent</c> for Full Import's deletion-detection gate.
+/// </remarks>
+public class RunProfileSafeguardsDto
+{
+    /// <summary>
+    /// The maximum number of creates an Export run may attempt. Export Run Profiles only.
+    /// </summary>
+    public int? MaxCreates { get; set; }
+
+    /// <summary>
+    /// The maximum number of updates an Export run may attempt. Export Run Profiles only.
+    /// </summary>
+    public int? MaxUpdates { get; set; }
+
+    /// <summary>
+    /// The maximum number of deletes an Export run may attempt. Export Run Profiles only.
+    /// </summary>
+    public int? MaxDeletes { get; set; }
 }
 
 /// <summary>

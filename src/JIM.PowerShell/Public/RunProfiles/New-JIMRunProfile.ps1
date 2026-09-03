@@ -44,6 +44,24 @@ function New-JIMRunProfile {
         otherwise have missed. Use temporarily to validate the skip optimisation; leave off for
         normal, faster Full Imports.
 
+    .PARAMETER MaxCreates
+        Run Profile Safeguards: the maximum number of creates an Export run may attempt. Only
+        valid when -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 is a
+        valid limit ("attempt none of these"). When the limit is reached, the remaining creates
+        stay pending for the next run and the run completes with a warning.
+
+    .PARAMETER MaxUpdates
+        Run Profile Safeguards: the maximum number of updates an Export run may attempt. Only
+        valid when -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 is a
+        valid limit ("attempt none of these").
+
+    .PARAMETER MaxDeletes
+        Run Profile Safeguards: the maximum number of deletes an Export run may attempt. Only
+        valid when -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 is a
+        valid limit ("attempt none of these"). Recommended for Export Run Profiles against
+        production directories: a small share of the target's population catches a mass
+        deprovisioning before it completes.
+
     .PARAMETER PassThru
         If specified, returns the created Run Profile object.
 
@@ -71,6 +89,12 @@ function New-JIMRunProfile {
         }
 
         Creates Run Profiles for all CSV-based Connected Systems.
+
+    .EXAMPLE
+        New-JIMRunProfile -ConnectedSystemId 1 -Name "Export" -RunType Export -MaxDeletes 100
+
+        Creates an Export Run Profile that stops after 100 deletes, leaving the remainder pending
+        for the next run.
 
     .LINK
         Get-JIMRunProfile
@@ -109,6 +133,15 @@ function New-JIMRunProfile {
         [Parameter()]
         [switch]$VerifyImportContentHashes,
 
+        [Parameter()]
+        [Nullable[int]]$MaxCreates,
+
+        [Parameter()]
+        [Nullable[int]]$MaxUpdates,
+
+        [Parameter()]
+        [Nullable[int]]$MaxDeletes,
+
         [switch]$PassThru
     )
 
@@ -123,6 +156,18 @@ function New-JIMRunProfile {
         if ($PSBoundParameters.ContainsKey('ConnectedSystemName')) {
             $connectedSystem = Resolve-JIMConnectedSystem -Name $ConnectedSystemName
             $ConnectedSystemId = $connectedSystem.id
+        }
+
+        # Run Profile Safeguards: validated here (not via ValidateRange, which misbehaves with
+        # $null) so a negative value fails fast rather than reaching the API as a 400.
+        foreach ($safeguard in @('MaxCreates', 'MaxUpdates', 'MaxDeletes')) {
+            if ($PSBoundParameters.ContainsKey($safeguard)) {
+                $value = $PSBoundParameters[$safeguard]
+                if ($null -ne $value -and $value -lt 0) {
+                    Write-Error "$safeguard cannot be negative."
+                    return
+                }
+            }
         }
 
         if ($PSCmdlet.ShouldProcess($Name, "Create Run Profile")) {
@@ -147,6 +192,16 @@ function New-JIMRunProfile {
 
             if ($VerifyImportContentHashes) {
                 $body.verifyImportContentHashes = $true
+            }
+
+            # Run Profile Safeguards: send the whole safeguards object when any limit is bound;
+            # an unbound parameter is $null, which is exactly "no limit" for that member.
+            if ($PSBoundParameters.ContainsKey('MaxCreates') -or $PSBoundParameters.ContainsKey('MaxUpdates') -or $PSBoundParameters.ContainsKey('MaxDeletes')) {
+                $body.safeguards = @{
+                    maxCreates = $MaxCreates
+                    maxUpdates = $MaxUpdates
+                    maxDeletes = $MaxDeletes
+                }
             }
 
             try {

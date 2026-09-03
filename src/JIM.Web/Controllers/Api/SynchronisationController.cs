@@ -2951,8 +2951,16 @@ public class SynchronisationController(
             RunType = request.RunType,
             PageSize = request.PageSize,
             FilePath = request.FilePath,
-            VerifyImportContentHashes = request.VerifyImportContentHashes
+            VerifyImportContentHashes = request.VerifyImportContentHashes,
+            MaxCreates = request.Safeguards?.MaxCreates,
+            MaxUpdates = request.Safeguards?.MaxUpdates,
+            MaxDeletes = request.Safeguards?.MaxDeletes
         };
+
+        // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
+        var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
+        if (safeguardsError != null)
+            return BadRequest(ApiErrorResponse.BadRequest(safeguardsError));
 
         // Set partition if provided
         if (request.PartitionId.HasValue)
@@ -3040,6 +3048,19 @@ public class SynchronisationController(
                 return BadRequest(ApiErrorResponse.BadRequest("VerifyImportContentHashes can only be enabled on a Full Import Run Profile."));
 
             runProfile.VerifyImportContentHashes = request.VerifyImportContentHashes.Value;
+        }
+
+        // Run Profile Safeguards (#1618): when present, the safeguards object replaces ALL members; a
+        // null member clears that limit, an absent object leaves every limit unchanged.
+        if (request.Safeguards != null)
+        {
+            runProfile.MaxCreates = request.Safeguards.MaxCreates;
+            runProfile.MaxUpdates = request.Safeguards.MaxUpdates;
+            runProfile.MaxDeletes = request.Safeguards.MaxDeletes;
+
+            var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
+            if (safeguardsError != null)
+                return BadRequest(ApiErrorResponse.BadRequest(safeguardsError));
         }
 
         // Update partition if provided

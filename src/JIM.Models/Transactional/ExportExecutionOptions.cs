@@ -20,4 +20,22 @@ public class ExportExecutionOptions
     /// Default is 1 (sequential processing). Set higher to enable parallel batch export.
     /// </summary>
     public int MaxParallelism { get; set; } = 1;
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): the maximum number of creates this run may attempt.
+    /// Null means no limit. Copied from the Run Profile's <see cref="Staging.ConnectedSystemRunProfile.MaxCreates"/>.
+    /// </summary>
+    public int? MaxCreates { get; set; }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): the maximum number of updates this run may attempt.
+    /// Null means no limit. Copied from the Run Profile's <see cref="Staging.ConnectedSystemRunProfile.MaxUpdates"/>.
+    /// </summary>
+    public int? MaxUpdates { get; set; }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): the maximum number of deletes this run may attempt.
+    /// Null means no limit. Copied from the Run Profile's <see cref="Staging.ConnectedSystemRunProfile.MaxDeletes"/>.
+    /// </summary>
+    public int? MaxDeletes { get; set; }
 }

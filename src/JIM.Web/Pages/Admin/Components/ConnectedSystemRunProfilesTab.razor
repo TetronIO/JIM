@@ -48,6 +48,24 @@
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Verification Mode</MudChip>
                         </MudTooltip>
                     }
+                    @if (context.Item.MaxCreates.HasValue)
+                    {
+                        <MudTooltip Text="This Export stops attempting creates once it reaches this limit; the rest stay pending for the next run." Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max creates @context.Item.MaxCreates</MudChip>
+                        </MudTooltip>
+                    }
+                    @if (context.Item.MaxUpdates.HasValue)
+                    {
+                        <MudTooltip Text="This Export stops attempting updates once it reaches this limit; the rest stay pending for the next run." Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max updates @context.Item.MaxUpdates</MudChip>
+                        </MudTooltip>
+                    }
+                    @if (context.Item.MaxDeletes.HasValue)
+                    {
+                        <MudTooltip Text="This Export stops attempting deletes once it reaches this limit; the rest stay pending for the next run." Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Max deletes @context.Item.MaxDeletes</MudChip>
+                        </MudTooltip>
+                    }
                 </CellTemplate>
             </TemplateColumn>
             @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions)
@@ -222,6 +240,31 @@
                         </MudTooltip>
                     </div>
                 }
+
+                @if (_newRunProfile.RunType == ConnectedSystemRunType.Export)
+                {
+                    <MudPaper Outlined="true" Class="pa-4 mt-5">
+                        <MudText Typo="Typo.subtitle2">Safeguards</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Limits on what this run may attempt. Leave blank for no limit.</MudText>
+                        <MudGrid Spacing="3">
+                            <MudItem xs="4">
+                                <MudNumericField T="int?" @bind-Value="_newRunProfile.MaxCreates" Label="Max creates"
+                                                 Variant="Variant.Outlined" Min="0" Clearable="true" Placeholder="No limit" />
+                            </MudItem>
+                            <MudItem xs="4">
+                                <MudNumericField T="int?" @bind-Value="_newRunProfile.MaxUpdates" Label="Max updates"
+                                                 Variant="Variant.Outlined" Min="0" Clearable="true" Placeholder="No limit" />
+                            </MudItem>
+                            <MudItem xs="4">
+                                <MudNumericField T="int?" @bind-Value="_newRunProfile.MaxDeletes" Label="Max deletes"
+                                                 Variant="Variant.Outlined" Min="0" Clearable="true" Placeholder="No limit" />
+                            </MudItem>
+                        </MudGrid>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                            When a limit is reached, the remaining changes of that type stay pending for the next run, and the run completes with a warning.
+                        </MudText>
+                    </MudPaper>
+                }
             </MudForm>
         </DialogContent>
         <DialogActions>
@@ -287,6 +330,31 @@
                             <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="ms-1 mud-text-secondary" />
                         </MudTooltip>
                     </div>
+                }
+
+                @if (_editRunProfile.RunType == ConnectedSystemRunType.Export)
+                {
+                    <MudPaper Outlined="true" Class="pa-4 mt-5">
+                        <MudText Typo="Typo.subtitle2">Safeguards</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Limits on what this run may attempt. Leave blank for no limit.</MudText>
+                        <MudGrid Spacing="3">
+                            <MudItem xs="4">
+                                <MudNumericField T="int?" @bind-Value="_editRunProfile.MaxCreates" Label="Max creates"
+                                                 Variant="Variant.Outlined" Min="0" Clearable="true" Placeholder="No limit" />
+                            </MudItem>
+                            <MudItem xs="4">
+                                <MudNumericField T="int?" @bind-Value="_editRunProfile.MaxUpdates" Label="Max updates"
+                                                 Variant="Variant.Outlined" Min="0" Clearable="true" Placeholder="No limit" />
+                            </MudItem>
+                            <MudItem xs="4">
+                                <MudNumericField T="int?" @bind-Value="_editRunProfile.MaxDeletes" Label="Max deletes"
+                                                 Variant="Variant.Outlined" Min="0" Clearable="true" Placeholder="No limit" />
+                            </MudItem>
+                        </MudGrid>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                            When a limit is reached, the remaining changes of that type stay pending for the next run, and the run completes with a warning.
+                        </MudText>
+                    </MudPaper>
                 }
             </MudForm>
         </DialogContent>
@@ -400,7 +468,10 @@
             Partition = selectedPartition,
             PageSize = _newRunProfile.PageSize,
             FilePath = _newRunProfile.FilePath,
-            VerifyImportContentHashes = _newRunProfile.RunType == ConnectedSystemRunType.FullImport && _newRunProfile.VerifyImportContentHashes
+            VerifyImportContentHashes = _newRunProfile.RunType == ConnectedSystemRunType.FullImport && _newRunProfile.VerifyImportContentHashes,
+            MaxCreates = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxCreates : null,
+            MaxUpdates = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxUpdates : null,
+            MaxDeletes = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxDeletes : null
         };
 
         try
@@ -436,7 +507,10 @@
             PageSize = runProfile.PageSize,
             FilePath = runProfile.FilePath,
             Partition = runProfile.Partition,
-            VerifyImportContentHashes = runProfile.VerifyImportContentHashes
+            VerifyImportContentHashes = runProfile.VerifyImportContentHashes,
+            MaxCreates = runProfile.MaxCreates,
+            MaxUpdates = runProfile.MaxUpdates,
+            MaxDeletes = runProfile.MaxDeletes
         };
         _editRunProfileDialogVisible = true;
         return Task.CompletedTask;
@@ -454,6 +528,13 @@
         _editRunProfileOriginal.FilePath = _editRunProfile.FilePath;
         _editRunProfileOriginal.Partition = selectedPartition;
         _editRunProfileOriginal.VerifyImportContentHashes = _editRunProfileOriginal.RunType == ConnectedSystemRunType.FullImport && _editRunProfile.VerifyImportContentHashes;
+
+        if (_editRunProfileOriginal.RunType == ConnectedSystemRunType.Export)
+        {
+            _editRunProfileOriginal.MaxCreates = _editRunProfile.MaxCreates;
+            _editRunProfileOriginal.MaxUpdates = _editRunProfile.MaxUpdates;
+            _editRunProfileOriginal.MaxDeletes = _editRunProfile.MaxDeletes;
+        }
 
         try
         {

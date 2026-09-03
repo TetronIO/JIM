@@ -188,7 +188,10 @@ public class SyncExportTaskProcessor
             var options = new ExportExecutionOptions
             {
                 BatchSize = 100,
-                MaxParallelism = resolvedParallelism
+                MaxParallelism = resolvedParallelism,
+                MaxCreates = _runProfile.MaxCreates,
+                MaxUpdates = _runProfile.MaxUpdates,
+                MaxDeletes = _runProfile.MaxDeletes
             };
 
             var throughput = new ThroughputTracker();
@@ -577,10 +580,24 @@ public class SyncExportTaskProcessor
         if (_connectedSystem.UnresolvedReferenceHandling == UnresolvedReferenceHandling.Warn && result.UnresolvableReferenceCount > 0)
         {
             var warningSummary = $"{result.UnresolvableReferenceCount} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System. The referenced objects are out of scope for every Synchronisation Rule into this system, or have not been provisioned yet; view the affected Pending Exports for details.";
-            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
-                ? warningSummary
-                : $"{_activity.WarningMessage}\n{warningSummary}";
+            AppendActivityWarning(warningSummary);
         }
+
+        // Run Profile Safeguards (#1618): populated (zero when nothing was withheld) on every Export
+        // run. Whenever the ledger's Reserve algorithm withheld anything of a type, it had already
+        // consumed the whole of that type's limit, so the limit itself is what was "attempted".
+        _activity.ExportCreatesWithheld = result.CreatesWithheld;
+        _activity.ExportUpdatesWithheld = result.UpdatesWithheld;
+        _activity.ExportDeletesWithheld = result.DeletesWithheld;
+
+        if (result.CreatesWithheld > 0 && _runProfile.MaxCreates.HasValue)
+            AppendActivityWarning(ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Create, _runProfile.MaxCreates.Value, result.CreatesWithheld));
+
+        if (result.UpdatesWithheld > 0 && _runProfile.MaxUpdates.HasValue)
+            AppendActivityWarning(ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Update, _runProfile.MaxUpdates.Value, result.UpdatesWithheld));
+
+        if (result.DeletesWithheld > 0 && _runProfile.MaxDeletes.HasValue)
+            AppendActivityWarning(ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, _runProfile.MaxDeletes.Value, result.DeletesWithheld));
 
         // Set completion message based on mode and results
         string completionMessage;
@@ -611,6 +628,18 @@ public class SyncExportTaskProcessor
         }
 
         return completionMessage;
+    }
+
+    /// <summary>
+    /// Appends a sentence to the Activity's warning message, newline-separated from anything already
+    /// there. <see cref="Worker.CompleteActivityBasedOnExecutionResultsAsync"/> turns a non-empty
+    /// warning message into Complete with warning once the Activity finishes.
+    /// </summary>
+    private void AppendActivityWarning(string additionalWarning)
+    {
+        _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+            ? additionalWarning
+            : $"{_activity.WarningMessage}\n{additionalWarning}";
     }
 
     /// <summary>
