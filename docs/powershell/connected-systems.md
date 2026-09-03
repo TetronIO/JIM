@@ -1467,10 +1467,10 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 
 - Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation.
 - Removes all CSOs, attribute values, Pending Exports, and deferred references from the Connected System.
-- Metaverse Objects are **not** deleted; their links to this Connected System are severed.
+- Metaverse Objects are **not** deleted by the clear itself; their links to this Connected System are severed.
 - By default, change history is also deleted. Use `-KeepChangeHistory` to retain it for auditing purposes.
 - Without `-Wait`, the cmdlet returns as soon as the clear is queued; a script that immediately re-imports, or reads the Connector Space back, races the clear task.
-- The clear arms a stranded-value sweep that runs automatically at this Connected System's next Full Synchronisation, recalling any Metaverse attribute value the system contributed whose object never returned. Run a Full Import before that synchronisation so objects that do return can reclaim their values first. See [Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space).
+- The clear records which Metaverse Objects were joined and arms the stranded-value sweep, which runs automatically at this Connected System's next Full Synchronisation once a Full Import has completed successfully: it recalls any Metaverse attribute value the system contributed whose object never returned, and applies that object type's Deletion Rule to objects that never returned. Run a Full Import before that synchronisation so objects that do return can reclaim their values and avoid the Deletion Rule firing on them. If far fewer objects return than were cleared, the sweep refuses rather than deleting most of the population; see `Sync.PostClearReconciliation.MaxMissingPercent` in [`Get-JIMServiceSetting`](service-settings.md). See [Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space).
 
 ---
 

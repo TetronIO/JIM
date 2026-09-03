@@ -454,6 +454,19 @@
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Pending Exports Removed</MudText>
                 <MudText Typo="Typo.h4" Color="Color.Error">@pendingExportCount.ToString("N0")</MudText>
             </MudPaper>
+
+            @* Tracked for Reconciliation: not a removal, so it deliberately does not add into Total Removed
+               and carries no destructive (red) styling. *@
+            @if (_activity.ClearedJoinRecordCount is > 0)
+            {
+                var joinRecordCount = _activity.ClearedJoinRecordCount!.Value;
+                <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Blue.Default}; min-width: 120px;")">
+                    <MudTooltip Text="Objects joined at the moment of the clear, so the next Full Synchronisation can tell who returned." Arrow="true" Placement="Placement.Top">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Tracked for Reconciliation</MudText>
+                    </MudTooltip>
+                    <MudText Typo="Typo.h4" Color="Color.Info">@joinRecordCount.ToString("N0")</MudText>
+                </MudPaper>
+            }
         </MudStack>
     }
 

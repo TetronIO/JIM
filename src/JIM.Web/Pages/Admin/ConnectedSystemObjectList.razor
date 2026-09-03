@@ -285,8 +285,12 @@
                 Metaverse joins, and any Pending Exports to this Connected System; the Metaverse itself is not
                 changed by the clear. Run a Full Import to rebuild the Connector Space. At the first Full
                 Synchronisation after that import completes successfully, values contributed by objects that did
-                not return are recalled automatically. A Full Synchronisation run before then does nothing
-                beyond ordinary synchronisation, and says so on its Activity.
+                not return are recalled automatically. Each object's type Deletion Rule is then applied to
+                objects that did not return, with its configured grace period. A Full Synchronisation run before
+                then does nothing beyond ordinary synchronisation, and says so on its Activity. The
+                reconciliation refuses, leaving everything as it was, if far fewer objects return than were
+                cleared; re-import the rest, or raise the allowed share in Service Settings, then run a Full
+                Synchronisation again.
             </MudText>
 
             <MudText Class="mt-3">

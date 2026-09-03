@@ -486,6 +486,7 @@ public class Worker : BackgroundService
                                             // store removal stats on the activity before completing
                                             newWorkerTask.Activity.ClearedPendingExportCount = clearResult.PendingExportsRemoved;
                                             newWorkerTask.Activity.ClearedConnectedSystemObjectCount = clearResult.ConnectedSystemObjectsRemoved;
+                                            newWorkerTask.Activity.ClearedJoinRecordCount = clearResult.JoinRecordsWritten;
 
                                             // task completed successfully, complete the activity
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
