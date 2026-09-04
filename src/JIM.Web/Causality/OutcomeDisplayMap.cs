@@ -181,7 +181,20 @@ public static class OutcomeDisplayMap
                 "have the values this Connected System contributed withdrawn"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] =
             new OutcomeDisplay("Contributed values kept", "Would Retain Contributed Values", CausalityTone.Info, Icons.Material.Filled.Inventory2,
-                "keep the values this Connected System contributed")
+                "keep the values this Connected System contributed"),
+        // The export-side scope pair. These exist because the import-side pair above were the only scope
+        // transitions an export rule's scope preview could emit, and "Leaves import scope" against a Metaverse
+        // Object leaving an export rule names a direction the rule does not have. Info on both: an identity the
+        // rule stops standing over with nothing in the target to remove, and one it starts flowing to, are the
+        // benign ends of a scope change. The costly ends have transitions of their own (WouldStageDeleteExport,
+        // WouldDisconnectFromMetaverseObject, WouldStopProvisioning and Provisioned), which is what lets these
+        // two be read as "nothing is created or removed" without qualification.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope] =
+            new OutcomeDisplay("Leaves export scope, nothing to remove", "Would Leave Export Scope", CausalityTone.Info, Icons.Material.Filled.FilterAltOff,
+                "leave export scope, with nothing in the target system to remove"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] =
+            new OutcomeDisplay("Enters export scope", "Would Enter Export Scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt,
+                "enter export scope")
     };
 
     /// <summary>

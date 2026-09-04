@@ -411,9 +411,96 @@ public class SyncRuleScopingPreviewAdapterTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(deltas.Select(d => d.TransitionType),
-                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope));
+                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope));
             Assert.That(deltas.Select(d => d.TransitionType),
                 Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportWideningOntoAnIdentityWithATargetObject_ReportsScopeEntryOnlyAsync()
+    {
+        // The target object already exists, so even a provisioning rule creates nothing; it begins flowing
+        // attributes to the object that is there.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.ProvisionToConnectedSystem = true;
+        GivenMvoWithTargetObject("Marketing");
+
+        var deltas = await EvaluateAsync(ProposalScopedToAnyOf("Sales", "Marketing"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope));
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportNarrowingAwayFromAnIdentityWithNoTargetObject_ReportsAScopeExitWithNothingToRemoveAsync()
+    {
+        // The rule never created anything for this identity, so leaving its scope removes nothing from the target
+        // system. The object is a Metaverse Object leaving an EXPORT rule, so the import-side scope exit, which
+        // the panel labels "Leaves import scope", would name a direction this rule does not have.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.ProvisionToConnectedSystem = false;
+        GivenMvoWithoutTargetObject("Sales");
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas, Has.Count.EqualTo(1));
+            Assert.That(deltas[0].TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportNarrowingAwayFromAnUnprovisionedIdentityWhenProvisioning_ReportsItWouldStopProvisioningAsync()
+    {
+        // The mirror of the widening case above: a rule that provisions would have created an account for this
+        // identity, and under the proposal it would not. The consequence is the account that never arrives, not
+        // the scope exit itself.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.ProvisionToConnectedSystem = true;
+        GivenMvoWithoutTargetObject("Sales");
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning));
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportWalk_NeverReportsTheImportScopeTransitionsAsync()
+    {
+        // An export rule's population is Metaverse Objects, and none of them can leave or enter import scope. The
+        // import-side transitions are the ones the panel labels "import scope", so their appearance on an export
+        // preview is exactly the mislabel this guards against.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.ProvisionToConnectedSystem = false;
+        GivenMvoWithoutTargetObject("Sales");
+        GivenMvoWithoutTargetObject("Marketing");
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas, Has.Count.EqualTo(2), "one identity leaves scope and one enters it");
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope));
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope));
         }
     }
 

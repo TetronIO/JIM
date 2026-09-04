@@ -288,6 +288,10 @@ public static class CausalityModelBuilder
                 // diverge, are both statements about the target system rather than about the Metaverse.
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift
+                // Preview-only: an export rule's scope decides what reaches the target system, so its scope pair
+                // sits here rather than beside the import-side pair in the Identity lane.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope
                 => CausalityLane.Downstream,
 
             // Metaverse-side events: what JIM did

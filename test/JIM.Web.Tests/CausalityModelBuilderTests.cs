@@ -119,7 +119,11 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] = CausalityLane.Source,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] = CausalityLane.Source,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = CausalityLane.Identity,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = CausalityLane.Identity
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = CausalityLane.Identity,
+            // An export rule's scope decides what reaches the target system, so its transitions sit beside the
+            // other export-side previews rather than with the import-side scope pair above.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = CausalityLane.Downstream
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

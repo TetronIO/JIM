@@ -61,6 +61,8 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported, "Would Resume Being Imported")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues, "Would Withdraw Contributed Values")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, "Would Retain Contributed Values")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, "Would Leave Export Scope")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Would Enter Export Scope")]
     public void GetOutcomeTypeDisplayName_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
     {
@@ -84,6 +86,8 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject, "Joins a different Metaverse Object")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin, "Projects instead of joining")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, "Identity created")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, "Leaves export scope, nothing to remove")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope")]
     public void GetOutcomeTypePlainName_EveryOutcomeType_ReturnsThePlainLabel(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
     {
@@ -134,6 +138,8 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported, Color.Success)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, Color.Info)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, Color.Info)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, Color.Info)]
     public void GetOutcomeTypeMudBlazorColor_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, Color expected)
     {
@@ -188,7 +194,9 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported] = Icons.Material.Filled.CloudOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported] = Icons.Material.Filled.CloudSync,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = Icons.Material.Filled.Undo,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = Icons.Material.Filled.Inventory2
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = Icons.Material.Filled.Inventory2,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope] = Icons.Material.Filled.FilterAltOff,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = Icons.Material.Filled.FilterAlt
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
