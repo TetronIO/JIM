@@ -108,9 +108,9 @@
 
     @if (SyncRule.Direction == SyncRuleDirection.Export)
     {
-        @* Headed like the Deprovisioning Action beneath it, so the two halves of an export rule's lifecycle read as
+        @* Headed like the Deprovisioning group beneath it, so the two halves of an export rule's lifecycle read as
            a pair rather than as a stray switch above a titled group. *@
-        <MudText Typo="Typo.h6" Class="mt-5">Provisioning Action</MudText>
+        <MudText Typo="Typo.h6" Class="mt-5">Provisioning</MudText>
         @* The label pluralises the Object Type's name, never the stand-in used before one is chosen: that is
            already plural, and pluralising it again read "Provision objectses to the Connected System?". *@
         <MudSwitch Class="mt-1" @bind-Value="@SyncRule.ProvisionToConnectedSystem" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
@@ -120,7 +120,7 @@
             option will cause the Metaverse Object to be created in the Connected System. You would typically enable
             this option for a destination system.</MudText>
 
-        <MudText Typo="Typo.h6" Class="mt-5">Deprovisioning Action</MudText>
+        <MudText Typo="Typo.h6" Class="mt-5">Deprovisioning</MudText>
         <MudRadioGroup T="OutboundDeprovisionAction" @bind-Value="@SyncRule.OutboundDeprovisionAction" @bind-Value:after="NotifyChangedAsync">
             <div class="mt-1">
                 <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Disconnect" Color="Color.Primary">Disconnect</MudRadio>
