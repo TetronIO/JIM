@@ -161,7 +161,10 @@
                             <MudText Typo="Typo.button">Value</MudText>
                         </HeaderTemplate>
                         <CellTemplate>
-                            <TextValueDisplay Value="@GetAttributeValue(context.Item)" />
+                            @* A value bound for the Connected System is an identifier or a literal, so it takes the
+                               code font every other exported value on these pages does (the Change History, the
+                               attribute table below). *@
+                            <TextValueDisplay Value="@GetAttributeValue(context.Item)" Class="jim-text-code" />
                         </CellTemplate>
                     </TemplateColumn>
                     <TemplateColumn Title="Status" Sortable="false">
@@ -220,8 +223,12 @@
     }
 
     <div class="mt-6">
+    @* pa-0 rather than pt-5: the Attributes grid carries the standing mt-5 gap of its own (VirtualisedDataGrid's
+       GridClass default), and stacking the panels' padding on top of it opened a 44px gap under the tab bar. The
+       Change History tab has no such margin of its own, so its content supplies the same gap itself below. See
+       JIM.Web/CLAUDE.md "Tab content spacing". *@
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync"
-                      TabPanelsClass="pa-0 mt-6">
+                      TabPanelsClass="pa-0">
         <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
             @* One row per attribute, as before; the object's attribute values were loaded with the rest of the
                page (capped per multi-valued attribute), so windows are sliced from that list in memory rather
@@ -334,6 +341,8 @@
             </VirtualisedDataGrid>
         </MudTabPanel>
         <MudTabPanel Text="Change History" Icon="@Icons.Material.Filled.History" BadgeData="@_changeCount.ToString("N0")" BadgeColor="Color.Primary">
+            @* mt-5 here matches the gap the Attributes grid gives itself above, since the panels carry none. *@
+            <div class="mt-5">
             @if (_changeHistoryLoading && _changeHistoryRows.Count == 0)
             {
                 <div class="d-flex justify-center pa-4">
@@ -342,7 +351,7 @@
             }
             else if (_changeCount == 0)
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">No change history recorded for this object.</MudAlert>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">No change history recorded for this object.</MudAlert>
             }
             else
             {
@@ -363,6 +372,7 @@
                     </div>
                 }
             }
+            </div>
         </MudTabPanel>
     </NavigableMudTabs>
     </div>
