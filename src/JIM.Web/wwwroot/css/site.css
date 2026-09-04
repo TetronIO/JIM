@@ -3545,8 +3545,13 @@ html[lang] .jim-password-guidance.mud-alert {
    with the tab bar, so its border, fill, radius and padding are the design system's (the paper
    rules above), and its shrink-to-fit layout and gap are the d-inline-flex and gap-3 utilities;
    jim-identity-strip itself styles nothing and is only a hook. */
+/* Block-level flex, not inline-flex, and the difference is visible: the flow is wrapped in a
+   MudTooltip root, which is a block. An inline-flex child of a block sits on the block's text
+   baseline, so the wrapper grows a line box taller than the flow and the flow lands ~2.5px below
+   the chips beside it (measured). As a block the wrapper is exactly the flow's height, and the
+   strip's own align-items centres it with the chips. */
 .jim-identity-flow {
-    display: inline-flex;
+    display: flex;
     align-items: center;
 }
 
