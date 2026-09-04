@@ -83,6 +83,16 @@ An Activity for a [Connector Space clear](../configuration/connected-systems.md#
 
 All three are empty for every other kind of Activity.
 
+An **Export** Activity carries how many Pending Exports of each change type were withheld by the Run Profile's [Safeguards](../configuration/run-profiles.md#safeguards) (`-Id` only):
+
+| Property | Type | Description |
+|---|---|---|
+| `ExportCreatesWithheld` | `Int32` | How many creates the Run Profile's Max creates limit withheld this run. `0` when nothing was withheld. |
+| `ExportUpdatesWithheld` | `Int32` | How many updates the Run Profile's Max updates limit withheld this run. `0` when nothing was withheld. |
+| `ExportDeletesWithheld` | `Int32` | How many deletes the Run Profile's Max deletes limit withheld this run. `0` when nothing was withheld. |
+
+All three are populated (zero when nothing was withheld) on every Export Activity, and empty for every other kind.
+
 When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ExternalIdValue`, `DisplayName`, `ConnectedSystemObjectType`, `ObjectChangeType`, `ErrorType`, and `OutcomeSummary`.
 
 When using the **Follow** parameter set, progress renders to the host while following; when following ends, the final activity object is emitted (the same shape as **ById**).

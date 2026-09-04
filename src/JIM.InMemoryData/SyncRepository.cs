@@ -2472,18 +2472,36 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(count);
     }
 
+    /// <summary>
+    /// Run Profile Safeguards (#1618): mirrors the Postgres GROUP BY implementation over the same
+    /// executable predicate as <see cref="GetExecutableExportCountAsync"/>.
+    /// </summary>
+    public Task<Dictionary<PendingExportChangeType, int>> GetExecutableExportCountsByChangeTypeAsync(int connectedSystemId)
+    {
+        var result = GetExecutableExportsForSystem(connectedSystemId)
+            .GroupBy(pe => pe.ChangeType)
+            .ToDictionary(g => g.Key, g => g.Count());
+        return Task.FromResult(result);
+    }
+
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
     {
         var result = GetExecutableExportsForSystem(connectedSystemId).ToList();
         return Task.FromResult(result);
     }
 
-    public virtual Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
+    public virtual Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+        IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
     {
         // Keyset pagination on (CreatedAt, Id), mirroring the Postgres implementation.
         // Guid ordering only needs to be self-consistent within this store; .NET's
         // Guid comparison is used for both the predicate and the ordering.
         var query = GetExecutableExportsForSystem(connectedSystemId);
+
+        // Run Profile Safeguards (#1618): mirrors the Postgres exclusion, so a withheld change type
+        // is never returned in a batch, whichever repository the test harness or the worker uses.
+        if (excludedChangeTypes is { Count: > 0 })
+            query = query.Where(pe => !excludedChangeTypes.Contains(pe.ChangeType));
 
         if (afterCreatedAt.HasValue && afterId.HasValue)
         {

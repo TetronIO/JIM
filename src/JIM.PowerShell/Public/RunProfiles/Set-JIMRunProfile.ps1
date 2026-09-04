@@ -41,6 +41,24 @@ function Set-JIMRunProfile {
         content-hash skips and instead compares each object's stored import content hash against
         the freshly computed incoming hash, raising a diagnostic error for any disagreement.
 
+    .PARAMETER MaxCreates
+        Run Profile Safeguards: sets the most creates that may be pending for a single Export run
+        to attempt any of them. If more are pending than this when a run starts, JIM attempts NONE
+        of them; there is no partial attempt. Only valid on an Export Run Profile; the API rejects
+        it otherwise. Pass a number to set the limit, 0 to refuse creates outright, or $null to
+        clear the limit (no limit). Omit the parameter entirely to leave the current value
+        unchanged. Setting any one of -MaxCreates, -MaxUpdates or -MaxDeletes fetches the Run
+        Profile's other two current values and sends all three together, so the ones you did not
+        pass are preserved exactly.
+
+    .PARAMETER MaxUpdates
+        Run Profile Safeguards: sets the most updates that may be pending for a single Export run
+        to attempt any of them. Same all-or-nothing semantics as -MaxCreates.
+
+    .PARAMETER MaxDeletes
+        Run Profile Safeguards: sets the most deletes that may be pending for a single Export run
+        to attempt any of them. Same all-or-nothing semantics as -MaxCreates.
+
     .PARAMETER PassThru
         If specified, returns the updated Run Profile object.
 
@@ -76,6 +94,11 @@ function Set-JIMRunProfile {
         Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -VerifyImportContentHashes $false
 
         Disables Verification Mode, returning the Run Profile to normal content-hash-skip behaviour.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDeletes $null
+
+        Clears the delete limit, leaving Max creates and Max updates exactly as they were.
 
     .LINK
         Get-JIMRunProfile
@@ -116,6 +139,15 @@ function Set-JIMRunProfile {
         [Parameter()]
         [bool]$VerifyImportContentHashes,
 
+        [Parameter()]
+        [Nullable[int]]$MaxCreates,
+
+        [Parameter()]
+        [Nullable[int]]$MaxUpdates,
+
+        [Parameter()]
+        [Nullable[int]]$MaxDeletes,
+
         [switch]$PassThru
     )
 
@@ -138,6 +170,18 @@ function Set-JIMRunProfile {
         if (-not $csId) {
             Write-Error "ConnectedSystemId is required. Provide -ConnectedSystemId parameter or pipe an object with connectedSystemId property."
             return
+        }
+
+        # Run Profile Safeguards: validated here (not via ValidateRange, which misbehaves with
+        # $null) so a negative value fails fast rather than reaching the API as a 400.
+        foreach ($safeguard in @('MaxCreates', 'MaxUpdates', 'MaxDeletes')) {
+            if ($PSBoundParameters.ContainsKey($safeguard)) {
+                $value = $PSBoundParameters[$safeguard]
+                if ($null -ne $value -and $value -lt 0) {
+                    Write-Error "$safeguard cannot be negative."
+                    return
+                }
+            }
         }
 
         # Build update body
@@ -164,6 +208,23 @@ function Set-JIMRunProfile {
         # express this (mirrors Set-JIMPredefinedSearch -IsEnabled).
         if ($PSBoundParameters.ContainsKey('VerifyImportContentHashes')) {
             $body.verifyImportContentHashes = $VerifyImportContentHashes
+        }
+
+        # Run Profile Safeguards: the update contract replaces all three members together, so
+        # binding any one of -MaxCreates/-MaxUpdates/-MaxDeletes means fetching the Run Profile's
+        # current safeguards first and overwriting only the bound members with the new values; an
+        # explicit $null clears that member ($PSBoundParameters.ContainsKey is true for a
+        # parameter passed $null).
+        if ($PSBoundParameters.ContainsKey('MaxCreates') -or $PSBoundParameters.ContainsKey('MaxUpdates') -or $PSBoundParameters.ContainsKey('MaxDeletes')) {
+            $currentProfiles = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$csId/run-profiles"
+            $currentProfile = $currentProfiles | Where-Object { $_.id -eq $profileId }
+            $currentSafeguards = $currentProfile.safeguards
+
+            $body.safeguards = @{
+                maxCreates = if ($PSBoundParameters.ContainsKey('MaxCreates')) { $MaxCreates } else { $currentSafeguards.maxCreates }
+                maxUpdates = if ($PSBoundParameters.ContainsKey('MaxUpdates')) { $MaxUpdates } else { $currentSafeguards.maxUpdates }
+                maxDeletes = if ($PSBoundParameters.ContainsKey('MaxDeletes')) { $MaxDeletes } else { $currentSafeguards.maxDeletes }
+            }
         }
 
         if ($body.Count -eq 0) {

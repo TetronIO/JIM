@@ -284,11 +284,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> GetExecutableExportCountAsync(int connectedSystemId)
         => _inner.GetExecutableExportCountAsync(connectedSystemId);
 
+    public Task<Dictionary<PendingExportChangeType, int>> GetExecutableExportCountsByChangeTypeAsync(int connectedSystemId)
+        => _inner.GetExecutableExportCountsByChangeTypeAsync(connectedSystemId);
+
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
         => _inner.GetExecutableExportsAsync(connectedSystemId);
 
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
-        => _inner.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId);
+    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+        IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
+        => _inner.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
 
     public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _inner.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);

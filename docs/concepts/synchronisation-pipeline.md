@@ -115,6 +115,10 @@ An export does not wait whole for its references. Everything that can be written
 
 JIM performs intelligent reconciliation before export. For example, if an object is created and then deleted before the export runs, the redundant Pending Exports are automatically cancelled -- avoiding unnecessary operations on the target system.
 
+### Safeguards
+
+An Export Run Profile can bound how many creates, updates and deletes a single run may attempt, so a broken import filter, a mistaken Synchronisation Rule change, or a Connector Space clear followed by a partial re-import cannot turn one run into a mass write. If more of a change type are pending than its limit allows, JIM attempts none of that type at all and leaves every one of them exactly as Pending Exports for a later run; the Activity completes as Complete with warning, naming the limit, what was pending and what to do next. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards).
+
 ### Applying Exported Changes Straight Away
 
 When an export to a Connected System succeeds, JIM applies the exported attribute values to its own record of that Connected System Object immediately, rather than waiting for the next import to bring them back. The confirming import still runs as usual, comparing what the Connected System reports against what JIM expects, but for a successfully exported object it typically finds nothing left to do. At large scale (hundreds of thousands of objects), this avoids re-processing millions of attribute values that JIM itself just wrote, and it keeps the confirming import fast.

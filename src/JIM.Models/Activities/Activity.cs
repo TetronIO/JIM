@@ -492,6 +492,28 @@ public class Activity
     /// </summary>
     public int? ClearedJoinRecordCount { get; set; }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // Run Profile Safeguards export limit stats (#1618, Layer 1)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// For Export activities: how many creates the Run Profile's Max creates limit withheld this run.
+    /// Populated (zero when nothing was withheld) on every Export activity; null on every other activity.
+    /// </summary>
+    public int? ExportCreatesWithheld { get; set; }
+
+    /// <summary>
+    /// For Export activities: how many updates the Run Profile's Max updates limit withheld this run.
+    /// Populated (zero when nothing was withheld) on every Export activity; null on every other activity.
+    /// </summary>
+    public int? ExportUpdatesWithheld { get; set; }
+
+    /// <summary>
+    /// For Export activities: how many deletes the Run Profile's Max deletes limit withheld this run.
+    /// Populated (zero when nothing was withheld) on every Export activity; null on every other activity.
+    /// </summary>
+    public int? ExportDeletesWithheld { get; set; }
+
     // results:
     // what would be useful here is to capture two levels of stats, depending on system settings:
     // - result item with operation type (create/update/delete) and link to the Metaverse Object

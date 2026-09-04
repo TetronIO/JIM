@@ -44,6 +44,28 @@ function New-JIMRunProfile {
         otherwise have missed. Use temporarily to validate the skip optimisation; leave off for
         normal, faster Full Imports.
 
+    .PARAMETER MaxCreates
+        Run Profile Safeguards: the most creates that may be pending for a single Export run to
+        attempt any of them. If more are pending than this when the run starts, JIM attempts NONE
+        of them; there is no partial attempt. Only valid when -RunType is Export; the API rejects
+        it otherwise. Omit for no limit. 0 refuses creates outright. A run that withholds anything
+        stays pending and completes with a warning naming what to do next: raise or clear the
+        limit, or run an Export Run Profile without one.
+
+    .PARAMETER MaxUpdates
+        Run Profile Safeguards: the most updates that may be pending for a single Export run to
+        attempt any of them. Same all-or-nothing behaviour as -MaxCreates. Only valid when
+        -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 refuses updates
+        outright.
+
+    .PARAMETER MaxDeletes
+        Run Profile Safeguards: the most deletes that may be pending for a single Export run to
+        attempt any of them. Same all-or-nothing behaviour as -MaxCreates. Only valid when
+        -RunType is Export; the API rejects it otherwise. Omit for no limit. 0 refuses deletes
+        outright. Recommended for Export Run Profiles against production directories: a small
+        share of the target's population means a broken filter or rule change withholds the
+        whole deprovisioning attempt and warns you, rather than working through the directory.
+
     .PARAMETER PassThru
         If specified, returns the created Run Profile object.
 
@@ -71,6 +93,12 @@ function New-JIMRunProfile {
         }
 
         Creates Run Profiles for all CSV-based Connected Systems.
+
+    .EXAMPLE
+        New-JIMRunProfile -ConnectedSystemId 1 -Name "Export" -RunType Export -MaxDeletes 100
+
+        Creates an Export Run Profile that attempts no deletes at all on a run where more than 100
+        are pending, leaving every one of them pending instead.
 
     .LINK
         Get-JIMRunProfile
@@ -109,6 +137,15 @@ function New-JIMRunProfile {
         [Parameter()]
         [switch]$VerifyImportContentHashes,
 
+        [Parameter()]
+        [Nullable[int]]$MaxCreates,
+
+        [Parameter()]
+        [Nullable[int]]$MaxUpdates,
+
+        [Parameter()]
+        [Nullable[int]]$MaxDeletes,
+
         [switch]$PassThru
     )
 
@@ -123,6 +160,18 @@ function New-JIMRunProfile {
         if ($PSBoundParameters.ContainsKey('ConnectedSystemName')) {
             $connectedSystem = Resolve-JIMConnectedSystem -Name $ConnectedSystemName
             $ConnectedSystemId = $connectedSystem.id
+        }
+
+        # Run Profile Safeguards: validated here (not via ValidateRange, which misbehaves with
+        # $null) so a negative value fails fast rather than reaching the API as a 400.
+        foreach ($safeguard in @('MaxCreates', 'MaxUpdates', 'MaxDeletes')) {
+            if ($PSBoundParameters.ContainsKey($safeguard)) {
+                $value = $PSBoundParameters[$safeguard]
+                if ($null -ne $value -and $value -lt 0) {
+                    Write-Error "$safeguard cannot be negative."
+                    return
+                }
+            }
         }
 
         if ($PSCmdlet.ShouldProcess($Name, "Create Run Profile")) {
@@ -147,6 +196,16 @@ function New-JIMRunProfile {
 
             if ($VerifyImportContentHashes) {
                 $body.verifyImportContentHashes = $true
+            }
+
+            # Run Profile Safeguards: send the whole safeguards object when any limit is bound;
+            # an unbound parameter is $null, which is exactly "no limit" for that member.
+            if ($PSBoundParameters.ContainsKey('MaxCreates') -or $PSBoundParameters.ContainsKey('MaxUpdates') -or $PSBoundParameters.ContainsKey('MaxDeletes')) {
+                $body.safeguards = @{
+                    maxCreates = $MaxCreates
+                    maxUpdates = $MaxUpdates
+                    maxDeletes = $MaxDeletes
+                }
             }
 
             try {

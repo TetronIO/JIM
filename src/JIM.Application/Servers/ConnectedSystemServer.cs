@@ -7811,6 +7811,11 @@ public partial class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
+        // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
+        var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
+        if (safeguardsError != null)
+            throw new ArgumentException(safeguardsError);
+
         // Core: IsRunProfileValid only reads ConnectorDefinition.Supports* and we read .Name for activity context.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
         if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
@@ -7842,6 +7847,11 @@ public partial class ConnectedSystemServer
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
+
+        // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
+        var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
+        if (safeguardsError != null)
+            throw new ArgumentException(safeguardsError);
 
         // Core: IsRunProfileValid only reads ConnectorDefinition.Supports* and we read .Name for activity context.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
@@ -7924,6 +7934,11 @@ public partial class ConnectedSystemServer
         if (connectedSystemRunProfile.VerifyImportContentHashes && connectedSystemRunProfile.RunType != ConnectedSystemRunType.FullImport)
             throw new ArgumentException("VerifyImportContentHashes can only be enabled on a Full Import Run Profile.");
 
+        // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
+        var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
+        if (safeguardsError != null)
+            throw new ArgumentException(safeguardsError);
+
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
@@ -7955,6 +7970,11 @@ public partial class ConnectedSystemServer
         // SPEC-1082 D10: Verification Mode only applies to Full Import.
         if (connectedSystemRunProfile.VerifyImportContentHashes && connectedSystemRunProfile.RunType != ConnectedSystemRunType.FullImport)
             throw new ArgumentException("VerifyImportContentHashes can only be enabled on a Full Import Run Profile.");
+
+        // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
+        var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
+        if (safeguardsError != null)
+            throw new ArgumentException(safeguardsError);
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);

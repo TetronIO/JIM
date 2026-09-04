@@ -33,6 +33,17 @@ public class ExportExecutionServer
     /// </summary>
     public const int DefaultBatchSize = 100;
 
+    /// <summary>
+    /// Every Pending Export change type, for iterating the Run Profile Safeguards (#1618) ledger
+    /// decision per type without re-declaring the three values at each call site.
+    /// </summary>
+    private static readonly PendingExportChangeType[] AllChangeTypes =
+    [
+        PendingExportChangeType.Create,
+        PendingExportChangeType.Update,
+        PendingExportChangeType.Delete
+    ];
+
     private JimApplication Application { get; }
     private ISyncRepository SyncRepo { get; }
 
@@ -154,8 +165,24 @@ public class ExportExecutionServer
             return result;
         }
 
+        // Run Profile Safeguards (#1618): decide once, up front, which change types this run may
+        // attempt at all. Reading the executable count per change type costs one extra query, so it
+        // is skipped entirely when the Run Profile carries no limits; an uncapped Export run performs
+        // no additional database work. The ledger is shared by both passes (the immediate batches
+        // below and the deferred-reference pass) and both connector shapes (calls and files), so a
+        // withheld type stays withheld regardless of which pass or path meets it.
+        var hasAnyChangeLimit = options.MaxCreates.HasValue || options.MaxUpdates.HasValue || options.MaxDeletes.HasValue;
+        var executablePendingCountsByType = hasAnyChangeLimit
+            ? await SyncRepo.GetExecutableExportCountsByChangeTypeAsync(connectedSystem.Id)
+            : new Dictionary<PendingExportChangeType, int>();
+        var changeLimitLedger = new ExportChangeLimitLedger(options.MaxCreates, options.MaxUpdates, options.MaxDeletes, executablePendingCountsByType);
+
+        // The withheld totals are decided now, at construction, not accumulated as the run
+        // progresses; count them towards processedCount up front too (see the paging loop below) so
+        // the run's progress window still completes even though a withheld type is never attempted.
+
         // Execute exports using the connector with batch-loading
-        await ExecuteExportsViaConnectorAsync(connectedSystem, connector, result, options,
+        await ExecuteExportsViaConnectorAsync(connectedSystem, connector, result, options, changeLimitLedger,
             cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
 
         // Second pass: retry any exports with deferred references that might now be resolvable
@@ -170,6 +197,11 @@ public class ExportExecutionServer
                 result.ProcessedExportItems = [];
             }
         }
+
+        // Run Profile Safeguards (#1618): copy the ledger's final withheld counts onto the result.
+        result.CreatesWithheld = changeLimitLedger.Withheld(PendingExportChangeType.Create);
+        result.UpdatesWithheld = changeLimitLedger.Withheld(PendingExportChangeType.Update);
+        result.DeletesWithheld = changeLimitLedger.Withheld(PendingExportChangeType.Delete);
 
         result.CompletedAt = DateTime.UtcNow;
 
@@ -356,6 +388,7 @@ public class ExportExecutionServer
         IConnector connector,
         ExportExecutionResult result,
         ExportExecutionOptions options,
+        ExportChangeLimitLedger changeLimitLedger,
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
@@ -365,7 +398,7 @@ public class ExportExecutionServer
         // Check if connector supports export using calls
         if (connector is IConnectorExportUsingCalls callsConnector)
         {
-            await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, result, options,
+            await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, result, options, changeLimitLedger,
                 cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
         }
         // File-based connectors load all Pending Exports upfront because the connector writes the
@@ -374,6 +407,11 @@ public class ExportExecutionServer
         else if (connector is IConnectorExportUsingFiles filesConnector)
         {
             var pendingExports = await GetExecutableExportsAsync(connectedSystem.Id);
+
+            // Run Profile Safeguards (#1618): reserve against the ledger before the file is written.
+            // Withheld exports are simply excluded here: never touched, never marked, left Pending.
+            pendingExports = ReserveAgainstLedger(pendingExports, changeLimitLedger);
+
             await ExecuteUsingFilesWithBatchingAsync(connectedSystem, filesConnector, pendingExports, result, options, cancellationToken, progressCallback);
         }
         else
@@ -381,6 +419,43 @@ public class ExportExecutionServer
             Log.Warning("ExecuteExportsViaConnectorAsync: Connector {ConnectorName} does not support export",
                 connector.Name);
         }
+    }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): filters a set of Pending Exports against the run's change-limit
+    /// ledger, preserving each change type's queue order. Groups by change type, reserves capacity for
+    /// each type's count in one call, then keeps the granted head of each type in its original position;
+    /// the rest is dropped from the returned list. A caller must leave whatever is dropped exactly as
+    /// found: not marked, not failed, given no execution item.
+    /// </summary>
+    private static List<PendingExport> ReserveAgainstLedger(List<PendingExport> exports, ExportChangeLimitLedger ledger)
+    {
+        if (exports.Count == 0)
+            return exports;
+
+        var requestedByType = exports
+            .GroupBy(pe => pe.ChangeType)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var grantedByType = requestedByType.ToDictionary(kv => kv.Key, kv => ledger.Reserve(kv.Key, kv.Value));
+
+        // Fast path: nothing was withheld for any type, so the original (already queue-ordered) list
+        // can be returned unchanged rather than rebuilt.
+        if (grantedByType.All(kv => kv.Value == requestedByType[kv.Key]))
+            return exports;
+
+        var consumedByType = new Dictionary<PendingExportChangeType, int>();
+        var granted = new List<PendingExport>(exports.Count);
+        foreach (var export in exports)
+        {
+            var consumed = consumedByType.GetValueOrDefault(export.ChangeType);
+            if (consumed < grantedByType[export.ChangeType])
+            {
+                granted.Add(export);
+                consumedByType[export.ChangeType] = consumed + 1;
+            }
+        }
+        return granted;
     }
 
     /// <summary>
@@ -416,6 +491,7 @@ public class ExportExecutionServer
         IConnectorExportUsingCalls connector,
         ExportExecutionResult result,
         ExportExecutionOptions options,
+        ExportChangeLimitLedger changeLimitLedger,
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
@@ -460,6 +536,14 @@ public class ExportExecutionServer
                 var processedCount = 0;
                 var processedIds = new HashSet<Guid>();
 
+                // Run Profile Safeguards (#1618): the change types withheld for the whole run,
+                // decided once by the ledger before this loop starts. Excluded at the database level
+                // (below) so paging never reads, and never has to skip past, a withheld row; their
+                // total is added to processedCount once, here, rather than accumulated per batch,
+                // since none of them will ever be seen by this loop to accumulate from.
+                var excludedChangeTypes = AllChangeTypes.Where(changeLimitLedger.IsWithheld).ToList();
+                processedCount += AllChangeTypes.Sum(changeLimitLedger.Withheld);
+
                 // Sub-phase narration from the connector, carrying the counts JIM owns (issue #637).
                 using var connectorProgress = CreateConnectorProgress(progressCallback, subPhase => new ExportProgressInfo
                 {
@@ -486,7 +570,7 @@ public class ExportExecutionServer
                             .SetTag("take", options.BatchSize))
                         {
                             rawBatch = await SyncRepo.GetExecutableExportBatchAsync(
-                                connectedSystem.Id, options.BatchSize, cursorCreatedAt, cursorId);
+                                connectedSystem.Id, options.BatchSize, cursorCreatedAt, cursorId, excludedChangeTypes);
                         }
 
                         if (rawBatch.Count == 0)
@@ -532,6 +616,13 @@ public class ExportExecutionServer
                     var immediateExports = eligibleExports.Where(pe => !pe.HasUnresolvedReferences).ToList();
                     var batchDeferred = eligibleExports.Where(pe => pe.HasUnresolvedReferences).ToList();
                     deferredExports.AddRange(batchDeferred);
+
+                    // Run Profile Safeguards (#1618): a defensive guard, not the primary mechanism -
+                    // excludedChangeTypes above already keeps a withheld type out of every batch this
+                    // loop reads. Whatever it drops is left exactly as found (Pending), not marked,
+                    // failed, or given an execution item; its withheld total was already added to
+                    // processedCount once, up front, not accumulated here.
+                    immediateExports = ReserveAgainstLedger(immediateExports, changeLimitLedger);
 
                     if (immediateExports.Count > 0)
                     {
@@ -681,7 +772,7 @@ public class ExportExecutionServer
                 // Second pass: Exports with unresolved references (deferred)
                 if (deferredExports.Count > 0)
                 {
-                    await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExports, result, options,
+                    await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExports, result, options, changeLimitLedger,
                         cancellationToken, progressCallback, connectorFactory, repositoryFactory);
 
                     // Drain any remaining deferred export items via callback
@@ -765,6 +856,7 @@ public class ExportExecutionServer
         List<PendingExport> deferredExports,
         ExportExecutionResult result,
         ExportExecutionOptions options,
+        ExportChangeLimitLedger changeLimitLedger,
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
@@ -853,6 +945,15 @@ public class ExportExecutionServer
 
         // Batch-export resolved deferred exports, and the partial writes alongside them
         var exportsToWrite = resolvedExports.Concat(writeInPartExports).ToList();
+
+        // Run Profile Safeguards (#1618): reserve against the same ledger the first pass used, before
+        // the exports are split into batches. A deferred export withheld here is left exactly as the
+        // first pass left it: still Pending, its unresolved-reference state untouched (the in-memory
+        // resolution above is never persisted for it), and NOT marked deferred - it simply was not
+        // attempted this run, so DeferredCount must not count it either. The next Export run resolves
+        // and attempts it in the ordinary order.
+        exportsToWrite = ReserveAgainstLedger(exportsToWrite, changeLimitLedger);
+
         if (exportsToWrite.Count > 0)
         {
             // Persist the in-memory reference resolutions BEFORE executing the deferred batches.

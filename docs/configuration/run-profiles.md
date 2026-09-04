@@ -48,6 +48,26 @@ Full Import automatically skips loading and comparing objects whose content has 
 
 **Verification Mode** is an optional toggle on a Full Import Run Profile that temporarily disables this optimisation: every object is fully compared regardless of its stored hash, and JIM reports an error if a stored hash matched but the comparison still found a change. Use it to validate the optimisation after an upgrade, or to investigate a suspected discrepancy; leave it off for everyday imports, since it forgoes the performance benefit. The toggle only applies to Full Import Run Profiles; enabling it on any other run type is rejected.
 
+## Safeguards
+
+An **Export** Run Profile can carry a limit on how many creates, updates and deletes a single run may attempt against the Connected System: **Max creates**, **Max updates** and **Max deletes**. Each is optional and independent; leave any of them blank for no limit, or set one to `0` to refuse that change type outright. The three limits are only valid on an Export Run Profile; setting one on any other run type is rejected.
+
+**A run that would exceed a limit attempts none of that change type.** JIM counts how many of each change type are pending at the start of the run; if a type's count is more than its limit, JIM attempts none of that type at all this run and leaves every one of them exactly where they were: still Pending, untouched. There is no partial attempt: JIM never processes up to the limit and stops partway. Other change types are unaffected and continue normally, whether they carry their own limit or none. The Activity for a run that withheld anything completes as **Complete with warning**, naming the limit, how many were pending, and what to do next, and the Activity's `exportCreatesWithheld` / `exportUpdatesWithheld` / `exportDeletesWithheld` counters record exactly how many were withheld (see [Activities](activities.md)). Resuming needs no action beyond raising or clearing the limit, or reducing what is pending, then running the Export Run Profile again.
+
+To clear a limit, set it back to no value:
+
+```powershell
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDeletes $null
+```
+
+**Recommended values:** set **Max deletes** to a small share of the target Connected System's population (for example, a few percent) on any Export Run Profile writing to a production directory; a broken import filter or an unintended Synchronisation Rule change can then withhold the whole deprovisioning attempt and warn you, rather than working through the whole directory. Leave **Max creates** and **Max updates** blank until a new Connected System's initial load has finished, since that first export is legitimately a mass create; consider capping them afterwards for the same reason as deletes.
+
+### Letting a legitimate mass change through
+
+A limit exists to stop a run nobody meant to be this big; it is not meant to be raised every time a genuine bulk operation comes along. If you know in advance that a run will legitimately exceed a limit (a planned bulk deprovisioning, a large onboarding batch), run a **second Export Run Profile against the same Connected System with no limit set**, and trigger it by hand rather than adding it to a Schedule. This gets the large, deliberate change through without touching the limited Run Profile that protects your regular scheduled runs.
+
+Raising or clearing the limited Run Profile's own limit works too, but is the weaker option: it is easy to forget to put the limit back afterwards, and until you do, the safeguard is gone for every run that Run Profile makes, scheduled or not. A second, unlimited Run Profile kept out of Schedules cannot be forgotten in the same way, because it is never run except when you choose to run it.
+
 ## Asynchronous execution
 
 Triggering a Run Profile returns an activity ID. The actual work runs on the worker process and is monitored via [activities](activities.md). For long-running runs, polling the activity gives you live progress counters; the per-object execution items let you drill into individual failures after the fact.

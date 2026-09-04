@@ -50,6 +50,58 @@
     </MudStack>
 }
 
+@* ─── Run Profile Safeguards withheld-changes notice (#1618) ───
+   Derived from the most recent completed Export Activity, so a backlog of deliberately unprocessed
+   changes cannot sit unnoticed behind a warning-status Activity on a busy Operations page. *@
+@if (_connectedSystem != null && _latestExportActivity is { } exportActivity &&
+     (exportActivity.ExportCreatesWithheld ?? 0) + (exportActivity.ExportUpdatesWithheld ?? 0) + (exportActivity.ExportDeletesWithheld ?? 0) is var totalWithheld and > 0)
+{
+    var exportRunProfile = _connectedSystem.RunProfiles?.FirstOrDefault(rp => rp.Id == exportActivity.ConnectedSystemRunProfileId);
+
+    // Run Profile Safeguards (#1618): a run attempts none of a change type it would exceed the
+    // limit for, so every withheld type here was withheld in full, not partially.
+    var withheldByType = new List<(string Noun, int Count, int? Limit)>();
+    if ((exportActivity.ExportCreatesWithheld ?? 0) > 0)
+        withheldByType.Add(("creates", exportActivity.ExportCreatesWithheld!.Value, exportRunProfile?.MaxCreates));
+    if ((exportActivity.ExportUpdatesWithheld ?? 0) > 0)
+        withheldByType.Add(("updates", exportActivity.ExportUpdatesWithheld!.Value, exportRunProfile?.MaxUpdates));
+    if ((exportActivity.ExportDeletesWithheld ?? 0) > 0)
+        withheldByType.Add(("deletes", exportActivity.ExportDeletesWithheld!.Value, exportRunProfile?.MaxDeletes));
+
+    var changeNoun = withheldByType.Count == 1
+        ? (totalWithheld == 1 ? withheldByType[0].Noun.TrimEnd('s') : withheldByType[0].Noun)
+        : "changes";
+    // The limit may have been raised or cleared since that run, in which case the Run Profile no longer
+    // carries one to name; say so rather than rendering an empty clause. The notice clears itself on the
+    // next completed export either way.
+    var limitsText = string.Join(", ", withheldByType
+        .Where(w => w.Limit.HasValue)
+        .Select(w => $"Max {w.Noun} is {w.Limit!.Value:N0}"));
+    var reasonText = limitsText.Length > 0
+        ? $"{exportActivity.TargetName}'s {limitsText}"
+        : $"{exportActivity.TargetName}'s limit has since been changed, so the next run will decide again";
+    var quantityText = totalWithheld == 1 ? "the 1 pending" : $"all {totalWithheld:N0} pending";
+
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-6">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
+            <span>
+                The last export withheld @quantityText @changeNoun: <strong>@reasonText</strong>.
+                They stay pending until the limit is raised or cleared, or an Export Run Profile without the limit runs.
+            </span>
+            <MudStack Row Spacing="2">
+                <MudButton Variant="Variant.Text" Color="Color.Inherit" DropShadow="false"
+                           Href="@($"/activity/{exportActivity.Id}")">
+                    View Activity
+                </MudButton>
+                <MudButton Variant="Variant.Text" Color="Color.Inherit" DropShadow="false"
+                           Href="@($"/admin/connected-systems/{_connectedSystem.Id}?t=run-profiles")">
+                    Edit Run Profile
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudAlert>
+}
+
 @* ─── Deletion fence notice (#809) ───
    A system with Status = Deleting is fenced: excluded from scheduled runs, its deletion either underway on
    the worker or stopped partway. The banner is the page's authority on that state; the Danger Zone's delete
@@ -278,6 +330,10 @@ else if (_drift is { TrackingDisabled: true })
     private int _pendingExportCount;
     private int _connectedSystemObjectCount;
     private int _obsoleteConnectedSystemObjectCount;
+
+    // Run Profile Safeguards (#1618): the most recent completed Export Activity, so a backlog of
+    // deliberately unprocessed changes cannot sit unnoticed behind a warning-status Activity.
+    private Activity? _latestExportActivity;
     private int _changeCount;
     private ConfigurationDriftStatus? _drift;
     private List<BreadcrumbItem> _breadcrumbs = null!;
@@ -345,6 +401,7 @@ else if (_drift is { TrackingDisabled: true })
 
         _pendingExportCount = await jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
         _connectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(Id);
+        _latestExportActivity = await jim.Activities.GetLatestCompletedExportActivityAsync(Id);
         _obsoleteConnectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectObsoleteCountAsync(Id);
         _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(Id);
         _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, Id, 1, 1)).TotalResults;
