@@ -42,10 +42,11 @@ else if (_syncRule != null)
 {
     @* The rule's identity (its Connected System, direction and object types) sits beneath the breadcrumbs rather
        than among the Details tab's fields, so every tab reads against it. mt-2 pairs with the breadcrumbs' own
-       padding, as on the Connected System page; the tabs' mt-2 collapses into the mb-4. *@
-    @if (_syncRule is { Id: > 0, ConnectedSystem: not null })
+       padding for the uniform 24px gap, as on the Connected System page; the gap below it belongs to the tabs
+       (see their Class), per the Panel spacing rules in JIM.Web/CLAUDE.md. *@
+    @if (ShowIdentityStrip)
     {
-        <div class="mt-2 mb-4">
+        <div class="mt-2">
             <SyncRuleIdentityStrip Direction="@_syncRule.Direction"
                                    MetaverseObjectTypeName="@_syncRule.MetaverseObjectType?.Name"
                                    ConnectedSystemObjectTypeName="@_syncRule.ConnectedSystemObjectType?.Name"
@@ -58,7 +59,9 @@ else if (_syncRule != null)
        than by their position in this markup: a panel that appears later (Passwords, when provisioning is
        switched on) is appended to the end, landing after Attribute Flow instead of before it. Changing the key
        rebuilds the component, so registration order becomes markup order again. *@
-    <NavigableMudTabs @key="TabSetKey" TabPanelsClass="pt-5" Class="mt-2" @bind-ActivePanelIndex="_activeTabIndex">
+    @* mt-6 after the identity strip, which is a plain block with no padding of its own; mt-2 when the tabs follow
+       the breadcrumbs directly (a new rule), whose own 16px padding makes up the rest of the 24px. *@
+    <NavigableMudTabs @key="TabSetKey" TabPanelsClass="pt-5" Class="@(ShowIdentityStrip ? "mt-6" : "mt-2")" @bind-ActivePanelIndex="_activeTabIndex">
 
         <MudTabPanel Text="Details">
             <SyncRuleDetailsTab SyncRule="_syncRule"
@@ -319,6 +322,12 @@ else if (_syncRule != null)
     /// component itself.
     /// </summary>
     private string TabSetKey => $"{ShowInitialPasswordTab}-{_syncRule is { Id: > 0 }}";
+
+    /// <summary>
+    /// Whether the identity strip renders beneath the breadcrumbs: only a saved rule has one, and only once its
+    /// Connected System is loaded. The tabs' top margin depends on it, so both read the same answer.
+    /// </summary>
+    private bool ShowIdentityStrip => _syncRule is { Id: > 0, ConnectedSystem: not null };
 
     // Details, Matching, Scope, [Passwords], Attribute Flow are the editing tabs; for an existing rule
     // Changes and Danger Zone follow, and both are read-only views, so the editing save bar is hidden when
