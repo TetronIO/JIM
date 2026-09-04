@@ -3541,10 +3541,10 @@ html[lang] .jim-password-guidance.mud-alert {
    for Outbound, info for Inbound); the label's fill, the line and the arrowhead all take
    currentColor, so one rule per direction sets everything.
 
-   The container is an outlined MudPaper carrying the panels' own pa-4, so its border, fill, radius
-   and padding are the design system's (the paper rules above), and its shrink-to-fit layout and
-   gap are the d-inline-flex and gap-3 utilities; jim-identity-strip itself styles nothing and is
-   only a hook. */
+   The container is an outlined MudPaper carrying the panels' px-4 and a py-2 that keeps it level
+   with the tab bar, so its border, fill, radius and padding are the design system's (the paper
+   rules above), and its shrink-to-fit layout and gap are the d-inline-flex and gap-3 utilities;
+   jim-identity-strip itself styles nothing and is only a hook. */
 .jim-identity-flow {
     display: inline-flex;
     align-items: center;
