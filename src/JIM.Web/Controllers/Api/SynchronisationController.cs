@@ -3421,12 +3421,12 @@ public class SynchronisationController(
     /// </summary>
     /// <remarks>
     /// Answers what changing the rule's behaviour toggles would do before anything is saved: how many objects
-    /// would stop having an identity created for them, how many would stop having an account created, and how many
+    /// would stop having an identity created for them, how many would stop having a Connected System Object created, and how many
     /// would be left free to drift from what JIM holds, along with each of their inverses.
     ///
     /// These are the settings whose consequences are hardest to picture, because none of them names a population.
     /// Disabling a rule reads like pausing it and is closer to withdrawing every value it owns; turning
-    /// `provisionToConnectedSystem` on reads like granting a capability and is account creation at scale.
+    /// `provisionToConnectedSystem` on reads like granting a capability and is Connected System Object creation at scale.
     ///
     /// Every omitted toggle is taken from the stored rule, exactly as the update endpoint does, so a caller
     /// proposing one change never silently proposes a second.

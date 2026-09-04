@@ -13,7 +13,7 @@
 {
     @* ApplyEffectsToContainer is the one presentation parameter worth naming here: the tinted panel surface
        below needs the tabs' own effects carried onto it. The rest are JIM's defaults. *@
-    <NavigableMudTabs Class="mt-3" TabPanelsClass="pa-4 jim-tabs-surface"
+    <NavigableMudTabs TabPanelsClass="pa-4 jim-tabs-surface"
                       ApplyEffectsToContainer="true" QueryParameterName="c">
         @foreach (var category in _categoryGroups)
         {

@@ -289,7 +289,31 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// deletion rather than leaving the reader to notice the deletion was scheduled and never happened
     /// (#1620).
     /// </summary>
-    MvoDeletionCancelled
+    MvoDeletionCancelled,
+
+    /// <summary>
+    /// Preview only: the Metaverse Object is in scope of an export Synchronisation Rule today, the proposal would
+    /// take it out of scope, and the rule has nothing in the target Connected System to remove for it, so the exit
+    /// costs nothing beyond the rule no longer standing over the object. The export-side sibling of
+    /// <see cref="WouldFallOutOfScope"/>, which describes a Connected System Object leaving import scope. Its own
+    /// value because the two are different statements about different objects: a Metaverse Object leaving an
+    /// export rule's scope, reported through the import-side value, was labelled as leaving import scope, which
+    /// names a direction the rule does not have.
+    ///
+    /// Where the rule provisions, an in-scope identity with no target object would have had a Connected System Object
+    /// created and leaving scope means it no longer will; that is reported as <see cref="WouldStopProvisioning"/>,
+    /// because the consequence is the object that never arrives rather than the scope exit itself.
+    /// </summary>
+    WouldLeaveExportScope,
+
+    /// <summary>
+    /// Preview only: the Metaverse Object is out of an export Synchronisation Rule's scope today and the proposal
+    /// would bring it in without creating anything: either the rule does not provision, or the target object
+    /// already exists and the rule simply begins flowing attributes to it. The export-side sibling of
+    /// <see cref="WouldFallInScope"/>. Where the rule provisions and no target object exists, the entry is reported
+    /// as <see cref="Provisioned"/> instead, because the account it creates is the consequence.
+    /// </summary>
+    WouldEnterExportScope
 }
 
 /// <summary>

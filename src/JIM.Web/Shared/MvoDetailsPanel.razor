@@ -11,7 +11,7 @@
 
 @if (MetaverseObject != null)
 {
-    <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="mt-3 jim-expansion-panel">
+    <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="jim-expansion-panel">
         @foreach (var category in _categoryGroups)
         {
             <MudExpansionPanel Expanded="@GetCategoryExpanded(category.CategoryName)"

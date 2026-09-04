@@ -272,6 +272,8 @@ public class OutcomeDisplayMapEventOperationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope)]
     public void GetEventOperation_PreviewOutcomes_AreNullBecauseNothingHappened(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {

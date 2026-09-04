@@ -37,7 +37,7 @@
 
 @if (MetaverseObject != null)
 {
-    <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync" Class="mt-2" TabPanelsClass="pa-0">
+    <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync" Class="mt-2" TabPanelsClass="pt-5">
         <Header Context="headerContext">
             @if (_activeTabIndex == 0)
             {
@@ -75,7 +75,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeBadge()" BadgeColor="Color.Primary">
-            <div class="mt-3">
+            <div>
                 @if (_changeHistoryLoading && _changeHistoryRows.Count == 0)
                 {
                     <div class="d-flex justify-center pa-4">
@@ -109,7 +109,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Properties" Icon="@Icons.Material.Filled.Assignment">
-            <MudPaper Class="pa-4 mt-3" Outlined="true">
+            <MudPaper Class="pa-4" Outlined="true">
                 <MudGrid Spacing="4">
                     <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">Id</MudText>
@@ -200,7 +200,7 @@
         @* whole tab carries an Administrator gate rather than inheriting the page's (issue #1172).          *@
         <AuthorizeView Roles="Administrator" Context="actionsAuth">
             <MudTabPanel Text="Actions" Icon="@Icons.Material.Filled.Bolt">
-                <MudPaper Class="pa-4 mt-6" Outlined="true">
+                <MudPaper Class="pa-4" Outlined="true">
                     <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-set-password">
                         <MudIcon Icon="@Icons.Material.Filled.Key" Color="Color.Primary" Class="mt-1" />
                         <MudStack Spacing="1" Class="flex-grow-1">
@@ -227,7 +227,7 @@
                 @* A separate action rather than an option on the one above, because they answer different
                    questions. Set Password fixes named accounts now; this one says the person's password has
                    changed and every configured system should end up holding it. *@
-                <MudPaper Class="pa-4 mt-4" Outlined="true">
+                <MudPaper Class="pa-4 mt-6" Outlined="true">
                     <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-sync-password">
                         <MudIcon Icon="@Icons.Material.Filled.SyncLock" Color="Color.Primary" Class="mt-1" />
                         <MudStack Spacing="1" Class="flex-grow-1">

@@ -63,12 +63,14 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin, "Projects instead of joining", "Would Project Instead Of Join", CausalityTone.Error, Icons.Material.Filled.CallSplit),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously, "Matches more than one Metaverse Object", "Would Match Ambiguously", CausalityTone.Warning, Icons.Material.Filled.QuestionMark),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting, "No longer creates an identity", "Would Stop Projecting", CausalityTone.Warning, Icons.Material.Filled.PersonOff),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, "No longer creates an account", "Would Stop Provisioning", CausalityTone.Warning, Icons.Material.Filled.NoAccounts),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, "No longer creates a Connected System Object", "Would Stop Provisioning", CausalityTone.Warning, Icons.Material.Filled.NoAccounts),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift, "Free to drift from JIM", "Would Stop Correcting Drift", CausalityTone.Warning, Icons.Material.Filled.SyncDisabled),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported, "Stops being imported, stays joined", "Would Stop Being Imported", CausalityTone.Warning, Icons.Material.Filled.CloudOff),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported, "Imported again", "Would Resume Being Imported", CausalityTone.Success, Icons.Material.Filled.CloudSync),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues, "Contributed values withdrawn", "Would Withdraw Contributed Values", CausalityTone.Warning, Icons.Material.Filled.Undo),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, "Contributed values kept", "Would Retain Contributed Values", CausalityTone.Info, Icons.Material.Filled.Inventory2)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, "Contributed values kept", "Would Retain Contributed Values", CausalityTone.Info, Icons.Material.Filled.Inventory2),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, "Leaves export scope, nothing to remove", "Would Leave Export Scope", CausalityTone.Info, Icons.Material.Filled.FilterAltOff),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope", "Would Enter Export Scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt)
     ];
 
     /// <summary>
@@ -99,7 +101,9 @@ public class OutcomeDisplayMapTests
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues,
-        ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope
     ];
 
     [Test]
@@ -116,6 +120,26 @@ public class OutcomeDisplayMapTests
                 Assert.That(plainLabel, Is.Not.EqualTo(outcomeType.ToString().SplitOnCapitalLetters()),
                     $"Plain label for {outcomeType} is the de-PascalCased enum name rather than written English");
             }
+        }
+    }
+
+    /// <summary>
+    /// The export-side scope transitions exist because their import-side siblings' labels were the only ones an
+    /// export rule's scope preview could show, and "Leaves import scope" against a Metaverse Object leaving an
+    /// export rule names a direction the rule does not have. Their labels must say which side they are.
+    /// </summary>
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope)]
+    public void Get_ExportScopeTransitions_NameExportScopeAndNeverImport(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        var display = OutcomeDisplayMap.Get(outcomeType);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(display.PlainLabel, Does.Contain("export scope"));
+            Assert.That(display.PlainLabel, Does.Not.Contain("import").IgnoreCase);
+            Assert.That(display.SentenceForm, Does.Contain("export scope"));
+            Assert.That(display.SentenceForm, Does.Not.Contain("import").IgnoreCase);
         }
     }
 

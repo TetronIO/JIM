@@ -94,7 +94,13 @@ public class SyncOutcomeTypeOrdinalTests
 
         // The cancellation counterpart of MvoDeletionScheduled (17): a rejoin undid the disconnection that
         // scheduled a grace-period deletion (#1620).
-        [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled] = 43
+        [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled] = 43,
+
+        // Export-side scope transitions for the Synchronisation Rule scope preview: a Metaverse Object leaving or
+        // entering an export rule's scope was reported through the import-side values (20, 21) and labelled as
+        // import scope, a direction an export rule does not have.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope] = 44,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = 45
     };
 
     [Test]

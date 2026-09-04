@@ -90,8 +90,9 @@ Changing a Scoping Criterion decides which objects the rule manages at all, and 
 
 The **Preview Scope Impact** button, which appears beside the editor's save button once you have edited the criteria, starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the criteria as they stand on the form, evaluated against the rule's saved criteria, changing nothing. It reports each object that would move, split by what the move actually costs it:
 
-- **Leaving scope**<br /> A joined object whose join would break, taking whatever it contributed out of the Metaverse with it; a joined object that would keep its join and simply stop receiving Attribute Flow; and an unjoined object that stops matching and loses nothing. Where a broken join would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
-- **Entering scope**<br /> What each object would become, answered by running the same evaluation a synchronisation would: a new Metaverse Object projected, a join to an existing one, or an object provisioned into the target Connected System.
+- **Leaving an import rule's scope**<br /> A joined object whose join would break, taking whatever it contributed out of the Metaverse with it; a joined object that would keep its join and simply stop receiving Attribute Flow; and an unjoined object that stops matching and loses nothing. Where a broken join would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
+- **Leaving an export rule's scope**<br /> A Metaverse Object with an object in the target system, which the **Deprovisioning Action** then removes from the target or disconnects and leaves in place; a Metaverse Object with no target object that a provisioning rule would have created a Connected System Object for and now will not; and a Metaverse Object with no target object under a rule that does not provision, which leaves scope with nothing to remove.
+- **Entering scope**<br /> What each object would become, answered by running the same evaluation a synchronisation would: a new Metaverse Object projected, a join to an existing one, or an object provisioned into the target Connected System. An export rule that does not provision, or whose target object already exists, reports the object as entering export scope and creates nothing.
 
 Two answers are deliberately negative rather than reassuring. Removing every criterion is called out as a warning, because it hands the rule every object of its type and is one click away from tidying up. And where another import Synchronisation Rule covers the same object type with **no** criteria of its own, that rule keeps every object in scope whatever this one says, so narrowing this rule disconnects nobody: the preview names that rule and counts no departures, rather than reporting a disconnection wave that would never happen.
 
@@ -157,7 +158,7 @@ warning stream from `Switch-JIMMatchingMode`.
 
 The five behaviour toggles are the settings whose consequences are hardest to picture, because none of them names a
 population. Disabling a rule reads like pausing it and is closer to withdrawing every value it owns. Turning
-**Provision To Connected System** on reads like granting a capability and is account creation at scale. Turning
+**Provision To Connected System** on reads like granting a capability and is Connected System Object creation at scale. Turning
 **Enforce State** off reads like relaxing a constraint and is a standing decision to let a target system diverge.
 
 **Preview Behaviour Impact**, which appears beside the editor's save button once you have edited a toggle, answers
@@ -166,7 +167,7 @@ what your edited toggles would do without saving them:
 | Transition | What it means |
 |---|---|
 | No longer creates an identity | Objects that would have had a Metaverse Object projected for them and now would not. They stay in the connector space, unmanaged. |
-| No longer creates an account | Metaverse Objects that would have had an account created in the target system and now would not. Nothing existing is destroyed, which is why it goes unnoticed. |
+| No longer creates a Connected System Object | Metaverse Objects that would have had a Connected System Object created in the target system and now would not. Nothing existing is destroyed, which is why it goes unnoticed. |
 | Free to drift from JIM | Objects whose divergence from what JIM holds would no longer be corrected. |
 | Identity created / Provisioned / Drift corrected | The inverses, for a toggle being turned on. |
 
