@@ -63,7 +63,7 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldProjectInsteadOfJoin, "Projects instead of joining", "Would Project Instead Of Join", CausalityTone.Error, Icons.Material.Filled.CallSplit),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously, "Matches more than one Metaverse Object", "Would Match Ambiguously", CausalityTone.Warning, Icons.Material.Filled.QuestionMark),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting, "No longer creates an identity", "Would Stop Projecting", CausalityTone.Warning, Icons.Material.Filled.PersonOff),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, "No longer creates an account", "Would Stop Provisioning", CausalityTone.Warning, Icons.Material.Filled.NoAccounts),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning, "No longer creates a Connected System Object", "Would Stop Provisioning", CausalityTone.Warning, Icons.Material.Filled.NoAccounts),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift, "Free to drift from JIM", "Would Stop Correcting Drift", CausalityTone.Warning, Icons.Material.Filled.SyncDisabled),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported, "Stops being imported, stays joined", "Would Stop Being Imported", CausalityTone.Warning, Icons.Material.Filled.CloudOff),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported, "Imported again", "Would Resume Being Imported", CausalityTone.Success, Icons.Material.Filled.CloudSync),

@@ -378,8 +378,8 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
                 if (targetObject == null)
                 {
                     // Nothing to deprovision: the rule never got as far as creating anything for this identity. What
-                    // the exit costs is the account a provisioning rule would have created and now will not; under a
-                    // rule that does not provision it costs nothing at all. Either way this is a Metaverse Object
+                    // the exit costs is the Connected System Object a provisioning rule would have created and now
+                    // will not; under a rule that does not provision it costs nothing at all. Either way this is a Metaverse Object
                     // leaving an EXPORT rule's scope, so the import-side transition, which the panel labels "Leaves
                     // import scope", would name a direction the rule does not have.
                     var exit = rule.ProvisionToConnectedSystem == true

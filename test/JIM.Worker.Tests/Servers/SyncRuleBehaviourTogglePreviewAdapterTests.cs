@@ -21,9 +21,10 @@ namespace JIM.Worker.Tests.Servers;
 ///
 /// These five settings are the ones whose consequences are hardest to picture, because none of them names a
 /// population. Disabling a rule reads like pausing it and is closer to withdrawing every value it owns; turning
-/// Provision To Connected System on reads like a capability and is account creation at scale. So the preview's job
-/// is to attach a count to each, and its job on Direction is to refuse: flipping it leaves every mapping and every
-/// Object Matching Rule pointing at the side the rule is leaving, so there is no coherent proposal to evaluate.
+/// Provision To Connected System on reads like a capability and is Connected System Object creation at scale. So
+/// the preview's job is to attach a count to each, and its job on Direction is to refuse: flipping it leaves every
+/// mapping and every Object Matching Rule pointing at the side the rule is leaving, so there is no coherent
+/// proposal to evaluate.
 /// </summary>
 [TestFixture]
 public class SyncRuleBehaviourTogglePreviewAdapterTests
@@ -134,16 +135,22 @@ public class SyncRuleBehaviourTogglePreviewAdapterTests
     }
 
     [Test]
-    public async Task ValidateAsync_ProvisioningTurnedOn_WarnsThatAccountsWouldBeCreatedAsync()
+    public async Task ValidateAsync_ProvisioningTurnedOn_WarnsThatConnectedSystemObjectsWouldBeCreatedAsync()
     {
+        // "Connected System Object" rather than "account": provisioning creates groups and custom types exactly as
+        // it creates user accounts, and the warning is read by an administrator deciding whether to save.
         _rule.Direction = SyncRuleDirection.Export;
         _rule.ProvisionToConnectedSystem = false;
 
         var findings = await NewAdapter().ValidateAsync(
             Context(Stored() with { ProvisionToConnectedSystem = true }));
 
-        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Warning).Select(f => f.Message),
-            Has.Some.Contains("account").IgnoreCase);
+        var warnings = findings.Where(f => f.Severity == PreviewValidationSeverity.Warning).Select(f => f.Message).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(warnings, Has.Some.Contains("Connected System Object"));
+            Assert.That(warnings, Has.None.Contains("account").IgnoreCase);
+        }
     }
 
     [Test]

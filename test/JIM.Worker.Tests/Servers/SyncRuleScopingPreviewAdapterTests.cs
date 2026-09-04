@@ -461,9 +461,9 @@ public class SyncRuleScopingPreviewAdapterTests
     [Test]
     public async Task EvaluateDeltasAsync_ExportNarrowingAwayFromAnUnprovisionedIdentityWhenProvisioning_ReportsItWouldStopProvisioningAsync()
     {
-        // The mirror of the widening case above: a rule that provisions would have created an account for this
-        // identity, and under the proposal it would not. The consequence is the account that never arrives, not
-        // the scope exit itself.
+        // The mirror of the widening case above: a rule that provisions would have created a Connected System Object
+        // for this identity, and under the proposal it would not. The consequence is the object that never arrives,
+        // not the scope exit itself.
         GivenExportRule();
         GivenRuleScopedToSales(_rule);
         _rule.ProvisionToConnectedSystem = true;

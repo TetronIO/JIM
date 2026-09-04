@@ -17,7 +17,7 @@ namespace JIM.Application.Servers.Preview;
 ///
 /// These are the settings whose consequences are hardest to picture, because none of them names a population.
 /// Disabling a rule reads like pausing it and is closer to withdrawing every value it owns. Turning Provision To
-/// Connected System on reads like granting a capability and is account creation at scale. Turning Enforce State
+/// Connected System on reads like granting a capability and is Connected System Object creation at scale. Turning Enforce State
 /// off reads like relaxing a constraint and is a standing decision to let a target system diverge. So the
 /// preview's whole job here is to put a count and a list of objects against each.
 ///
@@ -114,9 +114,9 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         {
             findings.Add(new PreviewValidationFinding(
                 PreviewValidationSeverity.Warning,
-                "Turning Provision To Connected System on creates an account in the target system for every " +
-                "in-scope Metaverse Object that has none. This is account creation at scale, and the count below " +
-                "is how many.",
+                "Turning Provision To Connected System on creates a Connected System Object in the target system for " +
+                "every in-scope Metaverse Object that has none. This is object creation at scale, and the count " +
+                "below is how many.",
                 nameof(SyncRule.ProvisionToConnectedSystem)));
         }
 

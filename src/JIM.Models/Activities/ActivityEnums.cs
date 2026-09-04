@@ -300,9 +300,9 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// export rule's scope, reported through the import-side value, was labelled as leaving import scope, which
     /// names a direction the rule does not have.
     ///
-    /// Where the rule provisions, an in-scope identity with no target object would have had an account created and
-    /// leaving scope means it no longer will; that is reported as <see cref="WouldStopProvisioning"/>, because the
-    /// consequence is the account that never arrives rather than the scope exit itself.
+    /// Where the rule provisions, an in-scope identity with no target object would have had a Connected System Object
+    /// created and leaving scope means it no longer will; that is reported as <see cref="WouldStopProvisioning"/>,
+    /// because the consequence is the object that never arrives rather than the scope exit itself.
     /// </summary>
     WouldLeaveExportScope,
 
