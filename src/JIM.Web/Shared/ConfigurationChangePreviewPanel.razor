@@ -23,7 +23,11 @@
    rather than rendered with a warning beside them. A number on screen is read as an answer whatever sits next to it.
 
    An empty summary means "nothing would change" only when the summary stage actually completed. While it is running
-   there is no answer yet, and where the adapter produces no deltas at all there never will be one from this stage. *@
+   there is no answer yet, and where the adapter produces no deltas at all there never will be one from this stage.
+
+   Spacing: every block below the header (alert, progress, stage list, subtitle, grid, drill-down heading) sits mt-4
+   from the one above it, so a panel reads as one column whatever mix of blocks a given preview produces. Text
+   inside a block uses mt-1 / mt-2; a warning that qualifies the block directly beneath its heading uses mt-2. *@
 
 <MudPaper Outlined="true" Class="@($"pa-4 {Class}")">
 
@@ -41,6 +45,13 @@
                        StartIcon="@Icons.Material.Filled.Cancel" Disabled="@_cancelling" OnClick="CancelAsync">
                 Cancel
             </MudButton>
+        }
+        @if (OnClose.HasDelegate)
+        {
+            <MudTooltip Text="Close this preview" Arrow="true" Placement="Placement.Top">
+                <MudIconButton data-testid="jim-preview-close" Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                               aria-label="Close this preview" OnClick="OnClose" />
+            </MudTooltip>
         }
     </div>
 
@@ -151,7 +162,7 @@
                     }
                     @foreach (var finding in _findings.OrderByDescending(f => f.Severity))
                     {
-                        <MudAlert Severity="@FindingSeverity(finding.Severity)" Variant="Variant.Outlined" Class="mt-2" Dense="true">
+                        <MudAlert Severity="@FindingSeverity(finding.Severity)" Variant="Variant.Outlined" Class="mt-4" Dense="true">
                             @* a finding about one Metaverse Attribute names it separately so the quoted name in
                                the plain-text message renders as the standard Metaverse attribute chip here *@
                             @foreach (var part in FindingMessageParts(finding))
@@ -181,7 +192,7 @@
                     @* without ordering it by how much the consequence matters.                                     *@
                     @if (ConfigurationChangePreviewVerdict.Describe(_impactCounts) is { } verdict)
                     {
-                        <MudAlert Severity="@verdict.Severity" Variant="Variant.Outlined" Class="mt-6"
+                        <MudAlert Severity="@verdict.Severity" Variant="Variant.Outlined" Class="mt-4"
                                   data-testid="jim-preview-verdict">
                             <MudText Typo="Typo.body1"><b>@verdict.Lead</b></MudText>
                             @if (!string.IsNullOrEmpty(verdict.Detail))
@@ -194,7 +205,7 @@
                     @* ─── Summary groups: the landing view ─── *@
                     @if (_groups.Count > 0)
                     {
-                        <MudText Typo="Typo.subtitle1" Class="mt-6">What would change</MudText>
+                        <MudText Typo="Typo.subtitle1" Class="mt-4">What would change</MudText>
                         @* The summary groups are already in memory (they are read whole on every refresh), so the
                            grid slices its windows from the list rather than reading a range. *@
                         <VirtualisedDataGrid @ref="_groupsGrid" T="ConfigurationChangePreviewGroup"
@@ -336,7 +347,7 @@
                     }
                     else if (NothingWouldChange)
                     {
-                        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mt-6">
+                        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mt-4">
                             This change would not change anything: no object moves through any transition as a result
                             of it.
                         </MudAlert>
@@ -348,7 +359,7 @@
                         var selected = _selectedGroup;
                         @* Which group is open, on two lines: value pairs run to the length of a Distinguished Name,
                            and on one line they push the Close button off the row they belong to. *@
-                        <div class="d-flex align-start mt-6" data-testid="jim-preview-drilldown-heading">
+                        <div class="d-flex align-start mt-4" data-testid="jim-preview-drilldown-heading">
                             <div>
                                 <MudText Typo="Typo.subtitle1">
                                     @Helpers.GetOutcomeTypePlainName(selected.TransitionType)@(string.IsNullOrEmpty(DescribePopulation(selected)) ? "" : $": {DescribePopulation(selected)}")
@@ -525,6 +536,15 @@
 
     [Parameter]
     public string? Class { get; set; }
+
+    /// <summary>
+    /// Raised when the administrator closes the panel. The surface that opened the preview decides what closing
+    /// means (the Synchronisation Rule editor forgets the preview, so the save confirmation stops citing it); a
+    /// surface that shows a preview as a record, such as the Activity page, leaves this unset and gets no button.
+    /// A running preview closed this way is not cancelled: it finishes as an Activity, where it can still be read.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
 
     private ConfigurationChangePreview? _preview;
     private Activity? _activity;

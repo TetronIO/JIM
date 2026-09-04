@@ -7,6 +7,7 @@
 @using JIM.Models.Preview
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Utility
+@using JIM.Web.Models
 @using JIM.Web.Pages.Admin.Components
 @using JIM.Web.Services
 @using JIM.Application
@@ -39,11 +40,28 @@
 }
 else if (_syncRule != null)
 {
+    @* The rule's identity (its Connected System, direction and object types) sits beneath the breadcrumbs rather
+       than among the Details tab's fields, so every tab reads against it. mt-2 pairs with the breadcrumbs' own
+       padding for the uniform 24px gap, as on the Connected System page; the gap below it belongs to the tabs
+       (see their Class), per the Panel spacing rules in JIM.Web/CLAUDE.md. *@
+    @if (ShowIdentityStrip)
+    {
+        <div class="mt-2">
+            <SyncRuleIdentityStrip Direction="@_syncRule.Direction"
+                                   MetaverseObjectTypeName="@_syncRule.MetaverseObjectType?.Name"
+                                   ConnectedSystemObjectTypeName="@_syncRule.ConnectedSystemObjectType?.Name"
+                                   ConnectedSystemId="@_syncRule.ConnectedSystemId"
+                                   ConnectedSystemName="@_syncRule.ConnectedSystem.Name" />
+        </div>
+    }
+
     @* Keyed on which tabs exist, because MudTabs orders its strip by the order panels register themselves rather
        than by their position in this markup: a panel that appears later (Passwords, when provisioning is
        switched on) is appended to the end, landing after Attribute Flow instead of before it. Changing the key
        rebuilds the component, so registration order becomes markup order again. *@
-    <NavigableMudTabs @key="TabSetKey" TabPanelsClass="pt-5" Class="mt-2" @bind-ActivePanelIndex="_activeTabIndex">
+    @* mt-6 after the identity strip, which is a plain block with no padding of its own; mt-2 when the tabs follow
+       the breadcrumbs directly (a new rule), whose own 16px padding makes up the rest of the 24px. *@
+    <NavigableMudTabs @key="TabSetKey" TabPanelsClass="pt-5" Class="@(ShowIdentityStrip ? "mt-6" : "mt-2")" @bind-ActivePanelIndex="_activeTabIndex">
 
         <MudTabPanel Text="Details">
             <SyncRuleDetailsTab SyncRule="_syncRule"
@@ -133,38 +151,53 @@ else if (_syncRule != null)
             @* Preview (#1115): the two destructive toggles (Deprovisioning Action, Out-of-Scope Action) can turn *@
             @* a routine scope exit into a deletion wave, so they are the settings that most need answering       *@
             @* beforehand. Only an existing rule can be previewed: the adapter evaluates the proposal against the *@
-            @* persisted configuration, and a rule that does not exist yet stands over no objects.                *@
-            @if (_syncRule.Id > 0)
+            @* persisted configuration, and a rule that does not exist yet stands over no objects. And each       *@
+            @* preview is offered only while the settings it answers for have been edited: evaluated against the  *@
+            @* stored rule, an unedited setting can only be reported as changing nothing, and four buttons that   *@
+            @* all said so crowded the save button (the baseline is re-taken after every save).                   *@
+            @if (_syncRule.Id > 0 && _previewBaseline is { } previewBaseline)
             {
-                <MudButton data-testid="jim-preview-destructive-toggles" Variant="Variant.Outlined" Color="Color.Primary"
-                    StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDestructiveTogglesAsync"
-                    Disabled="@_startingPreview">
-                    Preview Deprovisioning Impact
-                </MudButton>
+                @if (previewBaseline.DestructiveTogglesEdited(_syncRule))
+                {
+                    <MudButton data-testid="jim-preview-destructive-toggles" Variant="Variant.Outlined" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDestructiveTogglesAsync"
+                        Disabled="@_startingPreview">
+                        Preview Deprovisioning Impact
+                    </MudButton>
+                }
                 @* Preview (#1436): a Scoping Criteria edit decides which objects the rule manages at all, and what *@
                 @* the ones that leave cost is read from the toggles beside it, so the two are previewed           *@
                 @* separately and answer different questions.                                                     *@
-                <MudButton data-testid="jim-preview-scoping-criteria" Variant="Variant.Outlined" Color="Color.Primary"
-                    StartIcon="@Icons.Material.Filled.FilterAlt" OnClick="PreviewScopingCriteriaAsync"
-                    Disabled="@_startingPreview">
-                    Preview Scope Impact
-                </MudButton>
+                @if (previewBaseline.ScopeEdited(_syncRule))
+                {
+                    <MudButton data-testid="jim-preview-scoping-criteria" Variant="Variant.Outlined" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.FilterAlt" OnClick="PreviewScopingCriteriaAsync"
+                        Disabled="@_startingPreview">
+                        Preview Scope Impact
+                    </MudButton>
+                }
                 @* Preview (#1437): an Attribute Flow edit rewrites values on every object the rule already      *@
                 @* manages, which is a third question again: scope decides WHICH objects, the toggles decide what *@
                 @* leaving costs them, and this decides what the ones staying end up holding.                     *@
-                <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Outlined" Color="Color.Primary"
-                    StartIcon="@Icons.Material.Filled.SyncAlt" OnClick="PreviewAttributeFlowAsync"
-                    Disabled="@_startingPreview">
-                    Preview Attribute Flow Impact
-                </MudButton>
+                @if (previewBaseline.AttributeFlowEdited(_syncRule))
+                {
+                    <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Outlined" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.SyncAlt" OnClick="PreviewAttributeFlowAsync"
+                        Disabled="@_startingPreview">
+                        Preview Attribute Flow Impact
+                    </MudButton>
+                }
                 @* Preview (#1462): the behaviour toggles are a fourth question. Scope decides which objects, the *@
                 @* deprovisioning toggles decide what leaving costs them, Attribute Flow decides what the ones    *@
                 @* staying hold, and these decide whether the rule runs at all and what it may create.            *@
-                <MudButton data-testid="jim-preview-behaviour" Variant="Variant.Outlined" Color="Color.Primary"
-                    StartIcon="@Icons.Material.Filled.ToggleOn" OnClick="PreviewBehaviourAsync"
-                    Disabled="@_startingPreview">
-                    Preview Behaviour Impact
-                </MudButton>
+                @if (previewBaseline.BehaviourEdited(_syncRule))
+                {
+                    <MudButton data-testid="jim-preview-behaviour" Variant="Variant.Outlined" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.ToggleOn" OnClick="PreviewBehaviourAsync"
+                        Disabled="@_startingPreview">
+                        Preview Behaviour Impact
+                    </MudButton>
+                }
             }
         </MudStack>
 
@@ -184,6 +217,7 @@ else if (_syncRule != null)
             <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
                                              Title="Preview: Deprovisioning Impact"
                                              OnPreviewChanged="OnDestructiveTogglePreviewChanged"
+                                             OnClose="CloseDestructiveTogglePreview"
                                              Class="mt-6" />
         }
 
@@ -203,6 +237,7 @@ else if (_syncRule != null)
             <ConfigurationChangePreviewPanel ActivityId="@scopePreviewActivityId"
                                              Title="Preview: Scope Impact"
                                              OnPreviewChanged="OnScopingPreviewChanged"
+                                             OnClose="CloseScopingPreview"
                                              Class="mt-6" />
         }
 
@@ -222,6 +257,7 @@ else if (_syncRule != null)
             <ConfigurationChangePreviewPanel ActivityId="@behaviourPreviewActivityId"
                                              Title="Preview: Behaviour Impact"
                                              OnPreviewChanged="OnBehaviourPreviewChanged"
+                                             OnClose="CloseBehaviourPreview"
                                              Class="mt-6" />
         }
 
@@ -241,6 +277,7 @@ else if (_syncRule != null)
             <ConfigurationChangePreviewPanel ActivityId="@attributeFlowPreviewActivityId"
                                              Title="Preview: Attribute Flow Impact"
                                              OnPreviewChanged="OnAttributeFlowPreviewChanged"
+                                             OnClose="CloseAttributeFlowPreview"
                                              Class="mt-6" />
         }
     </div>
@@ -286,6 +323,12 @@ else if (_syncRule != null)
     /// </summary>
     private string TabSetKey => $"{ShowInitialPasswordTab}-{_syncRule is { Id: > 0 }}";
 
+    /// <summary>
+    /// Whether the identity strip renders beneath the breadcrumbs: only a saved rule has one, and only once its
+    /// Connected System is loaded. The tabs' top margin depends on it, so both read the same answer.
+    /// </summary>
+    private bool ShowIdentityStrip => _syncRule is { Id: > 0, ConnectedSystem: not null };
+
     // Details, Matching, Scope, [Passwords], Attribute Flow are the editing tabs; for an existing rule
     // Changes and Danger Zone follow, and both are read-only views, so the editing save bar is hidden when
     // either is active. Computed rather than a constant because the Passwords tab is conditional, and a
@@ -300,6 +343,13 @@ else if (_syncRule != null)
     /// properly, and a successful save (or a reload, which discards the staged edits) empties the list.
     /// </summary>
     private readonly List<SyncRuleMappingRemovalChoice> _mappingRemovalChoices = [];
+
+    /// <summary>
+    /// The rule's previewable settings as loaded or last saved, which is what decides which of the preview buttons
+    /// are offered: each appears only while the settings it answers for differ from this. Null for a new rule,
+    /// which cannot be previewed at all.
+    /// </summary>
+    private SyncRulePreviewBaseline? _previewBaseline;
 
     // A single JimApplication (and its DbContext) is held for the whole edit session. The rule is loaded
     // change-tracked and every tab mutates that tracked graph, so the final save lets EF Core diff and
@@ -353,6 +403,7 @@ else if (_syncRule != null)
 
             _syncRuleNameOrCreate = _syncRule.Name;
             _breadcrumbs.Add(new BreadcrumbItem(_syncRule.Name, href: null, disabled: true));
+            _previewBaseline = SyncRulePreviewBaseline.Capture(_syncRule);
 
             // lightweight count for the Changes tab badge (one row fetched; TotalResults only)
             _changeCount = (await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SynchronisationRule, _syncRule.Id, 1, 1)).TotalResults;
@@ -366,6 +417,7 @@ else if (_syncRule != null)
             // create a new Synchronisation Rule
             _syncRule = new SyncRule();
             _syncRuleNameOrCreate = "New";
+            _previewBaseline = null;
             _breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
             _connectedSystemHeaders = await _jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
             _metaverseObjectTypes = await _jim.Metaverse.GetMetaverseObjectTypesAsync(true);
@@ -421,7 +473,7 @@ else if (_syncRule != null)
     /// also why only an existing rule offers it.
     /// </summary>
     private SyncRuleDestructiveToggleProposal BuildDestructiveToggleProposal() =>
-        new(_syncRule!.OutboundDeprovisionAction, _syncRule.InboundOutOfScopeAction);
+        SyncRuleDestructiveToggleProposal.FromCurrentSettings(_syncRule!);
 
     /// <summary>
     /// Whether the form has moved on from the settings the visible preview was run against.
@@ -484,6 +536,17 @@ else if (_syncRule != null)
     /// Nothing the page renders depends on this value, so storing it is enough.
     /// </summary>
     private void OnDestructiveTogglePreviewChanged(ConfigurationChangePreview? preview) => _preview = preview;
+
+    /// <summary>
+    /// Forgets the preview, so the panel goes and the save confirmation no longer cites it. The evaluation itself is
+    /// untouched: a preview still running finishes as an Activity, where it can still be read.
+    /// </summary>
+    private void CloseDestructiveTogglePreview()
+    {
+        _previewActivityId = null;
+        _previewedProposal = null;
+        _preview = null;
+    }
 
     // ─── Scoping Criteria preview (#1436) ───
 
@@ -549,6 +612,13 @@ else if (_syncRule != null)
     }
 
     private void OnScopingPreviewChanged(ConfigurationChangePreview? preview) => _scopePreview = preview;
+
+    private void CloseScopingPreview()
+    {
+        _scopePreviewActivityId = null;
+        _previewedScopingProposal = null;
+        _scopePreview = null;
+    }
 
     // ─── Attribute Flow preview (#1437) ───
 
@@ -625,7 +695,21 @@ else if (_syncRule != null)
 
     private void OnAttributeFlowPreviewChanged(ConfigurationChangePreview? preview) => _attributeFlowPreview = preview;
 
+    private void CloseAttributeFlowPreview()
+    {
+        _attributeFlowPreviewActivityId = null;
+        _previewedAttributeFlowProposal = null;
+        _attributeFlowPreview = null;
+    }
+
     private void OnBehaviourPreviewChanged(ConfigurationChangePreview? preview) => _behaviourPreview = preview;
+
+    private void CloseBehaviourPreview()
+    {
+        _behaviourPreviewActivityId = null;
+        _previewedBehaviourProposal = null;
+        _behaviourPreview = null;
+    }
 
     /// <summary>
     /// The behaviour toggles as the editor currently holds them.
@@ -766,6 +850,9 @@ else if (_syncRule != null)
                 NavManager.NavigateTo($"/admin/sync-rules/{_syncRule.Id}");
                 break;
             case true:
+                // the same tracked rule stays on the page, so what was just saved is the new baseline the preview
+                // buttons are offered against; a create re-loads the rule by its new URL and captures it there.
+                _previewBaseline = SyncRulePreviewBaseline.Capture(_syncRule);
                 Snackbar.Add("Changes saved.", Severity.Success);
                 break;
             case false:

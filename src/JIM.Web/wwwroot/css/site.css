@@ -3533,6 +3533,78 @@ html[lang] .jim-password-guidance.mud-alert {
     color: var(--mud-palette-warning);
 }
 
+/* ─── Synchronisation Rule identity strip ────────────────────────────────────────────────────
+   The rule's Metaverse type, direction and Connected System type beneath the page's breadcrumbs
+   (Shared/SyncRuleIdentityStrip.razor). The direction is drawn, not just named: the line runs
+   between the two type chips and the arrowhead sits against whichever side receives the data, so
+   an Inbound rule cannot read as an export. Colour follows the direction chips elsewhere (warning
+   for Outbound, info for Inbound); the label's fill, the line and the arrowhead all take
+   currentColor, so one rule per direction sets everything.
+
+   The container is an outlined MudPaper carrying the panels' px-4 and a py-2 that keeps it level
+   with the tab bar, so its border, fill, radius and padding are the design system's (the paper
+   rules above), and its shrink-to-fit layout and gap are the d-inline-flex and gap-3 utilities;
+   jim-identity-strip itself styles nothing and is only a hook. */
+/* Block-level flex, not inline-flex, and the difference is visible: the flow is wrapped in a
+   MudTooltip root, which is a block. An inline-flex child of a block sits on the block's text
+   baseline, so the wrapper grows a line box taller than the flow and the flow lands ~2.5px below
+   the chips beside it (measured). As a block the wrapper is exactly the flow's height, and the
+   strip's own align-items centres it with the chips. */
+.jim-identity-flow {
+    display: flex;
+    align-items: center;
+}
+
+.jim-identity-flow-outbound {
+    color: var(--mud-palette-warning);
+}
+
+.jim-identity-flow-inbound {
+    color: var(--mud-palette-info);
+}
+
+.jim-identity-flow-line {
+    width: 1.75rem;
+    height: 2px;
+    background-color: currentColor;
+    opacity: 0.55;
+}
+
+.jim-identity-flow-label {
+    margin: 0 0.375rem;
+    padding: 0.125rem 0.625rem;
+    border-radius: 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    background-color: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+/* A border triangle rather than an icon, so the head is sized to the line it ends. Which border
+   carries the colour decides which way it points. */
+.jim-identity-flow-head {
+    width: 0;
+    height: 0;
+    border-top: 0.3125rem solid transparent;
+    border-bottom: 0.3125rem solid transparent;
+}
+
+.jim-identity-flow-outbound .jim-identity-flow-head {
+    border-left: 0.4375rem solid currentColor;
+}
+
+.jim-identity-flow-inbound .jim-identity-flow-head {
+    border-right: 0.4375rem solid currentColor;
+}
+
+.jim-identity-strip-system {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-weight: 500;
+}
+
 /* ─── Scoped hierarchy picker ────────────────────────────────────────────────────────────────
    The Container tree on a Connected System's Partitions & Containers tab. Rows are a grid rather
    than free-flowing inline content so the checkbox, name, scope control and metadata line up in
