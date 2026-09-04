@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
@@ -110,10 +111,18 @@ public readonly struct MetaverseObjectChangeResult
     /// <summary>
     /// The serialised decision-time deletion policy snapshot (#119), for the caller to attach to the
     /// outcome-bearing execution item's DeletionPolicySnapshotJson. Populated whenever the deletion rule
-    /// evaluation recorded an outcome (triggered, or evaluated-but-not-triggered under mode semantics);
-    /// null for non-events.
+    /// evaluation recorded an outcome (triggered, or evaluated-but-not-triggered under mode semantics), and
+    /// also carried through unchanged when a join cancels a previously scheduled deletion (#1620), so the
+    /// Deletion Rule that had scheduled it stays visible on the Joined item's causality panel.
     /// </summary>
     public string? MvoDeletionPolicySnapshotJson { get; init; }
+
+    /// <summary>
+    /// Set when this join cancelled a previously scheduled grace-period deletion (#119, #1620): the detail
+    /// message for the <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled"/>
+    /// child outcome the caller attaches under the Joined root. Null for an ordinary join.
+    /// </summary>
+    public string? CancelledMvoDeletionDetailMessage { get; init; }
 
     /// <summary>
     /// When a scheduled deletion becomes due (UTC), so the outcome node can state the date rather than
@@ -167,12 +176,22 @@ public readonly struct MetaverseObjectChangeResult
     /// <summary>
     /// Creates a result indicating a join to an existing MVO.
     /// </summary>
-    public static MetaverseObjectChangeResult Joined(int attributesAdded = 0, int attributesRemoved = 0) => new()
+    /// <param name="attributesAdded">The number of MVO attributes that were added alongside the join.</param>
+    /// <param name="attributesRemoved">The number of MVO attributes that were removed alongside the join.</param>
+    /// <param name="cancelledMvoDeletionDetailMessage">The detail message for an MvoDeletionCancelled child outcome, when this join cancelled a previously scheduled deletion (#1620); null otherwise.</param>
+    /// <param name="mvoDeletionPolicySnapshotJson">The scheduled deletion's decision-time policy snapshot, carried through unchanged so the causality panel can still show the rule that had scheduled it (#1620); null otherwise.</param>
+    public static MetaverseObjectChangeResult Joined(
+        int attributesAdded = 0,
+        int attributesRemoved = 0,
+        string? cancelledMvoDeletionDetailMessage = null,
+        string? mvoDeletionPolicySnapshotJson = null) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.Joined,
         AttributesAdded = attributesAdded,
-        AttributesRemoved = attributesRemoved
+        AttributesRemoved = attributesRemoved,
+        CancelledMvoDeletionDetailMessage = cancelledMvoDeletionDetailMessage,
+        MvoDeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson
     };
 
     /// <summary>

@@ -279,7 +279,17 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// out-of-scope disconnection so an administrator can see why the values remain; the sibling of
     /// <see cref="NoContributor"/>, which reports the values that were genuinely cleared.
     /// </summary>
-    ValuesPreserved
+    ValuesPreserved,
+
+    /// <summary>
+    /// A scheduled grace-period Metaverse Object deletion was cancelled because a Connected System Object
+    /// rejoined the Metaverse Object from a source whose rejoin the deletion rule's trigger mode recognises
+    /// as undoing the disconnection that triggered it (#119). Emitted on the rejoining item as a child of
+    /// its <see cref="Joined"/> outcome, so the Lineage records why the object survived its scheduled
+    /// deletion rather than leaving the reader to notice the deletion was scheduled and never happened
+    /// (#1620).
+    /// </summary>
+    MvoDeletionCancelled
 }
 
 /// <summary>

@@ -30,6 +30,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope, "Out of Scope")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted, "MVO Deleted")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled, "MVO Deletion Scheduled")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled, "MVO Deletion Cancelled")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, "CSO Drift Corrected")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, "CSO Provisioned")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, "CSO Pending Export")]
@@ -102,6 +103,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted, Color.Error)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled, Color.Success)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, Color.Primary)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, Color.Info)]
@@ -156,6 +158,7 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope] = Icons.Material.Filled.FilterAltOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted] = Icons.Material.Filled.PersonRemove,
             [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled] = Icons.Material.Filled.HourglassBottom,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled] = Icons.Material.Filled.HourglassDisabled,
             [ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection] = Icons.Material.Filled.CompareArrows,
             [ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned] = Icons.Material.Filled.SwitchAccessShortcut,
             [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated] = Icons.Material.Filled.Schedule,

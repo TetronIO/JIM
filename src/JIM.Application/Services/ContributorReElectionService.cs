@@ -114,7 +114,11 @@ public static class ContributorReElectionService
                 }
             }
 
-            // The gate writes to the survivor's joined Metaverse Object; ensure the back-reference is the MVO in hand.
+            // The gate writes to the survivor's joined Metaverse Object; ensure the back-reference is the MVO
+            // in hand. This overwrite is also what keeps the survivor's (possibly freshly reloaded) Type
+            // navigation from carrying a stale or distinct Metaverse Object instance forward: pinning the
+            // navigation back to `mvo` here is exactly the kind of same-page identity resolution
+            // MetaverseObjectPageIdentityMap (#1612) centralises for the sync processors' own loads.
             survivor.MetaverseObject = mvo;
 
             // A survivor out of the rule's scope is not a legitimate contributor, so it must not be re-elected.

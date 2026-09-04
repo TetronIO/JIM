@@ -250,6 +250,7 @@ public class OutcomeDisplayMapEventOperationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor)]
     public void GetEventOperation_OutcomesWithNoObjectOperationOfTheirOwn_AreNull(

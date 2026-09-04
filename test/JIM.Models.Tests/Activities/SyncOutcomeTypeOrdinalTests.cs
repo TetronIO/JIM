@@ -90,7 +90,11 @@ public class SyncOutcomeTypeOrdinalTests
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = 41,
 
         // Recall gate observability (#1570): values preserved as last known state because no import source remains.
-        [ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved] = 42
+        [ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved] = 42,
+
+        // The cancellation counterpart of MvoDeletionScheduled (17): a rejoin undid the disconnection that
+        // scheduled a grace-period deletion (#1620).
+        [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled] = 43
     };
 
     [Test]

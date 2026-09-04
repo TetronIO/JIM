@@ -161,6 +161,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                     totalCsosToProcess);
             }
 
+            // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
+            // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve
+            // onto the same canonical instance as this navigation, rather than two distinct loads of the
+            // same row.
+            _mvoIdentityMap.Seed(csoPagedResult.Results);
+
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
             // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
 
@@ -249,9 +255,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // Persist MVO change records via raw SQL before clearing the change tracker
                 await FlushPendingMvoChangesAsync();
 
-                // Clear the change tracker unconditionally at every page boundary.
-                // See SyncFullSyncTaskProcessor for detailed explanation.
-                _syncRepo.ClearChangeTracker();
+                // Clear the change tracker (and the page identity map, #1612) unconditionally at every page
+                // boundary. See SyncFullSyncTaskProcessor for detailed explanation.
+                ClearPageTrackingState();
 
                 // Update progress with page completion. The call persists the Activity's counters,
                 // which the portal renders the count, rate and time remaining from; see the same

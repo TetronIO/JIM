@@ -449,13 +449,15 @@ public partial class SyncRepository
         if (metaverseObjects.Count == 0)
             return;
 
-        // Defensive collapse (belt and braces): the page-flush accumulator (SyncTaskProcessorBase's
-        // QueueMvoForUpdate) is meant to dedupe by Id before this method ever sees the list, but this is
-        // the last line of defence before the batch UPDATE/INSERT below, which cannot tolerate a duplicate
-        // Id at all - a duplicate-keyed VALUES row makes the UPDATE nondeterministic (PostgreSQL picks an
-        // arbitrary row) and a duplicate attribute value Id in the INSERT fails outright on the unique
-        // constraint, aborting the whole Activity. Collapsing here means a future queueing-site regression
-        // degrades to a logged consolidation instead of a failed Activity.
+        // Defensive collapse (belt and braces): SyncTaskProcessorBase's page-wide Metaverse Object identity
+        // map (MetaverseObjectPageIdentityMap, #1612) is the PRIMARY mechanism preventing a same-page load
+        // from ever producing two distinct instances of the same Id in the first place; QueueMvoForUpdate's
+        // own by-Id dedupe is a tripwire for a load site that bypasses the map. This collapse is the last
+        // line of defence before the batch UPDATE/INSERT below, which cannot tolerate a duplicate Id at all
+        // - a duplicate-keyed VALUES row makes the UPDATE nondeterministic (PostgreSQL picks an arbitrary
+        // row) and a duplicate attribute value Id in the INSERT fails outright on the unique constraint,
+        // aborting the whole Activity. Collapsing here means a regression at every earlier layer degrades to
+        // a logged consolidation instead of a failed Activity.
         metaverseObjects = CollapseDuplicateMvoEntries(metaverseObjects);
 
         // Pre-generate ids for newly added attribute values and fix up reference FKs from in-memory
@@ -553,10 +555,12 @@ public partial class SyncRepository
 
     /// <summary>
     /// Collapses entries that share an Id but are distinct object instances (see the SamePageJoinConflict
-    /// note on <c>SyncTaskProcessorBase.QueueMvoForUpdate</c>, JIM.Worker), keeping the later entry and
-    /// copying any deletion-marker scalars the earlier entry carried across before it is dropped. Ordinary
-    /// callers reach this method with an already-deduped list, so the common case is a same-size list
-    /// returned untouched; this only does work when the upstream queue-time guard has regressed.
+    /// note on <c>SyncTaskProcessorBase.QueueMvoForUpdate</c>, JIM.Worker, and the page identity map,
+    /// <c>MetaverseObjectPageIdentityMap</c>, #1612, that is now the primary mechanism preventing the
+    /// split), keeping the later entry and copying any deletion-marker scalars the earlier entry carried
+    /// across before it is dropped. Ordinary callers reach this method with an already-deduped list, so the
+    /// common case is a same-size list returned untouched; this only does work when every earlier layer -
+    /// the identity map and the page-flush queueing guard alike - has regressed.
     /// </summary>
     private static List<MetaverseObject> CollapseDuplicateMvoEntries(List<MetaverseObject> metaverseObjects)
     {

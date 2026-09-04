@@ -43,6 +43,7 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.Exported, "Exported", "CSO Exported", CausalityTone.Info, Icons.Material.Filled.Output),
         (ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, "Deprovisioned", "CSO Deprovisioned", CausalityTone.Error, Icons.Material.Filled.CloudOff),
         (ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled, "Identity deletion scheduled", "MVO Deletion Scheduled", CausalityTone.Warning, Icons.Material.Filled.HourglassBottom),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled, "Deletion cancelled", "MVO Deletion Cancelled", CausalityTone.Success, Icons.Material.Filled.HourglassDisabled),
         (ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull, "Blank asserted", "MVO Null Asserted", CausalityTone.Warning, Icons.Material.Filled.DoNotDisturbOn),
         (ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, "Value cleared", "MVO No Contributor", CausalityTone.Warning, Icons.Material.Filled.HighlightOff),
         (ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved, "Values preserved", "MVO Values Preserved", CausalityTone.Warning, Icons.Material.Filled.AcUnit),
