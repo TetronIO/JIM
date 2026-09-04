@@ -4,6 +4,7 @@
 using Bunit;
 using JIM.Models.Logic;
 using JIM.Web.Shared;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -80,6 +81,21 @@ public class SyncRuleIdentityStripTests : JimComponentTestContext
         {
             Assert.That(link.GetAttribute("href"), Is.EqualTo("/admin/connected-systems/7"));
             Assert.That(link.TextContent, Does.Contain("Corporate Directory"));
+        }
+    }
+
+    [Test]
+    public void SyncRuleIdentityStrip_Container_IsAnOutlinedPaperLikeEveryOtherPanel()
+    {
+        // The strip is a panel of the page, so it takes the design system's radius and border from MudPaper
+        // rather than carrying a pill shape of its own; the first cut did, and it was sent back for exactly that.
+        var cut = RenderStrip(SyncRuleDirection.Export);
+
+        var paper = cut.FindComponent<MudPaper>();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(paper.Instance.Outlined, Is.True);
+            Assert.That(paper.Find("div").ClassList, Does.Contain("jim-identity-strip"));
         }
     }
 

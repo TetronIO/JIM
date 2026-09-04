@@ -3539,15 +3539,14 @@ html[lang] .jim-password-guidance.mud-alert {
    between the two type chips and the arrowhead sits against whichever side receives the data, so
    an Inbound rule cannot read as an export. Colour follows the direction chips elsewhere (warning
    for Outbound, info for Inbound); the label's fill, the line and the arrowhead all take
-   currentColor, so one rule per direction sets everything. */
+   currentColor, so one rule per direction sets everything.
+
+   The container is an outlined MudPaper, so its border, fill and radius are the design system's
+   (the paper rules above); this class only sets the inner spacing. Shrink-to-fit comes from the
+   d-inline-flex utility on the same element. */
 .jim-identity-strip {
-    display: inline-flex;
-    align-items: center;
     gap: 0.75rem;
     padding: 0.375rem 1rem 0.375rem 0.5rem;
-    border-radius: 1.5rem;
-    background-color: var(--mud-palette-surface);
-    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
 }
 
 .jim-identity-flow {

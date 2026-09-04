@@ -12,7 +12,9 @@
 @* first switch on the Details tab and drew a fixed arrow from the Metaverse type to the Connected System type,   *@
 @* so an Inbound rule read as though it exported. See JIM.Web/CLAUDE.md "Synchronisation Rule identity strip".   *@
 
-<div class="jim-identity-strip">
+@* An outlined MudPaper, so the strip takes the design system's border and radius like every other panel; only  *@
+@* its shrink-to-fit layout and inner spacing are its own (site.css, jim-identity-strip).                        *@
+<MudPaper Outlined="true" Class="jim-identity-strip d-inline-flex align-center">
     <ObjectChip Kind="ObjectChipKind.Metaverse" TypeName="@MetaverseObjectTypeName" Tooltip="Metaverse Object Type" Class="ma-0" />
     <MudTooltip Text="@FlowTooltip" Arrow="true" Placement="Placement.Top">
         <span class="@($"jim-identity-flow {FlowClass}")">
@@ -36,7 +38,7 @@
         <MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Small" />
         @ConnectedSystemName
     </MudLink>
-</div>
+</MudPaper>
 
 @code {
     /// <summary>
