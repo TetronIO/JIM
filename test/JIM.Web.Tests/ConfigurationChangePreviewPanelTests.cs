@@ -416,6 +416,56 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void Panel_WithACloseHandler_OffersCloseAndRaisesIt()
+    {
+        // The panel does not decide what closing means; the surface that opened it does (the Synchronisation Rule
+        // editor forgets the preview, so the save confirmation stops citing it). The panel's part is the affordance.
+        GivenPreview(Complete);
+        var closed = false;
+
+        var panel = Render<ConfigurationChangePreviewPanel>(p => p
+            .Add(x => x.ActivityId, ActivityId)
+            .Add(x => x.OnClose, () => closed = true));
+        panel.WaitForState(() => !panel.Markup.Contains("jim-preview-loading"), TimeSpan.FromSeconds(2));
+
+        panel.Find("[data-testid='jim-preview-close']").Click();
+
+        Assert.That(closed, Is.True);
+    }
+
+    [Test]
+    public void Panel_WithoutACloseHandler_DoesNotOfferClose()
+    {
+        // The Activity page shows a preview as the record of what was evaluated; there is nothing to close there,
+        // and a button that did nothing would be worse than none.
+        GivenPreview(Complete);
+
+        var panel = RenderPanel();
+
+        Assert.That(panel.FindAll("[data-testid='jim-preview-close']"), Is.Empty);
+    }
+
+    [Test]
+    public void Panel_RunningPreview_OffersCloseBesideCancel()
+    {
+        // Closing puts the panel away; cancelling stops the evaluation. Both stand while a preview runs, so an
+        // administrator who has seen enough is not made to choose between waiting and stopping it.
+        GivenPreview(p => p.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.InProgress,
+            a => a.Status = ActivityStatus.InProgress);
+
+        var panel = Render<ConfigurationChangePreviewPanel>(p => p
+            .Add(x => x.ActivityId, ActivityId)
+            .Add(x => x.OnClose, () => { }));
+        panel.WaitForState(() => !panel.Markup.Contains("jim-preview-loading"), TimeSpan.FromSeconds(2));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(panel.FindAll("[data-testid='jim-preview-cancel']"), Is.Not.Empty);
+            Assert.That(panel.FindAll("[data-testid='jim-preview-close']"), Is.Not.Empty);
+        }
+    }
+
+    [Test]
     public void Panel_ActivityProgressNotificationForItsOwnPreview_RequeriesRatherThanTrustingTheHint()
     {
         // Notifications carry no data; the whole contract is that a subscriber re-reads. A panel that rendered from

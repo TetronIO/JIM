@@ -88,7 +88,7 @@ Configure this in the Scope tab of the Synchronisation Rule editor (choose Relat
 
 Changing a Scoping Criterion decides which objects the rule manages at all, and what that costs is decided by a different setting sitting beside it: narrowing an import rule takes objects out of scope, and the **Out-of-Scope Action** then decides whether their Metaverse Object joins survive; narrowing an export rule can delete the objects that leave from the target system, per the **Deprovisioning Action**. Widening pulls objects in, projecting and provisioning identities nobody has counted.
 
-The **Preview Scope Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the criteria as they stand on the form, evaluated against the rule's saved criteria, changing nothing. It reports each object that would move, split by what the move actually costs it:
+The **Preview Scope Impact** button, which appears beside the editor's save button once you have edited the criteria, starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the criteria as they stand on the form, evaluated against the rule's saved criteria, changing nothing. It reports each object that would move, split by what the move actually costs it:
 
 - **Leaving scope**<br /> A joined object whose join would break, taking whatever it contributed out of the Metaverse with it; a joined object that would keep its join and simply stop receiving Attribute Flow; and an unjoined object that stops matching and loses nothing. Where a broken join would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
 - **Entering scope**<br /> What each object would become, answered by running the same evaluation a synchronisation would: a new Metaverse Object projected, a join to an existing one, or an object provisioned into the target Connected System.
@@ -160,8 +160,8 @@ population. Disabling a rule reads like pausing it and is closer to withdrawing 
 **Provision To Connected System** on reads like granting a capability and is account creation at scale. Turning
 **Enforce State** off reads like relaxing a constraint and is a standing decision to let a target system diverge.
 
-**Preview Behaviour Impact**, beside the other previews on the rule's editor, answers what your edited toggles
-would do without saving them:
+**Preview Behaviour Impact**, which appears beside the editor's save button once you have edited a toggle, answers
+what your edited toggles would do without saving them:
 
 | Transition | What it means |
 |---|---|
@@ -241,7 +241,7 @@ This applies wherever the deletion happens: during a Synchronisation Run Profile
 
 Two of a Synchronisation Rule's settings can turn a routine scope exit into something you cannot take back: the **Deprovisioning Action** above, and an import rule's **Out-of-Scope Action** (whether objects that leave import scope keep their Metaverse Object join or are disconnected). Both are single dropdowns, and before this preview existed the first sign of what one meant was the synchronisation run that acted on it.
 
-The **Preview Deprovisioning Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the toggles as they stand on the form, evaluated against the rule's saved configuration, changing nothing. It answers two different questions and keeps them apart:
+The **Preview Deprovisioning Impact** button, which appears beside the editor's save button once you have edited either action, starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the toggles as they stand on the form, evaluated against the rule's saved configuration, changing nothing. It answers two different questions and keeps them apart:
 
 - **What the next synchronisation would do differently.** Objects the rule already has something to act on: a joined object whose Metaverse Object is already outside an export rule's scope would be deleted from the target system rather than disconnected (or the reverse), and a joined object outside import scope, or already marked obsolete, would be disconnected rather than keep its join (or the reverse). Where those disconnections would take a Metaverse Object's last connector, the preview follows the chain and reports which identities would become eligible for deletion.
 - **What changes for every object the rule manages.** Flipping an export rule's action to Delete deletes nothing today, but it changes what every future scope exit means for every managed object. The preview states that exposure as its own count ("scope-exit action changes"), so "3,400 objects in this system move from Disconnect to Delete" reads at a glance without overstating what the save itself does.
@@ -449,7 +449,7 @@ Initial Export Only is your choice about an attribute the Connected System would
 
 Changing a mapping rewrites an attribute on every object the rule manages, on the next synchronisation, and nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
 
-The **Preview Attribute Flow Impact** button beside the editor's save button starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the mappings as they stand on the form, evaluated against the rule's saved mappings, changing nothing. It reports, per object and per attribute:
+The **Preview Attribute Flow Impact** button, which appears beside the editor's save button once you have edited a mapping, starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the mappings as they stand on the form, evaluated against the rule's saved mappings, changing nothing. It reports, per object and per attribute:
 
 - **The value the object would end up with**<br /> Stated as an old-to-new pair, so a domain cutover reads as `ada@old.example` becoming `ada@new.example` rather than as a count. JIM groups identical pairs together and recognises the shape of the change (a changed domain, a changed container, a casing change, an added or removed prefix or suffix), so a thousand identical rewrites read as one line with a count beside it.
 - **Values that would be withdrawn**<br /> Where a mapping would stop producing a value for an object, the attribute is left blank rather than rewritten, and that is counted separately.
