@@ -58,7 +58,7 @@ Where JIM recognises what kind of edit a summary row describes, it says so besid
 
 A pattern only appears where **every** object in the row makes the same kind of edit. A row covering a mixture is left unnamed, and the objects behind it carry their own patterns in the drill-down. Nothing is shown where JIM does not recognise the change, which is the normal case for rows whose values are dates or identifiers.
 
-In the drill-down, each object's name is a link to the object the change would act on: the Connected System Object where the row has one (the object an export would remove, or the joined object an import would disconnect), otherwise the Metaverse Object.
+In the drill-down, each object's name is a link to the object the change would act on, with a **CS** or **MV** marker saying which side of the Metaverse it leads to: the Connected System Object where the row has one (the object an export would remove, or the joined object an import would disconnect), otherwise the Metaverse Object.
 
 Three things are worth knowing before you act on a preview:
 

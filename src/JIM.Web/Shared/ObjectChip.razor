@@ -84,10 +84,13 @@
     private string PrefixClass => Kind == ObjectChipKind.Metaverse ? "jim-mv-chip-prefix" : "jim-cs-chip-prefix";
 
     /// <summary>
-    /// The colon joins the type to the identifier, so it belongs to the pair rather than to the type: a chip
-    /// showing a type and nothing else would otherwise trail a colon with nothing after it.
+    /// The colon joins the type to the identifier, so it belongs to the pair rather than to either half: a chip
+    /// showing a type and nothing else would otherwise trail a colon with nothing after it, and a chip showing a
+    /// name and no type (a preview drill-down row, whose Type column already carries the type) would lead with one.
     /// </summary>
-    private string Prefix => string.IsNullOrEmpty(Name) ? (TypeName ?? string.Empty) : $"{TypeName}:";
+    private string Prefix => string.IsNullOrEmpty(Name) || string.IsNullOrEmpty(TypeName)
+        ? (TypeName ?? string.Empty)
+        : $"{TypeName}:";
 
     private RenderFragment Chip => @<MudChip T="string" Color="Color.Default" Class="@Class">
         <AvatarContent>
@@ -96,7 +99,10 @@
         <ChildContent>
             <b class="@PrefixClass">@Prefix</b>@if (!string.IsNullOrEmpty(Name))
             {
-                @((MarkupString)"&nbsp;")
+                @if (!string.IsNullOrEmpty(Prefix))
+                {
+                    @((MarkupString)"&nbsp;")
+                }
                 @Name
             }
         </ChildContent>

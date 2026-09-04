@@ -79,6 +79,7 @@ The marker is not decoration. Both sides of a flow are just names, and which sid
 
 - **`Href` makes it a link, and only a linked chip gets the hover treatment.** `jim-chip-link` goes on the link wrapper rather than the chip because the link is the hover target; the component owns that, so no call site places the class.
 - **A chip with no `Name` renders the type without a trailing colon.** The colon joins the type to the identifier, so a record with no external ID yet (nothing exported) would otherwise trail punctuation pointing at nothing.
+- **A chip with no `TypeName` renders the name alone.** The inverse: where the surrounding table already carries a Type column (a Configuration Change Preview's drill-down), the chip is the side marker and the link, and repeating the type on it would spend the row's one line saying it twice.
 - **`Class` is the call site's, for the surrounding geometry only:** `ma-0` inside a detail table's cell, nothing in a stack of its own. Do not restyle the chip itself per call site.
 - The avatar colours (`Color.Secondary` for CS, `Color.Primary` for MV) are load-bearing: the hover rule in `site.css` recolours `mud-avatar-filled-secondary` and `mud-avatar-filled-primary` by name, and both must stay in step or a badge stops responding to its own chip's hover.
 

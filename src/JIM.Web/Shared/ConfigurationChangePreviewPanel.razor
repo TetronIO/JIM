@@ -406,16 +406,20 @@
                                         <MudText Typo="Typo.button">Object</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
-                                        @* The name is the way into the object, so it links to the object the transition
-                                           acts on: the Connected System Object where the row carries one, otherwise the
-                                           Metaverse Object (see ObjectHref). A row naming nothing addressable stays text;
-                                           a dead link is worse than none. *@
+                                        @* The name is the way into the object, so it is an ObjectChip linking to the object
+                                           the transition acts on: the Connected System Object where the row carries one,
+                                           otherwise the Metaverse Object (see ObjectSide and ObjectHref). The CS / MV avatar
+                                           is the point: a bare name gives a reader no way to tell a record in a Connected
+                                           System from the identity it belongs to, and an export row names the identity
+                                           while its link lands on the record. No type on the chip, because the Type column
+                                           beside it already carries one. A row naming nothing addressable stays text. *@
                                         @{
-                                            var objectHref = ObjectHref(row.Item);
+                                            var objectSide = ObjectSide(row.Item);
                                         }
-                                        @if (objectHref != null && !string.IsNullOrWhiteSpace(row.Item.ObjectDisplayName))
+                                        @if (objectSide is { } side && !string.IsNullOrWhiteSpace(row.Item.ObjectDisplayName))
                                         {
-                                            <MudLink Href="@objectHref">@row.Item.ObjectDisplayName</MudLink>
+                                            <ObjectChip Kind="@side" Name="@row.Item.ObjectDisplayName" Href="@ObjectHref(row.Item)"
+                                                        Tooltip="@ObjectTooltip(side)" Class="ma-0" />
                                         }
                                         else
                                         {
@@ -835,22 +839,44 @@
     }
 
     /// <summary>
-    /// Where a drill-down row's name leads. The Connected System Object where the row carries one, because that is the
-    /// object the transition acts on: the target object an export would remove, the joined object an import would
-    /// disconnect, the object a matching rule would join elsewhere; its page shows the Metaverse Object beside it.
-    /// Otherwise the Metaverse Object, once its type's plural name is known. Null where the row names nothing
-    /// addressable (a container, or a row stored before ids were recorded).
+    /// Which object a drill-down row's name stands for. The Connected System Object where the row carries one, because
+    /// that is the object the transition acts on: the target object an export would remove, the joined object an
+    /// import would disconnect, the object a matching rule would join elsewhere; its page shows the Metaverse Object
+    /// beside it. Otherwise the Metaverse Object. Null where the row names nothing addressable (a container, or a row
+    /// stored before ids were recorded).
     /// </summary>
-    private string? ObjectHref(ConfigurationChangePreviewDelta row)
+    private static ObjectChipKind? ObjectSide(ConfigurationChangePreviewDelta row)
     {
-        if (row is { ConnectedSystemObjectId: { } connectedSystemObjectId, ConnectedSystemId: { } connectedSystemId })
-            return Utilities.GetConnectedSystemObjectHref(connectedSystemId, connectedSystemObjectId);
+        if (row is { ConnectedSystemObjectId: not null, ConnectedSystemId: not null })
+            return ObjectChipKind.ConnectedSystem;
 
-        if (row.MetaverseObjectId is { } metaverseObjectId && _selectedGroupTypePluralName is { Length: > 0 } pluralName)
-            return Utilities.GetMetaverseObjectHref(metaverseObjectId, pluralName);
-
-        return null;
+        return row.MetaverseObjectId.HasValue ? ObjectChipKind.Metaverse : null;
     }
+
+    /// <summary>
+    /// Where the row's name leads, for the side <see cref="ObjectSide"/> chose. A Metaverse Object's page is addressed
+    /// by its type's plural name, so that link waits until the name is resolved; the chip still says MV meanwhile.
+    /// </summary>
+    private string? ObjectHref(ConfigurationChangePreviewDelta row) => ObjectSide(row) switch
+    {
+        ObjectChipKind.ConnectedSystem =>
+            Utilities.GetConnectedSystemObjectHref(row.ConnectedSystemId!.Value, row.ConnectedSystemObjectId!.Value),
+        ObjectChipKind.Metaverse when _selectedGroupTypePluralName is { Length: > 0 } pluralName =>
+            Utilities.GetMetaverseObjectHref(row.MetaverseObjectId!.Value, pluralName),
+        _ => null
+    };
+
+    /// <summary>
+    /// The chip's tooltip: the side, and for a Connected System Object which system, since the group knows it and the
+    /// avatar's two letters do not.
+    /// </summary>
+    private string ObjectTooltip(ObjectChipKind side) => side switch
+    {
+        ObjectChipKind.ConnectedSystem when !string.IsNullOrEmpty(_selectedGroup?.ConnectedSystemName) =>
+            $"Connected System Object in {_selectedGroup.ConnectedSystemName}",
+        ObjectChipKind.ConnectedSystem => "Connected System Object",
+        _ => "Metaverse Object"
+    };
 
     /// <summary>
     /// Resolves the plural name a Metaverse Object link needs, once per drill-down, and only when a fetched row would

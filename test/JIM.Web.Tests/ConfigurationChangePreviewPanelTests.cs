@@ -329,9 +329,17 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         OpenSummaryRowContaining(panel, "Scoping Criteria");
         panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
 
-        var link = panel.FindAll("a").SingleOrDefault(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal));
-        Assert.That(link, Is.Not.Null, "the object's name must be a link");
-        Assert.That(link!.GetAttribute("href"), Is.EqualTo($"/admin/connected-systems/5/connector-space/{csoId}"));
+        // The name is rendered through ObjectChip, so the CS avatar says which side of the Metaverse the link
+        // leads to; a bare link gives a reader no way to tell a Connected System Object from the identity it
+        // belongs to.
+        var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "Bob Smith");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystem));
+            Assert.That(chip.Instance.Href, Is.EqualTo($"/admin/connected-systems/5/connector-space/{csoId}"));
+            Assert.That(panel.FindAll("a").Any(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal)
+                && a.GetAttribute("href") == $"/admin/connected-systems/5/connector-space/{csoId}"), Is.True);
+        }
     }
 
     [Test]
@@ -354,8 +362,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         panel.WaitForState(() => panel.FindAll("a").Any(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(2));
 
-        var link = panel.FindAll("a").Single(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal));
-        Assert.That(link.GetAttribute("href"), Is.EqualTo($"/t/users/v/{mvoId}"));
+        var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "Bob Smith");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.Metaverse));
+            Assert.That(chip.Instance.Href, Is.EqualTo($"/t/users/v/{mvoId}"));
+        }
     }
 
     [Test]
@@ -374,8 +386,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         OpenSummaryRowContaining(panel, "Scoping Criteria");
         panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
 
-        var link = panel.FindAll("a").Single(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal));
-        Assert.That(link.GetAttribute("href"), Is.EqualTo($"/admin/connected-systems/5/connector-space/{csoId}"));
+        var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "Bob Smith");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystem));
+            Assert.That(chip.Instance.Href, Is.EqualTo($"/admin/connected-systems/5/connector-space/{csoId}"));
+        }
     }
 
     [Test]
@@ -391,7 +407,11 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         OpenSummaryRowContaining(panel, "Email");
         panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
 
-        Assert.That(panel.FindAll("a").Any(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal)), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(panel.FindAll("a").Any(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal)), Is.False);
+            Assert.That(panel.FindComponents<ObjectChip>(), Is.Empty, "a chip claims a side of the Metaverse the row cannot name");
+        }
     }
 
     [Test]
