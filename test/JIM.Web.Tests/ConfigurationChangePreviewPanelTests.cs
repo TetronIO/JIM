@@ -315,6 +315,86 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void Panel_DrillDownRowNamingAConnectedSystemObject_LinksItsNameToTheObject()
+    {
+        // The name is the way into the object: an administrator reading "Amelia Sullivan would be removed from the
+        // target system" wants to look at Amelia's object before deciding, and a name that is only text sends them
+        // off to search for it.
+        GivenPreview(Complete);
+        GivenGroups(Group(1, attributeName: "Scoping Criteria"));
+        var csoId = Guid.CreateVersion7();
+        GivenDeltas(Delta("In scope", "Out of scope", null, connectedSystemId: 5, connectedSystemObjectId: csoId));
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Scoping Criteria");
+        panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
+
+        var link = panel.FindAll("a").SingleOrDefault(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal));
+        Assert.That(link, Is.Not.Null, "the object's name must be a link");
+        Assert.That(link!.GetAttribute("href"), Is.EqualTo($"/admin/connected-systems/5/connector-space/{csoId}"));
+    }
+
+    [Test]
+    public void Panel_DrillDownRowNamingAMetaverseObjectOnly_LinksItsNameToTheMetaverseObject()
+    {
+        // A Metaverse Object's page is addressed by its type's plural name, which the stored row does not carry;
+        // the panel resolves it from the group's type once, not per row.
+        var metaverseRepository = new Mock<IMetaverseRepository>();
+        metaverseRepository
+            .Setup(r => r.GetMetaverseObjectTypeAsync(11, It.IsAny<bool>()))
+            .ReturnsAsync(new JIM.Models.Core.MetaverseObjectType { Id = 11, Name = "User", PluralName = "Users" });
+        _repository.Setup(r => r.Metaverse).Returns(metaverseRepository.Object);
+        GivenPreview(Complete);
+        GivenGroups(Group(1, attributeName: "Scoping Criteria"));
+        var mvoId = Guid.CreateVersion7();
+        GivenDeltas(Delta("In scope", "Out of scope", null, metaverseObjectId: mvoId));
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Scoping Criteria");
+        panel.WaitForState(() => panel.FindAll("a").Any(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(2));
+
+        var link = panel.FindAll("a").Single(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal));
+        Assert.That(link.GetAttribute("href"), Is.EqualTo($"/t/users/v/{mvoId}"));
+    }
+
+    [Test]
+    public void Panel_DrillDownRowNamingBothObjects_LinksToTheConnectedSystemObject()
+    {
+        // A row carrying both ids is an identity and its object in the Connected System the group is about (the
+        // target object an export would remove, or the joined object an import would disconnect). That object is
+        // what the transition acts on, so it is where the name goes; its page shows the Metaverse Object beside it.
+        GivenPreview(Complete);
+        GivenGroups(Group(1, attributeName: "Scoping Criteria"));
+        var csoId = Guid.CreateVersion7();
+        GivenDeltas(Delta("In scope", "Out of scope", null,
+            connectedSystemId: 5, connectedSystemObjectId: csoId, metaverseObjectId: Guid.CreateVersion7()));
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Scoping Criteria");
+        panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
+
+        var link = panel.FindAll("a").Single(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal));
+        Assert.That(link.GetAttribute("href"), Is.EqualTo($"/admin/connected-systems/5/connector-space/{csoId}"));
+    }
+
+    [Test]
+    public void Panel_DrillDownRowWithNoObjectIds_ShowsThePlainName()
+    {
+        // A row that names nothing addressable (a container, or a row from before ids were recorded) has nowhere to
+        // point, and a dead link is worse than text.
+        GivenPreview(Complete);
+        GivenGroups(Group(1, attributeName: "Email"));
+        GivenDeltas(Delta("bob@contoso.com", "bob@fabrikam.com", null));
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Email");
+        panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
+
+        Assert.That(panel.FindAll("a").Any(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal)), Is.False);
+    }
+
+    [Test]
     public void Panel_DrillDown_ReadsTheStoredDeltasFromTheFirstPageNotPageZero()
     {
         // The object-level rows are stored behind a page-based read while the grid asks for arbitrary windows, so the
@@ -641,7 +721,8 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
                 PageSize = 25
             });
 
-    private static ConfigurationChangePreviewDelta Delta(string oldValue, string newValue, string? patternKey) => new()
+    private static ConfigurationChangePreviewDelta Delta(string oldValue, string newValue, string? patternKey,
+        int? connectedSystemId = null, Guid? connectedSystemObjectId = null, Guid? metaverseObjectId = null) => new()
     {
         Id = Guid.CreateVersion7(),
         ActivityId = ActivityId,
@@ -651,7 +732,10 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         AttributeName = "Email",
         OldValue = oldValue,
         NewValue = newValue,
-        PatternKey = patternKey
+        PatternKey = patternKey,
+        ConnectedSystemId = connectedSystemId,
+        ConnectedSystemObjectId = connectedSystemObjectId,
+        MetaverseObjectId = metaverseObjectId
     };
 
     private void GivenGroups(params ConfigurationChangePreviewGroup[] groups) =>

@@ -1,3 +1,4 @@
+@using JIM.Application
 @using JIM.Application.Interfaces
 @using JIM.Application.Servers
 @using JIM.Models.Activities
@@ -405,7 +406,21 @@
                                         <MudText Typo="Typo.button">Object</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
-                                        <TextValueDisplay Value="@row.Item.ObjectDisplayName" />
+                                        @* The name is the way into the object, so it links to the object the transition
+                                           acts on: the Connected System Object where the row carries one, otherwise the
+                                           Metaverse Object (see ObjectHref). A row naming nothing addressable stays text;
+                                           a dead link is worse than none. *@
+                                        @{
+                                            var objectHref = ObjectHref(row.Item);
+                                        }
+                                        @if (objectHref != null && !string.IsNullOrWhiteSpace(row.Item.ObjectDisplayName))
+                                        {
+                                            <MudLink Href="@objectHref">@row.Item.ObjectDisplayName</MudLink>
+                                        }
+                                        else
+                                        {
+                                            <TextValueDisplay Value="@row.Item.ObjectDisplayName" />
+                                        }
                                     </CellTemplate>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Type" Sortable="false">
@@ -552,6 +567,12 @@
     private List<PreviewValidationFinding> _findings = [];
     private List<PreviewImpactCount> _impactCounts = [];
     private ConfigurationChangePreviewGroup? _selectedGroup;
+
+    /// <summary>
+    /// The plural name of the open group's Metaverse Object Type, which a Metaverse Object's page is addressed by and
+    /// the stored rows do not carry. Resolved once per drill-down, and only when a fetched row will link to one.
+    /// </summary>
+    private string? _selectedGroupTypePluralName;
     private VirtualisedDataGrid<ConfigurationChangePreviewGroup>? _groupsGrid;
     private VirtualisedDataGrid<ConfigurationChangePreviewDelta>? _deltasGrid;
 
@@ -781,6 +802,8 @@
                     break;
             }
 
+            await ResolveMetaverseObjectTypePluralNameAsync(jim, group, fetched);
+
             var offsetIntoFirstPage = request.StartIndex - (firstPage * DeltaPageSize);
             return new VirtualisedWindow<ConfigurationChangePreviewDelta>(
                 fetched.Skip(offsetIntoFirstPage).Take(request.Count).ToList(),
@@ -796,6 +819,7 @@
     private async Task OnGroupClicked(ConfigurationChangePreviewGroup group)
     {
         _selectedGroup = group;
+        _selectedGroupTypePluralName = null;
         StateHasChanged();
 
         // The grid may not exist yet on the first drill-down (the section it lives in has only just been rendered);
@@ -804,7 +828,54 @@
             await _deltasGrid.RefreshAsync(invalidateTotals: true);
     }
 
-    private void CloseDrillDown() => _selectedGroup = null;
+    private void CloseDrillDown()
+    {
+        _selectedGroup = null;
+        _selectedGroupTypePluralName = null;
+    }
+
+    /// <summary>
+    /// Where a drill-down row's name leads. The Connected System Object where the row carries one, because that is the
+    /// object the transition acts on: the target object an export would remove, the joined object an import would
+    /// disconnect, the object a matching rule would join elsewhere; its page shows the Metaverse Object beside it.
+    /// Otherwise the Metaverse Object, once its type's plural name is known. Null where the row names nothing
+    /// addressable (a container, or a row stored before ids were recorded).
+    /// </summary>
+    private string? ObjectHref(ConfigurationChangePreviewDelta row)
+    {
+        if (row is { ConnectedSystemObjectId: { } connectedSystemObjectId, ConnectedSystemId: { } connectedSystemId })
+            return Utilities.GetConnectedSystemObjectHref(connectedSystemId, connectedSystemObjectId);
+
+        if (row.MetaverseObjectId is { } metaverseObjectId && _selectedGroupTypePluralName is { Length: > 0 } pluralName)
+            return Utilities.GetMetaverseObjectHref(metaverseObjectId, pluralName);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the plural name a Metaverse Object link needs, once per drill-down, and only when a fetched row would
+    /// link to a Metaverse Object (it carries the id and no Connected System Object of its own). A lookup that fails
+    /// costs the link and nothing else: the rows still render, as text.
+    /// </summary>
+    private async Task ResolveMetaverseObjectTypePluralNameAsync(JimApplication jim, ConfigurationChangePreviewGroup group,
+        List<ConfigurationChangePreviewDelta> fetched)
+    {
+        if (_selectedGroupTypePluralName != null || group.MetaverseObjectTypeId is not { } typeId)
+            return;
+
+        if (!fetched.Any(row => row.MetaverseObjectId.HasValue && ObjectHref(row) == null))
+            return;
+
+        try
+        {
+            var type = await jim.Metaverse.GetMetaverseObjectTypeAsync(typeId, false);
+            _selectedGroupTypePluralName = type?.PluralName;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
+        {
+            Serilog.Log.Debug(ex, "ConfigurationChangePreviewPanel: resolving the Metaverse Object Type for preview {ActivityId} failed", ActivityId);
+        }
+    }
 
     private async Task CancelAsync()
     {
