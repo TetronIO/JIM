@@ -471,31 +471,51 @@
     }
 
     @* Run Profile Safeguards (#1618): only shown once something was actually withheld, so a normal,
-       uncapped Export run shows nothing extra here. *@
-    @if ((_activity.ExportCreatesWithheld ?? 0) > 0 || (_activity.ExportUpdatesWithheld ?? 0) > 0 || (_activity.ExportDeletesWithheld ?? 0) > 0)
+       uncapped Export or Full Import run shows nothing extra here. An Activity carries either the
+       three Export counters or the one Full Import counter, never both, so the caption and the tile
+       (or tiles) rendered below both branch on which kind of run this Activity is. *@
+    @if ((_activity.ExportCreatesWithheld ?? 0) > 0 || (_activity.ExportUpdatesWithheld ?? 0) > 0 || (_activity.ExportDeletesWithheld ?? 0) > 0 || (_activity.DetectedDeletionsWithheld ?? 0) > 0)
     {
         var createsWithheld = _activity.ExportCreatesWithheld ?? 0;
         var updatesWithheld = _activity.ExportUpdatesWithheld ?? 0;
         var deletesWithheld = _activity.ExportDeletesWithheld ?? 0;
+        var detectedDeletionsWithheld = _activity.DetectedDeletionsWithheld ?? 0;
 
         <MudText Typo="Typo.h5" Class="mt-5">Safeguards</MudText>
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2 mb-4">
-            Withheld exports stay Pending until a run whose limit allows them, or an Export Run Profile without the limit, attempts them.
+            @if (_activity.ConnectedSystemRunType == ConnectedSystemRunType.FullImport)
+            {
+                @:This import does not count as a successful Full Import for the post-clear reconciliation gate.
+            }
+            else
+            {
+                @:Withheld exports stay Pending until a run whose limit allows them, or an Export Run Profile without the limit, attempts them.
+            }
         </MudText>
 
         <MudStack Row="true" Class="mt-2 mb-5 flex-wrap" Spacing="3">
-            <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {(createsWithheld > 0 ? Colors.Orange.Default : Colors.Gray.Default)}; min-width: 120px;")">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Creates Withheld</MudText>
-                <MudText Typo="Typo.h4" Color="@(createsWithheld > 0 ? Color.Warning : Color.Default)">@createsWithheld.ToString("N0")</MudText>
-            </MudPaper>
-            <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {(updatesWithheld > 0 ? Colors.Orange.Default : Colors.Gray.Default)}; min-width: 120px;")">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Updates Withheld</MudText>
-                <MudText Typo="Typo.h4" Color="@(updatesWithheld > 0 ? Color.Warning : Color.Default)">@updatesWithheld.ToString("N0")</MudText>
-            </MudPaper>
-            <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {(deletesWithheld > 0 ? Colors.Orange.Default : Colors.Gray.Default)}; min-width: 120px;")">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Deletes Withheld</MudText>
-                <MudText Typo="Typo.h4" Color="@(deletesWithheld > 0 ? Color.Warning : Color.Default)">@deletesWithheld.ToString("N0")</MudText>
-            </MudPaper>
+            @if (_activity.ConnectedSystemRunType == ConnectedSystemRunType.FullImport)
+            {
+                <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Orange.Default}; min-width: 120px;")">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Detected deletions withheld</MudText>
+                    <MudText Typo="Typo.h4" Color="Color.Warning">@detectedDeletionsWithheld.ToString("N0")</MudText>
+                </MudPaper>
+            }
+            else
+            {
+                <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {(createsWithheld > 0 ? Colors.Orange.Default : Colors.Gray.Default)}; min-width: 120px;")">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Creates Withheld</MudText>
+                    <MudText Typo="Typo.h4" Color="@(createsWithheld > 0 ? Color.Warning : Color.Default)">@createsWithheld.ToString("N0")</MudText>
+                </MudPaper>
+                <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {(updatesWithheld > 0 ? Colors.Orange.Default : Colors.Gray.Default)}; min-width: 120px;")">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Updates Withheld</MudText>
+                    <MudText Typo="Typo.h4" Color="@(updatesWithheld > 0 ? Color.Warning : Color.Default)">@updatesWithheld.ToString("N0")</MudText>
+                </MudPaper>
+                <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {(deletesWithheld > 0 ? Colors.Orange.Default : Colors.Gray.Default)}; min-width: 120px;")">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Deletes Withheld</MudText>
+                    <MudText Typo="Typo.h4" Color="@(deletesWithheld > 0 ? Color.Warning : Color.Default)">@deletesWithheld.ToString("N0")</MudText>
+                </MudPaper>
+            }
         </MudStack>
     }
 

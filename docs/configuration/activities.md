@@ -44,6 +44,16 @@ When an Export activity withholds anything, it completes as **Complete with warn
 
 > Max deletes is 100, but 342 deletes were pending, so none were attempted and all 342 remain pending. Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.
 
+### Run Profile Safeguards (Full Import deletion detection limits)
+
+Every Full Import activity that ran deletion detection carries a `detectedDeletionsWithheld` counter: `0` when its Run Profile has no deletion detection limit, or the count of newly-detected deletions did not exceed either limit; otherwise it is how many Connected System Objects deletion detection found missing but marked as deleted. It is `null` on every other activity, including a Full Import that imported zero objects and so skipped deletion detection entirely. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
+
+When a Full Import activity's deletion detection is refused, it completes as **Complete with warning**, and its warning message names the limit that tripped, for example:
+
+> Deletion detection found 4,120 objects (41% of 10,000) no longer in the Connected System, above this Run Profile's limit of 10%; none were marked as deleted. Check the Connected System's scope and the connector's filters, or raise the limit, then run the Full Import again.
+
+A refused detection also means the run does not count as a successful Full Import for the post-clear reconciliation gate; see [Run Profiles > Safeguards > Full Import](run-profiles.md#full-import).
+
 ## Execution items
 
 For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.

@@ -514,6 +514,19 @@ public class Activity
     /// </summary>
     public int? ExportDeletesWithheld { get; set; }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // Run Profile Safeguards Full Import deletion detection limit stat (#1618, Layer 2)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// For Full Import activities that ran deletion detection: how many Connected System Objects the
+    /// Run Profile's Max detected deletions/Max detected deletions percent limits withheld this run.
+    /// Zero on a Full Import that applied its deletion detection (whether or not anything was found
+    /// missing); the withheld count on one that refused; null on every other activity, including a
+    /// Full Import that imported zero objects and so skipped detection entirely.
+    /// </summary>
+    public int? DetectedDeletionsWithheld { get; set; }
+
     // results:
     // what would be useful here is to capture two levels of stats, depending on system settings:
     // - result item with operation type (create/update/delete) and link to the Metaverse Object

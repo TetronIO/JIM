@@ -1,6 +1,6 @@
 # Run Profile Safeguards
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-09-03
 - **Author:** Jay Van der Zant
 - **Issue:** [#1618](https://github.com/TetronIO/JIM/issues/1618)

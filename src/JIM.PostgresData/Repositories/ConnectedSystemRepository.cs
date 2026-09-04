@@ -3963,6 +3963,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         tracked.MaxCreates = runProfile.MaxCreates;
         tracked.MaxUpdates = runProfile.MaxUpdates;
         tracked.MaxDeletes = runProfile.MaxDeletes;
+        // Run Profile Safeguards (#1618, Layer 2): the same by-hand copy requirement as the three
+        // export limits above; Layer 1's first Scenario 21 run found those missing from exactly here.
+        tracked.MaxDetectedDeletions = runProfile.MaxDetectedDeletions;
+        tracked.MaxDetectedDeletionsPercent = runProfile.MaxDetectedDeletionsPercent;
         tracked.LastUpdated = runProfile.LastUpdated;
         tracked.LastUpdatedByType = runProfile.LastUpdatedByType;
         tracked.LastUpdatedById = runProfile.LastUpdatedById;

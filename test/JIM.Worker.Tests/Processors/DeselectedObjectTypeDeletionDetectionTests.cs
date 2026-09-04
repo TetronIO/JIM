@@ -73,7 +73,9 @@ public class DeselectedObjectTypeDeletionDetectionTests
                 "object type selection filter here, because that filter is the behaviour under test.");
 
         var queuedForUpdate = new List<ConnectedSystemObject>();
-        await (Task)method.Invoke(processor, [new List<ExternalIdPair>(), queuedForUpdate, null])!;
+        // existingCsoCount (#1618 Layer 2) is irrelevant here: the fixture's Run Profile sets no
+        // deletion detection limits, so no value withholds anything.
+        await (Task)method.Invoke(processor, [new List<ExternalIdPair>(), queuedForUpdate, null, 0])!;
         return queuedForUpdate;
     }
 

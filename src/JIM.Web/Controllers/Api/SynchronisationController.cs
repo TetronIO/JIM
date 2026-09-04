@@ -2954,7 +2954,9 @@ public class SynchronisationController(
             VerifyImportContentHashes = request.VerifyImportContentHashes,
             MaxCreates = request.Safeguards?.MaxCreates,
             MaxUpdates = request.Safeguards?.MaxUpdates,
-            MaxDeletes = request.Safeguards?.MaxDeletes
+            MaxDeletes = request.Safeguards?.MaxDeletes,
+            MaxDetectedDeletions = request.Safeguards?.MaxDetectedDeletions,
+            MaxDetectedDeletionsPercent = request.Safeguards?.MaxDetectedDeletionsPercent
         };
 
         // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
@@ -3057,6 +3059,8 @@ public class SynchronisationController(
             runProfile.MaxCreates = request.Safeguards.MaxCreates;
             runProfile.MaxUpdates = request.Safeguards.MaxUpdates;
             runProfile.MaxDeletes = request.Safeguards.MaxDeletes;
+            runProfile.MaxDetectedDeletions = request.Safeguards.MaxDetectedDeletions;
+            runProfile.MaxDetectedDeletionsPercent = request.Safeguards.MaxDetectedDeletionsPercent;
 
             var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
             if (safeguardsError != null)

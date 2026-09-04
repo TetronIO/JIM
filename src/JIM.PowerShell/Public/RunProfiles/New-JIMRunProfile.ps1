@@ -66,6 +66,25 @@ function New-JIMRunProfile {
         share of the target's population means a broken filter or rule change withholds the
         whole deprovisioning attempt and warns you, rather than working through the directory.
 
+    .PARAMETER MaxDetectedDeletions
+        Run Profile Safeguards: the most Connected System Objects a single Full Import run may
+        newly mark as deleted. If more would be newly marked than this when the run finishes
+        reading the Connected System, JIM marks NONE of them; there is no partial marking. Only
+        valid when -RunType is FullImport; the API rejects it otherwise. Omit for no limit. 0
+        refuses to mark anything as deleted. Objects the import did see are still created and
+        updated as normal. A run that withholds anything completes with a warning naming what to
+        do next, and does not count as a successful Full Import for the post-clear reconciliation
+        gate (#1605).
+
+    .PARAMETER MaxDetectedDeletionsPercent
+        Run Profile Safeguards: the most Connected System Objects a single Full Import run may
+        newly mark as deleted, as a share (0 to 100) of the Connected System Objects in the run's
+        scope when it starts. Same all-or-nothing behaviour as -MaxDetectedDeletions, and either
+        limit tripping withholds the whole detection. Only valid when -RunType is FullImport; the
+        API rejects it otherwise. Omit for no limit. Recommended for a Full Import against a large
+        Connected System, where a broken filter or base DN dropping a plausible-looking fraction
+        of the population is easier to catch as a share than as a raw count.
+
     .PARAMETER PassThru
         If specified, returns the created Run Profile object.
 
@@ -99,6 +118,12 @@ function New-JIMRunProfile {
 
         Creates an Export Run Profile that attempts no deletes at all on a run where more than 100
         are pending, leaving every one of them pending instead.
+
+    .EXAMPLE
+        New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import" -RunType FullImport -MaxDetectedDeletionsPercent 10
+
+        Creates a Full Import Run Profile that marks nothing as deleted on a run where deletion
+        detection would newly mark more than 10% of the Connected System's objects as deleted.
 
     .LINK
         Get-JIMRunProfile
@@ -146,6 +171,12 @@ function New-JIMRunProfile {
         [Parameter()]
         [Nullable[int]]$MaxDeletes,
 
+        [Parameter()]
+        [Nullable[int]]$MaxDetectedDeletions,
+
+        [Parameter()]
+        [Nullable[int]]$MaxDetectedDeletionsPercent,
+
         [switch]$PassThru
     )
 
@@ -164,13 +195,20 @@ function New-JIMRunProfile {
 
         # Run Profile Safeguards: validated here (not via ValidateRange, which misbehaves with
         # $null) so a negative value fails fast rather than reaching the API as a 400.
-        foreach ($safeguard in @('MaxCreates', 'MaxUpdates', 'MaxDeletes')) {
+        foreach ($safeguard in @('MaxCreates', 'MaxUpdates', 'MaxDeletes', 'MaxDetectedDeletions')) {
             if ($PSBoundParameters.ContainsKey($safeguard)) {
                 $value = $PSBoundParameters[$safeguard]
                 if ($null -ne $value -and $value -lt 0) {
                     Write-Error "$safeguard cannot be negative."
                     return
                 }
+            }
+        }
+
+        if ($PSBoundParameters.ContainsKey('MaxDetectedDeletionsPercent')) {
+            if ($null -ne $MaxDetectedDeletionsPercent -and ($MaxDetectedDeletionsPercent -lt 0 -or $MaxDetectedDeletionsPercent -gt 100)) {
+                Write-Error "MaxDetectedDeletionsPercent must be between 0 and 100."
+                return
             }
         }
 
@@ -200,11 +238,14 @@ function New-JIMRunProfile {
 
             # Run Profile Safeguards: send the whole safeguards object when any limit is bound;
             # an unbound parameter is $null, which is exactly "no limit" for that member.
-            if ($PSBoundParameters.ContainsKey('MaxCreates') -or $PSBoundParameters.ContainsKey('MaxUpdates') -or $PSBoundParameters.ContainsKey('MaxDeletes')) {
+            if ($PSBoundParameters.ContainsKey('MaxCreates') -or $PSBoundParameters.ContainsKey('MaxUpdates') -or $PSBoundParameters.ContainsKey('MaxDeletes') -or
+                $PSBoundParameters.ContainsKey('MaxDetectedDeletions') -or $PSBoundParameters.ContainsKey('MaxDetectedDeletionsPercent')) {
                 $body.safeguards = @{
                     maxCreates = $MaxCreates
                     maxUpdates = $MaxUpdates
                     maxDeletes = $MaxDeletes
+                    maxDetectedDeletions = $MaxDetectedDeletions
+                    maxDetectedDeletionsPercent = $MaxDetectedDeletionsPercent
                 }
             }
 

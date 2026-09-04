@@ -115,6 +115,24 @@ public class ConnectedSystemRunProfile : IAuditable
     public int? MaxDeletes { get; set; }
 
     /// <summary>
+    /// Run Profile Safeguards (#1618): the maximum number of Connected System Objects a Full Import
+    /// may newly mark as deleted in one run. Only honoured when <see cref="RunType"/> is
+    /// <see cref="ConnectedSystemRunType.FullImport"/>. Null means no limit. Zero is a valid limit:
+    /// the run refuses to mark anything as deleted. If either this or
+    /// <see cref="MaxDetectedDeletionsPercent"/> would be exceeded, deletion detection marks nothing;
+    /// objects the import did see are still created and updated as normal.
+    /// </summary>
+    public int? MaxDetectedDeletions { get; set; }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): the maximum share, 0 to 100, of the Connected System Objects in
+    /// the run's scope at the start of the run that a Full Import may newly mark as deleted. Only
+    /// honoured when <see cref="RunType"/> is <see cref="ConnectedSystemRunType.FullImport"/>. Null
+    /// means no limit.
+    /// </summary>
+    public int? MaxDetectedDeletionsPercent { get; set; }
+
+    /// <summary>
     /// Back-link to dependent activity objects.
     /// Optional relationship.
     /// Used by EntityFramework.

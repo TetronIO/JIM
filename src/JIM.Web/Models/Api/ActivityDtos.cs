@@ -523,6 +523,15 @@ public class ActivityDetailDto
     public int? ExportDeletesWithheld { get; set; }
 
     /// <summary>
+    /// Run Profile Safeguards (#1618, Layer 2): how many Connected System Objects the Run Profile's
+    /// Max detected deletions/Max detected deletions percent limits withheld this run. Populated (zero
+    /// when nothing was withheld) on every Full Import activity that ran deletion detection; null on
+    /// every other activity, including a Full Import that imported zero objects and so skipped
+    /// detection entirely.
+    /// </summary>
+    public int? DetectedDeletionsWithheld { get; set; }
+
+    /// <summary>
     /// Creates a detail DTO from an Activity entity.
     /// </summary>
     public static ActivityDetailDto FromEntity(
@@ -573,7 +582,8 @@ public class ActivityDetailDto
             ClearedJoinRecordCount = activity.ClearedJoinRecordCount,
             ExportCreatesWithheld = activity.ExportCreatesWithheld,
             ExportUpdatesWithheld = activity.ExportUpdatesWithheld,
-            ExportDeletesWithheld = activity.ExportDeletesWithheld
+            ExportDeletesWithheld = activity.ExportDeletesWithheld,
+            DetectedDeletionsWithheld = activity.DetectedDeletionsWithheld
         };
     }
 }

@@ -224,11 +224,12 @@ public class SyncRepositoryCsoReadTests
 
     #region Release safety (#1079 Regression B)
 
-    // ObsoleteConnectedSystemObjectAsync (deletion detection during confirming import) hydrates
-    // via GetConnectedSystemObjectByAttributeAsync and adds the result to the update-path working
-    // set, whose AttributeValues later get released once persisted. Every single-CSO getter on
-    // this repository must therefore hand back an independent instance, exactly like
-    // GetConnectedSystemObjectsByIdsAsync - otherwise that release empties the store's own copy.
+    // SyncImportTaskProcessor's deletion detection (ResolveDeletionCandidateAsync, during a
+    // confirming import) hydrates via GetConnectedSystemObjectByAttributeAsync and adds the result
+    // to the update-path working set, whose AttributeValues later get released once persisted.
+    // Every single-CSO getter on this repository must therefore hand back an independent instance,
+    // exactly like GetConnectedSystemObjectsByIdsAsync - otherwise that release empties the store's
+    // own copy.
 
     [Test]
     public async Task GetConnectedSystemObjectAsync_CallerReleasesAttributeValues_StoreCopyUnaffectedAsync()
