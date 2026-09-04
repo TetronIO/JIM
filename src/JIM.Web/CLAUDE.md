@@ -35,6 +35,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
 | `<OneLineText Text="@x" Secondary="@y" />` | A cell's text (and the secondary text that would otherwise sit under it) kept to one line | "One line per row" below |
 | `<OverflowList TItem="X" Items="@xs" ItemTemplate="..." Title="Roles" />` | A cell holding a list: the first item, then "+n more" | "One line per row" below |
+| `<SyncRuleIdentityStrip Direction="@d" MetaverseObjectTypeName="@mv" ConnectedSystemObjectTypeName="@cs" ConnectedSystemId="@id" ConnectedSystemName="@n" />` | A Synchronisation Rule's Connected System, direction and object types, beneath the page's breadcrumbs | "Synchronisation Rule identity strip" below |
 
 ## Choosing Containers
 
@@ -82,6 +83,14 @@ The marker is not decoration. Both sides of a flow are just names, and which sid
 - The avatar colours (`Color.Secondary` for CS, `Color.Primary` for MV) are load-bearing: the hover rule in `site.css` recolours `mud-avatar-filled-secondary` and `mud-avatar-filled-primary` by name, and both must stay in step or a badge stops responding to its own chip's hover.
 
 **Why this is a component.** The markup was duplicated by hand across `ActivityRunProfileExecutionItemDetail` and `PendingExportDetail`, and that duplication is exactly what let a defect live: the avatar hover rule was written for the MV badge only, so every CS badge kept its resting colour when its chip filled. `PendingExportDetail` rendered both badges side by side and still nothing tied them together. It was also measurably wrong for the MV badge it did cover (1.2:1 to 1.7:1 against the fill); see the rule's comment in `site.css` for the palette measurements behind the treatment that replaced it.
+
+## Synchronisation Rule identity strip
+
+**A Synchronisation Rule's Connected System, direction and object types are stated once, by `<SyncRuleIdentityStrip />` beneath the page's breadcrumbs.** They are facts about the rule, not settings on it, so they do not belong among the Details tab's fields (where they used to sit between Description and the first switch), and they are context for Matching, Scope and Attribute Flow as much as for Details, so they belong where every tab can see them: the slot under the breadcrumbs that the Connected System page uses for its own strip.
+
+- **The Metaverse type is always on the left and the Connected System type on the right; only the arrow turns.** The create form draws the pair the same way, and a rule that read one way while being created and another once saved would be worse than either. The arrowhead sits against the side that receives the data, drawn in CSS from the direction class (`jim-identity-flow-outbound` / `-inbound`), so the shape cannot disagree with the label. The row this replaced drew a fixed arrow, so every Inbound rule read as an export.
+- The two type chips are `<ObjectChip />`s with no `Name`, which is the supported "type alone" case; do not hand-roll MV/CS avatars here.
+- Nothing is shown on the New page: those facts are chosen in its form, exactly as `<AuditInfo />` is hidden until the rule exists.
 
 ## Form action gating and input immediacy
 

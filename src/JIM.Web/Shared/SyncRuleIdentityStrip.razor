@@ -1,0 +1,84 @@
+@using JIM.Models.Logic
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The one place a Synchronisation Rule's identity is stated: which Metaverse Object Type, flowing which way, as  *@
+@* which Connected System Object Type, in which Connected System. It renders once, beneath the page's             *@
+@* breadcrumbs, so it is on screen on every tab; Matching, Scope and Attribute Flow all read against it.          *@
+@*                                                                                                                *@
+@* The Metaverse stays on the left and the Connected System on the right whatever the direction, as the create    *@
+@* form draws them, and only the arrow turns. The row this replaced sat between the Description field and the     *@
+@* first switch on the Details tab and drew a fixed arrow from the Metaverse type to the Connected System type,   *@
+@* so an Inbound rule read as though it exported. See JIM.Web/CLAUDE.md "Synchronisation Rule identity strip".   *@
+
+<div class="jim-identity-strip">
+    <ObjectChip Kind="ObjectChipKind.Metaverse" TypeName="@MetaverseObjectTypeName" Tooltip="Metaverse Object Type" Class="ma-0" />
+    <MudTooltip Text="@FlowTooltip" Arrow="true" Placement="Placement.Top">
+        <span class="@($"jim-identity-flow {FlowClass}")">
+            @if (!IsOutbound)
+            {
+                <span class="jim-identity-flow-head"></span>
+            }
+            <span class="jim-identity-flow-line"></span>
+            <span class="jim-identity-flow-label">@DirectionLabel</span>
+            <span class="jim-identity-flow-line"></span>
+            @if (IsOutbound)
+            {
+                <span class="jim-identity-flow-head"></span>
+            }
+        </span>
+    </MudTooltip>
+    <ObjectChip Kind="ObjectChipKind.ConnectedSystem" TypeName="@ConnectedSystemObjectTypeName" Tooltip="Connected System Object Type" Class="ma-0" />
+    <MudDivider Vertical="true" FlexItem="true" />
+    <span class="mud-text-secondary">in</span>
+    <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}")" Class="jim-identity-strip-system">
+        <MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Small" />
+        @ConnectedSystemName
+    </MudLink>
+</div>
+
+@code {
+    /// <summary>
+    /// Which way the rule moves data. Import is drawn as Inbound (the arrow faces the Metaverse); anything else is
+    /// drawn as Outbound, matching how the Details tab's own chip has always read the direction.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public SyncRuleDirection Direction { get; set; }
+
+    /// <summary>
+    /// The Metaverse Object Type the rule works with, always the left-hand chip.
+    /// </summary>
+    [Parameter]
+    public string? MetaverseObjectTypeName { get; set; }
+
+    /// <summary>
+    /// The Connected System Object Type the rule works with, always the right-hand chip.
+    /// </summary>
+    [Parameter]
+    public string? ConnectedSystemObjectTypeName { get; set; }
+
+    /// <summary>
+    /// The Connected System the rule belongs to; the strip links to it.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The Connected System's name, as the link's text.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string ConnectedSystemName { get; set; } = string.Empty;
+
+    private bool IsOutbound => Direction != SyncRuleDirection.Import;
+
+    private string DirectionLabel => IsOutbound ? "Outbound" : "Inbound";
+
+    private string FlowClass => IsOutbound ? "jim-identity-flow-outbound" : "jim-identity-flow-inbound";
+
+    /// <summary>
+    /// The same wording the create form's direction arrow carries, so the two states of the page explain the
+    /// arrow identically.
+    /// </summary>
+    private string FlowTooltip => IsOutbound ? "Exports to the Connected System" : "Imports to the Metaverse";
+}

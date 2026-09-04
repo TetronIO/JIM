@@ -39,6 +39,20 @@
 }
 else if (_syncRule != null)
 {
+    @* The rule's identity (its Connected System, direction and object types) sits beneath the breadcrumbs rather
+       than among the Details tab's fields, so every tab reads against it. mt-2 pairs with the breadcrumbs' own
+       padding, as on the Connected System page; the tabs' mt-2 collapses into the mb-4. *@
+    @if (_syncRule is { Id: > 0, ConnectedSystem: not null })
+    {
+        <div class="mt-2 mb-4">
+            <SyncRuleIdentityStrip Direction="@_syncRule.Direction"
+                                   MetaverseObjectTypeName="@_syncRule.MetaverseObjectType?.Name"
+                                   ConnectedSystemObjectTypeName="@_syncRule.ConnectedSystemObjectType?.Name"
+                                   ConnectedSystemId="@_syncRule.ConnectedSystemId"
+                                   ConnectedSystemName="@_syncRule.ConnectedSystem.Name" />
+        </div>
+    }
+
     @* Keyed on which tabs exist, because MudTabs orders its strip by the order panels register themselves rather
        than by their position in this markup: a panel that appears later (Passwords, when provisioning is
        switched on) is appended to the end, landing after Attribute Flow instead of before it. Changing the key

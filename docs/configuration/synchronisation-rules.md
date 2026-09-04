@@ -18,6 +18,8 @@ Synchronisation Rules are the central configuration mechanism for identity synch
 
 Each rule also has a name and an optional **description**, a free-text note for recording what the rule is for and why it exists. The description is shown on the rule's Details tab and changes to it are tracked in the [configuration change history](activities.md#configuration-change-history).
 
+A saved rule's Connected System, direction and Object Types are stated in a strip beneath the page's breadcrumbs, visible on every tab. The Metaverse Object Type is always on the left and the Connected System Object Type on the right, with the arrow between them drawn the way data flows: towards the Connected System for an export rule, towards the Metaverse for an import rule. The Connected System's name links to it.
+
 ## Direction
 
 Each rule has a direction that determines the flow of data.
