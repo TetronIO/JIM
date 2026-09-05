@@ -11,6 +11,7 @@ using JIM.Application.Interfaces;
 using JIM.Connectors;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Operations;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Enums;
@@ -126,11 +127,19 @@ public class Worker : BackgroundService
         // to determine if the worker's main loop is still executing.
         const string healthcheckFile = "/tmp/healthcheck";
 
+        // The same liveness, written to the database for administrators: the Operations page reads it to show
+        // whether the Worker is up, what it is running and since when, and which version. Written wherever the
+        // file is touched; the writer throttles itself and never lets a failed write into this loop.
+        var heartbeat = ServiceHeartbeatWriter.ForThisProcess(JimService.WorkerSync);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             // Touch the healthcheck file each iteration so Docker knows the main loop is alive
             try { await File.WriteAllTextAsync(healthcheckFile, DateTime.UtcNow.ToString("O"), stoppingToken); }
             catch { /* Non-critical — don't let healthcheck IO fail the main loop */ }
+
+            var (currentWork, currentWorkStartedAt) = WorkerCurrentWork.Describe(SnapshotCurrentTasks());
+            await heartbeat.WriteAsync(mainLoopJim, currentWork, currentWorkStartedAt, null, stoppingToken);
 
             // if processing no tasks:
             //      get the next batch of parallel tasks and execute them all at once or the next sequential task and execute that
@@ -885,7 +894,8 @@ public class Worker : BackgroundService
 
                         }, cancellationTokenSource.Token);
 
-                        CurrentTasks.Add(new TaskTask(mainLoopNewWorkerTask.Id, task, cancellationTokenSource));
+                        CurrentTasks.Add(new TaskTask(mainLoopNewWorkerTask.Id, task, cancellationTokenSource,
+                            WorkerCurrentWork.DescribeTask(mainLoopNewWorkerTask), DateTime.UtcNow));
                     }
                 }
             }
@@ -902,6 +912,16 @@ public class Worker : BackgroundService
     }
 
     #region private methods
+
+    /// <summary>
+    /// A copy of the in-flight task list taken under its lock, for readers that must not observe a task thread
+    /// removing its own entry mid-enumeration.
+    /// </summary>
+    private List<TaskTask> SnapshotCurrentTasks()
+    {
+        lock (_currentTasksLock)
+            return CurrentTasks.ToList();
+    }
 
     /// <summary>
     /// Warms the CSO lookup cache for all Connected Systems at startup.

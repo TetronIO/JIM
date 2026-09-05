@@ -3,6 +3,7 @@
 
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -105,20 +106,6 @@ public class HealthController(JimApplication application) : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult Version()
     {
-        return Ok(new { product = "JIM", version = AppVersion });
-    }
-
-    private static readonly string AppVersion = GetCleanVersion();
-
-    private static string GetCleanVersion()
-    {
-        var version = System.Reflection.CustomAttributeExtensions
-            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(
-                typeof(HealthController).Assembly)
-            ?.InformationalVersion ?? "unknown";
-
-        // Strip the Source Link commit hash suffix (e.g. "+6444a6934e...")
-        var plusIndex = version.IndexOf('+');
-        return plusIndex >= 0 ? version[..plusIndex] : version;
+        return Ok(new { product = "JIM", version = JimVersion.Current });
     }
 }

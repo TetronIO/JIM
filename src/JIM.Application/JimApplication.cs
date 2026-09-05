@@ -95,6 +95,7 @@ public class JimApplication : IDisposable
     public ServiceSettingsServer ServiceSettings { get; }
     public SyncPreviewServer SyncPreview { get; }
     public SystemServer System { get; }
+    public SystemHealthServer SystemHealth { get; }
     public TaskingServer Tasking { get; }
 
     /// <param name="previewAdapters">
@@ -197,6 +198,7 @@ public class JimApplication : IDisposable
         Seeding = new SeedingServer(this);
         ServiceSettings = new ServiceSettingsServer(this);
         System = new SystemServer(this);
+        SystemHealth = new SystemHealthServer(this);
         Tasking = new TaskingServer(this);
         Log.Verbose("The JIM Application has started.");
     }

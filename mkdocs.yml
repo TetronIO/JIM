@@ -111,6 +111,7 @@ nav:
       - Data Flow: configuration/data-flow.md
       - Metaverse: configuration/metaverse.md
       - Predefined Searches: configuration/predefined-searches.md
+      - Operations: configuration/operations.md
       - Schedules: configuration/schedules.md
       - Activities: configuration/activities.md
       - API Keys: configuration/api-keys.md

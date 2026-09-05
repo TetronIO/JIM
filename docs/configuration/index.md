@@ -25,8 +25,9 @@ The central identity store and the searches that surface it.
 
 ## Automation and Operations
 
-Scheduled execution and the audit trail of what JIM did.
+Scheduled execution, the audit trail of what JIM did, and whether the services doing it are alive.
 
+- [Operations](operations.md) -- the queue, history, Schedules and Passwords tabs in one place, with the Service Health of the Worker and Scheduler
 - [Schedules](schedules.md) -- automated, ordered sequences of operations
 - [Activities](activities.md) -- the audit trail of every operation, with status and execution detail
 
