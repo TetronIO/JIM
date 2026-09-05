@@ -271,6 +271,10 @@ An explanatory tooltip that runs as one long line is hard to read and stretches 
 
 A single-sentence description needs none of this and renders unchanged. The site-wide `24rem` measure cap and left-alignment (`site.css` > "Tooltip measure") is what keeps a long *single* sentence from running off the page; MudBlazor sets no `max-width` on `.mud-tooltip` at all.
 
+## Configuration Change Preview panels
+
+**Every editing surface that opens a `<ConfigurationChangePreviewPanel />` passes `OnClose`.** Point it at the surface's existing `Discard...Preview()` method (the one that forgets the Activity id, the previewed proposal and the last read), so closing removes the panel and the save confirmation stops citing the preview. The panel renders the close control only when the callback is set, so the one surface that shows a preview as a record rather than as a question, the Activity page, leaves it unset. A running preview closed this way is not cancelled; it finishes as an Activity. The affordance itself is covered by `ConfigurationChangePreviewPanelTests`; the wiring is a convention, so check it by reading the panel's call sites (`grep -n "<ConfigurationChangePreviewPanel" -A4`).
+
 ## Alerts
 - ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components
 - This ensures a consistent outlined style across the entire UI
