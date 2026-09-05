@@ -75,7 +75,7 @@ public static class PasswordHistoryTimelineModel
     /// <param name="InitiatorLead">"by" for a person, "via" for an API key.</param>
     /// <param name="InitiatorName">Who made the change, or null where the Activity did not record one.</param>
     /// <param name="InitiatorTrail">"(API key)" after an automation's name; null for a person.</param>
-    /// <param name="Scope">"on 3 accounts" for an administrator's explicit choice of more than one account; null otherwise.</param>
+    /// <param name="Scope">"on 3 Connected Systems" for an administrator's explicit choice of more than one account; null otherwise.</param>
     /// <param name="DotColour">The timeline dot: the worst state among the entry's systems.</param>
     /// <param name="Targets">One per Connected System, in the order they were first reached.</param>
     public sealed record Entry(
@@ -198,7 +198,7 @@ public static class PasswordHistoryTimelineModel
             InitiatorLead: apiKey ? "via" : "by",
             InitiatorName: initiatorKnown ? change.InitiatedByName : null,
             InitiatorTrail: initiatorKnown && apiKey ? "(API key)" : null,
-            Scope: explicitChange && targets.Count > 1 ? $"on {targets.Count} accounts" : null,
+            Scope: explicitChange && targets.Count > 1 ? $"on {targets.Count} Connected Systems" : null,
             DotColour: WorstColour(targets),
             Targets: targets);
     }

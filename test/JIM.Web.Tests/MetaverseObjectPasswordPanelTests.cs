@@ -463,7 +463,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     /// The first line says who and, for an administrator's explicit choice of accounts, how many.
     /// </summary>
     [Test]
-    public void Panel_EntryLine_SaysWhoAndOnHowManyAccounts()
+    public void Panel_EntryLine_SaysWhoAndOnHowManyConnectedSystems()
     {
         var cut = RenderPanel(events:
         [
@@ -475,7 +475,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
         var entries = FindAll(cut, EntryMarker);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(entries[0].QuerySelector(".jim-password-entry-head")!.TextContent, Does.Contain("by Admin User on 3 accounts"));
+            Assert.That(entries[0].QuerySelector(".jim-password-entry-head")!.TextContent, Does.Contain("by Admin User on 3 Connected Systems"));
             Assert.That(entries[0].QuerySelector(".jim-password-entry-head b")!.TextContent, Is.EqualTo("Admin User"), "the name carries the emphasis");
             Assert.That(entries[1].QuerySelector(".jim-password-entry-head")!.TextContent, Does.Contain("via Self-service portal (API key)").And.Not.Contain("accounts"));
         }

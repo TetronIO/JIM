@@ -143,7 +143,7 @@ public class PasswordHistoryTimelineModelTests
             Assert.That(entry.InitiatorLead, Is.EqualTo("by"));
             Assert.That(entry.InitiatorName, Is.EqualTo("Admin User"));
             Assert.That(entry.InitiatorTrail, Is.Null);
-            Assert.That(entry.Scope, Is.EqualTo("on 3 accounts"));
+            Assert.That(entry.Scope, Is.EqualTo("on 3 Connected Systems"));
         }
     }
 
@@ -171,7 +171,7 @@ public class PasswordHistoryTimelineModelTests
             Assert.That(entry.InitiatorLead, Is.EqualTo("via"));
             Assert.That(entry.InitiatorName, Is.EqualTo("Service Desk"));
             Assert.That(entry.InitiatorTrail, Is.EqualTo("(API key)"));
-            Assert.That(entry.Scope, Is.Null, "the count is for an administrator's explicit choice of accounts");
+            Assert.That(entry.Scope, Is.Null, "the count is for an administrator's explicit choice of Connected Systems");
         }
     }
 
