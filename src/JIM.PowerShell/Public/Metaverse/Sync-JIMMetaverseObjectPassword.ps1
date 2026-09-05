@@ -64,7 +64,8 @@ function Sync-JIMMetaverseObjectPassword {
         Targets: ConnectedSystemId, ConnectedSystemName, Enabled, ConnectedSystemObjectId, State (Queued,
         Delivering, Set, Retrying, Parked, Held, Expired or Cancelled), NextAttemptAt (for a target that is
         Retrying), Message (the target's own words on its most recent outcome) and AttemptCount. Without -Wait,
-        every target is Queued or Held and Settled is false unless nothing was queued.
+        every target is Queued or Held; Settled is false while any target is Queued or Delivering, so a change
+        whose every system is switched off (all Held) or that reached no system is already settled.
 
     .EXAMPLE
         $password = Read-Host -AsSecureString "New password"

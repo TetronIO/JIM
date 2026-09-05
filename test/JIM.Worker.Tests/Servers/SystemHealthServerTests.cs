@@ -281,9 +281,9 @@ public class SystemHealthServerTests
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_OneServiceHasReported_ShownRunningAmongTheNotSeen()
+    public async Task GetServiceHealthAsync_OneServiceHasReported_ShownHealthyAmongTheUnhealthy()
     {
-        // One heartbeat among three expected services: the one that spoke is Running, the others are not seen,
+        // One heartbeat among three expected services: the one that spoke is Healthy, the others are Unhealthy,
         // and the report's overall verdict is the worst of them.
         GivenHeartbeats(Heartbeat(JimService.WorkerPasswordDelivery, TimeSpan.FromSeconds(1)));
 
