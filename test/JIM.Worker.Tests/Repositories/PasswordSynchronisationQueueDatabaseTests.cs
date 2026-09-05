@@ -100,7 +100,9 @@ public class PasswordSynchronisationQueueDatabaseTests
             ActivityId = Guid.NewGuid(),
             CancelledAt = createdAt.AddMinutes(2),
             CancelledById = Guid.NewGuid(),
-            CancelledByName = "Ada Lovelace"
+            CancelledByName = "Ada Lovelace",
+            ClaimedAt = createdAt.AddMinutes(3),
+            ClaimedBy = "worker-1a2b3c4d"
         };
 
         await using (var write = NewContext())
@@ -128,6 +130,8 @@ public class PasswordSynchronisationQueueDatabaseTests
             Assert.That(stored.CancelledAt, Is.EqualTo(change.CancelledAt));
             Assert.That(stored.CancelledById, Is.EqualTo(change.CancelledById));
             Assert.That(stored.CancelledByName, Is.EqualTo("Ada Lovelace"));
+            Assert.That(stored.ClaimedAt, Is.EqualTo(change.ClaimedAt));
+            Assert.That(stored.ClaimedBy, Is.EqualTo("worker-1a2b3c4d"));
         }
     }
 
@@ -242,18 +246,23 @@ public class PasswordSynchronisationQueueDatabaseTests
     public async Task RecordPasswordChangeAttemptsAsync_PersistsTheOutcomeAsync()
     {
         var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
-        var change = NewChange(mvoId, systemId, null, "$JIMPW$v1$ciphertext", DateTime.UtcNow);
+        var queued = NewChange(mvoId, systemId, null, "$JIMPW$v1$ciphertext", DateTime.UtcNow);
 
         await using (var write = NewContext())
-            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([change]);
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([queued]);
 
-        // The account is resolved on the attempt, which is how a change queued before provisioning gains one.
+        // An attempt is only ever recorded against a claimed row (#1635): the write is guarded on the row still
+        // being Delivering, so the lane's claim is what makes it land.
+        PendingPasswordChange change;
+        await using (var claim = NewContext())
+            change = (await new PostgresDataRepository(claim).Sync.ClaimDuePasswordChangesAsync(
+                systemId, "worker-1a2b3c4d", DateTime.UtcNow, PendingPasswordChange.ClaimLease, 10)).Single();
+
+        // The account is resolved on the attempt, which is how a change queued before provisioning gains one; the
+        // outcome goes through the model's own transition, as the lane's does, so the claim ends with it.
         change.ConnectedSystemObjectId = csoId;
-        change.Status = PendingPasswordChangeStatus.Parked;
-        change.FailureReason = PasswordSetFailureReason.PolicyRejection;
-        change.TargetMessage = "Password too short";
-        change.AttemptCount = 1;
-        change.LastAttemptedAt = DateTime.UtcNow;
+        change.RecordAttempt(PasswordSetFailureReason.PolicyRejection, "Password too short",
+            new ConnectedSystemPasswordSynchronisation { MaxRetries = 3, RetryBackoffBase = TimeSpan.FromMinutes(5) }, DateTime.UtcNow);
 
         await using (var write = NewContext())
             await new PostgresDataRepository(write).Sync.RecordPasswordChangeAttemptsAsync([change]);
@@ -268,6 +277,7 @@ public class PasswordSynchronisationQueueDatabaseTests
             Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
             Assert.That(stored.TargetMessage, Is.EqualTo("Password too short"));
             Assert.That(stored.AttemptCount, Is.EqualTo(1));
+            Assert.That(stored.ClaimedBy, Is.Null, "An attempt ends the claim.");
         }
     }
 

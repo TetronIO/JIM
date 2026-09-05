@@ -1,4 +1,4 @@
-﻿// Copyright (c) Tetron Limited. All rights reserved.
+// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Interfaces;
@@ -180,10 +180,7 @@ public class JimApplication : IDisposable
             // Delivery outcomes are recorded by an unattended worker pass, so they are attributed to JIM itself.
             activity => Activities.CreateSystemActivityAsync(activity),
             activity => Activities.CompleteActivityAsync(activity),
-            (activity, errorMessage) => Activities.CompleteActivityWithErrorAsync(activity, errorMessage),
-            // Null-forgiving for the same reason as the repository above: Tasking is assigned further down this
-            // constructor, and the delegate is not called until a password change is queued or released.
-            connectedSystemId => Tasking!.RequestPasswordDeliveryAsync(connectedSystemId, "Password Synchronisation"));
+            (activity, errorMessage) => Activities.CompleteActivityWithErrorAsync(activity, errorMessage));
         ScopingEvaluation = new ScopingEvaluationServer();
         ScopeReconciliation = new ScopeReconciliationServer(this);
         FileSystem = new FileSystemServer(this);

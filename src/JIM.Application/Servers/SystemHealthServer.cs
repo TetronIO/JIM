@@ -51,13 +51,13 @@ public class SystemHealthServer
     /// <summary>
     /// The services every deployment is expected to run, in the order they appear in a report. A service on this
     /// list with no heartbeat at all is reported as unhealthy ("never started"), which is the honest reading of a
-    /// Worker that never came up. Password delivery is deliberately absent until the Password Delivery Service
-    /// exists to write its heartbeat (plan #1635, layer 2); listing it earlier would put a permanent red card and
-    /// a permanent banner on every deployment for a service that cannot yet report.
+    /// Worker that never came up. Password delivery is hosted in the Worker process (plan #1635, D3) and reports
+    /// separately, because a wedged synchronisation loop and a wedged password loop need different responses.
     /// </summary>
     public static readonly JimService[] ExpectedServices =
     [
         JimService.WorkerSync,
+        JimService.WorkerPasswordDelivery,
         JimService.Scheduler
     ];
 

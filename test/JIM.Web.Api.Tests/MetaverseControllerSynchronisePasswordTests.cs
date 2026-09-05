@@ -75,8 +75,6 @@ public class MetaverseControllerSynchronisePasswordTests
             .Returns(Task.CompletedTask);
         activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
-        taskingRepo.Setup(r => r.HasQueuedPasswordDeliveryTaskAsync(It.IsAny<int?>())).ReturnsAsync(true);
-
         metaverseRepo.Setup(r => r.GetMetaverseObjectAsync(It.IsAny<Guid>()))
             .ReturnsAsync(() => new MetaverseObject { Id = _metaverseObjectId, CachedDisplayName = "Ada Lovelace" });
 

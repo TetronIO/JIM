@@ -48,14 +48,11 @@ public class ConnectedSystemPasswordSynchronisationDrainTests
         activityRepository.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         activityRepository.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
-        var taskingRepository = new Mock<ITaskingRepository>();
-        taskingRepository.Setup(r => r.HasQueuedPasswordDeliveryTaskAsync(It.IsAny<int?>())).ReturnsAsync(false);
-        taskingRepository.Setup(r => r.CreateWorkerTaskAsync(It.IsAny<JIM.Models.Tasking.WorkerTask>())).Returns(Task.CompletedTask);
-
+        // No tasking repository: releasing parked work no longer raises a Worker Task (#1635). The row update
+        // itself is what wakes the Password Delivery Service, so what these fixtures observe is the row.
         var repository = new Mock<IRepository>();
         repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepository.Object);
         repository.Setup(r => r.Activity).Returns(activityRepository.Object);
-        repository.Setup(r => r.Tasking).Returns(taskingRepository.Object);
 
         _syncRepository = new SyncRepository();
         _jim = new JimApplication(repository.Object, syncRepository: _syncRepository);

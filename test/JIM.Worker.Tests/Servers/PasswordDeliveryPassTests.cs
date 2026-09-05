@@ -34,6 +34,7 @@ public class PasswordDeliveryPassTests
     private const int FirstSystemId = 3;
     private const int SecondSystemId = 4;
     private const int UserObjectTypeId = 200;
+    private const string ClaimedBy = "worker-test-1a2b3c4d";
 
     private JIM.InMemoryData.SyncRepository _syncRepository = null!;
     private Mock<IConnectedSystemRepository> _connectedSystemRepository = null!;
@@ -87,8 +88,7 @@ public class PasswordDeliveryPassTests
                 return Task.CompletedTask;
             },
             _ => Task.CompletedTask,
-            (_, _) => Task.CompletedTask,
-            _ => Task.CompletedTask);
+            (_, _) => Task.CompletedTask);
     }
 
     /// <summary>
@@ -164,7 +164,7 @@ public class PasswordDeliveryPassTests
         await QueueAsync(FirstSystemId);
         await QueueAsync(SecondSystemId);
 
-        var result = await _server.DeliverDueAsync(FirstSystemId, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -182,7 +182,7 @@ public class PasswordDeliveryPassTests
         await QueueAsync(FirstSystemId);
         await QueueAsync(SecondSystemId);
 
-        var result = await _server.DeliverDueAsync(null, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(null, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -197,7 +197,7 @@ public class PasswordDeliveryPassTests
     {
         ArrangeSystem(FirstSystemId, "Corporate AD");
 
-        var result = await _server.DeliverDueAsync(null, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(null, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -219,7 +219,7 @@ public class PasswordDeliveryPassTests
         await QueueAsync(FirstSystemId);
         await QueueAsync(SecondSystemId);
 
-        var result = await _server.DeliverDueAsync(null, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(null, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -236,7 +236,7 @@ public class PasswordDeliveryPassTests
         await QueueAsync(FirstSystemId);
         await QueueAsync(SecondSystemId);
 
-        var result = await _server.DeliverDueAsync(null, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(null, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -251,7 +251,7 @@ public class PasswordDeliveryPassTests
         ArrangeSystem(FirstSystemId, "Corporate AD", withConnector: false);
         var change = await QueueAsync(FirstSystemId);
 
-        await _server.DeliverDueAsync(FirstSystemId, DateTime.UtcNow, CancellationToken.None);
+        await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         var stored = await _syncRepository.GetDuePasswordChangesAsync(FirstSystemId, DateTime.UtcNow.AddMinutes(1), 10);
         using (Assert.EnterMultipleScope())
@@ -268,7 +268,7 @@ public class PasswordDeliveryPassTests
         ArrangeSystem(FirstSystemId, "Corporate AD", enabled: false);
         await QueueAsync(FirstSystemId);
 
-        var result = await _server.DeliverDueAsync(null, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(null, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -285,7 +285,7 @@ public class PasswordDeliveryPassTests
         _createConnector = _ => new PasswordlessConnector();
         await QueueAsync(FirstSystemId);
 
-        var result = await _server.DeliverDueAsync(FirstSystemId, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -305,7 +305,7 @@ public class PasswordDeliveryPassTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        var result = await _server.DeliverDueAsync(null, DateTime.UtcNow, cancellation.Token);
+        var result = await _server.DeliverDueAsync(null, ClaimedBy, DateTime.UtcNow, cancellation.Token);
 
         Assert.That(result.ConnectedSystemsVisited, Is.Zero);
     }
@@ -315,7 +315,7 @@ public class PasswordDeliveryPassTests
     {
         ArrangeSystem(FirstSystemId, "Corporate AD");
 
-        var result = await _server.DeliverDueAsync(FirstSystemId, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -330,7 +330,7 @@ public class PasswordDeliveryPassTests
         ArrangeSystem(FirstSystemId, "Corporate AD");
         await QueueAsync(FirstSystemId);
 
-        var result = await _server.DeliverDueAsync(FirstSystemId, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         var description = result.Describe();
         using (Assert.EnterMultipleScope())
@@ -352,7 +352,7 @@ public class PasswordDeliveryPassTests
         _connectors[FirstSystemId].PasswordChannelSecure = false;
         var change = await QueueAsync(FirstSystemId);
 
-        var result = await _server.DeliverDueAsync(FirstSystemId, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         var stored = await _syncRepository.GetDuePasswordChangesAsync(FirstSystemId, DateTime.UtcNow.AddMinutes(1), 10);
         using (Assert.EnterMultipleScope())
@@ -363,6 +363,7 @@ public class PasswordDeliveryPassTests
             Assert.That(stored[0].Id, Is.EqualTo(change.Id));
             Assert.That(stored[0].AttemptCount, Is.Zero,
                 "Nothing was sent, so nothing may be counted against the change.");
+            Assert.That(stored[0].ClaimedBy, Is.Null, "The claim the pass took is given back with the change.");
         }
     }
 
@@ -374,7 +375,7 @@ public class PasswordDeliveryPassTests
         _connectors[FirstSystemId].PasswordChannelSecure = true;
         await QueueAsync(FirstSystemId);
 
-        var result = await _server.DeliverDueAsync(FirstSystemId, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         Assert.That(result.DeliveredCount, Is.EqualTo(1));
     }
@@ -389,7 +390,7 @@ public class PasswordDeliveryPassTests
         _connectors[FirstSystemId].PasswordChannelSecure = false;
         await QueueAsync(FirstSystemId);
 
-        var result = await _server.DeliverDueAsync(FirstSystemId, DateTime.UtcNow, CancellationToken.None);
+        var result = await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         Assert.That(result.DeliveredCount, Is.EqualTo(1));
     }
@@ -402,7 +403,7 @@ public class PasswordDeliveryPassTests
         _connectors[FirstSystemId].PasswordChannelSecure = false;
         await QueueAsync(FirstSystemId);
 
-        await _server.DeliverDueAsync(FirstSystemId, DateTime.UtcNow, CancellationToken.None);
+        await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
 
         Assert.That(_connectors[FirstSystemId].PasswordConnectionOpen, Is.False,
             "A refused pass must not leave the channel it opened to make the check hanging open.");

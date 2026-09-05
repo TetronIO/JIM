@@ -1,4 +1,4 @@
-﻿// Copyright (c) Tetron Limited. All rights reserved.
+// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Interfaces;
@@ -42,7 +42,6 @@ public class PasswordSynchronisationServer
     private readonly Func<Activity, Task> _createSystemActivity;
     private readonly Func<Activity, Task> _completeActivity;
     private readonly Func<Activity, string, Task> _completeActivityWithError;
-    private readonly Func<int?, Task> _requestDelivery;
 
     /// <param name="passwordProtection">
     /// How to reach password protection, resolved when a change is queued rather than now. The hosts set
@@ -76,11 +75,6 @@ public class PasswordSynchronisationServer
     /// and there is no principal at that moment to attribute the outcome to. The parent Activity for the change
     /// carries who made it; this records what one system did with it.
     /// </param>
-    /// <param name="requestDelivery">
-    /// Asks for a delivery pass over the given Connected System, or over every system with work due where null.
-    /// Queueing and delivering stay separate (a password change must not wait on a directory), so this is how the
-    /// queue tells the worker there is something to do rather than leaving it to the next housekeeping tick.
-    /// </param>
     /// <param name="completeActivity">Completes an Activity.</param>
     /// <param name="completeActivityWithError">
     /// Completes an Activity as a failure, carrying the reason. A separate delegate because a target refusing a
@@ -96,8 +90,7 @@ public class PasswordSynchronisationServer
         Func<Activity, MetaverseObject?, ApiKey?, Task> createActivity,
         Func<Activity, Task> createSystemActivity,
         Func<Activity, Task> completeActivity,
-        Func<Activity, string, Task> completeActivityWithError,
-        Func<int?, Task> requestDelivery)
+        Func<Activity, string, Task> completeActivityWithError)
     {
         _syncRepo = syncRepository;
         _connectedSystemRepo = connectedSystemRepository;
@@ -108,7 +101,6 @@ public class PasswordSynchronisationServer
         _createSystemActivity = createSystemActivity;
         _completeActivity = completeActivity;
         _completeActivityWithError = completeActivityWithError;
-        _requestDelivery = requestDelivery;
     }
 
     /// <summary>
@@ -252,11 +244,9 @@ public class PasswordSynchronisationServer
             metaverseObjectId, outcomes.Count, outcomes.Count(o => !o.Enabled),
             outcomes.Count == 0 ? "none" : LogSanitiser.Sanitise(string.Join(", ", outcomes.Select(o => o.ConnectedSystemName))));
 
-        // Unscoped, because fan-out reaches every enabled system at once and the pass resolves which of them
-        // actually have work due. Nothing queued means nothing to ask for.
-        if (changes.Count > 0)
-            await _requestDelivery(null);
-
+        // Nothing asks for delivery here. The rows just written fire the queue's notification trigger, and the
+        // Password Delivery Service (#1635) wakes on it and claims them within a second; queueing stays a durable
+        // write and a return, whatever the directories are doing.
         return new PasswordQueueResult { ActivityId = activity.Id, Targets = outcomes };
     }
 
@@ -286,21 +276,42 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
-    /// How many queued password changes one pass will attempt against a Connected System.
+    /// How many queued password changes one lane will attempt against a Connected System before handing back.
     /// <para>
     /// A bound rather than a page size, matching the initial-password pass: a misconfigured target must not turn
-    /// one pass into an unbounded run of failing round trips. What is left over is taken by the next pass, oldest
-    /// first, so nothing starves.
+    /// one lane into an unbounded run of failing round trips. What is left over is taken by the next lane, oldest
+    /// first, so nothing starves; the rows the lane wrote wake the service for it.
     /// </para>
     /// </summary>
     public const int MaximumChangesPerPass = 1000;
 
     /// <summary>
+    /// How many changes a lane claims at a time. Small enough that a claim is never held for much longer than the
+    /// attempts it covers, so a lane working through a long queue against a slow directory does not outlive its
+    /// own lease (<see cref="ClaimLease"/>) on the rows at the back of the batch; large enough that the claim
+    /// round trip is a small fraction of the directory work between claims.
+    /// </summary>
+    public const int ClaimBatchSize = 100;
+
+    /// <summary>
+    /// How long a claim is honoured before another deliverer may take the change. <see cref="PendingPasswordChange.ClaimLease"/>,
+    /// surfaced here because this is the layer that passes it to every read that must agree on it.
+    /// </summary>
+    public static readonly TimeSpan ClaimLease = PendingPasswordChange.ClaimLease;
+
+    /// <summary>
     /// Delivers the password changes due on a Connected System, expiring anything that has outlived its window
-    /// first.
+    /// first: one lane of the Password Delivery Service (#1635).
+    /// <para>
+    /// Works over rows it claims rather than rows it reads. Each claim marks its rows Delivering under
+    /// <paramref name="claimedBy"/> in the same statement that selects them, so a second deliverer (another
+    /// Worker replica, or a lane overlapping a safety poll) cannot take the same rows; the claim is released
+    /// unattempted wherever the lane finds it cannot deliver at all, so nothing is counted against a change
+    /// nobody tried.
+    /// </para>
     /// <para>
     /// Never throws for a delivery that did not work. Every outcome is classified and recorded against the change
-    /// it belongs to, because a pass that threw would abandon the changes it had not reached and lose the outcomes
+    /// it belongs to, because a lane that threw would abandon the changes it had not reached and lose the outcomes
     /// of the ones it had.
     /// </para>
     /// </summary>
@@ -309,33 +320,39 @@ public class PasswordSynchronisationServer
     /// Its Connector. One that cannot set passwords leaves the queued changes exactly as they are rather than
     /// failing them: the capability may arrive with a Connector upgrade.
     /// </param>
-    /// <param name="asOf">The instant the pass runs, for expiry and retry scheduling.</param>
+    /// <param name="claimedBy">
+    /// Who is delivering: the service instance id, stamped on every row this lane claims so a row found stuck in
+    /// Delivering names the process to look at.
+    /// </param>
+    /// <param name="asOf">The instant the lane runs, for expiry and retry scheduling.</param>
     /// <param name="cancellationToken">
-    /// Stops before the changes not yet reached. It cannot undo the deliveries already made, and their outcomes
-    /// are still recorded: a password that landed has landed whatever the run did next.
+    /// Stops before the changes not yet reached, releasing their claims. It cannot undo the deliveries already
+    /// made, and their outcomes are still recorded: a password that landed has landed whatever the lane did next.
     /// </param>
     public async Task<PasswordDeliveryRunResult> DeliverDuePasswordChangesAsync(
         ConnectedSystem connectedSystem,
         IConnector connector,
+        string claimedBy,
         DateTime asOf,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
 
         var result = new PasswordDeliveryRunResult();
 
-        // An unconfigured or disabled system delivers nothing, and keeps everything. Requirement 2: a disabled
-        // system accumulates rather than discarding, so enabling it later has something to drain.
+        // An unconfigured or disabled system delivers nothing, claims nothing, and keeps everything. Requirement
+        // 2: a disabled system accumulates rather than discarding, so enabling it later has something to drain.
         var configuration = connectedSystem.PasswordSynchronisation;
         if (configuration is not { Enabled: true })
             return result;
 
         // Expiry first, so a change on its way out is not attempted, and its attempt count not inflated, on the
-        // very pass that retires it.
+        // very lane that retires it. Expiry touches Pending rows only; a claimed row belongs to its claimant.
         result.ExpiredCount = await _syncRepo.ExpirePasswordChangesAsync(connectedSystem.Id, asOf);
 
-        var due = await _syncRepo.GetDuePasswordChangesAsync(connectedSystem.Id, asOf, MaximumChangesPerPass);
-        if (due.Count == 0)
+        var claimed = await _syncRepo.ClaimDuePasswordChangesAsync(connectedSystem.Id, claimedBy, asOf, ClaimLease, ClaimBatchSize);
+        if (claimed.Count == 0)
             return result;
 
         if (connector is not IConnectorPasswordManagement passwordConnector)
@@ -343,7 +360,8 @@ public class PasswordSynchronisationServer
             result.ConnectorCannotSetPasswords = true;
             Log.Warning(
                 "DeliverDuePasswordChangesAsync: The Connector for Connected System {ConnectedSystemId} cannot set passwords. {Count} queued password change(s) are left outstanding.",
-                connectedSystem.Id, due.Count);
+                connectedSystem.Id, claimed.Count);
+            await ReleaseUnattemptedAsync(claimed);
             return result;
         }
 
@@ -353,40 +371,102 @@ public class PasswordSynchronisationServer
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Reported once for the pass rather than as a failure per change: the problem belongs to the
+            // Reported once for the lane rather than as a failure per change: the problem belongs to the
             // connection, and counting it against every change would inflate attempt counts that are supposed to
             // mean "distinct attempts at this password".
             result.CouldNotOpenPasswordConnection = true;
             Log.Error(ex,
                 "DeliverDuePasswordChangesAsync: Could not open the password channel to Connected System {ConnectedSystemId}. {Count} queued password change(s) are left outstanding.",
-                connectedSystem.Id, due.Count);
+                connectedSystem.Id, claimed.Count);
+            await ReleaseUnattemptedAsync(claimed);
             return result;
         }
 
         // The administrator's declaration that passwords must not leave JIM in the clear for this system,
         // applied to the channel the Connector actually opened. The rule is shared with the other two paths that
         // write a password here, so all three refuse on identical grounds. Nothing is attempted and no attempt is
-        // counted: the changes stay Pending and due, so no release is needed when the setting is turned off
-        // again; the worker's idle housekeeping finds them within the minute and raises a pass.
+        // counted: the changes go back to Pending and due, so turning the setting off again is enough; that
+        // configuration save releases the system's work and the service picks it up.
         if (PasswordChannelSecurity.RefusesChannel(connectedSystem, passwordConnector))
         {
             passwordConnector.ClosePasswordConnection();
             result.PasswordChannelNotSecure = true;
             Log.Error(
                 "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId} requires a secure transport for passwords, and the Connector's password channel is not encrypted. {Count} queued password change(s) are left outstanding.",
-                connectedSystem.Id, due.Count);
+                connectedSystem.Id, claimed.Count);
+            await ReleaseUnattemptedAsync(claimed);
             return result;
         }
 
+        try
+        {
+            var attemptedInTotal = 0;
+            while (true)
+            {
+                attemptedInTotal += await DeliverBatchAsync(passwordConnector, connectedSystem, configuration, claimed, asOf, result, cancellationToken);
+
+                // Another batch only when this one was full and the bound has room: a short batch means the queue
+                // for this system is drained as of the claim, and anything queued since has woken the service.
+                if (cancellationToken.IsCancellationRequested || claimed.Count < ClaimBatchSize || attemptedInTotal >= MaximumChangesPerPass)
+                    break;
+
+                claimed = await _syncRepo.ClaimDuePasswordChangesAsync(connectedSystem.Id, claimedBy, asOf, ClaimLease,
+                    Math.Min(ClaimBatchSize, MaximumChangesPerPass - attemptedInTotal));
+                if (claimed.Count == 0)
+                    break;
+            }
+        }
+        finally
+        {
+            passwordConnector.ClosePasswordConnection();
+        }
+
+        // Synchronisation Integrity: summary statistics at the end of every batch operation.
+        Log.Information(
+            "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Released} released unattempted.",
+            connectedSystem.Id, result.DeliveredCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount, result.ReleasedCount);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Attempts one claimed batch, persisting what happened to every row in it whatever happens: outcomes for the
+    /// rows attempted, deletion for the rows delivered, and release for the rows a cancellation stopped the lane
+    /// reaching. Returns how many were attempted.
+    /// </summary>
+    private async Task<int> DeliverBatchAsync(
+        IConnectorPasswordManagement passwordConnector,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemPasswordSynchronisation configuration,
+        List<PendingPasswordChange> claimed,
+        DateTime asOf,
+        PasswordDeliveryRunResult result,
+        CancellationToken cancellationToken)
+    {
         var attempted = new List<PendingPasswordChange>();
         var delivered = new List<Guid>();
+        var unattempted = new List<PendingPasswordChange>();
 
         try
         {
-            foreach (var change in due)
+            foreach (var change in claimed)
             {
                 if (cancellationToken.IsCancellationRequested)
-                    break;
+                {
+                    unattempted.Add(change);
+                    continue;
+                }
+
+                // A claim can outlive a change's window when it was reclaimed from a deliverer that died holding
+                // it: expiry never touches a Delivering row, so this is where such a row is retired. Recorded
+                // through the attempt write, which is guarded on the claim, rather than attempted.
+                if (change.ExpiresAt <= asOf)
+                {
+                    change.Expire();
+                    attempted.Add(change);
+                    result.ExpiredCount++;
+                    continue;
+                }
 
                 var outcome = await DeliverOneAsync(passwordConnector, connectedSystem, change, configuration, asOf, cancellationToken);
 
@@ -407,23 +487,38 @@ public class PasswordSynchronisationServer
         }
         finally
         {
-            passwordConnector.ClosePasswordConnection();
-
-            // Persisted in the finally so a cancelled pass keeps what it achieved. Re-delivering a password
-            // already set is harmless, but leaving a delivered change queued would send it again on every pass.
+            // Persisted in the finally so a cancelled lane keeps what it achieved. Re-delivering a password
+            // already set is harmless, but leaving a delivered change queued would send it again on every lane,
+            // and leaving a claimed one claimed would hold it for the whole lease.
             if (attempted.Count > 0)
                 await _syncRepo.RecordPasswordChangeAttemptsAsync(attempted);
 
             if (delivered.Count > 0)
                 await _syncRepo.DeletePasswordChangesAsync(delivered);
+
+            if (unattempted.Count > 0)
+                result.ReleasedCount += await ReleaseClaimsAsync(unattempted);
         }
 
-        // Synchronisation Integrity: summary statistics at the end of every batch operation.
-        Log.Information(
-            "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired.",
-            connectedSystem.Id, result.DeliveredCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount);
+        return attempted.Count + delivered.Count;
+    }
 
-        return result;
+    /// <summary>
+    /// Gives a whole claimed batch back unattempted, for a lane that found before its first attempt that it could
+    /// not deliver at all. Logged rather than counted on the result, because the result already names why.
+    /// </summary>
+    private async Task ReleaseUnattemptedAsync(List<PendingPasswordChange> claimed)
+    {
+        var released = await ReleaseClaimsAsync(claimed);
+        Log.Debug("DeliverDuePasswordChangesAsync: Released {Released} of {Claimed} claimed password change(s) unattempted.", released, claimed.Count);
+    }
+
+    private async Task<int> ReleaseClaimsAsync(List<PendingPasswordChange> claimed)
+    {
+        foreach (var change in claimed)
+            change.ReleaseClaim();
+
+        return await _syncRepo.ReleasePasswordChangeClaimsAsync(claimed.Select(c => c.Id));
     }
 
     /// <summary>
@@ -589,21 +684,28 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
-    /// Whether any Connected System has queued password work due as of the given moment (#1119).
-    /// <para>
-    /// Asked by the worker's idle housekeeping, which is the only trigger that catches a retry: a change that
-    /// failed once comes due minutes later without anything else happening in the system.
-    /// </para>
+    /// Which Connected Systems have password work a lane would attempt now (#1635): pending and due on an enabled
+    /// system, or claimed under a lease that has run out. What the Password Delivery Service asks on every wake
+    /// to decide which lanes to run.
     /// </summary>
-    public async Task<bool> HasWorkDueAsync(DateTime asOf)
+    public async Task<List<int>> GetConnectedSystemIdsWithWorkDueAsync(DateTime asOf)
     {
-        var connectedSystemIds = await _syncRepo.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf);
-        return connectedSystemIds.Count > 0;
+        return await _syncRepo.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf, ClaimLease);
+    }
+
+    /// <summary>
+    /// What the Password Delivery Service has ahead of it (#1635): due and retrying counts and the earliest
+    /// scheduled attempt, in one query. The service sleeps until that attempt (or its safety poll, whichever is
+    /// sooner) and writes the counts into its heartbeat.
+    /// </summary>
+    public async Task<PasswordQueueDeliveryOutlook> GetDeliveryOutlookAsync(DateTime asOf)
+    {
+        return await _syncRepo.GetPasswordQueueDeliveryOutlookAsync(asOf, ClaimLease);
     }
 
     /// <summary>
     /// Runs a delivery pass over the Connected Systems with password work due, resolving each system's Connector
-    /// as it goes. This is what the worker's Password Delivery task calls.
+    /// as it goes. This is what the Password Delivery Service calls, one system per lane.
     /// <para>
     /// A system that cannot be delivered to is recorded and stepped over rather than thrown from. A pass that
     /// threw on the first unreachable directory would leave every system behind it in the list undelivered, which
@@ -612,18 +714,21 @@ public class PasswordSynchronisationServer
     /// </para>
     /// </summary>
     /// <param name="connectedSystemId">
-    /// The Connected System to deliver to, or null to visit every system with work due. Named where the trigger
+    /// The Connected System to deliver to, or null to visit every system with work due. Named where the caller
     /// knows which system it is, so a targeted delivery does not sweep systems with nothing to do.
     /// </param>
+    /// <param name="claimedBy">Who is delivering: the service instance id, stamped on every row claimed.</param>
     /// <param name="asOf">The moment the pass is running as of; what is due and what has expired are read from it.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the pass.</param>
-    public async Task<PasswordDeliveryPassResult> DeliverDueAsync(int? connectedSystemId, DateTime asOf, CancellationToken cancellationToken)
+    public async Task<PasswordDeliveryPassResult> DeliverDueAsync(int? connectedSystemId, string claimedBy, DateTime asOf, CancellationToken cancellationToken)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
+
         var result = new PasswordDeliveryPassResult();
 
         var connectedSystemIds = connectedSystemId.HasValue
             ? [connectedSystemId.Value]
-            : await _syncRepo.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf);
+            : await GetConnectedSystemIdsWithWorkDueAsync(asOf);
 
         foreach (var id in connectedSystemIds)
         {
@@ -665,7 +770,7 @@ public class PasswordSynchronisationServer
             // is not disposable, which using handles.
             using var disposableConnector = connector as IDisposable;
 
-            var systemResult = await DeliverDuePasswordChangesAsync(connectedSystem, connector, asOf, cancellationToken);
+            var systemResult = await DeliverDuePasswordChangesAsync(connectedSystem, connector, claimedBy, asOf, cancellationToken);
             result.Add(connectedSystem.Name, systemResult);
         }
 
@@ -690,17 +795,11 @@ public class PasswordSynchronisationServer
                 "ReleaseForDeliveryAsync: {Released} parked password change(s) on Connected System {ConnectedSystemId} are due again.",
                 released, connectedSystemId);
 
-        // Asked for unconditionally, not only when something was un-parked. A system switched on after a spell
-        // off has no parked changes at all: what it has is everything queued while it was off, already Pending
-        // and already due, which nothing un-parks. Gating the request on the released count left those waiting
-        // on the worker's next idle sweep, so "enabling delivers what accumulated" was true only up to a minute
-        // later. The caller only reaches here when delivery actually changed, so an unconditional request costs
-        // one pass over one system, and a pass with nothing due finishes immediately.
-        //
-        // Scoped to this system: the trigger knows exactly which one changed, so a pass over every system would
-        // visit others with nothing to do.
-        await _requestDelivery(connectedSystemId);
-
+        // Nothing asks for delivery here. Where rows were un-parked, their update fires the queue's notification
+        // trigger and the Password Delivery Service wakes for them. Where none were (a system switched on after a
+        // spell off has everything already Pending and due), the service's next wake finds the system among
+        // those with work due: enabling it is what made its accumulated changes count, and the safety poll is at
+        // most thirty seconds away.
         return released;
     }
 
@@ -746,6 +845,115 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
+    /// Where one password change stands at every Connected System it was queued for (#1635), or null where no
+    /// Activity with that id exists. What a caller waiting on a change polls, and what the dialog and the REST
+    /// response are built from.
+    /// <para>
+    /// Merged from the queue rows still carrying this change and the child Activities recorded under it, because
+    /// neither alone answers the question: the row is deleted when the password lands, so the queue never shows a
+    /// success, and the Activities say nothing about a change still waiting its turn.
+    /// </para>
+    /// </summary>
+    public async Task<PasswordChangeOutcomes?> GetChangeOutcomesAsync(Guid activityId)
+    {
+        var activity = await _activityRepo().GetActivityAsync(activityId);
+        if (activity == null)
+            return null;
+
+        var rows = await _syncRepo.GetPasswordChangesByActivityAsync(activityId);
+        var outcomes = await _activityRepo().GetPasswordSynchronisationOutcomesAsync(activityId);
+
+        // Names and the enabled flag for every configured system, in one read. A row on a paused system is Held
+        // rather than Queued, and that is a fact about the system's configuration now, not about the row.
+        var targets = (await _connectedSystemRepo().GetPasswordSynchronisationTargetsAsync())
+            .ToDictionary(t => t.ConnectedSystemId);
+
+        var newestOutcomeBySystem = outcomes
+            .Where(o => o.ConnectedSystemId.HasValue)
+            .GroupBy(o => o.ConnectedSystemId!.Value)
+            .ToDictionary(g => g.Key, g => (Newest: g.Last(), Count: g.Count()));
+
+        var rowsBySystem = rows.ToDictionary(r => r.ConnectedSystemId);
+
+        var systemIds = rowsBySystem.Keys.Union(newestOutcomeBySystem.Keys);
+        var results = new List<PasswordChangeTargetOutcome>();
+        foreach (var systemId in systemIds)
+        {
+            targets.TryGetValue(systemId, out var target);
+            rowsBySystem.TryGetValue(systemId, out var row);
+            newestOutcomeBySystem.TryGetValue(systemId, out var history);
+
+            var name = target?.ConnectedSystemName
+                       ?? history.Newest?.ConnectedSystemName
+                       ?? $"Connected System {systemId}";
+
+            results.Add(row != null
+                ? DescribeRow(systemId, name, row, target is { Enabled: true })
+                : DescribeHistory(systemId, name, history.Newest!, history.Count));
+        }
+
+        var ordered = results.OrderBy(r => r.ConnectedSystemName, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.ConnectedSystemId).ToList();
+
+        return new PasswordChangeOutcomes
+        {
+            ActivityId = activity.Id,
+            MetaverseObjectId = activity.MetaverseObjectId ?? Guid.Empty,
+            Created = activity.Created,
+            IsSettled = ordered.All(r => r.State is not (PasswordChangeTargetState.Queued or PasswordChangeTargetState.Delivering)),
+            Targets = ordered
+        };
+    }
+
+    /// <summary>
+    /// A target still carrying a queue row, described from the row: it is the authority on what JIM intends to do
+    /// next, and the most recent attempt's words are on it.
+    /// </summary>
+    private static PasswordChangeTargetOutcome DescribeRow(int systemId, string name, PendingPasswordChange row, bool systemEnabled)
+    {
+        var state = row.Status switch
+        {
+            PendingPasswordChangeStatus.Delivering => PasswordChangeTargetState.Delivering,
+            PendingPasswordChangeStatus.Parked => PasswordChangeTargetState.Parked,
+            PendingPasswordChangeStatus.Expired => PasswordChangeTargetState.Expired,
+            PendingPasswordChangeStatus.Cancelled => PasswordChangeTargetState.Cancelled,
+            // Pending: held by a paused system, waiting out a backoff after an attempt, or not yet attempted.
+            _ when !systemEnabled => PasswordChangeTargetState.Held,
+            _ when row.LastAttemptedAt != null => PasswordChangeTargetState.Retrying,
+            _ => PasswordChangeTargetState.Queued
+        };
+
+        return new PasswordChangeTargetOutcome
+        {
+            ConnectedSystemId = systemId,
+            ConnectedSystemName = name,
+            State = state,
+            NextAttemptAt = state == PasswordChangeTargetState.Retrying ? row.NextRetryAt : null,
+            Message = row.TargetMessage ?? (row.FailureReason?.ToString()),
+            OccurredAt = row.LastAttemptedAt,
+            AttemptCount = row.AttemptCount
+        };
+    }
+
+    /// <summary>
+    /// A target with no queue row left, described from its newest delivery Activity. A success means the password
+    /// was set and the row deleted. A failure with no row behind it means the row has since been removed by
+    /// retention after parking; the last thing known about it was that refusal, so it reads as Parked.
+    /// </summary>
+    private static PasswordChangeTargetOutcome DescribeHistory(int systemId, string name, PasswordSynchronisationEventOutcome newest, int attemptCount)
+    {
+        var set = newest.Succeeded == true;
+        return new PasswordChangeTargetOutcome
+        {
+            ConnectedSystemId = systemId,
+            ConnectedSystemName = name,
+            State = set ? PasswordChangeTargetState.Set : PasswordChangeTargetState.Parked,
+            Message = set ? newest.Message : newest.ErrorMessage ?? newest.Message,
+            OccurredAt = newest.OccurredAt,
+            AttemptCount = attemptCount
+        };
+    }
+
+    /// <summary>
     /// What the whole queue holds, for the summary above a queue list.
     /// </summary>
     public async Task<PasswordQueueSummary> GetQueueSummaryAsync()
@@ -779,14 +987,10 @@ public class PasswordSynchronisationServer
             initiatedBy,
             initiatedByApiKey);
 
+        // The rows just made due fire the queue's notification trigger, which wakes the Password Delivery
+        // Service; nothing else is needed to have them attempted within a second.
         if (retried > 0)
-        {
             Log.Information("RetryAsync: {Retried} queued password change(s) are due again.", retried);
-
-            // Scoped where the filter was, unscoped where it was not: a retry aimed at one system has no reason
-            // to visit the others.
-            await _requestDelivery(filter.ConnectedSystemId);
-        }
 
         return retried;
     }

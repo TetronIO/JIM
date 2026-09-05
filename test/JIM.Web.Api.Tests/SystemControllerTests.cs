@@ -407,8 +407,7 @@ public class SystemControllerTests
 
         var response = (ServiceHealthResponse)((OkObjectResult)result).Value!;
         Assert.That(response.Overall, Is.EqualTo(ServiceHealthStatus.Unhealthy));
-        // Password delivery is not an expected service until its loop exists (plan #1635, layer 2).
-        Assert.That(response.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.Scheduler }));
+        Assert.That(response.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler }));
         Assert.That(response.Services.Select(s => s.Status), Is.All.EqualTo(ServiceHealthStatus.Unhealthy));
         Assert.That(response.Services.Select(s => s.Condition), Is.All.EqualTo(ServiceHealthCondition.NeverStarted));
         Assert.That(response.Services.Select(s => s.Reason), Is.All.EqualTo("Never started"));
@@ -461,9 +460,11 @@ public class SystemControllerTests
         Assert.That(services[0].GetProperty("service").GetString(), Is.EqualTo("WorkerSync"));
         Assert.That(services[0].GetProperty("status").GetString(), Is.EqualTo("Healthy"));
         Assert.That(services[0].GetProperty("condition").GetString(), Is.EqualTo("Heartbeating"));
-        Assert.That(services[1].GetProperty("service").GetString(), Is.EqualTo("Scheduler"));
+        Assert.That(services[1].GetProperty("service").GetString(), Is.EqualTo("WorkerPasswordDelivery"));
         Assert.That(services[1].GetProperty("status").GetString(), Is.EqualTo("Unhealthy"));
-        Assert.That(services[1].GetProperty("condition").GetString(), Is.EqualTo("NeverStarted"));
+        Assert.That(services[2].GetProperty("service").GetString(), Is.EqualTo("Scheduler"));
+        Assert.That(services[2].GetProperty("status").GetString(), Is.EqualTo("Unhealthy"));
+        Assert.That(services[2].GetProperty("condition").GetString(), Is.EqualTo("NeverStarted"));
     }
 
     [Test]

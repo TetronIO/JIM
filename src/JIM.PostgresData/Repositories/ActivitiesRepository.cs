@@ -1,4 +1,4 @@
-﻿// Copyright (c) Tetron Limited. All rights reserved.
+// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
@@ -572,6 +572,8 @@ public class ActivityRepository : IActivityRepository
             .Select(a => new
             {
                 ParentActivityId = a.ParentActivityId!.Value,
+                // The same fields as OutcomeProjection below; an expression cannot be invoked inside another
+                // projection, so the shape is repeated here and the per-change read keeps the shared one.
                 Outcome = new PasswordSynchronisationEventOutcome
                 {
                     ActivityId = a.Id,
@@ -597,6 +599,35 @@ public class ActivityRepository : IActivityRepository
 
         return changes;
     }
+
+    /// <inheritdoc />
+    public async Task<List<PasswordSynchronisationEventOutcome>> GetPasswordSynchronisationOutcomesAsync(Guid changeActivityId)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentActivityId == changeActivityId)
+            .OrderBy(a => a.Created)
+            .ThenBy(a => a.Id)
+            .Select(OutcomeProjection)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// One delivery outcome Activity in the shape the password surfaces read. An expression tree over the entity
+    /// so EF Core projects it in the database rather than materialising the Activity; it must stay field-for-field
+    /// identical to the inline projection in <see cref="GetPasswordSynchronisationEventsAsync"/>.
+    /// </summary>
+    private static readonly System.Linq.Expressions.Expression<Func<Activity, PasswordSynchronisationEventOutcome>> OutcomeProjection = a =>
+        new PasswordSynchronisationEventOutcome
+        {
+            ActivityId = a.Id,
+            ConnectedSystemId = a.ConnectedSystemId,
+            ConnectedSystemName = a.TargetName ?? string.Empty,
+            Status = a.Status,
+            ErrorMessage = a.ErrorMessage,
+            Message = a.Message,
+            OccurredAt = a.Created
+        };
 
     public async Task<PagedResultSet<Activity>> GetChildActivitiesAsync(Guid parentActivityId, int page, int pageSize)
     {

@@ -118,21 +118,31 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     }
 
     [Test]
-    public async Task ServiceHealthBanner_PasswordDeliveryNeverReportedBesideARunningWorker_RendersNothing()
+    public async Task ServiceHealthBanner_PasswordDeliveryNeverReportedBesideARunningWorker_NamesTheDeliveryService()
     {
-        // The shape every installation has until its Worker carries the password delivery service: no banner,
-        // because the Worker is alive; the strip's card is where the gap is shown.
+        // The Worker carries the Password Delivery Service (#1635), so a synchronisation loop that is alive beside
+        // a delivery loop that never reported is a Worker half up: the banner names the half that is missing,
+        // because the remedy (look at the Worker's log for the delivery service) differs from a Worker that is down.
         Arrange(Heartbeat(JimService.WorkerSync, 2), Heartbeat(JimService.Scheduler, 2));
 
         var cut = await RenderAndReadAsync();
 
-        Assert.That(cut.HasComponent<MudAlert>(), Is.False);
+        cut.WaitForAssertion(() =>
+        {
+            var alert = cut.FindComponent<MudAlert>();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(alert.Instance.Severity, Is.EqualTo(Severity.Error));
+                Assert.That(cut.Markup, Does.Contain("The Worker's password delivery service has never reported. Nothing is being delivered; queued work is safe and resumes when it returns."));
+            }
+        });
     }
 
     [Test]
     public async Task ServiceHealthBanner_WorkerWithNoHeartbeat_ShowsAnErrorNamingTheWorkerOnce()
     {
-        // Sync gone quiet and password delivery never reported: one Worker, one sentence.
+        // Sync gone quiet and password delivery never reported: one Worker, one sentence. The silence measured is
+        // the synchronisation loop's; the delivery loop, having never reported, has none to measure.
         Arrange(Heartbeat(JimService.WorkerSync, 4 * 60), Heartbeat(JimService.Scheduler, 2));
 
         var cut = await RenderAndReadAsync();

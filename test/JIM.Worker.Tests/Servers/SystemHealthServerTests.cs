@@ -71,7 +71,7 @@ public class SystemHealthServerTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.Scheduler }));
+            Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler }));
             Assert.That(report.Services.Select(s => s.Status), Is.All.EqualTo(ServiceHealthStatus.Unhealthy));
             Assert.That(report.Services.Select(s => s.Condition), Is.All.EqualTo(ServiceHealthCondition.NeverStarted));
             Assert.That(report.Services.Select(s => s.Reason), Is.All.EqualTo("Never started"));
@@ -281,10 +281,10 @@ public class SystemHealthServerTests
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_UnexpectedServiceHasReported_IncludedAlongsideTheExpectedOnes()
+    public async Task GetServiceHealthAsync_OneServiceHasReported_ShownRunningAmongTheNotSeen()
     {
-        // Password delivery is not on the expected list until its service exists, but a heartbeat from it is
-        // still shown: a report that hid a service which had actually spoken would be the misleading one.
+        // One heartbeat among three expected services: the one that spoke is Running, the others are not seen,
+        // and the report's overall verdict is the worst of them.
         GivenHeartbeats(Heartbeat(JimService.WorkerPasswordDelivery, TimeSpan.FromSeconds(1)));
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
@@ -301,10 +301,11 @@ public class SystemHealthServerTests
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_ExpectedServicesOnly_PasswordDeliveryIsNotExpectedYet()
+    public void ExpectedServices_IncludePasswordDeliveryInReportOrder()
     {
-        Assert.That(SystemHealthServer.ExpectedServices, Is.EqualTo(new[] { JimService.WorkerSync, JimService.Scheduler }));
-        await Task.CompletedTask;
+        // The Password Delivery Service (#1635) writes its own heartbeat from the Worker process, so a deployment
+        // whose Worker never started it must show a red card and a banner, as for the synchronisation loop.
+        Assert.That(SystemHealthServer.ExpectedServices, Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler }));
     }
 
     [Test]
