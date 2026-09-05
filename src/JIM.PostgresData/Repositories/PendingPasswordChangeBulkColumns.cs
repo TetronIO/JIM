@@ -20,7 +20,7 @@ internal static class PendingPasswordChangeBulkColumns
         "Id", "MetaverseObjectId", "ConnectedSystemId", "ConnectedSystemObjectId", "EncryptedPassword",
         "ExpiryBehaviour", "Status", "FailureReason", "TargetMessage", "AttemptCount", "NextRetryAt",
         "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId", "CancelledAt", "CancelledById",
-        "CancelledByName"
+        "CancelledByName", "ClaimedAt", "ClaimedBy"
     ];
 
     /// <summary>
@@ -34,25 +34,31 @@ internal static class PendingPasswordChangeBulkColumns
     /// The cancellation stamp goes with them, and for the same reason: it cancelled a password that no longer
     /// exists on this row. Leaving it would produce a pending row claiming to have been cancelled.
     /// </para>
+    /// <para>
+    /// So does the claim (#1635): a deliverer holding the superseded password has nothing to deliver any more, and
+    /// its outcome write is guarded on the row still being Delivering, so clearing the claim here is what makes
+    /// that write land nowhere. The new password is delivered on a claim of its own.
+    /// </para>
     /// </summary>
     internal static readonly string[] PendingPasswordChangesSupersedeUpdate =
     [
         "ConnectedSystemObjectId", "EncryptedPassword", "ExpiryBehaviour", "Status", "FailureReason",
         "TargetMessage", "AttemptCount", "NextRetryAt", "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId",
-        "CancelledAt", "CancelledById", "CancelledByName"
+        "CancelledAt", "CancelledById", "CancelledByName", "ClaimedAt", "ClaimedBy"
     ];
 
     /// <summary>
     /// Update columns for recording the outcome of a delivery attempt: everything one try can change.
     /// <para>
     /// ConnectedSystemObjectId is included because delivery re-resolves the account on each attempt, so a change
-    /// queued before its account existed gains one the moment provisioning catches up.
+    /// queued before its account existed gains one the moment provisioning catches up. The claim columns are
+    /// included because an attempt ends the claim (#1635): the writer sets them to null.
     /// </para>
     /// </summary>
     internal static readonly string[] PendingPasswordChangesAttemptUpdate =
     [
         "ConnectedSystemObjectId", "Status", "FailureReason", "TargetMessage", "AttemptCount", "NextRetryAt",
-        "LastAttemptedAt"
+        "LastAttemptedAt", "ClaimedAt", "ClaimedBy"
     ];
 
     /// <summary>

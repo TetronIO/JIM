@@ -699,24 +699,68 @@ public interface ISyncRepository
     /// <summary>
     /// The password changes owed to a Connected System that are due for a delivery attempt now: pending, and
     /// either never attempted or past their scheduled retry. Oldest first, capped at <paramref name="maximum"/>.
+    /// A read with no side effect; delivery itself goes through <see cref="ClaimDuePasswordChangesAsync"/>.
     /// </summary>
     Task<List<PendingPasswordChange>> GetDuePasswordChangesAsync(int connectedSystemId, DateTime asOf, int maximum);
 
     /// <summary>
-    /// Which Connected Systems have password changes due now, so a delivery pass can be raised only for the
-    /// systems that have work rather than for every configured one.
+    /// Takes the password changes due on a Connected System for delivery (#1635): in one statement, selects the
+    /// due rows (pending and due, or claimed under a lease that has run out) with <c>FOR UPDATE SKIP LOCKED</c>,
+    /// marks them <see cref="PendingPasswordChangeStatus.Delivering"/> stamped with <paramref name="claimedBy"/>
+    /// and <paramref name="asOf"/>, and returns them. Oldest first, capped at <paramref name="maximum"/>.
     /// <para>
-    /// A system with Password Synchronisation switched off is never among them, however much it has accumulated:
-    /// a pass steps over it without touching its changes, so reporting it as due would have the worker's idle
-    /// sweep raise a pointless pass every minute for as long as the system stayed off. Those changes are not
-    /// due, they are held; enabling the system is what asks for the pass that delivers them.
+    /// Two deliverers claiming the same system at once split the rows between them with no overlap; that is what
+    /// <c>SKIP LOCKED</c> is for, and why the select and the update are one statement rather than a read followed
+    /// by a write. A claim older than <paramref name="lease"/> is treated as abandoned and claimed again.
     /// </para>
     /// </summary>
-    Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf);
+    Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum);
+
+    /// <summary>
+    /// Gives claimed changes back unattempted, returning how many were released. For a lane that claimed and then
+    /// could not deliver at all (no password capability, channel refused, cancelled before reaching them): the
+    /// rows go back to Pending exactly as they were, with nothing counted against them. Only rows still
+    /// <see cref="PendingPasswordChangeStatus.Delivering"/> are touched; one that was cancelled or superseded
+    /// meanwhile keeps that outcome.
+    /// </summary>
+    Task<int> ReleasePasswordChangeClaimsAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
+    /// Which Connected Systems have password changes due now, so the Password Delivery Service runs a lane only
+    /// for the systems that have work rather than for every configured one. Includes systems holding a claim that
+    /// has outlived <paramref name="claimLease"/>, since those rows are claimable again.
+    /// <para>
+    /// A system with Password Synchronisation switched off is never among them, however much it has accumulated:
+    /// a lane steps over it without touching its changes, so reporting it as due would have the service run a
+    /// pointless lane on every poll for as long as the system stayed off. Those changes are not due, they are
+    /// held; enabling the system is what releases them, and the row update that does so wakes the service.
+    /// </para>
+    /// </summary>
+    Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf, TimeSpan claimLease);
+
+    /// <summary>
+    /// What the Password Delivery Service has ahead of it, in one query: how many changes a lane would attempt
+    /// now, how many are waiting out a backoff, and the earliest scheduled attempt still ahead. Read once per
+    /// loop iteration to decide how long to sleep, and written into the service's heartbeat.
+    /// </summary>
+    Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease);
+
+    /// <summary>
+    /// Every queue row a password change produced, by the Activity that recorded the change. Rows a newer change
+    /// has since superseded are re-pointed at the newer Activity and so are not returned here: they carry a
+    /// different password now.
+    /// </summary>
+    Task<List<PendingPasswordChange>> GetPasswordChangesByActivityAsync(Guid activityId);
 
     /// <summary>
     /// Records the outcome of a delivery attempt against each change: its status, failure classification, the
-    /// target's message, the attempt count, when the next retry falls due, and the account it resolved to.
+    /// target's message, the attempt count, when the next retry falls due, the account it resolved to, and the
+    /// end of its claim.
+    /// <para>
+    /// Written only where the row is still <see cref="PendingPasswordChangeStatus.Delivering"/>. A row that left
+    /// that state while the attempt was in flight (cancelled from the queue page, or superseded by a newer
+    /// password) keeps what happened to it; the attempt's Activity still records what the target said.
+    /// </para>
     /// </summary>
     Task RecordPasswordChangeAttemptsAsync(IEnumerable<PendingPasswordChange> changes);
 
@@ -728,7 +772,8 @@ public interface ISyncRepository
 
     /// <summary>
     /// Marks every pending password change on a Connected System that has outlived its time to live as expired,
-    /// returning how many were marked. An expiry is a recorded outcome, never a silent drop (requirement 9).
+    /// returning how many were marked. An expiry is a recorded outcome, never a silent drop (requirement 9). A
+    /// change a deliverer holds is left to that deliverer; expiry never touches a Delivering row.
     /// </summary>
     Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf);
 

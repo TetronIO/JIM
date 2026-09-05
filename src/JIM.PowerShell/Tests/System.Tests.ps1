@@ -351,7 +351,7 @@ Describe 'Get-JIMServiceHealth' {
                             lastProgressAt = '2026-09-05T09:59:50Z'; detail = $null
                         },
                         [PSCustomObject]@{
-                            service = 'WorkerPasswordDelivery'; status = 'Healthy'; condition = 'Heartbeating'; reason = 'Heartbeat 2 seconds ago'
+                            service = 'WorkerDelivery'; status = 'Healthy'; condition = 'Heartbeating'; reason = 'Heartbeat 2 seconds ago'
                             instanceId = 'host-a:1234'; hostName = 'host-a'; version = '1.2.3'
                             startedAt = '2026-09-05T09:00:00Z'; lastSeenAt = '2026-09-05T09:59:58Z'
                             currentWork = $null; currentWorkStartedAt = $null; lastProgressAt = $null; detail = 'queue: 0 due'
@@ -385,7 +385,7 @@ Describe 'Get-JIMServiceHealth' {
 
                 $services.Count | Should -Be 3
                 $services[0].PSObject.TypeNames[0] | Should -Be 'JIM.ServiceHealth'
-                $services.Service | Should -Be @('WorkerSync', 'WorkerPasswordDelivery', 'Scheduler')
+                $services.Service | Should -Be @('WorkerSync', 'WorkerDelivery', 'Scheduler')
                 $services.Status | Should -Be @('Healthy', 'Healthy', 'Unhealthy')
                 $services.Condition | Should -Be @('Heartbeating', 'Heartbeating', 'NeverStarted')
             }

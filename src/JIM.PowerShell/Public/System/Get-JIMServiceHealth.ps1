@@ -9,7 +9,7 @@ function Get-JIMServiceHealth {
     .DESCRIPTION
         Reads the heartbeat every JIM background service writes to the database every 5 seconds and returns one
         object per service: WorkerSync (the Worker's synchronisation loop, which runs Run Profiles and other
-        queued work), WorkerPasswordDelivery (the Worker's password delivery loop) and Scheduler (which starts
+        queued work), WorkerDelivery (the Worker's password delivery loop) and Scheduler (which starts
         Schedules when they fall due). This is the same report the Service Health strip on the Operations page
         shows, so a script and an administrator always see the same verdict.
 

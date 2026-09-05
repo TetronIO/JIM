@@ -33,10 +33,28 @@ public class SynchroniseMetaverseObjectPasswordRequest
     /// synchronising the one they just set.
     /// </summary>
     public PasswordExpiryBehaviour? ExpiryBehaviour { get; set; }
+
+    /// <summary>
+    /// How many seconds to wait for delivery before answering, 0 to 30. Omit, or pass 0, to return as soon as the
+    /// change is recorded, which is the right default for a propagated password: it goes to every configured system,
+    /// and the caller usually has no reason to be held while it does. With a wait, the response is <c>200</c> once
+    /// every target has settled (set, retrying, parked, held) or <c>202</c> with what is known when the time runs
+    /// out; delivery continues either way.
+    /// </summary>
+    [Range(MinimumWaitSeconds, MaximumWaitSeconds)]
+    public int? Wait { get; set; }
+
+    public const int MinimumWaitSeconds = 0;
+
+    /// <summary>
+    /// Long enough for a target having a bad moment to answer, short enough that a caller held for it is not left
+    /// wondering whether the request is still alive.
+    /// </summary>
+    public const int MaximumWaitSeconds = 30;
 }
 
 /// <summary>
-/// What was queued, and where. Never carries the password or anything derived from it.
+/// What was queued, where, and how far each target has got. Never carries the password or anything derived from it.
 /// </summary>
 public class SynchroniseMetaverseObjectPasswordResponse
 {
@@ -58,19 +76,42 @@ public class SynchroniseMetaverseObjectPasswordResponse
     /// </summary>
     public bool QueuedForNoSystems => Targets.Count == 0;
 
-    public static SynchroniseMetaverseObjectPasswordResponse FromResult(PasswordQueueResult result)
+    /// <summary>
+    /// True when no target is still Queued or Delivering: every one has been set, is retrying on its own clock, is
+    /// parked waiting on a person, is held behind a switched-off system, or has expired. A waited request answers
+    /// <c>200</c> when this is true and <c>202</c> when it is not. A change queued for no systems is settled.
+    /// </summary>
+    public bool Settled { get; set; }
+
+    /// <summary>
+    /// Builds the response from what was queued and where each target stands (#1635). The queue result is the
+    /// authority on which systems the change reached and the enqueue-time facts about each (enabled, account); the
+    /// outcomes overlay the delivery state. A target the outcomes do not mention has not moved, so it reads Queued.
+    /// </summary>
+    public static SynchroniseMetaverseObjectPasswordResponse FromResult(PasswordQueueResult result, PasswordChangeOutcomes? outcomes)
     {
         ArgumentNullException.ThrowIfNull(result);
+
+        var outcomeBySystem = (outcomes?.Targets ?? []).ToDictionary(o => o.ConnectedSystemId);
 
         return new SynchroniseMetaverseObjectPasswordResponse
         {
             ActivityId = result.ActivityId,
-            Targets = result.Targets.Select(t => new SynchroniseMetaverseObjectPasswordTarget
+            Settled = outcomes?.IsSettled ?? result.NoTargets,
+            Targets = result.Targets.Select(t =>
             {
-                ConnectedSystemId = t.ConnectedSystemId,
-                ConnectedSystemName = t.ConnectedSystemName,
-                Enabled = t.Enabled,
-                ConnectedSystemObjectId = t.ConnectedSystemObjectId
+                outcomeBySystem.TryGetValue(t.ConnectedSystemId, out var outcome);
+                return new SynchroniseMetaverseObjectPasswordTarget
+                {
+                    ConnectedSystemId = t.ConnectedSystemId,
+                    ConnectedSystemName = t.ConnectedSystemName,
+                    Enabled = t.Enabled,
+                    ConnectedSystemObjectId = t.ConnectedSystemObjectId,
+                    State = outcome?.State ?? PasswordChangeTargetState.Queued,
+                    NextAttemptAt = outcome?.NextAttemptAt,
+                    Message = outcome?.Message,
+                    AttemptCount = outcome?.AttemptCount ?? 0
+                };
             }).ToList()
         };
     }
@@ -99,4 +140,27 @@ public class SynchroniseMetaverseObjectPasswordTarget
     /// provisioning-then-password race resolves itself when the account appears.
     /// </summary>
     public Guid? ConnectedSystemObjectId { get; set; }
+
+    /// <summary>
+    /// Where delivery to this system stands: Queued, Delivering, Set, Retrying, Parked, Held, Expired or Cancelled.
+    /// Read once when the change is recorded (so it is usually Queued), or as of the end of the wait when one was
+    /// asked for.
+    /// </summary>
+    public PasswordChangeTargetState State { get; set; }
+
+    /// <summary>
+    /// When the next delivery attempt falls due (UTC), for a target that is Retrying; null otherwise.
+    /// </summary>
+    public DateTime? NextAttemptAt { get; set; }
+
+    /// <summary>
+    /// The target's own words on the most recent outcome, or JIM's where the target gave none: why it refused, or
+    /// that the password was set. Null for a target nothing has been said about yet.
+    /// </summary>
+    public string? Message { get; set; }
+
+    /// <summary>
+    /// How many delivery attempts this change has had against this system.
+    /// </summary>
+    public int AttemptCount { get; set; }
 }

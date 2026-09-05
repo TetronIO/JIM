@@ -1,4 +1,4 @@
-﻿// Copyright (c) Tetron Limited. All rights reserved.
+// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
@@ -82,6 +82,14 @@ public interface IActivityRepository
     /// <param name="maximumEvents">How many changes to return, newest first. The panel shows recent history, not
     /// an archive; the Activities list is where the whole record lives.</param>
     public Task<List<PasswordSynchronisationEvent>> GetPasswordSynchronisationEventsAsync(Guid metaverseObjectId, int maximumEvents);
+
+    /// <summary>
+    /// What each Connected System did with one password change (#1635): the child Activities under the change's
+    /// own Activity, oldest first, in the same shape the identity's history uses. Empty where nothing has been
+    /// attempted yet, or where the Activity does not exist.
+    /// </summary>
+    /// <param name="changeActivityId">The Activity recording the password change.</param>
+    public Task<List<PasswordSynchronisationEventOutcome>> GetPasswordSynchronisationOutcomesAsync(Guid changeActivityId);
 
     /// <summary>
     /// Returns a dictionary mapping each activity ID (from the provided set) to its direct child activity count.

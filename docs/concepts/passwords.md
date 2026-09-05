@@ -181,9 +181,9 @@ JIM has two ways to give somebody a password, and they answer different question
 |---|---|---|
 | Answers | "Change this person's password in the systems I choose" | "This person's password changed; every system should hold it" |
 | Reaches | The accounts you tick | Every Connected System enabled for Password Synchronisation |
-| When | Immediately, while you wait | Recorded now, delivered on its own clock |
+| When | Immediately, while you wait | Recorded now; the first delivery attempt follows within about a second |
 | If a system is down | That account fails, and you are told | Queued and retried until it works or the window closes |
-| Told to you | Success or failure per account | Which systems it was queued for |
+| Told to you | Success or failure per account | Which systems it was queued for, and what each did with it if you choose to wait |
 
 Use **Set Password** when you are choosing the password yourself and applying it to systems you name: onboarding somebody, or putting right an account whose password was refused or forgotten. Use **Synchronise Password** when they have already changed their own password somewhere and the rest should catch up.
 
@@ -195,17 +195,22 @@ Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId 3 -Password $password
 
 # Propagate a password change everywhere it belongs
 Sync-JIMMetaverseObjectPassword -Id $id -Password $password
+
+# The same, but stay on the line for up to ten seconds and be told which systems took it
+Sync-JIMMetaverseObjectPassword -Id $id -Password $password -Wait 10
 ```
 
 Over REST, that is `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password` and `POST /api/v1/metaverse/objects/{id}/password` respectively. Every endpoint that accepts a password refuses the request unless JIM can confirm the connection is encrypted; if TLS terminates at a reverse proxy, set `JIM_TRUSTED_PROXIES` so JIM reads the forwarded scheme rather than the hop it can see.
 
+A synchronised change is recorded and delivered separately (the next section says why), so by default the call returns the moment the change is recorded, before anything has been written to a directory. Because delivery begins within about a second, it is often worth waiting for: a service desk script wants to tell the caller their password has landed, not that it has been noted. The endpoint takes an optional `wait`, in seconds from 0 to 30 (`-Wait` in PowerShell, default 0), and holds the request until every target has settled or the time runs out. It answers `200` when everything settled and `202` when something was still on its way, with the same body either way: `settled`, and one entry per Connected System carrying its `state` (`Queued`, `Delivering`, `Set`, `Retrying`, `Parked`, `Held`, `Expired` or `Cancelled`), the target's own `message`, its `attemptCount`, and `nextAttemptAt` for a target that is retrying. A target that is retrying counts as settled: its next attempt is minutes away, and nobody at a screen should be held for it.
+
 ### 📬 How a password change reaches a system
 
-A password change is recorded first and delivered afterwards, never in the same breath. The person changing their password must not be held waiting on a directory, and their new password must not fail to take because one of the systems they have an account in happens to be down. So JIM writes one queued change per target system, encrypted, and returns; delivery runs on its own.
+A password change is recorded first and delivered afterwards, never in the same breath. The person changing their password must not be held waiting on a directory, and their new password must not fail to take because one of the systems they have an account in happens to be down. So JIM writes one queued change per target system, encrypted, and returns; the **Password Delivery Service** takes it from there.
 
 What happens to a queued change:
 
-- **It is delivered, and disappears.** Nothing is kept once the target has the password: there is no value worth retaining and every reason not to.
+- **It is delivered, and disappears.** While it is being written to the target it shows as **Delivering**; the moment the target has the password the change is gone, because there is no value worth retaining and every reason not to. The outcome is recorded as an Activity, which is where the person's password history comes from.
 - **It is retried.** A target that was unreachable, or that failed in a way another attempt may resolve, gets one. Each wait is twice as long as the one before it, starting from the backoff you configured, and never longer than the time the change has left.
 - **It is parked, and waits for you.** A target that *refused* the password, or that cannot do what was asked at all, will refuse it identically next time; JIM stops rather than burning the attempts. So does a change that has used all of them. Parked work is released, and tried again, the moment you change what would be delivered to that system: switching Password Synchronisation on, or correcting a setting.
 - **It is held, because the system is switched off.** Password Synchronisation being switched off on a Connected System does not stop changes being recorded for it; it stops them being sent. They accumulate, shown as **Held**, and switching the system back on delivers all of them without anything else being done. Nothing about a held change is attempted while it waits, so it does not consume attempts and does not appear in the due count. It still expires on time, which is what bounds how long a change window can last before the passwords made during it are lost.
@@ -213,7 +218,17 @@ What happens to a queued change:
 
 A change for someone who changes their password again before the first one is delivered replaces the first, rather than queueing behind it. Only the newest password is ever sent.
 
-Delivery is a Password Delivery task in the Operations queue, so a pass is visible while it runs and its outcome is recorded as an Activity like any other work. A pass is raised when a password change is queued, when you enable Password Synchronisation on a system (to deliver what accumulated), and by JIM itself when a retry falls due. A system that is switched off is never swept for: its changes are held rather than due, so no pass is raised on their account until you switch it on.
+### ⚡ The Password Delivery Service
+
+Delivery is not a synchronisation task and never waits behind one. The Worker runs a separate Password Delivery Service alongside its synchronisation loop, and the two share nothing but the process: a change queued while a Full Import is running is attempted within about a second of being queued, and a retry is attempted when it falls due rather than when the Worker next has nothing to do. That is what "on its own clock" means: the service's clock, not the synchronisation engine's.
+
+The service is woken by the queue itself. Recording a change wakes it, and so does anything that makes a change due: switching Password Synchronisation on for a system (to deliver what accumulated), a retry from the Passwords tab or from PowerShell, a correction to a system's delivery settings, and a retry falling due, which the service has already set a timer for. A sweep every 30 seconds sits under all of that as a floor, so nothing waits longer than that even if a wake-up is lost.
+
+Each Connected System is delivered to on its own, one change at a time over a single connection, with up to four systems in progress at once, so a directory that is slow or down delays only its own passwords. A system the service could not reach at all is left alone for 30 seconds before it is tried again, rather than being hammered while it is down; a new change or a retry for that system lifts the pause immediately. A system that is switched off is never attempted: its changes are held rather than due, so nothing is done on their account until you switch it on.
+
+A change the service has picked up is marked **Delivering** for as long as the write takes. If the Worker stops mid-write, the change is not lost and not stuck: the claim lapses after a minute and the change is picked up again, and sending a password a second time is harmless.
+
+The service reports its own health. Its **Worker · Passwords** card on the [Service Health](../configuration/operations.md#service-health) strip says whether it is running, which systems it is delivering to, and what the queue holds ahead of it: how many changes are due now, how many are waiting out a retry, and when the next attempt is.
 
 ### 🔎 Watching the queue
 
@@ -223,14 +238,14 @@ It never shows a password, and cannot: the queued value is encrypted in the data
 
 Four counts sit above the list:
 
-- **Waiting**<br /> Changes JIM still intends to deliver. The second line says how many of those a delivery pass would attempt right now; the rest are waiting out a retry backoff, or are held because their Connected System is switched off. A large waiting count with nothing due is a queue working through its backoffs, or one waiting on a system to be switched back on. A large due count is a queue that is not being drained.
+- **Waiting**<br /> Changes JIM still intends to deliver, including any being delivered at this moment. The second line says how many of those are due now; the rest are waiting out a retry backoff, or are held because their Connected System is switched off. A large waiting count with nothing due is a queue working through its backoffs, or one waiting on a system to be switched back on. A due count that stays large is a queue that is not being drained: check the **Worker · Passwords** card on the Service Health strip above the tabs.
 - **Parked**<br /> The target refused them, or they ran out of attempts. These wait on you.
 - **Expired**<br /> They outlived their time to live. The password each carried is gone, so nothing can deliver them now.
 - **Cancelled**<br /> You stopped them. Counted rather than hidden, because that person's password is still divergent on that system and the count is the only thing that says so.
 
 Filter by Connected System, by state, or by how the last attempt failed, and search by person or system. Two actions apply to whatever the filters are currently showing, as well as to a single row:
 
-- **Retry**<br /> Makes matching changes due immediately and raises a delivery pass. This is what you run once the reason a directory was refusing passwords has been dealt with. It applies to waiting, parked and cancelled changes; an expired one is left alone, because there is no password left to send.
+- **Retry**<br /> Makes matching changes due immediately; the Password Delivery Service attempts them within about a second. This is what you run once the reason a directory was refusing passwords has been dealt with. It applies to waiting, parked and cancelled changes; an expired one is left alone, because there is no password left to send.
 - **Cancel**<br /> Stops JIM delivering them. The changes stay, marked **Cancelled**, recording who cancelled them and when.
 
 !!! note "Cancelling records an outcome; it does not erase one"
