@@ -83,6 +83,7 @@ public static class ServerCertificateDiagnosis
 
             logger.Error("The {Transport} connection to {Host}:{Port} was refused because of the {ServerDescription}'s certificate. Reason: {Reason}. Subject: {Subject}, Issuer: {Issuer}, Thumbprint: {Thumbprint}, Valid to: {ValidTo}",
                 endpoint.SecureTransportName, LogSanitiser.Sanitise(endpoint.Host), endpoint.Port, endpoint.ServerDescription,
+                // codeql[cs/cleartext-storage-of-sensitive-information] FailureReason is an enum (UntrustedIssuer et al.), not a credential
                 diagnostic.FailureReason, LogSanitiser.Sanitise(diagnostic.Subject), LogSanitiser.Sanitise(diagnostic.Issuer),
                 LogSanitiser.Sanitise(diagnostic.Thumbprint), diagnostic.ValidTo);
 
