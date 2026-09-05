@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Staging;
+
 namespace JIM.Models.Transactional.DTOs;
 
 /// <summary>
@@ -70,6 +72,14 @@ public class PasswordChangeTargetOutcome
     /// that the password was set. Null for a target nothing has been said about yet.
     /// </summary>
     public string? Message { get; set; }
+
+    /// <summary>
+    /// How the most recent attempt failed, as JIM classified it, for a target still carrying a queue row; null
+    /// before an attempt has been made, once the password is set, and for a target whose row is gone. The Set
+    /// Password dialog chooses its remediation guidance by this, because the classification is what decides
+    /// whether another attempt could ever help, and the target's words in <see cref="Message"/> do not say.
+    /// </summary>
+    public PasswordSetFailureReason? FailureReason { get; set; }
 
     /// <summary>
     /// When the most recent attempt was made (UTC), or null before one has been.

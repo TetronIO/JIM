@@ -151,6 +151,45 @@ public class ServiceHealthDisplayTests
         }
     }
 
+    /// <summary>
+    /// The condition slot is never left blank on a card that has anything to say. A live service's condition is
+    /// its reason; an unhealthy one has put its reason on the activity line already, so the slot carries what it
+    /// was running (the more useful fact, because it names the work an administrator may need to restart) and,
+    /// failing that, when it was last heard from.
+    /// </summary>
+    [Test]
+    public void Condition_UnhealthyServiceWithWork_IsWhatItWasRunning()
+    {
+        var service = Derive(JimService.WorkerSync, ageSeconds: 4 * 60, currentWork: "Full Import: Corporate Directory");
+
+        Assert.That(ServiceHealthDisplay.Condition(service), Is.EqualTo("Was running: Full Import: Corporate Directory"));
+    }
+
+    [Test]
+    public void Condition_UnhealthyIdleService_IsItsLastHeartbeat()
+    {
+        var service = Derive(JimService.Scheduler, ageSeconds: 3 * 60);
+        var lastSeen = service.LastSeenAt!.Value.ToLocalTime().ToFriendlyDate();
+
+        Assert.That(ServiceHealthDisplay.Condition(service), Is.EqualTo($"Last heartbeat {lastSeen}"));
+    }
+
+    [Test]
+    public void Condition_LiveService_IsItsReason()
+    {
+        var service = Derive(JimService.WorkerSync, ageSeconds: 30);
+
+        Assert.That(ServiceHealthDisplay.Condition(service), Is.EqualTo(service.Reason));
+    }
+
+    [Test]
+    public void Condition_NeverStartedService_HasNothingToSay()
+    {
+        var service = SystemHealthServer.Derive(JimService.WorkerDelivery, null, AsOf);
+
+        Assert.That(ServiceHealthDisplay.Condition(service), Is.Null);
+    }
+
     [Test]
     public void Activity_NeverStartedService_SaysSo()
     {

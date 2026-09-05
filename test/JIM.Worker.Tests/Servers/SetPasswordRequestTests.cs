@@ -433,6 +433,30 @@ public class SetPasswordRequestTests
         }
     }
 
+    /// <summary>
+    /// The Activity is the durable record of a change and the queue row is not, so the person's password history
+    /// can only say "set" or "propagated" if the parent Activity carries the origin. TargetContext is the one
+    /// free-text slot on an Activity that is context about the target rather than the target itself, and the
+    /// enum's own name is written so the read side can parse it back without a mapping table.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_ExplicitAndPropagated_RecordTheOriginOnTheParentActivityAsync()
+    {
+        ArrangeSystem(CorporateAdId, "Corporate AD");
+        var account = ArrangeAccount(CorporateAdId);
+
+        var explicitResult = await _server.SetPasswordAsync(Request([account.Id]), CancellationToken.None);
+        var propagatedResult = await _server.SetPasswordAsync(Request(null), CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_createdActivities.Single(a => a.Id == explicitResult.ActivityId).TargetContext,
+                Is.EqualTo(nameof(PendingPasswordChangeOrigin.Explicit)));
+            Assert.That(_createdActivities.Single(a => a.Id == propagatedResult.ActivityId).TargetContext,
+                Is.EqualTo(nameof(PendingPasswordChangeOrigin.Propagated)));
+        }
+    }
+
     [Test]
     public async Task SetPasswordAsync_ExplicitAndPropagated_RecordOneChildActivityPerSystemOnDeliveryAsync()
     {

@@ -7,7 +7,7 @@ namespace JIM.Web.Services;
 
 /// <summary>
 /// Waits on a queued password change until every target has settled or a timeout runs out (#1635). What the
-/// Synchronise Password dialog and the REST endpoint's <c>wait</c> parameter are built on.
+/// Set Password dialog's result stage and the REST endpoint's <c>wait</c> parameter are built on.
 /// </summary>
 public interface IPasswordChangeOutcomeWaiter
 {

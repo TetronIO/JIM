@@ -180,6 +180,60 @@ public class ServiceHealthStripTests : JimComponentTestContext
         }
     }
 
+    /// <summary>
+    /// An unhealthy service that was idle when it went quiet has nothing it was running, and the slot used to sit
+    /// blank on exactly the card an administrator is staring at. The last heartbeat is the next most useful thing
+    /// to say there, and every other card in the row keeps its shape.
+    /// </summary>
+    [Test]
+    public void ServiceHealthStrip_UnhealthyIdleService_FillsTheConditionSlotWithItsLastHeartbeat()
+    {
+        var report = ServiceHealthDisplayTests.Report(
+            ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 2),
+            ServiceHealthDisplayTests.Derive(JimService.WorkerDelivery, 2),
+            ServiceHealthDisplayTests.Derive(JimService.Scheduler, 4 * 60));
+
+        var cut = RenderStrip(report);
+
+        var card = Card(cut, JimService.Scheduler);
+        var lastSeen = report.Services.Single(s => s.Service == JimService.Scheduler).LastSeenAt!.Value.ToLocalTime().ToFriendlyDate();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("No heartbeat for 4 minutes"));
+            Assert.That(Text(card, ".jim-service-health-condition"), Is.EqualTo($"Last heartbeat {lastSeen}"));
+        }
+    }
+
+    /// <summary>
+    /// The footer's separator dots are drawn by CSS on every item but the first, and the footer must be allowed
+    /// to wrap without a wrapped line opening with a dot. The rule that clips a dot at a line start lives in
+    /// site.css, where no component test can see it, so this checks the stylesheet carries it rather than
+    /// trusting the markup.
+    /// </summary>
+    [Test]
+    public void ServiceHealthStrip_FooterSeparators_AreClippedAtALineStart()
+    {
+        var css = File.ReadAllText(Path.Join(FindWebProjectRoot(), "wwwroot", "css", "site.css"));
+
+        var footerRule = System.Text.RegularExpressions.Regex.Match(css, @"\.jim-service-health-footer\s*\{[^}]*\}").Value;
+        var separatorRule = System.Text.RegularExpressions.Regex.Match(css, @"\.jim-service-health-footer > \* \+ \*::before\s*\{[^}]*\}").Value;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(footerRule, Does.Contain("overflow: hidden"), "a dot positioned before a line's first item must be clipped");
+            Assert.That(separatorRule, Does.Contain("position: absolute"), "the dot sits in the column gap rather than inside the item's box");
+        }
+    }
+
+    private static string FindWebProjectRoot()
+    {
+        var directory = new DirectoryInfo(NUnit.Framework.TestContext.CurrentContext.TestDirectory);
+        while (directory != null && !Directory.Exists(Path.Join(directory.FullName, "src", "JIM.Web")))
+            directory = directory.Parent;
+
+        Assert.That(directory, Is.Not.Null, "could not locate the repository root from the test directory");
+        return Path.Join(directory!.FullName, "src", "JIM.Web");
+    }
+
     [Test]
     public void ServiceHealthStrip_NeverStartedService_RendersHonestlyWithoutCrashing()
     {

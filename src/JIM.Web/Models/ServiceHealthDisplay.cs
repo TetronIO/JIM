@@ -117,6 +117,27 @@ public static class ServiceHealthDisplay
     }
 
     /// <summary>
+    /// The card's condition line. For a healthy or degraded service, its reason in plain words. An unhealthy
+    /// service has already put its reason on the activity line, so this slot carries the next most useful fact:
+    /// the work it was running when it went quiet (see <see cref="WasDoing"/>), or failing that when it was last
+    /// heard from, in the viewer's local time. Null only for a service that never started, which has neither.
+    /// </summary>
+    public static string? Condition(ServiceHealth service)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        if (service.Status != ServiceHealthStatus.Unhealthy)
+            return service.Reason;
+
+        if (WasDoing(service) is { } wasDoing)
+            return wasDoing;
+
+        return service.LastSeenAt is { } lastSeenAt
+            ? $"Last heartbeat {lastSeenAt.ToLocalTime().ToFriendlyDate()}"
+            : null;
+    }
+
+    /// <summary>
     /// Whether the service reports a version other than the web tier's. Only judged when the service has reported
     /// one at all; a service never seen has no version to disagree with.
     /// </summary>

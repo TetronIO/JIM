@@ -41,7 +41,7 @@
         {
             var asOf = Report.GeneratedAt;
             var activity = ServiceHealthDisplay.Activity(service);
-            var wasDoing = ServiceHealthDisplay.WasDoing(service);
+            var condition = ServiceHealthDisplay.Condition(service);
             var unhealthy = service.Status == ServiceHealthStatus.Unhealthy;
             var versionSkew = ServiceHealthDisplay.HasVersionSkew(service, Report.WebVersion);
             <MudPaper Outlined="true" Class="pa-3 jim-service-health-card" data-service="@service.Service" data-status="@service.Status" @key="service.Service">
@@ -62,15 +62,9 @@
                 </div>
                 @* For a healthy or degraded service this is the condition in plain words. An unhealthy service has
                    already put its condition on the activity line, so this slot names the work it was doing when it
-                   went quiet, if any; a dead process's last words are context, not activity. *@
-                @if (unhealthy)
-                {
-                    <div class="jim-service-health-condition jim-one-line" title="@wasDoing">@wasDoing</div>
-                }
-                else
-                {
-                    <div class="jim-service-health-condition jim-one-line" title="@service.Reason">@service.Reason</div>
-                }
+                   went quiet, or failing that its last heartbeat; a dead process's last words are context, not
+                   activity, and a blank slot on the one card an administrator is staring at helps nobody. *@
+                <div class="jim-service-health-condition jim-one-line" title="@condition">@condition</div>
                 @* Host, version and uptime share the footer: three short facts that together identify the instance. A
                    never-started service has none of them; the slot stays so the card keeps its shape. *@
                 <div class="jim-service-health-footer">

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Staging;
 using JIM.Models.Transactional.DTOs;
 using MudBlazor;
 
@@ -10,9 +11,9 @@ namespace JIM.Web.Models;
 /// How one target's delivery outcome reads on screen (#1635): the icon and colour beside the Connected System's
 /// name, and the sentence beneath it.
 /// <para>
-/// One helper rather than a switch inside the Synchronise Password dialog, for the reason
-/// <see cref="PendingPasswordChangeDisplay"/> exists: the Set Password dialog's result stage is due to move onto the
-/// same outcomes, and two dialogs describing the same state in different words would read as two different
+/// One helper rather than a switch inside the Set Password dialog, for the reason
+/// <see cref="PendingPasswordChangeDisplay"/> exists: the dialog's result stage and the REST response describe the
+/// same outcomes, and two surfaces describing the same state in different words would read as two different
 /// problems.
 /// </para>
 /// </summary>
@@ -74,10 +75,16 @@ public static class PasswordChangeTargetDisplay
 
             case PasswordChangeTargetState.Retrying:
             {
-                var words = outcome.NextAttemptAt.HasValue
-                    ? $"Retrying; next attempt at {outcome.NextAttemptAt.Value.ToLocalTime().ToFriendlyDate()}"
+                // JIM's classification first, then the target's own words, then the next attempt: what went wrong,
+                // in whose words, and what happens next. The classification is absent for a target read from
+                // history rather than from the queue, in which case the state word stands in for it.
+                var lead = outcome.FailureReason is { } reason and not PasswordSetFailureReason.None
+                    ? PendingPasswordChangeDisplay.Reason(reason)
                     : "Retrying";
-                return string.IsNullOrWhiteSpace(outcome.Message) ? words : $"{words}. Last answer: {outcome.Message}";
+                var words = string.IsNullOrWhiteSpace(outcome.Message) ? lead : $"{lead}: {outcome.Message}";
+                return outcome.NextAttemptAt.HasValue
+                    ? $"{words}. Next attempt {outcome.NextAttemptAt.Value.ToLocalTime().ToFriendlyDate()}"
+                    : words;
             }
 
             case PasswordChangeTargetState.Parked:

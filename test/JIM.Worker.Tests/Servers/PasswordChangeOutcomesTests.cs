@@ -263,6 +263,38 @@ public class PasswordChangeOutcomesTests
         }
     }
 
+    /// <summary>
+    /// The classification travels with the row's words. The Set Password dialog offers remediation guidance per
+    /// failure reason, and the reason is JIM's own verdict on whether another attempt could ever help, so a parked
+    /// target without it would leave the dialog able to quote the refusal and unable to say what to do about it.
+    /// </summary>
+    [Test]
+    public async Task GetChangeOutcomesAsync_RowWithAFailedAttempt_CarriesTheFailureReasonAsync()
+    {
+        await RowAsync(CorporateAdId, r =>
+        {
+            r.Status = PendingPasswordChangeStatus.Parked;
+            r.AttemptCount = 1;
+            r.LastAttemptedAt = Created.AddSeconds(2);
+            r.FailureReason = PasswordSetFailureReason.PolicyRejection;
+            r.TargetMessage = "Password does not meet complexity requirements";
+        });
+
+        var target = await TargetAsync(CorporateAdId);
+
+        Assert.That(target.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
+    }
+
+    [Test]
+    public async Task GetChangeOutcomesAsync_RowNotYetAttempted_HasNoFailureReasonAsync()
+    {
+        await RowAsync(CorporateAdId);
+
+        var target = await TargetAsync(CorporateAdId);
+
+        Assert.That(target.FailureReason, Is.Null);
+    }
+
     [Test]
     public async Task GetChangeOutcomesAsync_ParkedRowWithoutTargetWords_FallsBackToTheReasonAsync()
     {

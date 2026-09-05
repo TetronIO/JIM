@@ -143,7 +143,12 @@ public class PasswordSynchronisationServer
             TargetName = request.DisplayName,
             TargetType = ActivityTargetType.PasswordSynchronisation,
             TargetOperationType = ActivityTargetOperationType.SetPassword,
-            MetaverseObjectId = request.MetaverseObjectId
+            MetaverseObjectId = request.MetaverseObjectId,
+            // The origin travels on the Activity because the Activity is what outlives the queue row: the person's
+            // password history is read from Activities alone, and "set" against "propagated" is the one fact about
+            // a change it could not otherwise recover. The enum's name rather than its number, so the read side
+            // parses it back without a mapping table and a human reading the Activity list sees a word.
+            TargetContext = request.Origin.ToString()
         };
         await _createActivity(activity, request.InitiatedBy, request.InitiatedByApiKey);
 
@@ -1093,6 +1098,9 @@ public class PasswordSynchronisationServer
             State = state,
             NextAttemptAt = state == PasswordChangeTargetState.Retrying ? row.NextRetryAt : null,
             Message = row.TargetMessage ?? (row.FailureReason?.ToString()),
+            // None is the row's "no failure yet" and reads as null here, so a caller can key guidance on the
+            // presence of a reason rather than on a sentinel.
+            FailureReason = row.FailureReason is null or PasswordSetFailureReason.None ? null : row.FailureReason,
             OccurredAt = row.LastAttemptedAt,
             AttemptCount = row.AttemptCount
         };

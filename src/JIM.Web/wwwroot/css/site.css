@@ -2676,7 +2676,7 @@ html[lang] .jim-schema-change-table td {
    markers showing how far through the step it leaves the run is. */
 /* One token drives every rail's markers and the alignment of the line through them, so resizing the
    markers cannot leave a rail running through them off-centre. Declared at the root rather than on
-   the stepper, because the Set Password dialog's rail is a second user of these markers and a token
+   the stepper, because a second user of these markers (the Set Password dialog's rail, since retired) found a token
    scoped to one component silently resolves to nothing in the other: the marker's width, height and
    the connector's offset all collapse, which is exactly how that rail first shipped. */
 :root {
@@ -2722,11 +2722,8 @@ html[lang] .jim-schema-change-table td {
     display: none;
 }
 
-/* Shared with the Set Password dialog's fan-out rail, so a completed, failed or running step looks the same
-   wherever JIM reports a sequence of work. The marker tokens live here; the two rails lay them out
-   differently, because one is a MudStepper and the other is a plain row. */
-.jim-phase-h-label,
-.jim-password-rail-marker {
+/* The marker tokens live here so "what a completed step looks like" has one definition. */
+.jim-phase-h-label {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2738,13 +2735,11 @@ html[lang] .jim-schema-change-table td {
     color: var(--mud-palette-text-disabled);
 }
 
-.jim-phase-h-label .mud-icon-root,
-.jim-password-rail-marker .mud-icon-root {
+.jim-phase-h-label .mud-icon-root {
     font-size: 0.9375rem;
 }
 
-.jim-phase-h-label--completed,
-.jim-password-rail-marker--completed {
+.jim-phase-h-label--completed {
     border-color: var(--mud-palette-success);
     background-color: var(--mud-palette-success);
     color: var(--mud-palette-success-text);
@@ -2759,16 +2754,14 @@ html[lang] .jim-schema-change-table td {
     color: var(--mud-palette-success);
 }
 
-.jim-phase-h-label--failed,
-.jim-password-rail-marker--failed {
+.jim-phase-h-label--failed {
     border-color: var(--mud-palette-error);
     background-color: var(--mud-palette-error);
     color: var(--mud-palette-error-text);
 }
 
 /* The running step: filled, and breathing, so the eye lands on it first. */
-.jim-phase-h-label--active,
-.jim-password-rail-marker--active {
+.jim-phase-h-label--active {
     border-color: var(--mud-palette-primary);
     background-color: var(--mud-palette-primary);
     color: var(--mud-palette-primary-text);
@@ -2880,7 +2873,6 @@ html[lang] .jim-schema-change-table td {
 @media (prefers-reduced-motion: reduce) {
 
     .jim-phase-h-label--active,
-    .jim-password-rail-marker--active,
     .jim-phase-h-connector-fill--active {
         animation: none;
     }
@@ -3218,83 +3210,10 @@ html[lang] .jim-schema-change-table td {
     font-variant-numeric: tabular-nums;
 }
 
-/* ─── Set Password dialog (#1121, #1172) ───
-   The fan-out across several Connected Systems is reported the same way a Run Profile execution is: a rail of
-   markers with a filling line between them. It is not the same component (a password set is not an Activity,
-   and MudStepper's navigation and content machinery would only be hidden again), so the layout below is its
-   own; the markers share the phase stepper's rules verbatim, above, so "what a completed step looks like" has
-   one definition rather than two that drift. */
-.jim-password-rail {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.jim-password-rail-steps {
-    display: flex;
-    align-items: flex-start;
-}
-
-.jim-password-rail-step {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-    flex: 0 0 auto;
-    max-width: 8rem;
-    text-align: center;
-    line-height: 1.25;
-}
-
-/* Aligned to the marker's centre so the line reads through the markers however many lines a name wraps to,
-   and pulled under the names either side so each leg runs marker to marker rather than label to label. */
-.jim-password-rail-connector {
-    flex: 1 1 2.5rem;
-    min-width: 1.5rem;
-    height: 0.25rem;
-    margin-top: calc((var(--jim-phase-marker-size) / 2) - 0.125rem);
-    margin-inline: -1.5rem;
-    border-radius: 0.125rem;
-    background-color: var(--mud-palette-lines-default);
-    overflow: hidden;
-}
-
-/* A leg belongs to the step it leaves, so it carries that step's outcome. Filling every traversed leg
-   green would draw a green rail through three red markers on a run where nothing worked at all. */
-.jim-password-rail-connector-fill {
-    display: block;
-    height: 100%;
-    width: 0;
-    border-radius: 0.125rem;
-    background-color: var(--mud-palette-success);
-    transition: width 0.4s ease;
-}
-
-.jim-password-rail-connector-fill--completed,
-.jim-password-rail-connector-fill--failed {
-    width: 100%;
-}
-
-.jim-password-rail-connector-fill--failed {
-    background-color: var(--mud-palette-error);
-}
-
-.jim-password-rail-step-name {
-    line-height: 1.25;
-}
-
-.jim-password-rail-step--pending .jim-password-rail-step-name {
-    color: var(--mud-palette-text-disabled);
-}
-
-.jim-password-rail-step--active .jim-password-rail-step-name {
-    font-weight: 500;
-}
-
-.jim-password-rail-step--failed .jim-password-rail-step-name {
-    color: var(--mud-palette-error);
-}
-
+/* ─── Set Password dialog (#1121, #1172, #1635) ───
+   The fan-out across several Connected Systems is reported as a list of rows, one per system, updated as each
+   answers. The progress rail that used to narrate the writes as a sequence went with the direct writes: delivery
+   now runs in a lane per system and finishes without the dialog, so there is no sequence to draw. */
 /* ─── Results, one row per account the password was written to ───
    A separate list from the picker rather than status bolted onto it: choosing where to write and reading what
    happened are different questions, and a checkbox column has nothing to say once the writing is done. */
@@ -4135,25 +4054,41 @@ html[lang] .jim-scope-text .mud-input-slot {
 }
 
 /* Host, version and uptime on one line in the monospace face the rest of the portal uses for identifiers,
-   separated by a middle dot drawn by CSS so the markup carries only facts. */
+   separated by a middle dot drawn by CSS so the markup carries only facts. The footer may wrap on a narrow card
+   (three cards across at 1500px, a version chip on one of them), and a wrapped line must not open with a dot: the
+   dot is drawn in the column gap to the left of each item after the first, positioned rather than flowed, so at a
+   line start it falls outside the footer's box and overflow: hidden clips it. */
 .jim-service-health-footer {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    column-gap: 0.5rem;
+    column-gap: 1rem;
     row-gap: 0.25rem;
     min-width: 0;
     min-height: 1.5rem;
     margin-top: auto;
     padding-top: 0.25rem;
+    overflow: hidden;
     color: var(--mud-palette-text-secondary);
     font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
     font-size: 0.8125rem;
 }
 
+.jim-service-health-footer > * {
+    position: relative;
+    min-width: 0;
+}
+
 .jim-service-health-footer > * + *::before {
     content: "\00B7";
-    margin-right: 0.5rem;
+    position: absolute;
+    left: -0.5rem;
+    transform: translateX(-50%);
+}
+
+/* MudTooltip wraps its child in a block root; on the footer's line it is one item among the others. */
+.jim-service-health-footer > .mud-tooltip-root {
+    display: inline-flex;
 }
 
 .jim-service-health-version {

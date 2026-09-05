@@ -10,6 +10,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Scheduling;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
@@ -556,7 +557,13 @@ public class ActivityRepository : IActivityRepository
                 Created = a.Created,
                 InitiatedByName = a.InitiatedByName,
                 InitiatedByType = a.InitiatedByType,
-                Message = a.Message
+                Message = a.Message,
+                // The origin is the enum's name in TargetContext (#1635), written by SetPasswordAsync. Spelt out as
+                // string comparisons rather than Enum.Parse so it translates to a CASE in the database, and so an
+                // Activity from before origins were recorded (null, or anything else) projects to null.
+                Origin = a.TargetContext == nameof(PendingPasswordChangeOrigin.Explicit) ? PendingPasswordChangeOrigin.Explicit
+                    : a.TargetContext == nameof(PendingPasswordChangeOrigin.Propagated) ? PendingPasswordChangeOrigin.Propagated
+                    : (PendingPasswordChangeOrigin?)null
             })
             .ToListAsync();
 
