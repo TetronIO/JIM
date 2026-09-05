@@ -16,7 +16,7 @@ namespace JIM.Web.Controllers.Api;
 /// API controller for system-wide administrative operations.
 /// </summary>
 /// <remarks>
-/// Currently scoped to factory reset; future system-wide maintenance routines should join it here.
+/// Factory reset and service health; future system-wide maintenance routines should join them here.
 /// </remarks>
 [Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
@@ -83,5 +83,50 @@ public class SystemController(ILogger<SystemController> logger, JimApplication a
         {
             return Conflict(ApiErrorResponse.Conflict(ex.Message));
         }
+    }
+
+    /// <summary>
+    /// Get service health
+    /// </summary>
+    /// <remarks>
+    /// Reports whether JIM's background services are alive and what each is doing, from the heartbeat every service
+    /// writes to the database every 5 seconds. This is the same report the Operations page shows, so a monitoring
+    /// script and an administrator looking at the portal always see the same verdict.
+    ///
+    /// One entry is returned per service, always in the order **WorkerSync** (the Worker's synchronisation loop,
+    /// which runs Run Profiles and other queued work), **WorkerPasswordDelivery** (the Worker's password delivery
+    /// loop) and **Scheduler** (which starts Schedules when they fall due). Each entry's <c>state</c> is one of:
+    ///
+    /// - **Running**: reported within the last 15 seconds. Nothing to do.
+    /// - **Stale**: more than 15 seconds since the last heartbeat, but not yet long enough to presume the process
+    ///   is gone. It may be paused under load or the database may be slow; worth a glance, not yet an alarm.
+    /// - **NoProgress**: alive, but its current work has not moved forward for more than 10 minutes. The process
+    ///   is up; the task it is running may be wedged. Only judged for work that reports progress.
+    /// - **NotSeen**: no heartbeat for 60 seconds (Worker services) or 120 seconds (Scheduler), or the service has
+    ///   never reported at all (<c>reason</c> is "Never reported"). Queued and scheduled work will not run until it
+    ///   is back.
+    ///
+    /// <c>overall</c> is the worst state present, so a script that alerts on anything other than **Running** needs
+    /// to read nothing else. Each entry also carries the reporting instance, its host and version, when it started
+    /// and was last seen, and its current work with when that began and last progressed. Compare each
+    /// <c>version</c> with <c>webVersion</c>: a mismatch means a partial upgrade.
+    ///
+    /// The unauthenticated <c>/api/v1/health</c> endpoints report only the web tier that answers them and say
+    /// nothing about the Worker or the Scheduler; this endpoint is how those are observed. The response is marked
+    /// <c>Cache-Control: no-store</c> because a cached verdict is a wrong one.
+    /// </remarks>
+    /// <returns>The health of every background service, with the worst state as the overall verdict.</returns>
+    /// <response code="200">Returns the service health report.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    /// <response code="403">If the user lacks the Administrator role.</response>
+    [HttpGet("health", Name = "GetServiceHealth")]
+    [ProducesResponseType(typeof(ServiceHealthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetServiceHealthAsync()
+    {
+        var report = await _application.SystemHealth.GetServiceHealthAsync(DateTime.UtcNow);
+        Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+        return Ok(ServiceHealthResponse.FromReport(report));
     }
 }

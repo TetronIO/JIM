@@ -6,10 +6,13 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Operations;
 using JIM.Models.Scheduling;
 using JIM.Models.Utility;
+using JIM.Utilities;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,7 +20,10 @@ using Moq;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace JIM.Web.Api.Tests;
@@ -306,4 +312,165 @@ public class SystemControllerTests
             It.Is<IEnumerable<ActivityStatus>?>(s => s != null && System.Linq.Enumerable.Contains(s, ActivityStatus.InProgress)),
             It.IsAny<bool?>()), Times.Once);
     }
+
+    #region GetServiceHealthAsync tests
+
+    private static SystemController BuildHealthController(params ServiceHeartbeat[] heartbeats)
+    {
+        // The health read is a pure function of the newest heartbeat rows, so only the system repository needs a
+        // stand-in; the reset helper above wires the whole seeding pipeline, which health never touches.
+        var mockRepository = new Mock<IRepository>();
+        var mockSystemRepo = new Mock<ISystemRepository>();
+        mockSystemRepo.Setup(s => s.GetLatestServiceHeartbeatsAsync()).ReturnsAsync(new List<ServiceHeartbeat>(heartbeats));
+        mockRepository.Setup(r => r.System).Returns(mockSystemRepo.Object);
+
+        var application = new JimApplication(mockRepository.Object);
+        return new SystemController(NullLogger<SystemController>.Instance, application)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+    }
+
+    private static ServiceHeartbeat Heartbeat(JimService service, DateTime lastSeenAt, string? currentWork = null, DateTime? lastProgressAt = null) => new()
+    {
+        Service = service,
+        InstanceId = $"host-a:{(int)service}",
+        HostName = "host-a",
+        Version = "1.2.3",
+        StartedAt = lastSeenAt.AddHours(-1),
+        LastSeenAt = lastSeenAt,
+        CurrentWork = currentWork,
+        CurrentWorkStartedAt = currentWork == null ? null : lastSeenAt.AddMinutes(-30),
+        LastProgressAt = lastProgressAt,
+        Detail = "queue: 0"
+    };
+
+    [Test]
+    public async Task GetServiceHealthAsync_WithFreshHeartbeats_ReturnsOkWithEveryServiceRunning()
+    {
+        var now = DateTime.UtcNow;
+        var controller = BuildHealthController(
+            Heartbeat(JimService.WorkerSync, now.AddSeconds(-2)),
+            Heartbeat(JimService.WorkerPasswordDelivery, now.AddSeconds(-3)),
+            Heartbeat(JimService.Scheduler, now.AddSeconds(-4)));
+
+        var result = await controller.GetServiceHealthAsync();
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var response = (ServiceHealthResponse)((OkObjectResult)result).Value!;
+        Assert.That(response.Overall, Is.EqualTo(ServiceHealthState.Running));
+        Assert.That(response.WebVersion, Is.EqualTo(JimVersion.Current));
+        Assert.That(response.GeneratedAt, Is.EqualTo(now).Within(TimeSpan.FromSeconds(5)));
+        Assert.That(response.Services.Select(s => s.Service), Is.EqualTo(new[]
+        {
+            JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler
+        }));
+        Assert.That(response.Services.Select(s => s.State), Is.All.EqualTo(ServiceHealthState.Running));
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_MapsEveryHeartbeatFieldOntoTheService()
+    {
+        var now = DateTime.UtcNow;
+        var lastSeen = now.AddSeconds(-2);
+        var lastProgress = now.AddMinutes(-1);
+        var controller = BuildHealthController(
+            Heartbeat(JimService.WorkerSync, lastSeen, "Full Import: Corporate Directory", lastProgress));
+
+        var result = await controller.GetServiceHealthAsync();
+
+        var worker = ((ServiceHealthResponse)((OkObjectResult)result).Value!).Services.Single(s => s.Service == JimService.WorkerSync);
+        Assert.Multiple(() =>
+        {
+            Assert.That(worker.State, Is.EqualTo(ServiceHealthState.Running));
+            Assert.That(worker.Reason, Does.StartWith("Last seen"));
+            Assert.That(worker.InstanceId, Is.EqualTo("host-a:1"));
+            Assert.That(worker.HostName, Is.EqualTo("host-a"));
+            Assert.That(worker.Version, Is.EqualTo("1.2.3"));
+            Assert.That(worker.StartedAt, Is.EqualTo(lastSeen.AddHours(-1)));
+            Assert.That(worker.LastSeenAt, Is.EqualTo(lastSeen));
+            Assert.That(worker.CurrentWork, Is.EqualTo("Full Import: Corporate Directory"));
+            Assert.That(worker.CurrentWorkStartedAt, Is.EqualTo(lastSeen.AddMinutes(-30)));
+            Assert.That(worker.LastProgressAt, Is.EqualTo(lastProgress));
+            Assert.That(worker.Detail, Is.EqualTo("queue: 0"));
+        });
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_WithNoHeartbeats_ReportsEveryServiceNotSeenAndOverallNotSeen()
+    {
+        var controller = BuildHealthController();
+
+        var result = await controller.GetServiceHealthAsync();
+
+        var response = (ServiceHealthResponse)((OkObjectResult)result).Value!;
+        Assert.That(response.Overall, Is.EqualTo(ServiceHealthState.NotSeen));
+        Assert.That(response.Services, Has.Count.EqualTo(3));
+        Assert.That(response.Services.Select(s => s.State), Is.All.EqualTo(ServiceHealthState.NotSeen));
+        Assert.That(response.Services.Select(s => s.Reason), Is.All.EqualTo("Never reported"));
+        Assert.That(response.Services.Select(s => s.LastSeenAt), Is.All.Null);
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_OverallIsTheWorstStatePresent()
+    {
+        var now = DateTime.UtcNow;
+        var controller = BuildHealthController(
+            Heartbeat(JimService.WorkerSync, now.AddSeconds(-2)),
+            Heartbeat(JimService.WorkerPasswordDelivery, now.AddSeconds(-2)),
+            Heartbeat(JimService.Scheduler, now.AddSeconds(-30)));
+
+        var result = await controller.GetServiceHealthAsync();
+
+        var response = (ServiceHealthResponse)((OkObjectResult)result).Value!;
+        Assert.That(response.Services.Single(s => s.Service == JimService.Scheduler).State, Is.EqualTo(ServiceHealthState.Stale));
+        Assert.That(response.Overall, Is.EqualTo(ServiceHealthState.Stale));
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_MarksTheResponseNoStore()
+    {
+        var controller = BuildHealthController();
+
+        await controller.GetServiceHealthAsync();
+
+        Assert.That(controller.Response.Headers.CacheControl.ToString(), Does.Contain("no-store"));
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_SerialisesEnumsAsStringNames()
+    {
+        var now = DateTime.UtcNow;
+        var controller = BuildHealthController(Heartbeat(JimService.WorkerSync, now.AddSeconds(-2)));
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        ApiJsonConfiguration.Configure(options);
+
+        var result = await controller.GetServiceHealthAsync();
+        var json = JsonSerializer.Serialize(((OkObjectResult)result).Value, options);
+
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        Assert.That(root.GetProperty("overall").GetString(), Is.EqualTo("NotSeen"));
+        var services = root.GetProperty("services").EnumerateArray().ToList();
+        Assert.That(services[0].GetProperty("service").GetString(), Is.EqualTo("WorkerSync"));
+        Assert.That(services[0].GetProperty("state").GetString(), Is.EqualTo("Running"));
+        Assert.That(services[2].GetProperty("service").GetString(), Is.EqualTo("Scheduler"));
+        Assert.That(services[2].GetProperty("state").GetString(), Is.EqualTo("NotSeen"));
+    }
+
+    [Test]
+    public void GetServiceHealthAsync_IsAdministratorOnly()
+    {
+        // The controller carries the Administrator requirement; the action must not relax it. The unauthenticated
+        // liveness endpoints live on HealthController and report only the web tier.
+        var controllerAuthorise = typeof(SystemController).GetCustomAttribute<AuthorizeAttribute>();
+        var action = typeof(SystemController).GetMethod(nameof(SystemController.GetServiceHealthAsync))!;
+
+        Assert.That(controllerAuthorise?.Roles, Is.EqualTo("Administrator"));
+        Assert.That(action.GetCustomAttribute<AllowAnonymousAttribute>(), Is.Null);
+        Assert.That(action.GetCustomAttribute<HttpGetAttribute>()?.Template, Is.EqualTo("health"));
+        Assert.That(action.GetCustomAttribute<HttpGetAttribute>()?.Name, Is.EqualTo("GetServiceHealth"));
+    }
+
+    #endregion
 }

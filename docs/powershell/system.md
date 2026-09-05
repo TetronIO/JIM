@@ -4,7 +4,7 @@ title: System
 
 # System
 
-System cmdlets provide access to JIM health checks, version information, authentication configuration, and current user details. Health, version, and auth config cmdlets work without authentication, making them suitable for monitoring, scripting, and client bootstrapping. User info requires an active connection.
+System cmdlets provide access to JIM health checks, service health, version information, authentication configuration, and current user details. Health, version, and auth config cmdlets work without authentication, making them suitable for monitoring, scripting, and client bootstrapping. Service health and user info require an active connection.
 
 !!! tip
     Health, version, and auth config cmdlets accept a `-Url` parameter for standalone use without `Connect-JIM`. When omitted, they fall back to the URL from the active session.
@@ -67,6 +67,93 @@ Get-JIMHealth -Ready
 - Use `-Ready` as a Kubernetes readiness probe or load balancer health check; it verifies database connectivity and maintenance mode status.
 - Use `-Live` as a Kubernetes liveness probe; it confirms the process is running.
 - The basic health check (no switches) returns the general application health status.
+
+---
+
+## Get-JIMServiceHealth
+
+Reports whether JIM's background services (the Worker and the Scheduler) are alive and what each is doing, from the heartbeat every service writes to the database every 5 seconds. This is the same report the Service Health strip on [Operations](../configuration/operations.md#service-health) shows. Requires an active `Connect-JIM` session with the **Administrator** role.
+
+`Get-JIMHealth` answers a different question: it probes the web tier only, without authentication, and says nothing about the Worker or the Scheduler.
+
+### Syntax
+
+```powershell
+# One object per service (default)
+Get-JIMServiceHealth
+
+# One summary object with the worst state present
+Get-JIMServiceHealth -Summary
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Summary` | `switch` | Yes (Summary set) | | Return one object carrying `Overall`, `WebVersion`, `GeneratedAt` and `Services`, instead of one object per service |
+
+### Output
+
+By default, one `JIM.ServiceHealth` object per service, always three and always in this order: `WorkerSync`, `WorkerPasswordDelivery`, `Scheduler`. A service that has never reported is present as `NotSeen` rather than missing, with the fields it cannot supply set to `$null`.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Service` | `string` | `WorkerSync` (the Worker's synchronisation loop), `WorkerPasswordDelivery` (the Worker's password delivery loop) or `Scheduler` |
+| `State` | `string` | `Running`, `Stale`, `NoProgress` or `NotSeen`; see [What the states mean](../configuration/operations.md#what-the-states-mean) |
+| `Reason` | `string` | One sentence explaining the state, e.g. `Last seen 4 minutes ago; expected within 60 seconds` or `Never reported` |
+| `CurrentWork` | `string?` | What the service was doing when it last reported, e.g. `Full Import: Corporate Directory`; `$null` when idle |
+| `CurrentWorkStartedAt` | `datetime?` | When the current work began (UTC) |
+| `LastSeenAt` | `datetime?` | When the service last reported (UTC) |
+| `StartedAt` | `datetime?` | When the reporting instance started (UTC) |
+| `HostName` | `string?` | The host the reporting instance runs on |
+| `Version` | `string?` | The JIM version the instance runs; compare with the summary's `WebVersion` |
+| `InstanceId` | `string?` | The reporting instance (host name plus a per-process id) |
+| `LastProgressAt` | `datetime?` | When the current work last moved forward (UTC); `$null` when the service cannot tell progress apart from liveness |
+| `Detail` | `string?` | Free text the service left beside its state, such as queue counts or why it is waiting |
+
+With `-Summary`, one `JIM.ServiceHealthSummary` object:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Overall` | `string` | The worst state among the services: `Running`, `Stale`, `NoProgress` or `NotSeen` |
+| `WebVersion` | `string` | The version of the web tier that answered |
+| `GeneratedAt` | `datetime` | When the verdicts were derived (UTC); every `Reason` is relative to it |
+| `Services` | `JIM.ServiceHealth[]` | The per-service objects described above |
+
+### Examples
+
+```powershell title="Is the Worker running, and what is it doing?"
+Get-JIMServiceHealth
+```
+
+```powershell title="The columns that matter during a change window"
+Get-JIMServiceHealth | Format-Table Service, State, CurrentWork, LastSeenAt, Version
+```
+
+```powershell title="Fail a monitoring check when any service is unhealthy"
+$health = Get-JIMServiceHealth -Summary
+if ($health.Overall -ne 'Running') {
+    $health.Services | Where-Object State -ne 'Running' | Format-List Service, State, Reason
+    exit 1
+}
+```
+
+```powershell title="Name the work that has stalled"
+Get-JIMServiceHealth | Where-Object State -eq 'NoProgress' | Select-Object Service, CurrentWork, LastProgressAt
+```
+
+```powershell title="Find services running a different version from the web tier"
+$health = Get-JIMServiceHealth -Summary
+$health.Services | Where-Object { $_.Version -and $_.Version -ne $health.WebVersion } |
+    Select-Object Service, HostName, Version, @{ Name = 'WebVersion'; Expression = { $health.WebVersion } }
+```
+
+### Notes
+
+- Requires an active connection via [Connect-JIM](connection.md#connect-jim) and the **Administrator** role.
+- `Running` means a heartbeat within the last 15 seconds; `Stale` more than 15 seconds; `NotSeen` more than 60 seconds for the Worker services and 120 seconds for the Scheduler, or never reported; `NoProgress` means the current work has not moved forward for 10 minutes. `Overall` is the worst state present, so a monitoring script needs to read nothing else.
+- `Stale` is worth a glance, not an alarm: a slow database or a paused process produces it. `NotSeen` and `NoProgress` are what the portal raises its administrator banner for.
+- Calls `GET /api/v1/system/health`, which is marked `Cache-Control: no-store`; every call is a fresh verdict.
 
 ---
 
@@ -260,5 +347,6 @@ $result = Reset-JIMSystem -Force
 
 ## See also
 
-- [Interactive API reference](../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, factory reset)
+- [Interactive API reference](../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, service health, factory reset)
+- [Operations](../configuration/operations.md): the Service Health strip these cmdlets read from, and what each state means
 - [Connection](connection.md): establishing and managing connections to JIM
