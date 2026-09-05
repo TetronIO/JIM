@@ -156,6 +156,7 @@ else
 {
     <ConfigurationChangePreviewPanel ActivityId="@_previewActivityId.Value"
                                      Title="Preview: Object Matching Impact"
+                                     OnClose="DiscardObjectMatchingPreview"
                                      Class="mt-6" />
 }
 
@@ -193,6 +194,13 @@ else
     // add form, and the Simple/Advanced switch waiting in its dialog.
     private Guid? _previewActivityId;
     private bool _startingPreview;
+
+    /// <summary>
+    /// Forgets the preview, so the panel goes. Nothing here cites it afterwards: matching rules are saved as they
+    /// are edited, so there is no later confirmation for it to inform. A preview still running finishes as an
+    /// Activity, where it can still be read.
+    /// </summary>
+    private void DiscardObjectMatchingPreview() => _previewActivityId = null;
 
     // Mode switch dialog
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
