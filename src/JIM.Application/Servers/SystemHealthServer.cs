@@ -21,37 +21,37 @@ public class SystemHealthServer
     public const int HeartbeatIntervalSeconds = 5;
 
     /// <summary>
-    /// A heartbeat older than this many intervals is <see cref="ServiceHealthState.Stale"/>: enough missed writes
-    /// to notice, not enough to conclude the process is gone.
+    /// A heartbeat older than this many intervals is <see cref="ServiceHealthCondition.HeartbeatOverdue"/>: enough
+    /// missed writes to notice, not enough to conclude the process is gone.
     /// </summary>
-    public const int StaleAfterIntervals = 3;
+    public const int HeartbeatOverdueAfterIntervals = 3;
 
     /// <summary>
-    /// After this long without a heartbeat a Worker service is <see cref="ServiceHealthState.NotSeen"/>. A minute is
-    /// twelve missed writes: long past a slow database or a garbage-collection pause.
+    /// After this long without a heartbeat a Worker service is <see cref="ServiceHealthCondition.NoHeartbeat"/>. A
+    /// minute is twelve missed writes: long past a slow database or a garbage-collection pause.
     /// </summary>
-    public const int WorkerNotSeenAfterSeconds = 60;
+    public const int WorkerNoHeartbeatAfterSeconds = 60;
 
     /// <summary>
-    /// The Scheduler's equivalent of <see cref="WorkerNotSeenAfterSeconds"/>. It is given longer because its loop
-    /// blocks on schedule advancement, which can legitimately hold it for a while under a heavy schedule.
+    /// The Scheduler's equivalent of <see cref="WorkerNoHeartbeatAfterSeconds"/>. It is given longer because its
+    /// loop blocks on schedule advancement, which can legitimately hold it for a while under a heavy schedule.
     /// </summary>
-    public const int SchedulerNotSeenAfterSeconds = 120;
+    public const int SchedulerNoHeartbeatAfterSeconds = 120;
 
     /// <summary>
-    /// Work that has reported no progress for this long is <see cref="ServiceHealthState.NoProgress"/>. Only judged
+    /// Work that has reported no progress for this long is <see cref="ServiceHealthCondition.Stalled"/>. Only judged
     /// when the service supplies a progress timestamp; a service that cannot is never accused of it.
     /// </summary>
-    public const int NoProgressAfterMinutes = 10;
+    public const int StalledAfterMinutes = 10;
 
     public static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(HeartbeatIntervalSeconds);
-    public static readonly TimeSpan StaleAfter = HeartbeatInterval * StaleAfterIntervals;
-    public static readonly TimeSpan NoProgressAfter = TimeSpan.FromMinutes(NoProgressAfterMinutes);
+    public static readonly TimeSpan HeartbeatOverdueAfter = HeartbeatInterval * HeartbeatOverdueAfterIntervals;
+    public static readonly TimeSpan StalledAfter = TimeSpan.FromMinutes(StalledAfterMinutes);
 
     /// <summary>
     /// The services every deployment is expected to run, in the order they appear in a report. A service on this
-    /// list with no heartbeat at all is reported as not seen ("never reported"), which is the honest reading of a
-    /// Worker that never started. Password delivery is deliberately absent until the Password Delivery Service
+    /// list with no heartbeat at all is reported as unhealthy ("never started"), which is the honest reading of a
+    /// Worker that never came up. Password delivery is deliberately absent until the Password Delivery Service
     /// exists to write its heartbeat (plan #1635, layer 2); listing it earlier would put a permanent red card and
     /// a permanent banner on every deployment for a service that cannot yet report.
     /// </summary>
@@ -69,18 +69,18 @@ public class SystemHealthServer
     }
 
     /// <summary>
-    /// How long a service may go unheard before it is presumed down.
+    /// How long a service may go without a heartbeat before it is presumed down.
     /// </summary>
-    public static TimeSpan NotSeenAfter(JimService service) => service switch
+    public static TimeSpan NoHeartbeatAfter(JimService service) => service switch
     {
-        JimService.Scheduler => TimeSpan.FromSeconds(SchedulerNotSeenAfterSeconds),
-        _ => TimeSpan.FromSeconds(WorkerNotSeenAfterSeconds)
+        JimService.Scheduler => TimeSpan.FromSeconds(SchedulerNoHeartbeatAfterSeconds),
+        _ => TimeSpan.FromSeconds(WorkerNoHeartbeatAfterSeconds)
     };
 
     /// <summary>
-    /// Builds the health report as of <paramref name="asOf"/> (UTC). Every service is present, in a fixed order; one
-    /// that has never written a heartbeat is reported as <see cref="ServiceHealthState.NotSeen"/> with the reason
-    /// "Never reported".
+    /// Builds the health report as of <paramref name="asOf"/> (UTC). Every expected service is present, in a fixed
+    /// order; one that has never written a heartbeat is reported as <see cref="ServiceHealthStatus.Unhealthy"/>
+    /// with the condition <see cref="ServiceHealthCondition.NeverStarted"/>.
     /// </summary>
     public async Task<ServiceHealthReport> GetServiceHealthAsync(DateTime asOf)
     {
@@ -106,8 +106,8 @@ public class SystemHealthServer
         return new ServiceHealthReport
         {
             Services = services,
-            // ServiceHealthState is ordered by severity, so the worst state present is the largest value.
-            Overall = services.Max(s => s.State),
+            // ServiceHealthStatus is ordered by severity, so the worst status present is the largest value.
+            Overall = services.Max(s => s.Status),
             WebVersion = JimVersion.Current,
             GeneratedAt = asOf
         };
@@ -124,46 +124,48 @@ public class SystemHealthServer
             return new ServiceHealth
             {
                 Service = service,
-                State = ServiceHealthState.NotSeen,
-                Reason = "Never reported"
+                Status = ServiceHealthStatus.Unhealthy,
+                Condition = ServiceHealthCondition.NeverStarted,
+                Reason = "Never started"
             };
         }
 
         var age = asOf - heartbeat.LastSeenAt;
-        var notSeenAfter = NotSeenAfter(service);
-        ServiceHealthState state;
+        var noHeartbeatAfter = NoHeartbeatAfter(service);
+        ServiceHealthCondition condition;
         string reason;
 
         // Precedence, most to least serious. A dead process's last words about its work are not a wedged task, so
-        // NotSeen is judged before NoProgress; and a wedged task matters more than a few late heartbeats, so
-        // NoProgress is judged before Stale.
-        if (age >= notSeenAfter)
+        // no heartbeat is judged before stalled; and a wedged task matters more than a few late heartbeats, so
+        // stalled is judged before overdue. The status follows from the condition, never the other way round.
+        if (age >= noHeartbeatAfter)
         {
-            state = ServiceHealthState.NotSeen;
-            reason = $"Last seen {Describe(age)} ago; expected within {(int)notSeenAfter.TotalSeconds} seconds";
+            condition = ServiceHealthCondition.NoHeartbeat;
+            reason = $"No heartbeat for {Describe(age)}";
         }
         else if (heartbeat.CurrentWork != null
                  && heartbeat.LastProgressAt is { } lastProgressAt
-                 && asOf - lastProgressAt > NoProgressAfter)
+                 && asOf - lastProgressAt > StalledAfter)
         {
-            state = ServiceHealthState.NoProgress;
-            reason = $"{heartbeat.CurrentWork} has made no progress for {Describe(asOf - lastProgressAt)}";
+            condition = ServiceHealthCondition.Stalled;
+            reason = $"Stalled: no progress on {heartbeat.CurrentWork} for {Describe(asOf - lastProgressAt)}";
         }
-        else if (age > StaleAfter)
+        else if (age > HeartbeatOverdueAfter)
         {
-            state = ServiceHealthState.Stale;
-            reason = $"Last seen {Describe(age)} ago; expected every {HeartbeatIntervalSeconds} seconds";
+            condition = ServiceHealthCondition.HeartbeatOverdue;
+            reason = $"Heartbeat overdue: last seen {Describe(age)} ago, expected every {HeartbeatIntervalSeconds} seconds";
         }
         else
         {
-            state = ServiceHealthState.Running;
-            reason = $"Last seen {Describe(age)} ago";
+            condition = ServiceHealthCondition.Heartbeating;
+            reason = $"Heartbeat {Describe(age)} ago";
         }
 
         return new ServiceHealth
         {
             Service = service,
-            State = state,
+            Status = StatusOf(condition),
+            Condition = condition,
             Reason = reason,
             InstanceId = heartbeat.InstanceId,
             HostName = heartbeat.HostName,
@@ -176,6 +178,20 @@ public class SystemHealthServer
             Detail = heartbeat.Detail
         };
     }
+
+    /// <summary>
+    /// The status each condition earns. Kept as the single mapping so the portal, the API and PowerShell cannot
+    /// colour one condition two ways.
+    /// </summary>
+    public static ServiceHealthStatus StatusOf(ServiceHealthCondition condition) => condition switch
+    {
+        ServiceHealthCondition.Heartbeating => ServiceHealthStatus.Healthy,
+        ServiceHealthCondition.HeartbeatOverdue => ServiceHealthStatus.Degraded,
+        ServiceHealthCondition.Stalled => ServiceHealthStatus.Degraded,
+        ServiceHealthCondition.NoHeartbeat => ServiceHealthStatus.Unhealthy,
+        ServiceHealthCondition.NeverStarted => ServiceHealthStatus.Unhealthy,
+        _ => throw new ArgumentOutOfRangeException(nameof(condition), condition, "Unknown service health condition")
+    };
 
     /// <summary>
     /// An age in its single most useful unit ("16 seconds", "4 minutes", "3 hours", "2 days"), rounded down. One

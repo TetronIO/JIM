@@ -108,7 +108,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     }
 
     [Test]
-    public async Task ServiceHealthBanner_StaleService_RendersNothing()
+    public async Task ServiceHealthBanner_OverdueHeartbeat_RendersNothing()
     {
         Arrange(Heartbeat(JimService.WorkerSync, 30), Heartbeat(JimService.WorkerPasswordDelivery, 2), Heartbeat(JimService.Scheduler, 2));
 
@@ -130,7 +130,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     }
 
     [Test]
-    public async Task ServiceHealthBanner_WorkerNotSeen_ShowsAnErrorNamingTheWorkerOnce()
+    public async Task ServiceHealthBanner_WorkerWithNoHeartbeat_ShowsAnErrorNamingTheWorkerOnce()
     {
         // Sync gone quiet and password delivery never reported: one Worker, one sentence.
         Arrange(Heartbeat(JimService.WorkerSync, 4 * 60), Heartbeat(JimService.Scheduler, 2));
@@ -151,7 +151,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     }
 
     [Test]
-    public async Task ServiceHealthBanner_BothWorkerServicesNotSeen_NamesTheWorkerOnce()
+    public async Task ServiceHealthBanner_BothWorkerServicesWithNoHeartbeat_NamesTheWorkerOnce()
     {
         Arrange(Heartbeat(JimService.WorkerSync, 4 * 60), Heartbeat(JimService.WorkerPasswordDelivery, 4 * 60), Heartbeat(JimService.Scheduler, 2));
 
@@ -165,7 +165,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     }
 
     [Test]
-    public async Task ServiceHealthBanner_WorkerMakingNoProgress_ShowsAWarningNamingTheWork()
+    public async Task ServiceHealthBanner_WorkerStalled_ShowsAWarningNamingTheWork()
     {
         Arrange(
             Heartbeat(JimService.WorkerSync, 2, "Full Import: Corporate Directory", 12 * 60),

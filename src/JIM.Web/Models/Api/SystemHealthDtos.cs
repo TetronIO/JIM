@@ -13,10 +13,10 @@ namespace JIM.Web.Models.Api;
 public class ServiceHealthResponse
 {
     /// <summary>
-    /// The worst state among <see cref="Services"/>: Running, Stale, NoProgress or NotSeen. A monitoring script
-    /// that alerts on anything other than Running needs to read nothing else.
+    /// The worst status among <see cref="Services"/>: Healthy, Degraded or Unhealthy. A monitoring script that
+    /// alerts on anything other than Healthy needs to read nothing else.
     /// </summary>
-    public ServiceHealthState Overall { get; set; }
+    public ServiceHealthStatus Overall { get; set; }
 
     /// <summary>
     /// The version of the web tier that answered, for comparison with each service's own version; a mismatch
@@ -31,7 +31,7 @@ public class ServiceHealthResponse
 
     /// <summary>
     /// One entry per service, always present and always in the order WorkerSync, WorkerPasswordDelivery,
-    /// Scheduler. A service that has never reported is present as NotSeen rather than missing.
+    /// Scheduler. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing.
     /// </summary>
     public List<ServiceHealthEntryResponse> Services { get; set; } = [];
 
@@ -64,13 +64,19 @@ public class ServiceHealthEntryResponse
     public JimService Service { get; set; }
 
     /// <summary>
-    /// The verdict: Running (reported within its interval), Stale (a few heartbeats missed), NoProgress (alive,
-    /// but its current work has not moved for a long time) or NotSeen (presumed down, or never reported).
+    /// The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue or its
+    /// current work has stalled) or Unhealthy (no heartbeat long enough to presume it down, or never started).
     /// </summary>
-    public ServiceHealthState State { get; set; }
+    public ServiceHealthStatus Status { get; set; }
 
     /// <summary>
-    /// One sentence explaining the verdict, for example "Last seen 4 minutes ago; expected within 60 seconds".
+    /// Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, NoHeartbeat or NeverStarted. Each
+    /// condition belongs to exactly one status.
+    /// </summary>
+    public ServiceHealthCondition Condition { get; set; }
+
+    /// <summary>
+    /// The condition in plain words with the figures that matter, for example "No heartbeat for 4 minutes".
     /// </summary>
     public string Reason { get; set; } = string.Empty;
 
@@ -130,7 +136,8 @@ public class ServiceHealthEntryResponse
         return new ServiceHealthEntryResponse
         {
             Service = health.Service,
-            State = health.State,
+            Status = health.Status,
+            Condition = health.Condition,
             Reason = health.Reason,
             InstanceId = health.InstanceId,
             HostName = health.HostName,

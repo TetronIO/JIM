@@ -82,7 +82,7 @@ Reports whether JIM's background services (the Worker and the Scheduler) are ali
 # One object per service (default)
 Get-JIMServiceHealth
 
-# One summary object with the worst state present
+# One summary object with the worst status present
 Get-JIMServiceHealth -Summary
 ```
 
@@ -94,13 +94,14 @@ Get-JIMServiceHealth -Summary
 
 ### Output
 
-By default, one `JIM.ServiceHealth` object per service, always three and always in this order: `WorkerSync`, `WorkerPasswordDelivery`, `Scheduler`. A service that has never reported is present as `NotSeen` rather than missing, with the fields it cannot supply set to `$null`.
+By default, one `JIM.ServiceHealth` object per service, always three and always in this order: `WorkerSync`, `WorkerPasswordDelivery`, `Scheduler`. A service that has never reported is present as `Unhealthy` with the condition `NeverStarted` rather than missing, with the fields it cannot supply set to `$null`.
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `Service` | `string` | `WorkerSync` (the Worker's synchronisation loop), `WorkerPasswordDelivery` (the Worker's password delivery loop) or `Scheduler` |
-| `State` | `string` | `Running`, `Stale`, `NoProgress` or `NotSeen`; see [What the states mean](../configuration/operations.md#what-the-states-mean) |
-| `Reason` | `string` | One sentence explaining the state, e.g. `Last seen 4 minutes ago; expected within 60 seconds` or `Never reported` |
+| `Status` | `string` | `Healthy`, `Degraded` or `Unhealthy`; the word to alert on. See [What Healthy, Degraded and Unhealthy mean](../configuration/operations.md#what-healthy-degraded-and-unhealthy-mean) |
+| `Condition` | `string` | Why it has that status: `Heartbeating`, `HeartbeatOverdue`, `Stalled`, `NoHeartbeat` or `NeverStarted` |
+| `Reason` | `string` | The condition in plain words with the figures that matter, e.g. `No heartbeat for 4 minutes` or `Never started` |
 | `CurrentWork` | `string?` | What the service was doing when it last reported, e.g. `Full Import: Corporate Directory`; `$null` when idle |
 | `CurrentWorkStartedAt` | `datetime?` | When the current work began (UTC) |
 | `LastSeenAt` | `datetime?` | When the service last reported (UTC) |
@@ -115,7 +116,7 @@ With `-Summary`, one `JIM.ServiceHealthSummary` object:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Overall` | `string` | The worst state among the services: `Running`, `Stale`, `NoProgress` or `NotSeen` |
+| `Overall` | `string` | The worst status among the services: `Healthy`, `Degraded` or `Unhealthy` |
 | `WebVersion` | `string` | The version of the web tier that answered |
 | `GeneratedAt` | `datetime` | When the verdicts were derived (UTC); every `Reason` is relative to it |
 | `Services` | `JIM.ServiceHealth[]` | The per-service objects described above |
@@ -127,19 +128,19 @@ Get-JIMServiceHealth
 ```
 
 ```powershell title="The columns that matter during a change window"
-Get-JIMServiceHealth | Format-Table Service, State, CurrentWork, LastSeenAt, Version
+Get-JIMServiceHealth | Format-Table Service, Status, CurrentWork, LastSeenAt, Version
 ```
 
 ```powershell title="Fail a monitoring check when any service is unhealthy"
 $health = Get-JIMServiceHealth -Summary
-if ($health.Overall -ne 'Running') {
-    $health.Services | Where-Object State -ne 'Running' | Format-List Service, State, Reason
+if ($health.Overall -ne 'Healthy') {
+    $health.Services | Where-Object Status -ne 'Healthy' | Format-List Service, Status, Condition, Reason
     exit 1
 }
 ```
 
 ```powershell title="Name the work that has stalled"
-Get-JIMServiceHealth | Where-Object State -eq 'NoProgress' | Select-Object Service, CurrentWork, LastProgressAt
+Get-JIMServiceHealth | Where-Object Condition -eq 'Stalled' | Select-Object Service, CurrentWork, LastProgressAt
 ```
 
 ```powershell title="Find services running a different version from the web tier"
@@ -151,8 +152,8 @@ $health.Services | Where-Object { $_.Version -and $_.Version -ne $health.WebVers
 ### Notes
 
 - Requires an active connection via [Connect-JIM](connection.md#connect-jim) and the **Administrator** role.
-- `Running` means a heartbeat within the last 15 seconds; `Stale` more than 15 seconds; `NotSeen` more than 60 seconds for the Worker services and 120 seconds for the Scheduler, or never reported; `NoProgress` means the current work has not moved forward for 10 minutes. `Overall` is the worst state present, so a monitoring script needs to read nothing else.
-- `Stale` is worth a glance, not an alarm: a slow database or a paused process produces it. `NotSeen` and `NoProgress` are what the portal raises its administrator banner for.
+- `Healthy` means a heartbeat within the last 15 seconds. `Degraded` is `HeartbeatOverdue` (more than 15 seconds) or `Stalled` (the current work has not moved forward for 10 minutes). `Unhealthy` is `NoHeartbeat` (more than 60 seconds for the Worker services, 120 seconds for the Scheduler) or `NeverStarted`. `Overall` is the worst status present, so a monitoring script needs to read nothing else.
+- `HeartbeatOverdue` is worth a glance, not an alarm: a slow database or a paused process produces it. `Unhealthy` and `Stalled` are what the portal raises its administrator banner for.
 - Calls `GET /api/v1/system/health`, which is marked `Cache-Control: no-store`; every call is a fresh verdict.
 
 ---

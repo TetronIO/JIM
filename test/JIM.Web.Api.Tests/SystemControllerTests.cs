@@ -346,7 +346,7 @@ public class SystemControllerTests
     };
 
     [Test]
-    public async Task GetServiceHealthAsync_WithFreshHeartbeats_ReturnsOkWithEveryServiceRunning()
+    public async Task GetServiceHealthAsync_WithFreshHeartbeats_ReturnsOkWithEveryServiceHealthy()
     {
         var now = DateTime.UtcNow;
         var controller = BuildHealthController(
@@ -358,14 +358,15 @@ public class SystemControllerTests
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         var response = (ServiceHealthResponse)((OkObjectResult)result).Value!;
-        Assert.That(response.Overall, Is.EqualTo(ServiceHealthState.Running));
+        Assert.That(response.Overall, Is.EqualTo(ServiceHealthStatus.Healthy));
         Assert.That(response.WebVersion, Is.EqualTo(JimVersion.Current));
         Assert.That(response.GeneratedAt, Is.EqualTo(now).Within(TimeSpan.FromSeconds(5)));
         Assert.That(response.Services.Select(s => s.Service), Is.EqualTo(new[]
         {
             JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler
         }));
-        Assert.That(response.Services.Select(s => s.State), Is.All.EqualTo(ServiceHealthState.Running));
+        Assert.That(response.Services.Select(s => s.Status), Is.All.EqualTo(ServiceHealthStatus.Healthy));
+        Assert.That(response.Services.Select(s => s.Condition), Is.All.EqualTo(ServiceHealthCondition.Heartbeating));
     }
 
     [Test]
@@ -382,8 +383,9 @@ public class SystemControllerTests
         var worker = ((ServiceHealthResponse)((OkObjectResult)result).Value!).Services.Single(s => s.Service == JimService.WorkerSync);
         Assert.Multiple(() =>
         {
-            Assert.That(worker.State, Is.EqualTo(ServiceHealthState.Running));
-            Assert.That(worker.Reason, Does.StartWith("Last seen"));
+            Assert.That(worker.Status, Is.EqualTo(ServiceHealthStatus.Healthy));
+            Assert.That(worker.Condition, Is.EqualTo(ServiceHealthCondition.Heartbeating));
+            Assert.That(worker.Reason, Does.StartWith("Heartbeat"));
             Assert.That(worker.InstanceId, Is.EqualTo("host-a:1"));
             Assert.That(worker.HostName, Is.EqualTo("host-a"));
             Assert.That(worker.Version, Is.EqualTo("1.2.3"));
@@ -397,23 +399,24 @@ public class SystemControllerTests
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_WithNoHeartbeats_ReportsEveryServiceNotSeenAndOverallNotSeen()
+    public async Task GetServiceHealthAsync_WithNoHeartbeats_ReportsEveryServiceNeverStartedAndOverallUnhealthy()
     {
         var controller = BuildHealthController();
 
         var result = await controller.GetServiceHealthAsync();
 
         var response = (ServiceHealthResponse)((OkObjectResult)result).Value!;
-        Assert.That(response.Overall, Is.EqualTo(ServiceHealthState.NotSeen));
+        Assert.That(response.Overall, Is.EqualTo(ServiceHealthStatus.Unhealthy));
         // Password delivery is not an expected service until its loop exists (plan #1635, layer 2).
         Assert.That(response.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.Scheduler }));
-        Assert.That(response.Services.Select(s => s.State), Is.All.EqualTo(ServiceHealthState.NotSeen));
-        Assert.That(response.Services.Select(s => s.Reason), Is.All.EqualTo("Never reported"));
+        Assert.That(response.Services.Select(s => s.Status), Is.All.EqualTo(ServiceHealthStatus.Unhealthy));
+        Assert.That(response.Services.Select(s => s.Condition), Is.All.EqualTo(ServiceHealthCondition.NeverStarted));
+        Assert.That(response.Services.Select(s => s.Reason), Is.All.EqualTo("Never started"));
         Assert.That(response.Services.Select(s => s.LastSeenAt), Is.All.Null);
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_OverallIsTheWorstStatePresent()
+    public async Task GetServiceHealthAsync_OverallIsTheWorstStatusPresent()
     {
         var now = DateTime.UtcNow;
         var controller = BuildHealthController(
@@ -424,8 +427,10 @@ public class SystemControllerTests
         var result = await controller.GetServiceHealthAsync();
 
         var response = (ServiceHealthResponse)((OkObjectResult)result).Value!;
-        Assert.That(response.Services.Single(s => s.Service == JimService.Scheduler).State, Is.EqualTo(ServiceHealthState.Stale));
-        Assert.That(response.Overall, Is.EqualTo(ServiceHealthState.Stale));
+        var scheduler = response.Services.Single(s => s.Service == JimService.Scheduler);
+        Assert.That(scheduler.Status, Is.EqualTo(ServiceHealthStatus.Degraded));
+        Assert.That(scheduler.Condition, Is.EqualTo(ServiceHealthCondition.HeartbeatOverdue));
+        Assert.That(response.Overall, Is.EqualTo(ServiceHealthStatus.Degraded));
     }
 
     [Test]
@@ -451,12 +456,14 @@ public class SystemControllerTests
 
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
-        Assert.That(root.GetProperty("overall").GetString(), Is.EqualTo("NotSeen"));
+        Assert.That(root.GetProperty("overall").GetString(), Is.EqualTo("Unhealthy"));
         var services = root.GetProperty("services").EnumerateArray().ToList();
         Assert.That(services[0].GetProperty("service").GetString(), Is.EqualTo("WorkerSync"));
-        Assert.That(services[0].GetProperty("state").GetString(), Is.EqualTo("Running"));
+        Assert.That(services[0].GetProperty("status").GetString(), Is.EqualTo("Healthy"));
+        Assert.That(services[0].GetProperty("condition").GetString(), Is.EqualTo("Heartbeating"));
         Assert.That(services[1].GetProperty("service").GetString(), Is.EqualTo("Scheduler"));
-        Assert.That(services[1].GetProperty("state").GetString(), Is.EqualTo("NotSeen"));
+        Assert.That(services[1].GetProperty("status").GetString(), Is.EqualTo("Unhealthy"));
+        Assert.That(services[1].GetProperty("condition").GetString(), Is.EqualTo("NeverStarted"));
     }
 
     [Test]

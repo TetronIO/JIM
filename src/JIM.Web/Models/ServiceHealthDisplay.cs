@@ -7,8 +7,9 @@ using MudBlazor;
 namespace JIM.Web.Models;
 
 /// <summary>
-/// How a service's health reads on screen: the card titles and state words on the Operations strip, the sentence
-/// in the banner administrators see on every page, and the verdict behind the red dot on the Administration index.
+/// How a service's health reads on screen: the card titles, status words and summary line on the Operations strip,
+/// the sentence in the banner administrators see on every page, and the verdict behind the red dot on the
+/// Administration index.
 /// <para>
 /// One class because the three surfaces describe the same report and must agree on it. The banner in particular
 /// has to decide which services to name and how, and that decision belongs beside the words it produces rather
@@ -30,56 +31,89 @@ public static class ServiceHealthDisplay
     };
 
     /// <summary>
-    /// The state as a word on the card.
+    /// The status as the word on the card's pill.
     /// </summary>
-    public static string StateWord(ServiceHealthState state) => state switch
+    public static string StatusWord(ServiceHealthStatus status) => status switch
     {
-        ServiceHealthState.Running => "Running",
-        ServiceHealthState.Stale => "Stale",
-        ServiceHealthState.NoProgress => "No progress",
-        ServiceHealthState.NotSeen => "Not seen",
-        _ => state.ToString()
+        ServiceHealthStatus.Healthy => "Healthy",
+        ServiceHealthStatus.Degraded => "Degraded",
+        ServiceHealthStatus.Unhealthy => "Unhealthy",
+        _ => status.ToString()
     };
 
     /// <summary>
-    /// The colour of the state word. Stale and No progress are both amber: worth a look, not yet an outage.
+    /// The colour of the status pill: green, amber, red. The pill is the only coloured element on a card, so this is
+    /// the one place a status becomes a colour.
     /// </summary>
-    public static Color StateColor(ServiceHealthState state) => state switch
+    public static Color StatusColour(ServiceHealthStatus status) => status switch
     {
-        ServiceHealthState.Running => Color.Success,
-        ServiceHealthState.NotSeen => Color.Error,
-        _ => Color.Warning
+        ServiceHealthStatus.Healthy => Color.Success,
+        ServiceHealthStatus.Degraded => Color.Warning,
+        ServiceHealthStatus.Unhealthy => Color.Error,
+        _ => Color.Default
     };
 
     /// <summary>
-    /// The suffix of the card's <c>jim-service-health-card--*</c> modifier class, which paints its left border.
+    /// The suffix of the pill's <c>jim-service-health-pill--*</c> modifier class, which paints its dot and tint.
     /// </summary>
-    public static string StateModifier(ServiceHealthState state) => state switch
+    public static string StatusModifier(ServiceHealthStatus status) => status switch
     {
-        ServiceHealthState.Running => "running",
-        ServiceHealthState.Stale => "stale",
-        ServiceHealthState.NoProgress => "no-progress",
-        ServiceHealthState.NotSeen => "not-seen",
-        _ => state.ToString().ToLowerInvariant()
+        ServiceHealthStatus.Healthy => "healthy",
+        ServiceHealthStatus.Degraded => "degraded",
+        ServiceHealthStatus.Unhealthy => "unhealthy",
+        _ => status.ToString().ToLowerInvariant()
     };
 
     /// <summary>
-    /// The card's one-line headline: the work in hand, "Idle" when there is none, or for a service that is not seen
-    /// when it was last heard from. A dead process's last words about its work are not what it is doing now, so a
-    /// Not seen card never headlines the work.
+    /// The header's one-line summary of the report: "All services healthy", or a count per status that is not,
+    /// worst first ("1 service unhealthy, 1 degraded"). The noun is pluralised by the first count only, because the
+    /// rest read as a continuation of it.
     /// </summary>
-    public static string Headline(ServiceHealth service, DateTime asOf)
+    public static string Summary(ServiceHealthReport report)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        var unhealthy = report.Services.Count(s => s.Status == ServiceHealthStatus.Unhealthy);
+        var degraded = report.Services.Count(s => s.Status == ServiceHealthStatus.Degraded);
+        if (unhealthy == 0 && degraded == 0)
+            return "All services healthy";
+
+        var parts = new List<string>();
+        if (unhealthy > 0)
+            parts.Add($"{unhealthy} {(unhealthy == 1 ? "service" : "services")} unhealthy");
+        if (degraded > 0)
+            parts.Add(parts.Count == 0 ? $"{degraded} {(degraded == 1 ? "service" : "services")} degraded" : $"{degraded} degraded");
+        return string.Join(", ", parts);
+    }
+
+    /// <summary>
+    /// The card's activity line: what the service is doing. The work in hand, "Idle" when there is none, or for an
+    /// unhealthy service the reason itself ("No heartbeat for 4 minutes", "Never started"), because a dead
+    /// process's last words about its work are not what it is doing now; see <see cref="WasDoing"/> for those.
+    /// </summary>
+    public static string Activity(ServiceHealth service)
     {
         ArgumentNullException.ThrowIfNull(service);
 
-        if (service.State == ServiceHealthState.NotSeen)
-        {
-            return service.LastSeenAt is { } lastSeenAt
-                ? $"Last heartbeat {CompactDuration(asOf - lastSeenAt)} ago"
-                : "Never reported";
-        }
+        if (service.Status == ServiceHealthStatus.Unhealthy)
+            return service.Reason;
 
         return string.IsNullOrWhiteSpace(service.CurrentWork) ? "Idle" : service.CurrentWork;
+    }
+
+    /// <summary>
+    /// For an unhealthy service that reported work before it went quiet, what that work was ("Was running: Full
+    /// Import: Corporate Directory"); null for a healthy or degraded service (its work is on the activity line) and
+    /// for one that was idle or never started.
+    /// </summary>
+    public static string? WasDoing(ServiceHealth service)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        if (service.Status != ServiceHealthStatus.Unhealthy || string.IsNullOrWhiteSpace(service.CurrentWork))
+            return null;
+
+        return $"Was running: {service.CurrentWork}";
     }
 
     /// <summary>
@@ -131,15 +165,17 @@ public static class ServiceHealthDisplay
 
     /// <summary>
     /// Whether the report warrants the Administration index's red dot: the same verdict as the banner's, so the dot
-    /// and the banner appear and disappear together.
+    /// and the banner appear and disappear together. That is any Unhealthy service, or a Degraded one whose
+    /// condition is Stalled; a Degraded service whose heartbeat is merely overdue lights neither.
     /// </summary>
     public static bool NeedsAttention(ServiceHealthReport report) => Banner(report) != null;
 
     /// <summary>
-    /// What the banner says, or null when it should not be shown. Shown only for an outage (a service not seen) or
-    /// a stalled task (no progress); a Stale service is worth a glance on the strip, not an alarm on every page.
-    /// Reads the report's verdict as it stands: which services a deployment is expected to run is the read model's
-    /// decision (<c>SystemHealthServer.ExpectedServices</c>), so a service reported as never seen is one that should
+    /// What the banner says, or null when it should not be shown. Shown for an outage (an Unhealthy service: no
+    /// heartbeat, or never started) or a stalled task (Degraded by the Stalled condition); an overdue heartbeat is
+    /// worth a glance on the strip, not an alarm on every page. Reads the report's verdict as it stands: which
+    /// services a deployment is expected to run is the read model's decision
+    /// (<c>SystemHealthServer.ExpectedServices</c>), so a service reported as never started is one that should
     /// have been.
     /// </summary>
     public static ServiceHealthBannerContent? Banner(ServiceHealthReport report)
@@ -155,21 +191,20 @@ public static class ServiceHealthDisplay
         // once both loops are in the report.
         var deliveryReported = considered.Any(s => s.Service == JimService.WorkerPasswordDelivery);
 
-        var worst = considered.Max(s => s.State);
-        return worst switch
-        {
-            ServiceHealthState.NotSeen => NotSeenBanner(considered.Where(s => s.State == ServiceHealthState.NotSeen).ToList(), deliveryReported, report.GeneratedAt),
-            ServiceHealthState.NoProgress => NoProgressBanner(considered.Where(s => s.State == ServiceHealthState.NoProgress).ToList(), report.GeneratedAt),
-            _ => null
-        };
+        var down = considered.Where(s => s.Status == ServiceHealthStatus.Unhealthy).ToList();
+        if (down.Count > 0)
+            return OutageBanner(down, deliveryReported, report.GeneratedAt);
+
+        var stalled = considered.Where(s => s.Condition == ServiceHealthCondition.Stalled).ToList();
+        return stalled.Count > 0 ? StalledBanner(stalled, report.GeneratedAt) : null;
     }
 
-    private static ServiceHealthBannerContent NotSeenBanner(List<ServiceHealth> notSeen, bool deliveryReported, DateTime asOf)
+    private static ServiceHealthBannerContent OutageBanner(List<ServiceHealth> down, bool deliveryReported, DateTime asOf)
     {
-        var syncDown = notSeen.Any(s => s.Service == JimService.WorkerSync);
+        var syncDown = down.Any(s => s.Service == JimService.WorkerSync);
         // With no delivery loop in the report, the synchronisation loop down is the whole Worker down.
-        var passwordsDown = notSeen.Any(s => s.Service == JimService.WorkerPasswordDelivery) || (syncDown && !deliveryReported);
-        var schedulerDown = notSeen.Any(s => s.Service == JimService.Scheduler);
+        var passwordsDown = down.Any(s => s.Service == JimService.WorkerPasswordDelivery) || (syncDown && !deliveryReported);
+        var schedulerDown = down.Any(s => s.Service == JimService.Scheduler);
 
         // Both Worker services down is the Worker down: name it once. One of them alone is named precisely, because
         // the other half of the process is still alive and the remedy is different.
@@ -187,8 +222,8 @@ public static class ServiceHealthDisplay
         var subject = Capitalise(JoinAnd(names));
 
         // "For how long" is the longest silence among the named services, because that is the one the administrator
-        // is most behind on. A service that never reported has no silence to measure; when none of them has, say so.
-        var silences = notSeen.Where(s => s.LastSeenAt.HasValue).Select(s => asOf - s.LastSeenAt!.Value).ToList();
+        // is most behind on. A service that never started has no silence to measure; when none of them has, say so.
+        var silences = down.Where(s => s.LastSeenAt.HasValue).Select(s => asOf - s.LastSeenAt!.Value).ToList();
         var first = silences.Count == 0
             ? $"{subject} {(plural ? "have" : "has")} never reported."
             : $"{subject} {(plural ? "have" : "has")} not reported for {LongDuration(silences.Max())}.";
@@ -205,7 +240,7 @@ public static class ServiceHealthDisplay
         return new ServiceHealthBannerContent(Severity.Error, $"{first} {second}");
     }
 
-    private static ServiceHealthBannerContent NoProgressBanner(List<ServiceHealth> stalled, DateTime asOf)
+    private static ServiceHealthBannerContent StalledBanner(List<ServiceHealth> stalled, DateTime asOf)
     {
         // One sentence per stalled service. The sync loop is "the Worker" here because that is what an administrator
         // calls the thing running their Full Import; the other two are named for what they are.

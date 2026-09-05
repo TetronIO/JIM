@@ -135,8 +135,8 @@ public sealed class ServiceHeartbeatWriter
             CurrentWorkStartedAt = currentWorkStartedAt,
             // Always null for now. No service can yet tell progress from liveness: the Activity model carries
             // ObjectsProcessed but no timestamp that moves with it, and the Worker Task heartbeat moves whether or
-            // not the task advances. SystemHealthServer therefore never reaches NoProgress. When a progress
-            // timestamp exists, thread it through here and the state lights up with no reader change.
+            // not the task advances. SystemHealthServer therefore never judges a service Stalled. When a progress
+            // timestamp exists, thread it through here and the condition lights up with no reader change.
             LastProgressAt = null,
             Detail = detail
         };

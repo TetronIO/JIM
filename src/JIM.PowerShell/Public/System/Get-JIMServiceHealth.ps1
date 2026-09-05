@@ -13,23 +13,25 @@ function Get-JIMServiceHealth {
         Schedules when they fall due). This is the same report the Service Health strip on the Operations page
         shows, so a script and an administrator always see the same verdict.
 
-        Each service's State is one of:
+        Each service's Status is one of:
 
-        - Running: reported within the last 15 seconds. Nothing to do.
-        - Stale: more than 15 seconds since the last heartbeat, but not yet long enough to presume the process is
-          gone. It may be paused under load or the database may be slow; worth a glance, not yet an alarm.
-        - NoProgress: alive, but its current work has not moved forward for more than 10 minutes. The process is
-          up; the task it is running may be wedged. Only judged for work that reports progress.
-        - NotSeen: no heartbeat for 60 seconds (Worker services) or 120 seconds (Scheduler), or the service has
-          never reported at all (Reason is "Never reported"). Queued and scheduled work will not run until it is
-          back.
+        - Healthy: heartbeating within the last 15 seconds. Nothing to do.
+        - Degraded: alive, but something is not right. Condition says what: HeartbeatOverdue (more than 15 seconds
+          since the last heartbeat, not yet long enough to presume the process gone; it may be paused under load or
+          the database may be slow) or Stalled (its current work has not moved forward for more than 10 minutes;
+          the process is up, the task it is running may be wedged; only judged for work that reports progress).
+        - Unhealthy: presumed down. Condition is NoHeartbeat (none for 60 seconds for the Worker services, 120
+          seconds for the Scheduler) or NeverStarted (it has never reported at all). Queued and scheduled work will
+          not run until it is back.
 
-        Reason says why in one sentence. CurrentWork names what the service was doing when it last reported (for
+        A Healthy service's Condition is Heartbeating.
+
+        Reason puts the condition in plain words with the figures that matter. CurrentWork names what the service was doing when it last reported (for
         example "Full Import: Corporate Directory"), and Version is the JIM version that instance runs: compare it
         with the web tier's version from -Summary, because a mismatch means a partial upgrade.
 
-        With -Summary, one object is returned instead: Overall (the worst state present), WebVersion, GeneratedAt
-        and the per-service objects under Services. A monitoring script that alerts on anything other than Running
+        With -Summary, one object is returned instead: Overall (the worst status present), WebVersion, GeneratedAt
+        and the per-service objects under Services. A monitoring script that alerts on anything other than Healthy
         needs to read nothing but Overall.
 
         Get-JIMHealth answers a different question: it probes the web tier only, without authentication, and says
@@ -42,7 +44,7 @@ function Get-JIMServiceHealth {
 
     .OUTPUTS
         JIM.ServiceHealth
-        One object per service with Service, State, Reason, CurrentWork, CurrentWorkStartedAt, LastSeenAt,
+        One object per service with Service, Status, Condition, Reason, CurrentWork, CurrentWorkStartedAt, LastSeenAt,
         StartedAt, HostName, Version, InstanceId, LastProgressAt and Detail. Fields a never-seen service cannot
         supply are null.
 
@@ -53,27 +55,27 @@ function Get-JIMServiceHealth {
     .EXAMPLE
         Get-JIMServiceHealth
 
-        Lists the three services with their state and reason. The quickest way to find out whether the Worker is
+        Lists the services with their status, condition and reason. The quickest way to find out whether the Worker is
         running and what it is doing.
 
     .EXAMPLE
-        Get-JIMServiceHealth | Format-Table Service, State, CurrentWork, LastSeenAt, Version
+        Get-JIMServiceHealth | Format-Table Service, Status, CurrentWork, LastSeenAt, Version
 
         The columns that matter during a change window: what each service is doing, when it last reported, and
         which version it is running.
 
     .EXAMPLE
         $health = Get-JIMServiceHealth -Summary
-        if ($health.Overall -ne 'Running') {
-            $health.Services | Where-Object State -ne 'Running' | Format-List Service, State, Reason
+        if ($health.Overall -ne 'Healthy') {
+            $health.Services | Where-Object Status -ne 'Healthy' | Format-List Service, Status, Condition, Reason
             exit 1
         }
 
-        A monitoring check. Exits non-zero when any service is Stale, NoProgress or NotSeen, printing which and
-        why, so a scheduler or pipeline can raise an alert on the exit code.
+        A monitoring check. Exits non-zero when any service is Degraded or Unhealthy, printing which and why, so a
+        scheduler or pipeline can raise an alert on the exit code.
 
     .EXAMPLE
-        Get-JIMServiceHealth | Where-Object State -eq 'NoProgress' | Select-Object Service, CurrentWork, LastProgressAt
+        Get-JIMServiceHealth | Where-Object Condition -eq 'Stalled' | Select-Object Service, CurrentWork, LastProgressAt
 
         Names the work that has stalled. The process is up; the task is what needs looking at, and the Operations
         page's Queue tab is where to cancel it if it is genuinely wedged.
@@ -116,7 +118,8 @@ function Get-JIMServiceHealth {
         $services = foreach ($service in @($response.services)) {
             $item = [PSCustomObject]@{
                 Service              = $service.service
-                State                = $service.state
+                Status               = $service.status
+                Condition            = $service.condition
                 Reason               = $service.reason
                 CurrentWork          = $service.currentWork
                 CurrentWorkStartedAt = $service.currentWorkStartedAt

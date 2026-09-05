@@ -339,25 +339,25 @@ Describe 'Get-JIMServiceHealth' {
                 # report order. Invoke-JIMApi is mocked below the normaliser, so the cmdlet must not rely on it to
                 # produce PascalCase names.
                 $script:healthWire = [PSCustomObject]@{
-                    overall      = 'NotSeen'
+                    overall      = 'Unhealthy'
                     webVersion   = '1.2.3'
                     generatedAt  = '2026-09-05T10:00:00Z'
                     services     = @(
                         [PSCustomObject]@{
-                            service = 'WorkerSync'; state = 'Running'; reason = 'Last seen 2 seconds ago'
+                            service = 'WorkerSync'; status = 'Healthy'; condition = 'Heartbeating'; reason = 'Heartbeat 2 seconds ago'
                             instanceId = 'host-a:1234'; hostName = 'host-a'; version = '1.2.3'
                             startedAt = '2026-09-05T09:00:00Z'; lastSeenAt = '2026-09-05T09:59:58Z'
                             currentWork = 'Full Import: Corporate Directory'; currentWorkStartedAt = '2026-09-05T09:50:00Z'
                             lastProgressAt = '2026-09-05T09:59:50Z'; detail = $null
                         },
                         [PSCustomObject]@{
-                            service = 'WorkerPasswordDelivery'; state = 'Running'; reason = 'Last seen 2 seconds ago'
+                            service = 'WorkerPasswordDelivery'; status = 'Healthy'; condition = 'Heartbeating'; reason = 'Heartbeat 2 seconds ago'
                             instanceId = 'host-a:1234'; hostName = 'host-a'; version = '1.2.3'
                             startedAt = '2026-09-05T09:00:00Z'; lastSeenAt = '2026-09-05T09:59:58Z'
                             currentWork = $null; currentWorkStartedAt = $null; lastProgressAt = $null; detail = 'queue: 0 due'
                         },
                         [PSCustomObject]@{
-                            service = 'Scheduler'; state = 'NotSeen'; reason = 'Never reported'
+                            service = 'Scheduler'; status = 'Unhealthy'; condition = 'NeverStarted'; reason = 'Never started'
                             instanceId = $null; hostName = $null; version = $null
                             startedAt = $null; lastSeenAt = $null
                             currentWork = $null; currentWorkStartedAt = $null; lastProgressAt = $null; detail = $null
@@ -386,7 +386,8 @@ Describe 'Get-JIMServiceHealth' {
                 $services.Count | Should -Be 3
                 $services[0].PSObject.TypeNames[0] | Should -Be 'JIM.ServiceHealth'
                 $services.Service | Should -Be @('WorkerSync', 'WorkerPasswordDelivery', 'Scheduler')
-                $services.State | Should -Be @('Running', 'Running', 'NotSeen')
+                $services.Status | Should -Be @('Healthy', 'Healthy', 'Unhealthy')
+                $services.Condition | Should -Be @('Heartbeating', 'Heartbeating', 'NeverStarted')
             }
         }
 
@@ -397,9 +398,9 @@ Describe 'Get-JIMServiceHealth' {
                 $worker = @(Get-JIMServiceHealth)[0]
 
                 $worker.PSObject.Properties.Name | Should -Be @(
-                    'Service', 'State', 'Reason', 'CurrentWork', 'CurrentWorkStartedAt', 'LastSeenAt', 'StartedAt',
-                    'HostName', 'Version', 'InstanceId', 'LastProgressAt', 'Detail')
-                $worker.Reason | Should -Be 'Last seen 2 seconds ago'
+                    'Service', 'Status', 'Condition', 'Reason', 'CurrentWork', 'CurrentWorkStartedAt', 'LastSeenAt',
+                    'StartedAt', 'HostName', 'Version', 'InstanceId', 'LastProgressAt', 'Detail')
+                $worker.Reason | Should -Be 'Heartbeat 2 seconds ago'
                 $worker.CurrentWork | Should -Be 'Full Import: Corporate Directory'
                 $worker.HostName | Should -Be 'host-a'
                 $worker.Version | Should -Be '1.2.3'
@@ -415,8 +416,9 @@ Describe 'Get-JIMServiceHealth' {
                 $scheduler = @(Get-JIMServiceHealth) | Where-Object Service -eq 'Scheduler'
 
                 $scheduler | Should -Not -BeNullOrEmpty
-                $scheduler.State | Should -Be 'NotSeen'
-                $scheduler.Reason | Should -Be 'Never reported'
+                $scheduler.Status | Should -Be 'Unhealthy'
+                $scheduler.Condition | Should -Be 'NeverStarted'
+                $scheduler.Reason | Should -Be 'Never started'
                 $scheduler.LastSeenAt | Should -BeNullOrEmpty
                 $scheduler.HostName | Should -BeNullOrEmpty
             }
@@ -431,7 +433,7 @@ Describe 'Get-JIMServiceHealth' {
                 $summary.Count | Should -Be 1
                 $summary[0].PSObject.TypeNames[0] | Should -Be 'JIM.ServiceHealthSummary'
                 $summary[0].PSObject.Properties.Name | Should -Be @('Overall', 'WebVersion', 'GeneratedAt', 'Services')
-                $summary[0].Overall | Should -Be 'NotSeen'
+                $summary[0].Overall | Should -Be 'Unhealthy'
                 $summary[0].WebVersion | Should -Be '1.2.3'
                 @($summary[0].Services).Count | Should -Be 3
                 @($summary[0].Services)[0].PSObject.TypeNames[0] | Should -Be 'JIM.ServiceHealth'
@@ -462,9 +464,9 @@ Describe 'Get-JIMServiceHealth' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
         }
 
-        It 'Should include a monitoring example that fails when Overall is not Running' {
+        It 'Should include a monitoring example that fails when Overall is not Healthy' {
             $codes = @($help.Examples.Example | ForEach-Object { $_.Code })
-            ($codes -match "Overall -ne 'Running'") | Should -Not -BeNullOrEmpty
+            ($codes -match "Overall -ne 'Healthy'") | Should -Not -BeNullOrEmpty
         }
 
         It 'Should document the Summary parameter' {

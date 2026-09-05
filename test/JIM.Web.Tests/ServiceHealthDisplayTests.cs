@@ -27,18 +27,52 @@ public class ServiceHealthDisplayTests
         Assert.That(ServiceHealthDisplay.Label(service), Is.EqualTo(expected));
     }
 
-    [TestCase(ServiceHealthState.Running, "Running", Color.Success, "running")]
-    [TestCase(ServiceHealthState.Stale, "Stale", Color.Warning, "stale")]
-    [TestCase(ServiceHealthState.NoProgress, "No progress", Color.Warning, "no-progress")]
-    [TestCase(ServiceHealthState.NotSeen, "Not seen", Color.Error, "not-seen")]
-    public void State_EachValue_HasWordColourAndModifier(ServiceHealthState state, string word, Color colour, string modifier)
+    [TestCase(ServiceHealthStatus.Healthy, "Healthy", Color.Success, "healthy")]
+    [TestCase(ServiceHealthStatus.Degraded, "Degraded", Color.Warning, "degraded")]
+    [TestCase(ServiceHealthStatus.Unhealthy, "Unhealthy", Color.Error, "unhealthy")]
+    public void Status_EachValue_HasWordColourAndModifier(ServiceHealthStatus status, string word, Color colour, string modifier)
     {
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(ServiceHealthDisplay.StateWord(state), Is.EqualTo(word));
-            Assert.That(ServiceHealthDisplay.StateColor(state), Is.EqualTo(colour));
-            Assert.That(ServiceHealthDisplay.StateModifier(state), Is.EqualTo(modifier));
+            Assert.That(ServiceHealthDisplay.StatusWord(status), Is.EqualTo(word));
+            Assert.That(ServiceHealthDisplay.StatusColour(status), Is.EqualTo(colour));
+            Assert.That(ServiceHealthDisplay.StatusModifier(status), Is.EqualTo(modifier));
         }
+    }
+
+    [Test]
+    public void Summary_EveryServiceHealthy_SaysSo()
+    {
+        var report = Report(Derive(JimService.WorkerSync, 2), Derive(JimService.Scheduler, 2));
+
+        Assert.That(ServiceHealthDisplay.Summary(report), Is.EqualTo("All services healthy"));
+    }
+
+    [Test]
+    public void Summary_OneDegraded_CountsIt()
+    {
+        var report = Report(Derive(JimService.WorkerSync, 30), Derive(JimService.Scheduler, 2));
+
+        Assert.That(ServiceHealthDisplay.Summary(report), Is.EqualTo("1 service degraded"));
+    }
+
+    [Test]
+    public void Summary_TwoUnhealthy_SpeaksInThePlural()
+    {
+        var report = Report(Derive(JimService.WorkerSync, 4 * 60), Derive(JimService.Scheduler, 3 * 60));
+
+        Assert.That(ServiceHealthDisplay.Summary(report), Is.EqualTo("2 services unhealthy"));
+    }
+
+    [Test]
+    public void Summary_UnhealthyAndDegraded_WorstFirst()
+    {
+        var report = Report(
+            Derive(JimService.WorkerSync, 30),
+            Derive(JimService.WorkerPasswordDelivery, 2),
+            Derive(JimService.Scheduler, 3 * 60));
+
+        Assert.That(ServiceHealthDisplay.Summary(report), Is.EqualTo("1 service unhealthy, 1 degraded"));
     }
 
     [TestCase(40, "40 s")]
@@ -64,40 +98,73 @@ public class ServiceHealthDisplayTests
     }
 
     [Test]
-    public void Headline_ServiceWithCurrentWork_IsTheWork()
+    public void Activity_ServiceWithCurrentWork_IsTheWork()
     {
         var service = Derive(JimService.WorkerSync, ageSeconds: 2, currentWork: "Full Import: Corporate Directory");
 
-        Assert.That(ServiceHealthDisplay.Headline(service, AsOf), Is.EqualTo("Full Import: Corporate Directory"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.Activity(service), Is.EqualTo("Full Import: Corporate Directory"));
+            Assert.That(ServiceHealthDisplay.WasDoing(service), Is.Null, "a live service's work is its activity, not its history");
+        }
     }
 
     [Test]
-    public void Headline_RunningServiceWithoutWork_IsIdle()
+    public void Activity_HealthyServiceWithoutWork_IsIdle()
     {
         var service = Derive(JimService.Scheduler, ageSeconds: 2);
 
-        Assert.That(ServiceHealthDisplay.Headline(service, AsOf), Is.EqualTo("Idle"));
+        Assert.That(ServiceHealthDisplay.Activity(service), Is.EqualTo("Idle"));
     }
 
     [Test]
-    public void Headline_NotSeenService_SaysWhenTheLastHeartbeatWas()
+    public void Activity_DegradedServiceWithWork_IsStillTheWork()
+    {
+        // Degraded by an overdue heartbeat: the process is alive, so what it says it is doing still stands.
+        var service = Derive(JimService.WorkerSync, ageSeconds: 30, currentWork: "Full Import: Corporate Directory");
+
+        Assert.That(ServiceHealthDisplay.Activity(service), Is.EqualTo("Full Import: Corporate Directory"));
+    }
+
+    [Test]
+    public void Activity_UnhealthyService_IsTheReasonAndItsWorkMovesToWasDoing()
     {
         var service = Derive(JimService.WorkerSync, ageSeconds: 4 * 60, currentWork: "Full Import: Corporate Directory");
 
-        Assert.That(ServiceHealthDisplay.Headline(service, AsOf), Is.EqualTo("Last heartbeat 4 min ago"),
-            "a dead process's last words about its work are not what it is doing now");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.Activity(service), Is.EqualTo("No heartbeat for 4 minutes"),
+                "a dead process's last words about its work are not what it is doing now");
+            Assert.That(ServiceHealthDisplay.WasDoing(service), Is.EqualTo("Was running: Full Import: Corporate Directory"));
+        }
     }
 
     [Test]
-    public void Headline_NeverReportedService_SaysSo()
+    public void Activity_UnhealthyIdleService_HasNothingItWasDoing()
+    {
+        var service = Derive(JimService.Scheduler, ageSeconds: 3 * 60);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.Activity(service), Is.EqualTo("No heartbeat for 3 minutes"));
+            Assert.That(ServiceHealthDisplay.WasDoing(service), Is.Null);
+        }
+    }
+
+    [Test]
+    public void Activity_NeverStartedService_SaysSo()
     {
         var service = SystemHealthServer.Derive(JimService.WorkerPasswordDelivery, null, AsOf);
 
-        Assert.That(ServiceHealthDisplay.Headline(service, AsOf), Is.EqualTo("Never reported"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.Activity(service), Is.EqualTo("Never started"));
+            Assert.That(ServiceHealthDisplay.WasDoing(service), Is.Null);
+        }
     }
 
     [Test]
-    public void Banner_EveryServiceRunning_IsNothing()
+    public void Banner_EveryServiceHealthy_IsNothing()
     {
         var report = Report(
             Derive(JimService.WorkerSync, 2),
@@ -108,18 +175,22 @@ public class ServiceHealthDisplayTests
     }
 
     [Test]
-    public void Banner_StaleService_IsNothing()
+    public void Banner_OverdueHeartbeat_IsNothing()
     {
         var report = Report(
             Derive(JimService.WorkerSync, 30),
             Derive(JimService.WorkerPasswordDelivery, 2),
             Derive(JimService.Scheduler, 2));
 
-        Assert.That(ServiceHealthDisplay.Banner(report), Is.Null, "a few late heartbeats are worth a glance, not a banner on every page");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.Banner(report), Is.Null, "a few late heartbeats are worth a glance, not a banner on every page");
+            Assert.That(ServiceHealthDisplay.NeedsAttention(report), Is.False, "nor a red dot on the Administration index");
+        }
     }
 
     [Test]
-    public void Banner_BothWorkerServicesNotSeen_NamesTheWorkerOnce()
+    public void Banner_BothWorkerServicesWithNoHeartbeat_NamesTheWorkerOnce()
     {
         var report = Report(
             Derive(JimService.WorkerSync, 4 * 60),
@@ -134,11 +205,12 @@ public class ServiceHealthDisplayTests
             Assert.That(banner!.Severity, Is.EqualTo(Severity.Error));
             Assert.That(banner.Sentence, Is.EqualTo(
                 "The Worker has not reported for 4 minutes. Nothing is being synchronised or delivered; queued work is safe and resumes when it returns."));
+            Assert.That(ServiceHealthDisplay.NeedsAttention(report), Is.True);
         }
     }
 
     [Test]
-    public void Banner_WorkerSyncNotSeenAndPasswordDeliveryNeverReported_NamesTheWorkerOnce()
+    public void Banner_WorkerSyncWithNoHeartbeatAndPasswordDeliveryNeverStarted_NamesTheWorkerOnce()
     {
         // The two services share a process: a Worker that is down takes both with it, and an administrator wants
         // to be told once that the Worker is gone, not twice in different words.
@@ -156,7 +228,7 @@ public class ServiceHealthDisplayTests
     [Test]
     public void Banner_PasswordDeliveryThatStoppedReporting_IsAnOutage()
     {
-        // Distinct from never reported: this loop did exist and has gone quiet while its sibling is still alive.
+        // Distinct from never started: this loop did exist and has gone quiet while its sibling is still alive.
         var report = Report(
             Derive(JimService.WorkerSync, 2),
             Derive(JimService.WorkerPasswordDelivery, 4 * 60),
@@ -170,7 +242,7 @@ public class ServiceHealthDisplayTests
     }
 
     [Test]
-    public void Banner_SchedulerNotSeen_NamesTheScheduler()
+    public void Banner_SchedulerWithNoHeartbeat_NamesTheScheduler()
     {
         var report = Report(
             Derive(JimService.WorkerSync, 2),
@@ -185,7 +257,7 @@ public class ServiceHealthDisplayTests
     }
 
     [Test]
-    public void Banner_WorkerAndSchedulerNotSeen_NamesBothAndSpeaksInThePlural()
+    public void Banner_WorkerAndSchedulerWithNoHeartbeat_NamesBothAndSpeaksInThePlural()
     {
         var report = Report(
             Derive(JimService.WorkerSync, 4 * 60),
@@ -200,7 +272,7 @@ public class ServiceHealthDisplayTests
     }
 
     [Test]
-    public void Banner_EverythingNeverReported_SaysNeverRatherThanForZeroSeconds()
+    public void Banner_EverythingNeverStarted_SaysNeverRatherThanForZeroSeconds()
     {
         var report = Report(
             SystemHealthServer.Derive(JimService.WorkerSync, null, AsOf),
@@ -214,7 +286,7 @@ public class ServiceHealthDisplayTests
     }
 
     [Test]
-    public void Banner_WorkerMakingNoProgress_NamesTheWorkAndHowLong()
+    public void Banner_WorkerStalled_NamesTheWorkAndHowLong()
     {
         var report = Report(
             Derive(JimService.WorkerSync, 2, currentWork: "Full Import: Corporate Directory", progressAgeSeconds: 12 * 60),
@@ -228,11 +300,26 @@ public class ServiceHealthDisplayTests
         {
             Assert.That(banner!.Severity, Is.EqualTo(Severity.Warning));
             Assert.That(banner.Sentence, Is.EqualTo("The Worker has made no progress on Full Import: Corporate Directory for 12 minutes."));
+            Assert.That(ServiceHealthDisplay.NeedsAttention(report), Is.True, "a stalled task earns the red dot; an overdue heartbeat does not");
         }
     }
 
     [Test]
-    public void Banner_NotSeenOutranksNoProgress()
+    public void Banner_StalledBesideAnOverdueHeartbeat_NamesOnlyTheStalledOne()
+    {
+        // Both are Degraded; only the stalled condition is worth a banner, and the overdue Scheduler is not named.
+        var report = Report(
+            Derive(JimService.WorkerSync, 2, currentWork: "Full Import: Corporate Directory", progressAgeSeconds: 12 * 60),
+            Derive(JimService.Scheduler, 30));
+
+        var banner = ServiceHealthDisplay.Banner(report);
+
+        Assert.That(banner, Is.Not.Null);
+        Assert.That(banner!.Sentence, Is.EqualTo("The Worker has made no progress on Full Import: Corporate Directory for 12 minutes."));
+    }
+
+    [Test]
+    public void Banner_NoHeartbeatOutranksStalled()
     {
         var report = Report(
             Derive(JimService.WorkerSync, 2, currentWork: "Full Import: Corporate Directory", progressAgeSeconds: 12 * 60),
@@ -257,7 +344,7 @@ public class ServiceHealthDisplayTests
             Assert.That(ServiceHealthDisplay.HasVersionSkew(Derive(JimService.WorkerSync, 2, version: "0.14.0"), "0.15.0"), Is.True);
             Assert.That(ServiceHealthDisplay.HasVersionSkew(Derive(JimService.WorkerSync, 2, version: "0.15.0"), "0.15.0"), Is.False);
             Assert.That(ServiceHealthDisplay.HasVersionSkew(SystemHealthServer.Derive(JimService.WorkerSync, null, AsOf), "0.15.0"), Is.False,
-                "a service that has never reported has no version to disagree with");
+                "a service that has never started has no version to disagree with");
         }
     }
 
@@ -288,7 +375,7 @@ public class ServiceHealthDisplayTests
     internal static ServiceHealthReport Report(params ServiceHealth[] services) => new()
     {
         Services = [.. services],
-        Overall = services.Max(s => s.State),
+        Overall = services.Max(s => s.Status),
         WebVersion = "0.15.0",
         GeneratedAt = AsOf
     };

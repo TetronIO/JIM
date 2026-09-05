@@ -12,8 +12,8 @@ using Moq;
 namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
-/// State derivation for <see cref="SystemHealthServer.GetServiceHealthAsync"/>: each threshold at and around its
-/// boundary, the never-reported case, the no-progress case, the worst-state roll-up, the fixed service order, and
+/// Status and condition derivation for <see cref="SystemHealthServer.GetServiceHealthAsync"/>: each threshold at and around its
+/// boundary, the never-started case, the stalled case, the worst-status roll-up, the fixed service order, and
 /// the newest instance winning when a service has more than one row.
 /// </summary>
 [TestFixture]
@@ -63,7 +63,7 @@ public class SystemHealthServerTests
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_NoRows_EveryServiceIsNotSeenAndNeverReported()
+    public async Task GetServiceHealthAsync_NoRows_EveryServiceIsUnhealthyAndNeverStarted()
     {
         GivenHeartbeats();
 
@@ -72,15 +72,16 @@ public class SystemHealthServerTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.Scheduler }));
-            Assert.That(report.Services.Select(s => s.State), Is.All.EqualTo(ServiceHealthState.NotSeen));
-            Assert.That(report.Services.Select(s => s.Reason), Is.All.EqualTo("Never reported"));
+            Assert.That(report.Services.Select(s => s.Status), Is.All.EqualTo(ServiceHealthStatus.Unhealthy));
+            Assert.That(report.Services.Select(s => s.Condition), Is.All.EqualTo(ServiceHealthCondition.NeverStarted));
+            Assert.That(report.Services.Select(s => s.Reason), Is.All.EqualTo("Never started"));
             Assert.That(report.Services.Select(s => s.LastSeenAt), Is.All.Null);
-            Assert.That(report.Overall, Is.EqualTo(ServiceHealthState.NotSeen));
+            Assert.That(report.Overall, Is.EqualTo(ServiceHealthStatus.Unhealthy));
         }
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_HeartbeatWithinInterval_Running()
+    public async Task GetServiceHealthAsync_HeartbeatWithinInterval_HealthyAndHeartbeating()
     {
         GivenHeartbeats(Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2)));
 
@@ -88,23 +89,24 @@ public class SystemHealthServerTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(health.State, Is.EqualTo(ServiceHealthState.Running));
-            Assert.That(health.Reason, Is.EqualTo("Last seen 2 seconds ago"));
+            Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Healthy));
+            Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.Heartbeating));
+            Assert.That(health.Reason, Is.EqualTo("Heartbeat 2 seconds ago"));
         }
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_HeartbeatAtExactlyThreeIntervals_StillRunning()
+    public async Task GetServiceHealthAsync_HeartbeatAtExactlyThreeIntervals_StillHealthy()
     {
         GivenHeartbeats(Heartbeat(JimService.WorkerSync, SystemHealthServer.HeartbeatInterval * 3));
 
         var health = await HealthOfAsync(JimService.WorkerSync);
 
-        Assert.That(health.State, Is.EqualTo(ServiceHealthState.Running));
+        Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Healthy));
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_HeartbeatJustOverThreeIntervals_Stale()
+    public async Task GetServiceHealthAsync_HeartbeatJustOverThreeIntervals_DegradedByOverdueHeartbeat()
     {
         GivenHeartbeats(Heartbeat(JimService.WorkerSync, SystemHealthServer.HeartbeatInterval * 3 + TimeSpan.FromSeconds(1)));
 
@@ -112,23 +114,24 @@ public class SystemHealthServerTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(health.State, Is.EqualTo(ServiceHealthState.Stale));
-            Assert.That(health.Reason, Is.EqualTo("Last seen 16 seconds ago; expected every 5 seconds"));
+            Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Degraded));
+            Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.HeartbeatOverdue));
+            Assert.That(health.Reason, Is.EqualTo("Heartbeat overdue: last seen 16 seconds ago, expected every 5 seconds"));
         }
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_WorkerHeartbeatJustUnderSixtySeconds_Stale()
+    public async Task GetServiceHealthAsync_WorkerHeartbeatJustUnderSixtySeconds_HeartbeatOverdue()
     {
         GivenHeartbeats(Heartbeat(JimService.WorkerPasswordDelivery, TimeSpan.FromSeconds(59)));
 
         var health = await HealthOfAsync(JimService.WorkerPasswordDelivery);
 
-        Assert.That(health.State, Is.EqualTo(ServiceHealthState.Stale));
+        Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.HeartbeatOverdue));
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_WorkerHeartbeatAtExactlySixtySeconds_NotSeen()
+    public async Task GetServiceHealthAsync_WorkerHeartbeatAtExactlySixtySeconds_UnhealthyByNoHeartbeat()
     {
         GivenHeartbeats(Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(60)));
 
@@ -136,23 +139,24 @@ public class SystemHealthServerTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(health.State, Is.EqualTo(ServiceHealthState.NotSeen));
-            Assert.That(health.Reason, Is.EqualTo("Last seen 1 minute ago; expected within 60 seconds"));
+            Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Unhealthy));
+            Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.NoHeartbeat));
+            Assert.That(health.Reason, Is.EqualTo("No heartbeat for 1 minute"));
         }
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_SchedulerHeartbeatAtNinetySeconds_StaleNotNotSeen()
+    public async Task GetServiceHealthAsync_SchedulerHeartbeatAtNinetySeconds_OverdueNotNoHeartbeat()
     {
         GivenHeartbeats(Heartbeat(JimService.Scheduler, TimeSpan.FromSeconds(90)));
 
         var health = await HealthOfAsync(JimService.Scheduler);
 
-        Assert.That(health.State, Is.EqualTo(ServiceHealthState.Stale));
+        Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.HeartbeatOverdue));
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_SchedulerHeartbeatAtExactlyTwoMinutes_NotSeen()
+    public async Task GetServiceHealthAsync_SchedulerHeartbeatAtExactlyTwoMinutes_NoHeartbeat()
     {
         GivenHeartbeats(Heartbeat(JimService.Scheduler, TimeSpan.FromSeconds(120)));
 
@@ -160,13 +164,14 @@ public class SystemHealthServerTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(health.State, Is.EqualTo(ServiceHealthState.NotSeen));
-            Assert.That(health.Reason, Is.EqualTo("Last seen 2 minutes ago; expected within 120 seconds"));
+            Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Unhealthy));
+            Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.NoHeartbeat));
+            Assert.That(health.Reason, Is.EqualTo("No heartbeat for 2 minutes"));
         }
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_CurrentWorkWithProgressOlderThanTenMinutes_NoProgress()
+    public async Task GetServiceHealthAsync_CurrentWorkWithProgressOlderThanTenMinutes_DegradedByStalled()
     {
         GivenHeartbeats(Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2),
             currentWork: "Full Import: Corporate Directory", lastProgressAt: AsOf.AddMinutes(-11)));
@@ -175,48 +180,49 @@ public class SystemHealthServerTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(health.State, Is.EqualTo(ServiceHealthState.NoProgress));
-            Assert.That(health.Reason, Is.EqualTo("Full Import: Corporate Directory has made no progress for 11 minutes"));
+            Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Degraded));
+            Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.Stalled));
+            Assert.That(health.Reason, Is.EqualTo("Stalled: no progress on Full Import: Corporate Directory for 11 minutes"));
         }
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_CurrentWorkWithProgressAtExactlyTenMinutes_Running()
+    public async Task GetServiceHealthAsync_CurrentWorkWithProgressAtExactlyTenMinutes_Healthy()
     {
         GivenHeartbeats(Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2),
             currentWork: "Full Import: Corporate Directory", lastProgressAt: AsOf.AddMinutes(-10)));
 
         var health = await HealthOfAsync(JimService.WorkerSync);
 
-        Assert.That(health.State, Is.EqualTo(ServiceHealthState.Running));
+        Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Healthy));
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_CurrentWorkWithoutProgressTimestamp_NeverNoProgress()
+    public async Task GetServiceHealthAsync_CurrentWorkWithoutProgressTimestamp_NeverStalled()
     {
-        // A service that cannot tell progress from liveness leaves LastProgressAt null; judging it "no progress"
+        // A service that cannot tell progress from liveness leaves LastProgressAt null; judging it stalled
         // on the strength of a long-running task would be a false alarm on every big Full Import.
         GivenHeartbeats(Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2),
             currentWork: "Full Import: Corporate Directory", lastProgressAt: null));
 
         var health = await HealthOfAsync(JimService.WorkerSync);
 
-        Assert.That(health.State, Is.EqualTo(ServiceHealthState.Running));
+        Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Healthy));
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_IdleWithOldProgressTimestamp_Running()
+    public async Task GetServiceHealthAsync_IdleWithOldProgressTimestamp_Healthy()
     {
         GivenHeartbeats(Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2),
             currentWork: null, lastProgressAt: AsOf.AddHours(-2)));
 
         var health = await HealthOfAsync(JimService.WorkerSync);
 
-        Assert.That(health.State, Is.EqualTo(ServiceHealthState.Running));
+        Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Healthy));
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_NotSeenAndNoProgress_NotSeenWins()
+    public async Task GetServiceHealthAsync_NoHeartbeatAndStalled_NoHeartbeatWins()
     {
         // A dead process's last words about its work are not a wedged task; they are a dead process.
         GivenHeartbeats(Heartbeat(JimService.WorkerSync, TimeSpan.FromMinutes(5),
@@ -224,11 +230,15 @@ public class SystemHealthServerTests
 
         var health = await HealthOfAsync(JimService.WorkerSync);
 
-        Assert.That(health.State, Is.EqualTo(ServiceHealthState.NotSeen));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Unhealthy));
+            Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.NoHeartbeat));
+        }
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_MixedStates_OverallIsTheWorst()
+    public async Task GetServiceHealthAsync_MixedStatuses_OverallIsTheWorst()
     {
         GivenHeartbeats(
             Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2)),
@@ -238,11 +248,11 @@ public class SystemHealthServerTests
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
 
-        Assert.That(report.Overall, Is.EqualTo(ServiceHealthState.NoProgress));
+        Assert.That(report.Overall, Is.EqualTo(ServiceHealthStatus.Degraded));
     }
 
     [Test]
-    public async Task GetServiceHealthAsync_AllRunning_OverallRunning()
+    public async Task GetServiceHealthAsync_AllHeartbeating_OverallHealthy()
     {
         GivenHeartbeats(
             Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(1)),
@@ -251,7 +261,7 @@ public class SystemHealthServerTests
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
 
-        Assert.That(report.Overall, Is.EqualTo(ServiceHealthState.Running));
+        Assert.That(report.Overall, Is.EqualTo(ServiceHealthStatus.Healthy));
     }
 
     [Test]
@@ -285,8 +295,8 @@ public class SystemHealthServerTests
             {
                 JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler
             }));
-            Assert.That(report.Services.Single(s => s.Service == JimService.WorkerPasswordDelivery).State, Is.EqualTo(ServiceHealthState.Running));
-            Assert.That(report.Overall, Is.EqualTo(ServiceHealthState.NotSeen));
+            Assert.That(report.Services.Single(s => s.Service == JimService.WorkerPasswordDelivery).Status, Is.EqualTo(ServiceHealthStatus.Healthy));
+            Assert.That(report.Overall, Is.EqualTo(ServiceHealthStatus.Unhealthy));
         }
     }
 
@@ -309,7 +319,7 @@ public class SystemHealthServerTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(health.InstanceId, Is.EqualTo("host-new"));
-            Assert.That(health.State, Is.EqualTo(ServiceHealthState.Running));
+            Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Healthy));
         }
     }
 
@@ -337,17 +347,34 @@ public class SystemHealthServerTests
         }
     }
 
+    [TestCase(ServiceHealthCondition.Heartbeating, ServiceHealthStatus.Healthy)]
+    [TestCase(ServiceHealthCondition.HeartbeatOverdue, ServiceHealthStatus.Degraded)]
+    [TestCase(ServiceHealthCondition.Stalled, ServiceHealthStatus.Degraded)]
+    [TestCase(ServiceHealthCondition.NoHeartbeat, ServiceHealthStatus.Unhealthy)]
+    [TestCase(ServiceHealthCondition.NeverStarted, ServiceHealthStatus.Unhealthy)]
+    public void StatusOf_EachCondition_MapsToExactlyOneStatus(ServiceHealthCondition condition, ServiceHealthStatus expected)
+    {
+        Assert.That(SystemHealthServer.StatusOf(condition), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ServiceHealthStatus_IsOrderedBySeverity()
+    {
+        // Overall is the largest value present, so the order is load-bearing, not cosmetic.
+        Assert.That(new[] { ServiceHealthStatus.Healthy, ServiceHealthStatus.Degraded, ServiceHealthStatus.Unhealthy }, Is.Ordered);
+    }
+
     [Test]
     public void Thresholds_AsDocumented()
     {
         using (Assert.EnterMultipleScope())
         {
             Assert.That(SystemHealthServer.HeartbeatInterval, Is.EqualTo(TimeSpan.FromSeconds(5)));
-            Assert.That(SystemHealthServer.StaleAfter, Is.EqualTo(TimeSpan.FromSeconds(15)));
-            Assert.That(SystemHealthServer.NotSeenAfter(JimService.WorkerSync), Is.EqualTo(TimeSpan.FromSeconds(60)));
-            Assert.That(SystemHealthServer.NotSeenAfter(JimService.WorkerPasswordDelivery), Is.EqualTo(TimeSpan.FromSeconds(60)));
-            Assert.That(SystemHealthServer.NotSeenAfter(JimService.Scheduler), Is.EqualTo(TimeSpan.FromSeconds(120)));
-            Assert.That(SystemHealthServer.NoProgressAfter, Is.EqualTo(TimeSpan.FromMinutes(10)));
+            Assert.That(SystemHealthServer.HeartbeatOverdueAfter, Is.EqualTo(TimeSpan.FromSeconds(15)));
+            Assert.That(SystemHealthServer.NoHeartbeatAfter(JimService.WorkerSync), Is.EqualTo(TimeSpan.FromSeconds(60)));
+            Assert.That(SystemHealthServer.NoHeartbeatAfter(JimService.WorkerPasswordDelivery), Is.EqualTo(TimeSpan.FromSeconds(60)));
+            Assert.That(SystemHealthServer.NoHeartbeatAfter(JimService.Scheduler), Is.EqualTo(TimeSpan.FromSeconds(120)));
+            Assert.That(SystemHealthServer.StalledAfter, Is.EqualTo(TimeSpan.FromMinutes(10)));
         }
     }
 }

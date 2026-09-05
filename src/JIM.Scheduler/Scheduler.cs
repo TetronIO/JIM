@@ -177,8 +177,9 @@ public class Scheduler : BackgroundService
     /// <summary>
     /// Waits out the polling interval (or a wake-up notification, whichever is first) in heartbeat-sized slices,
     /// writing the Scheduler's heartbeat between them. The cycle itself takes well under a second, so without this
-    /// the heartbeat would move once per 30-second cycle and a perfectly healthy Scheduler would read as Stale
-    /// (heartbeat older than three intervals) for most of every minute. Returns true when woken by a notification.
+    /// the heartbeat would move once per 30-second cycle and a perfectly healthy Scheduler would read as Degraded
+    /// (heartbeat overdue: older than three intervals) for most of every minute. Returns true when woken by a
+    /// notification.
     /// </summary>
     private async Task<bool> WaitForNextCycleAsync(ServiceHeartbeatWriter heartbeat, CancellationToken stoppingToken)
     {

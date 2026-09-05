@@ -12,14 +12,15 @@ public class ServiceHealthReport
     /// <summary>
     /// One entry per <see cref="JimService"/>, always present and always in the order WorkerSync,
     /// WorkerPasswordDelivery, Scheduler, so a display can rely on the position. A service that has never reported
-    /// is present as <see cref="ServiceHealthState.NotSeen"/> rather than missing.
+    /// is present as <see cref="ServiceHealthStatus.Unhealthy"/> (never started) rather than missing.
     /// </summary>
     public List<ServiceHealth> Services { get; set; } = [];
 
     /// <summary>
-    /// The worst state among <see cref="Services"/>. This is what decides whether an administrator sees a banner.
+    /// The worst status among <see cref="Services"/>: what a monitoring script alerts on and what the strip's header
+    /// summarises. Which condition raised it is on the service concerned.
     /// </summary>
-    public ServiceHealthState Overall { get; set; }
+    public ServiceHealthStatus Overall { get; set; }
 
     /// <summary>
     /// The version of the web tier that produced this report, so each service's version can be compared with the

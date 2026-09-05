@@ -95,18 +95,22 @@ public class SystemController(ILogger<SystemController> logger, JimApplication a
     ///
     /// One entry is returned per service, always in the order **WorkerSync** (the Worker's synchronisation loop,
     /// which runs Run Profiles and other queued work), **WorkerPasswordDelivery** (the Worker's password delivery
-    /// loop) and **Scheduler** (which starts Schedules when they fall due). Each entry's <c>state</c> is one of:
+    /// loop) and **Scheduler** (which starts Schedules when they fall due). Each entry's <c>status</c> is one of:
     ///
-    /// - **Running**: reported within the last 15 seconds. Nothing to do.
-    /// - **Stale**: more than 15 seconds since the last heartbeat, but not yet long enough to presume the process
-    ///   is gone. It may be paused under load or the database may be slow; worth a glance, not yet an alarm.
-    /// - **NoProgress**: alive, but its current work has not moved forward for more than 10 minutes. The process
-    ///   is up; the task it is running may be wedged. Only judged for work that reports progress.
-    /// - **NotSeen**: no heartbeat for 60 seconds (Worker services) or 120 seconds (Scheduler), or the service has
-    ///   never reported at all (<c>reason</c> is "Never reported"). Queued and scheduled work will not run until it
-    ///   is back.
+    /// - **Healthy**: heartbeating within the last 15 seconds. Nothing to do.
+    /// - **Degraded**: alive, but something is not right. Its <c>condition</c> says what: **HeartbeatOverdue**
+    ///   (more than 15 seconds since the last heartbeat, not yet long enough to presume the process gone; it may be
+    ///   paused under load or the database may be slow) or **Stalled** (its current work has not moved forward for
+    ///   more than 10 minutes; the process is up, the task it is running may be wedged; only judged for work that
+    ///   reports progress).
+    /// - **Unhealthy**: presumed down. Its <c>condition</c> is **NoHeartbeat** (none for 60 seconds for the Worker
+    ///   services, 120 seconds for the Scheduler) or **NeverStarted** (it has never reported at all). Queued and
+    ///   scheduled work will not run until it is back.
     ///
-    /// <c>overall</c> is the worst state present, so a script that alerts on anything other than **Running** needs
+    /// A Healthy entry's <c>condition</c> is **Heartbeating**. <c>reason</c> puts the condition in plain words with
+    /// the figures that matter ("No heartbeat for 4 minutes").
+    ///
+    /// <c>overall</c> is the worst status present, so a script that alerts on anything other than **Healthy** needs
     /// to read nothing else. Each entry also carries the reporting instance, its host and version, when it started
     /// and was last seen, and its current work with when that began and last progressed. Compare each
     /// <c>version</c> with <c>webVersion</c>: a mismatch means a partial upgrade.
@@ -115,7 +119,7 @@ public class SystemController(ILogger<SystemController> logger, JimApplication a
     /// nothing about the Worker or the Scheduler; this endpoint is how those are observed. The response is marked
     /// <c>Cache-Control: no-store</c> because a cached verdict is a wrong one.
     /// </remarks>
-    /// <returns>The health of every background service, with the worst state as the overall verdict.</returns>
+    /// <returns>The health of every background service, with the worst status as the overall verdict.</returns>
     /// <response code="200">Returns the service health report.</response>
     /// <response code="401">If the user is not authenticated.</response>
     /// <response code="403">If the user lacks the Administrator role.</response>

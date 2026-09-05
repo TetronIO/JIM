@@ -15,13 +15,18 @@ public class ServiceHealth
     public JimService Service { get; set; }
 
     /// <summary>
-    /// The verdict.
+    /// The verdict: how well the service is. What a display colours by and what a monitoring script alerts on.
     /// </summary>
-    public ServiceHealthState State { get; set; }
+    public ServiceHealthStatus Status { get; set; }
 
     /// <summary>
-    /// One short sentence explaining the verdict in the administrator's terms, for example
-    /// "Last seen 4 minutes ago; expected within 60 seconds" or "Never reported".
+    /// Why the service has that status: the observation about its heartbeat that decided it.
+    /// </summary>
+    public ServiceHealthCondition Condition { get; set; }
+
+    /// <summary>
+    /// The condition in plain words, with the figures that matter, for example "Heartbeat 3 seconds ago",
+    /// "No heartbeat for 4 minutes" or "Never started".
     /// </summary>
     public string Reason { get; set; } = null!;
 
