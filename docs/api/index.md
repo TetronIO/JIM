@@ -48,7 +48,7 @@ These behaviours are common across the API. The interactive API reference is aut
 
 **Enum values.** Enum-typed fields are always serialised as their string name in responses (for example `"status": "Enabled"`), and must be sent as their string name in request bodies. Numeric enum values are not accepted on input and are rejected with a `400 Bad Request`; this keeps the wire contract stable, since an enum's numeric ordinal is free to change between releases while its name is not.
 
-**Asynchronous operations.** Long-running operations (schema import, Run Profile execution, Connected System deletion) return `202 Accepted` with an activity ID; poll [Activities](../configuration/activities.md) to track progress.
+**Asynchronous operations.** Long-running operations (schema import, Run Profile execution, Connected System deletion) return `202 Accepted` with an activity ID; poll [Activities](../configuration/activities.md) to track progress. Synchronising a password (`POST /api/v1/metaverse/objects/{id}/password`) is the one operation that can be asked to wait: pass `wait` (seconds, 0 to 30, default 0) and it answers `200` once every target Connected System has settled, or `202` with what is known when the time runs out; see [Passwords](../concepts/passwords.md#-starting-a-synchronised-password-change) for the per-target states in the body.
 
 **Rate limiting.** Requests are throttled per client (see [Rate Limiting](rate-limiting.md)); an exceeded limit returns `429 Too Many Requests` with a `Retry-After` header.
 
@@ -56,4 +56,4 @@ These behaviours are common across the API. The interactive API reference is aut
 
 A small set of system-level endpoints (health, readiness, liveness, version, auth config, user info) are useful for orchestrators, load balancers, and client bootstraps rather than identity management workflows. They are documented in the interactive API reference alongside everything else.
 
-The unauthenticated health endpoints answer for the web tier only. `GET /api/v1/system/health` (Administrator role) reports whether the Worker and the Scheduler are alive and what each is doing, from the heartbeats they write to the database; it is the endpoint for monitoring that needs to know whether JIM's work is actually being done. See [Operations > Service Health](../configuration/operations.md#service-health) for what each status and condition means.
+The unauthenticated health endpoints answer for the web tier only. `GET /api/v1/system/health` (Administrator role) reports whether the Worker's synchronisation loop, its Password Delivery Service and the Scheduler are alive and what each is doing, from the heartbeats they write to the database; it is the endpoint for monitoring that needs to know whether JIM's work is actually being done. See [Operations > Service Health](../configuration/operations.md#service-health) for what each status and condition means.

@@ -7,9 +7,10 @@ function Resume-JIMPendingPasswordChange {
         Puts queued password changes back on the Password Synchronisation queue and asks JIM to deliver them now.
 
     .DESCRIPTION
-        Makes every matching change due immediately and raises a delivery pass for it. This is what you run once
-        the reason a Connected System refused the passwords has been dealt with: the changes are parked behind
-        that system, and nothing will attempt them again until somebody says so.
+        Makes every matching change due immediately. The Password Delivery Service is woken by the change and
+        attempts them within about a second, whatever the synchronisation engine is doing. This is what you run
+        once the reason a Connected System refused the passwords has been dealt with: the changes are parked
+        behind that system, and nothing will attempt them again until somebody says so.
 
         Applies to changes JIM could still deliver, which is Pending, Parked and Cancelled. An Expired change is
         left alone: the password it carried is gone, so there is nothing to send. Retrying a change clears the

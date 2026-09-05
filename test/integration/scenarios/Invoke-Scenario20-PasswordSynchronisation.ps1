@@ -30,6 +30,13 @@
          (requirement 3), and the accounts must then sign in with their new passwords and refuse their old ones.
       4. **Does an ordinary change reach the directory once the system is live?** A fourth password change, with
          the system enabled throughout, must be delivered without anybody doing anything.
+      5. **Does delivery wait behind the synchronisation engine?** (#1635) A Full Import is started and, while it
+         runs, a password change is queued with -Wait 10. The response must come back settled with the target
+         Set, and the change must be gone from the queue, within ten seconds; a Worker busy with an import must
+         not delay a password. The measured latency is printed so a regression in the Password Delivery Service
+         shows as a number before it shows as a failure.
+      6. **Is a retry attempted when asked, not when the Worker is next idle?** A password the directory refuses
+         is queued, parks, and is retried from the queue; the new attempt must be made within five seconds.
 
     Two invariants are asserted throughout rather than as a step: no password value appears in any JIM log, and
     no queue response carries one. They are the reason the feature is allowed to hold passwords at all.
@@ -133,11 +140,22 @@ $passwords = @{
     Held           = 'Ravenscroft-4-Lantern!'
     Coalesced      = @('Windlass-1-Thicket!', 'Pinnacle-2-Ferrous!', 'Saltmarsh-3-Quiver!')
     WhileEnabled   = 'Kingfisher-8-Bracken!'
+    WhileBusy      = 'Harbourlight-5-Meadow!'
+    # Deliberately refused. Six characters is under the test domain's minimum length of seven, the one password
+    # rule it keeps (complexity and history are switched off), so Active Directory answers with a constraint
+    # violation and JIM parks the change rather than retrying into the same refusal. Parking is what Test 8 needs.
+    Refused        = 'Qx-7!z'
 }
 
 # Every password value this scenario puts into JIM, for the never-log sweep. Flattened once here so the sweep
 # cannot drift from the list above by someone adding a password and forgetting the assertion.
-$allPasswords = @($passwords.Held) + $passwords.Coalesced + @($passwords.WhileEnabled)
+$allPasswords = @($passwords.Held) + $passwords.Coalesced + @($passwords.WhileEnabled, $passwords.WhileBusy, $passwords.Refused)
+
+# The Password Delivery Service's promise (#1635): a queued change is attempted within about a second, and a
+# retry when it is asked for, whatever the synchronisation loop is doing. These are the bounds Tests 7 and 8 hold
+# it to, with room for a slow directory write; measured at 450 ms from POST to claim in development.
+$deliveryLatencyBudgetSeconds = 10
+$retryLatencyBudgetSeconds = 5
 
 # Four accounts are what this scenario asserts against, so it always provisions at Micro no matter what the
 # runner passed. A larger template would lengthen the export and prove nothing further.
@@ -508,15 +526,151 @@ try {
         -Detail "Expected Success, got '$($bindLive.Outcome)'. Directory said: $($bindLive.Output)"
 
     # ─────────────────────────────────────────────────────────────────────────────────────────
-    # Test 7: delivery leaves nothing behind, and nothing parked
+    # Test 7: delivery does not wait behind the synchronisation engine (#1635)
     # ─────────────────────────────────────────────────────────────────────────────────────────
-    Write-TestSection "Test 7: What the queue holds afterwards"
+    Write-TestSection "Test 7: A change queued while a Full Import is running is delivered within seconds"
+
+    # The directory's Full Import, started and not waited for: the longest run this scenario's own systems
+    # offer. At Micro it can finish in seconds, so the assertion is on two things it can always prove: the Worker
+    # had the import when the change was queued, and how long the password took to land regardless.
+    $import = Start-JIMRunProfile -ConnectedSystemId $ldapSystemId -RunProfileId $config.LDAPFullImportProfileId -PassThru
+    $importActivityId = $import.activityId
+    $terminalStatuses = @('Complete', 'CompleteWithWarning', 'CompleteWithError', 'FailedWithError', 'Cancelled')
+    $importStatusBefore = [string](Get-JIMActivity -Id $importActivityId).status
+
+    $busySecure = ConvertTo-SecureString -String $passwords.WhileBusy -AsPlainText -Force
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $busyResult = Sync-JIMMetaverseObjectPassword -Id $whileEnabled.MvoId -Password $busySecure -Wait $deliveryLatencyBudgetSeconds -Force
+    $respondedAfter = $stopwatch.Elapsed
+
+    # Measured from the queue as well as read from the response, because the queue is the ground truth: a change
+    # is gone from it the moment the target has the password. Polled quickly; Wait-ForCondition's whole-second
+    # interval would blur a latency that is meant to be well under one.
+    $delivered = $false
+    while ($stopwatch.Elapsed.TotalSeconds -lt $deliveryLatencyBudgetSeconds) {
+        if (@(Get-JIMPendingPasswordChange -MetaverseObjectId $whileEnabled.MvoId).Count -eq 0) {
+            $delivered = $true
+            break
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    $deliveredAfter = $stopwatch.Elapsed
+    $importStatusAfter = [string](Get-JIMActivity -Id $importActivityId).status
+
+    Write-Host ("  Response after {0:N0} ms; queue empty after {1:N0} ms; import was '{2}' at queue time and '{3}' at delivery." -f `
+        $respondedAfter.TotalMilliseconds, $deliveredAfter.TotalMilliseconds, $importStatusBefore, $importStatusAfter) -ForegroundColor Cyan
+
+    Add-TestResult -Name "The Worker had the Full Import when the change was queued" `
+        -Passed ($importStatusBefore -notin $terminalStatuses) `
+        -Detail "The import's Activity was already '$importStatusBefore' when the password change was queued, so this run cannot show that delivery did not wait behind it. Start a longer import or queue sooner."
+
+    # The response shape is the contract from #1635: settled, and a state per target. Read defensively so a
+    # server without the wait reports 'the response did not say' rather than a property-not-found error.
+    $busyTarget = @($busyResult.targets) | Select-Object -First 1
+    $busySettled = if ($null -ne $busyResult.PSObject.Properties['settled']) { [bool]$busyResult.settled } else { $false }
+    $busyState = if ($null -ne $busyTarget -and $null -ne $busyTarget.PSObject.Properties['state']) { [string]$busyTarget.state } else { '(not reported)' }
+
+    Add-TestResult -Name "Sync-JIMMetaverseObjectPassword -Wait returns settled, with the target Set, within $deliveryLatencyBudgetSeconds seconds" `
+        -Passed ($busySettled -and $busyState -eq 'Set' -and $respondedAfter.TotalSeconds -lt $deliveryLatencyBudgetSeconds) `
+        -Detail "settled='$busySettled', state='$busyState', responded after $([math]::Round($respondedAfter.TotalMilliseconds)) ms. A caller who asks to wait is meant to be told the password landed, not that it was noted."
+
+    Add-TestResult -Name "The password was delivered within $deliveryLatencyBudgetSeconds seconds of being queued, while the import ran" `
+        -Passed $delivered `
+        -Detail "The change was still queued after $deliveryLatencyBudgetSeconds seconds (import status now '$importStatusAfter'). The Password Delivery Service is meant to attempt a queued change within about a second, whatever the synchronisation loop is doing; a change waiting on the import to finish is the failure #1635 exists to remove."
+
+    $bindBusy = Test-LDAPBind -BindDN $whileEnabled.Dn -BindPassword $passwords.WhileBusy -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "The account signs in with the password delivered during the import" `
+        -Passed ($bindBusy.Outcome -eq 'Success') `
+        -Detail "Expected Success, got '$($bindBusy.Outcome)'. Directory said: $($bindBusy.Output)"
+
+    # Let the import finish before anything else is asserted: the later tests read the queue and the logs, and an
+    # import still running would make the worker-error sweep and the final summary read a moving target.
+    $importFinished = Wait-ForCondition -Description "the Full Import started alongside the password change to finish" -TimeoutSeconds 600 -IntervalSeconds 2 -Condition {
+        ([string](Get-JIMActivity -Id $importActivityId).status) -in $terminalStatuses
+    }
+    if (-not $importFinished) {
+        throw "The Full Import (Activity $importActivityId) had not finished after 600 seconds."
+    }
+    Assert-ActivitySuccess -ActivityId $importActivityId -Name "Directory Full Import (run alongside password delivery)"
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 8: a retry is attempted when asked for, not when the Worker is next idle (#1635)
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 8: A parked change retried from the queue is attempted within seconds"
+
+    $refusedSecure = ConvertTo-SecureString -String $passwords.Refused -AsPlainText -Force
+    $refusedResult = Sync-JIMMetaverseObjectPassword -Id $coalesced.MvoId -Password $refusedSecure -Wait $deliveryLatencyBudgetSeconds -Force
+
+    $parked = Wait-ForCondition -Description "the refused password to be parked" -TimeoutSeconds 30 -IntervalSeconds 1 -Condition {
+        @(Get-JIMPendingPasswordChange -MetaverseObjectId $coalesced.MvoId -Status Parked).Count -eq 1
+    }
+    $parkedRow = @(Get-JIMPendingPasswordChange -MetaverseObjectId $coalesced.MvoId) | Select-Object -First 1
+
+    Add-TestResult -Name "A password the directory refuses is parked, not retried into the same refusal" `
+        -Passed ($parked -and $null -ne $parkedRow -and [string]$parkedRow.failureReason -eq 'PolicyRejection') `
+        -Detail "parked='$parked', status='$(if ($parkedRow) { $parkedRow.status })', failureReason='$(if ($parkedRow) { $parkedRow.failureReason })', target said: $(if ($parkedRow) { $parkedRow.targetMessage }). The test domain's minimum password length is seven; a six-character password is the deliberate refusal this test is built on."
+
+    if ($null -eq $parkedRow) {
+        throw "No queued change remains for $($coalesced.AccountName) to retry; the rest of Test 8 has nothing to time."
+    }
+
+    $refusedTarget = @($refusedResult.targets) | Select-Object -First 1
+    $refusedState = if ($null -ne $refusedTarget -and $null -ne $refusedTarget.PSObject.Properties['state']) { [string]$refusedTarget.state } else { '(not reported)' }
+    $refusedMessage = if ($null -ne $refusedTarget -and $null -ne $refusedTarget.PSObject.Properties['message']) { [string]$refusedTarget.message } else { '' }
+    Add-TestResult -Name "The waited-for response reports the refusal as Parked, with the directory's own words" `
+        -Passed ($refusedState -eq 'Parked' -and -not [string]::IsNullOrWhiteSpace($refusedMessage)) `
+        -Detail "state='$refusedState', message='$refusedMessage'. A refusal is exactly what a caller waiting on a reset needs to hear about before hanging up."
+
+    $attemptedBefore = $parkedRow.lastAttemptedAt
+    $retry = Resume-JIMPendingPasswordChange -Id ([guid]$parkedRow.id) -Force
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+    Add-TestResult -Name "The retry covers the one parked change" `
+        -Passed ($retry.affectedCount -eq 1) `
+        -Detail "affectedCount was $($retry.affectedCount)."
+
+    # A retry resets the attempt count and makes the change due; the Password Delivery Service is woken by that
+    # write. The new attempt is visible as a later LastAttemptedAt and an attempt count back at one, and the
+    # directory refuses again, so the change parks again: what is being timed is the attempt, not its outcome.
+    $retriedRow = $null
+    $attempted = $false
+    while ($stopwatch.Elapsed.TotalSeconds -lt $retryLatencyBudgetSeconds) {
+        $retriedRow = @(Get-JIMPendingPasswordChange -MetaverseObjectId $coalesced.MvoId) | Select-Object -First 1
+        if ($null -ne $retriedRow -and $null -ne $retriedRow.lastAttemptedAt -and ([datetime]$retriedRow.lastAttemptedAt) -gt ([datetime]$attemptedBefore)) {
+            $attempted = $true
+            break
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    $attemptedAfter = $stopwatch.Elapsed
+
+    Write-Host ("  Retry attempted after {0:N0} ms (attempt count {1}, status '{2}')." -f `
+        $attemptedAfter.TotalMilliseconds, $(if ($retriedRow) { $retriedRow.attemptCount }), $(if ($retriedRow) { $retriedRow.status })) -ForegroundColor Cyan
+
+    Add-TestResult -Name "The retried change is attempted within $retryLatencyBudgetSeconds seconds of the retry" `
+        -Passed ($attempted -and $retriedRow.attemptCount -ge 1) `
+        -Detail "attempted='$attempted' after $([math]::Round($attemptedAfter.TotalMilliseconds)) ms; lastAttemptedAt before '$attemptedBefore', now '$(if ($retriedRow) { $retriedRow.lastAttemptedAt })', attemptCount $(if ($retriedRow) { $retriedRow.attemptCount }). A retry from the queue page used to wait for the Worker to be idle; it is now meant to wake the Password Delivery Service directly."
+
+    # The coalesced account still holds the newest of its three passwords: a refused password never lands.
+    $bindStillNewest = Test-LDAPBind -BindDN $coalesced.Dn -BindPassword $passwords.Coalesced[-1] -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "A refused password leaves the account's password as it was" `
+        -Passed ($bindStillNewest.Outcome -eq 'Success') `
+        -Detail "Expected Success with the previously delivered password, got '$($bindStillNewest.Outcome)'. Directory said: $($bindStillNewest.Output)"
+
+    # Cancelled rather than left parked, so the final summary below reads a queue this scenario has finished
+    # with. Cancelling keeps the change, marked Cancelled, which is what the summary's cancelledCount reports.
+    Stop-JIMPendingPasswordChange -Id ([guid]$parkedRow.id) -Force | Out-Null
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 9: delivery leaves nothing behind, and nothing parked
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 9: What the queue holds afterwards"
 
     $finalSummary = Get-JIMPendingPasswordChange -Summary
 
     Add-TestResult -Name "Nothing was parked by the directory refusing a password" `
         -Passed ($finalSummary.parkedCount -eq 0) `
-        -Detail "parkedCount was $($finalSummary.parkedCount). A parked change is one the target refused; the passwords this scenario sends are chosen to satisfy a stock complexity rule, so a refusal is a genuine finding."
+        -Detail "parkedCount was $($finalSummary.parkedCount). A parked change is one the target refused; apart from the deliberately refused password in Test 8, since cancelled, the passwords this scenario sends are chosen to satisfy a stock complexity rule, so a refusal is a genuine finding."
 
     Add-TestResult -Name "Nothing expired waiting to be delivered" `
         -Passed ($finalSummary.expiredCount -eq 0) `
@@ -527,9 +681,9 @@ try {
         -Detail "waitingCount was $($finalSummary.waitingCount). Nothing is kept once the target has the password: there is no value worth retaining and every reason not to."
 
     # ─────────────────────────────────────────────────────────────────────────────────────────
-    # Test 8: the invariant that lets JIM hold passwords at all
+    # Test 10: the invariant that lets JIM hold passwords at all
     # ─────────────────────────────────────────────────────────────────────────────────────────
-    Write-TestSection "Test 8: No password value reached a log or an API response"
+    Write-TestSection "Test 10: No password value reached a log or an API response"
 
     # Read from the containers rather than from a file, so this covers everything JIM wrote at every level,
     # including anything a library wrote on its behalf. The window starts before the scenario did.
@@ -591,5 +745,6 @@ if ($failed -gt 0) {
 
 Write-Host ""
 Write-Host "✓ A password change reaches the account it belongs to: held while the system was off," -ForegroundColor Green
-Write-Host "  delivered the moment it was switched on, newest password only, and never logged." -ForegroundColor Green
+Write-Host "  delivered the moment it was switched on, newest password only, never logged, and never" -ForegroundColor Green
+Write-Host "  kept waiting behind the synchronisation engine." -ForegroundColor Green
 exit 0

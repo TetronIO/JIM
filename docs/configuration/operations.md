@@ -11,17 +11,18 @@ title: Operations
 - **Queue**<br /> The work in flight and the work waiting behind it: Run Profile executions, schema imports, deletions and the other background tasks, with live progress per row. Running Schedules are grouped under a header drawn as a rail of their steps. See [The Operations queue](../administration/portal-lists.md#the-operations-queue) and [Live progress](activities.md#live-progress).
 - **History**<br /> The [Activities](activities.md) record of everything JIM has done, filterable by outcome, type and Schedule, with a side panel for each one.
 - **Schedules**<br /> The [Schedules](schedules.md) that run work automatically, each with its last run and how that run ended.
-- **Passwords**<br /> The Password Synchronisation queue: every password change on its way to a Connected System, with what the target said about it. See [Watching the queue](../concepts/passwords.md#-watching-the-queue).
+- **Passwords**<br /> The Password Synchronisation queue: every password change on its way to a Connected System, with what the target said about it. A change shows as **Delivering** for the moment the Password Delivery Service is writing it to the target. See [Watching the queue](../concepts/passwords.md#-watching-the-queue).
 
 ## Service Health
 
-JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and executes every other queued task, and the **Scheduler**, which starts Schedules when they fall due. Until now the only sign either was alive was the container health check, which a person at the portal never sees; a Worker that had stopped looked exactly like a Worker with nothing to do, right up until a Schedule failed to run. Each service now writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it.
+JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and every other queued task and also hosts the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service), and the **Scheduler**, which starts Schedules when they fall due. Until now the only sign either was alive was the container health check, which a person at the portal never sees; a Worker that had stopped looked exactly like a Worker with nothing to do, right up until a Schedule failed to run. Each service now writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it.
 
 The strip is a panel headed **Service Health**, with a one-line summary beside the heading ("All services healthy", or "1 service unhealthy, 1 degraded", worst first) and, on the right, whether **Live updates** are connected: whether the portal is receiving real-time change notifications from the database. When they are reconnecting the portal falls back to polling; pages still update, more slowly. That indicator is about the portal's own connection, not a background service.
 
 Below the header is one card per service, all built the same way so the same fact is in the same place on every card:
 
 - **Worker · Sync**<br /> The synchronisation loop. When it is running something, the card names it ("Full Import: Corporate Directory") and says how long it has been at it.
+- **Worker · Passwords**<br /> The Password Delivery Service, which delivers the Passwords tab's queue on its own clock. While it is writing to a directory the card says which ("Delivering to Corporate Directory"); its detail line reads what the queue holds ahead of it ("3 due, 1 retrying, next attempt 09:19 UTC"), and is blank when nothing is waiting. It shares a process with the synchronisation loop, so the two cards go **Unhealthy** together when the Worker is down; one alone means that half of the process has stopped while the other is still working, which is why they are reported separately.
 - **Scheduler**<br /> The Schedule runner.
 
 Each card carries, top to bottom: the service's name with its status on a coloured pill (green, amber or red; the pill is the only coloured thing on the card); what it is doing now, or **Idle**; its condition in plain words ("Heartbeat 3 seconds ago"); and the host, version and uptime of the instance reporting. A service that is Unhealthy leads with why ("No heartbeat for 4 minutes") and says what it was running when it went quiet, if anything.
@@ -42,7 +43,7 @@ The summary in the panel's header counts services by status, so "1 service degra
 
 ### The administrator banner
 
-When any service is **Unhealthy**, or is **Degraded** because its work has **stalled**, administrators see a banner above the page content wherever they are in the portal, naming the service and linking to Operations and to the logs. It appears only to administrators, only for those conditions, and disappears on its own when the service is seen again. An overdue heartbeat never raises it: a few missed heartbeats are not worth interrupting anyone for.
+When any service is **Unhealthy**, or is **Degraded** because its work has **stalled**, administrators see a banner above the page content wherever they are in the portal, naming the service and linking to Operations and to the logs. Both Worker services down is named once, as the Worker; one of them alone is named for what it is (the Worker's synchronisation service, or the Worker's password delivery service), because the remedy differs. It appears only to administrators, only for those conditions, and disappears on its own when the service is seen again. An overdue heartbeat never raises it: a few missed heartbeats are not worth interrupting anyone for.
 
 The Operations tile on the Administration index carries the same signal as a red dot, so the problem is visible from the landing page.
 
@@ -52,7 +53,7 @@ Each card shows the JIM version the service is running. When it differs from the
 
 ### Timings
 
-Every service writes its heartbeat every 5 seconds. The Worker is presumed down after 60 seconds without one; the Scheduler after 120 seconds, because its loop can legitimately block for a while while it advances a heavy Schedule. Both match the interval the container health checks already use. Work is judged stalled after 10 minutes without a progress report. These are fixed for now; if a deployment needs them tuned, say so.
+Every service writes its heartbeat every 5 seconds. Both Worker services are presumed down after 60 seconds without one; the Scheduler after 120 seconds, because its loop can legitimately block for a while while it advances a heavy Schedule. Both match the interval the container health checks already use. Work is judged stalled after 10 minutes without a progress report. These are fixed for now; if a deployment needs them tuned, say so.
 
 The strip refreshes every 10 seconds, so a change of status appears within roughly one refresh of it happening.
 
@@ -71,7 +72,7 @@ if ($health.Overall -ne 'Healthy') {
 }
 ```
 
-The unauthenticated `/api/v1/health` endpoints ([Health Monitoring](../administration/deployment.md#health-monitoring)) answer for the web tier only and say nothing about the Worker or the Scheduler. Use them for load balancers and orchestrators; use `system/health` for anything that needs to know whether JIM's work is actually being done.
+The unauthenticated `/api/v1/health` endpoints ([Health Monitoring](../administration/deployment.md#health-monitoring)) answer for the web tier only and say nothing about the Worker, the Password Delivery Service or the Scheduler. Use them for load balancers and orchestrators; use `system/health` for anything that needs to know whether JIM's work is actually being done.
 
 ## See also
 
