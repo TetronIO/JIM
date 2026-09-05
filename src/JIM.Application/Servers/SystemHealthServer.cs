@@ -49,12 +49,15 @@ public class SystemHealthServer
     public static readonly TimeSpan NoProgressAfter = TimeSpan.FromMinutes(NoProgressAfterMinutes);
 
     /// <summary>
-    /// The order services appear in every report, so a display can rely on the position.
+    /// The services every deployment is expected to run, in the order they appear in a report. A service on this
+    /// list with no heartbeat at all is reported as not seen ("never reported"), which is the honest reading of a
+    /// Worker that never started. Password delivery is deliberately absent until the Password Delivery Service
+    /// exists to write its heartbeat (plan #1635, layer 2); listing it earlier would put a permanent red card and
+    /// a permanent banner on every deployment for a service that cannot yet report.
     /// </summary>
-    private static readonly JimService[] ReportOrder =
+    public static readonly JimService[] ExpectedServices =
     [
         JimService.WorkerSync,
-        JimService.WorkerPasswordDelivery,
         JimService.Scheduler
     ];
 
@@ -90,7 +93,13 @@ public class SystemHealthServer
             .GroupBy(h => h.Service)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(h => h.LastSeenAt).First());
 
-        var services = ReportOrder
+        // Every expected service, plus any other service that has actually reported: a heartbeat from a service
+        // this build did not expect (an upgraded Worker reporting a loop this portal predates, say) is still
+        // information an administrator wants, and the order is the enum's so the display can rely on it.
+        var services = ExpectedServices
+            .Concat(newestByService.Keys)
+            .Distinct()
+            .OrderBy(service => (int)service)
             .Select(service => Derive(service, newestByService.GetValueOrDefault(service), asOf))
             .ToList();
 

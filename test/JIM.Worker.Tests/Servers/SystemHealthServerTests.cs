@@ -71,7 +71,7 @@ public class SystemHealthServerTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(report.Services, Has.Count.EqualTo(3));
+            Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.Scheduler }));
             Assert.That(report.Services.Select(s => s.State), Is.All.EqualTo(ServiceHealthState.NotSeen));
             Assert.That(report.Services.Select(s => s.Reason), Is.All.EqualTo("Never reported"));
             Assert.That(report.Services.Select(s => s.LastSeenAt), Is.All.Null);
@@ -259,6 +259,7 @@ public class SystemHealthServerTests
     {
         GivenHeartbeats(
             Heartbeat(JimService.Scheduler, TimeSpan.FromSeconds(1)),
+            Heartbeat(JimService.WorkerPasswordDelivery, TimeSpan.FromSeconds(1)),
             Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(1)));
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
@@ -267,6 +268,33 @@ public class SystemHealthServerTests
         {
             JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler
         }));
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_UnexpectedServiceHasReported_IncludedAlongsideTheExpectedOnes()
+    {
+        // Password delivery is not on the expected list until its service exists, but a heartbeat from it is
+        // still shown: a report that hid a service which had actually spoken would be the misleading one.
+        GivenHeartbeats(Heartbeat(JimService.WorkerPasswordDelivery, TimeSpan.FromSeconds(1)));
+
+        var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[]
+            {
+                JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler
+            }));
+            Assert.That(report.Services.Single(s => s.Service == JimService.WorkerPasswordDelivery).State, Is.EqualTo(ServiceHealthState.Running));
+            Assert.That(report.Overall, Is.EqualTo(ServiceHealthState.NotSeen));
+        }
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_ExpectedServicesOnly_PasswordDeliveryIsNotExpectedYet()
+    {
+        Assert.That(SystemHealthServer.ExpectedServices, Is.EqualTo(new[] { JimService.WorkerSync, JimService.Scheduler }));
+        await Task.CompletedTask;
     }
 
     [Test]

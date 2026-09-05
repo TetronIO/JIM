@@ -405,7 +405,8 @@ public class SystemControllerTests
 
         var response = (ServiceHealthResponse)((OkObjectResult)result).Value!;
         Assert.That(response.Overall, Is.EqualTo(ServiceHealthState.NotSeen));
-        Assert.That(response.Services, Has.Count.EqualTo(3));
+        // Password delivery is not an expected service until its loop exists (plan #1635, layer 2).
+        Assert.That(response.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.Scheduler }));
         Assert.That(response.Services.Select(s => s.State), Is.All.EqualTo(ServiceHealthState.NotSeen));
         Assert.That(response.Services.Select(s => s.Reason), Is.All.EqualTo("Never reported"));
         Assert.That(response.Services.Select(s => s.LastSeenAt), Is.All.Null);
@@ -454,8 +455,8 @@ public class SystemControllerTests
         var services = root.GetProperty("services").EnumerateArray().ToList();
         Assert.That(services[0].GetProperty("service").GetString(), Is.EqualTo("WorkerSync"));
         Assert.That(services[0].GetProperty("state").GetString(), Is.EqualTo("Running"));
-        Assert.That(services[2].GetProperty("service").GetString(), Is.EqualTo("Scheduler"));
-        Assert.That(services[2].GetProperty("state").GetString(), Is.EqualTo("NotSeen"));
+        Assert.That(services[1].GetProperty("service").GetString(), Is.EqualTo("Scheduler"));
+        Assert.That(services[1].GetProperty("state").GetString(), Is.EqualTo("NotSeen"));
     }
 
     [Test]

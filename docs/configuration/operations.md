@@ -15,12 +15,11 @@ title: Operations
 
 ## Service Health
 
-JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles, delivers passwords and executes every other queued task, and the **Scheduler**, which starts Schedules when they fall due. Until now the only sign either was alive was the container health check, which a person at the portal never sees; a Worker that had stopped looked exactly like a Worker with nothing to do, right up until a Schedule failed to run. Each service now writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it.
+JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and executes every other queued task, and the **Scheduler**, which starts Schedules when they fall due. Until now the only sign either was alive was the container health check, which a person at the portal never sees; a Worker that had stopped looked exactly like a Worker with nothing to do, right up until a Schedule failed to run. Each service now writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it.
 
-The strip shows four cards:
+The strip shows three cards:
 
 - **Worker**<br /> The synchronisation loop. When it is running something, the card names it ("Full Import: Corporate Directory") and says how long it has been at it.
-- **Password Delivery**<br /> The Worker's password delivery loop, reported separately because a wedged synchronisation loop and a wedged password loop need different responses.
 - **Scheduler**<br /> The Schedule runner.
 - **Live updates**<br /> Whether the portal is receiving real-time change notifications from the database. When it is not, the portal falls back to polling; pages still update, more slowly. This card is about the portal's own connection, not a background service.
 
@@ -33,7 +32,7 @@ Each service card carries a state, a one-sentence reason, the host and version i
 | **Running** | The service reported within its interval. Nothing to do. | Last heartbeat within 15 seconds |
 | **Stale** | A few heartbeats missed, but not enough to presume the process is gone. It may be paused under load, or the database may be slow. Worth a glance; not yet an alarm. | Last heartbeat more than 15 seconds ago |
 | **No progress** | The service is alive and reports work in flight, but that work has not moved forward for a long time. The process is up; the task it is running may be wedged. Look at it on the Queue tab, and cancel it if it is genuinely stuck. | Current work has not progressed for 10 minutes |
-| **Not seen** | The service should be presumed down, or it has never reported at all. Queued and scheduled work will not run until it is back. Check the container, then [the logs](../administration/troubleshooting.md). | No heartbeat for 60 seconds (Worker, Password Delivery) or 120 seconds (Scheduler), or never reported |
+| **Not seen** | The service should be presumed down, or it has never reported at all. Queued and scheduled work will not run until it is back. Check the container, then [the logs](../administration/troubleshooting.md). | No heartbeat for 60 seconds (Worker) or 120 seconds (Scheduler), or never reported |
 
 A service that has never written a heartbeat is shown as **Not seen** with the reason "Never reported" rather than left off the strip, so a deployment that never started its Worker says so.
 
