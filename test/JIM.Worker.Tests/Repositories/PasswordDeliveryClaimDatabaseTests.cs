@@ -82,10 +82,10 @@ public class PasswordDeliveryClaimDatabaseTests
     #region seeding
 
     /// <summary>
-    /// A Connected System configured for Password Synchronisation, with one Metaverse Object Type to hang
-    /// identities off. Returns the system id.
+    /// A Connected System configured for Password Synchronisation (or, with <paramref name="configured"/> false,
+    /// never configured for it), with one Metaverse Object Type to hang identities off. Returns the system id.
     /// </summary>
-    private async Task<int> SeedSystemAsync(string name = "Corporate AD", bool enabled = true)
+    private async Task<int> SeedSystemAsync(string name = "Corporate AD", bool enabled = true, bool configured = true)
     {
         await using var seed = NewContext();
 
@@ -97,16 +97,21 @@ public class PasswordDeliveryClaimDatabaseTests
             seed.Add(new MetaverseObjectType { Name = "User", PluralName = "Users" });
         await seed.SaveChangesAsync();
 
-        seed.Add(new ConnectedSystemPasswordSynchronisation
+        if (configured)
         {
-            ConnectedSystemId = system.Id,
-            Enabled = enabled,
-            TargetObjectTypeId = objectType.Id
-        });
-        await seed.SaveChangesAsync();
+            seed.Add(new ConnectedSystemPasswordSynchronisation
+            {
+                ConnectedSystemId = system.Id,
+                Enabled = enabled,
+                TargetObjectTypeId = objectType.Id
+            });
+            await seed.SaveChangesAsync();
+        }
 
         return system.Id;
     }
+
+    private static void Explicit(PendingPasswordChange change) => change.Origin = PendingPasswordChangeOrigin.Explicit;
 
     /// <summary>
     /// One queued change for a fresh identity on the given system, adjusted as the test wants, inserted directly
@@ -144,10 +149,10 @@ public class PasswordDeliveryClaimDatabaseTests
         return await ctx.PendingPasswordChanges.AsNoTracking().SingleAsync(c => c.Id == id);
     }
 
-    private async Task<List<PendingPasswordChange>> ClaimAsync(int systemId, string claimant = Claimant, DateTime? asOf = null, int maximum = 100)
+    private async Task<List<PendingPasswordChange>> ClaimAsync(int systemId, string claimant = Claimant, DateTime? asOf = null, int maximum = 100, bool explicitOnly = false)
     {
         await using var ctx = NewContext();
-        return await new PostgresDataRepository(ctx).Sync.ClaimDuePasswordChangesAsync(systemId, claimant, asOf ?? AsOf, Lease, maximum);
+        return await new PostgresDataRepository(ctx).Sync.ClaimDuePasswordChangesAsync(systemId, claimant, asOf ?? AsOf, Lease, maximum, explicitOnly);
     }
 
     #endregion
@@ -244,7 +249,7 @@ public class PasswordDeliveryClaimDatabaseTests
 
         await using var first = NewContext();
         await using var transaction = await first.Database.BeginTransactionAsync();
-        var firstClaim = await new PostgresDataRepository(first).Sync.ClaimDuePasswordChangesAsync(systemId, Claimant, AsOf, Lease, 3);
+        var firstClaim = await new PostgresDataRepository(first).Sync.ClaimDuePasswordChangesAsync(systemId, Claimant, AsOf, Lease, 3, explicitOnly: false);
 
         // Still inside the first claimer's transaction: its three rows are locked and marked, not yet committed.
         var secondClaim = await ClaimAsync(systemId, OtherClaimant, maximum: 10);
@@ -321,6 +326,153 @@ public class PasswordDeliveryClaimDatabaseTests
             "The first system's claim has run out and is claimable; the second's is fresh and is not.");
     }
 
+    #region origins (#1635, decision D1)
+
+    /// <summary>
+    /// The lane over a system that is not taking propagated passwords claims only an administrator's explicit
+    /// sets. The filter is inside the one claiming statement, so it holds under SKIP LOCKED like everything else.
+    /// </summary>
+    [Test]
+    public async Task ClaimDuePasswordChangesAsync_ExplicitOnly_LeavesPropagatedRowsUnclaimedAsync()
+    {
+        var systemId = await SeedSystemAsync(enabled: false);
+        var propagatedId = await SeedChangeAsync(systemId, createdAt: AsOf.AddMinutes(-10));
+        var explicitId = await SeedChangeAsync(systemId, Explicit, createdAt: AsOf.AddMinutes(-5));
+
+        var claimed = await ClaimAsync(systemId, explicitOnly: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(claimed.Select(c => c.Id), Is.EqualTo(new[] { explicitId }));
+            Assert.That(claimed[0].Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
+            Assert.That((await StoredAsync(propagatedId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Pending), "Held, and untouched.");
+            Assert.That((await StoredAsync(explicitId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Delivering));
+        }
+    }
+
+    [Test]
+    public async Task ClaimDuePasswordChangesAsync_NotExplicitOnly_ClaimsBothOriginsAsync()
+    {
+        var systemId = await SeedSystemAsync();
+        var propagatedId = await SeedChangeAsync(systemId, createdAt: AsOf.AddMinutes(-10));
+        var explicitId = await SeedChangeAsync(systemId, Explicit, createdAt: AsOf.AddMinutes(-5));
+
+        var claimed = await ClaimAsync(systemId, explicitOnly: false);
+
+        Assert.That(claimed.Select(c => c.Id), Is.EqualTo(new[] { propagatedId, explicitId }), "Oldest first, whatever the origin.");
+    }
+
+    [Test]
+    public async Task GetConnectedSystemIdsWithDuePasswordChangesAsync_IncludesUnconfiguredAndPausedSystemsWithExplicitSetsAsync()
+    {
+        var unconfigured = await SeedSystemAsync("Never Configured", configured: false);
+        var paused = await SeedSystemAsync("Paused", enabled: false);
+        var pausedWithPropagatedOnly = await SeedSystemAsync("Paused, propagated only", enabled: false);
+        await SeedChangeAsync(unconfigured, Explicit);
+        await SeedChangeAsync(paused, Explicit);
+        await SeedChangeAsync(paused);
+        await SeedChangeAsync(pausedWithPropagatedOnly);
+
+        await using var ctx = NewContext();
+        var systems = await new PostgresDataRepository(ctx).Sync.GetConnectedSystemIdsWithDuePasswordChangesAsync(AsOf, Lease);
+
+        Assert.That(systems, Is.EquivalentTo(new[] { unconfigured, paused }),
+            "An explicit set makes its system due whatever the configuration says; a held propagated change does not.");
+    }
+
+    [Test]
+    public async Task GetPasswordQueueDeliveryOutlookAsync_CountsAnExplicitSetOnAPausedSystemAsDueAsync()
+    {
+        var paused = await SeedSystemAsync("Paused", enabled: false);
+        await SeedChangeAsync(paused, Explicit);
+        await SeedChangeAsync(paused);
+
+        await using var ctx = NewContext();
+        var outlook = await new PostgresDataRepository(ctx).Sync.GetPasswordQueueDeliveryOutlookAsync(AsOf, Lease);
+
+        Assert.That(outlook.DueCount, Is.EqualTo(1), "The explicit set counts; the held propagated change does not.");
+    }
+
+    [Test]
+    public async Task ExpirePasswordChangesAsync_ExplicitOnly_LeavesHeldPropagatedRowsAloneAsync()
+    {
+        var systemId = await SeedSystemAsync(enabled: false);
+        var propagatedId = await SeedChangeAsync(systemId, c => c.ExpiresAt = AsOf.AddMinutes(-1));
+        var explicitId = await SeedChangeAsync(systemId, c =>
+        {
+            Explicit(c);
+            c.ExpiresAt = AsOf.AddMinutes(-1);
+        });
+
+        await using var ctx = NewContext();
+        var expired = await new PostgresDataRepository(ctx).Sync.ExpirePasswordChangesAsync(systemId, AsOf, explicitOnly: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(expired, Is.EqualTo(1));
+            Assert.That((await StoredAsync(explicitId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Expired));
+            Assert.That((await StoredAsync(propagatedId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+        }
+    }
+
+    /// <summary>
+    /// The origin and the enable decision travel through the raw-SQL queue write and its coalescing UPSERT: an
+    /// administrator's reset replaces a held propagated change as a reset, and a later propagated change replaces
+    /// the reset carrying no enable decision.
+    /// </summary>
+    [Test]
+    public async Task QueuePasswordChangesAsync_RoundTripsTheOriginAndEnableDecisionAcrossASupersessionAsync()
+    {
+        var systemId = await SeedSystemAsync(enabled: false);
+        var propagatedId = await SeedChangeAsync(systemId);
+        var stored = await StoredAsync(propagatedId);
+
+        var reset = new PendingPasswordChange
+        {
+            MetaverseObjectId = stored.MetaverseObjectId,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = null,
+            EncryptedPassword = "$JIMPW$v1$reset",
+            Origin = PendingPasswordChangeOrigin.Explicit,
+            EnableAccount = true,
+            CreatedAt = AsOf,
+            ExpiresAt = AsOf.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([reset]);
+
+        var afterReset = await StoredAsync(propagatedId);
+
+        var propagatedAgain = new PendingPasswordChange
+        {
+            MetaverseObjectId = stored.MetaverseObjectId,
+            ConnectedSystemId = systemId,
+            EncryptedPassword = "$JIMPW$v1$propagated-again",
+            CreatedAt = AsOf.AddMinutes(1),
+            ExpiresAt = AsOf.AddMinutes(1).AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([propagatedAgain]);
+
+        var afterPropagation = await StoredAsync(propagatedId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated), "The column default is the propagated origin.");
+            Assert.That(afterReset.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
+            Assert.That(afterReset.EnableAccount, Is.True);
+            Assert.That(afterReset.EncryptedPassword, Is.EqualTo("$JIMPW$v1$reset"));
+            Assert.That(afterReset.ActivityId, Is.EqualTo(reset.ActivityId));
+            Assert.That(afterPropagation.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(afterPropagation.EnableAccount, Is.Null);
+            Assert.That(afterPropagation.EncryptedPassword, Is.EqualTo("$JIMPW$v1$propagated-again"));
+        }
+    }
+
+    #endregion
+
     [Test]
     public async Task ExpirePasswordChangesAsync_IgnoresDeliveringRowsAsync()
     {
@@ -336,7 +488,7 @@ public class PasswordDeliveryClaimDatabaseTests
         var pendingId = claimedId == firstId ? secondId : firstId;
 
         await using var ctx = NewContext();
-        var expired = await new PostgresDataRepository(ctx).Sync.ExpirePasswordChangesAsync(systemId, AsOf);
+        var expired = await new PostgresDataRepository(ctx).Sync.ExpirePasswordChangesAsync(systemId, AsOf, explicitOnly: false);
 
         using (Assert.EnterMultipleScope())
         {

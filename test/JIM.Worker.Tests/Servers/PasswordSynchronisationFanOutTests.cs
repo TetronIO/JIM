@@ -316,7 +316,7 @@ public class PasswordSynchronisationFanOutTests
         [
             new PasswordQueueTargetOutcome { ConnectedSystemId = 3, ConnectedSystemName = "Corporate AD", Enabled = true },
             new PasswordQueueTargetOutcome { ConnectedSystemId = 4, ConnectedSystemName = "Contractor LDAP", Enabled = false }
-        ]);
+        ], PendingPasswordChangeOrigin.Propagated);
 
         using (Assert.EnterMultipleScope())
         {
@@ -329,7 +329,8 @@ public class PasswordSynchronisationFanOutTests
     public void DescribeQueueOutcome_WithEverySystemTaking_SaysNothingAboutHolding()
     {
         var message = PasswordSynchronisationServer.DescribeQueueOutcome(
-            [new PasswordQueueTargetOutcome { ConnectedSystemId = 3, ConnectedSystemName = "Corporate AD", Enabled = true }]);
+            [new PasswordQueueTargetOutcome { ConnectedSystemId = 3, ConnectedSystemName = "Corporate AD", Enabled = true }],
+            PendingPasswordChangeOrigin.Propagated);
 
         using (Assert.EnterMultipleScope())
         {
@@ -347,10 +348,31 @@ public class PasswordSynchronisationFanOutTests
     [Test]
     public void DescribeQueueOutcome_WithNoTargets_SaysNothingWasQueuedAnywhere()
     {
-        var message = PasswordSynchronisationServer.DescribeQueueOutcome([]);
+        var message = PasswordSynchronisationServer.DescribeQueueOutcome([], PendingPasswordChangeOrigin.Propagated);
 
         Assert.That(message, Is.EqualTo(
             "No Connected System is configured for Password Synchronisation, so this password was not queued for delivery anywhere."));
+    }
+
+    /// <summary>
+    /// An explicit set is never held (#1635, decision D1), so its message names the accounts and says nothing
+    /// about switched-off systems, even where one of them is.
+    /// </summary>
+    [Test]
+    public void DescribeQueueOutcome_ForAnExplicitSet_NamesTheAccountsAndNeverSaysHeld()
+    {
+        var message = PasswordSynchronisationServer.DescribeQueueOutcome(
+        [
+            new PasswordQueueTargetOutcome { ConnectedSystemId = 3, ConnectedSystemName = "Corporate AD", Enabled = true },
+            new PasswordQueueTargetOutcome { ConnectedSystemId = 4, ConnectedSystemName = "Contractor LDAP", Enabled = false }
+        ], PendingPasswordChangeOrigin.Explicit);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.StartWith("Password set requested for 2 accounts"));
+            Assert.That(message, Does.Contain("Corporate AD").And.Contain("Contractor LDAP"));
+            Assert.That(message, Does.Not.Contain("Held"));
+        }
     }
 
     /// <summary>

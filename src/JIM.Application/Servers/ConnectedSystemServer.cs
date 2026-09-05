@@ -3022,6 +3022,17 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Sets the password on one account in a Connected System, at an administrator's request (issue #1121).
     /// <para>
+    /// TODO(#1635 layer 3, web agent): an interim shim. The one password operation is
+    /// <see cref="PasswordSynchronisationServer.SetPasswordAsync"/> with one explicit target, which queues the
+    /// change for the Password Delivery Service and reports its outcome through
+    /// <see cref="PasswordSynchronisationServer.GetChangeOutcomesAsync"/>. This method, its API-key overload and
+    /// <see cref="SetPasswordOnAccountsAsync"/> remain only because <c>SynchronisationController</c>,
+    /// <c>SetPasswordDialog</c>, <c>View.razor</c> and <c>ConnectedSystemObjectDetail.razor</c> still compile
+    /// against their return types; they write inline through <see cref="PasswordDeliveryCore"/>. Rewrite those
+    /// callers against the queue and delete all three, along with <c>MultiAccountPasswordSetResult</c> and
+    /// <c>AccountPasswordSetOutcome</c>.
+    /// </para>
+    /// <para>
     /// This is the manual counterpart to the initial password an export delivers: the account whose provisioning
     /// password was parked, the person who never received theirs, the reset that has to happen now. It writes
     /// straight to the target and records the attempt as an Activity; nothing is staged, retried or persisted,
@@ -3140,6 +3151,12 @@ public partial class ConnectedSystemServer
 
     /// <summary>
     /// Sets the same password on several of a person's accounts, one Connected System at a time (issue #1172).
+    /// <para>
+    /// TODO(#1635 layer 3, web agent): an interim shim; see <see cref="SetConnectedSystemObjectPasswordAsync(int, Guid, string, PasswordSetOptions, MetaverseObject?, CancellationToken)"/>.
+    /// The replacement is <see cref="PasswordSynchronisationServer.SetPasswordAsync"/> with the accounts as
+    /// explicit targets; per-account outcomes then come from the queue rather than from an
+    /// <see cref="IProgress{T}"/>.
+    /// </para>
     /// <para>
     /// <b>There is no transaction across systems.</b> Each write is independent, and a fan-out routinely ends
     /// with some accounts changed and others not; that is reported per account rather than rolled into a count,
@@ -3308,7 +3325,9 @@ public partial class ConnectedSystemServer
         };
         await createActivityAsync(activity);
 
-        var result = await ApplyPasswordAsync(passwordConnector, connectedSystem, connectedSystemObject, password, options, cancellationToken);
+        // The same open, check, set, close sequence every other password JIM writes goes through (#1635), so a
+        // Connected System gets one answer about its channel whichever way the password reached it.
+        var result = await PasswordDeliveryCore.DeliverOnceAsync(passwordConnector, connectedSystem, connectedSystemObject, password, options, cancellationToken);
 
         if (result.Success)
         {
@@ -3329,64 +3348,6 @@ public partial class ConnectedSystemServer
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Opens the password connection, sets the password, and closes the connection whatever happens.
-    /// <para>
-    /// A connection that could not be opened, or a Connector that threw rather than classifying, is reported as
-    /// a transient failure: it says nothing about whether the password itself would be acceptable, and an
-    /// administrator's next move is to try again once the target is reachable.
-    /// </para>
-    /// <para>
-    /// A channel the Connected System's configuration forbids is a different matter, and is refused outright
-    /// before anything is sent (#1119). It is a configuration fault rather than a transient one: trying again
-    /// changes nothing until somebody either encrypts the connection or accepts an unencrypted one.
-    /// </para>
-    /// </summary>
-    private static async Task<PasswordSetResult> ApplyPasswordAsync(
-        IConnectorPasswordManagement passwordConnector,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObject connectedSystemObject,
-        string password,
-        PasswordSetOptions options,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            passwordConnector.OpenPasswordConnection(connectedSystem.SettingValues);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Log.Error(ex, "SetConnectedSystemObjectPasswordAsync: Could not open the password connection to Connected System {ConnectedSystemId}", connectedSystem.Id);
-            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient,
-                $"JIM could not open a password connection to the Connected System: {ex.Message}");
-        }
-
-        try
-        {
-            // Asked once the channel exists, because what is being judged is the channel that opened rather than
-            // the settings it was built from. The same rule governs the other two paths that write a password to
-            // this system, so an administrator who turns the setting on gets one answer everywhere.
-            if (PasswordChannelSecurity.RefusesChannel(connectedSystem, passwordConnector))
-            {
-                Log.Error("SetConnectedSystemObjectPasswordAsync: Connected System {ConnectedSystemId} requires a secure transport for passwords and the password channel is not encrypted; no password was sent",
-                    connectedSystem.Id);
-                return PasswordSetResult.Failed(PasswordSetFailureReason.ConfigurationFault,
-                    PasswordChannelSecurity.RefusalMessage(connectedSystem));
-            }
-
-            return await passwordConnector.SetPasswordAsync(connectedSystemObject, password, options, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Log.Error(ex, "SetConnectedSystemObjectPasswordAsync: The Connector threw setting a password on Connected System Object {CsoId}", connectedSystemObject.Id);
-            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient, ex.Message);
-        }
-        finally
-        {
-            passwordConnector.ClosePasswordConnection();
-        }
     }
 
     /// <summary>

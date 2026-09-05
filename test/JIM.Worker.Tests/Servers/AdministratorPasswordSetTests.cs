@@ -19,6 +19,13 @@ namespace JIM.Worker.Tests.Servers;
 /// Covers an administrator setting the password on one Connected System Object (issue #1121), which is the manual
 /// counterpart to the initial password an export delivers.
 /// <para>
+/// TODO(#1635 layer 3, web agent): this fixture guards the interim <c>SetConnectedSystemObjectPasswordAsync</c>
+/// shim, which the REST controller still calls; delete it with the shim once the controller queues through
+/// <c>PasswordSynchronisationServer.SetPasswordAsync</c>. The Connector-facing behaviour it pins now lives in
+/// <c>PasswordDeliveryCoreTests</c>; the Activity shape for the one operation is pinned in
+/// <c>SetPasswordRequestTests</c>.
+/// </para>
+/// <para>
 /// The behaviour worth guarding is what the code does around the Connector call rather than the call itself: that
 /// the password reaches the Connector and nothing else, that the connection is closed however the attempt ends,
 /// that a target's refusal is reported rather than thrown, and that every attempt leaves an Activity saying what

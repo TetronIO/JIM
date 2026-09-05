@@ -164,6 +164,42 @@ public class PasswordChangeOutcomesTests
         }
     }
 
+    /// <summary>
+    /// Decision D1 (#1635): an administrator's explicit set is delivered on a paused system, so it is queued and
+    /// on its way, never held.
+    /// </summary>
+    [Test]
+    public async Task GetChangeOutcomesAsync_ExplicitRowOnAPausedSystem_IsQueuedNotHeldAsync()
+    {
+        _targets.Single(t => t.ConnectedSystemId == CorporateAdId).Enabled = false;
+        await RowAsync(CorporateAdId, r => r.Origin = PendingPasswordChangeOrigin.Explicit);
+
+        var outcomes = await _server.GetChangeOutcomesAsync(_changeActivity!.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes!.Targets.Single().State, Is.EqualTo(PasswordChangeTargetState.Queued));
+            Assert.That(outcomes.IsSettled, Is.False, "The Password Delivery Service is about to claim it; a caller can wait for that.");
+        }
+    }
+
+    [Test]
+    public async Task GetChangeOutcomesAsync_ExplicitRowOnAnUnconfiguredSystem_TakesTheNameFromTheSystemAsync()
+    {
+        _targets.Clear();
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemHeaderAsync(CorporateAdId))
+            .ReturnsAsync(new ConnectedSystemHeader { Id = CorporateAdId, Name = "Corporate AD" });
+        await RowAsync(CorporateAdId, r => r.Origin = PendingPasswordChangeOrigin.Explicit);
+
+        var target = await TargetAsync(CorporateAdId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(target.ConnectedSystemName, Is.EqualTo("Corporate AD"));
+            Assert.That(target.State, Is.EqualTo(PasswordChangeTargetState.Queued));
+        }
+    }
+
     [Test]
     public async Task GetChangeOutcomesAsync_ClaimedRow_IsDeliveringAndNotSettledAsync()
     {

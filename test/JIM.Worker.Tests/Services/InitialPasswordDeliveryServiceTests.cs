@@ -137,6 +137,41 @@ public class InitialPasswordDeliveryServiceTests
         Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Retry));
     }
 
+    /// <summary>
+    /// A Connector that throws rather than classifying says nothing about whether the password would have been
+    /// acceptable, so it is a transient failure to retry rather than an exception for the pass to fall over on
+    /// (#1635, through the shared delivery core).
+    /// </summary>
+    [Test]
+    public async Task DeliverAsync_WhenTheConnectorThrows_RetriesWithTheConnectorsWordsAsync()
+    {
+        _connector.Setup(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
+                It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("The directory dropped the connection."));
+
+        var result = await _service.DeliverAsync(_connector.Object, _target, EnabledConfiguration(), null, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Retry));
+            Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.Transient));
+            Assert.That(result.Message, Is.EqualTo("The directory dropped the connection."));
+        }
+    }
+
+    [Test]
+    public void DeliverAsync_WhenCancelled_Propagates()
+    {
+        // The one exception that must escape: an aborting run must abort, not grind on classifying its own
+        // cancellation as a directory fault.
+        _connector.Setup(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
+                It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        Assert.ThrowsAsync<OperationCanceledException>(() =>
+            _service.DeliverAsync(_connector.Object, _target, EnabledConfiguration(), null, CancellationToken.None));
+    }
+
     [Test]
     public async Task DeliverAsync_WhenTheConnectedSystemIsMisconfigured_RetriesAsync()
     {

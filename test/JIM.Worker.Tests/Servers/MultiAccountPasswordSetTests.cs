@@ -18,6 +18,14 @@ namespace JIM.Worker.Tests.Servers;
 /// <summary>
 /// Covers setting one password across several of a person's accounts (issue #1172).
 /// <para>
+/// TODO(#1635 layer 3, web agent): this fixture guards the interim <c>SetPasswordOnAccountsAsync</c> shim, which
+/// the portal's Set Password dialog still calls; delete it with the shim once the dialog queues through
+/// <c>PasswordSynchronisationServer.SetPasswordAsync</c>. Each intent here has its queue-side counterpart in
+/// <c>SetPasswordRequestTests</c> and <c>PasswordDeliveryTests</c>: one refusal never stops the rest (each system
+/// is its own lane), every account is reported by name (per-target outcomes), and the audit trail is one parent
+/// Activity with a child per system. Progress narration is gone; outcomes come from the queue.
+/// </para>
+/// <para>
 /// The behaviour worth guarding is what happens when the fan-out does not go cleanly, because it routinely does
 /// not: three Connected Systems are three independent writes with no transaction between them. One account
 /// refusing must not stop the others, every account must be reported by name, and the audit trail must let
