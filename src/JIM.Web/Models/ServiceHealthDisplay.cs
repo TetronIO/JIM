@@ -54,14 +54,17 @@ public static class ServiceHealthDisplay
     };
 
     /// <summary>
-    /// The suffix of the pill's <c>jim-service-health-pill--*</c> modifier class, which paints its dot and tint.
+    /// The suffix of the pill's <c>jim-status-pill--*</c> modifier class, which paints its dot and tint. The
+    /// vocabulary (ok, warn, err, neutral) is shared with every other status pill in the portal (the password
+    /// history's per-system chips among them), so one rule in site.css paints them all and a health status is
+    /// translated into it here rather than lending the shared rule its own names.
     /// </summary>
     public static string StatusModifier(ServiceHealthStatus status) => status switch
     {
-        ServiceHealthStatus.Healthy => "healthy",
-        ServiceHealthStatus.Degraded => "degraded",
-        ServiceHealthStatus.Unhealthy => "unhealthy",
-        _ => status.ToString().ToLowerInvariant()
+        ServiceHealthStatus.Healthy => "ok",
+        ServiceHealthStatus.Degraded => "warn",
+        ServiceHealthStatus.Unhealthy => "err",
+        _ => "neutral"
     };
 
     /// <summary>
@@ -135,6 +138,52 @@ public static class ServiceHealthDisplay
         return service.LastSeenAt is { } lastSeenAt
             ? $"Last heartbeat {lastSeenAt.ToLocalTime().ToFriendlyDate()}"
             : null;
+    }
+
+    /// <summary>
+    /// The card's condition line with the uptime after it ("Heartbeat 3 seconds ago · up 54 s"), or null for a
+    /// service that never started. The uptime rides on this line rather than on a footer of its own because it is
+    /// the same kind of fact as the heartbeat: how the process is doing, not which process it is.
+    /// </summary>
+    public static string? ConditionLine(ServiceHealth service, DateTime asOf)
+    {
+        var condition = Condition(service);
+        var uptime = Uptime(service, asOf);
+        if (uptime == null)
+            return condition;
+
+        var up = $"up {CompactDuration(uptime.Value)}";
+        return condition == null ? up : $"{condition} · {up}";
+    }
+
+    /// <summary>
+    /// How long the reporting instance has been up: to the report's own time for a service still reporting, and to
+    /// its last heartbeat for one that has gone quiet, because that figure says how long it ran before it stopped
+    /// and would otherwise keep growing after death. Null for a service that never started.
+    /// </summary>
+    public static TimeSpan? Uptime(ServiceHealth service, DateTime asOf)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        if (service.StartedAt is not { } startedAt)
+            return null;
+
+        var until = service.Status == ServiceHealthStatus.Unhealthy && service.LastSeenAt is { } lastSeenAt ? lastSeenAt : asOf;
+        return until - startedAt;
+    }
+
+    /// <summary>
+    /// The instance id where it says more than the host does (it is the host plus a per-process suffix), or null
+    /// where it is the host name over again or the service never reported.
+    /// </summary>
+    public static string? Instance(ServiceHealth service)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        if (service.InstanceId == null || string.Equals(service.InstanceId, service.HostName, StringComparison.Ordinal))
+            return null;
+
+        return service.InstanceId;
     }
 
     /// <summary>

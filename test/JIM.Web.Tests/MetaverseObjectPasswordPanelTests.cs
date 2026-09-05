@@ -8,6 +8,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Web.Shared;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -37,26 +38,42 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     private const string QueuedStopMarker = "jim-password-queued-stop";
     private const string KindMarker = "jim-password-kind";
 
-    private static PasswordSynchronisationEvent Change(PendingPasswordChangeOrigin? origin, params PasswordSynchronisationEventOutcome[] outcomes) => new()
+    private const string DayMarker = "jim-password-day";
+    private const string EntryMarker = "jim-password-entry";
+    private const string TargetMarker = "jim-password-target";
+    private const string TargetDetailMarker = "jim-password-target-detail";
+    private const string HistoryRetryMarker = "jim-password-history-retry";
+    private const string HistoryStopMarker = "jim-password-history-stop";
+
+    /// <summary>
+    /// A change made a few minutes ago, so it sits under Today whatever the wall clock says.
+    /// </summary>
+    private static readonly DateTime Recently = DateTime.UtcNow.AddMinutes(-10);
+
+    private static PasswordSynchronisationEvent Change(PendingPasswordChangeOrigin? origin, params PasswordSynchronisationEventOutcome[] outcomes) =>
+        Change(Recently, origin, outcomes);
+
+    private static PasswordSynchronisationEvent Change(DateTime created, PendingPasswordChangeOrigin? origin, params PasswordSynchronisationEventOutcome[] outcomes) => new()
     {
         ActivityId = Guid.NewGuid(),
-        Created = new DateTime(2026, 8, 21, 9, 0, 0, DateTimeKind.Utc),
-        InitiatedByName = "Self-service portal",
-        InitiatedByType = ActivityInitiatorType.ApiKey,
+        Created = created,
+        InitiatedByName = origin == PendingPasswordChangeOrigin.Explicit ? "Admin User" : "Self-service portal",
+        InitiatedByType = origin == PendingPasswordChangeOrigin.Explicit ? ActivityInitiatorType.User : ActivityInitiatorType.ApiKey,
         Message = "Password change queued.",
         Origin = origin,
         Outcomes = outcomes
     };
 
-    private static PasswordSynchronisationEventOutcome Outcome(string system, ActivityStatus status, string? error = null) => new()
+    private static PasswordSynchronisationEventOutcome Outcome(string system, ActivityStatus status, string? error = null, DateTime? occurredAt = null) => new()
     {
         ActivityId = Guid.NewGuid(),
-        ConnectedSystemId = 3,
+        // A stable id per system name, so two outcomes on one system coalesce into one chip and two systems do not.
+        ConnectedSystemId = Math.Abs(system.GetHashCode() % 1000),
         ConnectedSystemName = system,
         Status = status,
         ErrorMessage = error,
         Message = error ?? $"Password set on {system}.",
-        OccurredAt = new DateTime(2026, 8, 21, 9, 0, 5, DateTimeKind.Utc)
+        OccurredAt = occurredAt ?? Recently.AddSeconds(5)
     };
 
     private static PendingPasswordChangeHeader Queued(
@@ -66,7 +83,8 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
         PasswordSetFailureReason? reason = null,
         string? targetMessage = null,
         int attempts = 0,
-        DateTime? nextRetryAt = null) => new()
+        DateTime? nextRetryAt = null,
+        DateTime? createdAt = null) => new()
     {
         Id = Guid.NewGuid(),
         ConnectedSystemId = connectedSystemId,
@@ -76,7 +94,8 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
         TargetMessage = targetMessage,
         AttemptCount = attempts,
         NextRetryAt = nextRetryAt,
-        CreatedAt = DateTime.UtcNow,
+        CreatedAt = createdAt ?? DateTime.UtcNow,
+        LastAttemptedAt = attempts > 0 ? DateTime.UtcNow.AddMinutes(-1) : null,
         ExpiresAt = DateTime.UtcNow.AddDays(7)
     };
 
@@ -264,11 +283,103 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     {
         var cut = RenderPanel();
 
-        Assert.That(cut.Markup, Does.Contain("never"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("never"));
+            Assert.That(FindAll(cut, EntryMarker), Is.Empty);
+        }
     }
 
+    /// <summary>
+    /// History reads as a timeline (#1635): a heading per day, one entry per change under it with the time of day
+    /// alone, because the day is already said once above.
+    /// </summary>
     [Test]
-    public void Panel_ShowsEachSystemsOwnOutcome()
+    public void Panel_History_GroupsChangesByDayWithTodayYesterdayThenTheDate()
+    {
+        var yesterday = DateTime.UtcNow.AddDays(-1);
+        var lastWeek = DateTime.UtcNow.AddDays(-6);
+        var cut = RenderPanel(events:
+        [
+            Change(Recently, PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete)),
+            Change(yesterday, PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete)),
+            Change(lastWeek, PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete))
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(FindAll(cut, DayMarker).Select(d => d.TextContent.Trim()), Is.EqualTo(new[] { "Today", "Yesterday", lastWeek.ToLocalTime().ToFriendlyDay() }));
+            Assert.That(FindAll(cut, EntryMarker), Has.Count.EqualTo(3), "one entry per change");
+            Assert.That(FindAll(cut, "jim-password-time").Select(t => t.TextContent.Trim()),
+                Is.EqualTo(new[] { Recently.ToLocalTime().ToFriendlyTime(), yesterday.ToLocalTime().ToFriendlyTime(), lastWeek.ToLocalTime().ToFriendlyTime() }));
+            Assert.That(cut.FindComponents<MudTimelineItem>(), Has.Count.EqualTo(3));
+        }
+    }
+
+    /// <summary>
+    /// The dot is the entry's verdict at a glance: green when every system took it, amber while one is still being
+    /// retried, red when one is parked, and grey for a change nothing has attempted.
+    /// </summary>
+    [Test]
+    public void Panel_EachEntry_ColoursItsDotByTheWorstOutcome()
+    {
+        var parked = Change(Recently, PendingPasswordChangeOrigin.Explicit, Outcome("HR SQL", ActivityStatus.FailedWithError, "Too short."));
+        var retrying = Change(Recently.AddMinutes(-1), PendingPasswordChangeOrigin.Explicit, Outcome("Badge System", ActivityStatus.FailedWithError, "Connection refused"));
+        var allSet = Change(Recently.AddMinutes(-2), PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete));
+        var nothingYet = Change(Recently.AddMinutes(-3), PendingPasswordChangeOrigin.Propagated);
+        var cut = RenderPanel(
+            events: [parked, retrying, allSet, nothingYet],
+            queued:
+            [
+                Queued(Math.Abs("HR SQL".GetHashCode() % 1000), "HR SQL", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.PolicyRejection, "Too short.", attempts: 3, createdAt: parked.Created),
+                Queued(Math.Abs("Badge System".GetHashCode() % 1000), "Badge System", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: retrying.Created)
+            ]);
+
+        var dots = cut.FindComponents<MudTimelineItem>().Select(i => i.Instance.Color).ToList();
+        Assert.That(dots, Is.EqualTo(new[] { Color.Error, Color.Warning, Color.Success, Color.Default }));
+    }
+
+    /// <summary>
+    /// One chip per Connected System, in the Service Health pill vocabulary, naming the system and its state where
+    /// that is anything other than a plain success. A live queue row decides the newest change's chip only: the
+    /// queue holds one row per person and system, so an older change that already reached the system keeps
+    /// reading as set.
+    /// </summary>
+    [Test]
+    public void Panel_Chips_NameEachSystemAndItsStateWithTheQueueRowDecidingOnlyTheNewestChange()
+    {
+        var older = Change(Recently.AddHours(-2), PendingPasswordChangeOrigin.Explicit,
+            Outcome("Corporate AD", ActivityStatus.Complete, occurredAt: Recently.AddHours(-2).AddSeconds(3)));
+        var newer = Change(Recently, PendingPasswordChangeOrigin.Explicit,
+            Outcome("Corporate AD", ActivityStatus.FailedWithError, "Connection refused"),
+            Outcome("HR SQL", ActivityStatus.Complete));
+        var cut = RenderPanel(
+            events: [newer, older],
+            queued: [Queued(Math.Abs("Corporate AD".GetHashCode() % 1000), "Corporate AD", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: newer.Created)]);
+
+        var entries = FindAll(cut, EntryMarker);
+        var newerChips = entries[0].QuerySelectorAll($"[data-testid='{TargetMarker}']");
+        var olderChips = entries[1].QuerySelectorAll($"[data-testid='{TargetMarker}']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(newerChips.Select(c => c.TextContent.Trim()), Is.EqualTo(new[] { "Corporate AD · retrying", "HR SQL" }));
+            Assert.That(newerChips[0].ClassList, Does.Contain("jim-status-pill").And.Contain("jim-status-pill--warn"));
+            Assert.That(newerChips[1].ClassList, Does.Contain("jim-status-pill--ok"));
+            Assert.That(olderChips.Select(c => c.TextContent.Trim()), Is.EqualTo(new[] { "Corporate AD" }), "the older change already reached the system; the live row is not its");
+            Assert.That(olderChips[0].ClassList, Does.Contain("jim-status-pill--ok"));
+            // MudTooltip renders its content only while open, so what can be pinned here is that every chip has one
+            // with content behind it; the words themselves are PasswordHistoryTimelineModelTests' to pin.
+            Assert.That(cut.FindComponents<MudTooltip>().Count(t => t.Instance.TooltipContent != null), Is.EqualTo(3),
+                "each of the three chips carries a tooltip with the target's own words");
+        }
+    }
+
+    /// <summary>
+    /// Words appear only where something is wrong or still owed. A success is its chip and nothing more; the
+    /// "Password set on X." sentence is gone.
+    /// </summary>
+    [Test]
+    public void Panel_DetailLines_AppearOnlyForSystemsThatAreNotAPlainSuccess()
     {
         var cut = RenderPanel(events:
         [
@@ -277,12 +388,96 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
                 Outcome("HR SQL", ActivityStatus.FailedWithError, "The password does not meet the requirements of the domain."))
         ]);
 
+        var details = FindAll(cut, TargetDetailMarker);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.Markup, Does.Contain("Corporate AD"));
-            Assert.That(cut.Markup, Does.Contain("HR SQL"));
-            Assert.That(cut.Markup, Does.Contain("requirements of the domain"),
+            Assert.That(details, Has.Count.EqualTo(1));
+            Assert.That(details[0].TextContent, Does.Contain("HR SQL:").And.Contain("requirements of the domain"),
                 "the target's own words are what tell an administrator where the remedy lives");
+            Assert.That(cut.Markup, Does.Not.Contain("Password set on"));
+        }
+    }
+
+    /// <summary>
+    /// A success that landed long after it was asked for says so, because a password that took a quarter of an
+    /// hour to arrive is a fact about the delivery worth a line; one that landed within the minute is not.
+    /// </summary>
+    [Test]
+    public void Panel_SuccessThatLagged_SaysWhenItLandedOnlyWhenItLaggedByMoreThanAMinute()
+    {
+        var requested = Recently.AddHours(-1);
+        var lagged = Change(requested, PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete, occurredAt: requested.AddMinutes(13)));
+        var prompt = Change(Recently, PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete, occurredAt: Recently.AddSeconds(40)));
+        var cut = RenderPanel(events: [prompt, lagged]);
+
+        var entries = FindAll(cut, EntryMarker);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entries[0].QuerySelectorAll($"[data-testid='{TargetDetailMarker}']"), Is.Empty);
+            Assert.That(entries[1].QuerySelector($"[data-testid='{TargetDetailMarker}']")!.TextContent,
+                Does.Contain($"delivered {requested.AddMinutes(13).ToLocalTime().ToFriendlyTime()}, 13 min after the request"));
+        }
+    }
+
+    /// <summary>
+    /// The remedy sits on the line that says what is wrong: Retry for a parked system, Stop trying for one JIM is
+    /// still retrying, each raising the panel's callback for that Connected System alone.
+    /// </summary>
+    [Test]
+    public void Panel_DetailLines_OfferRetryForParkedAndStopTryingForRetrying()
+    {
+        var retried = new List<int>();
+        var stopped = new List<int>();
+        var change = Change(PendingPasswordChangeOrigin.Explicit,
+            Outcome("HR Portal", ActivityStatus.FailedWithError, "Too short."),
+            Outcome("Badge System", ActivityStatus.FailedWithError, "Connection refused"));
+        var cut = RenderPanel(
+            events: [change],
+            queued:
+            [
+                Queued(Math.Abs("HR Portal".GetHashCode() % 1000), "HR Portal", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.PolicyRejection, "Too short.", attempts: 3, createdAt: change.Created),
+                Queued(Math.Abs("Badge System".GetHashCode() % 1000), "Badge System", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: change.Created)
+            ],
+            onRetry: retried.Add,
+            onStopTrying: stopped.Add);
+
+        var details = FindAll(cut, TargetDetailMarker);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(details, Has.Count.EqualTo(2));
+            Assert.That(details[0].TextContent, Does.Contain("HR Portal:").And.Contain("policy rejection, Too short."));
+            Assert.That(details[1].TextContent, Does.Contain("Badge System:").And.Contain("Next attempt"));
+        }
+
+        Find(cut, HistoryRetryMarker).Click();
+        Find(cut, HistoryStopMarker).Click();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retried, Is.EqualTo(new[] { Math.Abs("HR Portal".GetHashCode() % 1000) }));
+            Assert.That(stopped, Is.EqualTo(new[] { Math.Abs("Badge System".GetHashCode() % 1000) }));
+        }
+    }
+
+    /// <summary>
+    /// The first line says who and, for an administrator's explicit choice of accounts, how many.
+    /// </summary>
+    [Test]
+    public void Panel_EntryLine_SaysWhoAndOnHowManyAccounts()
+    {
+        var cut = RenderPanel(events:
+        [
+            Change(Recently, PendingPasswordChangeOrigin.Explicit,
+                Outcome("Corporate AD", ActivityStatus.Complete), Outcome("HR SQL", ActivityStatus.Complete), Outcome("Badge System", ActivityStatus.Complete)),
+            Change(Recently.AddMinutes(-1), PendingPasswordChangeOrigin.Propagated, Outcome("Corporate AD", ActivityStatus.Complete))
+        ]);
+
+        var entries = FindAll(cut, EntryMarker);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entries[0].QuerySelector(".jim-password-entry-head")!.TextContent, Does.Contain("by Admin User on 3 accounts"));
+            Assert.That(entries[0].QuerySelector(".jim-password-entry-head b")!.TextContent, Is.EqualTo("Admin User"), "the name carries the emphasis");
+            Assert.That(entries[1].QuerySelector(".jim-password-entry-head")!.TextContent, Does.Contain("via Self-service portal (API key)").And.Not.Contain("accounts"));
         }
     }
 
@@ -297,14 +492,15 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     {
         var cut = RenderPanel(events:
         [
-            Change(PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete)),
-            Change(PendingPasswordChangeOrigin.Propagated, Outcome("Corporate AD", ActivityStatus.Complete)),
-            Change(null, Outcome("Corporate AD", ActivityStatus.Complete))
+            Change(Recently, PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete)),
+            Change(Recently.AddMinutes(-1), PendingPasswordChangeOrigin.Propagated, Outcome("Corporate AD", ActivityStatus.Complete)),
+            Change(Recently.AddMinutes(-2), null, Outcome("Corporate AD", ActivityStatus.Complete))
         ]);
 
         var chips = FindAll(cut, KindMarker);
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(FindAll(cut, EntryMarker), Has.Count.EqualTo(3));
             Assert.That(chips, Has.Count.EqualTo(2), "the change with no recorded origin draws no chip");
             Assert.That(chips[0].TextContent.Trim(), Is.EqualTo("Set"));
             Assert.That(chips[1].TextContent.Trim(), Is.EqualTo("Propagated"));

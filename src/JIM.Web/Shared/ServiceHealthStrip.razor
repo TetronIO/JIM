@@ -2,6 +2,8 @@
 @using JIM.Web.Models
 @implements IDisposable
 @inject IUiNotificationService UiNotifications
+@inject IJSRuntime JsRuntime
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -12,14 +14,19 @@
    It does own the Live updates indicator in the header, because that is a fact about this web process rather
    than about the report, and it changes on its own schedule.
 
-   Every card has the same four slots in the same order (name and status pill; activity; condition; instance), so
-   the eye finds the same fact in the same place on every card and the cards stay one height. The status pill is
-   the only coloured element: a card that is all amber shouts, and a red border on one card recolours the
-   whole strip.
+   Every card has the same four slots in the same order (name and status pill; activity; condition with the
+   uptime and the details control; the details themselves, closed by default), so the eye finds the same fact in
+   the same place on every card and the cards stay one height while nothing is open. The status pill is the only
+   coloured element: a card that is all amber shouts, and a red border on one card recolours the whole strip.
+
+   Host, version and instance identify the process, which matters during an upgrade and almost never otherwise,
+   so they sit behind the details control rather than on every card's face. The one exception is version skew: a
+   service on another version from the portal is the fact an administrator must act on, so its chip stays on the
+   card's face beside the pill and is repeated on the Version row, where the number and the warning sit together.
 
    Every duration on a card is measured against the report's own GeneratedAt rather than the clock at render, so
-   the activity line's "· 12 min" and the condition line's "Heartbeat 3 seconds ago" were derived at the same
-   instant and cannot disagree. Each poll brings a new report, so nothing goes stale. *@
+   the activity line's "· 12 min" and the condition line's "Heartbeat 3 seconds ago · up 54 s" were derived at the
+   same instant and cannot disagree. Each poll brings a new report, so nothing goes stale. *@
 
 <MudPaper Outlined="true" Class="@($"pa-4 jim-service-health-strip {Class}".Trim())">
     <div class="jim-service-health-header">
@@ -30,7 +37,7 @@
         <MudTooltip Text="@(_realTimeAvailable ? "Database notifications reach open pages directly." : "The database notification listener is not connected; pages refresh on a timer meanwhile.")"
                     Arrow="true" Placement="Placement.Top">
             <span class="jim-service-health-live" data-testid="live-updates" data-connected="@_realTimeAvailable.ToString().ToLowerInvariant()">
-                <span class="@($"jim-service-health-dot jim-service-health-dot--{(_realTimeAvailable ? "healthy" : "degraded")}")"></span>
+                <span class="@($"jim-status-dot jim-status-dot--{(_realTimeAvailable ? "ok" : "warn")}")"></span>
                 @(_realTimeAvailable ? "Live updates connected" : "Live updates reconnecting")
             </span>
         </MudTooltip>
@@ -41,14 +48,24 @@
         {
             var asOf = Report.GeneratedAt;
             var activity = ServiceHealthDisplay.Activity(service);
-            var condition = ServiceHealthDisplay.Condition(service);
+            var conditionLine = ServiceHealthDisplay.ConditionLine(service, asOf);
             var unhealthy = service.Status == ServiceHealthStatus.Unhealthy;
             var versionSkew = ServiceHealthDisplay.HasVersionSkew(service, Report.WebVersion);
+            var instance = ServiceHealthDisplay.Instance(service);
+            var detailsOpen = _openDetails.Contains(service.Service);
+            var hostName = service.HostName;
+            var version = service.Version;
             <MudPaper Outlined="true" Class="pa-3 jim-service-health-card" data-service="@service.Service" data-status="@service.Status" @key="service.Service">
                 <div class="jim-service-health-card-top">
                     <span class="jim-service-health-label jim-one-line" title="@ServiceHealthDisplay.Label(service.Service)">@ServiceHealthDisplay.Label(service.Service)</span>
-                    <span class="@($"jim-service-health-pill jim-service-health-pill--{ServiceHealthDisplay.StatusModifier(service.Status)}")">
-                        <span class="jim-service-health-dot"></span>@ServiceHealthDisplay.StatusWord(service.Status)
+                    @if (versionSkew)
+                    {
+                        <MudTooltip Text="@VersionSkewTooltip" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" Class="jim-service-health-skew ma-0">differs from portal</MudChip>
+                        </MudTooltip>
+                    }
+                    <span class="@($"jim-status-pill jim-status-pill--{ServiceHealthDisplay.StatusModifier(service.Status)}")">
+                        <span class="jim-status-dot"></span>@ServiceHealthDisplay.StatusWord(service.Status)
                     </span>
                 </div>
                 @* The activity line is the one line an administrator reads first; its full text is its title so a
@@ -60,36 +77,73 @@
                         <span class="jim-service-health-muted"> · @ServiceHealthDisplay.CompactDuration(asOf - workStartedAt)</span>
                     }
                 </div>
-                @* For a healthy or degraded service this is the condition in plain words. An unhealthy service has
-                   already put its condition on the activity line, so this slot names the work it was doing when it
-                   went quiet, or failing that its last heartbeat; a dead process's last words are context, not
-                   activity, and a blank slot on the one card an administrator is staring at helps nobody. *@
-                <div class="jim-service-health-condition jim-one-line" title="@condition">@condition</div>
-                @* Host, version and uptime share the footer: three short facts that together identify the instance. A
-                   never-started service has none of them; the slot stays so the card keeps its shape. *@
-                <div class="jim-service-health-footer">
-                    @if (service.HostName != null)
-                    {
-                        <span class="jim-one-line" title="@service.InstanceId">@service.HostName</span>
-                    }
-                    @if (service.Version != null)
-                    {
-                        <span class="jim-service-health-version">
-                            v@(service.Version)
-                            @if (versionSkew)
-                            {
-                                <MudTooltip Text="@VersionSkewTooltip" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" Class="jim-service-health-skew ma-0">differs from portal</MudChip>
-                                </MudTooltip>
-                            }
-                        </span>
-                    }
-                    @if (service.StartedAt is { } startedAt)
-                    {
-                        <MudTooltip Text="@($"Started {startedAt.ToLocalTime().ToFriendlyDate()}")" Arrow="true" Placement="Placement.Top">
-                            <span>up @ServiceHealthDisplay.CompactDuration(asOf - startedAt)</span>
-                        </MudTooltip>
-                    }
+                @* For a healthy or degraded service this is the condition in plain words, with the uptime after it.
+                   An unhealthy service has already put its condition on the activity line, so this slot names the
+                   work it was doing when it went quiet, or failing that its last heartbeat; a dead process's last
+                   words are context, not activity, and a blank slot on the one card an administrator is staring at
+                   helps nobody. The uptime it had at its last heartbeat stays: it says how long it ran.
+
+                   The details control sits at the right of this row rather than in the top row: the top row is
+                   the name and the verdict (and, when it matters, the skew chip), and a fourth item there crowds
+                   the one line every card must keep readable at three across. Down here it is the last thing on
+                   the card before the details it opens, so the affordance is next to what it reveals, and it lands
+                   where the footer used to be, which is where the eye already went for host and version. *@
+                <div class="jim-service-health-condition-row">
+                    <div class="jim-service-health-condition jim-one-line" title="@ConditionTitle(service, conditionLine)">@conditionLine</div>
+                    <MudTooltip Text="Details" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
+                                       Class="@($"jim-service-health-details-toggle{(detailsOpen ? " jim-service-health-details-toggle--open" : string.Empty)}")"
+                                       aria-label="Details" aria-expanded="@(detailsOpen ? "true" : "false")"
+                                       OnClick="@(() => ToggleDetails(service.Service))"
+                                       data-testid="service-health-details-toggle" />
+                    </MudTooltip>
+                </div>
+                @* Closed, this slot has no height, so the cards in a row stay level; open, it grows its own card.
+                   The open state is per card and in memory: a page refresh closes them all, which is right for
+                   facts that are only wanted while an administrator is actually looking at them. *@
+                <div class="jim-service-health-details">
+                    <MudCollapse Expanded="@detailsOpen">
+                        @if (hostName == null && version == null)
+                        {
+                            <div class="jim-service-health-details-empty">This service has never reported, so there is no instance to identify.</div>
+                        }
+                        else
+                        {
+                            <dl class="jim-service-health-details-list">
+                                @if (hostName != null)
+                                {
+                                    <dt>Host</dt>
+                                    <dd>
+                                        <code class="jim-service-health-details-value" title="@hostName" data-testid="service-health-host">@hostName</code>
+                                        @CopyButton("host", hostName)
+                                    </dd>
+                                }
+                                @if (version != null)
+                                {
+                                    var versionText = $"v{version}";
+                                    <dt>Version</dt>
+                                    <dd>
+                                        <code class="jim-service-health-details-value" title="@versionText" data-testid="service-health-version">@versionText</code>
+                                        @if (versionSkew)
+                                        {
+                                            <MudTooltip Text="@VersionSkewTooltip" Arrow="true" Placement="Placement.Top">
+                                                <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" Class="jim-service-health-skew ma-0">differs from portal</MudChip>
+                                            </MudTooltip>
+                                        }
+                                        @CopyButton("version", versionText)
+                                    </dd>
+                                }
+                                @if (instance != null)
+                                {
+                                    <dt>Instance</dt>
+                                    <dd>
+                                        <code class="jim-service-health-details-value" title="@instance" data-testid="service-health-instance">@instance</code>
+                                        @CopyButton("instance", instance)
+                                    </dd>
+                                }
+                            </dl>
+                        }
+                    </MudCollapse>
                 </div>
             </MudPaper>
         }
@@ -117,10 +171,98 @@
 
     private bool _realTimeAvailable;
 
+    /// <summary>
+    /// Which cards have their details open. Keyed on the service rather than held per render, so the state
+    /// survives the report being replaced every ten seconds.
+    /// </summary>
+    private readonly HashSet<JimService> _openDetails = [];
+
+    /// <summary>
+    /// Whether the browser will let this page write to the clipboard; asked once, as the Set Password dialog does.
+    /// Over plain HTTP the Clipboard API is absent, and a copy button that silently does nothing is worse than one
+    /// that says why it cannot.
+    /// </summary>
+    private bool _clipboardAvailable = true;
+
     protected override void OnInitialized()
     {
         _realTimeAvailable = UiNotifications.IsRealTimeAvailable;
         UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        try
+        {
+            _clipboardAvailable = await JsRuntime.InvokeAsync<bool>("jimInterop.isClipboardAvailable");
+            StateHasChanged();
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or InvalidOperationException)
+        {
+            // The circuit went away, or JS is not ready. Copying stays offered; the attempt itself reports failure
+            // honestly, which is a better outcome than hiding the buttons over a transient condition.
+        }
+    }
+
+    private void ToggleDetails(JimService service)
+    {
+        if (!_openDetails.Remove(service))
+            _openDetails.Add(service);
+    }
+
+    /// <summary>
+    /// The condition row's full text for its title: the line itself, and when the instance started, which is the
+    /// precise figure behind the rounded uptime.
+    /// </summary>
+    private static string? ConditionTitle(ServiceHealth service, string? conditionLine)
+    {
+        if (service.StartedAt is not { } startedAt)
+            return conditionLine;
+
+        var started = $"Started {startedAt.ToLocalTime().ToFriendlyDate()}";
+        return conditionLine == null ? started : $"{conditionLine}. {started}";
+    }
+
+    /// <summary>
+    /// The copy control beside a details value. One fragment for the three rows so they cannot drift: same icon,
+    /// same size, same label shape ("Copy host"), same disabled reason.
+    /// </summary>
+    private RenderFragment CopyButton(string what, string value) => __builder =>
+    {
+        <MudTooltip Text="@(_clipboardAvailable ? $"Copy the {what}" : "Clipboard access needs an HTTPS connection")" Arrow="true" Placement="Placement.Top">
+            <span>
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Class="jim-service-health-copy"
+                               Disabled="@(!_clipboardAvailable)" aria-label="@($"Copy {what}")"
+                               OnClick="@(() => CopyAsync(what, value))" />
+            </span>
+        </MudTooltip>
+    };
+
+    /// <summary>
+    /// Copies a value and says so, through the same interop the Set Password dialog uses, so a value pasted into a
+    /// shell is known to have been copied rather than assumed. A failure is reported too: the value is on screen,
+    /// so the fallback is to select it by hand.
+    /// </summary>
+    private async Task CopyAsync(string what, string value)
+    {
+        bool copied;
+        try
+        {
+            copied = await JsRuntime.InvokeAsync<bool>("jimInterop.copyToClipboard", value);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException)
+        {
+            copied = false;
+        }
+
+        var noun = char.ToUpperInvariant(what[0]) + what[1..];
+        if (copied)
+            Snackbar.Add($"{noun} copied to the clipboard.", Severity.Success);
+        else
+            Snackbar.Add($"The {what} could not be copied. Select it and copy it by hand.", Severity.Warning);
     }
 
     private void OnRealTimeAvailabilityChanged(bool available)

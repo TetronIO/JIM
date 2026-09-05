@@ -257,7 +257,9 @@ Whatever a retry or a cancel covers, it is recorded as **one** Activity. A retry
 
 You are also told where the work is without going looking for it. The **Connected Systems** list carries a Password Synchronisation column showing each system's state, with parked and expired counts beside it, sortable and filterable, including a **Needs attention** filter that cuts across the states. And each person's own page has an administrator-only **Password** tab: Set Password, what is still owed to which of their systems, and what their recent password changes actually did on each one, whether an administrator set them or they were propagated.
 
-That last view reads from the Activities rather than from the queue, deliberately. A delivered change leaves the queue, so a view built on the queue alone would show a person's failures and none of their successes.
+That last view is a timeline, grouped by day: one entry per change, marked **Set** or **Propagated**, saying who made it, with a pill per Connected System that names the system and, where it is anything other than delivered, its state (**retrying**, **parked**, **held**, **expired**, **cancelled**). A system that refused the change or is still owed it gets a line beneath in the target's own words, with **Retry** or **Stop trying** on that line; a delivered one needs no words, unless it landed more than a minute after it was asked for, in which case the line says when. The entry's dot takes the colour of its worst outcome.
+
+It reads from the Activities rather than from the queue, deliberately. A delivered change leaves the queue, so a view built on the queue alone would show a person's failures and none of their successes.
 
 Everything on the tab is scriptable, because a recovery across a directory that has just come back is not a job for a browser:
 
