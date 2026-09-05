@@ -1,6 +1,8 @@
 @page "/admin/operations"
+@using JIM.Models.Operations
 @using JIM.Web.Pages.Admin.Components
 @attribute [Authorize(Roles = "Administrator")]
+@implements IDisposable
 @inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -13,9 +15,16 @@
     What JIM is doing now, what it did, and what is scheduled. Identity synchronisation and password delivery both report here.
 </MudText>
 
+@* Whether the services doing all of the below are alive, before any of it. The first read completes before the
+   first render (it is awaited in OnInitializedAsync), so the strip is never absent and the tabs never jump. *@
+@if (_report != null)
+{
+    <ServiceHealthStrip Report="_report" Class="mt-4" />
+}
+
 @* TabPanelsClass is pa-0 rather than pt-5 because the Schedules tab opens straight onto a virtualised grid, which
    supplies its own top margin; stacking both double-counts the gap. Each tab's own first block carries it. *@
-<NavigableMudTabs TabPanelsClass="pa-0" Class="mt-5">
+<NavigableMudTabs TabPanelsClass="pa-0" Class="mt-6">
     <MudTabPanel Text="Queue" Icon="@Icons.Material.Filled.Queue">
         <OperationsQueueTab />
     </MudTabPanel>
@@ -43,16 +52,76 @@
     ];
 
     /// <summary>
+    /// How often the page re-reads service health and the Passwords badge. Heartbeats are written every five
+    /// seconds, too often to relay through notifications, so the page polls; ten seconds keeps a Worker outage
+    /// visible well inside the sixty seconds at which it is judged.
+    /// </summary>
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The service health the strip shows. The page owns the poll and hands the report down rather than letting the
+    /// strip poll for itself: the page already had a read of its own to keep fresh (the badge below), the two reads
+    /// belong on one beat, and a strip that is given its report is a strip a test can render from a report it built.
+    /// </summary>
+    private ServiceHealthReport? _report;
+
+    /// <summary>
     /// Queued password changes that wait on a person, for the Passwords tab's badge. Loaded by the page rather
     /// than the tab because a badge belongs to the tab strip, which is the page's, and the tab itself is only
-    /// rendered once it is selected.
+    /// rendered once it is selected. Refreshed on the same poll as the health report, so a change parked while the
+    /// page is open shows up without a reload.
     /// </summary>
     private int _passwordAttentionCount;
 
+    private Timer? _pollTimer;
+    private bool _disposed;
+
     protected override async Task OnInitializedAsync()
     {
+        await RefreshAsync();
+
+        // A one-shot timer re-armed after each read (the pattern ExampleDataTemplateDetail uses), so a slow read
+        // can never overlap the next one.
+        _pollTimer = new Timer(async _ => await OnPollTimerElapsedAsync(), null, PollInterval, Timeout.InfiniteTimeSpan);
+    }
+
+    private async Task RefreshAsync()
+    {
         using var jim = JimFactory.Create();
+        _report = await jim.SystemHealth.GetServiceHealthAsync(DateTime.UtcNow);
         var summary = await jim.PasswordSynchronisation.GetQueueSummaryAsync();
         _passwordAttentionCount = summary.ParkedCount + summary.ExpiredCount;
+    }
+
+    private async Task OnPollTimerElapsedAsync()
+    {
+        try
+        {
+            await RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A failed read leaves the last report on screen; the next cycle retries.
+        }
+        finally
+        {
+            try
+            {
+                if (!_disposed)
+                    _pollTimer?.Change(PollInterval, Timeout.InfiniteTimeSpan);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Disposed while this callback was running; nothing to re-arm.
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _pollTimer?.Dispose();
+        _pollTimer = null;
     }
 }

@@ -3994,3 +3994,81 @@ html[lang] .jim-scope-text .mud-input-slot {
 #connector-list .mud-table-root {
     table-layout: fixed;
 }
+
+/* ---------------------------------------------------------------------------
+   Service health strip (<ServiceHealthStrip />) and banner (<ServiceHealthBanner />)
+
+   One card per JIM background service at the top of Operations. The state is carried twice, as the coloured
+   state word and as the card's left border, so a red card reads as red from across the room before the word
+   is legible. The border colour is a custom property the state modifier sets, following the verdict-dot pattern
+   above; the palette tokens are the four every theme defines. The selector is qualified with .mud-paper because
+   MudBlazor's outlined paper sets its own border at the same specificity from a sheet loaded after this one.
+   --------------------------------------------------------------------------- */
+.mud-paper.jim-service-health-card {
+    height: 100%;
+    border-left: 0.25rem solid var(--jim-service-health-accent, var(--mud-palette-lines-default));
+}
+
+.jim-service-health-card--running,
+.jim-service-health-card--connected {
+    --jim-service-health-accent: var(--mud-palette-success);
+}
+
+.jim-service-health-card--stale,
+.jim-service-health-card--no-progress,
+.jim-service-health-card--reconnecting {
+    --jim-service-health-accent: var(--mud-palette-warning);
+}
+
+.jim-service-health-card--not-seen {
+    --jim-service-health-accent: var(--mud-palette-error);
+}
+
+/* The label and state word share one line; the state word must not wrap under a long label on a narrow card. */
+.jim-service-health-state {
+    flex: none;
+    font-weight: 500;
+}
+
+/* Secondary detail lines under the headline: the colour is set once here and inherited, rather than mixing the
+   mud-text-secondary class (which also lowers opacity) with the token on the same block. */
+.jim-service-health-details {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* Host, version and uptime on one line, separated by a middle dot drawn by CSS so the markup carries only facts. */
+.jim-service-health-instance {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    column-gap: 0.5rem;
+    min-width: 0;
+}
+
+.jim-service-health-instance > * + *::before {
+    content: "\00B7";
+    margin-right: 0.5rem;
+}
+
+/* A version that differs from the portal's is the one fact on the line an administrator must act on. */
+.jim-service-health-version--skew {
+    color: var(--mud-palette-warning);
+    font-weight: 500;
+}
+
+/* The banner's links sit after the sentence and stay together when the alert wraps. */
+.jim-service-health-banner .mud-alert-message {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 1rem;
+    row-gap: 0.25rem;
+}
+
+.jim-service-health-banner-links {
+    display: inline-flex;
+    gap: 1rem;
+    white-space: nowrap;
+}

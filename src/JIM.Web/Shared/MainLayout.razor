@@ -75,6 +75,12 @@ else
                 <MudContainer MaxWidth="@_contentMaxWidth" Class="pt-5 pb-5">
                     <LoggingErrorBoundary @ref="_errorBoundary">
                         <ChildContent>
+                            @* A service outage or a stalled task, told to administrators on every page. Inside the
+                               error boundary so a fault in it is contained the way a page's would be; it renders
+                               nothing when all is well, so the page body sits exactly where it always has. *@
+                            <AuthorizeView Roles="Administrator">
+                                <ServiceHealthBanner />
+                            </AuthorizeView>
                             @Body
                         </ChildContent>
                         <ErrorContent Context="exception">
@@ -185,17 +191,9 @@ else
         }
     };
 
-    private static readonly string AppVersion = GetCleanVersion();
-
-    private static string GetCleanVersion()
-    {
-        var version = (System.Reflection.CustomAttributeExtensions
-            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(MainLayout).Assembly))
-            ?.InformationalVersion ?? "unknown";
-        // Strip the source link commit hash suffix (e.g. "+6444a6934e...")
-        var plusIndex = version.IndexOf('+');
-        return plusIndex >= 0 ? version[..plusIndex] : version;
-    }
+    // The same string the health report compares each service's version against, so the footer, the strip and
+    // the API all agree on what version this portal is.
+    private static readonly string AppVersion = JIM.Utilities.JimVersion.Current;
 
     private LoggingErrorBoundary? _errorBoundary;
     private MudThemeProvider? _mudThemeProvider;
