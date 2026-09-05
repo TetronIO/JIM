@@ -154,20 +154,6 @@ public class ServiceHealthDisplayTests
     }
 
     [Test]
-    public void Banner_PasswordDeliveryNeverReportedBesideAReportingWorker_IsNothing()
-    {
-        // A Worker that is heartbeating but whose password delivery loop has never reported is running a version
-        // without one; the strip shows that (Not seen, Never reported, the version in amber). A banner on every
-        // page would be a permanent alarm about a version gap, not an outage.
-        var report = Report(
-            Derive(JimService.WorkerSync, 2),
-            SystemHealthServer.Derive(JimService.WorkerPasswordDelivery, null, AsOf),
-            Derive(JimService.Scheduler, 2));
-
-        Assert.That(ServiceHealthDisplay.Banner(report), Is.Null);
-    }
-
-    [Test]
     public void Banner_PasswordDeliveryThatStoppedReporting_IsAnOutage()
     {
         // Distinct from never reported: this loop did exist and has gone quiet while its sibling is still alive.

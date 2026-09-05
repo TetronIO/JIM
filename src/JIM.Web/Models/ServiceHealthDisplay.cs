@@ -138,43 +138,37 @@ public static class ServiceHealthDisplay
     /// <summary>
     /// What the banner says, or null when it should not be shown. Shown only for an outage (a service not seen) or
     /// a stalled task (no progress); a Stale service is worth a glance on the strip, not an alarm on every page.
-    /// <para>
-    /// One exception to reading the report's <see cref="ServiceHealthReport.Overall"/> verbatim: a password
-    /// delivery service that has never reported while the Worker's synchronisation loop is reporting. The two
-    /// share a process, so that shape means the Worker is running a version without the delivery service (or one
-    /// from before it reported a heartbeat), which is a version gap the strip shows in amber, not an outage. Raising
-    /// the banner for it would put a permanent red bar on every page of every installation whose Worker was not
-    /// upgraded with the portal. A password delivery service that did report and then went quiet is an outage and
-    /// is named as one.
-    /// </para>
+    /// Reads the report's verdict as it stands: which services a deployment is expected to run is the read model's
+    /// decision (<c>SystemHealthServer.ExpectedServices</c>), so a service reported as never seen is one that should
+    /// have been.
     /// </summary>
     public static ServiceHealthBannerContent? Banner(ServiceHealthReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
 
-        var sync = report.Services.FirstOrDefault(s => s.Service == JimService.WorkerSync);
-        var considered = report.Services
-            .Where(s => !(s.Service == JimService.WorkerPasswordDelivery
-                          && s.LastSeenAt == null
-                          && sync is { State: not ServiceHealthState.NotSeen }))
-            .ToList();
-
+        var considered = report.Services;
         if (considered.Count == 0)
             return null;
+
+        // Until the Worker reports a separate password delivery loop, the synchronisation loop is simply "the
+        // Worker", and a Worker that is down delivers nothing either; the finer naming below only earns its place
+        // once both loops are in the report.
+        var deliveryReported = considered.Any(s => s.Service == JimService.WorkerPasswordDelivery);
 
         var worst = considered.Max(s => s.State);
         return worst switch
         {
-            ServiceHealthState.NotSeen => NotSeenBanner(considered.Where(s => s.State == ServiceHealthState.NotSeen).ToList(), report.GeneratedAt),
+            ServiceHealthState.NotSeen => NotSeenBanner(considered.Where(s => s.State == ServiceHealthState.NotSeen).ToList(), deliveryReported, report.GeneratedAt),
             ServiceHealthState.NoProgress => NoProgressBanner(considered.Where(s => s.State == ServiceHealthState.NoProgress).ToList(), report.GeneratedAt),
             _ => null
         };
     }
 
-    private static ServiceHealthBannerContent NotSeenBanner(List<ServiceHealth> notSeen, DateTime asOf)
+    private static ServiceHealthBannerContent NotSeenBanner(List<ServiceHealth> notSeen, bool deliveryReported, DateTime asOf)
     {
         var syncDown = notSeen.Any(s => s.Service == JimService.WorkerSync);
-        var passwordsDown = notSeen.Any(s => s.Service == JimService.WorkerPasswordDelivery);
+        // With no delivery loop in the report, the synchronisation loop down is the whole Worker down.
+        var passwordsDown = notSeen.Any(s => s.Service == JimService.WorkerPasswordDelivery) || (syncDown && !deliveryReported);
         var schedulerDown = notSeen.Any(s => s.Service == JimService.Scheduler);
 
         // Both Worker services down is the Worker down: name it once. One of them alone is named precisely, because
