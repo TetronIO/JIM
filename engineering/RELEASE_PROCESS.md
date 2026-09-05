@@ -62,11 +62,9 @@ git push origin main --tags
 
 ### Steps
 
-1. **Review pinned Docker dependencies**: Check that base image digests and apt package versions are up to date. If Dependabot PRs for Docker digests have been merged since the last release, verify the pinned apt versions still match. If not, update them:
+1. **Review pinned Docker dependencies**: merge any open Dependabot base-image digest PR and any open `apt-pin-check` PR before tagging, so the release ships the newest base image and current apt pins. Nothing needs checking by hand beyond that: every production stage runs `apt-get upgrade` before its pinned installs, so a stale pin fails the image build rather than shipping, and the `scan-images` CI job builds and scans every production image on each push to `main`, failing on any fixable HIGH/CRITICAL CVE. Confirm the latest `main` run is green. To inspect the archive's current versions for a pin by hand (the `apt-pin-check` workflow does this daily):
    ```bash
-   # Check available versions in the current base image
-   docker run --rm mcr.microsoft.com/dotnet/aspnet:10.0@sha256:<current-digest> bash -c \
-     "apt-get update -qq && apt-cache policy libldap-common libldap-2.5-0 cifs-utils"
+   pwsh -File ./.github/scripts/check-apt-pins.ps1
    ```
 
 2. **Update the changelog**: Move items from `[Unreleased]` to a new version section in `CHANGELOG.md`
