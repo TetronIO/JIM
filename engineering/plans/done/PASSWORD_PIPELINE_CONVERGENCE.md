@@ -1,6 +1,6 @@
 # One Password Pipeline: Implementation Plan
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#1635](https://github.com/TetronIO/JIM/issues/1635)
 - **PRD:** [PRD_PASSWORD_SYNCHRONISATION.md](../../prd/doing/PRD_PASSWORD_SYNCHRONISATION.md) (see its Amendment section)
 - **Created:** 2026-09-05
