@@ -22,7 +22,9 @@ public static class PendingPasswordChangeDisplay
     /// What the row's state is called on screen.
     /// <para>
     /// Pending is shown as "Waiting", which is what it is from the administrator's side. "Pending" is the
-    /// storage name and says nothing about whether anything is happening.
+    /// storage name and says nothing about whether anything is happening. Delivering is the one state where
+    /// something is happening right now (the Password Delivery Service has claimed the row, #1635), and reads as
+    /// itself.
     /// </para>
     /// </summary>
     public static string Status(PendingPasswordChangeHeader change)
@@ -32,6 +34,7 @@ public static class PendingPasswordChangeDisplay
         return change.Status switch
         {
             PendingPasswordChangeStatus.Pending => "Waiting",
+            PendingPasswordChangeStatus.Delivering => "Delivering",
             PendingPasswordChangeStatus.Parked => "Parked",
             PendingPasswordChangeStatus.Expired => "Expired",
             PendingPasswordChangeStatus.Cancelled => "Cancelled",

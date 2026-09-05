@@ -515,6 +515,30 @@ public class PasswordSynchronisationQueueDatabaseTests
     }
 
     /// <summary>
+    /// The Waiting filter (Pending) also returns a change the Password Delivery Service has claimed (#1635). The
+    /// summary counts a Delivering row as waiting, so a list filtered to waiting that dropped it would show one
+    /// fewer row than the card above it says there are.
+    /// </summary>
+    [Test]
+    public async Task GetPendingPasswordChangeHeadersAsync_WaitingFilter_IncludesAChangeBeingDeliveredAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        await SeedChangeAsync(systemId, mvoId, csoId, change => change.Status = PendingPasswordChangeStatus.Delivering);
+
+        await using var read = NewContext();
+        var window = await new PostgresDataRepository(read).Sync.GetPendingPasswordChangeHeadersAsync(
+            new PendingPasswordChangeFilter { Status = PendingPasswordChangeStatus.Pending }, 0, 10, "queued", sortDescending: false, includeTotalCount: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(window.TotalResults, Is.EqualTo(1));
+            Assert.That(window.Results, Has.Count.EqualTo(1));
+            Assert.That(window.Results[0].Status, Is.EqualTo(PendingPasswordChangeStatus.Delivering),
+                "the row keeps its own status; only the filter's reach is wider");
+        }
+    }
+
+    /// <summary>
     /// Counting is the expensive half of a window read, so a caller that already knows the total gets a null
     /// back rather than a second count. Null must not read as zero.
     /// </summary>

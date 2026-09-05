@@ -42,6 +42,7 @@ public class PendingPasswordChangeDisplayTests
         Assert.That(PendingPasswordChangeDisplay.Status(Change()), Is.EqualTo("Waiting"));
     }
 
+    [TestCase(PendingPasswordChangeStatus.Delivering, "Delivering")]
     [TestCase(PendingPasswordChangeStatus.Parked, "Parked")]
     [TestCase(PendingPasswordChangeStatus.Expired, "Expired")]
     [TestCase(PendingPasswordChangeStatus.Cancelled, "Cancelled")]

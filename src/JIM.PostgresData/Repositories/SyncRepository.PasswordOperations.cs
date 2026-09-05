@@ -526,8 +526,13 @@ public partial class SyncRepository
 
         if (filter.Status.HasValue)
         {
+            // Pending is the portal's "Waiting", and a change the Password Delivery Service has claimed is still
+            // waiting from the administrator's side (#1635): the summary counts it so, and a list that dropped it
+            // would show one fewer row than the card above it. Every other status is exact.
             var status = filter.Status.Value;
-            query = query.Where(c => c.Status == status);
+            query = status == PendingPasswordChangeStatus.Pending
+                ? query.Where(c => c.Status == PendingPasswordChangeStatus.Pending || c.Status == PendingPasswordChangeStatus.Delivering)
+                : query.Where(c => c.Status == status);
         }
 
         if (filter.FailureReason.HasValue)
@@ -567,8 +572,11 @@ public partial class SyncRepository
 
         if (filter.Status.HasValue)
         {
+            // Pending covers Delivering here too; see ApplyChangeFilter.
             var status = filter.Status.Value;
-            query = query.Where(h => h.Status == status);
+            query = status == PendingPasswordChangeStatus.Pending
+                ? query.Where(h => h.Status == PendingPasswordChangeStatus.Pending || h.Status == PendingPasswordChangeStatus.Delivering)
+                : query.Where(h => h.Status == status);
         }
 
         if (filter.FailureReason.HasValue)

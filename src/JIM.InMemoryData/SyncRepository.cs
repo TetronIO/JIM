@@ -3235,8 +3235,11 @@ public class SyncRepository : ISyncRepository
 
         if (filter.Status.HasValue)
         {
+            // Pending covers Delivering, as the PostgreSQL twin's ApplyChangeFilter explains (#1635).
             var status = filter.Status.Value;
-            query = query.Where(c => c.Status == status);
+            query = status == PendingPasswordChangeStatus.Pending
+                ? query.Where(c => c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering)
+                : query.Where(c => c.Status == status);
         }
 
         if (filter.FailureReason.HasValue)
