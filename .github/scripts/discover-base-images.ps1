@@ -33,8 +33,9 @@
     if no production Dockerfiles are discovered at all.
 
 .NOTES
-    This script is the source of truth for "which production base images are
-    scanned". There is no parallel list anywhere else. Adding a new production
+    This script is the source of truth for "which production images are built
+    and scanned" and for the base images they are pinned to. There is no
+    parallel list anywhere else. Adding a new production
     Dockerfile means adding the "# jim-compliance: production-image" directive to
     the file itself and nothing else. See engineering/DEVELOPER_GUIDE.md "Docker
     Base Images" section for the full policy.
