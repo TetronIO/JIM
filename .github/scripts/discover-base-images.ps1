@@ -16,7 +16,9 @@
          Any unpinned reference is a policy violation and fails the script.
 
       2. All resolved image references are emitted as a matrix, deduplicated by
-         image ref, so downstream jobs can scan each unique image exactly once.
+         image ref, and the production Dockerfiles themselves are emitted as a
+         second matrix (one leg per JIM image) for the job that builds and scans
+         the shipped images.
 
     Dockerfiles that do NOT carry the compliance directive (e.g. the devcontainer
     image, test fixture images for Samba AD / OpenLDAP) are skipped entirely. They
@@ -176,18 +178,41 @@ foreach ($r in $deduped) {
     Write-Host "    from $($r.dockerfile):$($r.line)"
 }
 
+# A second matrix, one leg per production Dockerfile, for the job that builds and scans
+# the JIM images themselves. The built image is what customers run, and it alone carries
+# the apt pins and the build-time apt-get upgrade; a base image scan sees neither. The
+# image name comes from the project directory (src/JIM.Web -> jim-web), which is the name
+# release.yml publishes under, so a finding here and a finding at release time name the
+# same thing.
+$imageLegs = @($results | Sort-Object dockerfile -Unique | ForEach-Object {
+    $projectDir = Split-Path (Split-Path $_.dockerfile -Parent) -Leaf
+    [pscustomobject]@{
+        dockerfile = $_.dockerfile
+        image_name = ($projectDir.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+    }
+})
+Write-Host "Production images to build and scan: $($imageLegs.Count)"
+foreach ($leg in $imageLegs) {
+    Write-Host "  $($leg.image_name) from $($leg.dockerfile)"
+}
+
 # Build matrix JSON for GitHub Actions consumption.
-$matrixObject = @{ include = $deduped }
-$matrixJson = $matrixObject | ConvertTo-Json -Compress -Depth 4
+$matrixJson = @{ include = $deduped } | ConvertTo-Json -Compress -Depth 4
+$imageMatrixJson = @{ include = $imageLegs } | ConvertTo-Json -Compress -Depth 4
 
 Write-Host ''
 Write-Host '== Matrix JSON =='
 Write-Host $matrixJson
+Write-Host '== Image matrix JSON =='
+Write-Host $imageMatrixJson
 
 # If running in GitHub Actions, write to $GITHUB_OUTPUT so the scan job matrix can
-# consume it via needs.discover-base-images.outputs.matrix.
+# consume them via needs.discover-base-images.outputs.matrix / .image_matrix.
 if ($env:GITHUB_OUTPUT) {
     "matrix=$matrixJson" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+    "image_matrix=$imageMatrixJson" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
     Write-Host ''
-    Write-Host 'Wrote matrix to GITHUB_OUTPUT'
+    Write-Host 'Wrote matrix and image_matrix to GITHUB_OUTPUT'
 }
+
+exit 0

@@ -246,12 +246,14 @@ jobs:
     # Discover production Dockerfiles and enforce the digest-pinning policy.
     # Production Dockerfiles are identified by the "# jim-compliance: production-image"
     # directive; unlabelled Dockerfiles (devcontainer, test fixtures) are out of scope.
-    # The job emits a matrix of unique base image references for scan-base-images to
-    # consume. Any production Dockerfile with a non-digest-pinned FROM line fails here.
+    # Any production Dockerfile with a non-digest-pinned FROM line fails here. The job
+    # emits two matrices: the unique base image references (the pin policy's subject)
+    # and the production Dockerfiles themselves, which scan-images builds and scans.
     # See .github/scripts/discover-base-images.ps1 and engineering/DEVELOPER_GUIDE.md.
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     outputs:
       matrix: ${{ steps.discover.outputs.matrix }}
+      image_matrix: ${{ steps.discover.outputs.image_matrix }}
 
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -261,13 +263,20 @@ jobs:
       shell: pwsh
       run: ./.github/scripts/discover-base-images.ps1
 
-  scan-base-images:
-    # Scan each discovered production base image for CRITICAL/HIGH CVEs with a
+  scan-images:
+    # Build each production JIM image and scan it for CRITICAL/HIGH CVEs with a
     # published fix. Emits SARIF so findings are surfaced in the GitHub Security tab,
     # not just the Actions log. Catches vulnerabilities early, before a release tag
-    # is created. The matrix is generated dynamically by discover-base-images, so
-    # adding a new production Dockerfile requires zero changes to this workflow:
-    # just add the "# jim-compliance: production-image" directive to the new file.
+    # is created.
+    #
+    # The built image, not the base image, is the subject: it is what customers run,
+    # and it alone carries the apt pins and the build-time apt-get upgrade (see any
+    # production Dockerfile). Scanning the base image instead reported every Ubuntu
+    # advisory Microsoft's rebuild had not yet caught up with, none of which the
+    # shipped image still contained, and could not see the JIM layer at all. The
+    # matrix comes from discover-base-images, so adding a new production Dockerfile
+    # requires zero changes to this workflow: just add the
+    # "# jim-compliance: production-image" directive to the new file.
     needs: discover-base-images
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     permissions:
@@ -276,20 +285,33 @@ jobs:
 
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.discover-base-images.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.discover-base-images.outputs.image_matrix) }}
 
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
-    # Pull the base image into the local Docker daemon so Trivy can read it via
-    # --image-src docker. Without this step, network image acquisition was a
-    # source of phantom failures (Trivy exiting 1 after "Detecting
-    # vulnerabilities" with no SARIF written). A digest-pinned local image always
-    # scans cleanly. See PR #520 discussion.
-    - name: Pull base image
-      run: docker pull ${{ matrix.image_ref }}
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
 
-    - name: Scan base image for vulnerabilities
+    # Same action, pins and cache scope as the release build, so a PR's build warms the
+    # cache the release will use and vice versa. The image is loaded into the local
+    # daemon for Trivy to read via --image-src docker; nothing is pushed. OPENAPI_STAGE
+    # skips the JIM.Web OpenAPI generation stage, which costs about five minutes and
+    # contributes nothing to what is scanned; the openapi-document job proves it separately.
+    - name: Build image
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
+      with:
+        context: .
+        file: ${{ matrix.dockerfile }}
+        load: true
+        tags: ${{ matrix.image_name }}:scan
+        build-args: |
+          VERSION=scan
+          OPENAPI_STAGE=publish
+        cache-from: type=gha,scope=${{ matrix.image_name }}
+        cache-to: type=gha,scope=${{ matrix.image_name }},mode=max
+
+    - name: Scan image for vulnerabilities
       id: trivy
       # Run Trivy from its pinned container image rather than via
       # aquasecurity/trivy-action + setup-trivy. The action path re-downloaded
@@ -308,12 +330,12 @@ jobs:
       # action's filter, and uses the same score GitHub Code Scanning shows).
       # ignore-unfixed stays on: no value blocking on CVEs with no upstream fix.
       #
-      # image_ref is passed via env, not interpolated into the run script, to
+      # The image tag is passed via env, not interpolated into the run script, to
       # avoid GitHub Actions expression-injection (flagged by CodeQL actions).
       env:
         # aquasec/trivy:0.70.0 pinned by digest (supply-chain governance).
         TRIVY_IMAGE: 'aquasec/trivy:0.70.0@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e'
-        IMAGE_REF: ${{ matrix.image_ref }}
+        IMAGE_REF: ${{ matrix.image_name }}:scan
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         docker run --rm \
@@ -381,7 +403,7 @@ jobs:
           }
         }
 
-        Write-Host "Trivy findings for ${{ matrix.image_ref }}:"
+        Write-Host "Trivy findings for ${{ matrix.image_name }} (${{ matrix.dockerfile }}):"
         Write-Host "  CRITICAL: $critical"
         Write-Host "  HIGH:     $high"
         Write-Host "  MEDIUM:   $medium  (not blocking)"
@@ -405,19 +427,20 @@ jobs:
       uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d  # v3.37.9
       with:
         sarif_file: trivy-results.sarif
-        # Category is keyed by image repository (stable), not Dockerfile line
-        # number. A line-keyed category orphaned its alerts whenever a FROM line
-        # moved, leaving fixed findings stuck open. See discover-base-images.ps1.
-        category: trivy-base-image-${{ matrix.image_name }}
+        # Category is keyed by the JIM image name (stable across base image
+        # digest bumps and Dockerfile edits), so fixed findings close on the
+        # next upload rather than sitting orphaned under a category that is
+        # never uploaded again. See discover-base-images.ps1.
+        category: trivy-image-${{ matrix.image_name }}
 
   scan-base-images-summary:
-    # Stable-name gate for the dynamic scan-base-images matrix. Matrix leg
-    # names embed image digests that change with every base image update,
-    # making them unsuitable as required status checks. This job succeeds
-    # only when all matrix legs succeed, providing a single stable check
-    # name ("scan-base-images-summary") for the branch protection ruleset.
+    # Stable-name gate for the dynamic scan-images matrix, providing the single
+    # check name the branch protection ruleset requires. The name predates the
+    # move from scanning base images to scanning the built JIM images and is
+    # kept because the ruleset names it; renaming it here without changing the
+    # ruleset would leave every PR waiting on a check that never reports.
     if: always()
-    needs: [discover-base-images, scan-base-images]
+    needs: [discover-base-images, scan-images]
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     steps:
     - name: Check matrix results
@@ -426,8 +449,8 @@ jobs:
           echo "discover-base-images failed or was cancelled"
           exit 1
         fi
-        if [ "${{ needs.scan-base-images.result }}" != "success" ]; then
-          echo "One or more scan-base-images matrix legs failed"
+        if [ "${{ needs.scan-images.result }}" != "success" ]; then
+          echo "One or more scan-images matrix legs failed"
           exit 1
         fi
-        echo "All base image scans passed"
+        echo "All image scans passed"

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # jim-compliance: production-image
 # This image ships to customers. Base image digest pinning is enforced by CI
-# (see .github/workflows/ci.yml scan-base-images job). Do not remove the
+# (see .github/workflows/ci.yml discover-base-images job). Do not remove the
 # @sha256: digest from any FROM line or this Dockerfile will fail CI.
 # See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
@@ -21,7 +21,15 @@ WORKDIR /app
 # Pin apt package versions for reproducible builds
 # Update these versions when bumping base image digests
 # Note: libldap-2.5-0 was renamed to libldap2 in Ubuntu Noble (OpenLDAP 2.6)
+#
+# Apply Ubuntu's published fixes at build time. Microsoft rebuilds the base image on its own
+# cadence, so a digest can trail the noble archive by weeks; upgrading here is what makes the
+# shipped image carry the fixes rather than wait for the rebuild. It runs before the pinned
+# installs so a pin is never silently moved: a pin older than what the upgrade installed fails
+# the build outright (and apt-pin-check will already have proposed the bump).
+# See engineering/DEPENDENCY_PINNING.md.
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         libldap-common=2.6.10+dfsg-0ubuntu0.24.04.1 \
         libldap2=2.6.10+dfsg-0ubuntu0.24.04.1 \

@@ -615,12 +615,12 @@ The `main` branch is protected by the **"Protect Main"** repository ruleset, whi
 |------------|--------|-------------------|
 | `build-and-test` | CI workflow | .NET build, .NET tests, PowerShell Pester tests |
 | `discover-base-images` | CI workflow | Production Dockerfile digest-pinning policy |
-| `scan-base-images-summary` | CI workflow | All base image vulnerability scans passed (aggregates dynamic matrix legs) |
+| `scan-base-images-summary` | CI workflow | Every production JIM image built and scanned clean of fixable HIGH/CRITICAL CVEs (aggregates the `scan-images` matrix legs) |
 | `Analyze (actions)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of GitHub Actions workflows |
 | `Analyze (csharp)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of C# code |
 | `Analyze (javascript-typescript)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of JavaScript/TypeScript code |
 
-**Why `scan-base-images-summary` exists:** the `scan-base-images` job uses a dynamic matrix whose leg names embed image digests (e.g. `scan-base-images (src/JIM.Web/Dockerfile, 10, mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:...)`). These names change with every base image update, making them unsuitable as required status checks. The summary job aggregates all matrix legs into a single stable check name.
+**Why `scan-base-images-summary` exists:** the `scan-images` job uses a dynamic matrix generated from the production Dockerfiles, and matrix leg names are unsuitable as required status checks (a leg appears or disappears with the Dockerfiles, and the original base-image matrix embedded digests that changed with every bump). The summary job aggregates all matrix legs into a single stable check name. The name predates the move from scanning base images to scanning the built JIM images and is kept because the ruleset names it.
 
 **Human review:** the required approving review count is currently set to zero. The machine-enforced quality gates (CodeQL static analysis with review comments via the github-code-quality bot, build and test, base image scanning, changelog lint) provide the consistent baseline across all PRs; an AI-assisted review can be requested on demand by commenting `@claude review this PR` (the `.github/workflows/claude.yml` workflow). As the team grows, human reviewer requirements will be layered onto the ruleset without restructuring.
 
@@ -1092,7 +1092,8 @@ All dependency updates require human review before merging. Dependabot proposes 
 
 All production Dockerfiles pin their dependencies for reproducible, auditable builds:
 
-- **Base image digests**: Each `FROM` line includes a `@sha256:` digest, locking the exact OS + runtime layer. This prevents builds on different dates producing different images.
+- **Base image digests**: Each `FROM` line includes a `@sha256:` digest, locking the exact .NET runtime layer and the Ubuntu layer Microsoft built it on.
+- **Ubuntu fixes applied at build time**: every production stage runs `apt-get upgrade` before its pinned installs. Microsoft rebuilds the base images on its own cadence, so a pinned digest can trail the noble archive by weeks; the upgrade is what makes the shipped image carry Ubuntu's published fixes rather than wait for that rebuild. It is a deliberate, bounded trade against reproducibility: the .NET layer and every JIM-installed package stay pinned, only the Ubuntu packages already in the base image move, and the release SBOM records exactly what shipped. The upgrade runs *before* the pinned installs so a pin can never be silently moved: a pin older than what the upgrade installed fails the build outright, and `apt-pin-check` will already have proposed the bump.
 - **Functional apt packages**: Libraries that JIM calls at runtime (libldap, cifs-utils, krb5) are pinned to exact versions (e.g., `libldap2=2.6.10+dfsg-0ubuntu0.24.04.1`).
 - **Diagnostic utilities**: Tools like `curl` and `iputils-ping` are not pinned, as they are only used for health checks and debugging, not functional code paths.
 
@@ -1106,7 +1107,7 @@ When adding a new production Dockerfile:
 2. Ensure every external `FROM` line uses `@sha256:` digest pinning
 3. That's it. The discovery script finds the new file automatically; no workflow or config update is required.
 
-Vulnerability scanning runs against every discovered production base image on every push and PR. Findings are surfaced in the GitHub Security tab via SARIF upload in addition to the Actions log, so they are visible to reviewers and auditable after the fact.
+Vulnerability scanning (`scan-images`) builds every production JIM image on every push and PR and scans the result: the built image is what customers run, and it alone carries the apt pins and the build-time upgrade. Findings are surfaced in the GitHub Security tab via SARIF upload (one category per JIM image) in addition to the Actions log, so they are visible to reviewers and auditable after the fact.
 
 **Why this matters**: `System.DirectoryServices.Protocols` (the .NET LDAP client) P/Invokes into the native `libldap` shared library at runtime. An incompatible libldap version could cause silent behavioural differences or crashes during LDAP/AD operations.
 
@@ -1127,13 +1128,13 @@ docker run --rm <image>@<new-digest> bash -c \
 Checking those pinned apt versions by hand (step 1 above) is easy to forget, and the two systems you might expect to catch a stale pin do not:
 
 - **Dependabot** only parses `FROM` lines for the Docker ecosystem; it never sees a `pkg=version` pinned inside a `RUN apt-get install`.
-- **The `scan-base-images` Trivy job** scans each base image *by digest*. The packages JIM pins are installed *on top of* the base image, so they exist only in the built JIM image, which that job does not scan. (They are scanned at release time by the built-image Trivy step in `release.yml`, but only for HIGH/CRITICAL and only when a release is cut.)
+- **The `scan-images` Trivy job** scans the built image, so it does see the pinned packages, but it only reports a pin as a problem when a CVE is published against it. A pin that is merely stale, or that the archive has since withdrawn, is invisible to it.
 
 The `apt-pin-check` workflow ([`.github/workflows/apt-pin-check.yml`](../.github/workflows/apt-pin-check.yml)) closes the gap. Daily, and on demand via *Run workflow*, it:
 
 1. Discovers the same production Dockerfiles, parses every pinned `pkg=version`, and attributes each pin to the base image of the build stage it is installed into.
 2. Queries that base image's archive for the current candidate version and flags any pin that is behind, noting whether the update comes from the `-security` pocket.
-3. **Validates that the candidate is actually installable** in that base image (`apt-get install --dry-run`) before proposing it. This matters because CI does not build the JIM images on a PR, so the bot must not propose an unbuildable version.
+3. **Validates that the candidate is actually installable** in that base image (`apt-get install --dry-run`) before proposing it, so the bump PR it raises builds first time.
 4. Raises, or updates in place, a single pull request bumping the validated pins, for the same human review every other dependency update gets.
 
 Backing scripts: [`.github/scripts/check-apt-pins.ps1`](../.github/scripts/check-apt-pins.ps1) (detection, installability validation, and the `-Apply` rewrite) and [`.github/scripts/open-pin-pr.ps1`](../.github/scripts/open-pin-pr.ps1) (the shared signed-commit PR opener, also used by `tooling-pin-check` below). Both run locally from the repository root for ad hoc checks; `check-apt-pins.ps1` needs Docker.
@@ -1166,37 +1167,35 @@ Backing scripts: [`.github/scripts/check-tooling-pins.ps1`](../.github/scripts/c
 
 Ranges (e.g. the `mkdocs>=1.6,<2` pins in `setup.sh`) are deliberately out of scope: a range already absorbs minor and patch releases, so only the upper bound is a periodic judgment call rather than an automatable bump.
 
-##### When the scan-base-images gate blocks on an upstream-only CVE
+##### When the scan-images gate blocks on an upstream-only CVE
 
-The `scan-base-images` CI job fails the build whenever Trivy reports a fixable HIGH or CRITICAL CVE (CVSS >= 7.0) in any production base image. "Fixable" means an upstream-patched version of the affected package exists.
+The `scan-images` CI job fails the build whenever Trivy reports a fixable HIGH or CRITICAL CVE (CVSS >= 7.0) in any built production image. "Fixable" means an upstream-patched version of the affected package exists.
 
-For most JIM-installed packages (the apt versions we pin in our Dockerfiles), "fixable" means we can bump the pinned version ourselves and the gate clears on the next build. But the bulk of packages in a base image come from the **Microsoft `dotnet/<runtime|aspnet|sdk>:10.0-noble` image layer**, not from JIM. We do not control when Microsoft rebuilds those images. Microsoft typically rebuilds on its own cadence (often monthly, sometimes longer); during the gap between an Ubuntu security release and a Microsoft refresh, Trivy can correctly flag a CVE as "fixable upstream" even though we have no way to apply the fix ourselves.
+Because every production stage runs `apt-get upgrade` at build time, an Ubuntu fix reaches the image on the next build, whether or not Microsoft has rebuilt the base image yet. The gap that remains is between the advisory being published and the fix reaching the noble archive (Trivy does not count a CVE as fixable until then), and, for the .NET runtime itself, between the advisory and Microsoft's servicing release. In that gap Trivy can correctly flag a CVE as "fixable upstream" even though no build of ours can apply the fix.
 
-When this happens, every PR and every push to `main` will fail the `scan-base-images` job until either Microsoft publishes a refreshed digest (which Dependabot will then propose) or we apply a manual workaround.
+When this happens, every PR and every push to `main` will fail the `scan-images` job until the fix is published (for a .NET runtime CVE, Dependabot proposes the refreshed digest) or a documented workaround is applied.
 
 **Response options, in order of preference:**
 
-1. **Wait for the Microsoft rebuild.** This is the default and best response when the CVE risk is acceptable to wait out. Check https://mcr.microsoft.com/en-us/product/dotnet/runtime/tags for the current published digest of `10.0-noble`. If it differs from what is pinned in the Dockerfiles, bump the digest manually (or wait for Dependabot to propose it). This typically takes a few days to a few weeks depending on Microsoft's release cadence.
+1. **Wait for the upstream publish.** This is the default and best response when the CVE risk is acceptable to wait out. For a .NET runtime CVE, check https://mcr.microsoft.com/en-us/product/dotnet/runtime/tags for the current published digest of `10.0-noble`; if it differs from what is pinned in the Dockerfiles, bump the digest manually (or wait for Dependabot to propose it).
 
-2. **Suppress the CVE via [`.trivyignore`](../.trivyignore)** when the reported CVE is a verified false positive (the base image is already patched but Trivy over-reports) or when the vulnerability is already mitigated at the application layer (e.g., a NuGet pin overrides the in-box assembly). See "Trivy CVE suppressions" below for the required justification format. This is preferable to option 3 because it scopes the suppression to specific CVEs rather than lowering the entire threshold.
+2. **Suppress the CVE via [`.trivyignore`](../.trivyignore)** when the reported CVE is a verified false positive (the image is already patched but Trivy over-reports) or when the vulnerability is already mitigated at the application layer (e.g., a NuGet pin overrides the in-box assembly). See "Trivy CVE suppressions" below for the required justification format. This is preferable to option 3 because it scopes the suppression to specific CVEs rather than lowering the entire threshold.
 
-3. **Apply `apt-get upgrade` in the Dockerfile** as a temporary measure if the CVE is severe enough that waiting is not acceptable. This pulls current Ubuntu security patches at *build* time rather than at *base image publish* time. Trade-off: it weakens the reproducibility guarantee of pinning by digest. Only do this for genuinely urgent issues, and revert as soon as Microsoft publishes a refreshed image.
+3. **Temporarily lower the gate threshold from HIGH to CRITICAL** in `.github/workflows/ci.yml` (the `Fail build on fixable HIGH/CRITICAL Trivy findings` step) if the blocking CVE is HIGH but not CRITICAL and the work jam is unacceptable. Two-line change. **Revert as soon as the underlying CVE is resolved.**
 
-4. **Temporarily lower the gate threshold from HIGH to CRITICAL** in `.github/workflows/ci.yml` (the `Fail build on fixable HIGH/CRITICAL Trivy findings` step) if the blocking CVE is HIGH but not CRITICAL and the work jam is unacceptable. Two-line change. **Revert as soon as the underlying CVE is resolved.**
-
-5. **Dismiss the specific alert** in the GitHub Security tab with a "won't fix - upstream dependency" reason and a comment explaining why. This requires the alert to first reach the Security tab via SARIF upload, which it will on every CI run. Dismissal only suppresses the specific alert; if the same CVE is detected against a different package or a new base image, it reappears.
+4. **Dismiss the specific alert** in the GitHub Security tab with a "won't fix - upstream dependency" reason and a comment explaining why. This requires the alert to first reach the Security tab via SARIF upload, which it will on every CI run. Dismissal only suppresses the specific alert; if the same CVE is detected against a different package or a new image, it reappears.
 
 **Do not** add `continue-on-error: true` to the scan step. That permanently weakens the gate and is not the same as a documented temporary downgrade.
 
-The choice between options 1-5 depends on the specific CVE, its CVSS score, the nature of the affected component, and how long Microsoft is likely to take. There is no pre-baked policy because the right answer is genuinely case-dependent. When in doubt, escalate to a maintainer.
+The choice between options 1-4 depends on the specific CVE, its CVSS score, the nature of the affected component, and how long upstream is likely to take. There is no pre-baked policy because the right answer is genuinely case-dependent. When in doubt, escalate to a maintainer.
 
 ##### Trivy CVE suppressions (`.trivyignore`)
 
-A repo-root [`.trivyignore`](../.trivyignore) file suppresses individual CVEs from the `scan-base-images` job. It is wired into `.github/workflows/ci.yml` via the `trivyignores: '.trivyignore'` input on the `aquasecurity/trivy-action` step; Trivy drops suppressed findings from the SARIF output entirely, so they do not reach the custom PowerShell filter or the GitHub Security tab.
+A repo-root [`.trivyignore`](../.trivyignore) file suppresses individual CVEs from the `scan-images` job. It is wired into `.github/workflows/ci.yml` via the `--ignorefile .trivyignore` argument on the Trivy invocation; Trivy drops suppressed findings from the SARIF output entirely, so they do not reach the custom PowerShell filter or the GitHub Security tab.
 
 **When to add a suppression:**
 
-- **Verified false positive**: the base image is already patched but Trivy still reports the CVE (common with .NET in-box assemblies where the patched DLL's file version can still read as pre-patch, causing Trivy to match it against the GHSA's NuGet version range).
+- **Verified false positive**: the image is already patched but Trivy still reports the CVE (common with .NET in-box assemblies where the patched DLL's file version can still read as pre-patch, causing Trivy to match it against the GHSA's NuGet version range).
 - **Mitigated at the application layer**: JIM pins a newer NuGet version that overrides the in-box assembly at publish, eliminating the real exploit surface even though the base image still contains the older copy. Cross-reference the mitigating PR.
 - **Not exploitable in JIM's usage**: the vulnerable code path is not reached by JIM at runtime. Document which class/API is affected and why it is unreachable.
 
