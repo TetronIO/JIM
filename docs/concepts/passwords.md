@@ -2,7 +2,7 @@
 
 A newly provisioned account is not much use until somebody gives it a password. JIM can do that for you, on the accounts it manages, without anyone touching the target system by hand.
 
-It can also set a password on demand: on one account, or the same password across every account a person has.
+It can also set a password on demand: on the accounts you name, or on every system configured to receive a person's password changes.
 
 !!! info "Nothing happens until you ask for it"
     A Connected System is only a candidate if its Connector supports setting passwords. Even then, JIM sets nothing until you configure it: initial passwords are off on every Synchronisation Rule until you switch them on, and every other route here is a deliberate action on a named account. Today the [LDAP Connector](../connectors/jim-ldap-connector.md#setting-passwords) is the Connector that supports it, covering Active Directory, Samba AD, OpenLDAP and generic LDAP directories.
@@ -95,9 +95,11 @@ So treat what JIM discovered as a **floor, not a guarantee**, and read a blank v
 Alongside provisioning, you can set a password whenever you need to: the new starter about to sign in for the first time, the account whose provisioning password was refused, the reset that has to happen now.
 
 - **One account.**<br /> Open a Connected System Object and use **Set Password**. The password is masked from the moment it is generated, and **Copy works while it is still masked**, so handing someone their password never means putting it on a screen others can read. Reveal is there for reading one aloud, and hides itself again after thirty seconds.
-- **One person, several systems.**<br /> Open a person and the same action lists every account they have that JIM can set a password on. Nothing is selected by default, so a reset in one system never quietly resets the others.
+- **One person, several systems.**<br /> Open a person's **Password** tab and **Set Password** lists every account they have that JIM can set a password on. Nothing is selected by default, so a reset in one system never quietly resets the others.
 
 JIM generates passwords in three styles (random characters, words, or a pronounceable password), always from a cryptographic random source, and tells you the length and character categories the result is guaranteed to carry. You can type your own instead. Automation has the same choice, through `-Generate` or `-Password` on the set-password cmdlets and their REST equivalents.
+
+Whichever way you start it, the password is not written while you watch. It is queued, encrypted, one change per Connected System, and the [Password Delivery Service](#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing. The dialog and the API wait briefly and tell you what each system did with it; see [Setting a password](#-setting-a-password) below for the outcomes and what each one asks of you.
 
 ### One password across several systems
 
@@ -105,22 +107,22 @@ Giving somebody four different passwords on their first morning is more work for
 
 This is the case where letting JIM generate the password matters most. You cannot see those policies in order to reason about them, and JIM can.
 
-!!! warning "Each system is written to independently"
-    There is no transaction across Connected Systems, so a run can end with some accounts changed and others not, leaving the person with a different password where it failed. JIM tells you exactly which, and offers to retry just those, reusing the password already in hand.
+!!! warning "Each system is delivered to independently"
+    There is no transaction across Connected Systems. Each one gets its own queued change, so one system being down or refusing the password does not stop the others, and the person can end up with the new password in some systems and not yet in others. JIM tells you exactly where each one stands: **Set**, **Retrying** where a system could not be reached (JIM keeps trying on its own clock), or **Parked** where the system refused it.
 
-    Where a system refused the **password itself**, sending it again would fail identically, so JIM offers a fresh password for every account instead, including the ones that already worked. Replacing it only where it failed would leave the person with two passwords.
+    Where a system refused the **password itself**, sending it again would fail identically, so JIM offers **Try another password**: a fresh one for every account, including the ones that already took the first. Replacing it only where it failed would leave the person with two passwords.
 
-    Where JIM could read no policy from a selected system, it says so rather than assuming that system will accept anything. Where no single password could satisfy them all, it refuses before writing anything, rather than handing you one that the first account accepts and the second rejects after the first has already changed.
+    Where JIM could read no policy from a selected system, it says so rather than assuming that system will accept anything. Where no single password could satisfy them all, it refuses before queueing anything, rather than handing you one that the first account accepts and the second rejects after the first has already changed.
 
 ## 🛡️ How JIM handles passwords safely
 
-**No password value is stored, with one exception you have to choose.** Not in JIM's database, its logs, its Activities, its configuration history, its previews or its search. Each password is generated at the moment it is needed, handed to the Connected System, and dropped.
+**A password is held, encrypted, only until it is delivered.** A password you set or propagate is encrypted the moment JIM receives it and sits on the queue only as long as it takes the Password Delivery Service to hand it to each Connected System; the moment a system has it, JIM's copy for that system is gone. A copy a system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with, until the change [expires or retention removes it](#-how-long-any-of-it-is-kept). Nothing else holds one: not JIM's logs, its Activities, its configuration history, its previews or its search, and no page, REST response or cmdlet will show you a queued password. An initial password JIM generates during provisioning is produced at the moment it is delivered and never queued at all.
 
-The exception is a [shared initial password](#one-password-for-every-account) you set on a Synchronisation Rule. That one has to survive until the next account is provisioned, so it is stored, encrypted at rest exactly as a Connected System's credentials are. It is write-only on every surface: no portal page, REST response or cmdlet will return it, and your configuration history records a keyed hash of it, which is enough to show that it changed and when without carrying the password.
+The one password that is stored for longer is a [shared initial password](#one-password-for-every-account) you choose to set on a Synchronisation Rule. That one has to survive until the next account is provisioned, so it is stored, encrypted at rest exactly as a Connected System's credentials are. It is write-only on every surface: no portal page, REST response or cmdlet will return it, and your configuration history records a keyed hash of it, which is enough to show that it changed and when without carrying the password.
 
-A password you explicitly asked JIM to generate for you is a different case and is stored nowhere: it is handed back once, to you, and forgotten. That is why the portal generates one for you on screen but the provisioning path does not; there is nothing kept to look up later.
+A password you explicitly asked JIM to generate for you is handed back once, to you, at the moment it is made; after that JIM's copy is the queued one, and it goes when the systems have it. That is why the portal generates one for you on screen but the provisioning path does not; there is nothing kept to look up later.
 
-Every attempt is recorded as an Activity against the account, whether it worked or not, carrying the outcome and the system's own words on a refusal. The Activity records that a password was set. It never records the password.
+Every attempt is recorded as an Activity, whether it worked or not, carrying the outcome and the system's own words on a refusal. The Activity records that a password was set. It never records the password.
 
 ### So how does the person get their password?
 
@@ -147,10 +149,10 @@ Passwords therefore travel their own path, which never touches any of it.
 | | Ordinary attributes | Passwords |
 |---|---|---|
 | Held centrally in the Metaverse | ✅ | ❌ |
-| Queued as a Pending Export | ✅ | ❌ written straight to the system |
+| Queued as a Pending Export | ✅ | ❌ queued on their own encrypted queue, held only until delivered |
 | Kept in configuration and object history | ✅ | ❌ a shared initial password is recorded as a keyed hash, never a value |
 | Read back when JIM imports | ✅ | ❌ |
-| Retried automatically | ✅ | Only an initial password, and only while a retry could help |
+| Retried automatically | ✅ | ✅ on their own clock, and parked rather than retried into the same refusal |
 
 The practical consequence is that **attributes holding credentials cannot be managed as attributes at all.** `unicodePwd`, `userPassword` and their relatives cannot be imported and cannot be chosen in an Attribute Flow; JIM does not offer them. If an earlier version of your deployment had selected one, the next schema refresh deselects and locks it rather than deleting it, so any Synchronisation Rule referring to it stays intact. See [Credential attributes are never managed](../configuration/connected-systems.md#credential-attributes-are-never-managed).
 
@@ -173,36 +175,36 @@ That is also why there is no way to remove a configuration, only to disable it. 
 
 How long a change waits before JIM gives up on it is the Connected System's **initial password time to live** setting, shared with initial password provisioning: the question both are asking is how long that system may be unavailable before JIM stops trying, and the answer is a property of the system.
 
-### ▶️ Starting a synchronised password change
+### ▶️ Setting a password
 
-JIM has two ways to give somebody a password, and they answer different questions.
+JIM has one operation for giving somebody a password, **Set Password**, and you aim it one of two ways. Both go through the same queue, the same delivery service, the same retries and the same history; what differs is where the password goes, and so what the sensible defaults are.
 
-| | **Set Password** | **Synchronise Password** |
+| | **Named accounts** | **Every configured system** |
 |---|---|---|
 | Answers | "Change this person's password in the systems I choose" | "This person's password changed; every system should hold it" |
-| Reaches | The accounts you tick | Every Connected System enabled for Password Synchronisation |
-| When | Immediately, while you wait | Recorded now; the first delivery attempt follows within about a second |
-| If a system is down | That account fails, and you are told | Queued and retried until it works or the window closes |
-| Told to you | Success or failure per account | Which systems it was queued for, and what each did with it if you choose to wait |
+| Reaches | The accounts you name, whether or not their system's Password Synchronisation is switched on | Every Connected System configured for Password Synchronisation, including those switched off (held) and those where the account does not exist yet (delivered when it does) |
+| Expiry, unless you say otherwise | Change required at next sign-in: somebody else chose this password | Left to each system's own policy: the person chose it, and should not be made to choose another |
+| Told to you | The call waits up to ten seconds and reports what each account did with the password | The call returns as soon as the change is recorded; ask it to wait if you want the outcomes |
+| Enable the account | Available | Never: a propagated password reaches accounts an administrator may have disabled on purpose |
 
-Use **Set Password** when you are choosing the password yourself and applying it to systems you name: onboarding somebody, or putting right an account whose password was refused or forgotten. Use **Synchronise Password** when they have already changed their own password somewhere and the rest should catch up.
+Name the accounts when you are choosing the password for somebody: onboarding them, or putting right an account whose password was refused or forgotten. Name none when they have already changed their own password somewhere and the rest should catch up; this is also the shape a future capture agent, replaying a change made in another directory, would use.
 
-Both are on the Metaverse Object's Actions tab, and both are available to automation:
+In the portal, both live on the person's **Password** tab: the **Set Password** card lists their accounts, and what is still to be delivered and what recent changes did sit beneath it. Both are available to automation:
 
 ```powershell
-# Change the password on chosen accounts, now
+# Change the password on the accounts in the systems you name, and wait to hear what each did with it
 Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId 3 -Password $password
 
-# Propagate a password change everywhere it belongs
-Sync-JIMMetaverseObjectPassword -Id $id -Password $password
+# Propagate a password change to every configured system, returning as soon as it is recorded
+Set-JIMMetaverseObjectPassword -Id $id -Password $password
 
 # The same, but stay on the line for up to ten seconds and be told which systems took it
-Sync-JIMMetaverseObjectPassword -Id $id -Password $password -Wait 10
+Set-JIMMetaverseObjectPassword -Id $id -Password $password -Wait 10
 ```
 
-Over REST, that is `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password` and `POST /api/v1/metaverse/objects/{id}/password` respectively. Every endpoint that accepts a password refuses the request unless JIM can confirm the connection is encrypted; if TLS terminates at a reverse proxy, set `JIM_TRUSTED_PROXIES` so JIM reads the forwarded scheme rather than the hop it can see.
+Over REST it is one endpoint, `POST /api/v1/metaverse/objects/{id}/password`, with `connectedSystemObjectIds` naming the accounts or omitted to propagate. `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password` is the same operation with that one account named, for callers that hold the account rather than the person. Every endpoint that accepts a password refuses the request unless JIM can confirm the connection is encrypted; if TLS terminates at a reverse proxy, set `JIM_TRUSTED_PROXIES` so JIM reads the forwarded scheme rather than the hop it can see.
 
-A synchronised change is recorded and delivered separately (the next section says why), so by default the call returns the moment the change is recorded, before anything has been written to a directory. Because delivery begins within about a second, it is often worth waiting for: a service desk script wants to tell the caller their password has landed, not that it has been noted. The endpoint takes an optional `wait`, in seconds from 0 to 30 (`-Wait` in PowerShell, default 0), and holds the request until every target has settled or the time runs out. It answers `200` when everything settled and `202` when something was still on its way, with the same body either way: `settled`, and one entry per Connected System carrying its `state` (`Queued`, `Delivering`, `Set`, `Retrying`, `Parked`, `Held`, `Expired` or `Cancelled`), the target's own `message`, its `attemptCount`, and `nextAttemptAt` for a target that is retrying. A target that is retrying counts as settled: its next attempt is minutes away, and nobody at a screen should be held for it.
+Either way the change is recorded and delivered separately (the next section says why): the call answers once the change is durable, and the first delivery attempt follows within about a second. The endpoint takes an optional `wait`, in seconds from 0 to 30 (`-Wait` in PowerShell), which overrides either default and holds the request until every target has settled or the time runs out. It answers `200` when everything settled and `202` when something was still on its way, with the same body either way: `origin` (`Explicit` or `Propagated`), `settled`, and one entry per Connected System carrying its `state` (`Queued`, `Delivering`, `Set`, `Retrying`, `Parked`, `Held`, `Expired` or `Cancelled`), the target's own `message`, its `attemptCount`, and `nextAttemptAt` for a target that is retrying. A target that is retrying counts as settled: its next attempt is minutes away, and nobody at a screen should be held for it. A target that was parked is settled too, and is the one that needs you: the system refused the password, in the words the `message` carries, and sending the same one again would be refused the same way.
 
 ### 📬 How a password change reaches a system
 
@@ -253,7 +255,7 @@ Filter by Connected System, by state, or by how the last attempt failed, and sea
 
 Whatever a retry or a cancel covers, it is recorded as **one** Activity. A retry over a directory that has just come back is a single decision, and a hundred Activities saying so would bury the decision in its own consequences. The Activity is recorded even when nothing matched, so a retry that changed nothing can be told from a retry that never ran.
 
-You are also told where the work is without going looking for it. The **Connected Systems** list carries a Password Synchronisation column showing each system's state, with parked and expired counts beside it, sortable and filterable, including a **Needs attention** filter that cuts across the states. And each person's own page has an administrator-only **Password Synchronisation** tab: what is still owed to which of their systems, and what their recent password changes actually did on each one.
+You are also told where the work is without going looking for it. The **Connected Systems** list carries a Password Synchronisation column showing each system's state, with parked and expired counts beside it, sortable and filterable, including a **Needs attention** filter that cuts across the states. And each person's own page has an administrator-only **Password** tab: Set Password, what is still owed to which of their systems, and what their recent password changes actually did on each one, whether an administrator set them or they were propagated.
 
 That last view reads from the Activities rather than from the queue, deliberately. A delivered change leaves the queue, so a view built on the queue alone would show a person's failures and none of their successes.
 
@@ -277,7 +279,7 @@ See [PowerShell: Password Synchronisation](../powershell/password-synchronisatio
 A finished password change is not kept for ever. The built-in **History Retention Cleanup** [Schedule](../configuration/schedules.md#built-in-schedules) runs daily and removes two things once they have had the `History.PasswordEventRetentionPeriod` [Service Setting](../administration/configuration.md#service-settings), which defaults to a year:
 
 - **Queued changes that finished**, whether parked, expired or cancelled. A change still owed to a Connected System is never removed, however old it is.
-- **The Activities recording what happened to each change**, including the per-system outcomes behind a person's Password Synchronisation tab.
+- **The Activities recording what happened to each change**, including the per-system outcomes behind a person's Password tab.
 
 The two move together on purpose: a person's password history is the outcomes, and a queued change without them says something happened without saying what.
 
@@ -288,12 +290,12 @@ Each pass says what it removed, on its own Activity, so retention is something y
 !!! warning "Requiring an encrypted connection means refusing to send"
     A Connected System with **Only send passwords over an encrypted connection** on will not have passwords sent to it over a connection JIM cannot confirm is encrypted. It is on the Connected System's Settings tab, under Passwords, and it governs **every** password JIM sends to that system: the first password on an account JIM provisions, one you set by hand, and a synchronised password change alike.
 
-    Nothing is discarded when JIM refuses. Queued password changes wait and are delivered once the connection is encrypted or the setting is turned off; accounts stay owed their first password and get one on the next export; an administrator setting a password by hand is told outright, at the time, rather than having it go out in the clear.
+    Nothing is discarded when JIM refuses. Queued password changes, an administrator's reset among them, wait and are delivered once the connection is encrypted or the setting is turned off; accounts stay owed their first password and get one on the next export. An administrator watching a reset is told at the time that the system is refusing to send, rather than having it go out in the clear.
 
     Leave it off only where the target genuinely cannot offer an encrypted connection, and understand what that costs: a password sent over an unencrypted one is readable by anyone on the network path.
 
 !!! note "Capturing a password changed in another system is a separate capability"
-    Everything here concerns a password change JIM knows about: one an administrator makes, or one sent to JIM's API. Capturing a change made **in** another system, such as a user changing their own password in Active Directory, and replaying it into the others needs a capture agent running on the domain controllers, because no directory will disclose a password when JIM reads from it.
+    Everything here concerns a password change JIM knows about: one an administrator makes, or one sent to JIM's API. Capturing a change made **in** another system, such as a user changing their own password in Active Directory, and replaying it into the others needs a capture agent running on the domain controllers, because no directory will disclose a password when JIM reads from it. When one exists, it will use the same operation as everything above, aimed at every configured system.
 
 ## Where to go next
 

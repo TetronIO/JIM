@@ -93,6 +93,14 @@ Settled during review (2026-09-05); the plan implements them rather than revisit
 
 **Tests.** Explicit row without configuration delivers; explicit row bypasses a paused system; propagated row is held; `EnableAccount` honoured only on explicit rows; the Activity shape is identical for both origins; the person's history shows a reset; dialog result states; endpoint and cmdlet contract tests.
 
+### Deviations
+
+Recorded during layer 3 (2026-09-05), REST and PowerShell:
+
+- **`Set-JIMConnectedSystemObjectPassword` changed shape after all.** The plan said "unchanged in shape", but once the account-scoped endpoint queues and waits, the old `-PassThru` object (applied expiry behaviour and a warning) no longer exists: the truthful result is the per-target outcome, and a refusal is a `Parked` target rather than a thrown error. The cmdlet now always returns the same outcome object `Set-JIMMetaverseObjectPassword` returns, `-PassThru` is removed, `-Wait` is added, and a generated password is carried on `GeneratedPassword` (was the lower-case `password`), matching the person-scoped cmdlet. Neither cmdlet shape had shipped.
+- **A `Parked` target is also surfaced as a non-terminating error** by both cmdlets, with the result as the error's `TargetObject`, so a script that stops on errors stops on a refusal. The plan named only the outcome shape; without the error a refusal would be silent in `-ErrorAction Stop` scripts that never inspect `Targets`.
+- **`-Generate` with no system named** generates against every Connected System the person has an account in, since the cmdlet cannot see which of those are configured for Password Synchronisation without a further call, and the strictest policy across all of them is the safe superset.
+
 ## Success Criteria
 
 - A Set Password on three accounts, started while a Full Import is running, reports per-account outcomes in the dialog within five seconds (integration test).
