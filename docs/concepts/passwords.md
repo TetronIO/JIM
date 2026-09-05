@@ -217,7 +217,7 @@ Delivery is a Password Delivery task in the Operations queue, so a pass is visib
 
 ### 🔎 Watching the queue
 
-Delivery works on its own, which is exactly why you need somewhere to look when it does not. The **Password Synchronisation** page under Administration lists every change on its way to a Connected System, one row per person per system, with what the target said about it.
+Delivery works on its own, which is exactly why you need somewhere to look when it does not. The **Passwords** tab of **Administration > Operations** lists every change on its way to a Connected System, one row per person per system, with what the target said about it. It sits beside the Queue, History and Schedules tabs because it answers the same question they do: what JIM is doing, and what it has stopped doing. The tab is badged with how many changes are waiting on a person (parked plus expired), so a backlog is visible from anywhere on the Operations page.
 
 It never shows a password, and cannot: the queued value is encrypted in the database and has no representation on any page, in any API response, or in any log line.
 
@@ -242,7 +242,7 @@ You are also told where the work is without going looking for it. The **Connecte
 
 That last view reads from the Activities rather than from the queue, deliberately. A delivered change leaves the queue, so a view built on the queue alone would show a person's failures and none of their successes.
 
-Everything on the page is scriptable, because a recovery across a directory that has just come back is not a job for a browser:
+Everything on the tab is scriptable, because a recovery across a directory that has just come back is not a job for a browser:
 
 ```powershell
 # What needs a person right now

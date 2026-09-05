@@ -10,7 +10,7 @@
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.PendingActions" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Operations</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    Manage tasks, view execution history, and configure schedules.
+    What JIM is doing now, what it did, and what is scheduled. Identity synchronisation and password delivery both report here.
 </MudText>
 
 @* TabPanelsClass is pa-0 rather than pt-5 because the Schedules tab opens straight onto a virtualised grid, which
@@ -25,6 +25,13 @@
     <MudTabPanel Text="Schedules" Icon="@Icons.Material.Filled.Schedule">
         <OperationsSchedulesTab />
     </MudTabPanel>
+    @* Badged with the password changes waiting on a person (parked plus expired), the way a Synchronisation Rule's
+       Passwords tab is badged with its parked accounts. Work JIM has stopped doing must be visible without
+       opening the tab to find out; waiting and cancelled changes are not counted, because neither needs anyone. *@
+    <MudTabPanel Text="Passwords" Icon="@Icons.Material.Filled.Key" BadgeColor="Color.Warning"
+                 BadgeData="@(_passwordAttentionCount > 0 ? _passwordAttentionCount.ToString("N0") : null)">
+        <OperationsPasswordsTab />
+    </MudTabPanel>
 </NavigableMudTabs>
 
 @code {
@@ -34,4 +41,18 @@
         new("Administration", href: "/admin"),
         new("Operations", href: null, disabled: true)
     ];
+
+    /// <summary>
+    /// Queued password changes that wait on a person, for the Passwords tab's badge. Loaded by the page rather
+    /// than the tab because a badge belongs to the tab strip, which is the page's, and the tab itself is only
+    /// rendered once it is selected.
+    /// </summary>
+    private int _passwordAttentionCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        var summary = await jim.PasswordSynchronisation.GetQueueSummaryAsync();
+        _passwordAttentionCount = summary.ParkedCount + summary.ExpiredCount;
+    }
 }
