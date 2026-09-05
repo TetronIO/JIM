@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # jim-compliance: production-image
 # This image ships to customers. Base image digest pinning is enforced by CI
-# (see .github/workflows/ci.yml scan-base-images job). Do not remove the
+# (see .github/workflows/ci.yml discover-base-images job). Do not remove the
 # @sha256: digest from any FROM line or this Dockerfile will fail CI.
 # See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
@@ -11,7 +11,7 @@ ARG VERSION=dev
 # to skip the expensive generation step in local dev builds.
 ARG OPENAPI_STAGE=openapi-gen
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:207cc51496778557731c81ff670333d8ade4a4fec22768fd1be8e78474a84ecf AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:a4556ed033fa96f984bb7a8d348851cb2d36b1281dd2420070045f664fbb5f94 AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Web"
@@ -27,7 +27,15 @@ EXPOSE 443
 # Pin functional dependency versions for reproducible builds
 # Update these versions when bumping base image digests
 # Note: libldap-2.5-0 was renamed to libldap2 in Ubuntu Noble (OpenLDAP 2.6)
+#
+# Apply Ubuntu's published fixes at build time. Microsoft rebuilds the base image on its own
+# cadence, so a digest can trail the noble archive by weeks; upgrading here is what makes the
+# shipped image carry the fixes rather than wait for the rebuild. It runs before the pinned
+# installs so a pin is never silently moved: a pin older than what the upgrade installed fails
+# the build outright (and apt-pin-check will already have proposed the bump).
+# See engineering/DEPENDENCY_PINNING.md.
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         libldap-common=2.6.10+dfsg-0ubuntu0.24.04.1 \
         libldap2=2.6.10+dfsg-0ubuntu0.24.04.1 \
@@ -114,7 +122,7 @@ RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 #
 # The output is written under /app/publish so that the final stage can pull
 # from either openapi-gen or publish using the same path.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:207cc51496778557731c81ff670333d8ade4a4fec22768fd1be8e78474a84ecf AS openapi-gen
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:a4556ed033fa96f984bb7a8d348851cb2d36b1281dd2420070045f664fbb5f94 AS openapi-gen
 WORKDIR /app/publish
 COPY --from=publish /app/publish .
 # DOTNET_gcServer=0 for the same reason scripts/Generate-OpenApiDoc.ps1 sets it: generation
