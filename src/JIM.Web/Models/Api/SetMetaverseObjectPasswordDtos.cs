@@ -146,7 +146,8 @@ public class SetMetaverseObjectPasswordResponse
                     State = outcome?.State ?? PasswordChangeTargetState.Queued,
                     NextAttemptAt = outcome?.NextAttemptAt,
                     Message = outcome?.Message,
-                    AttemptCount = outcome?.AttemptCount ?? 0
+                    AttemptCount = outcome?.AttemptCount ?? 0,
+                    FailureReason = outcome?.FailureReason
                 };
             }).ToList()
         };
@@ -199,4 +200,11 @@ public class SetMetaverseObjectPasswordTarget
     /// How many delivery attempts this change has had against this system.
     /// </summary>
     public int AttemptCount { get; set; }
+
+    /// <summary>
+    /// Why the most recent attempt failed, where it did: Transient, ConfigurationFault, PolicyRejection,
+    /// TargetObjectNotFound or UnsupportedOperation. Null before any attempt, once the password is set, and
+    /// after the queue row has gone. The portal chooses its remedy guidance from this; a script can do the same.
+    /// </summary>
+    public PasswordSetFailureReason? FailureReason { get; set; }
 }

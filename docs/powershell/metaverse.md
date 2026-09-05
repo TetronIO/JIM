@@ -980,6 +980,7 @@ Each entry under `Targets`:
 | `NextAttemptAt` | When the next attempt falls due, for a target that is `Retrying`; `$null` otherwise. |
 | `Message` | The system's own words on its most recent outcome (why it refused, or that the password was set), or `$null` before anything has been said. |
 | `AttemptCount` | How many delivery attempts this system has had. |
+| `FailureReason` | Why the most recent attempt failed: `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound` or `UnsupportedOperation`. Empty before any attempt and once the password is set. |
 
 A `Parked` target is also reported as a non-terminating error carrying the result as its `TargetObject`, so a script that stops on errors stops on a refusal and can still read the other targets from the exception it caught. A target still in flight when a wait ran out is reported as a warning.
 

@@ -112,6 +112,7 @@ function Set-JIMMetaverseObjectPassword {
         | NextAttemptAt           | When the next attempt falls due, for a Retrying target                          |
         | Message                 | The system's own words on its most recent outcome                               |
         | AttemptCount            | How many delivery attempts this system has had                                  |
+        | FailureReason           | Why the last attempt failed; empty before an attempt or once set                |
 
         No property carries the password you supplied.
 

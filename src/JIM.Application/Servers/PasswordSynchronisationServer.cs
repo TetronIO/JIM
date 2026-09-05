@@ -313,57 +313,6 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
-    /// Queues a password change for every Connected System configured for Password Synchronisation, attributed
-    /// to an administrator.
-    /// </summary>
-    /// <remarks>
-    /// TODO(#1635 layer 3, web agent): a forwarding overload kept only because <c>MetaverseController</c> and
-    /// <c>SynchronisePasswordDialog</c> still call it. Replace those calls with <see cref="SetPasswordAsync"/>
-    /// and delete this and the API-key overload below.
-    /// </remarks>
-    public async Task<PasswordQueueResult> QueuePasswordChangeAsync(
-        Guid metaverseObjectId,
-        string displayName,
-        string password,
-        PasswordExpiryBehaviour expiryBehaviour,
-        MetaverseObject? initiatedBy,
-        CancellationToken cancellationToken)
-    {
-        return await SetPasswordAsync(new SetPasswordRequest
-        {
-            MetaverseObjectId = metaverseObjectId,
-            DisplayName = displayName,
-            Password = password,
-            ExpiryBehaviour = expiryBehaviour,
-            InitiatedBy = initiatedBy
-        }, cancellationToken);
-    }
-
-    /// <summary>
-    /// Queues a password change for every Connected System configured for Password Synchronisation, attributed
-    /// to an API key. See the remarks on the administrator overload.
-    /// </summary>
-    public async Task<PasswordQueueResult> QueuePasswordChangeAsync(
-        Guid metaverseObjectId,
-        string displayName,
-        string password,
-        PasswordExpiryBehaviour expiryBehaviour,
-        ApiKey initiatedByApiKey,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
-
-        return await SetPasswordAsync(new SetPasswordRequest
-        {
-            MetaverseObjectId = metaverseObjectId,
-            DisplayName = displayName,
-            Password = password,
-            ExpiryBehaviour = expiryBehaviour,
-            InitiatedByApiKey = initiatedByApiKey
-        }, cancellationToken);
-    }
-
-    /// <summary>
     /// What the Activity says about where a password change went (#1119, requirement 14; #1635).
     /// <para>
     /// For a propagated change the distinction the message has to carry is between queued-and-on-its-way and

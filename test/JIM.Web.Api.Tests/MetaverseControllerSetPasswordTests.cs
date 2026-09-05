@@ -233,6 +233,7 @@ public class MetaverseControllerSetPasswordTests
                 _ => null
             },
             AttemptCount = state is PasswordChangeTargetState.Set or PasswordChangeTargetState.Parked ? 1 : 0,
+            FailureReason = state == PasswordChangeTargetState.Parked ? PasswordSetFailureReason.PolicyRejection : null,
             NextAttemptAt = state == PasswordChangeTargetState.Retrying ? DateTime.UtcNow.AddMinutes(5) : null
         }).ToList()
     };
