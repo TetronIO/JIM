@@ -3,9 +3,11 @@
 
 using JIM.Application;
 using JIM.Application.Interfaces;
+using JIM.Application.Services;
 using JIM.Data;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Operations;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
 using JIM.Utilities;
@@ -47,6 +49,11 @@ public class Scheduler : BackgroundService
     private readonly AsyncWakeSignal _wakeSignal = new();
     private Task? _listenTask;
 
+    /// <summary>
+    /// How long the main loop waits between polling cycles when no Worker Task change notification arrives.
+    /// </summary>
+    private static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(30);
+
     public Scheduler(IJimApplicationFactory jimFactory, IDatabaseNotificationListener notificationListener)
     {
         _jimFactory = jimFactory;
@@ -63,6 +70,10 @@ public class Scheduler : BackgroundService
         // to determine if the scheduler's main loop is still executing.
         const string healthcheckFile = "/tmp/healthcheck";
 
+        // The same liveness, written to the database for administrators: the Operations page reads it to show
+        // whether the Scheduler is up, since when, and which version. Written wherever the file is touched.
+        var heartbeat = ServiceHeartbeatWriter.ForThisProcess(JimService.Scheduler);
+
         // Wait for the application to be fully ready (JIM.Worker handles initial migration and seeding).
         // We must check IsApplicationReadyAsync() rather than just database connectivity, because the
         // worker needs to complete migrations and seeding before tables like Schedules exist.
@@ -76,6 +87,12 @@ public class Scheduler : BackgroundService
             try
             {
                 using var checkJim = _jimFactory.Create();
+
+                // Reported while waiting too, so an administrator can tell "the Scheduler is up but the Worker has
+                // not finished migrating" from "the Scheduler is down". The writer swallows the write failing
+                // because the table does not exist yet, which it will not until the Worker has migrated.
+                await heartbeat.WriteAsync(checkJim, null, null, "Waiting for the application to be ready", stoppingToken);
+
                 if (await checkJim.IsApplicationReadyAsync())
                 {
                     Log.Information("Application is ready.");
@@ -110,6 +127,8 @@ public class Scheduler : BackgroundService
                 // to avoid EF context caching issues
                 using var jim = _jimFactory.Create();
 
+                await heartbeat.WriteAsync(jim, null, null, null, stoppingToken);
+
                 // Step 1: Check for and start due schedules. This runs BEFORE the next-run-time bootstrap
                 // below, and must keep doing so: both read NextRunTime, and starting a schedule is what
                 // advances it. Bootstrapping first is how every cron-triggered schedule came to be swallowed
@@ -140,7 +159,7 @@ public class Scheduler : BackgroundService
             // Wait for the next cycle: woken early by a Worker Task change notification, or after
             // 30 seconds as the polling fallback (notifications are fire-and-forget hints; polling
             // remains the safety net for anything missed while disconnected)
-            var wokenByNotification = await _wakeSignal.WaitAsync(TimeSpan.FromSeconds(30), stoppingToken);
+            var wokenByNotification = await WaitForNextCycleAsync(heartbeat, stoppingToken);
             if (wokenByNotification)
             {
                 Log.Debug("Scheduler woken by Worker Task change notification; running next cycle after settling delay.");
@@ -153,6 +172,32 @@ public class Scheduler : BackgroundService
         }
 
         Log.Information("JIM.Scheduler shutting down...");
+    }
+
+    /// <summary>
+    /// Waits out the polling interval (or a wake-up notification, whichever is first) in heartbeat-sized slices,
+    /// writing the Scheduler's heartbeat between them. The cycle itself takes well under a second, so without this
+    /// the heartbeat would move once per 30-second cycle and a perfectly healthy Scheduler would read as Stale
+    /// (heartbeat older than three intervals) for most of every minute. Returns true when woken by a notification.
+    /// </summary>
+    private async Task<bool> WaitForNextCycleAsync(ServiceHeartbeatWriter heartbeat, CancellationToken stoppingToken)
+    {
+        var deadline = DateTime.UtcNow + PollingInterval;
+        while (true)
+        {
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+                return false;
+
+            var slice = remaining < ServiceHeartbeatWriter.Interval ? remaining : ServiceHeartbeatWriter.Interval;
+            if (await _wakeSignal.WaitAsync(slice, stoppingToken))
+                return true;
+
+            // A fresh instance per write, as the cycle above uses; the writer itself is throttled and swallows
+            // database failures, so this can neither hammer the database nor end the loop.
+            using var jim = _jimFactory.Create();
+            await heartbeat.WriteAsync(jim, null, null, null, stoppingToken);
+        }
     }
 
     /// <summary>
