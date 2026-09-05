@@ -403,7 +403,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(QueuePasswordChangesAsync));
 
-    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum)
+    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool explicitOnly)
         => throw new PreviewWriteAttemptedException(nameof(ClaimDuePasswordChangesAsync));
 
     public Task<int> ReleasePasswordChangeClaimsAsync(IEnumerable<Guid> ids)
@@ -415,7 +415,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
         => throw new PreviewWriteAttemptedException(nameof(DeletePasswordChangesAsync));
 
-    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf)
+    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool explicitOnly)
         => throw new PreviewWriteAttemptedException(nameof(ExpirePasswordChangesAsync));
 
     public Task<int> ReleasePasswordChangesForDeliveryAsync(int connectedSystemId)

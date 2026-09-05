@@ -4,6 +4,9 @@
 using AngleSharp.Dom;
 using Bunit;
 using JIM.Models.Staging;
+using JIM.Models.Transactional.DTOs;
+using JIM.Web.Models;
+using JIM.Web.Services;
 using JIM.Web.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
@@ -12,12 +15,17 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Covers the set-password dialog (issues #1121, #1172).
+/// Covers the set-password dialog (issues #1121, #1172, #1635).
 /// <para>
 /// Two families of rule. The first decides whether a credential ends up on a screen somebody else can read:
 /// masked from the moment it is generated, copyable without unmasking, and a reveal that hides itself again.
-/// The second decides whether an administrator can tell what actually happened when one password is set across
-/// several Connected Systems, which is the case that routinely goes partly wrong.
+/// The second decides whether an administrator can tell what actually happened when one password is queued for
+/// several Connected Systems: the result stage is driven by the outcome waiter, so each row reads set, retrying
+/// or parked as its system answers, and the actions beside a row are the ones that can still finish the job.
+/// </para>
+/// <para>
+/// The queueing and the stop are delegates the test scripts, as the dialog's hosts supply them; the waiter is a
+/// fake registered as the service the dialog injects.
 /// </para>
 /// </summary>
 [TestFixture]
@@ -30,7 +38,6 @@ public class SetPasswordDialogTests : JimComponentTestContext
     private const string SubmitMarker = "jim-set-password-submit";
     private const string CancelMarker = "jim-set-password-cancel";
     private const string SummaryMarker = "jim-set-password-summary";
-    private const string RailMarker = "jim-set-password-rail";
     private const string AccountMarker = "jim-set-password-account";
     private const string SelectAllMarker = "jim-set-password-select-all";
     private const string UnsettableMarker = "jim-set-password-unsettable";
@@ -39,8 +46,13 @@ public class SetPasswordDialogTests : JimComponentTestContext
     private const string SharedPermanentMarker = "jim-set-password-shared-permanent";
     private const string ConstraintsMarker = "jim-set-password-constraints";
     private const string IrreconcilableMarker = "jim-set-password-irreconcilable";
-    private const string ResultsMarker = "jim-set-password-results";
     private const string ResultMarker = "jim-set-password-result";
+    private const string StopTryingMarker = "jim-set-password-stop-trying";
+    private const string TryAnotherMarker = "jim-set-password-try-another";
+    private const string StillDeliveringMarker = "jim-set-password-still-delivering";
+    private const string PausedMarker = "jim-set-password-paused";
+    private const string FailureMarker = "jim-set-password-failure";
+    private const string IntroMarker = "jim-set-password-intro";
 
     private const string GeneratedPassword = "Correct-Horse-42";
 
@@ -52,16 +64,25 @@ public class SetPasswordDialogTests : JimComponentTestContext
     private static readonly TimeSpan ShortReveal = TimeSpan.FromMilliseconds(150);
 
     private List<MetaverseObjectAccount> _accounts = null!;
-    private List<(IReadOnlyList<MetaverseObjectAccount> Accounts, string Password, PasswordSetOptions Options)> _runs = null!;
-    private Dictionary<string, PasswordSetResult> _resultsBySystem = null!;
+    private List<PasswordSetSubmission> _submissions = null!;
+    private List<int> _stopped = null!;
+    private ScriptedWaiter _waiter = null!;
     private int _generateCalls;
+
+    protected override void ConfigureAdditionalServices()
+    {
+        _waiter = new ScriptedWaiter();
+        Services.AddSingleton<IPasswordChangeOutcomeWaiter>(_waiter);
+    }
 
     [SetUp]
     public void SetUpDialog()
     {
-        _runs = [];
+        _submissions = [];
+        _stopped = [];
+        _pausedSystems.Clear();
         _generateCalls = 0;
-        _resultsBySystem = [];
+        _waiter.Reset();
         _accounts =
         [
             Account("Contoso AD", canSetPasswords: true),
@@ -76,6 +97,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         JSInterop.Setup<bool>("jimInterop.copyToClipboard", _ => true).SetResult(true);
         JSInterop.Setup<bool>("jimInterop.clearClipboard").SetResult(true);
     }
+
+    [TearDown]
+    public async Task TearDownAsync() => await DisposeComponentsAsync();
 
     private static MetaverseObjectAccount Account(
         string name,
@@ -100,18 +124,23 @@ public class SetPasswordDialogTests : JimComponentTestContext
     private IRenderedComponent<MudDialogProvider> ShowDialog(
         bool allowSelection = false,
         IReadOnlyList<MetaverseObjectAccount>? accounts = null,
-        PasswordPolicyReconciliation? reconciliation = null)
+        PasswordPolicyReconciliation? reconciliation = null,
+        TimeSpan? deliveryWait = null,
+        Func<PasswordSetSubmission, Task<PasswordQueueResult>>? setPassword = null)
     {
         accounts ??= allowSelection ? _accounts : [_accounts[0]];
 
         var parameters = new DialogParameters<SetPasswordDialog>
         {
             { x => x.Accounts, accounts },
+            { x => x.MetaverseObjectId, Guid.NewGuid() },
             { x => x.AllowSelection, allowSelection },
             { x => x.RevealDuration, ShortReveal },
+            { x => x.DeliveryWait, deliveryWait ?? TimeSpan.FromSeconds(5) },
             { x => x.Reconcile, (IReadOnlyList<MetaverseObjectAccount> _) => reconciliation ?? Reconciliation() },
             { x => x.GeneratePassword, (PasswordGenerationPolicy _) => { _generateCalls++; return $"{GeneratedPassword}-{_generateCalls}"; } },
-            { x => x.SetPassword, RunFanOut }
+            { x => x.SetPassword, setPassword ?? Queue },
+            { x => x.StopTrying, (int connectedSystemId) => { _stopped.Add(connectedSystemId); return Task.CompletedTask; } }
         };
 
         var provider = Render<MudDialogProvider>();
@@ -122,30 +151,45 @@ public class SetPasswordDialogTests : JimComponentTestContext
         return provider;
     }
 
-    private Task<MultiAccountPasswordSetResult> RunFanOut(
-        IReadOnlyList<MetaverseObjectAccount> accounts,
-        string password,
-        PasswordSetOptions options,
-        IProgress<AccountPasswordSetOutcome> progress)
+    /// <summary>
+    /// The host's side of a submission: records it and answers with one queued target per account named, every
+    /// one enabled unless the test says otherwise.
+    /// </summary>
+    private Task<PasswordQueueResult> Queue(PasswordSetSubmission submission)
     {
-        _runs.Add((accounts, password, options));
-
-        var outcomes = accounts.Select(account => new AccountPasswordSetOutcome
-        {
-            ConnectedSystemObjectId = account.ConnectedSystemObjectId,
-            ConnectedSystemId = account.ConnectedSystemId,
-            ConnectedSystemName = account.ConnectedSystemName,
-            Result = _resultsBySystem.TryGetValue(account.ConnectedSystemName, out var result)
-                ? result
-                : PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn),
-            Duration = TimeSpan.FromMilliseconds(1)
-        }).ToList();
-
-        foreach (var outcome in outcomes)
-            progress.Report(outcome);
-
-        return Task.FromResult(new MultiAccountPasswordSetResult { Outcomes = outcomes });
+        _submissions.Add(submission);
+        var targets = submission.Targets
+            .Select(id => _accounts.Single(a => a.ConnectedSystemObjectId == id))
+            .Select(a => new PasswordQueueTargetOutcome
+            {
+                ConnectedSystemId = a.ConnectedSystemId,
+                ConnectedSystemName = a.ConnectedSystemName,
+                ConnectedSystemObjectId = a.ConnectedSystemObjectId,
+                Enabled = !_pausedSystems.Contains(a.ConnectedSystemName)
+            })
+            .ToList();
+        return Task.FromResult(new PasswordQueueResult { ActivityId = Guid.NewGuid(), Targets = targets });
     }
+
+    private readonly HashSet<string> _pausedSystems = [];
+
+    private PasswordChangeTargetOutcome Target(string system, PasswordChangeTargetState state, string? message = null,
+        PasswordSetFailureReason? reason = null, DateTime? nextAttemptAt = null) => new()
+    {
+        ConnectedSystemId = _accounts.Single(a => a.ConnectedSystemName == system).ConnectedSystemId,
+        ConnectedSystemName = system,
+        State = state,
+        Message = message,
+        FailureReason = reason,
+        NextAttemptAt = nextAttemptAt,
+        AttemptCount = state == PasswordChangeTargetState.Queued ? 0 : 1
+    };
+
+    /// <summary>
+    /// Scripts the waiter to answer settled with these targets from its first call.
+    /// </summary>
+    private void Settle(params PasswordChangeTargetOutcome[] targets) =>
+        _waiter.Answer = _ => Task.FromResult<PasswordChangeOutcomes?>(new PasswordChangeOutcomes { IsSettled = true, Targets = targets });
 
     private static PasswordPolicyReconciliation Reconciliation(
         IReadOnlyList<string>? constraints = null,
@@ -164,6 +208,11 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
     private static IElement PasswordInput(IRenderedComponent<MudDialogProvider> provider) =>
         provider.Find($"input[data-testid='{ValueMarker}']");
+
+    private static Severity SummarySeverity(IRenderedComponent<MudDialogProvider> provider) =>
+        provider.FindComponents<MudAlert>()
+            .Single(a => a.Instance.UserAttributes.TryGetValue("data-testid", out var id) && (string?)id == SummaryMarker)
+            .Instance.Severity;
 
     /// <summary>
     /// Whether the value is currently concealed. Read off the input's own type attribute, which is the browser
@@ -193,9 +242,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
     /// Every interaction in this fixture goes through here rather than clicking the element directly, because
     /// forgetting the wait at one call site is invisible on a quiet machine. MudBlazor's click path is async, so
     /// <c>Click()</c> returning means the handler ran, not that the re-render it queued has been processed;
-    /// asserting straight afterwards reads whatever the DOM last settled on. Under load that lost race showed up
-    /// as roughly one failure in thirty, spread across whichever test happened to lose it, which is precisely the
-    /// shape that gets written off as "flaky" instead of fixed.
+    /// asserting straight afterwards reads whatever the DOM last settled on.
     /// </para>
     /// </summary>
     private static void Click(IRenderedComponent<MudDialogProvider> provider, string marker)
@@ -211,6 +258,15 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var rendersBefore = provider.RenderCount;
         provider.FindAll($"[data-testid='{AccountMarker}'] input[type=checkbox]")[index].Change(true);
         provider.WaitForState(() => provider.RenderCount > rendersBefore);
+    }
+
+    /// <summary>
+    /// Submits and waits for the result stage to settle (the summary alert is drawn only once it has).
+    /// </summary>
+    private static void SubmitAndSettle(IRenderedComponent<MudDialogProvider> provider)
+    {
+        Click(provider, SubmitMarker);
+        provider.WaitForElement($"[data-testid='{SummaryMarker}']");
     }
 
     #region masked by default
@@ -381,22 +437,42 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
     #endregion
 
+    #region what the dialog promises about storage (decision D4)
+
+    /// <summary>
+    /// The password now goes through the queue, so "JIM stores nothing" would be untrue. The dialog says exactly
+    /// what is held and for how long, in the words decision D4 settled on, on both surfaces.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public void SetPasswordDialog_WhileComposing_SaysThePasswordIsHeldOnlyUntilDelivered(bool allowSelection)
+    {
+        var provider = ShowDialog(allowSelection: allowSelection);
+
+        // The markup wraps the sentence across source lines; the browser collapses that whitespace and so does this.
+        var intro = System.Text.RegularExpressions.Regex.Replace(Button(provider, IntroMarker).TextContent, @"\s+", " ");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(intro, Does.Contain("holds the password encrypted only until"));
+            Assert.That(intro, Does.Contain("keeps a refused one so it can finish the job"));
+            Assert.That(provider.Markup, Does.Not.Contain("stores nothing"));
+        }
+    }
+
+    #endregion
+
     #region one account: the dialog collapses to what shipped for #1121
 
     /// <summary>
-    /// A picker with one option and a rail with one step are both decoration. The single-account case has to
-    /// render as the dialog it was before there was anything to choose between.
+    /// A picker with one option is decoration. The single-account case has to render as the dialog it was
+    /// before there was anything to choose between.
     /// </summary>
     [Test]
-    public void SetPasswordDialog_WithOneAccount_DrawsNoPickerAndNoRail()
+    public void SetPasswordDialog_WithOneAccount_DrawsNoPicker()
     {
         var provider = ShowDialog();
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(provider.FindAll($"[data-testid='{AccountMarker}']"), Is.Empty);
-            Assert.That(provider.FindAll($"[data-testid='{RailMarker}']"), Is.Empty);
-        }
+        Assert.That(provider.FindAll($"[data-testid='{AccountMarker}']"), Is.Empty);
     }
 
     [Test]
@@ -408,20 +484,21 @@ public class SetPasswordDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void SetPasswordDialog_WhenSubmitted_SendsTheGeneratedValueAndTheChosenOptions()
+    public void SetPasswordDialog_WhenSubmitted_SendsTheGeneratedValueTheTargetAndTheChosenOptions()
     {
+        Settle(Target("Contoso AD", PasswordChangeTargetState.Set));
         var provider = ShowDialog();
         Generate(provider);
 
-        Click(provider, SubmitMarker);
-
-        provider.WaitForState(() => _runs.Count > 0);
+        SubmitAndSettle(provider);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(_runs[0].Password, Is.EqualTo($"{GeneratedPassword}-1"));
-            Assert.That(_runs[0].Options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
-            Assert.That(_runs[0].Accounts, Has.Count.EqualTo(1));
+            Assert.That(_submissions, Has.Count.EqualTo(1));
+            Assert.That(_submissions[0].Password, Is.EqualTo($"{GeneratedPassword}-1"));
+            Assert.That(_submissions[0].ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+            Assert.That(_submissions[0].Targets, Is.EqualTo(new[] { _accounts[0].ConnectedSystemObjectId }),
+                "the account's Connected System Object id is the target the one operation takes (#1635)");
         }
     }
 
@@ -432,38 +509,13 @@ public class SetPasswordDialogTests : JimComponentTestContext
     [Test]
     public void SetPasswordDialog_WhenTheEnableSwitchIsOff_LeavesTheAccountsStateAlone()
     {
+        Settle(Target("Contoso AD", PasswordChangeTargetState.Set));
         var provider = ShowDialog();
         Generate(provider);
 
-        Click(provider, SubmitMarker);
+        SubmitAndSettle(provider);
 
-        provider.WaitForState(() => _runs.Count > 0);
-
-        Assert.That(_runs[0].Options.EnableAccount, Is.Null);
-    }
-
-    /// <summary>
-    /// A refusal keeps the dialog open carrying the target's own words. Closing would lose the reason, and the
-    /// administrator's next move is almost always to try a different password in the same dialog.
-    /// </summary>
-    [Test]
-    public void SetPasswordDialog_WhenTheTargetRefuses_StaysOpenAndShowsTheReason()
-    {
-        const string reason = "The password does not meet the length, complexity or history requirements of the domain.";
-        _resultsBySystem["Contoso AD"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, reason);
-
-        var provider = ShowDialog();
-        Generate(provider);
-
-        Click(provider, SubmitMarker);
-
-        provider.WaitForState(() => provider.FindAll($"[data-testid='{SummaryMarker}']").Count > 0);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(provider.Find($"[data-testid='{SummaryMarker}']").TextContent, Does.Contain("Contoso AD"));
-            Assert.That(provider.FindAll($"[data-testid='{SubmitMarker}']"), Is.Not.Empty, "the dialog must stay open");
-        }
+        Assert.That(_submissions[0].EnableAccount, Is.Null);
     }
 
     /// <summary>
@@ -533,29 +585,6 @@ public class SetPasswordDialogTests : JimComponentTestContext
     }
 
     /// <summary>
-    /// A rail of one step is decoration; two or more is a sequence worth narrating.
-    /// </summary>
-    [Test]
-    public void SetPasswordDialog_WithOneAccountSelected_DrawsNoRail()
-    {
-        var provider = ShowDialog(allowSelection: true);
-
-        TickAccount(provider, 0);
-
-        Assert.That(provider.FindAll($"[data-testid='{RailMarker}']"), Is.Empty);
-    }
-
-    [Test]
-    public void SetPasswordDialog_WithTwoAccountsSelected_DrawsTheRail()
-    {
-        var provider = ShowDialog(allowSelection: true);
-
-        Click(provider, SelectAllMarker);
-
-        Assert.That(provider.FindAll($"[data-testid='{RailMarker}']"), Is.Not.Empty);
-    }
-
-    /// <summary>
     /// The action says what it will do, so what is about to happen is legible without reading back up the
     /// dialog.
     /// </summary>
@@ -572,43 +601,38 @@ public class SetPasswordDialogTests : JimComponentTestContext
     [Test]
     public void SetPasswordDialog_WhenSubmitted_SetsOnlyTheSelectedAccounts()
     {
+        Settle(Target("Contoso AD", PasswordChangeTargetState.Set));
         var provider = ShowDialog(allowSelection: true);
         TickAccount(provider, 0);
         Generate(provider);
 
-        Click(provider, SubmitMarker);
+        SubmitAndSettle(provider);
 
-        provider.WaitForState(() => _runs.Count > 0);
-
-        Assert.That(_runs[0].Accounts.Select(a => a.ConnectedSystemName), Is.EqualTo(new[] { "Contoso AD" }));
+        Assert.That(_submissions[0].Targets, Is.EqualTo(new[] { _accounts[0].ConnectedSystemObjectId }));
     }
 
     /// <summary>
     /// Only the behaviours every selected Connector can apply. Offering one that some cannot would let an
-    /// administrator choose a setting silently downgraded on part of the fan-out.
-    /// </summary>
-    /// <summary>
-    /// Deliberately arranged so the intersection and the union of the two Connectors' capabilities produce
-    /// different answers, and so that neither contains the dialog's own default. Overlapping sets that both
-    /// include the default would let a union pass this test while shipping a behaviour one Connector silently
-    /// downgrades.
+    /// administrator choose a setting silently downgraded on part of the fan-out. Deliberately arranged so the
+    /// intersection and the union of the two Connectors' capabilities produce different answers, and so that
+    /// neither contains the dialog's own default.
     /// </summary>
     [Test]
     public void SetPasswordDialog_WithSeveralAccountsSelected_OffersOnlyTheExpiryBehavioursAllOfThemSupport()
     {
-        var accounts = new List<MetaverseObjectAccount>
-        {
+        _accounts =
+        [
             Account("Contoso AD", true, [PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, PasswordExpiryBehaviour.NeverExpires]),
             Account("Research LDAP", true, [PasswordExpiryBehaviour.NeverExpires])
-        };
-        var provider = ShowDialog(allowSelection: true, accounts: accounts);
+        ];
+        Settle(Target("Contoso AD", PasswordChangeTargetState.Set), Target("Research LDAP", PasswordChangeTargetState.Set));
+        var provider = ShowDialog(allowSelection: true, accounts: _accounts);
         Click(provider, SelectAllMarker);
         Generate(provider);
 
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count > 0);
+        SubmitAndSettle(provider);
 
-        Assert.That(_runs[0].Options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires),
+        Assert.That(_submissions[0].ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires),
             "the only behaviour both Connectors can apply");
     }
 
@@ -669,127 +693,6 @@ public class SetPasswordDialogTests : JimComponentTestContext
         {
             Assert.That(provider.FindAll($"[data-testid='{SharedPermanentMarker}']"), Is.Not.Empty);
             Assert.That(Button(provider, SubmitMarker).HasAttribute("disabled"), Is.False, "warned, not refused");
-        }
-    }
-
-    #endregion
-
-    #region partial failure
-
-    /// <summary>
-    /// The state the whole design exists to make legible. "Two of three succeeded" leaves the administrator to
-    /// work out which, with somebody on the telephone whose password now works in two places out of three, so
-    /// the summary names the consequence instead of the count.
-    /// </summary>
-    [Test]
-    public void SetPasswordDialog_WhenSomeAccountsRefuse_NamesWhichPasswordIsUnchanged()
-    {
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-
-        var provider = ShowDialog(allowSelection: true);
-        Click(provider, SelectAllMarker);
-        Generate(provider);
-        Click(provider, SubmitMarker);
-
-        provider.WaitForState(() => provider.FindAll($"[data-testid='{SummaryMarker}']").Count > 0);
-
-        var summary = provider.Find($"[data-testid='{SummaryMarker}']").TextContent;
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(summary, Does.Contain("Fabrikam HR"));
-            Assert.That(summary, Does.Contain("unchanged"));
-        }
-    }
-
-    /// <summary>
-    /// Retry names the system when one failed, and counts them when several did.
-    /// </summary>
-    [Test]
-    public void SetPasswordDialog_AfterAPartialFailure_OffersToRetryTheFailedSystemByName()
-    {
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-
-        var provider = ShowDialog(allowSelection: true);
-        Click(provider, SelectAllMarker);
-        Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => provider.FindAll($"[data-testid='{SummaryMarker}']").Count > 0);
-
-        Assert.That(Button(provider, SubmitMarker).TextContent, Does.Contain("Retry Fabrikam HR"));
-    }
-
-    /// <summary>
-    /// Retry touches only the accounts that did not take the password. Re-sending it to an account that did
-    /// would reset a password the person may already be using.
-    /// </summary>
-    [Test]
-    public void SetPasswordDialog_WhenRetried_SetsOnlyTheAccountsThatFailed()
-    {
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-
-        var provider = ShowDialog(allowSelection: true);
-        Click(provider, SelectAllMarker);
-        Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
-
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 2);
-
-        Assert.That(_runs[1].Accounts.Select(a => a.ConnectedSystemName), Is.EqualTo(new[] { "Fabrikam HR" }));
-    }
-
-    /// <summary>
-    /// Retry reuses the password already in memory. The administrator may have conveyed it already, and for the
-    /// reasons that never judged the password, re-sending it is exactly right.
-    /// </summary>
-    [Test]
-    public void SetPasswordDialog_WhenRetried_ReusesTheSamePassword()
-    {
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.Transient, "Unreachable.");
-
-        var provider = ShowDialog(allowSelection: true);
-        Click(provider, SelectAllMarker);
-        Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
-
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 2);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(_runs[1].Password, Is.EqualTo(_runs[0].Password));
-            Assert.That(_generateCalls, Is.EqualTo(1), "no new password was generated for the retry");
-        }
-    }
-
-    /// <summary>
-    /// The one case retry cannot cover. A refused password will be refused again, and replacing it only where
-    /// it failed would leave the person with two, so the escape hatch generates a fresh one and sets it
-    /// everywhere the fan-out touched, including the accounts that succeeded.
-    /// </summary>
-    [Test]
-    public void SetPasswordDialog_WhenANewPasswordIsAskedForAfterARejection_SetsItOnEveryAccountAgain()
-    {
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-
-        var provider = ShowDialog(allowSelection: true);
-        Click(provider, SelectAllMarker);
-        Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
-
-        provider.WaitForElement("[data-testid='jim-password-guidance-toggle']").Click();
-        provider.WaitForElement("[data-testid='jim-password-guidance-regenerate']").Click();
-
-        provider.WaitForState(() => _runs.Count == 2);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(_runs[1].Accounts.Select(a => a.ConnectedSystemName),
-                Is.EqualTo(new[] { "Contoso AD", "Fabrikam HR" }), "the accounts that succeeded are rewritten too, so this person keeps one password");
-            Assert.That(_runs[1].Password, Is.Not.EqualTo(_runs[0].Password));
         }
     }
 
@@ -865,103 +768,165 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
     #endregion
 
-    #region how the outcome is reported
+    #region the result stage, driven by the outcome waiter
 
     /// <summary>
-    /// Choosing where to write and reading what happened are different questions, and the first shipped
-    /// answering both in one list: status was bolted onto the picker rows, so a finished fan-out left a column
-    /// of checkboxes beside three failures nobody could tick their way out of.
+    /// The happy path: every system answered and took the password. The summary is a success, and the row says
+    /// what was asked of the password beyond setting it, because that is the fact the administrator has to pass on.
     /// </summary>
     [Test]
-    public void SetPasswordDialog_WhenTheFanOutFinishes_ReplacesThePickerWithItsOwnResultsList()
+    public void SetPasswordDialog_WhenEverySystemTakesThePassword_ReportsSuccessAndWhatWasAskedOfIt()
     {
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-
+        Settle(Target("Contoso AD", PasswordChangeTargetState.Set, "Password set."), Target("Fabrikam HR", PasswordChangeTargetState.Set, "Password set."));
         var provider = ShowDialog(allowSelection: true);
         Click(provider, SelectAllMarker);
         Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
 
+        SubmitAndSettle(provider);
+
+        var rows = provider.FindAll($"[data-testid='{ResultMarker}']");
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Success));
+            Assert.That(Button(provider, SummaryMarker).TextContent, Does.Contain("Password set on all 2 accounts."));
+            Assert.That(rows, Has.Count.EqualTo(2), "one row per account, including the ones that worked");
+            Assert.That(rows.Select(r => r.GetAttribute("data-state")), Is.All.EqualTo("Set"));
+            Assert.That(rows[0].TextContent, Does.Contain("must be changed at next sign-in"));
             Assert.That(provider.FindAll($"[data-testid='{AccountMarker}']"), Is.Empty,
-                "the picker has nothing left to ask once the writing is done");
-            Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']"), Has.Count.EqualTo(2),
-                "one row per account the password was written to");
+                "the picker has nothing left to ask once the password is queued");
+            Assert.That(provider.FindAll($"[data-testid='{TryAnotherMarker}']"), Is.Empty, "nothing was refused");
+            Assert.That(Button(provider, CancelMarker).TextContent, Does.Contain("Done"));
         }
     }
 
     /// <summary>
-    /// Every account gets its own row, including the ones that worked. A list of only the failures reads as a
-    /// list of everything that happened, and leaves the administrator to infer the rest.
+    /// The rows appear from what was queued, so the stage is never empty while the first wait is in flight, and
+    /// each one moves as its system answers.
     /// </summary>
     [Test]
-    public void SetPasswordDialog_WhenSomeAccountsSucceeded_StillReportsThemByName()
+    public void SetPasswordDialog_WhileDelivering_ShowsTheQueuedRowsBeforeTheWaiterAnswers()
     {
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
+        var release = new TaskCompletionSource<PasswordChangeOutcomes?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _waiter.Answer = _ => release.Task;
+        var provider = ShowDialog();
+        Generate(provider);
 
+        Click(provider, SubmitMarker);
+
+        provider.WaitForAssertion(() =>
+        {
+            var rows = provider.FindAll($"[data-testid='{ResultMarker}']");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(rows, Has.Count.EqualTo(1));
+                Assert.That(rows[0].GetAttribute("data-state"), Is.EqualTo("Queued"));
+                Assert.That(provider.FindAll($"[data-testid='{SummaryMarker}']"), Is.Empty, "nothing to summarise until it settles");
+            }
+        });
+
+        release.SetResult(new PasswordChangeOutcomes { IsSettled = true, Targets = [Target("Contoso AD", PasswordChangeTargetState.Set)] });
+
+        provider.WaitForAssertion(() =>
+            Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']")[0].GetAttribute("data-state"), Is.EqualTo("Set")));
+    }
+
+    /// <summary>
+    /// A system JIM could not reach is not a failure: the password is kept and retried. The summary says so in
+    /// amber, names when the next attempt falls due, and the row offers the one thing an administrator can do
+    /// about it here, which is decide not to wait.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenASystemCannotBeReached_ReportsAWarningWithTheNextAttemptAndOffersStopTrying()
+    {
+        var next = DateTime.UtcNow.AddMinutes(5);
+        Settle(
+            Target("Contoso AD", PasswordChangeTargetState.Set, "Password set."),
+            Target("Fabrikam HR", PasswordChangeTargetState.Retrying, "Connection refused", PasswordSetFailureReason.Transient, next));
         var provider = ShowDialog(allowSelection: true);
         Click(provider, SelectAllMarker);
         Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
 
-        var rows = provider.FindAll($"[data-testid='{ResultMarker}']").Select(r => r.TextContent).ToList();
+        SubmitAndSettle(provider);
+
+        var summary = Button(provider, SummaryMarker).TextContent;
+        var retryingRow = provider.FindAll($"[data-testid='{ResultMarker}']")[1];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rows[0], Does.Contain("Contoso AD").And.Contain("Password set."));
-            Assert.That(rows[1], Does.Contain("Fabrikam HR").And.Contain("Refused."));
+            Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Warning));
+            Assert.That(summary, Does.Contain("Set on 1 of 2 accounts."));
+            Assert.That(summary, Does.Contain("Fabrikam HR could not be reached, so JIM has kept the password and will try again in 5 minutes"));
+            Assert.That(summary, Does.Contain("then with a longer wait each time"));
+            Assert.That(retryingRow.GetAttribute("data-state"), Is.EqualTo("Retrying"));
+            Assert.That(retryingRow.TextContent, Does.Contain("Target unavailable: Connection refused"));
+            Assert.That(retryingRow.TextContent, Does.Contain($"Next attempt {next.ToLocalTime().ToFriendlyDate()}"));
+            Assert.That(provider.FindAll($"[data-testid='{TryAnotherMarker}']"), Is.Empty, "the password was not refused, so there is nothing to replace");
         }
+
+        Click(provider, StopTryingMarker);
+
+        provider.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(_stopped, Is.EqualTo(new[] { _accounts[1].ConnectedSystemId }), "stop trying is for that Connected System alone");
+                Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']")[1].GetAttribute("data-state"), Is.EqualTo("Cancelled"));
+            }
+        });
     }
 
     /// <summary>
-    /// One account needs no list: the summary above it is already that same sentence, and a one-row table
-    /// under a one-sentence summary says everything twice. Its guidance still has to appear somewhere, so it
-    /// hangs off the summary instead.
+    /// A refusal is an error, not a caution: the person now holds two different passwords and nothing will
+    /// change that without somebody acting. The row carries the target's own words, the guidance the queue page
+    /// offers for that failure, and the one action that can still finish the job.
     /// </summary>
     [Test]
-    public void SetPasswordDialog_WhenOnlyOneAccountWasWrittenTo_DrawsNoResultsListButStillOffersGuidance()
+    public void SetPasswordDialog_WhenASystemRefuses_ReportsAnErrorWithTheTargetsWordsAndGuidance()
     {
-        _resultsBySystem["Contoso AD"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-
-        var provider = ShowDialog(allowSelection: true);
-        TickAccount(provider, 0);
-        Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(provider.FindAll($"[data-testid='{ResultsMarker}']"), Is.Empty);
-            Assert.That(provider.FindAll($"[data-testid='{SummaryMarker}']"), Is.Not.Empty);
-            Assert.That(provider.FindAll("[data-testid='jim-password-guidance-toggle']"), Is.Not.Empty,
-                "guidance must survive the collapse; it is the only thing telling them what to do next");
-        }
-    }
-
-    /// <summary>
-    /// A leg of the rail belongs to the step it leaves, so it carries that step's outcome. Filling every
-    /// traversed leg with the success colour drew a green rail straight through three red markers on a run
-    /// where nothing worked at all.
-    /// </summary>
-    [Test]
-    public void SetPasswordDialog_WhenAStepFailed_DoesNotDrawItsLegAsSucceeded()
-    {
-        _resultsBySystem["Contoso AD"] = PasswordSetResult.Failed(PasswordSetFailureReason.Transient, "Unreachable.");
-
+        Settle(
+            Target("Contoso AD", PasswordChangeTargetState.Set, "Password set."),
+            Target("Fabrikam HR", PasswordChangeTargetState.Parked, "Refused: too short.", PasswordSetFailureReason.PolicyRejection));
         var provider = ShowDialog(allowSelection: true);
         Click(provider, SelectAllMarker);
         Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
 
-        // One leg, between the failed first step and the second.
-        var leg = provider.Find($"[data-testid='{RailMarker}'] .jim-password-rail-connector-fill");
+        SubmitAndSettle(provider);
+
+        var summary = Button(provider, SummaryMarker).TextContent;
+        var rows = provider.FindAll($"[data-testid='{ResultMarker}']");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(leg.ClassName, Does.Contain("jim-password-rail-connector-fill--failed"));
-            Assert.That(leg.ClassName, Does.Not.Contain("jim-password-rail-connector-fill--completed"));
+            Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Error));
+            Assert.That(summary, Does.Contain("Set on 1 of 2 accounts."));
+            Assert.That(summary, Does.Contain("The password in Fabrikam HR is unchanged"));
+            Assert.That(rows[1].GetAttribute("data-state"), Is.EqualTo("Parked"));
+            Assert.That(rows[1].ClassName, Does.Contain("jim-password-result--failed"), "the row carries the failure, not the sentence");
+            Assert.That(rows[0].ClassName, Does.Not.Contain("jim-password-result--failed"));
+            Assert.That(rows[1].TextContent, Does.Contain("Refused: too short."));
+            Assert.That(rows[1].QuerySelector("[data-testid='jim-password-guidance-toggle']"), Is.Not.Null,
+                "guidance is the only thing telling them what to do next");
+            Assert.That(provider.FindAll($"[data-testid='{TryAnotherMarker}']"), Has.Count.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// One account, refused: the summary is the whole story, the guidance still appears, and a fresh password is
+    /// still offered.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenTheOnlySystemRefuses_ReportsTheRefusalAndOffersGuidance()
+    {
+        Settle(Target("Contoso AD", PasswordChangeTargetState.Parked, "Refused.", PasswordSetFailureReason.PolicyRejection));
+        var provider = ShowDialog();
+        Generate(provider);
+
+        SubmitAndSettle(provider);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Error));
+            Assert.That(Button(provider, SummaryMarker).TextContent, Does.Contain("The password was not set. Contoso AD refused it."));
+            Assert.That(provider.FindAll("[data-testid='jim-password-guidance-toggle']"), Is.Not.Empty);
+            Assert.That(provider.FindAll($"[data-testid='{SubmitMarker}']"), Is.Empty, "the dialog is past composing; the way forward is a fresh password");
         }
     }
 
@@ -970,93 +935,168 @@ public class SetPasswordDialogTests : JimComponentTestContext
     /// understates it, and the colour is what an administrator reads before the sentence.
     /// </summary>
     [Test]
-    public void SetPasswordDialog_WhenNoAccountTookThePassword_ReportsItAsAnErrorRatherThanAWarning()
+    public void SetPasswordDialog_WhenNoSystemTookThePassword_ReportsItAsAnErrorRatherThanAWarning()
     {
-        _resultsBySystem["Contoso AD"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-
+        Settle(
+            Target("Contoso AD", PasswordChangeTargetState.Parked, "Refused.", PasswordSetFailureReason.PolicyRejection),
+            Target("Fabrikam HR", PasswordChangeTargetState.Parked, "Refused.", PasswordSetFailureReason.PolicyRejection));
         var provider = ShowDialog(allowSelection: true);
         Click(provider, SelectAllMarker);
         Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
 
-        Assert.That(provider.FindComponents<MudAlert>()
-                .Single(a => a.Instance.UserAttributes.TryGetValue("data-testid", out var id)
-                             && (string?)id == SummaryMarker)
-                .Instance.Severity,
-            Is.EqualTo(Severity.Error));
+        SubmitAndSettle(provider);
+
+        Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Error));
     }
 
     /// <summary>
-    /// Partly set stays a warning: some accounts did take the password, and the person now holds two different
-    /// ones, which is a caution about a half-finished job rather than a failure.
+    /// The one case a retry cannot cover. A refused password will be refused again, and replacing it only where
+    /// it failed would leave the person with two, so the escape hatch generates a fresh one and queues it for
+    /// every account the change touched, including the accounts that took the first; the queue holds one change
+    /// per person per system, so the new value simply supersedes whatever is still owed.
     /// </summary>
     [Test]
-    public void SetPasswordDialog_WhenSomeAccountsTookThePassword_ReportsItAsAWarning()
+    public void SetPasswordDialog_TryAnotherPassword_GeneratesAFreshValueAndQueuesItForEveryAccountAgain()
     {
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-
+        Settle(
+            Target("Contoso AD", PasswordChangeTargetState.Set, "Password set."),
+            Target("Fabrikam HR", PasswordChangeTargetState.Parked, "Refused.", PasswordSetFailureReason.PolicyRejection));
         var provider = ShowDialog(allowSelection: true);
         Click(provider, SelectAllMarker);
         Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
+        SubmitAndSettle(provider);
 
-        Assert.That(provider.FindComponents<MudAlert>()
-                .Single(a => a.Instance.UserAttributes.TryGetValue("data-testid", out var id)
-                             && (string?)id == SummaryMarker)
-                .Instance.Severity,
-            Is.EqualTo(Severity.Warning));
-    }
+        Click(provider, TryAnotherMarker);
 
-    /// <summary>
-    /// A failed row carries its severity in the row rather than in the sentence, so the modifier has to reach
-    /// the markup: without it the row is painted like any other and the failure is left to red prose, which is
-    /// what read as milder than the thing it was reporting.
-    /// </summary>
-    [Test]
-    public void SetPasswordDialog_WhenAnAccountFailed_MarksItsWholeRowAsFailed()
-    {
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-
-        var provider = ShowDialog(allowSelection: true);
-        Click(provider, SelectAllMarker);
-        Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
-
-        var rows = provider.FindAll($"[data-testid='{ResultMarker}']");
+        provider.WaitForState(() => _submissions.Count == 2);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rows[0].ClassName, Does.Not.Contain("jim-password-result--failed"));
-            Assert.That(rows[1].ClassName, Does.Contain("jim-password-result--failed"));
+            Assert.That(_submissions[1].Targets, Is.EquivalentTo(new[] { _accounts[0].ConnectedSystemObjectId, _accounts[1].ConnectedSystemObjectId }),
+                "the accounts that succeeded are rewritten too, so this person keeps one password");
+            Assert.That(_submissions[1].Password, Is.Not.EqualTo(_submissions[0].Password));
+            Assert.That(_generateCalls, Is.EqualTo(2));
         }
     }
 
     /// <summary>
-    /// The rail's markers are the same four states the Run Profile stepper reports, carried as modifiers so
-    /// one set of rules paints both. A marker with no state modifier renders as an unstyled ring.
+    /// The same escape hatch from inside the guidance panel, which offers it where the failure was a policy
+    /// rejection across more than one account.
     /// </summary>
     [Test]
-    public void SetPasswordDialog_WhenTheFanOutFinishes_MarksEachStepWithItsOwnOutcome()
+    public void SetPasswordDialog_GuidancePanelsNewPasswordForAll_QueuesAFreshValueForEveryAccount()
     {
-        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
-
+        Settle(
+            Target("Contoso AD", PasswordChangeTargetState.Set, "Password set."),
+            Target("Fabrikam HR", PasswordChangeTargetState.Parked, "Refused.", PasswordSetFailureReason.PolicyRejection));
         var provider = ShowDialog(allowSelection: true);
         Click(provider, SelectAllMarker);
         Generate(provider);
-        Click(provider, SubmitMarker);
-        provider.WaitForState(() => _runs.Count == 1);
+        SubmitAndSettle(provider);
 
-        var markers = provider.FindAll($"[data-testid='{RailMarker}'] .jim-password-rail-marker")
-            .Select(m => m.ClassName ?? string.Empty).ToList();
+        provider.WaitForElement("[data-testid='jim-password-guidance-toggle']").Click();
+        provider.WaitForElement("[data-testid='jim-password-guidance-regenerate']").Click();
+
+        provider.WaitForState(() => _submissions.Count == 2);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(markers[0], Does.Contain("jim-password-rail-marker--completed"));
-            Assert.That(markers[1], Does.Contain("jim-password-rail-marker--failed"));
+            Assert.That(_submissions[1].Targets, Has.Count.EqualTo(2));
+            Assert.That(_submissions[1].Password, Is.Not.EqualTo(_submissions[0].Password));
+        }
+    }
+
+    /// <summary>
+    /// The wait is bounded. A directory that has not answered in ten seconds is followed on the Password tab, not
+    /// from a spinner, and the dialog says where.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenTheWaitRunsOut_SaysDeliveryContinuesAndWhereToFollowIt()
+    {
+        _waiter.Answer = _ => Task.FromResult<PasswordChangeOutcomes?>(new PasswordChangeOutcomes
+        {
+            IsSettled = false,
+            Targets = [Target("Contoso AD", PasswordChangeTargetState.Queued)]
+        });
+        var provider = ShowDialog(deliveryWait: TimeSpan.FromMilliseconds(300));
+        Generate(provider);
+
+        Click(provider, SubmitMarker);
+
+        provider.WaitForElement($"[data-testid='{StillDeliveringMarker}']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Warning));
+            Assert.That(Button(provider, SummaryMarker).TextContent, Does.Contain("Contoso AD has not answered yet"));
+            Assert.That(Button(provider, StillDeliveringMarker).InnerHtml, Does.Contain("t=passwords&amp;metaverseObjectId="),
+                "the note links to this person's rows on the Passwords tab of Operations");
+        }
+    }
+
+    /// <summary>
+    /// Decision D1: a named account is written to whether or not its system takes propagated passwords. The row
+    /// reads Set like any other; the sentence beneath stops that being taken as evidence that the person's own
+    /// password changes will reach this system too.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenASystemIsPausedForPropagation_SaysThePasswordIsDeliveredThereAnyway()
+    {
+        _pausedSystems.Add("Contoso AD");
+        Settle(Target("Contoso AD", PasswordChangeTargetState.Set, "Password set."));
+        var provider = ShowDialog();
+        Generate(provider);
+
+        SubmitAndSettle(provider);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']")[0].GetAttribute("data-state"), Is.EqualTo("Set"));
+            Assert.That(Button(provider, PausedMarker).TextContent, Does.Contain("Contoso AD is not taking propagated passwords; this one is delivered there because you named the account."));
+        }
+    }
+
+    /// <summary>
+    /// A request JIM refuses before recording anything (an account that is not this person's, two in one system)
+    /// is shown in its own words and leaves the administrator composing, with the selection to change.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenJimRefusesTheRequest_ShowsTheReasonAndStaysComposing()
+    {
+        var provider = ShowDialog(setPassword: _ => throw new ArgumentException("Connected System Objects A and B are both in Contoso AD; a password can be set on one account per Connected System at a time."));
+        Generate(provider);
+
+        Click(provider, SubmitMarker);
+
+        provider.WaitForElement($"[data-testid='{FailureMarker}']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Button(provider, FailureMarker).TextContent, Does.Contain("one account per Connected System at a time"));
+            Assert.That(provider.FindAll($"[data-testid='{SubmitMarker}']"), Is.Not.Empty, "still composing");
+            Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']"), Is.Empty, "nothing was queued, so there is nothing to follow");
+            Assert.That(_waiter.Calls, Is.Zero);
         }
     }
 
     #endregion
+
+    /// <summary>
+    /// A waiter the test scripts. <see cref="Answer"/> may return a task that is not yet complete, to hold the dialog
+    /// in its delivering stage.
+    /// </summary>
+    private sealed class ScriptedWaiter : IPasswordChangeOutcomeWaiter
+    {
+        public Func<Guid, Task<PasswordChangeOutcomes?>> Answer { get; set; } = _ => Task.FromResult<PasswordChangeOutcomes?>(null);
+
+        public int Calls { get; private set; }
+
+        public void Reset()
+        {
+            Calls = 0;
+            Answer = _ => Task.FromResult<PasswordChangeOutcomes?>(null);
+        }
+
+        public Task<PasswordChangeOutcomes?> WaitForOutcomesAsync(Guid activityId, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Answer(activityId);
+        }
+    }
 }

@@ -121,30 +121,24 @@ public class InitialPasswordDeliveryServer
         var delivered = new List<Guid>();
         var attempts = new List<PendingInitialPassword>();
 
-        try
+        // The same open-and-check every other password JIM writes goes through (#1635). One connection problem
+        // is one thing for an administrator to fix, not one per account, so either failure is reported once for
+        // the pass rather than as N identical failures with N incremented attempt counts, and the accounts are
+        // left owed exactly as they were.
+        var opening = PasswordDeliveryCore.OpenChannel(passwordConnector, connectedSystem);
+        if (opening.CouldNotOpenChannel)
         {
-            passwordConnector.OpenPasswordConnection(connectedSystem.SettingValues);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // One connection problem is one thing for an administrator to fix, not one per account, so this is
-            // reported on its own rather than as N identical failures with N incremented attempt counts.
             result.CouldNotOpenPasswordConnection = true;
-            result.PasswordConnectionErrorMessage = ex.Message;
-            Log.Error(ex, "DeliverOutstandingAsync: Could not open the password connection to {SystemName}; {Count} accounts are still owed an initial password",
+            result.PasswordConnectionErrorMessage = opening.OpenErrorMessage;
+            Log.Warning("DeliverOutstandingAsync: Could not open the password connection to {SystemName}; {Count} accounts are still owed an initial password",
                 LogSanitiser.Sanitise(connectedSystem.Name), outstanding.Count);
             return result;
         }
 
-        // Asked once the channel exists, because what is being judged is the channel that opened rather than the
-        // settings it was built from. The rule is shared with the other two paths that write a password to this
-        // system, so an administrator who turns the setting on gets one answer everywhere. Reported once and the
-        // accounts left owed, exactly as for a connection that could not be opened.
-        if (PasswordChannelSecurity.RefusesChannel(connectedSystem, passwordConnector))
+        if (opening.ChannelNotSecure)
         {
-            passwordConnector.ClosePasswordConnection();
             result.PasswordChannelNotSecure = true;
-            Log.Error("DeliverOutstandingAsync: {SystemName} requires a secure transport for passwords and the password channel is not encrypted; {Count} accounts are still owed an initial password",
+            Log.Warning("DeliverOutstandingAsync: {SystemName} requires a secure transport for passwords and the password channel is not encrypted; {Count} accounts are still owed an initial password",
                 LogSanitiser.Sanitise(connectedSystem.Name), outstanding.Count);
             return result;
         }

@@ -25,7 +25,7 @@ Below the header is one card per service, all built the same way so the same fac
 - **Worker · Passwords**<br /> The Password Delivery Service, which delivers the Passwords tab's queue on its own clock. While it is writing to a directory the card says which ("Delivering to Corporate Directory"); its detail line reads what the queue holds ahead of it ("3 due, 1 retrying, next attempt 09:19 UTC"), and is blank when nothing is waiting. It shares a process with the synchronisation loop, so the two cards go **Unhealthy** together when the Worker is down; one alone means that half of the process has stopped while the other is still working, which is why they are reported separately.
 - **Scheduler**<br /> The Schedule runner.
 
-Each card carries, top to bottom: the service's name with its status on a coloured pill (green, amber or red; the pill is the only coloured thing on the card); what it is doing now, or **Idle**; its condition in plain words ("Heartbeat 3 seconds ago"); and the host, version and uptime of the instance reporting. A service that is Unhealthy leads with why ("No heartbeat for 4 minutes") and says what it was running when it went quiet, if anything.
+Each card carries, top to bottom: the service's name with its status on a coloured pill (green, amber or red; the pill is the only coloured thing on the card); what it is doing now, or **Idle**; and its condition in plain words with the instance's uptime after it ("Heartbeat 3 seconds ago · up 54 s"). The host, version and instance id of the process reporting sit behind the card's details control (the chevron at the right of the heartbeat line); each value is in a fixed-width face with a copy button beside it, so a container id can go straight into a shell. A service that is Unhealthy leads with why ("No heartbeat for 4 minutes"), says what it was running when it went quiet, if anything, and keeps the uptime it had at its last heartbeat, which is how long it ran before it stopped.
 
 ### What Healthy, Degraded and Unhealthy mean
 
@@ -49,7 +49,7 @@ The Operations tile on the Administration index carries the same signal as a red
 
 ### Version skew
 
-Each card shows the JIM version the service is running. When it differs from the version of the portal you are looking at, a **differs from portal** chip sits beside it. After an upgrade that means one container did not restart on the new image; restart it. See [Upgrading](../administration/upgrading.md).
+Each card carries the JIM version the service is running behind its details control. When it differs from the version of the portal you are looking at, a **differs from portal** chip sits beside the status pill on the card's face, so the skew is seen without opening anything, and again beside the version number in the details, so the number and the warning read together. After an upgrade that means one container did not restart on the new image; restart it. See [Upgrading](../administration/upgrading.md).
 
 ### Timings
 

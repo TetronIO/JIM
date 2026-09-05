@@ -80,7 +80,7 @@ function Resume-JIMPendingPasswordChange {
     .LINK
         Get-JIMPendingPasswordChange
         Stop-JIMPendingPasswordChange
-        Sync-JIMMetaverseObjectPassword
+        Set-JIMMetaverseObjectPassword
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     [OutputType([PSCustomObject])]

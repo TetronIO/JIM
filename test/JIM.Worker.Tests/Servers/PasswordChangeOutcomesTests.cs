@@ -164,6 +164,42 @@ public class PasswordChangeOutcomesTests
         }
     }
 
+    /// <summary>
+    /// Decision D1 (#1635): an administrator's explicit set is delivered on a paused system, so it is queued and
+    /// on its way, never held.
+    /// </summary>
+    [Test]
+    public async Task GetChangeOutcomesAsync_ExplicitRowOnAPausedSystem_IsQueuedNotHeldAsync()
+    {
+        _targets.Single(t => t.ConnectedSystemId == CorporateAdId).Enabled = false;
+        await RowAsync(CorporateAdId, r => r.Origin = PendingPasswordChangeOrigin.Explicit);
+
+        var outcomes = await _server.GetChangeOutcomesAsync(_changeActivity!.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes!.Targets.Single().State, Is.EqualTo(PasswordChangeTargetState.Queued));
+            Assert.That(outcomes.IsSettled, Is.False, "The Password Delivery Service is about to claim it; a caller can wait for that.");
+        }
+    }
+
+    [Test]
+    public async Task GetChangeOutcomesAsync_ExplicitRowOnAnUnconfiguredSystem_TakesTheNameFromTheSystemAsync()
+    {
+        _targets.Clear();
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemHeaderAsync(CorporateAdId))
+            .ReturnsAsync(new ConnectedSystemHeader { Id = CorporateAdId, Name = "Corporate AD" });
+        await RowAsync(CorporateAdId, r => r.Origin = PendingPasswordChangeOrigin.Explicit);
+
+        var target = await TargetAsync(CorporateAdId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(target.ConnectedSystemName, Is.EqualTo("Corporate AD"));
+            Assert.That(target.State, Is.EqualTo(PasswordChangeTargetState.Queued));
+        }
+    }
+
     [Test]
     public async Task GetChangeOutcomesAsync_ClaimedRow_IsDeliveringAndNotSettledAsync()
     {
@@ -225,6 +261,38 @@ public class PasswordChangeOutcomesTests
             Assert.That(target.Message, Is.EqualTo("Password does not meet complexity requirements"));
             Assert.That(target.NextAttemptAt, Is.Null);
         }
+    }
+
+    /// <summary>
+    /// The classification travels with the row's words. The Set Password dialog offers remediation guidance per
+    /// failure reason, and the reason is JIM's own verdict on whether another attempt could ever help, so a parked
+    /// target without it would leave the dialog able to quote the refusal and unable to say what to do about it.
+    /// </summary>
+    [Test]
+    public async Task GetChangeOutcomesAsync_RowWithAFailedAttempt_CarriesTheFailureReasonAsync()
+    {
+        await RowAsync(CorporateAdId, r =>
+        {
+            r.Status = PendingPasswordChangeStatus.Parked;
+            r.AttemptCount = 1;
+            r.LastAttemptedAt = Created.AddSeconds(2);
+            r.FailureReason = PasswordSetFailureReason.PolicyRejection;
+            r.TargetMessage = "Password does not meet complexity requirements";
+        });
+
+        var target = await TargetAsync(CorporateAdId);
+
+        Assert.That(target.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
+    }
+
+    [Test]
+    public async Task GetChangeOutcomesAsync_RowNotYetAttempted_HasNoFailureReasonAsync()
+    {
+        await RowAsync(CorporateAdId);
+
+        var target = await TargetAsync(CorporateAdId);
+
+        Assert.That(target.FailureReason, Is.Null);
     }
 
     [Test]

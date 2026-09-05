@@ -253,21 +253,32 @@ public class InitialPasswordDeliveryServerTests
     }
 
     /// <summary>
-    /// The password connection is closed even when a delivery throws, so that a Connector fault cannot leave a
-    /// connection to a directory open for the rest of the worker's life.
+    /// A Connector that throws rather than classifying is a transient failure for that account (#1635, through
+    /// the shared delivery core): the record is kept to retry, the pass carries on to the accounts behind it, and
+    /// the password connection is still closed, so a Connector fault cannot leave a connection to a directory open
+    /// for the rest of the worker's life. Before the core, the throw escaped the pass and abandoned every account
+    /// after the one that failed.
     /// </summary>
     [Test]
-    public void DeliverOutstandingAsync_WhenADeliveryThrows_StillClosesThePasswordConnection()
+    public async Task DeliverOutstandingAsync_WhenADeliveryThrows_RetriesThatAccountAndStillClosesThePasswordConnectionAsync()
     {
-        StageOutstandingAsync().GetAwaiter().GetResult();
+        await StageOutstandingAsync();
         var connector = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
         connector.As<IConnectorPasswordManagement>()
             .Setup(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(), It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("The Connector fell over."));
 
-        Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None));
+        var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
 
+        var stored = _syncRepo.PendingInitialPasswords.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.RetryingCount, Is.EqualTo(1));
+            Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
+            Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.Transient));
+            Assert.That(stored.TargetMessage, Is.EqualTo("The Connector fell over."));
+            Assert.That(stored.AttemptCount, Is.EqualTo(1));
+        }
         connector.As<IConnectorPasswordManagement>().Verify(c => c.ClosePasswordConnection(), Times.Once);
     }
 

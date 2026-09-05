@@ -1593,15 +1593,18 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 Sets the password on one Connected System Object.
 
-The password is written straight to the Connected System: nothing is staged as a Pending Export, nothing is retried, and JIM stores nothing. The attempt is recorded as an Activity against the object, carrying the outcome and, where the system refused, its verbatim reason.
+The account-scoped form of Set Password: the same operation as [`Set-JIMMetaverseObjectPassword`](metaverse.md#set-jimmetaverseobjectpassword) with this one account named, for scripts that hold the account rather than the person. The change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing; by default the command waits up to ten seconds and tells you what the account did with the password. JIM holds the password only until the account has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. Every attempt is recorded as an Activity, carrying the outcome and, where the system refused, its verbatim reason.
 
-This is the automation counterpart of the **Set Password** action in the administration portal. Supply the password with `-Password`, or have JIM generate one that follows the Connected System's discovered policy with `-Generate`. A generated password is returned to you, once, because you asked for it; JIM stores it nowhere.
+This is the automation counterpart of the **Set Password** action on a Connected System Object in the administration portal. The object must be joined to a Metaverse Object: a password belongs to a person, and that is where its history is kept. Supply the password with `-Password`, or have JIM generate one that follows the Connected System's discovered policy with `-Generate`. A generated password is returned to you, once, on `GeneratedPassword`.
 
 ### Syntax
 
 ```powershell
 Set-JIMConnectedSystemObjectPassword -ConnectedSystemId <int> -Id <guid> -Password <securestring>
-    [-ExpiryBehaviour <string>] [-EnableAccount] [-Force] [-PassThru]
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Wait <int>] [-Force]
+
+Set-JIMConnectedSystemObjectPassword -ConnectedSystemId <int> -Id <guid> -Generate
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Wait <int>] [-Force]
 ```
 
 ### Parameters
@@ -1610,20 +1613,38 @@ Set-JIMConnectedSystemObjectPassword -ConnectedSystemId <int> -Id <guid> -Passwo
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts a Connected System Object from the pipeline. |
 | `Id` | `guid` | Yes | | Connected System Object identifier. Accepts a Connected System Object from the pipeline. |
-| `Password` | `securestring` | Yes | | The password to set. Sent to the Connected System and nowhere else. |
+| `Password` | `securestring` | Yes (unless `-Generate`) | | The password to set. Encrypted before JIM stores it and held only until delivered. |
+| `Generate` | `switch` | Yes (unless `-Password`) | | Have JIM generate a password satisfying the policy it discovered on the Connected System. |
 | `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`. |
 | `EnableAccount` | `switch` | No | `$false` | Enables the account as part of setting the password. Omitting it leaves the account's enabled state untouched. |
+| `Wait` | `int` | No | `10` | Seconds, 0 to 30, to wait for the account to answer. Pass `0` to return as soon as the change is recorded. |
 | `Force` | `switch` | No | `$false` | Skips the confirmation prompt. |
-| `PassThru` | `switch` | No | `$false` | Returns the outcome. |
 
 ### Output
 
-When `-PassThru` is specified, returns an object with these properties. No property carries the password.
+One `PSCustomObject` in the same shape `Set-JIMMetaverseObjectPassword` returns, with one entry under `Targets`. No property carries the password you supplied.
 
 | Property | Description |
 |----------|-------------|
-| `AppliedExpiryBehaviour` | The expiry behaviour really applied, which is not always the one asked for |
-| `ExpiryBehaviourWarning` | Why the requested behaviour could not be honoured, or null if it was |
+| `ActivityId` | The Activity recording the change. Its child Activity holds the account's outcome once delivery has been attempted. |
+| `Origin` | Always `Explicit`: the account was named. |
+| `Settled` | Whether the account had reached an outcome you need not wait on by the time the command returned. |
+| `Targets` | One entry, for this account's Connected System. |
+| `GeneratedPassword` | The password JIM produced, as a SecureString. Present only with `-Generate`. |
+
+The entry under `Targets`:
+
+| Property | Description |
+|----------|-------------|
+| `ConnectedSystemId`, `ConnectedSystemName` | The Connected System. |
+| `ConnectedSystemObjectId` | The account. |
+| `Enabled` | Whether the system is currently taking propagated passwords. This account is delivered to either way. |
+| `State` | `Queued`, `Delivering`, `Set`, `Retrying`, `Parked`, `Expired` or `Cancelled`. |
+| `NextAttemptAt` | When the next attempt falls due, for a target that is `Retrying`; `$null` otherwise. |
+| `Message` | The system's own words on its most recent outcome, or `$null` before anything has been said. |
+| `AttemptCount` | How many delivery attempts this account has had. |
+
+A `Parked` target is also reported as a non-terminating error carrying the result as its `TargetObject`, so a script that stops on errors stops on a refusal. A target still in flight when the wait ran out is reported as a warning.
 
 ### Examples
 
@@ -1632,9 +1653,10 @@ $password = Read-Host -AsSecureString "New password"
 Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b2c3d4e5f60 -Password $password
 ```
 
-```powershell title="Set a password and enable the account, reporting what the directory applied"
+```powershell title="Set a password and enable the account, and see whether the directory took it"
 $password = Read-Host -AsSecureString "New password"
-Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b2c3d4e5f60 -Password $password -EnableAccount -Force -PassThru
+$result = Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b2c3d4e5f60 -Password $password -EnableAccount -Force
+$result.Targets[0] | Select-Object State, Message
 ```
 
 ```powershell title="Pipeline: set the password on a retrieved Connected System Object"
@@ -1647,19 +1669,19 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b
 
 - **This resets the password on whichever account you point it at.** Anyone who can call it can reset the password of any account in this connector space, subject only to what the Connected System's own service account is permitted to do.
 - The password is taken as a `SecureString` so it does not sit in your session's command history in clear text. It is unwrapped only to be sent over TLS.
-- A Connected System that cannot honour the requested expiry behaviour applies what it can and reports the difference in `ExpiryBehaviourWarning`; the password is still set.
-- A rejected password returns an error carrying the system's own reason. A Connected System that could not be reached is reported distinctly, because nothing was established about the password itself and the same request is worth repeating.
+- A Connected System that cannot honour the requested expiry behaviour applies what it can and says so in the target's `Message`; the password is still set.
+- A system that refused the password parks it, with its own reason in `Message`. A system that could not be reached is `Retrying`, because nothing was established about the password itself; JIM tries again on its own clock, and nothing is lost while the system is down.
+- The account must be joined to a Metaverse Object. An unjoined object is reported as not found, with the remedy: join it first.
 - Routine initial passwords belong on the Synchronisation Rule that provisions the account; see `Set-JIMSyncRuleInitialPassword`.
 - Pass `-Generate` instead of `-Password` to have JIM produce a password satisfying the policy it discovered on
   the Connected System. Prefer this to inventing one in your own script: JIM knows what the target demands, and
   a hand-rolled generator rediscovers the passphrase trap, where three words offer two character categories
-  against a directory that wants three. The generated password comes back on the result's `password` property
-  as a SecureString, whether or not `-PassThru` is given, and **that is the only chance to capture it**; JIM
-  stores nothing and cannot return it again.
+  against a directory that wants three. The generated password comes back on the result's `GeneratedPassword`
+  property as a SecureString, and **that is the only chance to capture it**.
 
 ```powershell title="Set a compliant password without choosing one"
 $result = Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 3 -Id $csoId -Generate -EnableAccount -Force
-ConvertFrom-SecureString -SecureString $result.password -AsPlainText
+ConvertFrom-SecureString -SecureString $result.GeneratedPassword -AsPlainText
 ```
 
 ---

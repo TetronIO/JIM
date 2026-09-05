@@ -10,8 +10,8 @@
 .DESCRIPTION
     Invoke-JIMApi writes the outgoing request body to Write-Debug so an operator can see what a
     cmdlet sent. Several cmdlets send a password: Set-JIMMetaverseObjectPassword,
-    Sync-JIMMetaverseObjectPassword, Set-JIMConnectedSystemObjectPassword, and
-    Set-JIMSyncRuleInitialPassword all put a plaintext value in the body, having deliberately taken
+    Set-JIMConnectedSystemObjectPassword and Set-JIMSyncRuleInitialPassword all put a plaintext
+    value in the body, having deliberately taken
     it as a SecureString to keep it out of the session history in the first place. Running any of
     them under -Debug, or in a transcript with $DebugPreference set, wrote that value out again in
     clear text.

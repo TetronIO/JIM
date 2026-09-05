@@ -63,7 +63,9 @@ public partial class SyncRepository
                 BulkSqlHelpers.NullableParam(change.CancelledById, NpgsqlTypes.NpgsqlDbType.Uuid),
                 BulkSqlHelpers.NullableParam(change.CancelledByName, NpgsqlTypes.NpgsqlDbType.Text),
                 BulkSqlHelpers.NullableParam(change.ClaimedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
-                BulkSqlHelpers.NullableParam(change.ClaimedBy, NpgsqlTypes.NpgsqlDbType.Text));
+                BulkSqlHelpers.NullableParam(change.ClaimedBy, NpgsqlTypes.NpgsqlDbType.Text),
+                (int)change.Origin,
+                BulkSqlHelpers.NullableParam(change.EnableAccount, NpgsqlTypes.NpgsqlDbType.Boolean));
         }
     }
 
@@ -85,26 +87,27 @@ public partial class SyncRepository
     /// <inheritdoc />
     public async Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf, TimeSpan claimLease)
     {
-        // Restricted to systems that are actually taking passwords, because "due" here means "a lane would
-        // attempt this", and a lane steps over a switched-off system without touching its changes. Once a
-        // switched-off system accumulates changes rather than discarding them, leaving that condition out makes
-        // the service see permanent work: it would run a lane on every poll, for as long as the system stayed
-        // off, each one finding nothing it may deliver. The changes are not hidden by this, they are simply not
-        // due; enabling the system releases them, and that row update wakes the service.
+        // Restricted to what a lane would actually claim, because "due" here means "a lane would attempt this".
+        // A propagated change on a system that is not taking passwords is held, not due: once a switched-off
+        // system accumulates changes rather than discarding them, counting them would make the service see
+        // permanent work and run a lane on every poll, for as long as the system stayed off, each one finding
+        // nothing it may deliver. Enabling the system releases them, and that row update wakes the service. An
+        // explicit set (#1635, decision D1) is claimed whatever the configuration says, so it always counts.
         var claimExpiredBefore = asOf - claimLease;
         return await _context.PendingPasswordChanges
             .AsNoTracking()
             .Where(c => (c.Status == PendingPasswordChangeStatus.Pending && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
                          || c.Status == PendingPasswordChangeStatus.Delivering && c.ClaimedAt != null && c.ClaimedAt <= claimExpiredBefore)
-                        && _context.ConnectedSystemPasswordSynchronisations
-                            .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled))
+                        && (c.Origin == PendingPasswordChangeOrigin.Explicit
+                            || _context.ConnectedSystemPasswordSynchronisations
+                                .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled)))
             .Select(c => c.ConnectedSystemId)
             .Distinct()
             .ToListAsync();
     }
 
     /// <inheritdoc />
-    public async Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum)
+    public async Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool explicitOnly)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
         if (maximum < 1)
@@ -119,6 +122,10 @@ public partial class SyncRepository
         // call-site-computed columns (a status mark and the claim stamp), and a future column must not be swept
         // into it. RETURNING c.* hands the rows back in the entity's own shape, so nothing is re-read and the
         // caller holds exactly what it claimed.
+        //
+        // The origin filter is a parameter rather than two statements: over a system that is not taking
+        // propagated passwords the lane passes the explicit origin and claims only administrators' sets; over a
+        // live system it passes null and claims everything due (#1635).
         var claimExpiredBefore = asOf - lease;
         const string sql = """
             WITH due AS (
@@ -127,6 +134,7 @@ public partial class SyncRepository
                 WHERE "ConnectedSystemId" = {0}
                   AND (("Status" = {1} AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= {2}))
                     OR ("Status" = {3} AND "ClaimedAt" IS NOT NULL AND "ClaimedAt" <= {4}))
+                  AND ({7} IS NULL OR "Origin" = {7})
                 ORDER BY "CreatedAt", "Id"
                 LIMIT {5}
                 FOR UPDATE SKIP LOCKED
@@ -146,7 +154,8 @@ public partial class SyncRepository
                 (int)PendingPasswordChangeStatus.Delivering,
                 new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.TimestampTz, Value = claimExpiredBefore },
                 maximum,
-                claimedBy)
+                claimedBy,
+                BulkSqlHelpers.NullableParam(explicitOnly ? (int?)PendingPasswordChangeOrigin.Explicit : null, NpgsqlTypes.NpgsqlDbType.Integer))
             .AsNoTracking()
             // Materialised in the statement's own order: EF Core composes nothing over a query that is read
             // straight out, so the ORDER BY inside the claim is the order the caller sees.
@@ -174,13 +183,14 @@ public partial class SyncRepository
     public async Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
     {
         // One grouped round trip, read on every iteration of the delivery loop: three numbers from one scan of a
-        // table that is small whenever the service is keeping up. Restricted to enabled systems throughout, so a
-        // paused system's held changes neither inflate the counts nor wake the service for retries it will not
-        // make (see PasswordQueueDeliveryOutlook).
+        // table that is small whenever the service is keeping up. Restricted to what a lane would claim, so a
+        // paused system's held propagated changes neither inflate the counts nor wake the service for retries it
+        // will not make (see PasswordQueueDeliveryOutlook); an explicit set counts wherever it is (#1635).
         var claimExpiredBefore = asOf - claimLease;
         var outlook = await _context.PendingPasswordChanges.AsNoTracking()
-            .Where(c => _context.ConnectedSystemPasswordSynchronisations
-                .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled))
+            .Where(c => c.Origin == PendingPasswordChangeOrigin.Explicit
+                        || _context.ConnectedSystemPasswordSynchronisations
+                            .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled))
             .GroupBy(_ => 1)
             .Select(g => new PasswordQueueDeliveryOutlook
             {
@@ -256,7 +266,7 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
-    public async Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf)
+    public async Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool explicitOnly)
     {
         // Deliberately hand-written rather than driven from the bulk-columns constant: this marks exactly three
         // columns, and a future column must not be swept into it. The status filter lives in the WHERE rather
@@ -265,7 +275,8 @@ public partial class SyncRepository
         return await _context.PendingPasswordChanges
             .Where(c => c.ConnectedSystemId == connectedSystemId
                         && c.Status == PendingPasswordChangeStatus.Pending
-                        && c.ExpiresAt <= asOf)
+                        && c.ExpiresAt <= asOf
+                        && (!explicitOnly || c.Origin == PendingPasswordChangeOrigin.Explicit))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(c => c.Status, PendingPasswordChangeStatus.Expired)
                 .SetProperty(c => c.NextRetryAt, (DateTime?)null));
@@ -373,6 +384,7 @@ public partial class SyncRepository
                 // them, and a row that said "Due now" for one of those would contradict the summary above it.
                 ConnectedSystemTakingPasswords = _context.ConnectedSystemPasswordSynchronisations
                     .Any(ps => ps.ConnectedSystemId == change.ConnectedSystemId && ps.Enabled),
+                Origin = change.Origin,
                 Status = change.Status,
                 FailureReason = change.FailureReason,
                 TargetMessage = change.TargetMessage,
@@ -439,14 +451,16 @@ public partial class SyncRepository
                 // A claimed change is still work JIM intends to deliver; it is simply being delivered right now.
                 WaitingCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Pending
                                             || c.Status == PendingPasswordChangeStatus.Delivering),
-                // Held changes (those queued for a system that is switched off) are Waiting but not Due, matching
-                // GetConnectedSystemIdsWithDuePasswordChangesAsync and the number's own meaning: a pass would not
-                // attempt them. Counting them here would make a large Due count, which is meant to read as "the
-                // queue is not being drained", the ordinary state of any deployment with a system switched off.
+                // Held changes (propagated ones queued for a system that is switched off) are Waiting but not
+                // Due, matching GetConnectedSystemIdsWithDuePasswordChangesAsync and the number's own meaning: a
+                // lane would not attempt them. Counting them here would make a large Due count, which is meant to
+                // read as "the queue is not being drained", the ordinary state of any deployment with a system
+                // switched off. An explicit set is due wherever it is (#1635).
                 DueCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Pending
                                         && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
-                                        && _context.ConnectedSystemPasswordSynchronisations
-                                            .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled)),
+                                        && (c.Origin == PendingPasswordChangeOrigin.Explicit
+                                            || _context.ConnectedSystemPasswordSynchronisations
+                                                .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled))),
                 ParkedCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Parked),
                 ExpiredCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Expired),
                 CancelledCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Cancelled)

@@ -7,7 +7,7 @@ function Get-JIMPendingPasswordChange {
         Gets the Password Synchronisation queue: password changes waiting to be delivered to Connected Systems.
 
     .DESCRIPTION
-        Lists what Sync-JIMMetaverseObjectPassword put on the queue and what has happened to it since. One row
+        Lists what Set-JIMMetaverseObjectPassword put on the queue and what has happened to it since. One row
         per identity per Connected System, naming both, so a list reads as people and systems rather than
         identifiers.
 
@@ -111,7 +111,7 @@ function Get-JIMPendingPasswordChange {
     .LINK
         Resume-JIMPendingPasswordChange
         Stop-JIMPendingPasswordChange
-        Sync-JIMMetaverseObjectPassword
+        Set-JIMMetaverseObjectPassword
         Set-JIMConnectedSystemPasswordSynchronisation
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
