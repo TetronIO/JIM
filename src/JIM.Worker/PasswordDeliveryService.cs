@@ -19,7 +19,7 @@ namespace JIM.Worker;
 /// Task: a task waits its turn behind whatever Run Profile is executing, and a password change made during a Full
 /// Import used to wait for the import to finish. This loop shares nothing with the synchronisation loop but the
 /// process; it is woken by the queue's own database notification, by the earliest scheduled retry, and by a
-/// thirty-second safety poll, and it reports its own heartbeat under <see cref="JimService.WorkerPasswordDelivery"/>.
+/// thirty-second safety poll, and it reports its own heartbeat under <see cref="JimService.WorkerDelivery"/>.
 /// </para>
 /// <para>
 /// A fault here must never stop the synchronisation loop. The loop's iterations and its lanes each catch their
@@ -57,7 +57,7 @@ public sealed class PasswordDeliveryService : BackgroundService
         // The same liveness the Worker's synchronisation loop writes, under a service of its own: a wedged
         // synchronisation loop and a wedged password loop need different responses, and the Operations page shows
         // them as different cards. The instance id doubles as the name every claim is stamped with.
-        var heartbeat = ServiceHeartbeatWriter.ForThisProcess(JimService.WorkerPasswordDelivery);
+        var heartbeat = ServiceHeartbeatWriter.ForThisProcess(JimService.WorkerDelivery);
         var work = new JimPasswordDeliveryWork(_jimFactory, heartbeat);
 
         await WaitUntilApplicationReadyAsync(work, stoppingToken);

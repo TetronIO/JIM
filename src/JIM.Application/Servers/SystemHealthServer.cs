@@ -57,7 +57,7 @@ public class SystemHealthServer
     public static readonly JimService[] ExpectedServices =
     [
         JimService.WorkerSync,
-        JimService.WorkerPasswordDelivery,
+        JimService.WorkerDelivery,
         JimService.Scheduler
     ];
 

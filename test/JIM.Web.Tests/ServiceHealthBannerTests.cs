@@ -96,7 +96,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     [Test]
     public async Task ServiceHealthBanner_EveryServiceRunning_RendersNothingAtAll()
     {
-        Arrange(Heartbeat(JimService.WorkerSync, 2), Heartbeat(JimService.WorkerPasswordDelivery, 2), Heartbeat(JimService.Scheduler, 2));
+        Arrange(Heartbeat(JimService.WorkerSync, 2), Heartbeat(JimService.WorkerDelivery, 2), Heartbeat(JimService.Scheduler, 2));
 
         var cut = await RenderAndReadAsync();
 
@@ -110,7 +110,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     [Test]
     public async Task ServiceHealthBanner_OverdueHeartbeat_RendersNothing()
     {
-        Arrange(Heartbeat(JimService.WorkerSync, 30), Heartbeat(JimService.WorkerPasswordDelivery, 2), Heartbeat(JimService.Scheduler, 2));
+        Arrange(Heartbeat(JimService.WorkerSync, 30), Heartbeat(JimService.WorkerDelivery, 2), Heartbeat(JimService.Scheduler, 2));
 
         var cut = await RenderAndReadAsync();
 
@@ -163,7 +163,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     [Test]
     public async Task ServiceHealthBanner_BothWorkerServicesWithNoHeartbeat_NamesTheWorkerOnce()
     {
-        Arrange(Heartbeat(JimService.WorkerSync, 4 * 60), Heartbeat(JimService.WorkerPasswordDelivery, 4 * 60), Heartbeat(JimService.Scheduler, 2));
+        Arrange(Heartbeat(JimService.WorkerSync, 4 * 60), Heartbeat(JimService.WorkerDelivery, 4 * 60), Heartbeat(JimService.Scheduler, 2));
 
         var cut = await RenderAndReadAsync();
 
@@ -179,7 +179,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     {
         Arrange(
             Heartbeat(JimService.WorkerSync, 2, "Full Import: Corporate Directory", 12 * 60),
-            Heartbeat(JimService.WorkerPasswordDelivery, 2),
+            Heartbeat(JimService.WorkerDelivery, 2),
             Heartbeat(JimService.Scheduler, 2));
 
         var cut = await RenderAndReadAsync();

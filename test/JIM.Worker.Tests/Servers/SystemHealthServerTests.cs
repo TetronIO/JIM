@@ -71,7 +71,7 @@ public class SystemHealthServerTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler }));
+            Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerDelivery, JimService.Scheduler }));
             Assert.That(report.Services.Select(s => s.Status), Is.All.EqualTo(ServiceHealthStatus.Unhealthy));
             Assert.That(report.Services.Select(s => s.Condition), Is.All.EqualTo(ServiceHealthCondition.NeverStarted));
             Assert.That(report.Services.Select(s => s.Reason), Is.All.EqualTo("Never started"));
@@ -123,9 +123,9 @@ public class SystemHealthServerTests
     [Test]
     public async Task GetServiceHealthAsync_WorkerHeartbeatJustUnderSixtySeconds_HeartbeatOverdue()
     {
-        GivenHeartbeats(Heartbeat(JimService.WorkerPasswordDelivery, TimeSpan.FromSeconds(59)));
+        GivenHeartbeats(Heartbeat(JimService.WorkerDelivery, TimeSpan.FromSeconds(59)));
 
-        var health = await HealthOfAsync(JimService.WorkerPasswordDelivery);
+        var health = await HealthOfAsync(JimService.WorkerDelivery);
 
         Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.HeartbeatOverdue));
     }
@@ -242,7 +242,7 @@ public class SystemHealthServerTests
     {
         GivenHeartbeats(
             Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2)),
-            Heartbeat(JimService.WorkerPasswordDelivery, TimeSpan.FromSeconds(2),
+            Heartbeat(JimService.WorkerDelivery, TimeSpan.FromSeconds(2),
                 currentWork: "Password delivery: Corporate Directory", lastProgressAt: AsOf.AddMinutes(-30)),
             Heartbeat(JimService.Scheduler, TimeSpan.FromSeconds(30)));
 
@@ -256,7 +256,7 @@ public class SystemHealthServerTests
     {
         GivenHeartbeats(
             Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(1)),
-            Heartbeat(JimService.WorkerPasswordDelivery, TimeSpan.FromSeconds(1)),
+            Heartbeat(JimService.WorkerDelivery, TimeSpan.FromSeconds(1)),
             Heartbeat(JimService.Scheduler, TimeSpan.FromSeconds(1)));
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
@@ -269,14 +269,14 @@ public class SystemHealthServerTests
     {
         GivenHeartbeats(
             Heartbeat(JimService.Scheduler, TimeSpan.FromSeconds(1)),
-            Heartbeat(JimService.WorkerPasswordDelivery, TimeSpan.FromSeconds(1)),
+            Heartbeat(JimService.WorkerDelivery, TimeSpan.FromSeconds(1)),
             Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(1)));
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
 
         Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[]
         {
-            JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler
+            JimService.WorkerSync, JimService.WorkerDelivery, JimService.Scheduler
         }));
     }
 
@@ -285,7 +285,7 @@ public class SystemHealthServerTests
     {
         // One heartbeat among three expected services: the one that spoke is Healthy, the others are Unhealthy,
         // and the report's overall verdict is the worst of them.
-        GivenHeartbeats(Heartbeat(JimService.WorkerPasswordDelivery, TimeSpan.FromSeconds(1)));
+        GivenHeartbeats(Heartbeat(JimService.WorkerDelivery, TimeSpan.FromSeconds(1)));
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
 
@@ -293,9 +293,9 @@ public class SystemHealthServerTests
         {
             Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[]
             {
-                JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler
+                JimService.WorkerSync, JimService.WorkerDelivery, JimService.Scheduler
             }));
-            Assert.That(report.Services.Single(s => s.Service == JimService.WorkerPasswordDelivery).Status, Is.EqualTo(ServiceHealthStatus.Healthy));
+            Assert.That(report.Services.Single(s => s.Service == JimService.WorkerDelivery).Status, Is.EqualTo(ServiceHealthStatus.Healthy));
             Assert.That(report.Overall, Is.EqualTo(ServiceHealthStatus.Unhealthy));
         }
     }
@@ -305,7 +305,7 @@ public class SystemHealthServerTests
     {
         // The Password Delivery Service (#1635) writes its own heartbeat from the Worker process, so a deployment
         // whose Worker never started it must show a red card and a banner, as for the synchronisation loop.
-        Assert.That(SystemHealthServer.ExpectedServices, Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerPasswordDelivery, JimService.Scheduler }));
+        Assert.That(SystemHealthServer.ExpectedServices, Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerDelivery, JimService.Scheduler }));
     }
 
     [Test]
@@ -373,7 +373,7 @@ public class SystemHealthServerTests
             Assert.That(SystemHealthServer.HeartbeatInterval, Is.EqualTo(TimeSpan.FromSeconds(5)));
             Assert.That(SystemHealthServer.HeartbeatOverdueAfter, Is.EqualTo(TimeSpan.FromSeconds(15)));
             Assert.That(SystemHealthServer.NoHeartbeatAfter(JimService.WorkerSync), Is.EqualTo(TimeSpan.FromSeconds(60)));
-            Assert.That(SystemHealthServer.NoHeartbeatAfter(JimService.WorkerPasswordDelivery), Is.EqualTo(TimeSpan.FromSeconds(60)));
+            Assert.That(SystemHealthServer.NoHeartbeatAfter(JimService.WorkerDelivery), Is.EqualTo(TimeSpan.FromSeconds(60)));
             Assert.That(SystemHealthServer.NoHeartbeatAfter(JimService.Scheduler), Is.EqualTo(TimeSpan.FromSeconds(120)));
             Assert.That(SystemHealthServer.StalledAfter, Is.EqualTo(TimeSpan.FromMinutes(10)));
         }
