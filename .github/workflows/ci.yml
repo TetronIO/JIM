@@ -433,6 +433,56 @@ jobs:
         # never uploaded again. See discover-base-images.ps1.
         category: trivy-image-${{ matrix.image_name }}
 
+  retire-base-image-scan-categories:
+    # MIGRATION STEP: remove this job once the three configurations below have been
+    # deleted from Security > Code scanning > Tool status (Trivy).
+    #
+    # Code scanning remembers every category a workflow has ever uploaded for the
+    # default branch as a "configuration", and the Trivy merge check compares a PR
+    # against all of them. When scan-images replaced the base-image scan, the three
+    # trivy-base-image-* categories stopped being uploaded, the check reported
+    # "3 configurations present on main were not found", and the ruleset's
+    # code-scanning requirement blocked the PR (#1637) with every job green. An
+    # analysis with no results, uploaded under each retired category, satisfies the
+    # comparison, and once it lands on main it closes every alert those categories
+    # still hold as fixed; the base image findings they carried are now reported,
+    # where they still apply, by the built-image scan. Deleting the configurations
+    # is API/UI-only and cannot be done from a workflow, which is why this is a
+    # step to remove by hand rather than one that retires itself.
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      security-events: write  # required to upload SARIF to code scanning
+
+    strategy:
+      fail-fast: false
+      matrix:
+        base_image: [aspnet, runtime, sdk]
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+    - name: Write an empty Trivy analysis
+      run: |
+        cat > retired-category.sarif <<'EOF'
+        {
+          "version": "2.1.0",
+          "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+          "runs": [
+            {
+              "tool": { "driver": { "name": "Trivy", "informationUri": "https://github.com/aquasecurity/trivy" } },
+              "results": []
+            }
+          ]
+        }
+        EOF
+
+    - name: Upload the empty analysis under the retired category
+      uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d  # v3.37.9
+      with:
+        sarif_file: retired-category.sarif
+        category: trivy-base-image-mcr-microsoft-com-dotnet-${{ matrix.base_image }}
+
   scan-base-images-summary:
     # Stable-name gate for the dynamic scan-images matrix, providing the single
     # check name the branch protection ruleset requires. The name predates the
@@ -440,7 +490,7 @@ jobs:
     # kept because the ruleset names it; renaming it here without changing the
     # ruleset would leave every PR waiting on a check that never reports.
     if: always()
-    needs: [discover-base-images, scan-images]
+    needs: [discover-base-images, scan-images, retire-base-image-scan-categories]
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     steps:
     - name: Check matrix results
@@ -451,6 +501,10 @@ jobs:
         fi
         if [ "${{ needs.scan-images.result }}" != "success" ]; then
           echo "One or more scan-images matrix legs failed"
+          exit 1
+        fi
+        if [ "${{ needs.retire-base-image-scan-categories.result }}" != "success" ]; then
+          echo "One or more retired-category uploads failed"
           exit 1
         fi
         echo "All image scans passed"

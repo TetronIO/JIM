@@ -1109,6 +1109,8 @@ When adding a new production Dockerfile:
 
 Vulnerability scanning (`scan-images`) builds every production JIM image on every push and PR and scans the result: the built image is what customers run, and it alone carries the apt pins and the build-time upgrade. Findings are surfaced in the GitHub Security tab via SARIF upload (one category per JIM image) in addition to the Actions log, so they are visible to reviewers and auditable after the fact.
 
+**Retiring a code scanning category.** Code scanning remembers every SARIF category a workflow has uploaded for `main` as a "configuration", and the per-tool merge check compares each PR against all of them: a PR whose workflow stops uploading a category is reported as "configurations present on main were not found" and the ruleset's code-scanning requirement blocks the merge with every job green (seen on #1637 when the base-image scan became the built-image scan). Two steps retire one cleanly: keep uploading an empty analysis under the old category until the change has landed (the `retire-base-image-scan-categories` job does this; on `main` it also closes the category's remaining alerts as fixed), then delete the configuration from *Security > Code scanning > Tool status* and remove the job. Deletion is UI/API-only, so it cannot be folded into the workflow.
+
 **Why this matters**: `System.DirectoryServices.Protocols` (the .NET LDAP client) P/Invokes into the native `libldap` shared library at runtime. An incompatible libldap version could cause silent behavioural differences or crashes during LDAP/AD operations.
 
 Before merging a Docker digest update PR:
