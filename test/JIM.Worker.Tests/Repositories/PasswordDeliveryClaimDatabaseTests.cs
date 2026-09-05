@@ -327,9 +327,13 @@ public class PasswordDeliveryClaimDatabaseTests
         // The deliverer holding the row records its own outcome; two writers deciding the same row's fate at
         // once is what the claim exists to prevent.
         var systemId = await SeedSystemAsync();
-        var claimedId = await SeedChangeAsync(systemId, c => c.ExpiresAt = AsOf.AddMinutes(-1));
-        var pendingId = await SeedChangeAsync(systemId, c => c.ExpiresAt = AsOf.AddMinutes(-1));
-        await ClaimAsync(systemId, maximum: 1);
+        var firstId = await SeedChangeAsync(systemId, c => c.ExpiresAt = AsOf.AddMinutes(-1));
+        var secondId = await SeedChangeAsync(systemId, c => c.ExpiresAt = AsOf.AddMinutes(-1));
+
+        // Both rows share a CreatedAt, so the claim's tiebreak (the random Id) decides which one it takes; read
+        // that back rather than assuming, or the test passes or fails on the luck of two Guids.
+        var claimedId = (await ClaimAsync(systemId, maximum: 1)).Single().Id;
+        var pendingId = claimedId == firstId ? secondId : firstId;
 
         await using var ctx = NewContext();
         var expired = await new PostgresDataRepository(ctx).Sync.ExpirePasswordChangesAsync(systemId, AsOf);
