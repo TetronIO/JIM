@@ -48,9 +48,9 @@ The frameworks and standards covered include those commonly required by:
 
 ### Upstream-only base image CVEs
 
-JIM's container base images derive from Microsoft's `mcr.microsoft.com/dotnet/<runtime|aspnet|sdk>:10.0-noble` images. Vulnerability scanning (Trivy via the `scan-base-images` CI job) can correctly flag CVEs as "fixable upstream" during the gap between an Ubuntu security release and a Microsoft refresh of the `10.0-noble` digest. JIM cannot apply the fix directly in those cases; the fix lives in a layer JIM does not own.
+JIM's container images derive from Microsoft's `mcr.microsoft.com/dotnet/<runtime|aspnet|sdk>:10.0-noble` images. Every production stage applies Ubuntu's published fixes at build time (`apt-get upgrade`), so an Ubuntu security release reaches the shipped image on the next build without waiting for Microsoft's refresh of the `10.0-noble` digest. Vulnerability scanning (Trivy via the `scan-images` CI job, run against the built images) can still correctly flag a CVE as "fixable upstream" in the gap between an advisory and the fix reaching the noble archive, or, for the .NET runtime itself, Microsoft's servicing release. JIM cannot apply the fix directly in those cases; the fix lives in a layer JIM does not own.
 
-The response procedure for this situation is documented in [`engineering/DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) under "When the scan-base-images gate blocks on an upstream-only CVE". The available options range from waiting for Microsoft's next rebuild (default), through targeted in-Dockerfile mitigations, to documented temporary gate downgrades. The choice is case-by-case based on CVE severity and timing rather than a pre-baked policy, because the right answer genuinely depends on the specific CVE.
+The response procedure for this situation is documented in [`engineering/DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) under "When the scan-images gate blocks on an upstream-only CVE". The available options range from waiting for Microsoft's next rebuild (default), through targeted in-Dockerfile mitigations, to documented temporary gate downgrades. The choice is case-by-case based on CVE severity and timing rather than a pre-baked policy, because the right answer genuinely depends on the specific CVE.
 
 This is a known and intentional limitation of digest-pinned base images. It is not a compliance gap: digest pinning, vulnerability scanning, and SBOM generation all operate correctly. The constraint is purely on remediation latency for one class of finding.
 
@@ -223,7 +223,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 | Control | Description | JIM Implementation |
 |---------|-------------|-------------------|
 | SI-2 | Flaw Remediation | Vulnerability disclosure policy, dependency scanning |
-| SI-3 | Malicious Code Protection | Container base image scanning (Trivy) on every push/PR with results in GitHub code scanning; dependency vulnerability checks via Dependabot |
+| SI-3 | Malicious Code Protection | Every production container image built and scanned (Trivy) on every push/PR with results in GitHub code scanning; dependency vulnerability checks via Dependabot |
 | SI-7 | Software Integrity | SHA256 checksums on releases, signed commits |
 | SI-10 | Information Input Validation | Input validation at all API boundaries, DTO annotations |
 
