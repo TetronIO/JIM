@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Operations;
 using JIM.Models.Utility;
 namespace JIM.Data.Repositories;
 
@@ -28,4 +29,24 @@ public interface ISystemRepository
     /// administrator identities are removed as well, leaving a true brand-new install.
     /// </param>
     public Task<SystemResetResult> ResetSystemAsync(bool includeAdministrators);
+
+    /// <summary>
+    /// Records a service instance's heartbeat: inserts the row for (<see cref="ServiceHeartbeat.Service"/>,
+    /// <see cref="ServiceHeartbeat.InstanceId"/>) or replaces every other column of the existing one, in a single
+    /// statement. Runs every few seconds from every service, so it must stay one round trip and touch nothing else.
+    /// </summary>
+    public Task UpsertServiceHeartbeatAsync(ServiceHeartbeat heartbeat);
+
+    /// <summary>
+    /// The newest heartbeat per service, judged by <see cref="ServiceHeartbeat.LastSeenAt"/>. A service with no row
+    /// at all is absent from the result; the caller decides what that means.
+    /// </summary>
+    public Task<List<ServiceHeartbeat>> GetLatestServiceHeartbeatsAsync();
+
+    /// <summary>
+    /// Removes heartbeat rows for one service whose <see cref="ServiceHeartbeat.LastSeenAt"/> is before
+    /// <paramref name="olderThan"/>: the leftovers of instances that have since been restarted or retired.
+    /// </summary>
+    /// <returns>The number of rows removed.</returns>
+    public Task<int> PruneServiceHeartbeatsAsync(JimService service, DateTime olderThan);
 }

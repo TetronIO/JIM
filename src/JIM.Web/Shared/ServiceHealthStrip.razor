@@ -1,0 +1,142 @@
+@using JIM.Models.Operations
+@using JIM.Web.Models
+@implements IDisposable
+@inject IUiNotificationService UiNotifications
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A panel with a one-line header and a grid of identical cards, one per background service in the health report
+   the Operations page reads every ten seconds. The strip owns no polling: the page already polls for the
+   Passwords tab's badge, and a second timer here would be a second reader of the same rows on a different beat.
+   It does own the Live updates indicator in the header, because that is a fact about this web process rather
+   than about the report, and it changes on its own schedule.
+
+   Every card has the same four slots in the same order (name and status pill; activity; condition; instance), so
+   the eye finds the same fact in the same place on every card and the cards stay one height. The status pill is
+   the only coloured element: a card that is all amber shouts, and a red border on one card recolours the
+   whole strip.
+
+   Every duration on a card is measured against the report's own GeneratedAt rather than the clock at render, so
+   the activity line's "· 12 min" and the condition line's "Heartbeat 3 seconds ago" were derived at the same
+   instant and cannot disagree. Each poll brings a new report, so nothing goes stale. *@
+
+<MudPaper Outlined="true" Class="@($"pa-4 jim-service-health-strip {Class}".Trim())">
+    <div class="jim-service-health-header">
+        <MudText Typo="Typo.h6" Class="jim-service-health-title">Service Health</MudText>
+        <span class="jim-service-health-summary">@ServiceHealthDisplay.Summary(Report)</span>
+        @* The relay is not a service of JIM's but it decides whether this page moves on its own; while it is
+           reconnecting every live figure on the tabs below is on its polling fallback. *@
+        <MudTooltip Text="@(_realTimeAvailable ? "Database notifications reach open pages directly." : "The database notification listener is not connected; pages refresh on a timer meanwhile.")"
+                    Arrow="true" Placement="Placement.Top">
+            <span class="jim-service-health-live" data-testid="live-updates" data-connected="@_realTimeAvailable.ToString().ToLowerInvariant()">
+                <span class="@($"jim-service-health-dot jim-service-health-dot--{(_realTimeAvailable ? "healthy" : "degraded")}")"></span>
+                @(_realTimeAvailable ? "Live updates connected" : "Live updates reconnecting")
+            </span>
+        </MudTooltip>
+    </div>
+
+    <div class="jim-service-health-grid">
+        @foreach (var service in Report.Services)
+        {
+            var asOf = Report.GeneratedAt;
+            var activity = ServiceHealthDisplay.Activity(service);
+            var wasDoing = ServiceHealthDisplay.WasDoing(service);
+            var unhealthy = service.Status == ServiceHealthStatus.Unhealthy;
+            var versionSkew = ServiceHealthDisplay.HasVersionSkew(service, Report.WebVersion);
+            <MudPaper Outlined="true" Class="pa-3 jim-service-health-card" data-service="@service.Service" data-status="@service.Status" @key="service.Service">
+                <div class="jim-service-health-card-top">
+                    <span class="jim-service-health-label jim-one-line" title="@ServiceHealthDisplay.Label(service.Service)">@ServiceHealthDisplay.Label(service.Service)</span>
+                    <span class="@($"jim-service-health-pill jim-service-health-pill--{ServiceHealthDisplay.StatusModifier(service.Status)}")">
+                        <span class="jim-service-health-dot"></span>@ServiceHealthDisplay.StatusWord(service.Status)
+                    </span>
+                </div>
+                @* The activity line is the one line an administrator reads first; its full text is its title so a
+                   long Run Profile name clipped by the card is still available. *@
+                <div class="jim-service-health-activity jim-one-line" title="@activity">
+                    @activity
+                    @if (!unhealthy && service.CurrentWork != null && service.CurrentWorkStartedAt is { } workStartedAt)
+                    {
+                        <span class="jim-service-health-muted"> · @ServiceHealthDisplay.CompactDuration(asOf - workStartedAt)</span>
+                    }
+                </div>
+                @* For a healthy or degraded service this is the condition in plain words. An unhealthy service has
+                   already put its condition on the activity line, so this slot names the work it was doing when it
+                   went quiet, if any; a dead process's last words are context, not activity. *@
+                @if (unhealthy)
+                {
+                    <div class="jim-service-health-condition jim-one-line" title="@wasDoing">@wasDoing</div>
+                }
+                else
+                {
+                    <div class="jim-service-health-condition jim-one-line" title="@service.Reason">@service.Reason</div>
+                }
+                @* Host, version and uptime share the footer: three short facts that together identify the instance. A
+                   never-started service has none of them; the slot stays so the card keeps its shape. *@
+                <div class="jim-service-health-footer">
+                    @if (service.HostName != null)
+                    {
+                        <span class="jim-one-line" title="@service.InstanceId">@service.HostName</span>
+                    }
+                    @if (service.Version != null)
+                    {
+                        <span class="jim-service-health-version">
+                            v@(service.Version)
+                            @if (versionSkew)
+                            {
+                                <MudTooltip Text="@VersionSkewTooltip" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" Class="jim-service-health-skew ma-0">differs from portal</MudChip>
+                                </MudTooltip>
+                            }
+                        </span>
+                    }
+                    @if (service.StartedAt is { } startedAt)
+                    {
+                        <MudTooltip Text="@($"Started {startedAt.ToLocalTime().ToFriendlyDate()}")" Arrow="true" Placement="Placement.Top">
+                            <span>up @ServiceHealthDisplay.CompactDuration(asOf - startedAt)</span>
+                        </MudTooltip>
+                    }
+                </div>
+            </MudPaper>
+        }
+    </div>
+</MudPaper>
+
+@code {
+    /// <summary>
+    /// The tooltip on the chip beside a version that differs from the web tier's. Exposed so the test asserts the
+    /// words rather than re-typing them.
+    /// </summary>
+    public const string VersionSkewTooltip = "This service is running a different version from the web portal; upgrade them together.";
+
+    /// <summary>
+    /// The report to show. The owner polls and re-renders with a fresh one; the strip never reads for itself.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ServiceHealthReport Report { get; set; } = null!;
+
+    /// <summary>
+    /// Classes for the strip's root, for the owner's spacing.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private bool _realTimeAvailable;
+
+    protected override void OnInitialized()
+    {
+        _realTimeAvailable = UiNotifications.IsRealTimeAvailable;
+        UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
+    }
+
+    private void OnRealTimeAvailabilityChanged(bool available)
+    {
+        _realTimeAvailable = available;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        UiNotifications.RealTimeAvailabilityChanged -= OnRealTimeAvailabilityChanged;
+    }
+}

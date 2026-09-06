@@ -120,6 +120,8 @@ public class MetaverseObjectPasswordSynchronisationPanelTests : JimComponentTest
             .Add(c => c.Events, [])
             .Add(c => c.QueuedChanges, []));
 
-        Assert.That(cut.Markup, Does.Contain("/admin/password-synchronisation"));
+        // The queue is the Passwords tab of Operations (#1635), and the link must land on that tab with the
+        // identity filter in the same query string, or the reader arrives on the Queue tab and has to go looking.
+        Assert.That(cut.Markup, Does.Contain($"/admin/operations?t=passwords&amp;metaverseObjectId={id}"));
     }
 }

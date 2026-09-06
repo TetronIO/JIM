@@ -1,0 +1,114 @@
+@using JIM.Web.Models
+@implements IDisposable
+@inject IJimApplicationFactory JimFactory
+@inject NavigationManager Navigation
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The one place an administrator is told, whatever page they are on, that a JIM service is down or a task has
+   stalled. MainLayout renders it above the page body for Administrators only. It says nothing at all when there
+   is nothing to say: no wrapper element, so a healthy installation's pages are laid out exactly as before.
+
+   It polls the heartbeats itself, every fifteen seconds, rather than sharing the Operations strip's ten-second
+   read: the layout outlives every page, and a layout-owned timer is the only one that is still running when the
+   Worker dies while the administrator is looking at a Connected System. On Operations itself it stays hidden,
+   because the strip there already says it, card by card. *@
+
+@if (_content != null && !_onOperationsPage)
+{
+    <MudAlert Severity="@_content.Severity" Variant="Variant.Outlined" Dense="true" Class="jim-service-health-banner mb-5">
+        <span>@_content.Sentence</span>
+        <span class="jim-service-health-banner-links">
+            <MudLink Href="/admin/operations" Color="Color.Inherit" Underline="Underline.Always">Operations</MudLink>
+            <MudLink Href="/admin/logs" Color="Color.Inherit" Underline="Underline.Always">Logs</MudLink>
+        </span>
+    </MudAlert>
+}
+
+@code {
+    /// <summary>
+    /// How often the banner re-reads the heartbeats. Slower than the strip's ten seconds because it is on every page
+    /// of every administrator's session, and a Worker outage is judged at sixty seconds anyway.
+    /// </summary>
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(15);
+
+    private ServiceHealthBannerContent? _content;
+    private bool _onOperationsPage;
+    private Timer? _pollTimer;
+    private bool _disposed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _onOperationsPage = IsOperationsPage(Navigation.Uri);
+        Navigation.LocationChanged += OnLocationChanged;
+
+        await RefreshAsync();
+
+        // A one-shot timer re-armed after each read (the pattern ExampleDataTemplateDetail uses), so a slow read
+        // can never overlap the next one.
+        _pollTimer = new Timer(async _ => await OnPollTimerElapsedAsync(), null, PollInterval, Timeout.InfiniteTimeSpan);
+    }
+
+    private async Task OnPollTimerElapsedAsync()
+    {
+        try
+        {
+            await RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A failed read leaves the last verdict standing; the next cycle retries. The banner is a courtesy on
+            // top of the strip and the logs, not a place to surface a database hiccup of its own.
+        }
+        finally
+        {
+            try
+            {
+                if (!_disposed)
+                    _pollTimer?.Change(PollInterval, Timeout.InfiniteTimeSpan);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Disposed while this callback was running; nothing to re-arm.
+            }
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        using var jim = JimFactory.Create();
+        var report = await jim.SystemHealth.GetServiceHealthAsync(DateTime.UtcNow);
+        _content = ServiceHealthDisplay.Banner(report);
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        var onOperationsPage = IsOperationsPage(e.Location);
+        if (onOperationsPage == _onOperationsPage)
+            return;
+
+        _onOperationsPage = onOperationsPage;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Whether the location is the Operations page (any tab, any query string). The strip lives there.
+    /// </summary>
+    private static bool IsOperationsPage(string uri)
+    {
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
+            return false;
+
+        return string.Equals(parsed.AbsolutePath.TrimEnd('/'), "/admin/operations", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        Navigation.LocationChanged -= OnLocationChanged;
+        _pollTimer?.Dispose();
+        _pollTimer = null;
+    }
+}

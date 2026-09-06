@@ -10,7 +10,7 @@ namespace JIM.Web.Models;
 /// <summary>
 /// How a queued password change reads on screen (#1119).
 /// <para>
-/// Shared by the Password Synchronisation queue page and the Metaverse Object's panel because they show the same
+/// Shared by the Passwords tab of Operations and the Metaverse Object's panel because they show the same
 /// rows and must say the same thing about them. Written separately in each, they had already drifted: one named
 /// the failure reason before the target's message and the other showed the message alone, so the same parked
 /// change read as two different problems depending on which page an administrator opened.

@@ -12,7 +12,7 @@ namespace JIM.Web.Tests;
 /// <summary>
 /// How a queued password change reads on screen (#1119).
 /// <para>
-/// This exists as one shared helper because the queue page and the Metaverse Object's panel show the same rows.
+/// This exists as one shared helper because the Passwords tab of Operations and the Metaverse Object's panel show the same rows.
 /// Written separately in each, they drifted immediately: one named the failure reason before the target's
 /// message and the other showed the message alone, so the same parked change read as two different problems
 /// depending on which page an administrator opened.
@@ -183,7 +183,7 @@ public class PendingPasswordChangeDisplayTests
     }
 
     /// <summary>
-    /// The reading the queue page depends on: a held change must not show "Due now" beside a summary that
+    /// The reading the Passwords tab depends on: a held change must not show "Due now" beside a summary that
     /// correctly counts it as waiting and not due. A delivery pass steps over its system without reaching it,
     /// whatever the retry time says.
     /// </summary>
