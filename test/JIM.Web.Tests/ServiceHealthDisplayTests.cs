@@ -27,9 +27,11 @@ public class ServiceHealthDisplayTests
         Assert.That(ServiceHealthDisplay.Label(service), Is.EqualTo(expected));
     }
 
-    [TestCase(ServiceHealthStatus.Healthy, "Healthy", Color.Success, "healthy")]
-    [TestCase(ServiceHealthStatus.Degraded, "Degraded", Color.Warning, "degraded")]
-    [TestCase(ServiceHealthStatus.Unhealthy, "Unhealthy", Color.Error, "unhealthy")]
+    // The modifier is the shared status-pill vocabulary (ok, warn, err), not the health status's own name, so
+    // the same site.css rule paints this pill and the password history's per-system chips.
+    [TestCase(ServiceHealthStatus.Healthy, "Healthy", Color.Success, "ok")]
+    [TestCase(ServiceHealthStatus.Degraded, "Degraded", Color.Warning, "warn")]
+    [TestCase(ServiceHealthStatus.Unhealthy, "Unhealthy", Color.Error, "err")]
     public void Status_EachValue_HasWordColourAndModifier(ServiceHealthStatus status, string word, Color colour, string modifier)
     {
         using (Assert.EnterMultipleScope())
@@ -149,6 +151,45 @@ public class ServiceHealthDisplayTests
             Assert.That(ServiceHealthDisplay.Activity(service), Is.EqualTo("No heartbeat for 3 minutes"));
             Assert.That(ServiceHealthDisplay.WasDoing(service), Is.Null);
         }
+    }
+
+    /// <summary>
+    /// The condition slot is never left blank on a card that has anything to say. A live service's condition is
+    /// its reason; an unhealthy one has put its reason on the activity line already, so the slot carries what it
+    /// was running (the more useful fact, because it names the work an administrator may need to restart) and,
+    /// failing that, when it was last heard from.
+    /// </summary>
+    [Test]
+    public void Condition_UnhealthyServiceWithWork_IsWhatItWasRunning()
+    {
+        var service = Derive(JimService.WorkerSync, ageSeconds: 4 * 60, currentWork: "Full Import: Corporate Directory");
+
+        Assert.That(ServiceHealthDisplay.Condition(service), Is.EqualTo("Was running: Full Import: Corporate Directory"));
+    }
+
+    [Test]
+    public void Condition_UnhealthyIdleService_IsItsLastHeartbeat()
+    {
+        var service = Derive(JimService.Scheduler, ageSeconds: 3 * 60);
+        var lastSeen = service.LastSeenAt!.Value.ToLocalTime().ToFriendlyDate();
+
+        Assert.That(ServiceHealthDisplay.Condition(service), Is.EqualTo($"Last heartbeat {lastSeen}"));
+    }
+
+    [Test]
+    public void Condition_LiveService_IsItsReason()
+    {
+        var service = Derive(JimService.WorkerSync, ageSeconds: 30);
+
+        Assert.That(ServiceHealthDisplay.Condition(service), Is.EqualTo(service.Reason));
+    }
+
+    [Test]
+    public void Condition_NeverStartedService_HasNothingToSay()
+    {
+        var service = SystemHealthServer.Derive(JimService.WorkerDelivery, null, AsOf);
+
+        Assert.That(ServiceHealthDisplay.Condition(service), Is.Null);
     }
 
     [Test]
@@ -345,6 +386,72 @@ public class ServiceHealthDisplayTests
             Assert.That(ServiceHealthDisplay.HasVersionSkew(Derive(JimService.WorkerSync, 2, version: "0.15.0"), "0.15.0"), Is.False);
             Assert.That(ServiceHealthDisplay.HasVersionSkew(SystemHealthServer.Derive(JimService.WorkerSync, null, AsOf), "0.15.0"), Is.False,
                 "a service that has never started has no version to disagree with");
+        }
+    }
+
+    [Test]
+    public void ConditionLine_HealthyService_CarriesItsUptimeAfterTheCondition()
+    {
+        var line = ServiceHealthDisplay.ConditionLine(Derive(JimService.WorkerSync, 2), AsOf);
+
+        Assert.That(line, Is.EqualTo("Heartbeat 2 seconds ago · up 3 d"));
+    }
+
+    /// <summary>
+    /// A service that has gone quiet still had an uptime when it last reported, and that figure says how long it
+    /// ran before it stopped; measured to its last heartbeat, not to now, or it would keep growing after death.
+    /// </summary>
+    [Test]
+    public void ConditionLine_UnhealthyService_KeepsTheUptimeItHadAtItsLastHeartbeat()
+    {
+        var service = Derive(JimService.WorkerSync, 4 * 60, "Full Import: Corporate Directory");
+        var lastSeen = service.LastSeenAt!.Value;
+        var expectedUptime = ServiceHealthDisplay.CompactDuration(lastSeen - service.StartedAt!.Value);
+
+        var line = ServiceHealthDisplay.ConditionLine(service, AsOf);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(line, Is.EqualTo($"Was running: Full Import: Corporate Directory · up {expectedUptime}"));
+            Assert.That(ServiceHealthDisplay.Uptime(service, AsOf), Is.EqualTo(lastSeen - service.StartedAt!.Value));
+        }
+    }
+
+    [Test]
+    public void ConditionLine_NeverStartedService_IsNull()
+    {
+        var service = SystemHealthServer.Derive(JimService.WorkerSync, null, AsOf);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.ConditionLine(service, AsOf), Is.Null);
+            Assert.That(ServiceHealthDisplay.Uptime(service, AsOf), Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// The instance id is the host plus a per-process suffix; the card shows it as a separate row only when it
+    /// adds something to the host.
+    /// </summary>
+    [Test]
+    public void Instance_OnlyWhenItDiffersFromTheHost()
+    {
+        var withSuffix = Derive(JimService.WorkerSync, 2);
+        var sameAsHost = SystemHealthServer.Derive(JimService.WorkerSync, new ServiceHeartbeat
+        {
+            Service = JimService.WorkerSync,
+            InstanceId = "jim-worker-1",
+            HostName = "jim-worker-1",
+            Version = "0.15.0",
+            StartedAt = AsOf.AddDays(-3),
+            LastSeenAt = AsOf.AddSeconds(-2)
+        }, AsOf);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.Instance(withSuffix), Is.EqualTo("jim-worker-1:4f2a"));
+            Assert.That(ServiceHealthDisplay.Instance(sameAsHost), Is.Null);
+            Assert.That(ServiceHealthDisplay.Instance(SystemHealthServer.Derive(JimService.WorkerSync, null, AsOf)), Is.Null);
         }
     }
 

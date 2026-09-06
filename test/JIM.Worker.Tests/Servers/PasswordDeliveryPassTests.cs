@@ -126,7 +126,7 @@ public class PasswordDeliveryPassTests
     /// Queues a change for a system, and gives the identity an account of the target type there so the pass has
     /// something it can actually deliver to.
     /// </summary>
-    private async Task<PendingPasswordChange> QueueAsync(int connectedSystemId)
+    private async Task<PendingPasswordChange> QueueAsync(int connectedSystemId, PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Propagated)
     {
         var now = DateTime.UtcNow;
         var change = new PendingPasswordChange
@@ -135,6 +135,7 @@ public class PasswordDeliveryPassTests
             ConnectedSystemId = connectedSystemId,
             ConnectedSystemObjectId = Guid.NewGuid(),
             EncryptedPassword = _protection.ProtectPassword("a-password")!,
+            Origin = origin,
             CreatedAt = now,
             ExpiresAt = now.AddDays(7),
             ActivityId = Guid.NewGuid()
@@ -259,6 +260,7 @@ public class PasswordDeliveryPassTests
             Assert.That(stored, Has.Exactly(1).Items, "A Connector that cannot be resolved must not consume the change.");
             Assert.That(stored[0].Id, Is.EqualTo(change.Id));
             Assert.That(stored[0].AttemptCount, Is.Zero, "Nothing was attempted, so nothing may be counted against the change.");
+            Assert.That(stored[0].ClaimedBy, Is.Null, "The claim the lane took before discovering the Connector is given back.");
         }
     }
 
@@ -273,6 +275,62 @@ public class PasswordDeliveryPassTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_connectorRequests, Is.Empty, "A disabled system must not have its Connector resolved.");
+            Assert.That(result.ConnectedSystemsVisited, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// Decision D1 (#1635): the administrator named the account, so the system being paused for propagation does
+    /// not hold it. The same lane that steps over the system's propagated changes delivers this one.
+    /// </summary>
+    [Test]
+    public async Task DeliverDueAsync_DisabledSystemWithAnExplicitSet_IsVisitedAndDeliversItAsync()
+    {
+        ArrangeSystem(FirstSystemId, "Corporate AD", enabled: false);
+        var propagated = await QueueAsync(FirstSystemId);
+        var explicitSet = await QueueAsync(FirstSystemId, PendingPasswordChangeOrigin.Explicit);
+
+        var result = await _server.DeliverDueAsync(null, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ConnectedSystemsVisited, Is.EqualTo(1));
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(_connectors[FirstSystemId].PasswordSetAttempts.Single().ConnectedSystemObjectId, Is.EqualTo(explicitSet.ConnectedSystemObjectId));
+            Assert.That(_syncRepository.PendingPasswordChanges.Keys, Is.EqualTo(new[] { propagated.Id }), "The propagated change stays held.");
+        }
+    }
+
+    [Test]
+    public async Task DeliverDueAsync_UnconfiguredSystemWithAnExplicitSet_IsVisitedAndDeliversItAsync()
+    {
+        var system = ArrangeSystem(FirstSystemId, "Corporate AD");
+        system.PasswordSynchronisation = null;
+        await QueueAsync(FirstSystemId, PendingPasswordChangeOrigin.Explicit);
+
+        var result = await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// The Connector is built only once the lane has claimed something. A system on the due list with nothing
+    /// this lane may take (a safety poll finding the queue drained) costs a claim and no directory bind.
+    /// </summary>
+    [Test]
+    public async Task DeliverDueAsync_SystemWithNothingClaimable_NeverBuildsItsConnectorAsync()
+    {
+        ArrangeSystem(FirstSystemId, "Corporate AD");
+
+        var result = await _server.DeliverDueAsync(FirstSystemId, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connectorRequests, Is.Empty);
             Assert.That(result.ConnectedSystemsVisited, Is.Zero);
         }
     }

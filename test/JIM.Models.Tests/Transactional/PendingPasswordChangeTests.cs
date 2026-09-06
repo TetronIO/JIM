@@ -28,6 +28,28 @@ public class PendingPasswordChangeTests
         ActivityId = Guid.NewGuid()
     };
 
+    /// <summary>
+    /// A newer change for the same identity and Connected System, as fan-out would build it: what
+    /// <see cref="PendingPasswordChange.Supersede"/> takes its replacement values from.
+    /// </summary>
+    private static PendingPasswordChange Newer(
+        string encryptedPassword,
+        PasswordExpiryBehaviour expiryBehaviour,
+        Guid activityId,
+        TimeSpan timeToLive,
+        DateTime createdAt,
+        PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Propagated,
+        bool? enableAccount = null) => new()
+    {
+        EncryptedPassword = encryptedPassword,
+        ExpiryBehaviour = expiryBehaviour,
+        ActivityId = activityId,
+        CreatedAt = createdAt,
+        ExpiresAt = createdAt + timeToLive,
+        Origin = origin,
+        EnableAccount = enableAccount
+    };
+
     [Test]
     public void NewChange_StartsPendingWithNoAttempts()
     {
@@ -249,8 +271,8 @@ public class PendingPasswordChangeTests
         change.TargetMessage = "Password too short";
         change.NextRetryAt = now.AddHours(3);
 
-        change.Supersede("$JIMPW$v1$newer", PasswordExpiryBehaviour.NeverExpires, newActivityId,
-            TimeSpan.FromDays(7), now);
+        change.Supersede(Newer("$JIMPW$v1$newer", PasswordExpiryBehaviour.NeverExpires, newActivityId,
+            TimeSpan.FromDays(7), now));
 
         using (Assert.EnterMultipleScope())
         {
@@ -418,8 +440,8 @@ public class PendingPasswordChangeTests
         var change = Change();
         change.Cancel(Guid.NewGuid(), "Ada Lovelace", now);
 
-        change.Supersede("$JIMPW$v1$newer", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
-            Guid.NewGuid(), TimeSpan.FromHours(12), now.AddMinutes(5));
+        change.Supersede(Newer("$JIMPW$v1$newer", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+            Guid.NewGuid(), TimeSpan.FromHours(12), now.AddMinutes(5)));
 
         using (Assert.EnterMultipleScope())
         {
@@ -616,8 +638,8 @@ public class PendingPasswordChangeTests
         var change = Change();
         change.Claim("worker-1a2b3c4d", now);
 
-        change.Supersede("$JIMPW$v1$newer", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
-            Guid.NewGuid(), TimeSpan.FromHours(12), now.AddSeconds(5));
+        change.Supersede(Newer("$JIMPW$v1$newer", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+            Guid.NewGuid(), TimeSpan.FromHours(12), now.AddSeconds(5)));
 
         using (Assert.EnterMultipleScope())
         {
@@ -639,4 +661,74 @@ public class PendingPasswordChangeTests
 
         Assert.That(change.HasExpired(now), Is.False);
     }
+
+    #region origin (#1635)
+
+    /// <summary>
+    /// Every row queued before origins existed was a propagated change, and the column defaults to that so the
+    /// migration needs no backfill. An explicit set is the case that has to be said out loud.
+    /// </summary>
+    [Test]
+    public void NewChange_IsPropagatedWithNoEnableDecision()
+    {
+        var change = Change();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(change.EnableAccount, Is.Null);
+            Assert.That(change.IsExplicit, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// Coalescing is by identity and system, whatever the origin: an administrator's reset arriving after a
+    /// propagated change replaces it, and a later propagated change replaces the reset. The row carries the
+    /// origin of the password it is now holding, because that is what decides how it is delivered.
+    /// </summary>
+    [Test]
+    public void Supersede_ReplacesTheOriginAndTheEnableDecision()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+
+        change.Supersede(Newer("$JIMPW$v1$reset", PasswordExpiryBehaviour.RequireChangeAtNextSignIn, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now, PendingPasswordChangeOrigin.Explicit, enableAccount: true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
+            Assert.That(change.EnableAccount, Is.True);
+            Assert.That(change.IsExplicit, Is.True);
+        }
+
+        change.Supersede(Newer("$JIMPW$v1$propagated", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now.AddMinutes(1)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(change.EnableAccount, Is.Null,
+                "A propagated password never carries an enable decision, and must not inherit the reset's.");
+        }
+    }
+
+    [Test]
+    public void Supersede_TakesTheNewerChangesAccount()
+    {
+        // An explicit row names its account; a propagated row may not have one yet. Whichever arrives later is
+        // the truth about which account the password is for.
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var accountId = Guid.NewGuid();
+        var change = Change();
+        var newer = Newer("$JIMPW$v1$reset", PasswordExpiryBehaviour.RequireChangeAtNextSignIn, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now, PendingPasswordChangeOrigin.Explicit);
+        newer.ConnectedSystemObjectId = accountId;
+
+        change.Supersede(newer);
+
+        Assert.That(change.ConnectedSystemObjectId, Is.EqualTo(accountId));
+    }
+
+    #endregion
 }

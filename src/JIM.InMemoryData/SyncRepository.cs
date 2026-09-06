@@ -2872,9 +2872,7 @@ public class SyncRepository : ISyncRepository
 
             if (existing != null)
             {
-                existing.ConnectedSystemObjectId = change.ConnectedSystemObjectId;
-                existing.Supersede(change.EncryptedPassword, change.ExpiryBehaviour, change.ActivityId,
-                    change.ExpiresAt - change.CreatedAt, change.CreatedAt);
+                existing.Supersede(change);
                 continue;
             }
 
@@ -2913,7 +2911,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(systems);
     }
 
-    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum)
+    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool explicitOnly)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
 
@@ -2923,6 +2921,7 @@ public class SyncRepository : ISyncRepository
         // as it must against PostgreSQL.
         var claimed = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && (c.IsDue(asOf) || c.IsClaimExpired(asOf, lease)))
+            .Where(c => !explicitOnly || c.IsExplicit)
             .OrderBy(c => c.CreatedAt)
             .ThenBy(c => c.Id)
             .Take(maximum)
@@ -3033,7 +3032,9 @@ public class SyncRepository : ISyncRepository
         CancelledById = source.CancelledById,
         CancelledByName = source.CancelledByName,
         ClaimedAt = source.ClaimedAt,
-        ClaimedBy = source.ClaimedBy
+        ClaimedBy = source.ClaimedBy,
+        Origin = source.Origin,
+        EnableAccount = source.EnableAccount
     };
 
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
@@ -3047,10 +3048,11 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf)
+    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool explicitOnly)
     {
         var expiring = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && c.HasExpired(asOf))
+            .Where(c => !explicitOnly || c.IsExplicit)
             .ToList();
 
         foreach (var change in expiring)
@@ -3112,6 +3114,7 @@ public class SyncRepository : ISyncRepository
                     MetaverseObjectTypePluralName = mvo?.Type?.PluralName,
                     ConnectedSystemId = c.ConnectedSystemId,
                     ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
+                    Origin = c.Origin,
                     Status = c.Status,
                     FailureReason = c.FailureReason,
                     TargetMessage = c.TargetMessage,

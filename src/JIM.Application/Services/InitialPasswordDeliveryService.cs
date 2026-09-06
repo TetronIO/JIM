@@ -83,7 +83,9 @@ public class InitialPasswordDeliveryService
             EnableAccount = configuration.EnableAccount
         };
 
-        var result = await connector.SetPasswordAsync(target, password!, options, cancellationToken);
+        // Through the shared core (#1635), so a Connector that throws rather than classifying is a transient
+        // failure to retry rather than an exception that abandons every account behind this one in the pass.
+        var result = await PasswordDeliveryCore.SetPasswordAsync(connector, target, password!, options, cancellationToken);
 
         if (result.Success)
             // The applied behaviour, not the requested one: a directory with no equivalent of what was asked for

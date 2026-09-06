@@ -445,7 +445,7 @@ A preflight is not stored. Reachability, permissions and policy all change witho
 
 ### Setting the password on one account
 
-Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. This writes the password straight to the Connected System: it is not staged as a Pending Export, not retried, and not stored anywhere in JIM.
+Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. It is the same operation as Set Password on the person, aimed at this one account: the change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing. It is never staged as a Pending Export, and JIM holds the password only until the account has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. The account must be joined to a Metaverse Object, because a password belongs to a person and that is where its history is kept.
 
 Use it for the new starter about to sign in for the first time, the account whose provisioning password was refused, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the account, where they happen without anybody watching.
 
@@ -458,7 +458,7 @@ The dialog is built around one rule: **the password is masked from the moment it
 
 Choose what happens to the password once it is set (requiring a change at the next sign-in is the default, and the right one for a password somebody else chose), and whether to enable the account at the same time. Leaving the enable switch off leaves the account's enabled state exactly as it was, which is what a reset on a working account should do.
 
-A Connected System that refuses the password says why, and the dialog stays open carrying its own words so you can try another one. Every attempt is recorded as an Activity against the object, whether it succeeded or not; the Activity records that a password was set, never the password.
+The dialog waits for the outcome and shows it: **Set**, **Retrying** with the next attempt where the system could not be reached (JIM keeps trying on its own clock, and you can stop it), or **Parked** where the system refused the password, carrying its own words so you can try another one. Every attempt is recorded as an Activity, whether it succeeded or not; the Activity records that a password was set, never the password.
 
 !!! warning "This resets the password on whichever account you point it at"
     Anyone who can reach this action can reset the password of any account in this connector space, up to and including privileged ones, subject only to what the Connected System's own service account is permitted to do. Grant the Administrator role accordingly, and scope the service account's rights to the containers JIM manages.
@@ -466,32 +466,30 @@ A Connected System that refuses the password says why, and the dialog stays open
 !!! note "Copying and your operating system's clipboard"
     Copying needs an HTTPS connection: browsers deny clipboard access over plain HTTP, and the button says so rather than silently doing nothing. JIM clears the clipboard when the dialog closes where the browser allows it, but your operating system may keep the value in its own clipboard history, which no web page can reach.
 
-The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, which can either take a password you supply or generate one against the discovered policy. A generated password is returned to the caller, once, because they asked for it; nothing is stored either way.
+The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, which can either take a password you supply or generate one against the discovered policy. A generated password is returned to the caller, once, because they asked for it; JIM's own copy is the queued one, and it goes when the account has it.
 
 ### One password across several Connected Systems
 
-A person often has accounts in more than one place, and conveying a different password for each is both more work and worse for them: four different passwords on a first morning end up on a sticky note. Open a person from the portal and the same **Set Password** action appears there, listing every account they have whose Connector can set a password.
+A person often has accounts in more than one place, and conveying a different password for each is both more work and worse for them: four different passwords on a first morning end up on a sticky note. Open a person's **Password** tab and **Set Password** lists every account they have whose Connector can set a password.
 
-Choose some or all of them and JIM sets one password across them, writing to each Connected System in turn. **Nothing is selected by default**, so resetting a forgotten password in one system never silently resets the others.
+Choose some or all of them and JIM sets one password across them, one queued change per Connected System, each delivered on its own. **Nothing is selected by default**, so resetting a forgotten password in one system never silently resets the others. An account in a system whose Password Synchronisation is switched off is still delivered to, and the dialog says the system is paused for propagated changes; you named the account, which is the decision that switch exists to make.
 
 The password is generated to satisfy the strictest of the selected systems' rules: the longest minimum length any of them demands, and the character categories all of them count. A category only one system recognises cannot help satisfy another system's complexity rule, so JIM counts only what they have in common. Where a selected system has never published a policy, JIM says so rather than assuming it will accept anything.
 
-Progress runs left to right along the same stepped rail a Run Profile execution uses, one step per Connected System.
+The dialog waits for the outcomes and shows one per Connected System: **Set**, **Retrying** with the next attempt (and a way to stop trying), **Parked** with the system's own words, or **Held**.
 
 !!! warning "There is no transaction across Connected Systems"
-    Each write is independent. A run routinely ends with some accounts changed and others not, which leaves the person with a different password in the systems that refused it. JIM says which, in as many words, and offers to retry only the accounts that failed, reusing the password already in hand.
+    Each system is delivered to independently. A reset can end with the new password in some systems and not yet in others, and the person has a different password where a system refused it. JIM says which, in as many words. A system that could not be reached is retried by JIM on its own clock; nothing is lost while it is down.
 
-    Where a system refused the **password itself**, retrying it unchanged will fail identically. The guidance on that result offers a fresh password for every account instead, including the ones that already succeeded, because replacing it only where it failed would leave the person with two.
+    Where a system refused the **password itself**, retrying it unchanged will fail identically. **Try another password** generates a fresh one for every account instead, including the ones that already took the first, because replacing it only where it failed would leave the person with two.
 
-Each account's failure carries guidance you can open, specific to what went wrong: a refused password and an unreachable directory need opposite responses, and the guidance says which of the two you have and whether retrying is worth anything at all.
+Every Connected System gets its own Activity, grouped under one parent for the change, so the whole action is findable afterwards and appears in the person's password history beside any propagated change.
 
-Every account gets its own Activity, grouped under one parent so the whole action is findable afterwards. Setting a password on a single account records no parent, because a group of one says nothing.
-
-For automation, `Set-JIMMetaverseObjectPassword` does the same thing over the per-account REST endpoint. You must name the Connected Systems, or pass `-AllAccounts`; there is no default, for the same reason the portal preselects nothing.
+For automation, `Set-JIMMetaverseObjectPassword -ConnectedSystemId` does the same thing over the same REST endpoint. Omitting `-ConnectedSystemId` aims the password at every Connected System configured for Password Synchronisation instead; see [Passwords > Setting a password](../concepts/passwords.md#-setting-a-password) for the two modes.
 
 ## Password Synchronisation
 
-Setting a password, above, is something you ask for one account at a time. Password Synchronisation is the standing arrangement: one password change for a person reaching every system they have an account in.
+Setting a password on named accounts, above, is a choice made per reset. Password Synchronisation is the standing arrangement: which systems receive a person's password when it is set without naming any, so that one change reaches every system they have an account in.
 
 It is configured on the Connected System's **Passwords** tab, which appears only where the connector can set passwords at all. Systems whose connector has no password channel do not show the tab, because there is nothing to configure rather than something to switch on later.
 

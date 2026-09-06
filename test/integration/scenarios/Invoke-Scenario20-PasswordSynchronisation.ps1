@@ -406,7 +406,7 @@ try {
     Write-TestSection "Test 2: A switched-off Connected System accumulates password changes"
 
     $heldSecure = ConvertTo-SecureString -String $passwords.Held -AsPlainText -Force
-    $queueResult = Sync-JIMMetaverseObjectPassword -Id $held.MvoId -Password $heldSecure -Force
+    $queueResult = Set-JIMMetaverseObjectPassword -Id $held.MvoId -Password $heldSecure -Force
 
     Add-TestResult -Name "The change is queued for the switched-off Connected System" `
         -Passed ((-not $queueResult.queuedForNoSystems) -and @($queueResult.targets).Count -eq 1) `
@@ -420,7 +420,7 @@ try {
     # Three changes for one person, so coalescing has something to coalesce.
     foreach ($password in $passwords.Coalesced) {
         $secure = ConvertTo-SecureString -String $password -AsPlainText -Force
-        Sync-JIMMetaverseObjectPassword -Id $coalesced.MvoId -Password $secure -Force | Out-Null
+        Set-JIMMetaverseObjectPassword -Id $coalesced.MvoId -Password $secure -Force | Out-Null
     }
 
     $coalescedQueue = @(Get-JIMPendingPasswordChange -MetaverseObjectId $coalesced.MvoId)
@@ -506,7 +506,7 @@ try {
     Write-TestSection "Test 6: A password change with the system enabled throughout"
 
     $liveSecure = ConvertTo-SecureString -String $passwords.WhileEnabled -AsPlainText -Force
-    $liveResult = Sync-JIMMetaverseObjectPassword -Id $whileEnabled.MvoId -Password $liveSecure -Force
+    $liveResult = Set-JIMMetaverseObjectPassword -Id $whileEnabled.MvoId -Password $liveSecure -Force
 
     $liveTarget = @($liveResult.targets) | Select-Object -First 1
     Add-TestResult -Name "The response says the change is on its way rather than held" `
@@ -540,7 +540,7 @@ try {
 
     $busySecure = ConvertTo-SecureString -String $passwords.WhileBusy -AsPlainText -Force
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $busyResult = Sync-JIMMetaverseObjectPassword -Id $whileEnabled.MvoId -Password $busySecure -Wait $deliveryLatencyBudgetSeconds -Force
+    $busyResult = Set-JIMMetaverseObjectPassword -Id $whileEnabled.MvoId -Password $busySecure -Wait $deliveryLatencyBudgetSeconds -Force
     $respondedAfter = $stopwatch.Elapsed
 
     # Measured from the queue as well as read from the response, because the queue is the ground truth: a change
@@ -570,7 +570,7 @@ try {
     $busySettled = if ($null -ne $busyResult.PSObject.Properties['settled']) { [bool]$busyResult.settled } else { $false }
     $busyState = if ($null -ne $busyTarget -and $null -ne $busyTarget.PSObject.Properties['state']) { [string]$busyTarget.state } else { '(not reported)' }
 
-    Add-TestResult -Name "Sync-JIMMetaverseObjectPassword -Wait returns settled, with the target Set, within $deliveryLatencyBudgetSeconds seconds" `
+    Add-TestResult -Name "Set-JIMMetaverseObjectPassword -Wait returns settled, with the target Set, within $deliveryLatencyBudgetSeconds seconds" `
         -Passed ($busySettled -and $busyState -eq 'Set' -and $respondedAfter.TotalSeconds -lt $deliveryLatencyBudgetSeconds) `
         -Detail "settled='$busySettled', state='$busyState', responded after $([math]::Round($respondedAfter.TotalMilliseconds)) ms. A caller who asks to wait is meant to be told the password landed, not that it was noted."
 
@@ -599,7 +599,9 @@ try {
     Write-TestSection "Test 8: A parked change retried from the queue is attempted within seconds"
 
     $refusedSecure = ConvertTo-SecureString -String $passwords.Refused -AsPlainText -Force
-    $refusedResult = Sync-JIMMetaverseObjectPassword -Id $coalesced.MvoId -Password $refusedSecure -Wait $deliveryLatencyBudgetSeconds -Force
+    # A refused password is reported as a Parked target and, because it is something a caller has to act on, as a
+    # non-terminating error too. The refusal is the point of this test, so the error stream is quietened here.
+    $refusedResult = Set-JIMMetaverseObjectPassword -Id $coalesced.MvoId -Password $refusedSecure -Wait $deliveryLatencyBudgetSeconds -Force -ErrorAction SilentlyContinue
 
     $parked = Wait-ForCondition -Description "the refused password to be parked" -TimeoutSeconds 30 -IntervalSeconds 1 -Condition {
         @(Get-JIMPendingPasswordChange -MetaverseObjectId $coalesced.MvoId -Status Parked).Count -eq 1

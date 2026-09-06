@@ -75,3 +75,32 @@ public enum PendingPasswordChangeStatus
     /// </summary>
     Delivering = 4
 }
+
+/// <summary>
+/// Where a queued password change came from (#1635): the one fact that decides how it is delivered.
+/// <para>
+/// Both origins share the queue, the retry policy, the coalescing key, the Activity shape and the person's
+/// password history; that is the point of having one pipeline. They differ in exactly two places. A propagated
+/// change is aimed at whichever account the Connected System's configuration nominates and is held while that
+/// system is paused for Password Synchronisation; an explicit set is aimed at the account the administrator
+/// named and is delivered whether or not the system is configured, because the administrator has already made
+/// the decision a configuration exists to make (decision D1).
+/// </para>
+/// </summary>
+public enum PendingPasswordChangeOrigin
+{
+    /// <summary>
+    /// The password changed somewhere and JIM is carrying it to every Connected System configured to receive
+    /// synchronised passwords. The account is resolved on each attempt from the system's configuration; the
+    /// account is never enabled as a side effect; a paused system holds the change until it is switched back on.
+    /// </summary>
+    Propagated = 0,
+
+    /// <summary>
+    /// An administrator set a password on an account they named. The row carries that account, and the enable
+    /// decision they made with it, and is delivered even where the system has no Password Synchronisation
+    /// configuration or has it switched off. Every row queued before origins existed was propagated, which is
+    /// why that value is zero and this one is not.
+    /// </summary>
+    Explicit = 1
+}

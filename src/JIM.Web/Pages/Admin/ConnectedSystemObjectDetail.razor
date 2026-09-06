@@ -4,6 +4,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
+@using JIM.Models.Transactional.DTOs
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Enums
@@ -103,8 +104,10 @@
             }
 
             @* Offered only where the Connector can actually set a password, so the action is never presented *@
-            @* against a Connected System that could not carry it out (issue #1121).                          *@
-            @if (_supportedExpiryBehaviours.Count > 0)
+            @* against a Connected System that could not carry it out (issue #1121), and only for an account   *@
+            @* joined to a Metaverse Object: the password goes onto the queue against the person (#1635), and  *@
+            @* an unjoined object has no person to queue it against.                                          *@
+            @if (_supportedExpiryBehaviours.Count > 0 && ConnectedSystemObject.MetaverseObjectId.HasValue)
             {
                 <MudSpacer />
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
@@ -437,21 +440,22 @@
     private ConnectedSystemPasswordPolicy? _discoveredPasswordPolicy;
 
     /// <summary>
-    /// Opens the set-password dialog for this account (issues #1121, #1172).
+    /// Opens the set-password dialog for this account (issues #1121, #1172, #1635).
     /// <para>
     /// The same dialog the Metaverse Object uses, handed exactly one account. With no choice to make there is
-    /// no picker and no progress rail, so it renders as the single-account dialog it was originally built as,
-    /// while there remains one component to maintain rather than two that drift.
+    /// no picker, so it renders as the single-account dialog it was originally built as, while there remains
+    /// one component to maintain rather than two that drift. The operation behind it is the same too: the one
+    /// password operation, aimed at this one account.
     /// </para>
     /// <para>
-    /// Generation and the set itself are passed in as delegates rather than letting the dialog reach the
+    /// Generation, the set and the stop are passed in as delegates rather than letting the dialog reach the
     /// application layer, so the dialog stays a piece of user interface with no knowledge of how JIM talks to a
     /// Connected System, and so the password it holds never travels further than those calls.
     /// </para>
     /// </summary>
     private async Task OpenSetPasswordDialogAsync()
     {
-        if (ConnectedSystemObject == null || ConnectedSystemHeader == null)
+        if (ConnectedSystemObject == null || ConnectedSystemHeader == null || ConnectedSystemObject.MetaverseObjectId is not { } metaverseObjectId)
             return;
 
         var account = new MetaverseObjectAccount
@@ -468,10 +472,12 @@
         var parameters = new DialogParameters<SetPasswordDialog>
         {
             { x => x.Accounts, new List<MetaverseObjectAccount> { account } },
+            { x => x.MetaverseObjectId, metaverseObjectId },
             { x => x.AllowSelection, false },
             { x => x.Reconcile, ReconcilePasswordPolicies },
             { x => x.GeneratePassword, GeneratePassword },
-            { x => x.SetPassword, SetPasswordOnAccountsAsync }
+            { x => x.SetPassword, SetPasswordAsync },
+            { x => x.StopTrying, StopPasswordChangeAsync }
         };
 
         await DialogService.ShowAsync<SetPasswordDialog>("Set Password", parameters,
@@ -492,17 +498,40 @@
         return jim.PasswordGenerator.Generate(policy);
     }
 
-    private async Task<MultiAccountPasswordSetResult> SetPasswordOnAccountsAsync(
-        IReadOnlyList<MetaverseObjectAccount> accounts,
-        string password,
-        PasswordSetOptions options,
-        IProgress<AccountPasswordSetOutcome> progress)
+    /// <summary>
+    /// The one password operation (#1635), aimed at this account alone.
+    /// </summary>
+    private async Task<PasswordQueueResult> SetPasswordAsync(PasswordSetSubmission submission)
     {
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        var metaverseObjectId = ConnectedSystemObject?.MetaverseObjectId ?? Guid.Empty;
 
-        return await jim.ConnectedSystems.SetPasswordOnAccountsAsync(
-            ConnectedSystemObject?.MetaverseObjectId ?? Guid.Empty, accounts, password, options, user, progress, CancellationToken.None);
+        return await jim.PasswordSynchronisation.SetPasswordAsync(new SetPasswordRequest
+        {
+            MetaverseObjectId = metaverseObjectId,
+            DisplayName = ConnectedSystemObject?.MetaverseObject?.NameOrId ?? GetDisplayIdentifier(),
+            Password = submission.Password,
+            Targets = submission.Targets,
+            ExpiryBehaviour = submission.ExpiryBehaviour,
+            EnableAccount = submission.EnableAccount,
+            InitiatedBy = user
+        }, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Stops JIM retrying the person's change on this Connected System, from the dialog's result stage.
+    /// </summary>
+    private async Task StopPasswordChangeAsync(int connectedSystemId)
+    {
+        if (ConnectedSystemObject?.MetaverseObjectId is not { } metaverseObjectId)
+            return;
+
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        await jim.PasswordSynchronisation.CancelAsync(
+            new PendingPasswordChangeFilter { MetaverseObjectId = metaverseObjectId, ConnectedSystemId = connectedSystemId },
+            user, null);
     }
 
     protected override async Task OnParametersSetAsync()

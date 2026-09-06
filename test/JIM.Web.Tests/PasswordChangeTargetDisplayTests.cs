@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Staging;
 using JIM.Models.Transactional.DTOs;
 using JIM.Web.Models;
 using MudBlazor;
@@ -9,9 +10,9 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// How one target's delivery outcome reads in the Synchronise Password dialog (#1635): the words under the system's
-/// name, and the icon and colour beside it. One helper rather than a switch in the dialog, so the Set Password
-/// dialog's result stage can say the same things the same way when it moves onto the same outcomes.
+/// How one target's delivery outcome reads in the Set Password dialog's result stage (#1635): the words under the
+/// system's name, and the icon and colour beside it. One helper rather than a switch in the dialog, so every
+/// surface describing the same outcome says the same thing the same way.
 /// </summary>
 [TestFixture]
 public class PasswordChangeTargetDisplayTests
@@ -19,13 +20,15 @@ public class PasswordChangeTargetDisplayTests
     private static PasswordChangeTargetOutcome Outcome(
         PasswordChangeTargetState state,
         string? message = null,
-        DateTime? nextAttemptAt = null) => new()
+        DateTime? nextAttemptAt = null,
+        PasswordSetFailureReason? failureReason = null) => new()
     {
         ConnectedSystemId = 3,
         ConnectedSystemName = "Corporate AD",
         State = state,
         Message = message,
-        NextAttemptAt = nextAttemptAt
+        NextAttemptAt = nextAttemptAt,
+        FailureReason = failureReason
     };
 
     [Test]
@@ -34,20 +37,34 @@ public class PasswordChangeTargetDisplayTests
         Assert.That(PasswordChangeTargetDisplay.Words(Outcome(PasswordChangeTargetState.Set, "Password set.")), Is.EqualTo("Password set"));
     }
 
+    /// <summary>
+    /// A retrying target leads with JIM's classification of the failure, then the target's own words, then when
+    /// the next attempt falls due: what went wrong, in whose words, and what happens next, in the order the reader
+    /// needs them.
+    /// </summary>
     [Test]
-    public void Words_Retrying_NamesTheNextAttemptAndTheLastAnswer()
+    public void Words_Retrying_LeadsWithTheReasonThenTheAnswerThenTheNextAttempt()
+    {
+        var next = new DateTime(2026, 9, 5, 14, 30, 0, DateTimeKind.Utc);
+
+        var words = PasswordChangeTargetDisplay.Words(Outcome(PasswordChangeTargetState.Retrying, "Connection refused", next, PasswordSetFailureReason.Transient));
+
+        Assert.That(words, Is.EqualTo($"Target unavailable: Connection refused. Next attempt {next.ToLocalTime().ToFriendlyDate()}"),
+            "the time is shown the way every other timestamp in JIM is, in the viewer's local time");
+    }
+
+    /// <summary>
+    /// A row read from history rather than from the queue carries no classification; the words still say it is
+    /// retrying and when.
+    /// </summary>
+    [Test]
+    public void Words_RetryingWithNoReason_NamesTheNextAttemptAndTheLastAnswer()
     {
         var next = new DateTime(2026, 9, 5, 14, 30, 0, DateTimeKind.Utc);
 
         var words = PasswordChangeTargetDisplay.Words(Outcome(PasswordChangeTargetState.Retrying, "Connection refused", next));
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(words, Does.StartWith("Retrying; next attempt at "));
-            Assert.That(words, Does.Contain(next.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")),
-                "the time is shown the way every other timestamp in JIM is, in the viewer's local time");
-            Assert.That(words, Does.EndWith("Last answer: Connection refused"));
-        }
+        Assert.That(words, Is.EqualTo($"Retrying: Connection refused. Next attempt {next.ToLocalTime().ToFriendlyDate()}"));
     }
 
     [Test]

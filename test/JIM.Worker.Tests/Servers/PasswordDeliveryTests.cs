@@ -135,7 +135,7 @@ public class PasswordDeliveryTests
         return change;
     }
 
-    private void ArrangeAccount(PendingPasswordChange change) =>
+    private void ArrangeAccount(PendingPasswordChange change, int typeId = UserObjectTypeId) =>
         _connectedSystemRepository
             .Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(change.MetaverseObjectId))
             .ReturnsAsync([
@@ -143,9 +143,33 @@ public class PasswordDeliveryTests
                 {
                     Id = change.ConnectedSystemObjectId ?? Guid.NewGuid(),
                     ConnectedSystemId = ConnectedSystemId,
-                    TypeId = UserObjectTypeId
+                    TypeId = typeId
                 }
             ]);
+
+    /// <summary>
+    /// An administrator's explicit set of a named account (#1635): the row carries the account and the enable
+    /// decision, and is delivered whether or not the system is taking propagated passwords.
+    /// </summary>
+    private async Task<PendingPasswordChange> QueueExplicitAsync(bool? enableAccount = null, DateTime? createdAt = null)
+    {
+        var now = createdAt ?? DateTime.UtcNow;
+        var change = new PendingPasswordChange
+        {
+            MetaverseObjectId = Guid.NewGuid(),
+            ConnectedSystemId = ConnectedSystemId,
+            ConnectedSystemObjectId = Guid.NewGuid(),
+            EncryptedPassword = _protection.ProtectPassword("a-password")!,
+            Origin = PendingPasswordChangeOrigin.Explicit,
+            EnableAccount = enableAccount,
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+
+        await _syncRepository.QueuePasswordChangesAsync([change]);
+        return change;
+    }
 
     /// <summary>
     /// Regression for #1529. The outcome Activity was created with neither a person nor an API key against it,
@@ -568,6 +592,195 @@ public class PasswordDeliveryTests
                 Is.EqualTo(PendingPasswordChangeStatus.Parked));
         }
     }
+
+    #region explicit sets (#1635, decision D1)
+
+    [Test]
+    public async Task Deliver_ExplicitRowOnADisabledSystem_IsDeliveredAsync()
+    {
+        // The administrator named the account; the system being paused for propagation does not hold it.
+        _configuration.Enabled = false;
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(_connector.PasswordSetAttempts.Single().ConnectedSystemObjectId, Is.EqualTo(change.ConnectedSystemObjectId));
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task Deliver_MixedOriginsOnADisabledSystem_DeliversOnlyTheExplicitRowAsync()
+    {
+        _configuration.Enabled = false;
+        var propagated = await QueueAsync();
+        var explicitSet = await QueueExplicitAsync();
+        ArrangeAccount(propagated);
+        ArrangeAccount(explicitSet);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var remaining = _syncRepository.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(_connector.PasswordSetAttempts.Single().ConnectedSystemObjectId, Is.EqualTo(explicitSet.ConnectedSystemObjectId));
+            Assert.That(remaining.Id, Is.EqualTo(propagated.Id), "The propagated change is held, untouched, until the system is switched on.");
+            Assert.That(remaining.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(remaining.AttemptCount, Is.Zero);
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ExplicitRowOnAnUnconfiguredSystem_IsDeliveredAsync()
+    {
+        _connectedSystem.PasswordSynchronisation = null;
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// With no configuration to read a retry policy from, an explicit set retries under JIM's defaults. The
+    /// default instance is built for the lane and never persisted: nothing here configures Password
+    /// Synchronisation on the administrator's behalf.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ExplicitRowOnAnUnconfiguredSystem_RetriesUnderTheDefaultPolicyAsync()
+    {
+        _connectedSystem.PasswordSynchronisation = null;
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+        _connector.WithPasswordSetResult(_ => PasswordSetResult.Failed(PasswordSetFailureReason.Transient, "Server unavailable"));
+
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.RetryingCount, Is.EqualTo(1));
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(stored.NextRetryAt, Is.EqualTo(now + ConnectedSystemPasswordSynchronisation.DefaultRetryBackoffBase));
+            Assert.That(_connectedSystem.PasswordSynchronisation, Is.Null, "The lane must not leave a configuration behind.");
+        }
+    }
+
+    /// <summary>
+    /// An explicit set is aimed at the account the administrator named, not at whichever account the system's
+    /// configuration nominates; the two can differ where a person holds accounts of more than one type.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ExplicitRow_UsesItsOwnAccountRatherThanTheConfiguredTypeAsync()
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change, typeId: 999);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(_connector.PasswordSetAttempts.Single().ConnectedSystemObjectId, Is.EqualTo(change.ConnectedSystemObjectId));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ExplicitRowWhoseAccountIsGone_ParksWithTargetObjectNotFoundAsync()
+    {
+        // Unlike a propagated change, which waits for provisioning to catch up, an explicit set has nothing to
+        // wait for: the account it was for is gone, and only a person can decide what to do about that.
+        var change = await QueueExplicitAsync();
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges.Values.Single();
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ParkedCount, Is.EqualTo(1));
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked));
+            Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.TargetObjectNotFound));
+            Assert.That(stored.TargetMessage, Does.Contain("Corporate AD"));
+            Assert.That(stored.NextRetryAt, Is.Null);
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+            Assert.That(activity.ErrorMessage, Does.Contain("no longer exists"));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ExplicitRow_CarriesTheEnableDecisionToTheConnectorAsync()
+    {
+        var change = await QueueExplicitAsync(enableAccount: true);
+        ArrangeAccount(change);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.True);
+    }
+
+    [Test]
+    public async Task Deliver_ExplicitRow_RecordsTheSameChildActivityShapeAsAPropagatedOneAsync()
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.TargetType, Is.EqualTo(ActivityTargetType.PasswordSynchronisation));
+            Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.SetPassword));
+            Assert.That(activity.ParentActivityId, Is.EqualTo(change.ActivityId));
+            Assert.That(activity.ConnectedSystemId, Is.EqualTo(ConnectedSystemId));
+            Assert.That(activity.ConnectedSystemObjectId, Is.EqualTo(change.ConnectedSystemObjectId));
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_OnADisabledSystem_ExpiresOnlyTheExplicitRowsAsync()
+    {
+        // The held propagated change is left exactly as it was, to be expired or delivered by the first lane
+        // after the system is switched on, as it always has been.
+        _configuration.Enabled = false;
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var propagated = await QueueAsync(createdAt: now.AddDays(-8));
+        var explicitSet = await QueueExplicitAsync(createdAt: now.AddDays(-8));
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ExpiredCount, Is.EqualTo(1));
+            Assert.That(_syncRepository.PendingPasswordChanges[explicitSet.Id].Status, Is.EqualTo(PendingPasswordChangeStatus.Expired));
+            Assert.That(_syncRepository.PendingPasswordChanges[propagated.Id].Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+        }
+    }
+
+    #endregion
 
     #region claims (#1635)
 

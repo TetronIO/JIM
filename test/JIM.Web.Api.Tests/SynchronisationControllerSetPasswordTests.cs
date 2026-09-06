@@ -14,26 +14,33 @@ using JIM.Connectors;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
+using JIM.Web.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Web.Api.Tests;
 
 /// <summary>
-/// The REST surface for an administrator setting the password on one Connected System Object (#1121), the
-/// automation counterpart of the portal's set-password dialog.
+/// The account-scoped REST surface for setting a password (#1121, #1635): the same operation as setting it on the
+/// person with one account named, for callers that hold the Connected System Object rather than the Metaverse
+/// Object.
 /// <para>
 /// Two things are load-bearing here and are the reason the fixture exists: the response must never carry the
-/// password back, and a failure has to be classified into a status code that says what the caller should do
-/// next. A directory that was unreachable and a directory that rejected the password call for opposite
-/// responses, and collapsing them into one would send administrators to change a password that was fine.
+/// password back, and the outcome has to be reported as a state on the target rather than as a status code,
+/// because the write happens in the Password Delivery Service after this request has been answered. A refusal by
+/// the directory is a Parked target with the directory's own words, not a 400; a 400 is reserved for a request
+/// JIM could not act on at all.
 /// </para>
 /// </summary>
 [TestFixture]
@@ -44,16 +51,20 @@ public class SynchronisationControllerSetPasswordTests
 
     private Mock<IConnectedSystemRepository> _connectedSystemRepo = null!;
     private Mock<IActivityRepository> _activityRepo = null!;
-    private RecordingPasswordConnector _connector = null!;
+    private Mock<IRepository> _repository = null!;
+    private SyncRepository _syncRepo = null!;
     private JimApplication _application = null!;
     private SynchronisationController _controller = null!;
+    private List<Activity> _createdActivities = null!;
     private Guid _csoId;
+    private Guid _metaverseObjectId;
 
     [SetUp]
     public void SetUp()
     {
         _csoId = Guid.NewGuid();
-        _connector = new RecordingPasswordConnector();
+        _metaverseObjectId = Guid.NewGuid();
+        _createdActivities = [];
 
         var connectedSystem = new ConnectedSystem
         {
@@ -62,15 +73,31 @@ public class SynchronisationControllerSetPasswordTests
             ConnectorDefinition = new ConnectorDefinition { Id = 1, Name = "JIM LDAP Connector" },
             ConnectorDefinitionId = 1
         };
-        var cso = new ConnectedSystemObject { Id = _csoId, ConnectedSystemId = ConnectedSystemId };
+        var cso = new ConnectedSystemObject { Id = _csoId, ConnectedSystemId = ConnectedSystemId, MetaverseObjectId = _metaverseObjectId };
 
         _connectedSystemRepo = new Mock<IConnectedSystemRepository>();
-        _connectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
         _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectAsync(ConnectedSystemId, _csoId)).ReturnsAsync(cso);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(_metaverseObjectId)).ReturnsAsync([cso]);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemForPasswordDeliveryAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+        _connectedSystemRepo.Setup(r => r.GetPasswordSynchronisationTargetsAsync()).ReturnsAsync([]);
+
+        var metaverseRepo = new Mock<IMetaverseRepository>();
+        metaverseRepo.Setup(r => r.GetMetaverseObjectAsync(_metaverseObjectId))
+            .ReturnsAsync(() => new MetaverseObject { Id = _metaverseObjectId, CachedDisplayName = "Ada Lovelace" });
 
         _activityRepo = new Mock<IActivityRepository>();
-        _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a =>
+            {
+                if (a.Id == Guid.Empty)
+                    a.Id = Guid.NewGuid();
+                _createdActivities.Add(a);
+            })
+            .Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _activityRepo.Setup(r => r.GetActivityAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Guid id) => _createdActivities.FirstOrDefault(a => a.Id == id));
+        _activityRepo.Setup(r => r.GetPasswordSynchronisationOutcomesAsync(It.IsAny<Guid>())).ReturnsAsync([]);
 
         var apiKeyId = Guid.NewGuid();
         var apiKeyRepo = new Mock<IApiKeyRepository>();
@@ -84,17 +111,17 @@ public class SynchronisationControllerSetPasswordTests
             Created = DateTime.UtcNow
         });
 
-        var repository = new Mock<IRepository>();
-        repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
-        repository.Setup(r => r.Activity).Returns(_activityRepo.Object);
-        repository.Setup(r => r.ApiKeys).Returns(apiKeyRepo.Object);
+        _repository = new Mock<IRepository>();
+        _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
+        _repository.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
+        _repository.Setup(r => r.Activity).Returns(_activityRepo.Object);
+        _repository.Setup(r => r.ApiKeys).Returns(apiKeyRepo.Object);
+        _repository.Setup(r => r.Tasking).Returns(new Mock<ITaskingRepository>().Object);
+        _repository.Setup(r => r.ServiceSettings).Returns(new Mock<IServiceSettingsRepository>().Object);
 
-        _application = new JimApplication(repository.Object, connectorFactory: new StubConnectorFactory(_connector));
-        _controller = new SynchronisationController(
-            new Mock<ILogger<SynchronisationController>>().Object,
-            _application,
-            new DynamicExpressoEvaluator(),
-            new Mock<ICredentialProtectionService>().Object);
+        _syncRepo = new SyncRepository();
+        _application = BuildApplicationWith(new PasswordCapableConnector(), _syncRepo);
+        _controller = BuildControllerFor(_application);
 
         var claims = new List<Claim>
         {
@@ -114,58 +141,137 @@ public class SynchronisationControllerSetPasswordTests
         _application?.Dispose();
     }
 
-    private async Task<IActionResult> SetPasswordAsync(SetConnectedSystemObjectPasswordRequest? request = null) =>
+    private async Task<IActionResult> SetPasswordAsync(SetConnectedSystemObjectPasswordRequest? request = null, IPasswordChangeOutcomeWaiter? waiter = null) =>
         await _controller.SetConnectedSystemObjectPasswordAsync(ConnectedSystemId, _csoId,
-            request ?? new SetConnectedSystemObjectPasswordRequest { Password = Password });
+            request ?? new SetConnectedSystemObjectPasswordRequest { Password = Password, Wait = 0 },
+            waiter ?? new RecordingWaiter(null));
+
+    private static SetMetaverseObjectPasswordResponse BodyOf(IActionResult result) =>
+        (SetMetaverseObjectPasswordResponse)((ObjectResult)result).Value!;
+
+    private PasswordChangeOutcomes OutcomeWhereTheTargetIs(PasswordChangeTargetState state, string? message = null) => new()
+    {
+        ActivityId = _createdActivities.Count > 0 ? _createdActivities[0].Id : Guid.Empty,
+        MetaverseObjectId = _metaverseObjectId,
+        Created = DateTime.UtcNow,
+        IsSettled = state is not (PasswordChangeTargetState.Queued or PasswordChangeTargetState.Delivering),
+        Targets =
+        [
+            new PasswordChangeTargetOutcome
+            {
+                ConnectedSystemId = ConnectedSystemId,
+                ConnectedSystemName = "Contoso AD",
+                State = state,
+                Message = message,
+                AttemptCount = state is PasswordChangeTargetState.Set or PasswordChangeTargetState.Parked ? 1 : 0
+            }
+        ]
+    };
 
     [Test]
-    public async Task SetConnectedSystemObjectPasswordAsync_WhenSuccessful_SendsThePasswordToTheConnectorAsync()
+    public async Task SetConnectedSystemObjectPasswordAsync_QueuesOneExplicitChangeForTheAccountAsync()
     {
         var result = await SetPasswordAsync();
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.TypeOf<OkObjectResult>());
-            Assert.That(_connector.PasswordsSet, Is.EqualTo(new[] { Password }));
+            var queued = _syncRepo.PendingPasswordChanges.Values.Single();
+            Assert.That(queued.ConnectedSystemId, Is.EqualTo(ConnectedSystemId));
+            Assert.That(queued.ConnectedSystemObjectId, Is.EqualTo(_csoId));
+            Assert.That(queued.MetaverseObjectId, Is.EqualTo(_metaverseObjectId));
+            Assert.That(queued.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
+            var body = BodyOf(result);
+            Assert.That(body.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
+            Assert.That(body.Targets.Select(t => t.ConnectedSystemObjectId), Is.EqualTo(new Guid?[] { _csoId }));
         }
     }
 
     /// <summary>
     /// The response is serialised, logged by intermediaries and stored by clients. Whatever else changes about
-    /// this endpoint, the password must not appear in what it returns.
+    /// this endpoint, the password must not appear in what it returns, and must not sit readable in the queue.
     /// </summary>
     [Test]
-    public async Task SetConnectedSystemObjectPasswordAsync_WhenSuccessful_ReturnsNoPasswordValueAsync()
+    public async Task SetConnectedSystemObjectPasswordAsync_ReturnsNoPasswordValueAndStoresItEncryptedAsync()
     {
         var result = (OkObjectResult)await SetPasswordAsync();
 
-        var response = result.Value as SetConnectedSystemObjectPasswordResponse;
-        Assert.That(response, Is.Not.Null);
-        Assert.That(System.Text.Json.JsonSerializer.Serialize(response), Does.Not.Contain(Password));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(System.Text.Json.JsonSerializer.Serialize(result.Value), Does.Not.Contain(Password));
+            Assert.That(_syncRepo.PendingPasswordChanges.Values.Single().EncryptedPassword, Does.Not.Contain(Password));
+        }
+    }
+
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_WaitsTenSecondsByDefaultAndReportsTheOutcomeAsync()
+    {
+        // Decision D6: a named account waits, so a caller resetting a password is told whether it took.
+        var waiter = new RecordingWaiter(() => OutcomeWhereTheTargetIs(PasswordChangeTargetState.Set, "Password set."));
+
+        var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password }, waiter);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.TypeOf<OkObjectResult>());
+            Assert.That(waiter.Waits, Is.EqualTo(new[] { TimeSpan.FromSeconds(10) }));
+            var body = BodyOf(result);
+            Assert.That(body.Settled, Is.True);
+            Assert.That(body.Targets[0].State, Is.EqualTo(PasswordChangeTargetState.Set));
+            Assert.That(body.Targets[0].Message, Is.EqualTo("Password set."));
+        }
+    }
+
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_WaitZero_ReturnsOnEnqueueAsync()
+    {
+        var waiter = new RecordingWaiter(null);
+
+        var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password, Wait = 0 }, waiter);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.TypeOf<OkObjectResult>());
+            Assert.That(waiter.Waits, Is.Empty);
+            var body = BodyOf(result);
+            Assert.That(body.Settled, Is.False);
+            Assert.That(body.Targets[0].State, Is.EqualTo(PasswordChangeTargetState.Queued));
+        }
+    }
+
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_WaitRunsOut_Returns202WithWhatIsKnownAsync()
+    {
+        var waiter = new RecordingWaiter(() => OutcomeWhereTheTargetIs(PasswordChangeTargetState.Delivering));
+
+        var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password, Wait = 3 }, waiter);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.TypeOf<AcceptedResult>());
+            Assert.That(waiter.Waits, Is.EqualTo(new[] { TimeSpan.FromSeconds(3) }));
+            Assert.That(BodyOf(result).Settled, Is.False);
+        }
     }
 
     /// <summary>
-    /// The applied behaviour rather than the requested one, and the caveat alongside it. A directory that
-    /// silently downgrades what was asked for leaves the account in a state the caller did not choose, and an
-    /// automation that reported the request back would never find out.
+    /// A refusal is the directory's answer, carried on the target in its own words. It is not a malformed request,
+    /// so it is not a 400: the change was recorded, attempted, and parked for a person to look at.
     /// </summary>
     [Test]
-    public async Task SetConnectedSystemObjectPasswordAsync_WhenTheTargetDowngradesExpiry_ReportsWhatWasAppliedAsync()
+    public async Task SetConnectedSystemObjectPasswordAsync_WhenTheTargetRefuses_ReportsParkedWithTheReasonAsync()
     {
-        const string warning = "This directory cannot require a change at next sign-in, so the password expires according to its own policy.";
-        _connector.Result = PasswordSetResult.SucceededWithExpiryDowngrade(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, warning);
+        const string reason = "The password does not meet the length, complexity or history requirements of the domain.";
+        var waiter = new RecordingWaiter(() => OutcomeWhereTheTargetIs(PasswordChangeTargetState.Parked, reason));
 
-        var result = (OkObjectResult)await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest
-        {
-            Password = Password,
-            ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn
-        });
+        var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password }, waiter);
 
-        var response = (SetConnectedSystemObjectPasswordResponse)result.Value!;
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(response.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy));
-            Assert.That(response.ExpiryBehaviourWarning, Is.EqualTo(warning));
+            Assert.That(result, Is.TypeOf<OkObjectResult>());
+            var target = BodyOf(result).Targets[0];
+            Assert.That(target.State, Is.EqualTo(PasswordChangeTargetState.Parked));
+            Assert.That(target.Message, Is.EqualTo(reason));
         }
     }
 
@@ -174,7 +280,15 @@ public class SynchronisationControllerSetPasswordTests
     {
         await SetPasswordAsync();
 
-        Assert.That(_connector.LastOptions?.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+        Assert.That(_syncRepo.PendingPasswordChanges.Values.Single().ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+    }
+
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_HonoursTheRequestedExpiryBehaviourAsync()
+    {
+        await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password, ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires, Wait = 0 });
+
+        Assert.That(_syncRepo.PendingPasswordChanges.Values.Single().ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
     }
 
     /// <summary>
@@ -186,83 +300,50 @@ public class SynchronisationControllerSetPasswordTests
     {
         await SetPasswordAsync();
 
-        Assert.That(_connector.LastOptions?.EnableAccount, Is.Null);
+        Assert.That(_syncRepo.PendingPasswordChanges.Values.Single().EnableAccount, Is.Null);
     }
 
     [Test]
-    public async Task SetConnectedSystemObjectPasswordAsync_WithAnEmptyPassword_RefusesBeforeReachingTheConnectorAsync()
+    public async Task SetConnectedSystemObjectPasswordAsync_WithEnableAccount_CarriesItOnTheChangeAsync()
+    {
+        await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password, EnableAccount = true, Wait = 0 });
+
+        Assert.That(_syncRepo.PendingPasswordChanges.Values.Single().EnableAccount, Is.True);
+    }
+
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_WithAnEmptyPassword_RefusesBeforeQueueingAnythingAsync()
     {
         var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = "   " });
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.TypeOf<BadRequestObjectResult>());
-            Assert.That(_connector.PasswordsSet, Is.Empty);
+            Assert.That(_syncRepo.PendingPasswordChanges, Is.Empty);
         }
     }
 
-    /// <summary>
-    /// A rejected password is the caller's to fix, so it is a 400 carrying the target's own words.
-    /// </summary>
-    [Test]
-    public async Task SetConnectedSystemObjectPasswordAsync_WhenTheTargetRefuses_ReturnsBadRequestWithTheReasonAsync()
+    [TestCase(-1)]
+    [TestCase(31)]
+    public async Task SetConnectedSystemObjectPasswordAsync_WaitOutOfRange_RefusesBeforeQueueingAnythingAsync(int wait)
     {
-        const string reason = "The password does not meet the length, complexity or history requirements of the domain.";
-        _connector.Result = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, reason);
+        var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password, Wait = wait });
 
-        var result = await SetPasswordAsync();
-
-        var badRequest = result as BadRequestObjectResult;
-        Assert.That(badRequest, Is.Not.Null);
-        Assert.That(System.Text.Json.JsonSerializer.Serialize(badRequest!.Value), Does.Contain(reason));
-    }
-
-    /// <summary>
-    /// Not a 400. Nothing was established about the password, so answering as though it were rejected would send
-    /// the caller off to change something that was never the problem; a 502 says the target is the problem and
-    /// the same request is worth repeating.
-    /// </summary>
-    [Test]
-    public async Task SetConnectedSystemObjectPasswordAsync_WhenTheTargetIsUnreachable_ReturnsBadGatewayAsync()
-    {
-        _connector.ThrowOnOpen = new InvalidOperationException("Connection refused.");
-
-        var result = await SetPasswordAsync();
-
-        Assert.That(result, Is.TypeOf<ObjectResult>());
-        var objectResult = (ObjectResult)result;
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(objectResult.StatusCode, Is.EqualTo(StatusCodes.Status502BadGateway));
-            // The body's code has to agree with the status, or a client branching on it is told the caller was
-            // at fault when the target was.
-            Assert.That(((ApiErrorResponse)objectResult.Value!).Code, Is.EqualTo(ApiErrorCodes.BadGateway));
+            Assert.That(result, Is.TypeOf<BadRequestObjectResult>());
+            Assert.That(_syncRepo.PendingPasswordChanges, Is.Empty);
         }
-    }
-
-    /// <summary>
-    /// Immediately after a create, an account the directory has not finished replicating is not a rejection and
-    /// not a permanent absence; a 404 tells the caller to repeat the request rather than change it.
-    /// </summary>
-    [Test]
-    public async Task SetConnectedSystemObjectPasswordAsync_WhenTheAccountIsNotThereYet_ReturnsNotFoundAsync()
-    {
-        _connector.Result = PasswordSetResult.Failed(PasswordSetFailureReason.TargetObjectNotFound, "No such object.");
-
-        var result = await SetPasswordAsync();
-
-        Assert.That(result, Is.TypeOf<NotFoundObjectResult>());
     }
 
     [Test]
     public async Task SetConnectedSystemObjectPasswordAsync_WhenTheObjectDoesNotExist_ReturnsNotFoundAsync()
     {
         var result = await _controller.SetConnectedSystemObjectPasswordAsync(ConnectedSystemId, Guid.NewGuid(),
-            new SetConnectedSystemObjectPasswordRequest { Password = Password });
+            new SetConnectedSystemObjectPasswordRequest { Password = Password }, new RecordingWaiter(null));
 
         Assert.That(result, Is.TypeOf<NotFoundObjectResult>());
     }
-
 
     /// <summary>
     /// The message is shown to an administrator and returned to automation, so it must read as a sentence about
@@ -272,60 +353,89 @@ public class SynchronisationControllerSetPasswordTests
     public async Task SetConnectedSystemObjectPasswordAsync_WhenTheObjectDoesNotExist_DoesNotLeakAParameterNameAsync()
     {
         var result = (NotFoundObjectResult)await _controller.SetConnectedSystemObjectPasswordAsync(ConnectedSystemId, Guid.NewGuid(),
-            new SetConnectedSystemObjectPasswordRequest { Password = Password });
+            new SetConnectedSystemObjectPasswordRequest { Password = Password }, new RecordingWaiter(null));
 
         Assert.That(((ApiErrorResponse)result.Value!).Message, Does.Not.Contain("Parameter"));
+    }
+
+    /// <summary>
+    /// A password belongs to a person. An account nobody is joined to has no person whose password this would be
+    /// and nowhere to record it; the caller is told to join it rather than left with a bare 404.
+    /// </summary>
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_WhenTheObjectIsNotJoined_ReturnsNotFoundSayingSoAsync()
+    {
+        var unjoinedId = Guid.NewGuid();
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectAsync(ConnectedSystemId, unjoinedId))
+            .ReturnsAsync(new ConnectedSystemObject { Id = unjoinedId, ConnectedSystemId = ConnectedSystemId, MetaverseObjectId = null });
+
+        var result = await _controller.SetConnectedSystemObjectPasswordAsync(ConnectedSystemId, unjoinedId,
+            new SetConnectedSystemObjectPasswordRequest { Password = Password }, new RecordingWaiter(null));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.TypeOf<NotFoundObjectResult>());
+            Assert.That(((ApiErrorResponse)((NotFoundObjectResult)result).Value!).Message, Does.Contain("not joined to a Metaverse Object"));
+            Assert.That(_syncRepo.PendingPasswordChanges, Is.Empty);
+        }
     }
 
     [Test]
     public async Task SetConnectedSystemObjectPasswordAsync_WhenTheConnectorCannotSetPasswords_ReturnsBadRequestAsync()
     {
-        using var application = BuildApplicationWith(new PasswordlessConnector());
+        using var application = BuildApplicationWith(new PasswordlessConnector(), new SyncRepository());
         var controller = BuildControllerFor(application);
+        controller.ControllerContext = _controller.ControllerContext;
 
         var result = await controller.SetConnectedSystemObjectPasswordAsync(ConnectedSystemId, _csoId,
-            new SetConnectedSystemObjectPasswordRequest { Password = Password });
+            new SetConnectedSystemObjectPasswordRequest { Password = Password }, new RecordingWaiter(null));
 
-        Assert.That(result, Is.TypeOf<BadRequestObjectResult>());
-    }
-
-    [Test]
-    public async Task SetConnectedSystemObjectPasswordAsync_WhenSuccessful_RecordsAnActivityAgainstTheObjectAsync()
-    {
-        await SetPasswordAsync();
-
-        var created = new List<Activity>();
-        _activityRepo.Verify(r => r.CreateActivityAsync(Capture.In(created)), Times.Once);
-        var activity = created.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(activity.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystemObject));
-            Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.SetPassword));
-            Assert.That(activity.ConnectedSystemObjectId, Is.EqualTo(_csoId));
+            Assert.That(result, Is.TypeOf<BadRequestObjectResult>());
+            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("cannot set passwords"));
         }
     }
 
-    private JimApplication BuildApplicationWith(IConnector connector)
+    /// <summary>
+    /// One Activity shape for both origins (#1635): the person's password history shows a reset beside a
+    /// propagated change, so the parent is recorded against the person, not against the account.
+    /// </summary>
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_RecordsThePasswordActivityAgainstThePersonAsync()
     {
-        var apiKeyRepo = new Mock<IApiKeyRepository>();
-        var repository = new Mock<IRepository>();
-        repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
-        repository.Setup(r => r.Activity).Returns(_activityRepo.Object);
-        repository.Setup(r => r.ApiKeys).Returns(apiKeyRepo.Object);
-        return new JimApplication(repository.Object, connectorFactory: new StubConnectorFactory(connector));
+        await SetPasswordAsync();
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.TargetType, Is.EqualTo(ActivityTargetType.PasswordSynchronisation));
+            Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.SetPassword));
+            Assert.That(activity.MetaverseObjectId, Is.EqualTo(_metaverseObjectId));
+            Assert.That(activity.TargetName, Is.EqualTo("Ada Lovelace"));
+        }
     }
 
-    private SynchronisationController BuildControllerFor(JimApplication application)
-    {
-        var controller = new SynchronisationController(
-            new Mock<ILogger<SynchronisationController>>().Object,
+    private JimApplication BuildApplicationWith(IConnector connector, SyncRepository syncRepository) =>
+        new(_repository.Object, syncRepository: syncRepository, connectorFactory: new StubConnectorFactory(connector));
+
+    private static SynchronisationController BuildControllerFor(JimApplication application) =>
+        new(new Mock<ILogger<SynchronisationController>>().Object,
             application,
             new DynamicExpressoEvaluator(),
-            new Mock<ICredentialProtectionService>().Object)
+            new Mock<ICredentialProtectionService>().Object);
+
+    private sealed class RecordingWaiter(Func<PasswordChangeOutcomes>? answer) : IPasswordChangeOutcomeWaiter
+    {
+        public List<TimeSpan> Waits { get; } = [];
+
+        public Task<PasswordChangeOutcomes?> WaitForOutcomesAsync(Guid activityId, TimeSpan timeout, CancellationToken cancellationToken)
         {
-            ControllerContext = _controller.ControllerContext
-        };
-        return controller;
+            Waits.Add(timeout);
+            if (answer == null)
+                throw new InvalidOperationException("The waiter was not expected to be consulted by this test.");
+            return Task.FromResult<PasswordChangeOutcomes?>(answer());
+        }
     }
 
     private sealed class StubConnectorFactory(IConnector connector) : IConnectorFactory
@@ -333,37 +443,27 @@ public class SynchronisationControllerSetPasswordTests
         public IConnector Create(string connectorName, ICredentialProtection? credentialProtection = null, ICertificateProvider? certificateProvider = null) => connector;
     }
 
-    private sealed class RecordingPasswordConnector : IConnector, IConnectorPasswordManagement
+    /// <summary>
+    /// Stands in for a Connector that can set passwords. It is never asked to: the endpoint queues, and delivery
+    /// belongs to the Password Delivery Service, which is not part of this fixture.
+    /// </summary>
+    private sealed class PasswordCapableConnector : IConnector, IConnectorPasswordManagement
     {
-        public string Name => "Recording Password Connector";
+        public string Name => "Password Capable Connector";
         public string? Description => null;
         public string? Url => null;
-
-        public List<string> PasswordsSet { get; } = [];
-        public PasswordSetOptions? LastOptions { get; private set; }
-        public Exception? ThrowOnOpen { get; set; }
-        public PasswordSetResult Result { get; set; } = PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn);
 
         public IReadOnlyCollection<PasswordExpiryBehaviour> SupportedExpiryBehaviours =>
             [PasswordExpiryBehaviour.RequireChangeAtNextSignIn, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy];
 
-        /// <summary>
-        /// This double stands in for an ordinary, properly configured target, so its channel is secure.
-        /// </summary>
         public bool IsPasswordChannelSecure => true;
 
         public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings)
         {
-            if (ThrowOnOpen != null)
-                throw ThrowOnOpen;
         }
 
-        public Task<PasswordSetResult> SetPasswordAsync(ConnectedSystemObject target, string password, PasswordSetOptions options, CancellationToken cancellationToken)
-        {
-            PasswordsSet.Add(password);
-            LastOptions = options;
-            return Task.FromResult(Result);
-        }
+        public Task<PasswordSetResult> SetPasswordAsync(ConnectedSystemObject target, string password, PasswordSetOptions options, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The endpoint queues; it must never deliver inline.");
 
         public void ClosePasswordConnection()
         {

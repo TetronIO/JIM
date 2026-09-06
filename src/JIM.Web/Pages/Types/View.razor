@@ -5,7 +5,9 @@
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Enums
 @using JIM.Models.Staging
+@using JIM.Models.Transactional
 @using JIM.Models.Transactional.DTOs
+@using JIM.Web.Models
 @using JIM.Web.Shared
 @using JIM.Web.Services
 @using Microsoft.JSInterop
@@ -15,6 +17,7 @@
 @inject IUserPreferenceService UserPreferences
 @inject IJSRuntime JsRuntime
 @inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -37,7 +40,8 @@
 
 @if (MetaverseObject != null)
 {
-    <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync" Class="mt-2" TabPanelsClass="pt-5">
+    <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync"
+                      ActivePanelSlugChanged="OnActiveTabSlugChangedAsync" Class="mt-2" TabPanelsClass="pt-5">
         <Header Context="headerContext">
             @if (_activeTabIndex == 0)
             {
@@ -182,75 +186,25 @@
             </MudPaper>
         </MudTabPanel>
 
-        @* ─── Password Synchronisation ─── *@
-        @* A report rather than an action, so it is its own tab rather than a panel in Actions below. It shows  *@
-        @* what somebody's password did on each of their systems, which is not something every signed-in user   *@
-        @* may see about every other person, so it carries its own Administrator gate (as Actions does).        *@
+        @* ─── Password ─── *@
+        @* Both a report and an action: what this person's password did on each of their systems, and the one    *@
+        @* operation that sets it (#1635). Neither is something every signed-in user may see or do to every other *@
+        @* person (the history says where somebody has accounts; the set is a reset primitive), and this page is  *@
+        @* visible to every signed-in user, so the whole tab carries an Administrator gate rather than inheriting *@
+        @* the page's (issue #1172). Badged red with the changes nothing will move without a person: parked plus *@
+        @* expired, the same count the Passwords tab of Operations carries per person.                            *@
         <AuthorizeView Roles="Administrator" Context="passwordAuth">
-            <MudTabPanel Text="Password Synchronisation" Icon="@Icons.Material.Filled.SyncLock">
-                <MetaverseObjectPasswordSynchronisationPanel MetaverseObjectId="@(MetaverseObject?.Id ?? Guid.Empty)"
-                                                             Events="@_passwordEvents"
-                                                             QueuedChanges="@_queuedPasswordChanges" />
-            </MudTabPanel>
-        </AuthorizeView>
-
-        @* ─── Actions ─── *@
-        @* Things an administrator can do TO this person, as opposed to the tabs that report on them.        *@
-        @* Setting a password is a reset primitive and this page is visible to every signed-in user, so the  *@
-        @* whole tab carries an Administrator gate rather than inheriting the page's (issue #1172).          *@
-        <AuthorizeView Roles="Administrator" Context="actionsAuth">
-            <MudTabPanel Text="Actions" Icon="@Icons.Material.Filled.Bolt">
-                <MudPaper Class="pa-4" Outlined="true">
-                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-set-password">
-                        <MudIcon Icon="@Icons.Material.Filled.Key" Color="Color.Primary" Class="mt-1" />
-                        <MudStack Spacing="1" Class="flex-grow-1">
-                            <MudText Typo="Typo.h6">Set Password</MudText>
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                Sets one password on some or all of this person's accounts, writing to each
-                                Connected System in turn. Nothing is staged and JIM stores nothing.
-                            </MudText>
-                            @if (_passwordCapableAccountCount == 0)
-                            {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="jim-mvo-action-set-password-unavailable">
-                                    Unavailable: none of this person's accounts are in a Connected System whose
-                                    Connector can set passwords.
-                                </MudText>
-                            }
-                        </MudStack>
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
-                                   Disabled="@(_passwordCapableAccountCount == 0)"
-                                   OnClick="OpenSetPasswordDialogAsync"
-                                   data-testid="jim-mvo-set-password">Set Password</MudButton>
-                    </MudStack>
-                </MudPaper>
-
-                @* A separate action rather than an option on the one above, because they answer different
-                   questions. Set Password fixes named accounts now; this one says the person's password has
-                   changed and every configured system should end up holding it. *@
-                <MudPaper Class="pa-4 mt-6" Outlined="true">
-                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-sync-password">
-                        <MudIcon Icon="@Icons.Material.Filled.SyncLock" Color="Color.Primary" Class="mt-1" />
-                        <MudStack Spacing="1" Class="flex-grow-1">
-                            <MudText Typo="Typo.h6">Synchronise Password</MudText>
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                Records that this person's password has changed and delivers it to every Connected
-                                System configured to receive synchronised passwords, retrying if one is
-                                unavailable. Use this when they have changed their own password somewhere; use Set
-                                Password above to apply a password you choose to accounts you name, straight away.
-                            </MudText>
-                            @if (_passwordSynchronisationSystemCount == 0)
-                            {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="jim-mvo-action-sync-password-unavailable">
-                                    Unavailable: no Connected System is configured for Password Synchronisation.
-                                </MudText>
-                            }
-                        </MudStack>
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
-                                   Disabled="@(_passwordSynchronisationSystemCount == 0)"
-                                   OnClick="OpenSynchronisePasswordDialogAsync"
-                                   data-testid="jim-mvo-sync-password">Synchronise Password</MudButton>
-                    </MudStack>
-                </MudPaper>
+            <MudTabPanel Text="Password" Icon="@Icons.Material.Filled.Key" BadgeColor="Color.Error"
+                         BadgeData="@(_passwordAttentionCount > 0 ? _passwordAttentionCount.ToString("N0") : null)">
+                <MetaverseObjectPasswordPanel MetaverseObjectId="@(MetaverseObject?.Id ?? Guid.Empty)"
+                                              Events="@_passwordEvents"
+                                              QueuedChanges="@_queuedPasswordChanges"
+                                              Accounts="@_passwordAccounts"
+                                              Loading="@(!_passwordTabLoaded)"
+                                              Busy="@_passwordActionRunning"
+                                              OnSetPassword="OpenSetPasswordDialogAsync"
+                                              OnRetry="RetryPasswordChangeAsync"
+                                              OnStopTrying="StopPasswordChangeAsync" />
             </MudTabPanel>
         </AuthorizeView>
         </ChildContent>
@@ -263,23 +217,26 @@
     [CascadingParameter]
     private Task<AuthenticationState> AuthenticationStateTask { get; set; } = null!;
 
-    // How many of this person's accounts are in a Connected System whose Connector can set passwords. Read with
-    // the page so the action is either offered or not, rather than appearing and then turning out to be
-    // unavailable once the dialog is open.
-    private int _passwordCapableAccountCount;
+    /// <summary>
+    /// The slug NavigableMudTabs gives the Password tab: its text, lower-cased. Keyed on the slug rather than the
+    /// panel index because the tab is gated on the Administrator role, so its index differs between readers.
+    /// </summary>
+    private const string PasswordTabSlug = "password";
 
-    // How many Connected Systems take synchronised passwords at all. Read with the page so the Synchronise
-    // Password action is offered or not, rather than appearing and then reaching nothing once somebody has
-    // typed a password into it.
-    private int _passwordSynchronisationSystemCount;
-
-    // This person's password history and outstanding queue work, loaded when the tab is first opened rather than
-    // with the page: two reads that most visits to this page never need, on a page every signed-in user opens.
+    // The Password tab's data (#1635): this person's history, their outstanding queue work and their accounts,
+    // loaded when the tab is first opened rather than with the page. Three reads that most visits to this page
+    // never need, on a page every signed-in user opens. The badge count is the exception: it is read with the
+    // page, because a badge that only appears once its tab is opened is not a badge.
     private IReadOnlyList<PasswordSynchronisationEvent> _passwordEvents = [];
     private IReadOnlyList<PendingPasswordChangeHeader> _queuedPasswordChanges = [];
+    private IReadOnlyList<MetaverseObjectAccount> _passwordAccounts = [];
+    private int _passwordAttentionCount;
+    private bool _passwordTabLoaded;
+    private bool _passwordTabLoading;
+    private bool _passwordActionRunning;
 
     /// <summary>
-    /// Whether the reader may see another person's password history. The panel's own markup is gated the same
+    /// Whether the reader may see another person's password history. The tab's own markup is gated the same
     /// way; this is the same decision made in code so the reads behind it are not run for readers who cannot.
     /// </summary>
     private async Task<bool> IsAdministratorAsync()
@@ -289,35 +246,30 @@
     }
 
     /// <summary>
-    /// How many password changes the panel shows. Recent history, not an archive: the Activities list is where
-    /// the whole record lives, and the panel links to the queue for what is still outstanding.
+    /// How many password changes the tab shows. Recent history, not an archive: the Activities list is where
+    /// the whole record lives, and the tab links to the queue for what is still outstanding.
     /// </summary>
     private const int PasswordEventsShown = 10;
 
     /// <summary>
-    /// How many outstanding queued changes the panel lists. Bounded by how many Connected Systems take
-    /// synchronised passwords, so this is a guard against an absurd deployment rather than a page size.
+    /// How many outstanding queued changes the tab lists. Bounded by how many Connected Systems this person has
+    /// an account in, so this is a guard against an absurd deployment rather than a page size.
     /// </summary>
     private const int MaximumQueuedChangesShown = 50;
 
     /// <summary>
-    /// Loads this person's password history and their outstanding queued changes.
+    /// This person's outstanding queue rows, and from them the tab's badge: the rows nothing will move without a
+    /// person (parked plus expired).
     /// <para>
-    /// Two sources, deliberately. The queue row is deleted the moment a password arrives, so the queue alone
-    /// would show this person's failures and none of their successes; the Activities are the durable record.
+    /// The count is not asked for: the list is bounded by how many Connected Systems this person has an account
+    /// in, and counting it would be a second query to learn a number nothing on screen shows.
     /// </para>
     /// </summary>
-    private async Task LoadPasswordSynchronisationAsync(JimApplication jim)
+    private async Task LoadQueuedPasswordChangesAsync(JimApplication jim)
     {
         if (MetaverseObject == null)
             return;
 
-        _passwordEvents = await jim.PasswordSynchronisation.GetEventsForMetaverseObjectAsync(
-            MetaverseObject.Id, PasswordEventsShown);
-
-        // The count is not asked for: the panel lists what is outstanding for one identity, which is bounded by
-        // how many Connected Systems take synchronised passwords, and counting it would be a second query to
-        // learn a number nothing on screen shows.
         var queued = await jim.PasswordSynchronisation.GetPendingPasswordChangesAsync(
             new PendingPasswordChangeFilter { MetaverseObjectId = MetaverseObject.Id },
             startIndex: 0,
@@ -326,40 +278,50 @@
             sortDescending: false,
             includeTotalCount: false);
         _queuedPasswordChanges = queued.Results;
+        _passwordAttentionCount = _queuedPasswordChanges.Count(c =>
+            c.Status is PendingPasswordChangeStatus.Parked or PendingPasswordChangeStatus.Expired);
     }
 
     /// <summary>
-    /// Opens the synchronise-password dialog (#1119).
+    /// Loads everything the Password tab shows: the history, the queue rows (again, so the tab is current even
+    /// after a change made from the dialog) and the accounts behind the coverage line.
     /// <para>
-    /// Deliberately has no account picker, unlike the set-password dialog beside it. Which Connected Systems
-    /// receive a synchronised password is their own configuration; offering a selection here would imply an
-    /// administrator can override it for one change, and they cannot.
+    /// Two sources for the first two, deliberately. The queue row is deleted the moment a password arrives, so
+    /// the queue alone would show this person's failures and none of their successes; the Activities are the
+    /// durable record.
     /// </para>
     /// </summary>
-    private async Task OpenSynchronisePasswordDialogAsync()
+    private async Task LoadPasswordTabAsync()
     {
-        if (MetaverseObject == null)
+        if (MetaverseObject == null || _passwordTabLoading)
             return;
 
-        var parameters = new DialogParameters<SynchronisePasswordDialog>
+        _passwordTabLoading = true;
+        try
         {
-            { x => x.MetaverseObjectId, MetaverseObject.Id },
-            { x => x.DisplayName, _displayName },
-            { x => x.TargetSystemCount, _passwordSynchronisationSystemCount }
-        };
-
-        var title = string.IsNullOrWhiteSpace(_displayName)
-            ? "Synchronise Password"
-            : $"Synchronise Password: {_displayName}";
-        await DialogService.ShowAsync<SynchronisePasswordDialog>(title, parameters,
-            new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+            using var jim = JimFactory.Create();
+            _passwordEvents = await jim.PasswordSynchronisation.GetEventsForMetaverseObjectAsync(MetaverseObject.Id, PasswordEventsShown);
+            await LoadQueuedPasswordChangesAsync(jim);
+            _passwordAccounts = await jim.ConnectedSystems.GetAccountsForPasswordSetAsync(MetaverseObject.Id);
+            _passwordTabLoaded = true;
+        }
+        finally
+        {
+            _passwordTabLoading = false;
+            StateHasChanged();
+        }
     }
 
     /// <summary>
-    /// Opens the set-password dialog over this person's accounts (issue #1172).
+    /// Opens the set-password dialog over this person's accounts (issues #1172, #1635).
     /// <para>
     /// Nothing is preselected. Somebody resetting a forgotten password in one Connected System must not
     /// silently reset the others; Select all is one click for the case where that is what is wanted.
+    /// </para>
+    /// <para>
+    /// Generation, the set and the stop are passed in as delegates rather than letting the dialog reach the
+    /// application layer, so the dialog stays a piece of user interface with no knowledge of who is signed in or
+    /// how JIM talks to a Connected System, and so the password it holds never travels further than those calls.
     /// </para>
     /// </summary>
     private async Task OpenSetPasswordDialogAsync()
@@ -367,23 +329,27 @@
         if (MetaverseObject == null)
             return;
 
-        using var jim = JimFactory.Create();
-        var accounts = await jim.ConnectedSystems.GetAccountsForPasswordSetAsync(MetaverseObject.Id);
-
         var parameters = new DialogParameters<SetPasswordDialog>
         {
-            { x => x.Accounts, accounts },
+            { x => x.Accounts, _passwordAccounts },
+            { x => x.MetaverseObjectId, MetaverseObject.Id },
             { x => x.AllowSelection, true },
             { x => x.Reconcile, ReconcilePasswordPolicies },
             { x => x.GeneratePassword, GeneratePassword },
-            { x => x.SetPassword, SetPasswordOnAccountsAsync }
+            { x => x.SetPassword, SetPasswordAsync },
+            { x => x.StopTrying, connectedSystemId => CancelPasswordChangeAsync(connectedSystemId) }
         };
 
         // The name only when there is one: an object with no display name would otherwise be titled with a
         // dangling colon.
         var title = string.IsNullOrWhiteSpace(_displayName) ? "Set Password" : $"Set Password: {_displayName}";
-        await DialogService.ShowAsync<SetPasswordDialog>(title, parameters,
+        var dialog = await DialogService.ShowAsync<SetPasswordDialog>(title, parameters,
             new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        // A change was queued, so the history and the queue rows behind this tab have moved on.
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: true })
+            await LoadPasswordTabAsync();
     }
 
     /// <summary>
@@ -404,17 +370,92 @@
         return jim.PasswordGenerator.Generate(policy);
     }
 
-    private async Task<MultiAccountPasswordSetResult> SetPasswordOnAccountsAsync(
-        IReadOnlyList<MetaverseObjectAccount> accounts,
-        string password,
-        PasswordSetOptions options,
-        IProgress<AccountPasswordSetOutcome> progress)
+    /// <summary>
+    /// The one password operation (#1635), aimed at the accounts the administrator ticked.
+    /// </summary>
+    private async Task<PasswordQueueResult> SetPasswordAsync(PasswordSetSubmission submission)
     {
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
-        return await jim.ConnectedSystems.SetPasswordOnAccountsAsync(
-            MetaverseObject!.Id, accounts, password, options, user, progress, CancellationToken.None);
+        return await jim.PasswordSynchronisation.SetPasswordAsync(new SetPasswordRequest
+        {
+            MetaverseObjectId = MetaverseObject!.Id,
+            DisplayName = _displayName ?? MetaverseObject.Id.ToString(),
+            Password = submission.Password,
+            Targets = submission.Targets,
+            ExpiryBehaviour = submission.ExpiryBehaviour,
+            EnableAccount = submission.EnableAccount,
+            InitiatedBy = user
+        }, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Retries this person's parked change on one Connected System, from the tab's attention strip or its queue
+    /// table. Zero is reported rather than passed over in silence: an administrator who acted and changed nothing
+    /// needs to know that happened.
+    /// </summary>
+    private async Task RetryPasswordChangeAsync(int connectedSystemId)
+    {
+        if (MetaverseObject == null || _passwordActionRunning)
+            return;
+
+        _passwordActionRunning = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var retried = await jim.PasswordSynchronisation.RetryAsync(
+                new PendingPasswordChangeFilter { MetaverseObjectId = MetaverseObject.Id, ConnectedSystemId = connectedSystemId },
+                user, null);
+
+            Snackbar.Add(
+                retried == 0 ? "Nothing was retried; the change is no longer on the queue." : "The password change will be attempted again.",
+                retried == 0 ? Severity.Info : Severity.Success);
+        }
+        finally
+        {
+            _passwordActionRunning = false;
+        }
+
+        await LoadPasswordTabAsync();
+    }
+
+    /// <summary>
+    /// Stops JIM retrying this person's change on one Connected System, from the tab's queue table.
+    /// </summary>
+    private async Task StopPasswordChangeAsync(int connectedSystemId)
+    {
+        if (MetaverseObject == null || _passwordActionRunning)
+            return;
+
+        _passwordActionRunning = true;
+        try
+        {
+            var cancelled = await CancelPasswordChangeAsync(connectedSystemId);
+            Snackbar.Add(
+                cancelled == 0 ? "Nothing was stopped; the change is no longer on the queue." : "The password change will not be delivered.",
+                cancelled == 0 ? Severity.Info : Severity.Success);
+        }
+        finally
+        {
+            _passwordActionRunning = false;
+        }
+
+        await LoadPasswordTabAsync();
+    }
+
+    /// <summary>
+    /// Cancels this person's queued change on one Connected System, attributed to the signed-in administrator.
+    /// Shared by the tab's Stop trying action and the dialog's.
+    /// </summary>
+    private async Task<int> CancelPasswordChangeAsync(int connectedSystemId)
+    {
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        return await jim.PasswordSynchronisation.CancelAsync(
+            new PendingPasswordChangeFilter { MetaverseObjectId = MetaverseObject!.Id, ConnectedSystemId = connectedSystemId },
+            user, null);
     }
 
     [Parameter]
@@ -488,19 +529,20 @@
         _attributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
         _changeCount = detailResult.ChangeCount;
 
+        // A navigation from one person to another reuses this component, so the Password tab's data is forgotten
+        // here and read again on its next activation; the badge is re-read below with the rest of the page.
+        _passwordTabLoaded = false;
+        _passwordEvents = [];
+        _queuedPasswordChanges = [];
+        _passwordAccounts = [];
+        _passwordAttentionCount = 0;
+
         _displayName = MetaverseObject.NameOrId;
 
-        _passwordCapableAccountCount = (await jim.ConnectedSystems.GetAccountsForPasswordSetAsync(MetaverseObject.Id))
-            .Count(account => account.ConnectorCanSetPasswords);
-
-        _passwordSynchronisationSystemCount = await jim.PasswordSynchronisation.GetTargetCountAsync();
-
-        // Loaded with the page rather than when the tab is opened, deliberately. The tab is gated on the
-        // Administrator role, so its position among the panels differs between readers, and keying a lazy load on
-        // a panel index would silently load the wrong tab's data the day a panel is added above it. The reads are
-        // bounded (ten changes and one identity's queue) and only run for the readers who can see the tab.
+        // Only the Password tab's badge is read with the page; the rest of the tab loads on its first activation
+        // (see OnActiveTabSlugChangedAsync). One bounded read, and only for the readers who can see the tab.
         if (await IsAdministratorAsync())
-            await LoadPasswordSynchronisationAsync(jim);
+            await LoadQueuedPasswordChangesAsync(jim);
 
         if (detailResult.EarliestChangeInitiator != null)
         {
@@ -554,6 +596,17 @@
         // Lazy-load the first page of change history when the user lands on the Changes tab.
         if (newIndex == 1 && _changeHistoryRows.Count == 0 && _changeCount > 0 && !_changeHistoryLoading)
             await LoadChangeHistoryPageAsync();
+    }
+
+    /// <summary>
+    /// Loads the Password tab's data the first time it is opened, whether by a click, by arriving on
+    /// <c>?t=password</c>, or by the browser's back button. Keyed on the slug because the tab's index differs
+    /// between readers (it is gated on the Administrator role).
+    /// </summary>
+    private async Task OnActiveTabSlugChangedAsync(string? slug)
+    {
+        if (slug == PasswordTabSlug && !_passwordTabLoaded)
+            await LoadPasswordTabAsync();
     }
 
     private async Task LoadMoreChangeHistoryAsync()

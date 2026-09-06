@@ -64,6 +64,9 @@ public class PasswordDeliveryPassResult
 
         if (result.PasswordChannelNotSecure)
             Problems.Add($"{connectedSystemName}: this system requires a secure transport for passwords and the connection is not encrypted, so nothing was sent.");
+
+        if (result.ConnectorCouldNotBeResolved)
+            Problems.Add($"{connectedSystemName}: its Connector could not be resolved, so queued password changes are waiting.");
     }
 
     /// <summary>

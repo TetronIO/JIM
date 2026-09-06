@@ -256,7 +256,7 @@ public class PasswordSynchronisationQueueDatabaseTests
         PendingPasswordChange change;
         await using (var claim = NewContext())
             change = (await new PostgresDataRepository(claim).Sync.ClaimDuePasswordChangesAsync(
-                systemId, "worker-1a2b3c4d", DateTime.UtcNow, PendingPasswordChange.ClaimLease, 10)).Single();
+                systemId, "worker-1a2b3c4d", DateTime.UtcNow, PendingPasswordChange.ClaimLease, 10, explicitOnly: false)).Single();
 
         // The account is resolved on the attempt, which is how a change queued before provisioning gains one; the
         // outcome goes through the model's own transition, as the lane's does, so the claim ends with it.
@@ -300,7 +300,7 @@ public class PasswordSynchronisationQueueDatabaseTests
 
         int expired;
         await using (var write = NewContext())
-            expired = await new PostgresDataRepository(write).Sync.ExpirePasswordChangesAsync(systemId, now);
+            expired = await new PostgresDataRepository(write).Sync.ExpirePasswordChangesAsync(systemId, now, explicitOnly: false);
 
         await using var verify = NewContext();
         var stored = await verify.PendingPasswordChanges.AsNoTracking().ToListAsync();

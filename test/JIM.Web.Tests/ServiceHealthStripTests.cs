@@ -32,7 +32,13 @@ public class ServiceHealthStripTests : JimComponentTestContext
     }
 
     [SetUp]
-    public void SetUp() => _notifications.IsRealTimeAvailable = true;
+    public void SetUp()
+    {
+        _notifications.IsRealTimeAvailable = true;
+        // The strip asks the browser whether it may write to the clipboard before offering to; over HTTPS (and on
+        // localhost) the answer is yes, and that is the case these tests describe.
+        JSInterop.Setup<bool>("jimInterop.isClipboardAvailable").SetResult(true);
+    }
 
     [TearDown]
     public async Task TearDownAsync() => await DisposeComponentsAsync();
@@ -97,14 +103,14 @@ public class ServiceHealthStripTests : JimComponentTestContext
             var slots = card.Children.Select(c => c.ClassList.First(cls => cls.StartsWith("jim-service-health-", StringComparison.Ordinal))).ToList();
             Assert.That(slots, Is.EqualTo(new[]
             {
-                "jim-service-health-card-top", "jim-service-health-activity", "jim-service-health-condition", "jim-service-health-footer"
+                "jim-service-health-card-top", "jim-service-health-activity", "jim-service-health-condition-row", "jim-service-health-details"
             }), $"card {card.GetAttribute("data-service")}");
         }
     }
 
-    [TestCase(ServiceHealthStatus.Healthy, "Healthy", "healthy")]
-    [TestCase(ServiceHealthStatus.Degraded, "Degraded", "degraded")]
-    [TestCase(ServiceHealthStatus.Unhealthy, "Unhealthy", "unhealthy")]
+    [TestCase(ServiceHealthStatus.Healthy, "Healthy", "ok")]
+    [TestCase(ServiceHealthStatus.Degraded, "Degraded", "warn")]
+    [TestCase(ServiceHealthStatus.Unhealthy, "Unhealthy", "err")]
     public void ServiceHealthStrip_EachStatus_ShowsItsWordOnAPillOfItsColour(ServiceHealthStatus status, string word, string modifier)
     {
         var sync = status switch
@@ -122,12 +128,12 @@ public class ServiceHealthStripTests : JimComponentTestContext
         var cut = RenderStrip(report);
 
         var card = Card(cut, JimService.WorkerSync);
-        var pill = card.QuerySelector(".jim-service-health-pill")!;
+        var pill = card.QuerySelector(".jim-service-health-card-top .jim-status-pill")!;
         using (Assert.EnterMultipleScope())
         {
             Assert.That(pill.TextContent.Trim(), Is.EqualTo(word));
-            Assert.That(pill.ClassList, Does.Contain($"jim-service-health-pill--{modifier}"));
-            Assert.That(pill.QuerySelector(".jim-service-health-dot"), Is.Not.Null, "the pill carries the coloured dot");
+            Assert.That(pill.ClassList, Does.Contain($"jim-status-pill--{modifier}"), "the pill is painted by the shared status-pill vocabulary");
+            Assert.That(pill.QuerySelector(".jim-status-dot"), Is.Not.Null, "the pill carries the coloured dot");
             Assert.That(card.GetAttribute("data-status"), Is.EqualTo(status.ToString()));
             Assert.That(card.ClassList.Any(c => c.StartsWith("jim-service-health-card--", StringComparison.Ordinal)), Is.False,
                 "the pill is the only coloured element; the card itself carries no status modifier");
@@ -148,10 +154,101 @@ public class ServiceHealthStripTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("Full Import: Corporate Directory · 12 min"));
-            Assert.That(Text(card, ".jim-service-health-condition"), Is.EqualTo("Heartbeat 2 seconds ago"));
-            Assert.That(Text(card, ".jim-service-health-footer"), Does.Contain("jim-worker-1").And.Contain("v0.15.0").And.Contain("up 3 d"));
+            Assert.That(Text(card, ".jim-service-health-condition"), Is.EqualTo("Heartbeat 2 seconds ago · up 3 d"), "the uptime rides on the heartbeat line");
+            Assert.That(card.QuerySelector(".jim-service-health-footer"), Is.Null, "host and version have moved behind the details control");
         }
     }
+
+    /// <summary>
+    /// Host and version identify the instance, which matters during an upgrade and almost never otherwise, so they
+    /// sit behind a details control rather than on every card's face. Closed by default; opening one card leaves
+    /// the others alone; each value can be copied without selecting it by hand.
+    /// </summary>
+    [Test]
+    public void ServiceHealthStrip_Details_AreClosedByDefaultAndOpenToShowCopyableHostAndVersion()
+    {
+        var cut = RenderStrip(HealthyReport());
+
+        var card = Card(cut, JimService.WorkerSync);
+        var collapse = cut.FindComponents<MudCollapse>();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(collapse, Has.Count.EqualTo(3), "one expander per card");
+            Assert.That(collapse.Select(c => c.Instance.Expanded), Is.All.False, "closed by default so the cards stay one height");
+            Assert.That(Toggle(card).GetAttribute("aria-expanded"), Is.EqualTo("false"));
+            Assert.That(Toggle(card).GetAttribute("aria-label"), Is.EqualTo("Details"));
+        }
+
+        Toggle(card).Click();
+
+        card = Card(cut, JimService.WorkerSync);
+        var details = card.QuerySelector(".jim-service-health-details")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Toggle(card).GetAttribute("aria-expanded"), Is.EqualTo("true"));
+            Assert.That(cut.FindComponents<MudCollapse>().Count(c => c.Instance.Expanded), Is.EqualTo(1), "opening one card's details leaves the other cards closed");
+            Assert.That(details.QuerySelectorAll("dt").Select(t => t.TextContent.Trim()), Is.EqualTo(new[] { "Host", "Version", "Instance" }));
+            Assert.That(details.QuerySelector("[data-testid='service-health-host']")!.TextContent.Trim(), Is.EqualTo("jim-worker-1"));
+            Assert.That(details.QuerySelector("[data-testid='service-health-version']")!.TextContent.Trim(), Is.EqualTo("v0.15.0"));
+            Assert.That(details.QuerySelector("[data-testid='service-health-instance']")!.TextContent.Trim(), Is.EqualTo("jim-worker-1:4f2a"));
+            Assert.That(details.QuerySelector("button[aria-label='Copy host']"), Is.Not.Null);
+            Assert.That(details.QuerySelector("button[aria-label='Copy version']"), Is.Not.Null);
+            Assert.That(details.QuerySelector("button[aria-label='Copy instance']"), Is.Not.Null);
+        }
+    }
+
+    /// <summary>
+    /// The instance id is the host plus a per-process suffix. Where it adds nothing to the host it is not shown.
+    /// </summary>
+    [Test]
+    public void ServiceHealthStrip_Details_ShowTheInstanceOnlyWhenItDiffersFromTheHost()
+    {
+        var asOf = DateTime.UtcNow;
+        var sameAsHost = SystemHealthServer.Derive(JimService.Scheduler, new ServiceHeartbeat
+        {
+            Service = JimService.Scheduler,
+            InstanceId = "6f7c1be45a30",
+            HostName = "6f7c1be45a30",
+            Version = "0.15.0",
+            StartedAt = asOf.AddMinutes(-1),
+            LastSeenAt = asOf.AddSeconds(-2)
+        }, asOf);
+        var report = ServiceHealthDisplayTests.Report(
+            ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 2),
+            ServiceHealthDisplayTests.Derive(JimService.WorkerDelivery, 2),
+            sameAsHost);
+
+        var cut = RenderStrip(report);
+
+        var details = Card(cut, JimService.Scheduler).QuerySelector(".jim-service-health-details")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(details.QuerySelectorAll("dt").Select(t => t.TextContent.Trim()), Is.EqualTo(new[] { "Host", "Version" }));
+            Assert.That(details.QuerySelector("[data-testid='service-health-instance']"), Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// Copying calls the same clipboard helper the Set Password dialog uses and confirms it with a snackbar, so an
+    /// administrator pasting a container id into a shell knows the copy happened.
+    /// </summary>
+    [Test]
+    public void ServiceHealthStrip_CopyHost_WritesTheHostToTheClipboardAndSaysSo()
+    {
+        var copy = JSInterop.Setup<bool>("jimInterop.copyToClipboard", "jim-worker-1").SetResult(true);
+        var cut = RenderStrip(HealthyReport());
+
+        Toggle(Card(cut, JimService.WorkerSync)).Click();
+        Card(cut, JimService.WorkerSync).QuerySelector("button[aria-label='Copy host']")!.Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(copy.Invocations, Has.Count.EqualTo(1));
+            Assert.That(Services.GetRequiredService<ISnackbar>().ShownSnackbars.Select(s => s.Message), Has.Some.Contains("Host copied"));
+        });
+    }
+
+    private static IElement Toggle(IElement card) => card.QuerySelector("[data-testid='service-health-details-toggle']")!;
 
     [Test]
     public void ServiceHealthStrip_IdleService_SaysIdle()
@@ -175,9 +272,71 @@ public class ServiceHealthStripTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("No heartbeat for 4 minutes"));
-            Assert.That(Text(card, ".jim-service-health-condition"), Is.EqualTo("Was running: Full Import: Corporate Directory"));
+            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith("Was running: Full Import: Corporate Directory · up "),
+                "the uptime it had at its last heartbeat stays: it says how long it ran before going quiet");
             Assert.That(card.TextContent, Does.Not.Contain("· 12 min"), "a dead process is not running anything");
         }
+    }
+
+    /// <summary>
+    /// An unhealthy service that was idle when it went quiet has nothing it was running, and the slot used to sit
+    /// blank on exactly the card an administrator is staring at. The last heartbeat is the next most useful thing
+    /// to say there, and every other card in the row keeps its shape.
+    /// </summary>
+    [Test]
+    public void ServiceHealthStrip_UnhealthyIdleService_FillsTheConditionSlotWithItsLastHeartbeat()
+    {
+        var report = ServiceHealthDisplayTests.Report(
+            ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 2),
+            ServiceHealthDisplayTests.Derive(JimService.WorkerDelivery, 2),
+            ServiceHealthDisplayTests.Derive(JimService.Scheduler, 4 * 60));
+
+        var cut = RenderStrip(report);
+
+        var card = Card(cut, JimService.Scheduler);
+        var lastSeen = report.Services.Single(s => s.Service == JimService.Scheduler).LastSeenAt!.Value.ToLocalTime().ToFriendlyDate();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("No heartbeat for 4 minutes"));
+            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith($"Last heartbeat {lastSeen} · up "));
+        }
+    }
+
+    /// <summary>
+    /// The card's classes must exist in site.css: a class named in markup and missing from the stylesheet compiles,
+    /// renders, and lays out as an unstyled div, and no component test can see that (bUnit applies no stylesheet).
+    /// The shared status-pill vocabulary is checked here too, because two components now depend on it.
+    /// </summary>
+    [Test]
+    public void ServiceHealthStrip_EveryClassItNames_ExistsInTheStylesheet()
+    {
+        var css = File.ReadAllText(Path.Join(FindWebProjectRoot(), "wwwroot", "css", "site.css"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var cls in new[]
+                     {
+                         "jim-service-health-condition-row", "jim-service-health-details-toggle", "jim-service-health-details",
+                         "jim-service-health-details-list", "jim-service-health-details-value", "jim-service-health-copy",
+                         "jim-status-pill", "jim-status-pill--ok", "jim-status-pill--warn", "jim-status-pill--err", "jim-status-pill--neutral",
+                         "jim-status-dot"
+                     })
+            {
+                Assert.That(css, Does.Contain($".{cls}"), $"site.css must define .{cls}");
+            }
+
+            Assert.That(css, Does.Not.Contain(".jim-service-health-footer"), "the footer is gone; its rules should not linger");
+        }
+    }
+
+    private static string FindWebProjectRoot()
+    {
+        var directory = new DirectoryInfo(NUnit.Framework.TestContext.CurrentContext.TestDirectory);
+        while (directory != null && !Directory.Exists(Path.Join(directory.FullName, "src", "JIM.Web")))
+            directory = directory.Parent;
+
+        Assert.That(directory, Is.Not.Null, "could not locate the repository root from the test directory");
+        return Path.Join(directory!.FullName, "src", "JIM.Web");
     }
 
     [Test]
@@ -193,10 +352,12 @@ public class ServiceHealthStripTests : JimComponentTestContext
         var card = Card(cut, JimService.WorkerDelivery);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(Text(card, ".jim-service-health-pill"), Is.EqualTo("Unhealthy"));
+            Assert.That(Text(card, ".jim-service-health-card-top .jim-status-pill"), Is.EqualTo("Unhealthy"));
             Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("Never started"));
             Assert.That(Text(card, ".jim-service-health-condition"), Is.Empty);
-            Assert.That(Text(card, ".jim-service-health-footer"), Is.Empty, "nothing to identify an instance that never existed");
+            Assert.That(card.QuerySelector("[data-testid='service-health-host']"), Is.Null, "nothing to identify an instance that never existed");
+            Assert.That(card.QuerySelector("[data-testid='service-health-version']"), Is.Null);
+            Assert.That(Toggle(card), Is.Not.Null, "the control stays so the four cards keep the same shape");
         }
     }
 
@@ -213,10 +374,14 @@ public class ServiceHealthStripTests : JimComponentTestContext
         var skewTooltips = cut.FindComponents<MudTooltip>()
             .Where(t => t.Instance.Text == ServiceHealthStrip.VersionSkewTooltip)
             .ToList();
+        var card = Card(cut, JimService.WorkerSync);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(skewTooltips, Has.Count.EqualTo(1), "only the service on the other version is flagged");
-            Assert.That(Card(cut, JimService.WorkerSync).QuerySelector(".jim-service-health-skew")!.TextContent.Trim(), Is.EqualTo("differs from portal"));
+            Assert.That(skewTooltips, Has.Count.EqualTo(2), "the one flagged card carries the chip twice: on its face and on its Version row");
+            Assert.That(card.QuerySelector(".jim-service-health-card-top .jim-service-health-skew")!.TextContent.Trim(), Is.EqualTo("differs from portal"),
+                "the skew stays visible without opening the details");
+            Assert.That(card.QuerySelector(".jim-service-health-details .jim-service-health-skew"), Is.Not.Null,
+                "the Version row repeats it so the number and the warning sit together");
             Assert.That(Card(cut, JimService.WorkerDelivery).QuerySelector(".jim-service-health-skew"), Is.Null);
             Assert.That(Card(cut, JimService.Scheduler).QuerySelector(".jim-service-health-skew"), Is.Null);
         }
@@ -230,7 +395,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(LiveIndicator(cut).TextContent.Trim(), Is.EqualTo("Live updates connected"));
-            Assert.That(LiveIndicator(cut).QuerySelector(".jim-service-health-dot")!.ClassList, Does.Contain("jim-service-health-dot--healthy"));
+            Assert.That(LiveIndicator(cut).QuerySelector(".jim-status-dot")!.ClassList, Does.Contain("jim-status-dot--ok"));
         }
 
         _notifications.IsRealTimeAvailable = false;
@@ -239,7 +404,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
         cut.WaitForAssertion(() =>
         {
             Assert.That(LiveIndicator(cut).TextContent.Trim(), Is.EqualTo("Live updates reconnecting"));
-            Assert.That(LiveIndicator(cut).QuerySelector(".jim-service-health-dot")!.ClassList, Does.Contain("jim-service-health-dot--degraded"));
+            Assert.That(LiveIndicator(cut).QuerySelector(".jim-status-dot")!.ClassList, Does.Contain("jim-status-dot--warn"));
         });
     }
 

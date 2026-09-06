@@ -4205,6 +4205,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool?>("EnableAccount")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("EncryptedPassword")
                         .IsRequired()
                         .HasColumnType("text");
@@ -4226,6 +4229,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("NextRetryAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Origin")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");

@@ -20,7 +20,7 @@ internal static class PendingPasswordChangeBulkColumns
         "Id", "MetaverseObjectId", "ConnectedSystemId", "ConnectedSystemObjectId", "EncryptedPassword",
         "ExpiryBehaviour", "Status", "FailureReason", "TargetMessage", "AttemptCount", "NextRetryAt",
         "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId", "CancelledAt", "CancelledById",
-        "CancelledByName", "ClaimedAt", "ClaimedBy"
+        "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount"
     ];
 
     /// <summary>
@@ -39,12 +39,17 @@ internal static class PendingPasswordChangeBulkColumns
     /// its outcome write is guarded on the row still being Delivering, so clearing the claim here is what makes
     /// that write land nowhere. The new password is delivered on a claim of its own.
     /// </para>
+    /// <para>
+    /// The origin and the enable decision describe the password the row is carrying now (#1635), so the newer
+    /// change's values replace the older's: an administrator's reset replaces a held propagated change and is
+    /// delivered as a reset; a later propagated change replaces the reset and carries no enable decision.
+    /// </para>
     /// </summary>
     internal static readonly string[] PendingPasswordChangesSupersedeUpdate =
     [
         "ConnectedSystemObjectId", "EncryptedPassword", "ExpiryBehaviour", "Status", "FailureReason",
         "TargetMessage", "AttemptCount", "NextRetryAt", "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId",
-        "CancelledAt", "CancelledById", "CancelledByName", "ClaimedAt", "ClaimedBy"
+        "CancelledAt", "CancelledById", "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount"
     ];
 
     /// <summary>

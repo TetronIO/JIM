@@ -78,6 +78,24 @@ public class PendingPasswordChange
     /// </summary>
     public PasswordExpiryBehaviour ExpiryBehaviour { get; set; } = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy;
 
+    /// <summary>
+    /// Where this change came from (#1635), which is what decides how it is delivered: see
+    /// <see cref="PendingPasswordChangeOrigin"/>. Replaced along with the password when a newer change supersedes
+    /// this row, because it describes the password the row is carrying now.
+    /// </summary>
+    public PendingPasswordChangeOrigin Origin { get; set; } = PendingPasswordChangeOrigin.Propagated;
+
+    /// <summary>
+    /// Whether to enable the account as the password is set, or null to leave it as it is.
+    /// <para>
+    /// Carried only by an <see cref="PendingPasswordChangeOrigin.Explicit"/> change, and read only for one: the
+    /// administrator who named the account made this decision with it. A propagated change never enables an
+    /// account, because it reaches accounts an administrator may have disabled on purpose, and re-enabling one
+    /// as a side effect of somebody changing their password elsewhere would undo that silently.
+    /// </para>
+    /// </summary>
+    public bool? EnableAccount { get; set; }
+
     public PendingPasswordChangeStatus Status { get; set; } = PendingPasswordChangeStatus.Pending;
 
     /// <summary>
@@ -169,6 +187,12 @@ public class PendingPasswordChange
     /// </para>
     /// </summary>
     public static readonly TimeSpan ClaimLease = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Whether an administrator named this change's account (<see cref="PendingPasswordChangeOrigin.Explicit"/>),
+    /// as opposed to JIM propagating a password to whichever account the system's configuration nominates.
+    /// </summary>
+    public bool IsExplicit => Origin == PendingPasswordChangeOrigin.Explicit;
 
     /// <summary>
     /// Whether a delivery pass at <paramref name="asOf"/> should attempt this change: it is still pending, and
@@ -281,19 +305,29 @@ public class PendingPasswordChange
     /// Carrying it forward would let a newer password inherit an exhausted retry budget, or a park earned by a
     /// password nobody is trying to deliver any more.
     /// </para>
+    /// <para>
+    /// Everything the newer change says about the password it carries comes across: its origin, its enable
+    /// decision and the account it names, as well as the value and the expiry behaviour. Coalescing is by
+    /// identity and system whatever the origin (#1635); an administrator's reset replaces a propagated change
+    /// that was still waiting, and a later propagated change replaces the reset.
+    /// </para>
     /// </summary>
-    public void Supersede(
-        string encryptedPassword,
-        PasswordExpiryBehaviour expiryBehaviour,
-        Guid activityId,
-        TimeSpan timeToLive,
-        DateTime asOf)
+    /// <param name="newer">
+    /// The change taking this row over. Its <see cref="CreatedAt"/> is the instant of the supersession and its
+    /// <see cref="ExpiresAt"/> the new window; the row's identity and coalescing key are untouched.
+    /// </param>
+    public void Supersede(PendingPasswordChange newer)
     {
-        EncryptedPassword = encryptedPassword;
-        ExpiryBehaviour = expiryBehaviour;
-        ActivityId = activityId;
-        CreatedAt = asOf;
-        ExpiresAt = asOf + timeToLive;
+        ArgumentNullException.ThrowIfNull(newer);
+
+        EncryptedPassword = newer.EncryptedPassword;
+        ExpiryBehaviour = newer.ExpiryBehaviour;
+        Origin = newer.Origin;
+        EnableAccount = newer.EnableAccount;
+        ConnectedSystemObjectId = newer.ConnectedSystemObjectId;
+        ActivityId = newer.ActivityId;
+        CreatedAt = newer.CreatedAt;
+        ExpiresAt = newer.ExpiresAt;
 
         Status = PendingPasswordChangeStatus.Pending;
         AttemptCount = 0;
@@ -393,6 +427,6 @@ public class PendingPasswordChange
     public override string ToString()
     {
         return $"{nameof(PendingPasswordChange)}: Metaverse Object {MetaverseObjectId} to Connected System " +
-               $"{ConnectedSystemId} ({Status})";
+               $"{ConnectedSystemId} ({Origin}, {Status})";
     }
 }

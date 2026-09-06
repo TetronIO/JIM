@@ -714,7 +714,12 @@ public interface ISyncRepository
     /// by a write. A claim older than <paramref name="lease"/> is treated as abandoned and claimed again.
     /// </para>
     /// </summary>
-    Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum);
+    /// <param name="explicitOnly">
+    /// True to claim only <see cref="PendingPasswordChangeOrigin.Explicit"/> changes: what a lane asks over a
+    /// system whose Password Synchronisation is unconfigured or switched off, where propagated changes are held
+    /// and an administrator's explicit set is delivered anyway (#1635, decision D1). False claims both origins.
+    /// </param>
+    Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool explicitOnly);
 
     /// <summary>
     /// Gives claimed changes back unattempted, returning how many were released. For a lane that claimed and then
@@ -730,10 +735,12 @@ public interface ISyncRepository
     /// for the systems that have work rather than for every configured one. Includes systems holding a claim that
     /// has outlived <paramref name="claimLease"/>, since those rows are claimable again.
     /// <para>
-    /// A system with Password Synchronisation switched off is never among them, however much it has accumulated:
-    /// a lane steps over it without touching its changes, so reporting it as due would have the service run a
-    /// pointless lane on every poll for as long as the system stayed off. Those changes are not due, they are
-    /// held; enabling the system is what releases them, and the row update that does so wakes the service.
+    /// A propagated change on a system with Password Synchronisation unconfigured or switched off never makes
+    /// that system due, however much has accumulated: a lane claims nothing propagated there, so reporting it
+    /// would have the service run a pointless lane on every poll for as long as the system stayed off. Those
+    /// changes are not due, they are held; enabling the system is what releases them, and the row update that
+    /// does so wakes the service. An <see cref="PendingPasswordChangeOrigin.Explicit"/> change makes its system
+    /// due whatever the configuration says (#1635, decision D1), and a lane over such a system claims only those.
     /// </para>
     /// </summary>
     Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf, TimeSpan claimLease);
@@ -741,7 +748,8 @@ public interface ISyncRepository
     /// <summary>
     /// What the Password Delivery Service has ahead of it, in one query: how many changes a lane would attempt
     /// now, how many are waiting out a backoff, and the earliest scheduled attempt still ahead. Read once per
-    /// loop iteration to decide how long to sleep, and written into the service's heartbeat.
+    /// loop iteration to decide how long to sleep, and written into the service's heartbeat. Counts what a lane
+    /// would claim: every change on an enabled system, and only explicit changes elsewhere.
     /// </summary>
     Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease);
 
@@ -775,7 +783,13 @@ public interface ISyncRepository
     /// returning how many were marked. An expiry is a recorded outcome, never a silent drop (requirement 9). A
     /// change a deliverer holds is left to that deliverer; expiry never touches a Delivering row.
     /// </summary>
-    Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf);
+    /// <param name="explicitOnly">
+    /// True to expire only <see cref="PendingPasswordChangeOrigin.Explicit"/> changes: a lane over a system whose
+    /// Password Synchronisation is unconfigured or switched off retires the explicit sets it is there to deliver
+    /// and leaves the held propagated changes exactly as they were, to be expired or delivered by the first lane
+    /// after the system is switched on, as they always have been (#1635).
+    /// </param>
+    Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool explicitOnly);
 
     /// <summary>
     /// Makes every parked password change on a Connected System due again, returning how many were released.

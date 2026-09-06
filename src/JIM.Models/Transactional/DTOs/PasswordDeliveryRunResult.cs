@@ -58,9 +58,16 @@ public class PasswordDeliveryRunResult
     public bool PasswordChannelNotSecure { get; set; }
 
     /// <summary>
+    /// The Connected System names a Connector this build does not have, so nothing could be attempted; the
+    /// claimed changes were given back unattempted.
+    /// </summary>
+    public bool ConnectorCouldNotBeResolved { get; set; }
+
+    /// <summary>
     /// Whether this pass has anything worth telling an administrator about.
     /// </summary>
     public bool HasSomethingToReport =>
         DeliveredCount > 0 || RetryingCount > 0 || ParkedCount > 0 || ExpiredCount > 0
-        || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure;
+        || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure
+        || ConnectorCouldNotBeResolved;
 }
