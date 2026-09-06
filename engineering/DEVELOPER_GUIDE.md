@@ -1109,7 +1109,23 @@ When adding a new production Dockerfile:
 
 Vulnerability scanning (`scan-images`) builds every production JIM image on every push and PR and scans the result: the built image is what customers run, and it alone carries the apt pins and the build-time upgrade. Findings are surfaced in the GitHub Security tab via SARIF upload (one category per JIM image) in addition to the Actions log, so they are visible to reviewers and auditable after the fact.
 
-**Retiring a code scanning category.** Code scanning remembers every SARIF category a workflow has uploaded for `main` as a "configuration", and the per-tool merge check compares each PR against all of them: a PR whose workflow stops uploading a category is reported as "configurations present on main were not found" and the ruleset's code-scanning requirement blocks the merge with every job green (seen on #1637 when the base-image scan became the built-image scan). Two steps retire one cleanly: keep uploading an empty analysis under the old category until the change has landed (the `retire-base-image-scan-categories` job does this; on `main` it also closes the category's remaining alerts as fixed), then delete the configuration from *Security > Code scanning > Tool status* and remove the job. Deletion is UI/API-only, so it cannot be folded into the workflow.
+**Retiring a code scanning category.** Code scanning remembers every SARIF category a workflow has uploaded for `main` as a "configuration", and the per-tool merge check compares each PR against all of them: a PR whose workflow stops uploading a category is reported as "configurations present on main were not found" and the ruleset's code-scanning requirement blocks the merge with every job green (seen on #1637 when the base-image scan became the built-image scan). Two steps retire one cleanly: keep uploading an empty analysis under the old category until the change has landed (a small matrix job writing a SARIF file with no results and passing it to `upload-sarif` with the old `category`; on `main` that also closes the category's remaining alerts as fixed), then delete every analysis in the category and remove the job. Deletion is API-only (the Tool status page lists configurations but cannot delete them), and the API deletes one *set* at a time (one set per category per git ref), so it has to be driven to exhaustion:
+
+```bash
+repo=repos/TetronIO/JIM
+while :; do
+  urls=$(gh api "$repo/code-scanning/analyses?tool_name=Trivy&per_page=100" --paginate \
+    --jq '.[] | select((.category|startswith("<old-category-prefix>")) and .deletable==true) | .url')
+  [ -z "$urls" ] && break
+  for url in $urls; do
+    while [ -n "$url" ]; do
+      url=$(gh api -X DELETE "$url?confirm_delete" --jq '.next_analysis_url // empty' 2>/dev/null) || break
+    done
+  done
+done
+```
+
+Budget for it: retiring the three base-image categories on #1637 meant about 8,000 deletions against the 5,000-per-hour API limit, so run it detached (`nohup`) with a retry on rate-limit refusals, and expect it to take a couple of hours.
 
 **Why this matters**: `System.DirectoryServices.Protocols` (the .NET LDAP client) P/Invokes into the native `libldap` shared library at runtime. An incompatible libldap version could cause silent behavioural differences or crashes during LDAP/AD operations.
 
