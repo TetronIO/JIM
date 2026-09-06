@@ -433,16 +433,18 @@ public class SynchronisationController(
         _logger.LogInformation("Bulk updating {Count} attributes for object type {ObjectTypeId} in Connected System {SystemId}",
             attributeCount, objectTypeId, connectedSystemId);
 
-        if (request.Attributes == null || request.Attributes.Count == 0)
-        {
-            return BadRequest(ApiErrorResponse.BadRequest("Attributes dictionary cannot be null or empty."));
-        }
-
+        // Settle who is calling before looking at what they sent: the identity check must not
+        // sit behind a condition the request body controls.
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for bulk attribute update");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        if (request.Attributes == null || request.Attributes.Count == 0)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest("Attributes dictionary cannot be null or empty."));
         }
 
         // Verify Connected System exists (Core retrieval — BulkUpdateAttributesAsync only reads

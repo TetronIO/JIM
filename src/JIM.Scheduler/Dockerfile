@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 # jim-compliance: production-image
 # This image ships to customers. Base image digest pinning is enforced by CI
-# (see .github/workflows/ci.yml scan-base-images job). Do not remove the
+# (see .github/workflows/ci.yml discover-base-images job). Do not remove the
 # @sha256: digest from any FROM line or this Dockerfile will fail CI.
 # See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:acad02eb5c4fbf57d15296f9c08d56cd4036e915bdae5b4dd48a06523d452617 AS base
+FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:a365ce6a50b09176855d085c69da3fc1204a48432e36087e9a208f6e5860e235 AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Scheduler"
@@ -18,6 +18,16 @@ LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
 LABEL org.opencontainers.image.licenses="See https://junctional.io/license"
 WORKDIR /app
 
+# Apply Ubuntu's published fixes at build time. Microsoft rebuilds the base image on its own
+# cadence, so a digest can trail the noble archive by weeks; upgrading here is what makes the
+# shipped image carry the fixes rather than wait for the rebuild. It runs before the pinned
+# installs so a pin is never silently moved: a pin older than what the upgrade installed fails
+# the build outright (and apt-pin-check will already have proposed the bump).
+# See engineering/DEPENDENCY_PINNING.md.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create data directories writeable by non-root user before switching
 # Note: no LDAP/Kerberos packages needed; Scheduler only queues WorkerTasks,
 # it never communicates with connected systems directly.
@@ -27,7 +37,7 @@ RUN mkdir -p /data/keys /var/log/jim \
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:e1fc6e423f543119c406d24e2e687d67c569f18f04a37a8b0005d80ad0dcee80 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:e1ffd2a92ae84c1291bc1b6887501f8af98e6331e7af6d4c8d37168c5e87a64c AS build
 # Corporate networks routinely inspect outbound TLS by re-signing it with their own authority, which
 # breaks certificate validation for every package restore inside the build. Supplying that authority
 # here (base64 of a PEM bundle) lets the build trust it; empty (the default) is a no-op. Build-stage

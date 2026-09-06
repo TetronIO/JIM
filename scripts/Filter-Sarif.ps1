@@ -19,8 +19,21 @@
     list is read from the same paths-ignore block the interpreted languages use, so there is exactly
     one place a path is excluded, and this script cannot drift from it.
 
-    Every removed result is logged individually (rule id and file), so a filtered upload never reads
-    as "the analysis found nothing there"; the log says what was dropped and why.
+    Two rules decide what is removed:
+
+      1. A result whose primary location is inside an excluded path.
+
+      2. A result whose taint source is inside an excluded path. Unit tests read fixture hostnames
+         from environment variables and hand them to the connector under test; CodeQL treats the
+         environment variable read as sensitive, follows it into the connector's own log calls, and
+         reports "clear-text storage" against shipped code. The alert lives in src/, so rule 1 never
+         sees it, but the only thing that makes it an alert is the excluded test file at the other
+         end of the flow. A result is removed on this rule only when EVERY code flow it carries
+         starts in an excluded path: one flow from shipped code is a real finding.
+
+    Every removed result is logged individually (rule id, file, and for rule 2 the excluded source),
+    so a filtered upload never reads as "the analysis found nothing there"; the log says what was
+    dropped and why.
 
 .PARAMETER SarifDirectory
     Directory containing the .sarif file(s) the analysis produced. Searched recursively; the files
@@ -97,6 +110,23 @@ function Test-ExcludedPath([string]$uri) {
     return $false
 }
 
+# Rule 2 above. A result carrying code flows is a taint-tracking finding, and each flow's first
+# step is the source that makes it one. Returns the distinct excluded source paths when every flow
+# starts inside an excluded path, and $null otherwise (no flows, or at least one flow from code
+# that is in scope). The comma keeps a single-element result an array rather than a bare string.
+function Get-ExcludedSources($result) {
+    $flows = @($result.codeFlows | Where-Object { $null -ne $_ })
+    if ($flows.Count -eq 0) { return $null }
+
+    $sources = [System.Collections.Generic.List[string]]::new()
+    foreach ($flow in $flows) {
+        $first = $flow.threadFlows[0].locations[0].location.physicalLocation.artifactLocation.uri
+        if (-not $first -or -not (Test-ExcludedPath $first)) { return $null }
+        if (-not $sources.Contains($first)) { $sources.Add($first) }
+    }
+    return ,$sources.ToArray()
+}
+
 $sarifFiles = @(Get-ChildItem -Path $SarifDirectory -Filter '*.sarif' -Recurse -File)
 if ($sarifFiles.Count -eq 0) {
     throw "No .sarif files found under ${SarifDirectory}. The analysis output path and the filter step's input have diverged."
@@ -119,10 +149,17 @@ foreach ($file in $sarifFiles) {
             if ($uri -and (Test-ExcludedPath $uri)) {
                 $totalRemoved++
                 Write-Host "  Removed: $($result.ruleId) at $uri"
+                continue
             }
-            else {
-                $kept.Add($result)
+
+            $excludedSources = Get-ExcludedSources $result
+            if ($excludedSources) {
+                $totalRemoved++
+                Write-Host "  Removed: $($result.ruleId) at $uri (every code flow starts in an excluded path: $($excludedSources -join ', '))"
+                continue
             }
+
+            $kept.Add($result)
         }
 
         $run.results = $kept.ToArray()
@@ -132,5 +169,5 @@ foreach ($file in $sarifFiles) {
     if ($totalRemoved -gt 0) {
         $sarif | ConvertTo-Json -Depth 100 -Compress | Set-Content $file.FullName -NoNewline
     }
-    Write-Host "$($file.Name): kept $totalKept result(s), removed $totalRemoved from excluded paths."
+    Write-Host "$($file.Name): kept $totalKept result(s), removed $totalRemoved reported in, or sourced from, excluded paths."
 }
