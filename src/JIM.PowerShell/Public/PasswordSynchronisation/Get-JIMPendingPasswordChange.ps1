@@ -11,12 +11,15 @@ function Get-JIMPendingPasswordChange {
         per identity per Connected System, naming both, so a list reads as people and systems rather than
         identifiers.
 
-        A change is in one of four states:
+        A change is in one of five states:
 
         - Pending: JIM still intends to deliver it. Read the Due and Held properties alongside this, which say
-          whether the next delivery pass would attempt it: a Pending change may be waiting out a retry backoff,
-          or be Held because Password Synchronisation is switched off on its Connected System. A held change is
-          never due; switching the system on delivers everything that accumulated for it.
+          whether the Password Delivery Service would attempt it now: a Pending change may be waiting out a
+          retry backoff, or be Held because Password Synchronisation is switched off on its Connected System. A
+          held change is never due; switching the system on delivers everything that accumulated for it.
+        - Delivering: the Password Delivery Service has claimed it and is writing it to the Connected System
+          right now. Momentary; it is gone once the target has the password, or back to Pending or Parked if
+          the target refused.
         - Parked: the target refused it, or it ran out of attempts. JIM has stopped trying and it waits on a
           person. FailureReason and TargetMessage say why, in the target's own words.
         - Expired: it outlived its Connected System's time to live. The password it carried is gone and nothing
@@ -30,7 +33,7 @@ function Get-JIMPendingPasswordChange {
         Restrict to one Connected System. Accepts a Connected System from the pipeline.
 
     .PARAMETER Status
-        Restrict to one state: Pending, Parked, Expired or Cancelled.
+        Restrict to one state: Pending, Delivering, Parked, Expired or Cancelled.
 
     .PARAMETER FailureReason
         Restrict to changes whose last attempt failed this way. Only meaningful for changes that have been
@@ -94,8 +97,8 @@ function Get-JIMPendingPasswordChange {
     .EXAMPLE
         Get-JIMPendingPasswordChange -Status Pending | Where-Object { -not $_.Due -and -not $_.Held }
 
-        Lists changes waiting out a retry backoff, as opposed to those the next delivery pass will attempt or
-        those held behind a Connected System that is switched off.
+        Lists changes waiting out a retry backoff, as opposed to those the Password Delivery Service is about
+        to attempt or those held behind a Connected System that is switched off.
 
     .EXAMPLE
         Get-JIMPendingPasswordChange -Status Pending -All | Where-Object Held |
@@ -120,7 +123,7 @@ function Get-JIMPendingPasswordChange {
 
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
-        [ValidateSet('Pending', 'Parked', 'Expired', 'Cancelled')]
+        [ValidateSet('Pending', 'Delivering', 'Parked', 'Expired', 'Cancelled')]
         [string]$Status,
 
         [Parameter(ParameterSetName = 'List')]

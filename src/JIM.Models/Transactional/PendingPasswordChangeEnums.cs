@@ -57,5 +57,21 @@ public enum PendingPasswordChangeStatus
     /// can retry the row back into the queue until its time to live runs out.
     /// </para>
     /// </summary>
-    Cancelled = 3
+    Cancelled = 3,
+
+    /// <summary>
+    /// The Password Delivery Service has claimed the change and is delivering it now.
+    /// <para>
+    /// A claim is what stops two deliverers (two Worker replicas, or one lane overlapping a safety poll) sending
+    /// the same password twice, and what lets the person who asked for the change be shown "delivering" rather
+    /// than "waiting". It is held under a lease: a deliverer that dies mid-flight leaves the row here, and once
+    /// the lease has run out the row is claimable again, which is the only way out of this state that does not
+    /// pass through the deliverer's own outcome write.
+    /// </para>
+    /// <para>
+    /// Not a terminal state and not a waiting one. The queue page groups it with Pending as "Waiting"; the
+    /// retention cleanup never removes it; expiry never touches it.
+    /// </para>
+    /// </summary>
+    Delivering = 4
 }

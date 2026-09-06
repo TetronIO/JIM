@@ -182,8 +182,14 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<PendingPasswordChange>> GetDuePasswordChangesAsync(int connectedSystemId, DateTime asOf, int maximum)
         => _inner.GetDuePasswordChangesAsync(connectedSystemId, asOf, maximum);
 
-    public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf)
-        => _inner.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf);
+    public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf, TimeSpan claimLease)
+        => _inner.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf, claimLease);
+
+    public Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+        => _inner.GetPasswordQueueDeliveryOutlookAsync(asOf, claimLease);
+
+    public Task<List<PendingPasswordChange>> GetPasswordChangesByActivityAsync(Guid activityId)
+        => _inner.GetPasswordChangesByActivityAsync(activityId);
 
     public Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds)
         => _inner.GetPasswordQueueAttentionAsync(connectedSystemIds);
@@ -396,6 +402,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(QueuePasswordChangesAsync));
+
+    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum)
+        => throw new PreviewWriteAttemptedException(nameof(ClaimDuePasswordChangesAsync));
+
+    public Task<int> ReleasePasswordChangeClaimsAsync(IEnumerable<Guid> ids)
+        => throw new PreviewWriteAttemptedException(nameof(ReleasePasswordChangeClaimsAsync));
 
     public Task RecordPasswordChangeAttemptsAsync(IEnumerable<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(RecordPasswordChangeAttemptsAsync));

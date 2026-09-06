@@ -81,7 +81,6 @@ internal static class WorkerCurrentWork
         DeleteSyncRuleWorkerTask => "Synchronisation Rule deletion",
         SchemaRefreshRemovalWorkerTask => "Schema refresh",
         ClearConnectedSystemObjectsWorkerTask => "Connector Space clear",
-        PasswordDeliveryWorkerTask => "Password delivery",
         ConfigurationChangePreviewWorkerTask => "Configuration change preview",
         TemporalScopeReconciliationWorkerTask => "Temporal scope reconciliation",
         HistoryRetentionCleanupWorkerTask => "History retention cleanup",

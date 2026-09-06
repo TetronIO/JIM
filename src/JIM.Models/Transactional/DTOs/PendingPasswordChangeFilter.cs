@@ -24,6 +24,12 @@ public class PendingPasswordChangeFilter
 
     /// <summary>
     /// Restrict to one status, or null for every status.
+    /// <para>
+    /// <see cref="PendingPasswordChangeStatus.Pending"/> is wider than the enum value: it also returns a change the
+    /// Password Delivery Service has claimed (<see cref="PendingPasswordChangeStatus.Delivering"/>), because from the
+    /// administrator's side both are waiting and the queue summary counts them together (#1635). Ask for Delivering
+    /// by name to see only those. Every other status matches exactly.
+    /// </para>
     /// </summary>
     public PendingPasswordChangeStatus? Status { get; set; }
 

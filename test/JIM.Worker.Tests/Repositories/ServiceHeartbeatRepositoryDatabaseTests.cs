@@ -150,7 +150,7 @@ public class ServiceHeartbeatRepositoryDatabaseTests
         using var repository = NewRepository();
 
         await repository.System.UpsertServiceHeartbeatAsync(Heartbeat(JimService.WorkerSync, "host-a1b2c3", T0));
-        await repository.System.UpsertServiceHeartbeatAsync(Heartbeat(JimService.WorkerPasswordDelivery, "host-a1b2c3", T0));
+        await repository.System.UpsertServiceHeartbeatAsync(Heartbeat(JimService.WorkerDelivery, "host-a1b2c3", T0));
 
         await using var read = NewContext();
         Assert.That(await read.ServiceHeartbeats.CountAsync(), Is.EqualTo(2));

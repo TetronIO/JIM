@@ -4,14 +4,86 @@ title: Password Synchronisation
 
 # Password Synchronisation
 
-These cmdlets are the queue behind [Password Synchronisation](../concepts/passwords.md#-password-synchronisation): the password changes on their way to your Connected Systems, and the two things you can do about the ones that are stuck.
+These cmdlets put a password change on the [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) queue, read the queue (the password changes on their way to your Connected Systems), and do the two things you can do about the ones that are stuck.
 
-They exist because a recovery is not a job for a browser. When a directory has been refusing passwords and somebody has finally fixed the cause, what you want is one command that releases everything parked behind it, not a page of rows to click through.
-
-`Sync-JIMMetaverseObjectPassword` ([Metaverse](metaverse.md)) is what puts a change on this queue in the first place.
+The queue cmdlets exist because a recovery is not a job for a browser. When a directory has been refusing passwords and somebody has finally fixed the cause, what you want is one command that releases everything parked behind it, not a page of rows to click through.
 
 !!! note "No password is ever returned"
     Nothing here returns a password, in any form. The queued value is encrypted in the database and has no representation in any response.
+
+---
+
+## Sync-JIMMetaverseObjectPassword
+
+Records that a person's password has changed and queues it for every Connected System enabled for Password Synchronisation in which they have an account.
+
+By default it returns as soon as the change is recorded; the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) makes the first attempt within about a second, whatever the synchronisation engine is doing. Pass `-Wait` to be told what each system did with the password before the command returns.
+
+This is not `Set-JIMMetaverseObjectPassword` ([Metaverse](metaverse.md#set-jimmetaverseobjectpassword)), which sets a password you choose on the accounts you name, immediately, and reports per account. Use this one when the person has changed their own password somewhere and the rest should catch up.
+
+### Syntax
+
+```powershell
+Sync-JIMMetaverseObjectPassword -Id <guid> -Password <securestring> [-ExpiryBehaviour <string>] [-Wait <int>]
+                                [-Force] [-WhatIf] [-Confirm]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes | | The Metaverse Object whose password changed. Accepts pipeline input by property name, so `Get-JIMMetaverseObject` output can be piped in. |
+| `Password` | `securestring` | Yes | | The new password. Encrypted before JIM stores it; never logged, returned or recorded on an Activity. |
+| `ExpiryBehaviour` | `string` | No | `ExpiresAccordingToTargetPolicy` | One of `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy`, `NeverExpires`. The default suits a password the person chose themselves. |
+| `Wait` | `int` | No | `0` | How many seconds, 0 to 30, to wait for the systems to answer. The wait ends early once every target has settled. A script that needs to watch for longer should poll `Get-JIMPendingPasswordChange -MetaverseObjectId` instead. |
+| `Force` | `switch` | No | | Skip the confirmation prompt. |
+
+Which systems receive the password is their own configuration, not a choice made here; a system with Password Synchronisation switched off still accumulates the change and receives it when switched back on.
+
+### Output
+
+A `PSCustomObject` describing what was queued and, if you waited, where it got to:
+
+| Property | Description |
+|----------|-------------|
+| `ActivityId` | The Activity recording the change. Its child Activities hold each system's outcome once delivery has been attempted. |
+| `Settled` | Whether every target had reached an outcome a caller need not wait on by the time the command returned. Without `-Wait` this is `$false` unless nothing was queued. A target that is retrying counts as settled: its next attempt is minutes away. |
+| `QueuedForNoSystems` | `$true` when no Connected System the person has an account in is enabled for Password Synchronisation, so nothing was queued. Worth checking: silence here would let a script believe a password propagated when nothing was recorded. |
+| `Targets` | One entry per Connected System the change was queued for, in name order. |
+
+Each entry under `Targets`:
+
+| Property | Description |
+|----------|-------------|
+| `ConnectedSystemId`, `ConnectedSystemName` | Where it is going. |
+| `Enabled` | Whether the system is currently taking synchronised passwords. `$false` means the change is held until somebody switches it on. |
+| `ConnectedSystemObjectId` | The account the password is aimed at, or `$null` where the person has no account in this system yet; the change is queued regardless, bounded by its time to live, so it lands when provisioning catches up. |
+| `State` | `Queued`, `Delivering`, `Set`, `Retrying`, `Parked`, `Held`, `Expired` or `Cancelled`. |
+| `NextAttemptAt` | When the next attempt falls due, for a target that is `Retrying`; `$null` otherwise. |
+| `Message` | The target's own words on its most recent outcome (why it refused, or that the password was set), or `$null` before anything has been said. |
+| `AttemptCount` | How many delivery attempts this system has had. |
+
+### Examples
+
+```powershell title="Record a password change and return at once"
+$password = Read-Host -AsSecureString "New password"
+Sync-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -Password $password
+```
+
+```powershell title="Wait up to ten seconds and report which systems took the password"
+$result = Sync-JIMMetaverseObjectPassword -Id $id -Password $password -Wait 10 -Force
+$result.Targets | Select-Object ConnectedSystemName, State, Message
+if (-not $result.Settled) {
+    Write-Warning "Not every system had answered after 10 seconds; check the person's Password Synchronisation tab."
+}
+```
+
+A service desk script uses this to tell the caller their reset has landed before they hang up: `State` is `Set` where it has, `Retrying` with a `NextAttemptAt` where a directory was unreachable, and `Parked` with the directory's own `Message` where it refused.
+
+```powershell title="Catch the case where nothing was queued"
+$result = Sync-JIMMetaverseObjectPassword -Id $id -Password $password -Force
+if ($result.QueuedForNoSystems) { Write-Warning "No system takes synchronised passwords for this person." }
+```
 
 ---
 
@@ -41,7 +113,7 @@ Get-JIMPendingPasswordChange -Summary
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | No | | Restrict to one Connected System. Accepts pipeline input by property name, so a Connected System can be piped in. |
-| `Status` | `string` | No | | One of `Pending`, `Parked`, `Expired`, `Cancelled`. |
+| `Status` | `string` | No | | One of `Pending`, `Delivering`, `Parked`, `Expired`, `Cancelled`. |
 | `FailureReason` | `string` | No | | One of `None`, `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound`, `UnsupportedOperation`. Only meaningful for changes that have been attempted. |
 | `MetaverseObjectId` | `guid` | No | | Restrict to one identity's queued changes. |
 | `Search` | `string` | No | | Free-text search over the identity and Connected System names. |
@@ -63,8 +135,8 @@ In the default and `-All` parameter sets, one `PSCustomObject` per queued change
 | `MetaverseObjectId`, `MetaverseObjectDisplayName` | The person whose password this is. |
 | `MetaverseObjectTypePluralName` | Their Metaverse Object Type's plural name, which is what a link to them is built from. |
 | `ConnectedSystemId`, `ConnectedSystemName` | Where it is going. |
-| `Status` | `Pending`, `Parked`, `Expired` or `Cancelled`. |
-| `Due` | Whether a delivery pass would attempt this change right now. A `Pending` change may be waiting out a retry backoff, or be `Held`, neither of which `Status` alone can tell you. Never `$true` while `Held` is. |
+| `Status` | `Pending`, `Delivering`, `Parked`, `Expired` or `Cancelled`. `Delivering` is momentary: the Password Delivery Service is writing the change to the Connected System right now. |
+| `Due` | Whether the Password Delivery Service would attempt this change now. A `Pending` change may be waiting out a retry backoff, or be `Held`, neither of which `Status` alone can tell you. Never `$true` while `Held` is. |
 | `Held` | Whether the change is waiting on Password Synchronisation being switched back on for its Connected System, rather than on JIM. A switched-off system accumulates changes instead of discarding them; switching it on delivers what accumulated. |
 | `FailureReason`, `TargetMessage` | How the last attempt failed, and the target's own words. Both `$null` for a change that has not been attempted. |
 | `AttemptCount` | How many delivery attempts have been made. |
@@ -109,7 +181,7 @@ Get-JIMPendingPasswordChange -Status Pending -All |
 
 ## Resume-JIMPendingPasswordChange
 
-Makes matching changes due immediately and raises a delivery pass for them.
+Makes matching changes due immediately. The Password Delivery Service is woken by the change and attempts them within about a second, whatever the synchronisation engine is doing.
 
 Run it once the reason a Connected System was refusing passwords has been dealt with. It applies to `Pending`, `Parked` and `Cancelled` changes; an `Expired` change is left alone, because the password it carried is gone. Retrying clears the failure recorded against a change and resets its attempt count.
 
@@ -211,6 +283,6 @@ Stop-JIMPendingPasswordChange -MetaverseObjectId 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3
 
 ## Related
 
-- [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) explains what the queue is and how a change moves through it
-- [Metaverse](metaverse.md) covers `Sync-JIMMetaverseObjectPassword`, which puts changes on this queue
+- [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) explains what the queue is and how a change moves through it, and [The Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) what delivers it
+- [Metaverse](metaverse.md#set-jimmetaverseobjectpassword) covers `Set-JIMMetaverseObjectPassword`, which sets a chosen password on named accounts immediately rather than through this queue
 - [Connected Systems](connected-systems.md) covers `Get-` and `Set-JIMConnectedSystemPasswordSynchronisation`, which decide which systems receive them

@@ -11,7 +11,7 @@ public class ServiceHealthReport
 {
     /// <summary>
     /// One entry per <see cref="JimService"/>, always present and always in the order WorkerSync,
-    /// WorkerPasswordDelivery, Scheduler, so a display can rely on the position. A service that has never reported
+    /// WorkerDelivery, Scheduler, so a display can rely on the position. A service that has never reported
     /// is present as <see cref="ServiceHealthStatus.Unhealthy"/> (never started) rather than missing.
     /// </summary>
     public List<ServiceHealth> Services { get; set; } = [];

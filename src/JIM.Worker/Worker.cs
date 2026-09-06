@@ -759,35 +759,6 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
-                                case PasswordDeliveryWorkerTask passwordDeliveryTask:
-                                {
-                                    Log.Information("ExecuteAsync: PasswordDeliveryWorkerTask received for Connected System {ConnectedSystemId}, initiated by: {InitiatedBy}",
-                                        passwordDeliveryTask.ConnectedSystemId, LogSanitiser.Sanitise(passwordDeliveryTask.InitiatedByName) ?? "Unknown");
-
-                                    try
-                                    {
-                                        // Every outcome that belongs to a queued password change is recorded on the change
-                                        // itself by the pass, including the ones that failed. What reaches this catch is a
-                                        // failure of the pass as a whole, which belongs on the Activity.
-                                        var deliveryResult = await taskJim.PasswordSynchronisation.DeliverDueAsync(
-                                            passwordDeliveryTask.ConnectedSystemId, DateTime.UtcNow, cancellationTokenSource.Token);
-
-                                        // Null where the pass had nothing to do, which is the common case for the
-                                        // housekeeping trigger: an Activity saying "nothing happened" reads as an outcome.
-                                        newWorkerTask.Activity.Message = deliveryResult.Describe();
-                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
-
-                                        Log.Information("ExecuteAsync: Password delivery completed in {ExecutionTime}: {Visited} Connected System(s) visited, {Delivered} password change(s) delivered.",
-                                            newWorkerTask.Activity.ExecutionTime, deliveryResult.ConnectedSystemsVisited, deliveryResult.DeliveredCount);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
-                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst delivering queued password changes.");
-                                    }
-
-                                    break;
-                                }
                                 case TemporalScopeReconciliationWorkerTask:
                                 {
                                     Log.Information("ExecuteAsync: TemporalScopeReconciliationWorkerTask received, initiated by: {InitiatedBy}",
@@ -1004,22 +975,9 @@ public class Worker : BackgroundService
             Log.Error(ex, "PerformHousekeepingAsync: Error during housekeeping");
         }
 
-        try
-        {
-            // Password Synchronisation (#1119). Queued password work is normally delivered by a pass raised the
-            // moment it is queued, but a retry falls due later with nothing else happening in the system to
-            // notice it. This idle tick is what catches those. The request is de-duplicated against passes
-            // already waiting to run, so a busy queue does not accumulate identical ones.
-            if (await jim.PasswordSynchronisation.HasWorkDueAsync(DateTime.UtcNow))
-                await jim.Tasking.RequestPasswordDeliveryAsync(null, "Password Synchronisation");
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Same boundary as the housekeeping catch above: an escape here would take the worker's idle loop
-            // down, and the next tick is sixty seconds away in any case. Cancellation is excluded deliberately:
-            // a worker shutting down must propagate, not be logged as a failure and carried on through.
-            Log.Error(ex, "PerformHousekeepingAsync: Error requesting a Password Synchronisation delivery pass");
-        }
+        // Password Synchronisation delivery used to be requested from here as a Worker Task, on a sixty-second tick
+        // that was the only thing catching a retry. It is now the Password Delivery Service's own loop (#1635):
+        // woken by the queue's row changes, by the earliest scheduled retry, and by a safety poll of its own.
 
         // History retention cleanup used to run here, on a six-hourly timer. It now runs as a step on the built-in
         // History Retention Cleanup Schedule (#1118), which gives it an execution history, a next run time, and the

@@ -25,7 +25,7 @@ public static class ServiceHealthDisplay
     public static string Label(JimService service) => service switch
     {
         JimService.WorkerSync => "Worker · Sync",
-        JimService.WorkerPasswordDelivery => "Worker · Passwords",
+        JimService.WorkerDelivery => "Worker · Passwords",
         JimService.Scheduler => "Scheduler",
         _ => service.ToString()
     };
@@ -189,7 +189,7 @@ public static class ServiceHealthDisplay
         // Until the Worker reports a separate password delivery loop, the synchronisation loop is simply "the
         // Worker", and a Worker that is down delivers nothing either; the finer naming below only earns its place
         // once both loops are in the report.
-        var deliveryReported = considered.Any(s => s.Service == JimService.WorkerPasswordDelivery);
+        var deliveryReported = considered.Any(s => s.Service == JimService.WorkerDelivery);
 
         var down = considered.Where(s => s.Status == ServiceHealthStatus.Unhealthy).ToList();
         if (down.Count > 0)
@@ -203,7 +203,7 @@ public static class ServiceHealthDisplay
     {
         var syncDown = down.Any(s => s.Service == JimService.WorkerSync);
         // With no delivery loop in the report, the synchronisation loop down is the whole Worker down.
-        var passwordsDown = down.Any(s => s.Service == JimService.WorkerPasswordDelivery) || (syncDown && !deliveryReported);
+        var passwordsDown = down.Any(s => s.Service == JimService.WorkerDelivery) || (syncDown && !deliveryReported);
         var schedulerDown = down.Any(s => s.Service == JimService.Scheduler);
 
         // Both Worker services down is the Worker down: name it once. One of them alone is named precisely, because
@@ -249,7 +249,7 @@ public static class ServiceHealthDisplay
             var name = s.Service switch
             {
                 JimService.WorkerSync => "The Worker",
-                JimService.WorkerPasswordDelivery => "The Worker's password delivery service",
+                JimService.WorkerDelivery => "The Worker's password delivery service",
                 _ => "The Scheduler"
             };
             var since = s.LastProgressAt is { } lastProgressAt ? $" for {LongDuration(asOf - lastProgressAt)}" : string.Empty;

@@ -31,6 +31,13 @@ public class PasswordDeliveryRunResult
     public int ExpiredCount { get; set; }
 
     /// <summary>
+    /// Changes the lane claimed and then gave back unattempted because it was cancelled before reaching them
+    /// (#1635). Nothing was counted against them; they are Pending and due again. Not a problem to report, since
+    /// the cancellation was asked for, but a number the lane's summary line should carry.
+    /// </summary>
+    public int ReleasedCount { get; set; }
+
+    /// <summary>
     /// True where the Connector could not open its password channel at all, so nothing was attempted. Reported
     /// once for the pass rather than as a failure per change, which would inflate every attempt count for a
     /// problem that belongs to the connection.

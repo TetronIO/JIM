@@ -4189,6 +4189,13 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("CancelledByName")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClaimedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
@@ -4405,22 +4412,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasBaseType("JIM.Models.Tasking.WorkerTask");
 
                     b.HasDiscriminator().HasValue("HistoryRetentionCleanupWorkerTask");
-                });
-
-            modelBuilder.Entity("JIM.Models.Tasking.PasswordDeliveryWorkerTask", b =>
-                {
-                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
-
-                    b.Property<int?>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.ToTable("WorkerTasks", t =>
-                        {
-                            t.Property("ConnectedSystemId")
-                                .HasColumnName("PasswordDeliveryWorkerTask_ConnectedSystemId");
-                        });
-
-                    b.HasDiscriminator().HasValue("PasswordDeliveryWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.SchemaRefreshRemovalWorkerTask", b =>

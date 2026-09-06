@@ -4,7 +4,6 @@
 using JIM.Models.Core;
 using JIM.Models.Activities;
 using JIM.Models.Staging;
-using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
@@ -17,12 +16,11 @@ namespace JIM.Worker.Tests.Repositories;
 /// Real-PostgreSQL verification of the reads and writes the Password Synchronisation delivery pass depends on
 /// (#1119).
 /// <para>
-/// Two things here are structurally invisible to the unit suite. A Password Delivery task is stored table-per-
-/// hierarchy alongside every other Worker Task, so whether it persists at all, and whether the de-duplication
-/// read finds only tasks of its own type, are questions about the discriminator, and a mocked DbSet answers them
-/// in LINQ-to-objects where the discriminator does not exist. The delivery pass's Connected System load is a
+/// Two things here are structurally invisible to the unit suite. The delivery pass's Connected System load is a
 /// purpose-built Include set, and an Include that is missing shows up as a null navigation rather than an error;
-/// the in-memory provider populates navigations from its identity map regardless of what was included.
+/// the in-memory provider populates navigations from its identity map regardless of what was included. And the
+/// "which systems have work due" read joins the queue to each system's configuration, which the in-memory fake
+/// does not hold. The claim statement itself is covered in <see cref="PasswordDeliveryClaimDatabaseTests"/>.
 /// </para>
 /// <para>
 /// Opt-in via the same <c>JIM_TEST_RESET_*</c> environment variables as the other <c>RequiresPostgres</c>
@@ -74,123 +72,6 @@ public class PasswordDeliveryReadsDatabaseTests
                     EXECUTE 'TRUNCATE TABLE ""' || r.tablename || '"" RESTART IDENTITY CASCADE';
                 END LOOP;
             END $$;");
-    }
-
-    private static Activity NewActivity() => new()
-    {
-        Id = Guid.NewGuid(),
-        InitiatedByType = ActivityInitiatorType.System,
-        InitiatedByName = "Password Synchronisation",
-        TargetType = ActivityTargetType.PasswordSynchronisation,
-        TargetOperationType = ActivityTargetOperationType.Execute
-    };
-
-    /// <summary>
-    /// Queues a Password Delivery task through the repository, exactly as the tasking server does.
-    /// </summary>
-    private async Task<Guid> QueueDeliveryTaskAsync(int? connectedSystemId, WorkerTaskStatus status = WorkerTaskStatus.Queued)
-    {
-        var task = PasswordDeliveryWorkerTask.ForSystem("Password Synchronisation", connectedSystemId);
-        task.Activity = NewActivity();
-        task.Status = status;
-
-        await using var ctx = NewContext();
-        await new PostgresDataRepository(ctx).Tasking.CreateWorkerTaskAsync(task);
-        return task.Id;
-    }
-
-    [Test]
-    public async Task CreateWorkerTaskAsync_PasswordDeliveryTask_ActuallyPersistsAsync()
-    {
-        // The task type is stored table-per-hierarchy with every other Worker Task, and its case in the create
-        // switch is the only thing that saves it. A case that adds without saving leaves the queue empty and the
-        // worker with nothing to run, while every caller reports success.
-        var id = await QueueDeliveryTaskAsync(connectedSystemId: 4);
-
-        await using var verify = NewContext();
-        var stored = await verify.WorkerTasks.AsNoTracking().OfType<PasswordDeliveryWorkerTask>().SingleAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(stored.Id, Is.EqualTo(id));
-            Assert.That(stored.ConnectedSystemId, Is.EqualTo(4));
-            Assert.That(stored.Status, Is.EqualTo(WorkerTaskStatus.Queued));
-            Assert.That(stored.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
-        }
-    }
-
-    [Test]
-    public async Task CreateWorkerTaskAsync_EverySystem_PersistsANullConnectedSystemIdAsync()
-    {
-        await QueueDeliveryTaskAsync(connectedSystemId: null);
-
-        await using var verify = NewContext();
-        var stored = await verify.WorkerTasks.AsNoTracking().OfType<PasswordDeliveryWorkerTask>().SingleAsync();
-
-        Assert.That(stored.ConnectedSystemId, Is.Null);
-    }
-
-    [Test]
-    public async Task HasQueuedPasswordDeliveryTaskAsync_MatchesOnScopeAndStatusAsync()
-    {
-        await QueueDeliveryTaskAsync(connectedSystemId: 4);
-        await QueueDeliveryTaskAsync(connectedSystemId: 7, status: WorkerTaskStatus.Processing);
-
-        await using var ctx = NewContext();
-        var tasking = new PostgresDataRepository(ctx).Tasking;
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(await tasking.HasQueuedPasswordDeliveryTaskAsync(4), Is.True);
-            Assert.That(await tasking.HasQueuedPasswordDeliveryTaskAsync(5), Is.False,
-                "A pass aimed at one system does nothing for another.");
-            Assert.That(await tasking.HasQueuedPasswordDeliveryTaskAsync(null), Is.False,
-                "A pass over one system leaves every other system undelivered.");
-            Assert.That(await tasking.HasQueuedPasswordDeliveryTaskAsync(7), Is.False,
-                "A pass already running may have read the queue before this work reached it.");
-        }
-    }
-
-    [Test]
-    public async Task HasQueuedPasswordDeliveryTaskAsync_UnscopedPass_CoversEverySystemAsync()
-    {
-        await QueueDeliveryTaskAsync(connectedSystemId: null);
-
-        await using var ctx = NewContext();
-        var tasking = new PostgresDataRepository(ctx).Tasking;
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(await tasking.HasQueuedPasswordDeliveryTaskAsync(null), Is.True);
-            Assert.That(await tasking.HasQueuedPasswordDeliveryTaskAsync(4), Is.True);
-        }
-    }
-
-    [Test]
-    public async Task HasQueuedPasswordDeliveryTaskAsync_OnlySeesItsOwnTaskTypeAsync()
-    {
-        // The discriminator is what separates these rows, and a mocked DbSet has none.
-        var reconciliation = new TemporalScopeReconciliationWorkerTask
-        {
-            Id = Guid.NewGuid(),
-            InitiatedByType = ActivityInitiatorType.System,
-            Status = WorkerTaskStatus.Queued,
-            Activity = new Activity
-            {
-                Id = Guid.NewGuid(),
-                InitiatedByType = ActivityInitiatorType.System,
-                TargetType = ActivityTargetType.TemporalScopeReconciliation,
-                TargetOperationType = ActivityTargetOperationType.Execute
-            }
-        };
-
-        await using (var write = NewContext())
-            await new PostgresDataRepository(write).Tasking.CreateWorkerTaskAsync(reconciliation);
-
-        await using var ctx = NewContext();
-        var tasking = new PostgresDataRepository(ctx).Tasking;
-
-        Assert.That(await tasking.HasQueuedPasswordDeliveryTaskAsync(null), Is.False);
     }
 
     [Test]
@@ -316,7 +197,7 @@ public class PasswordDeliveryReadsDatabaseTests
 
         await using var ctx = NewContext();
         var systemIds = await new PostgresDataRepository(ctx).Sync
-            .GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime.UtcNow);
+            .GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime.UtcNow, PendingPasswordChange.ClaimLease);
 
         Assert.That(systemIds, Is.EqualTo(new[] { enabled }));
     }
@@ -341,7 +222,7 @@ public class PasswordDeliveryReadsDatabaseTests
 
         await using var ctx = NewContext();
         var systemIds = await new PostgresDataRepository(ctx).Sync
-            .GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime.UtcNow);
+            .GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime.UtcNow, PendingPasswordChange.ClaimLease);
 
         Assert.That(systemIds, Is.EqualTo(new[] { systemId }));
     }

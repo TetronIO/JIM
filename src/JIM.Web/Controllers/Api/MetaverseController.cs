@@ -6,6 +6,7 @@ using JIM.Web.Extensions.Api;
 using JIM.Web.Middleware.Api;
 using JIM.Models.Staging;
 using JIM.Web.Models.Api;
+using JIM.Web.Services;
 using JIM.Application;
 using JIM.Application.Exceptions;
 using JIM.Application.Services;
@@ -1411,9 +1412,16 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// This is not the same operation as setting a password on chosen accounts
     /// (`POST /synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password`), which
     /// sets a chosen password on one named account immediately and reports whether the target accepted it. This
-    /// one returns as soon
-    /// as the change is recorded: delivery runs on its own clock and retries, so a directory being unavailable
-    /// delays the password rather than losing it, and the caller is not held while every target is written to.
+    /// one returns as soon as the change is recorded, by default: the Password Delivery Service picks it up within
+    /// a second or so and retries on its own clock, so a directory being unavailable delays the password rather
+    /// than losing it, and the caller is not held while every target is written to.
+    ///
+    /// To be told how delivery went, pass `wait` (seconds, 0 to 30). The response is then `200` once every target
+    /// has settled, or `202 Accepted` with what is known when the time runs out; delivery continues either way. Each
+    /// target carries its `state` (`Queued`, `Delivering`, `Set`, `Retrying` with `nextAttemptAt`, `Parked` with
+    /// the target's `message`, `Held` behind a switched-off system, `Expired`, `Cancelled`), and `settled` says
+    /// whether anything is still in flight. Without `wait` the same fields are read once as the change is recorded,
+    /// so they usually read `Queued`. The Activity named by `activityId` is the durable record either way.
     ///
     /// The password is encrypted before it is stored and is never logged, never returned, and never recorded on
     /// an Activity. A newer change for the same person and system replaces an older undelivered one, so only the
@@ -1422,22 +1430,29 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// A change that reaches no system is still recorded and says so, rather than appearing to have propagated.
     /// </remarks>
     /// <param name="id">The unique identifier (GUID) of the Metaverse Object whose password changed.</param>
-    /// <param name="request">The password, and how it should behave once each target holds it.</param>
-    /// <response code="200">The change was recorded. The body names the Connected Systems it was queued for.</response>
-    /// <response code="400">No password was supplied.</response>
+    /// <param name="request">The password, how it should behave once each target holds it, and how long to wait for delivery.</param>
+    /// <param name="waiter">Waits on the change's outcomes when the request asks for it.</param>
+    /// <response code="200">The change was recorded and, where a wait was asked for, every target has settled. The body names the Connected Systems it was queued for and where each stands.</response>
+    /// <response code="202">A wait was asked for and ran out with a target still Queued or Delivering. The body carries what is known; delivery continues.</response>
+    /// <response code="400">No password was supplied, or `wait` is outside 0 to 30.</response>
     /// <response code="403">The transport is not one JIM will carry a password over.</response>
     /// <response code="404">No such Metaverse Object.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("objects/{id:guid}/password", Name = "SynchroniseMetaverseObjectPassword")]
     [RequireSecureTransport]
     [ProducesResponseType(typeof(SynchroniseMetaverseObjectPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SynchroniseMetaverseObjectPasswordResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> SynchroniseMetaverseObjectPasswordAsync(Guid id, [FromBody] SynchroniseMetaverseObjectPasswordRequest request)
+    public async Task<IActionResult> SynchroniseMetaverseObjectPasswordAsync(
+        Guid id,
+        [FromBody] SynchroniseMetaverseObjectPasswordRequest request,
+        [FromServices] IPasswordChangeOutcomeWaiter waiter)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(waiter);
 
         // Deliberately logs the identity rather than anything about the password. There is nothing about a
         // password value that belongs in a log line, including its length.
@@ -1452,6 +1467,14 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         if (string.IsNullOrWhiteSpace(request.Password))
             return BadRequest(ApiErrorResponse.BadRequest("A password is required."));
+
+        // Checked here as well as by the model's Range attribute so the answer is the same ApiErrorResponse shape
+        // as every other refusal from this endpoint, and so nothing is queued before the request is known to be sound.
+        if (request.Wait is < SynchroniseMetaverseObjectPasswordRequest.MinimumWaitSeconds or > SynchroniseMetaverseObjectPasswordRequest.MaximumWaitSeconds)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"wait must be between {SynchroniseMetaverseObjectPasswordRequest.MinimumWaitSeconds} and {SynchroniseMetaverseObjectPasswordRequest.MaximumWaitSeconds} seconds."));
+        }
 
         var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(id);
         if (metaverseObject == null)
@@ -1474,7 +1497,20 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             : await _application.PasswordSynchronisation.QueuePasswordChangeAsync(
                 id, displayName, request.Password, expiryBehaviour, initiatedBy, HttpContext.RequestAborted);
 
-        return Ok(SynchroniseMetaverseObjectPasswordResponse.FromResult(result));
+        // The propagate case returns on enqueue unless asked to wait (decision D6). A change queued for no systems
+        // has nothing to wait for either way. Without a wait the states are still read once, so the response has
+        // the same shape whichever way it was called; they will usually read Queued.
+        var wait = TimeSpan.FromSeconds(request.Wait ?? 0);
+        var outcomes = result.NoTargets
+            ? null
+            : wait > TimeSpan.Zero
+                ? await waiter.WaitForOutcomesAsync(result.ActivityId, wait, HttpContext.RequestAborted)
+                : await _application.PasswordSynchronisation.GetChangeOutcomesAsync(result.ActivityId);
+
+        var response = SynchroniseMetaverseObjectPasswordResponse.FromResult(result, outcomes);
+        return wait > TimeSpan.Zero && !response.Settled
+            ? Accepted(response)
+            : Ok(response);
     }
 
     /// <summary>

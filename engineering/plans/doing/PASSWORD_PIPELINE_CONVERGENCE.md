@@ -51,7 +51,7 @@ Settled during review (2026-09-05); the plan implements them rather than revisit
 
 ### Layer 1: Operations and Service Health
 
-**Data.** `ServiceHeartbeat` (`JIM.Models/System/`): `Id`, `Service` (`JimService` enum: `WorkerSync`, `WorkerPasswordDelivery`, `Scheduler`), `InstanceId` (host name plus a per-process id), `HostName`, `Version`, `StartedAt`, `LastSeenAt`, `CurrentWork` (nullable text, e.g. "Full Import: Corporate Directory"), `CurrentWorkStartedAt`, `LastProgressAt`, `Detail` (nullable text). Unique index on (`Service`, `InstanceId`). One migration.
+**Data.** `ServiceHeartbeat` (`JIM.Models/System/`): `Id`, `Service` (`JimService` enum: `WorkerSync`, `WorkerDelivery`, `Scheduler`), `InstanceId` (host name plus a per-process id), `HostName`, `Version`, `StartedAt`, `LastSeenAt`, `CurrentWork` (nullable text, e.g. "Full Import: Corporate Directory"), `CurrentWorkStartedAt`, `LastProgressAt`, `Detail` (nullable text). Unique index on (`Service`, `InstanceId`). One migration.
 
 **Writers.** `ServiceHeartbeatWriter` (JIM.Application) upserts a row every 5 s, called from the same place each loop touches the healthcheck file today (`Worker.cs`, `Scheduler.cs`). The Worker writes `CurrentWork` from its in-flight tasks. On startup a writer deletes rows for its own service older than 24 h.
 
@@ -71,7 +71,7 @@ Settled during review (2026-09-05); the plan implements them rather than revisit
 
 **Wake-up.** Triggers on `PendingPasswordChanges` insert, update and delete call `pg_notify('jim_password_change', <ConnectedSystemId>)`, following the pattern in `20260723204302_AddRealTimeNotificationTriggers`. The listener is `PostgresNotificationListener` (already in JIM.PostgresData).
 
-**Service.** `PasswordDeliveryService : BackgroundService` in JIM.Worker (registered with `AddHostedService` and `BackgroundServiceExceptionBehavior.Ignore`, wrapped in its own catch-all with a restart delay). Loop: wait on (notification | earliest `NextRetryAt` | 30 s safety poll); for each Connected System with due rows run one lane; lanes run in parallel across systems, bounded by a semaphore of 4, sequential within a system. A lane: claim, expire outlived rows, open the password channel once, deliver each row through the existing `DeliverOneAsync` logic, close, persist attempts, delete delivered. Writes the `WorkerPasswordDelivery` heartbeat with `CurrentWork` and queue counts. Uses a fresh `JimApplication` per lane, as worker tasks do.
+**Service.** `PasswordDeliveryService : BackgroundService` in JIM.Worker (registered with `AddHostedService` and `BackgroundServiceExceptionBehavior.Ignore`, wrapped in its own catch-all with a restart delay). Loop: wait on (notification | earliest `NextRetryAt` | 30 s safety poll); for each Connected System with due rows run one lane; lanes run in parallel across systems, bounded by a semaphore of 4, sequential within a system. A lane: claim, expire outlived rows, open the password channel once, deliver each row through the existing `DeliverOneAsync` logic, close, persist attempts, delete delivered. Writes the `WorkerDelivery` heartbeat with `CurrentWork` and queue counts. Uses a fresh `JimApplication` per lane, as worker tasks do.
 
 **Removed.** `PasswordDeliveryWorkerTask`, `TaskingServer.RequestPasswordDeliveryAsync`, `HasQueuedPasswordDeliveryTaskAsync`, the housekeeping tick request in `Worker.PerformHousekeepingAsync`, and the per-pass Activity. Retry from the queue page and `ReleaseForDeliveryAsync` just touch rows; the trigger wakes the service.
 

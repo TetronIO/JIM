@@ -94,11 +94,11 @@ Get-JIMServiceHealth -Summary
 
 ### Output
 
-By default, one `JIM.ServiceHealth` object per service, always three and always in this order: `WorkerSync`, `WorkerPasswordDelivery`, `Scheduler`. A service that has never reported is present as `Unhealthy` with the condition `NeverStarted` rather than missing, with the fields it cannot supply set to `$null`.
+By default, one `JIM.ServiceHealth` object per service, always three and always in this order: `WorkerSync`, `WorkerDelivery`, `Scheduler`. A service that has never reported is present as `Unhealthy` with the condition `NeverStarted` rather than missing, with the fields it cannot supply set to `$null`.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Service` | `string` | `WorkerSync` (the Worker's synchronisation loop), `WorkerPasswordDelivery` (the Worker's password delivery loop) or `Scheduler` |
+| `Service` | `string` | `WorkerSync` (the Worker's synchronisation loop), `WorkerDelivery` (the Worker's password delivery loop) or `Scheduler` |
 | `Status` | `string` | `Healthy`, `Degraded` or `Unhealthy`; the word to alert on. See [What Healthy, Degraded and Unhealthy mean](../configuration/operations.md#what-healthy-degraded-and-unhealthy-mean) |
 | `Condition` | `string` | Why it has that status: `Heartbeating`, `HeartbeatOverdue`, `Stalled`, `NoHeartbeat` or `NeverStarted` |
 | `Reason` | `string` | The condition in plain words with the figures that matter, e.g. `No heartbeat for 4 minutes` or `Never started` |

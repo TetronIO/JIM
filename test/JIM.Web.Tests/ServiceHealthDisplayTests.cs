@@ -20,7 +20,7 @@ public class ServiceHealthDisplayTests
     private static readonly DateTime AsOf = new(2026, 9, 5, 12, 0, 0, DateTimeKind.Utc);
 
     [TestCase(JimService.WorkerSync, "Worker · Sync")]
-    [TestCase(JimService.WorkerPasswordDelivery, "Worker · Passwords")]
+    [TestCase(JimService.WorkerDelivery, "Worker · Passwords")]
     [TestCase(JimService.Scheduler, "Scheduler")]
     public void Label_EachService_IsTheCardTitle(JimService service, string expected)
     {
@@ -69,7 +69,7 @@ public class ServiceHealthDisplayTests
     {
         var report = Report(
             Derive(JimService.WorkerSync, 30),
-            Derive(JimService.WorkerPasswordDelivery, 2),
+            Derive(JimService.WorkerDelivery, 2),
             Derive(JimService.Scheduler, 3 * 60));
 
         Assert.That(ServiceHealthDisplay.Summary(report), Is.EqualTo("1 service unhealthy, 1 degraded"));
@@ -154,7 +154,7 @@ public class ServiceHealthDisplayTests
     [Test]
     public void Activity_NeverStartedService_SaysSo()
     {
-        var service = SystemHealthServer.Derive(JimService.WorkerPasswordDelivery, null, AsOf);
+        var service = SystemHealthServer.Derive(JimService.WorkerDelivery, null, AsOf);
 
         using (Assert.EnterMultipleScope())
         {
@@ -168,7 +168,7 @@ public class ServiceHealthDisplayTests
     {
         var report = Report(
             Derive(JimService.WorkerSync, 2),
-            Derive(JimService.WorkerPasswordDelivery, 2),
+            Derive(JimService.WorkerDelivery, 2),
             Derive(JimService.Scheduler, 2));
 
         Assert.That(ServiceHealthDisplay.Banner(report), Is.Null);
@@ -179,7 +179,7 @@ public class ServiceHealthDisplayTests
     {
         var report = Report(
             Derive(JimService.WorkerSync, 30),
-            Derive(JimService.WorkerPasswordDelivery, 2),
+            Derive(JimService.WorkerDelivery, 2),
             Derive(JimService.Scheduler, 2));
 
         using (Assert.EnterMultipleScope())
@@ -194,7 +194,7 @@ public class ServiceHealthDisplayTests
     {
         var report = Report(
             Derive(JimService.WorkerSync, 4 * 60),
-            Derive(JimService.WorkerPasswordDelivery, 4 * 60),
+            Derive(JimService.WorkerDelivery, 4 * 60),
             Derive(JimService.Scheduler, 2));
 
         var banner = ServiceHealthDisplay.Banner(report);
@@ -216,7 +216,7 @@ public class ServiceHealthDisplayTests
         // to be told once that the Worker is gone, not twice in different words.
         var report = Report(
             Derive(JimService.WorkerSync, 4 * 60),
-            SystemHealthServer.Derive(JimService.WorkerPasswordDelivery, null, AsOf),
+            SystemHealthServer.Derive(JimService.WorkerDelivery, null, AsOf),
             Derive(JimService.Scheduler, 2));
 
         var banner = ServiceHealthDisplay.Banner(report);
@@ -231,7 +231,7 @@ public class ServiceHealthDisplayTests
         // Distinct from never started: this loop did exist and has gone quiet while its sibling is still alive.
         var report = Report(
             Derive(JimService.WorkerSync, 2),
-            Derive(JimService.WorkerPasswordDelivery, 4 * 60),
+            Derive(JimService.WorkerDelivery, 4 * 60),
             Derive(JimService.Scheduler, 2));
 
         var banner = ServiceHealthDisplay.Banner(report);
@@ -246,7 +246,7 @@ public class ServiceHealthDisplayTests
     {
         var report = Report(
             Derive(JimService.WorkerSync, 2),
-            Derive(JimService.WorkerPasswordDelivery, 2),
+            Derive(JimService.WorkerDelivery, 2),
             Derive(JimService.Scheduler, 3 * 60));
 
         var banner = ServiceHealthDisplay.Banner(report);
@@ -261,7 +261,7 @@ public class ServiceHealthDisplayTests
     {
         var report = Report(
             Derive(JimService.WorkerSync, 4 * 60),
-            Derive(JimService.WorkerPasswordDelivery, 4 * 60),
+            Derive(JimService.WorkerDelivery, 4 * 60),
             Derive(JimService.Scheduler, 3 * 60));
 
         var banner = ServiceHealthDisplay.Banner(report);
@@ -276,7 +276,7 @@ public class ServiceHealthDisplayTests
     {
         var report = Report(
             SystemHealthServer.Derive(JimService.WorkerSync, null, AsOf),
-            SystemHealthServer.Derive(JimService.WorkerPasswordDelivery, null, AsOf),
+            SystemHealthServer.Derive(JimService.WorkerDelivery, null, AsOf),
             SystemHealthServer.Derive(JimService.Scheduler, null, AsOf));
 
         var banner = ServiceHealthDisplay.Banner(report);
@@ -290,7 +290,7 @@ public class ServiceHealthDisplayTests
     {
         var report = Report(
             Derive(JimService.WorkerSync, 2, currentWork: "Full Import: Corporate Directory", progressAgeSeconds: 12 * 60),
-            Derive(JimService.WorkerPasswordDelivery, 2),
+            Derive(JimService.WorkerDelivery, 2),
             Derive(JimService.Scheduler, 2));
 
         var banner = ServiceHealthDisplay.Banner(report);
@@ -323,7 +323,7 @@ public class ServiceHealthDisplayTests
     {
         var report = Report(
             Derive(JimService.WorkerSync, 2, currentWork: "Full Import: Corporate Directory", progressAgeSeconds: 12 * 60),
-            Derive(JimService.WorkerPasswordDelivery, 2),
+            Derive(JimService.WorkerDelivery, 2),
             Derive(JimService.Scheduler, 3 * 60));
 
         var banner = ServiceHealthDisplay.Banner(report);

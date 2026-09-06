@@ -11,10 +11,11 @@ namespace JIM.Web.Services;
 
 /// <summary>
 /// Background service that bridges PostgreSQL NOTIFY events into JIM.Web (issue #307). It listens on the
-/// Worker Task change and Activity progress channels via <see cref="IDatabaseNotificationListener"/> and
-/// fans each notification out to the in-process <see cref="UiNotificationService"/> (for Blazor Server
-/// components) and the <see cref="JimNotificationHub"/> SignalR hub (for non-Blazor consumers). Activity
-/// progress bursts are debounced so a busy synchronisation run cannot flood the UI with re-renders. The
+/// Worker Task change, Activity progress and Password Synchronisation queue channels via
+/// <see cref="IDatabaseNotificationListener"/> and fans each notification out to the in-process
+/// <see cref="UiNotificationService"/> (for Blazor Server components) and, for the first two, the
+/// <see cref="JimNotificationHub"/> SignalR hub (for non-Blazor consumers). Activity progress and password queue
+/// bursts are debounced so a busy synchronisation run or a bulk enqueue cannot flood the UI with re-renders. The
 /// listener's connection state is mirrored into <see cref="UiNotificationService"/> so components can
 /// fall back to fast polling while real-time updates are unavailable. This service must never crash the
 /// application: every failure path is contained and the UI's polling fallback covers any gap.
@@ -22,6 +23,7 @@ namespace JIM.Web.Services;
 public sealed class NotificationListenerService : BackgroundService
 {
     private static readonly TimeSpan ActivityProgressQuietWindow = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan PasswordChangeQuietWindow = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan ListenerRestartDelay = TimeSpan.FromSeconds(5);
 
     private readonly IDatabaseNotificationListener _listener;
@@ -29,6 +31,7 @@ public sealed class NotificationListenerService : BackgroundService
     private readonly IHubContext<JimNotificationHub> _hubContext;
     private readonly ILogger<NotificationListenerService> _logger;
     private NotificationDebouncer<Guid>? _activityProgressDebouncer;
+    private NotificationDebouncer<int>? _passwordChangeDebouncer;
     private CancellationToken _stoppingToken;
 
     public NotificationListenerService(
@@ -47,6 +50,7 @@ public sealed class NotificationListenerService : BackgroundService
     {
         _stoppingToken = stoppingToken;
         _activityProgressDebouncer = new NotificationDebouncer<Guid>(HandleActivityProgressFlush, ActivityProgressQuietWindow);
+        _passwordChangeDebouncer = new NotificationDebouncer<int>(HandlePasswordChangeFlush, PasswordChangeQuietWindow);
         _listener.ConnectionStateChanged += OnListenerConnectionStateChanged;
         _uiNotificationService.SetRealTimeAvailability(_listener.IsConnected);
 
@@ -57,7 +61,11 @@ public sealed class NotificationListenerService : BackgroundService
                 try
                 {
                     await _listener.ListenAsync(
-                        [Constants.NotificationChannels.WorkerTaskChange, Constants.NotificationChannels.ActivityProgress],
+                        [
+                            Constants.NotificationChannels.WorkerTaskChange,
+                            Constants.NotificationChannels.ActivityProgress,
+                            Constants.NotificationChannels.PasswordChange
+                        ],
                         HandleNotificationAsync,
                         stoppingToken);
 
@@ -97,6 +105,7 @@ public sealed class NotificationListenerService : BackgroundService
     public override void Dispose()
     {
         _activityProgressDebouncer?.Dispose();
+        _passwordChangeDebouncer?.Dispose();
         base.Dispose();
     }
 
@@ -124,6 +133,19 @@ public sealed class NotificationListenerService : BackgroundService
 
                 _activityProgressDebouncer?.Notify(activityId);
                 break;
+
+            case Constants.NotificationChannels.PasswordChange:
+                // The payload is the Connected System id the queue row belongs to (#1635). Nothing about the
+                // change itself travels: a subscriber re-reads the queue, so a malformed id is dropped rather than
+                // published as zero and read as "system 0 changed".
+                if (!int.TryParse(payload, out var connectedSystemId))
+                {
+                    _logger.LogWarning("NotificationListenerService: malformed Password Synchronisation queue payload received; ignoring");
+                    return;
+                }
+
+                _passwordChangeDebouncer?.Notify(connectedSystemId);
+                break;
         }
     }
 
@@ -143,6 +165,16 @@ public sealed class NotificationListenerService : BackgroundService
             _uiNotificationService.PublishActivityProgress(activityId);
 
         _ = BroadcastActivityProgressAsync(activityIds);
+    }
+
+    /// <summary>
+    /// Debouncer flush callback for the Password Synchronisation queue: publishes each coalesced Connected System id
+    /// to the in-process relay. There is no hub broadcast; the only consumers are in-process waiters.
+    /// </summary>
+    private void HandlePasswordChangeFlush(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        foreach (var connectedSystemId in connectedSystemIds)
+            _uiNotificationService.PublishPasswordChange(connectedSystemId);
     }
 
     private async Task BroadcastActivityProgressAsync(IReadOnlyCollection<Guid> activityIds)

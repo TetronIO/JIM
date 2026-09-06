@@ -582,6 +582,10 @@ try
     builder.Services.AddSignalR();
     builder.Services.AddSingleton<UiNotificationService>();
     builder.Services.AddSingleton<IUiNotificationService>(sp => sp.GetRequiredService<UiNotificationService>());
+    builder.Services.AddSingleton<IPasswordChangeNotifications>(sp => sp.GetRequiredService<UiNotificationService>());
+    // Waits on a queued password change for the Synchronise Password dialog and the REST endpoint's `wait` (#1635):
+    // woken by the relay above, polling as a safety net, one JimApplication per read.
+    builder.Services.AddSingleton<IPasswordChangeOutcomeWaiter, PasswordChangeOutcomeWaiter>();
     builder.Services.AddSingleton<IDatabaseNotificationListener>(_ =>
         new PostgresNotificationListener(JimDbContext.BuildListenerConnectionString()));
     builder.Services.AddHostedService<NotificationListenerService>();

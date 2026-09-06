@@ -457,5 +457,12 @@ public static class Constants
         /// Message or Status columns). Payload: the Activity id as text.
         /// </summary>
         public const string ActivityProgress = "jim_activity_progress";
+
+        /// <summary>
+        /// Raised when a Password Synchronisation queue row is inserted, updated or deleted (#1635). Payload: the
+        /// row's Connected System id as text. The Password Delivery Service listens here so a queued change, a
+        /// retry from the queue page or a released hold is delivered within a second rather than on a poll.
+        /// </summary>
+        public const string PasswordChange = "jim_password_change";
     }
 }

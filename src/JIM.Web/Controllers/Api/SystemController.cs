@@ -94,7 +94,7 @@ public class SystemController(ILogger<SystemController> logger, JimApplication a
     /// script and an administrator looking at the portal always see the same verdict.
     ///
     /// One entry is returned per service, always in the order **WorkerSync** (the Worker's synchronisation loop,
-    /// which runs Run Profiles and other queued work), **WorkerPasswordDelivery** (the Worker's password delivery
+    /// which runs Run Profiles and other queued work), **WorkerDelivery** (the Worker's password delivery
     /// loop) and **Scheduler** (which starts Schedules when they fall due). Each entry's <c>status</c> is one of:
     ///
     /// - **Healthy**: heartbeating within the last 15 seconds. Nothing to do.

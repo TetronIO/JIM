@@ -140,6 +140,29 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
     }
 
     [Test]
+    public void OperationsPasswordsTab_ARowBeingDelivered_ReadsAsDeliveringAndCannotBeRetried()
+    {
+        // A claimed row is on its way right now (#1635): it counts as waiting, it says so rather than "Due now",
+        // and a retry would only ask for the attempt it is already getting, so that action is not offered. Cancel
+        // still is: the delivery service's outcome write is guarded on the row still being Delivering.
+        _navigation.NavigateTo("/admin/operations?t=passwords");
+        ArrangeWindow([Change("Ada Lovelace", "Corporate Directory", PendingPasswordChangeStatus.Delivering)]);
+
+        var cut = Render<OperationsPasswordsTab>();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Markup, Does.Contain("Delivering now"));
+                Assert.That(cut.Markup, Does.Not.Contain("Due now"));
+                Assert.That(cut.FindAll("[aria-label='Retry this password change']"), Is.Empty);
+                Assert.That(cut.FindAll("[aria-label='Cancel this password change']"), Has.Count.EqualTo(1));
+            }
+        });
+    }
+
+    [Test]
     public void OperationsPasswordsTab_NothingQueued_SaysSoAsTheHealthyState()
     {
         _navigation.NavigateTo("/admin/operations?t=passwords");

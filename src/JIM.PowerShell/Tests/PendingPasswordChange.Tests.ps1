@@ -52,7 +52,9 @@ Describe 'Get-JIMPendingPasswordChange' {
             $validateSet = $command.Parameters['Status'].Attributes |
                 Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
             $validateSet | Should -Not -BeNullOrEmpty
-            $validateSet.ValidValues | Should -Be @('Pending', 'Parked', 'Expired', 'Cancelled')
+            # Delivering is the moment the Password Delivery Service is writing a change to its target (#1635);
+            # brief, but a state a change can be found in, so the filter offers it.
+            $validateSet.ValidValues | Should -Be @('Pending', 'Delivering', 'Parked', 'Expired', 'Cancelled')
         }
 
         It 'Should accept a Connected System by pipeline property name' {

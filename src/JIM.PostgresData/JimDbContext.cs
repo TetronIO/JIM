@@ -1,4 +1,4 @@
-﻿// Copyright (c) Tetron Limited. All rights reserved.
+// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data;
@@ -99,7 +99,6 @@ public class JimDbContext : DbContext
     public virtual DbSet<DeleteSyncRuleWorkerTask> DeleteSyncRuleWorkerTasks { get; set; } = null!;
     public virtual DbSet<SchemaRefreshRemovalWorkerTask> SchemaRefreshRemovalWorkerTasks { get; set; } = null!;
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
-    public virtual DbSet<PasswordDeliveryWorkerTask> PasswordDeliveryWorkerTasks { get; set; } = null!;
     public virtual DbSet<TemporalScopeReconciliationWorkerTask> TemporalScopeReconciliationWorkerTasks { get; set; } = null!;
     public virtual DbSet<HistoryRetentionCleanupWorkerTask> HistoryRetentionCleanupWorkerTasks { get; set; } = null!;
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;

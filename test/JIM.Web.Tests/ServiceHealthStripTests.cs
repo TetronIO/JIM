@@ -39,7 +39,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
 
     private static ServiceHealthReport HealthyReport() => ServiceHealthDisplayTests.Report(
         ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 2),
-        ServiceHealthDisplayTests.Derive(JimService.WorkerPasswordDelivery, 2),
+        ServiceHealthDisplayTests.Derive(JimService.WorkerDelivery, 2),
         ServiceHealthDisplayTests.Derive(JimService.Scheduler, 2));
 
     private IRenderedComponent<ServiceHealthStrip> RenderStrip(ServiceHealthReport report) =>
@@ -87,7 +87,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
         // the cards one height. The never-started card has the least to say and must still carry all four.
         var report = ServiceHealthDisplayTests.Report(
             ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 2, "Full Import: Corporate Directory"),
-            SystemHealthServer.Derive(JimService.WorkerPasswordDelivery, null, DateTime.UtcNow),
+            SystemHealthServer.Derive(JimService.WorkerDelivery, null, DateTime.UtcNow),
             ServiceHealthDisplayTests.Derive(JimService.Scheduler, 4 * 60));
 
         var cut = RenderStrip(report);
@@ -116,7 +116,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
         Assume.That(sync.Status, Is.EqualTo(status), "the fixture must produce the status under test through the real derivation");
         var report = ServiceHealthDisplayTests.Report(
             sync,
-            ServiceHealthDisplayTests.Derive(JimService.WorkerPasswordDelivery, 2),
+            ServiceHealthDisplayTests.Derive(JimService.WorkerDelivery, 2),
             ServiceHealthDisplayTests.Derive(JimService.Scheduler, 2));
 
         var cut = RenderStrip(report);
@@ -139,7 +139,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
     {
         var report = ServiceHealthDisplayTests.Report(
             ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 2, "Full Import: Corporate Directory", 30),
-            ServiceHealthDisplayTests.Derive(JimService.WorkerPasswordDelivery, 2),
+            ServiceHealthDisplayTests.Derive(JimService.WorkerDelivery, 2),
             ServiceHealthDisplayTests.Derive(JimService.Scheduler, 2));
 
         var cut = RenderStrip(report);
@@ -166,7 +166,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
     {
         var report = ServiceHealthDisplayTests.Report(
             ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 4 * 60, "Full Import: Corporate Directory"),
-            ServiceHealthDisplayTests.Derive(JimService.WorkerPasswordDelivery, 2),
+            ServiceHealthDisplayTests.Derive(JimService.WorkerDelivery, 2),
             ServiceHealthDisplayTests.Derive(JimService.Scheduler, 2));
 
         var cut = RenderStrip(report);
@@ -185,12 +185,12 @@ public class ServiceHealthStripTests : JimComponentTestContext
     {
         var report = ServiceHealthDisplayTests.Report(
             ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 2),
-            SystemHealthServer.Derive(JimService.WorkerPasswordDelivery, null, DateTime.UtcNow),
+            SystemHealthServer.Derive(JimService.WorkerDelivery, null, DateTime.UtcNow),
             ServiceHealthDisplayTests.Derive(JimService.Scheduler, 2));
 
         var cut = RenderStrip(report);
 
-        var card = Card(cut, JimService.WorkerPasswordDelivery);
+        var card = Card(cut, JimService.WorkerDelivery);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Text(card, ".jim-service-health-pill"), Is.EqualTo("Unhealthy"));
@@ -205,7 +205,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
     {
         var report = ServiceHealthDisplayTests.Report(
             ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 2, version: "0.14.0"),
-            ServiceHealthDisplayTests.Derive(JimService.WorkerPasswordDelivery, 2),
+            ServiceHealthDisplayTests.Derive(JimService.WorkerDelivery, 2),
             ServiceHealthDisplayTests.Derive(JimService.Scheduler, 2));
 
         var cut = RenderStrip(report);
@@ -217,7 +217,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
         {
             Assert.That(skewTooltips, Has.Count.EqualTo(1), "only the service on the other version is flagged");
             Assert.That(Card(cut, JimService.WorkerSync).QuerySelector(".jim-service-health-skew")!.TextContent.Trim(), Is.EqualTo("differs from portal"));
-            Assert.That(Card(cut, JimService.WorkerPasswordDelivery).QuerySelector(".jim-service-health-skew"), Is.Null);
+            Assert.That(Card(cut, JimService.WorkerDelivery).QuerySelector(".jim-service-health-skew"), Is.Null);
             Assert.That(Card(cut, JimService.Scheduler).QuerySelector(".jim-service-health-skew"), Is.Null);
         }
     }
