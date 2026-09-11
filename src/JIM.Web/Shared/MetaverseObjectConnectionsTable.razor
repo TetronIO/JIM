@@ -49,11 +49,11 @@ else if (IsLoaded)
                 <MudStack Row="true" Spacing="1">
                     @if (context.IsSource)
                     {
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Source</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="ma-0">Source</MudChip>
                     }
                     @if (context.IsTarget)
                     {
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary">Target</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary" Class="ma-0">Target</MudChip>
                     }
                     @if (!context.IsSource && !context.IsTarget)
                     {
@@ -62,14 +62,14 @@ else if (IsLoaded)
                 </MudStack>
             </MudTd>
             <MudTd DataLabel="Join">
-                <MudChip T="string" Variant="Variant.Text" Color="GetJoinTypeColor(context.JoinType)">
+                <MudChip T="string" Variant="Variant.Text" Color="GetJoinTypeColor(context.JoinType)" Class="ma-0">
                     @context.JoinType
                 </MudChip>
             </MudTd>
             <MudTd DataLabel="State">
                 <MudStack Spacing="0">
                     <MudChip T="string" Variant="Variant.Text" Color="GetConnectionStateColor(context.State)"
-                             Class="jim-connection-state-chip" data-state="@context.State">
+                             Class="jim-connection-state-chip ma-0" data-state="@context.State">
                         @GetConnectionStateLabel(context.State)
                     </MudChip>
                     @if (context.State == ConnectedSystemObjectConnectionState.UpdatePending && context.PendingAttributeChangeCount is { } count)
