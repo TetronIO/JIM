@@ -40,11 +40,11 @@
                     <strong>Nothing has been changed.</strong>
                     @if ((Context.CsoConnectedSystemName ?? Context.ConnectedSystemName) is { } previewSystemName)
                     {
-                        <text>What a Full Synchronisation of @previewSystemName would do to this object now.</text>
+                        <text>&#32;What a Full Synchronisation of @previewSystemName would do to this object now.</text>
                     }
                     else
                     {
-                        <text>What every enabled export Synchronisation Rule would do with this Metaverse Object as it stands now.</text>
+                        <text>&#32;What every enabled export Synchronisation Rule would do with this Metaverse Object as it stands now.</text>
                     }
                 </span>
                 @if (OnClose.HasDelegate)
