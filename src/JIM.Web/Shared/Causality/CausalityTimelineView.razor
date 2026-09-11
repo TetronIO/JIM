@@ -19,7 +19,7 @@
             </span>
         </div>
         <div class="tl-body">
-            <div class="tl-line"><span class="verb">@CausalitySourceLabels.Verb()</span></div>
+            <div class="tl-line"><span class="verb">@CausalitySourceLabels.Verb(Model.IsSpeculative)</span></div>
             <div class="tl-detail-line">
                 @if (!string.IsNullOrWhiteSpace(Model.Context.RunProfileName))
                 {
@@ -177,6 +177,18 @@
         var system = Model.Context.ConnectedSystemName;
         var hasProfile = !string.IsNullOrWhiteSpace(profile);
         var hasSystem = !string.IsNullOrWhiteSpace(system);
+
+        if (Model.IsSpeculative)
+        {
+            // A Sync Preview (#1519): conditional mood, and "object" rather than "record" (D-S9).
+            if (hasProfile && hasSystem)
+                return $" on {system} would pick up this object.";
+            if (hasProfile)
+                return " would pick up this object.";
+            if (hasSystem)
+                return $"A run on {system} would pick up this object.";
+            return "This object would be picked up for processing.";
+        }
 
         if (hasProfile && hasSystem)
             return $" on {system} picked up this Connected System Object.";

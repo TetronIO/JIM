@@ -37,7 +37,15 @@
             <div class="preview-band">
                 <span class="preview-pill">Preview</span>
                 <span class="preview-text">
-                    Nothing has been changed. What a Full Synchronisation of @(Context.CsoConnectedSystemName ?? Context.ConnectedSystemName ?? "the target system") would do to this object now.
+                    Nothing has been changed.
+                    @if ((Context.CsoConnectedSystemName ?? Context.ConnectedSystemName) is { } previewSystemName)
+                    {
+                        <text>What a Full Synchronisation of @previewSystemName would do to this object now.</text>
+                    }
+                    else
+                    {
+                        <text>What every enabled export Synchronisation Rule would do with this Metaverse Object as it stands now.</text>
+                    }
                 </span>
                 @if (OnClose.HasDelegate)
                 {
@@ -136,8 +144,8 @@
 
     /// <summary>
     /// Raised when the preview band's close button is clicked. No-op (button hidden) when the host
-    /// does not wire a handler; used by the Connected System Object and Identity pages to dismiss the
-    /// inline panel after a Sync Preview.
+    /// does not wire a handler; used by the Connected System Object and Metaverse Object detail pages
+    /// to dismiss the inline panel after a Sync Preview.
     /// </summary>
     [Parameter]
     public EventCallback OnClose { get; set; }

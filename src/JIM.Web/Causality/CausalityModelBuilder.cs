@@ -157,8 +157,7 @@ public static class CausalityModelBuilder
         return new CausalityEvent
         {
             OutcomeType = node.OutcomeType,
-            PlainLabel = display.PlainLabel,
-            TechnicalLabel = display.TechnicalLabel,
+            Label = display.Label,
             Tone = display.Tone,
             Icon = display.Icon,
             Lane = lane,
@@ -456,9 +455,9 @@ public static class CausalityModelBuilder
     }
 
     /// <summary>
-    /// Substitutes the conditional-mood label (D-S1/D-S9) for a speculative event's plain-language label,
-    /// leaving the technical label, tone and icon unchanged. A no-op for the recorded path
-    /// (<paramref name="isSpeculative"/> false) and for any outcome type the preview engine cannot emit
+    /// Substitutes the conditional-mood label (D-S1/D-S9) for a speculative event's label, leaving the
+    /// tone and icon unchanged. A no-op for the recorded path (<paramref name="isSpeculative"/> false)
+    /// and for any outcome type the preview engine cannot emit
     /// (<see cref="OutcomeDisplayMap.GetSpeculativeLabel"/> returns null), so an unanticipated type still
     /// renders its ordinary past-tense label rather than nothing.
     /// </summary>
@@ -471,7 +470,7 @@ public static class CausalityModelBuilder
             return display;
 
         var speculativeLabel = OutcomeDisplayMap.GetSpeculativeLabel(outcomeType);
-        return speculativeLabel != null ? display with { PlainLabel = speculativeLabel } : display;
+        return speculativeLabel != null ? display with { Label = speculativeLabel } : display;
     }
 
     /// <summary>

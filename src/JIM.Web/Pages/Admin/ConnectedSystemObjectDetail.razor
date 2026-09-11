@@ -1025,8 +1025,8 @@
     private CausalityPageContext BuildPreviewContext()
     {
         return new CausalityPageContext(
-            ConnectedSystemId: null,
-            ConnectedSystemName: null,
+            ConnectedSystemId: CsId,
+            ConnectedSystemName: ConnectedSystemHeader?.Name,
             RunProfileName: "Full Synchronisation",
             CsoId: ConnectedSystemObject?.Id,
             CsoConnectedSystemId: CsId,

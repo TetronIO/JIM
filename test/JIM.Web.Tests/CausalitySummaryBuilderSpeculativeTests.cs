@@ -65,8 +65,8 @@ public class CausalitySummaryBuilderSpeculativeTests
         var summary = CausalitySummaryBuilder.Build(model);
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC would process the object for Liam Allen: " +
-            "a new Identity would be created, and 3 attributes would flow to it."));
+            "A Full Synchronisation on Yellowstone APAC would process person Liam Allen: " +
+            "a new Metaverse Object would be projected, and 3 attributes would flow to it."));
     }
 
     [Test]
@@ -76,7 +76,7 @@ public class CausalitySummaryBuilderSpeculativeTests
         var summary = CausalitySummaryBuilder.Build(model);
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC would process the object for Liam Allen: no changes are needed."));
+            "A Full Synchronisation on Yellowstone APAC would process person Liam Allen: no changes are needed."));
     }
 
     [Test]
@@ -87,7 +87,7 @@ public class CausalitySummaryBuilderSpeculativeTests
         var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
         var summary = CausalitySummaryBuilder.Build(model);
 
-        Assert.That(RenderSentence(summary.Segments), Does.Contain("processed the record for"));
+        Assert.That(RenderSentence(summary.Segments), Does.Contain("processed person"));
         Assert.That(RenderSentence(summary.Segments), Does.Not.Contain("would"));
     }
 }

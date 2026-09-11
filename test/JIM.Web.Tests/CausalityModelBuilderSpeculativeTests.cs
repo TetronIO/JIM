@@ -57,14 +57,14 @@ public class CausalityModelBuilderSpeculativeTests
 
         var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
 
-        Assert.That(model.Roots[0].PlainLabel, Is.EqualTo("Identity would be created"));
+        Assert.That(model.Roots[0].Label, Is.EqualTo("A Metaverse Object would be projected"));
     }
 
     [Test]
-    public void BuildSpeculative_MvoDeletedNode_LinksTheLiveIdentityNotADeletionRecord()
+    public void BuildSpeculative_MvoDeletedNode_LinksTheLiveMetaverseObjectNotADeletionRecord()
     {
-        // Unlike the recorded tree, nothing is actually deleted by a preview: the Identity mention must
-        // point at its live page, not the "View deletion record" href the recorded MvoDeleted uses.
+        // Unlike the recorded tree, nothing is actually deleted by a preview: the Metaverse Object mention
+        // must point at its live page, not the "View deletion record" href the recorded MvoDeleted uses.
         var preview = new SyncPreviewResult
         {
             OutcomeTree =
@@ -117,15 +117,15 @@ public class CausalityModelBuilderSpeculativeTests
         {
             var root = model.Roots[0];
             Assert.That(root.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope));
-            Assert.That(root.PlainLabel, Is.EqualTo("Would be disconnected from its Identity"));
+            Assert.That(root.Label, Is.EqualTo("Would be disconnected from its Metaverse Object"));
 
             var deleted = root.Children[0];
             Assert.That(deleted.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted));
-            Assert.That(deleted.PlainLabel, Is.EqualTo("Identity would be deleted"));
+            Assert.That(deleted.Label, Is.EqualTo("The Metaverse Object would be deleted"));
 
             var deprovision = deleted.Children[0];
             Assert.That(deprovision.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued));
-            Assert.That(deprovision.PlainLabel, Is.EqualTo("Would be deprovisioned from its target Connected System"));
+            Assert.That(deprovision.Label, Is.EqualTo("Would be deprovisioned from its target Connected System"));
             Assert.That(deprovision.Lane, Is.EqualTo(CausalityLane.Downstream));
             Assert.That(deprovision.SystemId, Is.EqualTo(2));
         }

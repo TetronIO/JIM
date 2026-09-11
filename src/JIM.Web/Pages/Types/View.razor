@@ -702,8 +702,8 @@
             using var jim = JimFactory.Create();
             _connectionPreviewResult = await jim.SyncPreview.PreviewSyncForCsoAsync(connection.ConnectedSystemId, connection.ConnectedSystemObjectId);
             _connectionPreviewContext = new CausalityPageContext(
-                ConnectedSystemId: null,
-                ConnectedSystemName: null,
+                ConnectedSystemId: connection.ConnectedSystemId,
+                ConnectedSystemName: connection.ConnectedSystemName,
                 RunProfileName: "Full Synchronisation",
                 CsoId: connection.ConnectedSystemObjectId,
                 CsoConnectedSystemId: connection.ConnectedSystemId,

@@ -96,7 +96,7 @@ public class CausalityPanelSpeculativeTests
             .Add(c => c.PreviewResult, SimplePreview())
             .Add(c => c.Context, PreviewContext()));
 
-        Assert.That(cut.Markup, Does.Contain("Identity would be created"));
+        Assert.That(cut.Markup, Does.Contain("A Metaverse Object would be projected"));
     }
 
     [Test]
