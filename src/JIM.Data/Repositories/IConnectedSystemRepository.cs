@@ -578,6 +578,17 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
+    /// Gets every Connected System Object joined to a Metaverse Object, with its Connected System Object
+    /// Type and Connected System navigations loaded, for the Identity Connections tab (#1519). Core-weight
+    /// (see the entity retrieval taxonomy): the number of joined objects for one Identity is always small,
+    /// so materialising the full entity plus its first-level Type/ConnectedSystem navigations (needed for
+    /// the tab's Connected System name and object type name columns) costs nothing at this scale, unlike
+    /// <see cref="GetConnectedSystemObjectsByMetaverseObjectIdAsync"/>'s callers, which do not need either.
+    /// </summary>
+    /// <param name="metaverseObjectId">The MVO ID to find joined CSOs for.</param>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(Guid metaverseObjectId);
+
+    /// <summary>
     /// Gets a Connected System Object by its joined Metaverse Object ID and Connected System.
     /// Used for finding existing CSOs during export evaluation.
     /// </summary>

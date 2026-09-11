@@ -1,6 +1,7 @@
 @using JIM.Models.Activities
 @using JIM.Models.Activities.DTOs
 @using JIM.Models.Sync
+@using JIM.Models.Transactional
 @using JIM.Web.Causality
 @inject IUserPreferenceService PreferenceService
 
@@ -19,8 +20,8 @@
    chain renders on the Lineage itself (#1495); the separate Caused by list retired with the Flow and
    Graph views. *@
 
-<div class="causality-panel">
-    @if (Item.SyncOutcomes.Count == 0)
+<div class="causality-panel @(_model?.IsSpeculative == true ? "speculative" : null)">
+    @if (Item != null && Item.SyncOutcomes.Count == 0)
     {
         <div class="pa-4">
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
@@ -31,7 +32,21 @@
     }
     else if (_model != null && _summary != null)
     {
-        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()">
+        @if (_model.IsSpeculative)
+        {
+            <div class="preview-band">
+                <span class="preview-pill">Preview</span>
+                <span class="preview-text">
+                    Nothing has been changed. What a Full Synchronisation of @(Context.CsoConnectedSystemName ?? Context.ConnectedSystemName ?? "the target system") would do to this object now.
+                </span>
+                @if (OnClose.HasDelegate)
+                {
+                    <button type="button" class="preview-close" aria-label="Close preview" @onclick="OnClose">&#x2715;</button>
+                }
+            </div>
+        }
+        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()"
+                              IsSpeculative="_model.IsSpeculative">
             <Actions>
                 @if (AvailableViews.Count > 1)
                 {
@@ -86,17 +101,46 @@
 
 @code {
     /// <summary>
-    /// The views currently implemented, in switcher order. A stored preference only takes effect
-    /// when its view appears here.
+    /// The views implemented for a recorded item, in switcher order. A stored preference only takes
+    /// effect when its view appears here.
     /// </summary>
-    private static readonly IReadOnlyList<CausalityView> AvailableViews =
+    private static readonly IReadOnlyList<CausalityView> RecordedViews =
         [CausalityView.Lineage, CausalityView.Timeline];
 
     /// <summary>
-    /// The Run Profile Execution Item whose causality is visualised.
+    /// A speculative model offers Timeline only (#1519): <see cref="CausalityLineageModelBuilder.Build"/>
+    /// needs a recorded item's <c>ObjectChangeType</c> to decide which side of the join the page's own
+    /// record sits on, which a Sync Preview has no equivalent of. Rather than guess at one and risk
+    /// drawing the join backwards (#1528 was exactly this class of bug), the Lineage is not offered at
+    /// all for a preview; the Timeline needs no such fact and renders the tree directly.
     /// </summary>
-    [Parameter, EditorRequired]
-    public ActivityRunProfileExecutionItem Item { get; set; } = null!;
+    private static readonly IReadOnlyList<CausalityView> SpeculativeViews = [CausalityView.Timeline];
+
+    private IReadOnlyList<CausalityView> AvailableViews => _model?.IsSpeculative == true ? SpeculativeViews : RecordedViews;
+
+    /// <summary>
+    /// The Run Profile Execution Item whose causality is visualised. Required for the recorded path;
+    /// leave unset when <see cref="PreviewResult"/> is supplied instead.
+    /// </summary>
+    [Parameter]
+    public ActivityRunProfileExecutionItem? Item { get; set; }
+
+    /// <summary>
+    /// A Sync Preview result to render speculatively (#1519, D-S1) instead of a recorded
+    /// <see cref="Item"/>. When set, the panel builds its model via
+    /// <see cref="CausalityModelBuilder.BuildSpeculative"/>, shows the "Preview" band, offers Timeline
+    /// only (see <see cref="SpeculativeViews"/>), and every label reads in the conditional mood.
+    /// </summary>
+    [Parameter]
+    public SyncPreviewResult? PreviewResult { get; set; }
+
+    /// <summary>
+    /// Raised when the preview band's close button is clicked. No-op (button hidden) when the host
+    /// does not wire a handler; used by the Connected System Object and Identity pages to dismiss the
+    /// inline panel after a Sync Preview.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
 
     /// <summary>
     /// The page-level context (run, Connected System, record and Metaverse Object Type names) used
@@ -152,29 +196,51 @@
     private CausalityEvent? _expandedEvent;
     private CausalityEvent? _selectedEvent;
     private ActivityRunProfileExecutionItem? _builtItem;
+    private SyncPreviewResult? _builtPreviewResult;
     private CausalityPageContext? _builtContext;
     private IReadOnlySet<Guid>? _builtLivePendingExportIds;
     private CausalChain? _builtChain;
 
     protected override void OnParametersSet()
     {
-        // Build once per (Item, Context, Chain) tuple; parent re-renders with unchanged values must
-        // not discard the expanded/selected-event state by rebuilding the model. The chain is an
-        // input (#1495): it supplies the export decision captions and the Lineage's chain cards, and
-        // the page resolves it after the first render, so its arrival must rebuild.
-        if (ReferenceEquals(Item, _builtItem) && Equals(Context, _builtContext)
+        // Build once per (Item, PreviewResult, Context, Chain) tuple; parent re-renders with unchanged
+        // values must not discard the expanded/selected-event state by rebuilding the model. The chain
+        // is an input (#1495): it supplies the export decision captions and the Lineage's chain cards,
+        // and the page resolves it after the first render, so its arrival must rebuild.
+        if (ReferenceEquals(Item, _builtItem) && ReferenceEquals(PreviewResult, _builtPreviewResult)
+            && Equals(Context, _builtContext)
             && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds)
             && ReferenceEquals(Chain, _builtChain))
             return;
 
         _builtItem = Item;
+        _builtPreviewResult = PreviewResult;
         _builtContext = Context;
         _builtLivePendingExportIds = LivePendingExportIds;
         _builtChain = Chain;
-        _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds,
-            DeletionPolicySnapshot, IsSynchronisationRun, Chain);
-        _summary = CausalitySummaryBuilder.Build(_model);
-        _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType);
+
+        if (PreviewResult != null)
+        {
+            _model = CausalityModelBuilder.BuildSpeculative(PreviewResult, Context);
+            _summary = CausalitySummaryBuilder.Build(_model);
+            // No chain, no Lineage: see SpeculativeViews' doc comment.
+            _lineageModel = null;
+            _view = CausalityView.Timeline;
+        }
+        else if (Item != null)
+        {
+            _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds,
+                DeletionPolicySnapshot, IsSynchronisationRun, Chain);
+            _summary = CausalitySummaryBuilder.Build(_model);
+            _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType);
+        }
+        else
+        {
+            _model = null;
+            _summary = null;
+            _lineageModel = null;
+        }
+
         _expandedEvent = null;
         _selectedEvent = null;
     }
@@ -221,6 +287,11 @@
 
     private CausalityTone GetStatusTone()
     {
+        // A preview has no run status to report (nothing executed); Info is the panel's neutral tone
+        // for "informational, not a verdict on success or failure".
+        if (Item == null)
+            return CausalityTone.Info;
+
         return Item.ErrorType is not null and not ActivityRunProfileExecutionItemErrorType.NotSet
             ? CausalityTone.Error
             : CausalityTone.Success;

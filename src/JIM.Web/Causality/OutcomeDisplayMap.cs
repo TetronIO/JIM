@@ -42,19 +42,25 @@ public static class OutcomeDisplayMap
 
         // Sync outcomes; inbound
         [ActivityRunProfileExecutionItemSyncOutcomeType.Projected] =
-            new OutcomeDisplay("Projected to the Metaverse", CausalityTone.Primary, Icons.Material.Filled.AirlineStops),
+            new OutcomeDisplay("Projected to the Metaverse", CausalityTone.Primary, Icons.Material.Filled.AirlineStops,
+                SpeculativeLabel: "A Metaverse Object would be projected"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.Joined] =
-            new OutcomeDisplay("Joined to Metaverse Object", CausalityTone.Secondary, Icons.Material.Filled.Link),
+            new OutcomeDisplay("Joined to Metaverse Object", CausalityTone.Secondary, Icons.Material.Filled.Link,
+                SpeculativeLabel: "Would join an existing Metaverse Object"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow] =
-            new OutcomeDisplay("Attributes flowed", CausalityTone.Secondary, Icons.Material.Filled.SyncAlt),
+            new OutcomeDisplay("Attributes flowed", CausalityTone.Secondary, Icons.Material.Filled.SyncAlt,
+                SpeculativeLabel: "Attributes would flow"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected] =
             new OutcomeDisplay("Disconnected", CausalityTone.Warning, Icons.Material.Filled.LinkOff),
         [ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope] =
-            new OutcomeDisplay("Left scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff),
+            new OutcomeDisplay("Left scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff,
+                SpeculativeLabel: "Would be disconnected from its Metaverse Object"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted] =
-            new OutcomeDisplay("Metaverse Object deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove),
+            new OutcomeDisplay("Metaverse Object deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove,
+                SpeculativeLabel: "The Metaverse Object would be deleted"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled] =
-            new OutcomeDisplay("Metaverse Object deletion scheduled", CausalityTone.Warning, Icons.Material.Filled.HourglassBottom),
+            new OutcomeDisplay("Metaverse Object deletion scheduled", CausalityTone.Warning, Icons.Material.Filled.HourglassBottom,
+                SpeculativeLabel: "Metaverse Object deletion would be scheduled"),
         // The survival counterpart of MvoDeletionScheduled above (#1620): a rejoin undid the disconnection
         // that scheduled it, so the object lives on. Success-toned (the object survived) and the
         // "hourglass disabled" icon reads as the same hourglass, stopped, rather than a new symbol.
@@ -65,14 +71,17 @@ public static class OutcomeDisplayMap
 
         // Sync outcomes; outbound (Pending Export creation during sync)
         [ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned] =
-            new OutcomeDisplay("Provisioned", CausalityTone.Primary, Icons.Material.Filled.SwitchAccessShortcut),
+            new OutcomeDisplay("Provisioned", CausalityTone.Primary, Icons.Material.Filled.SwitchAccessShortcut,
+                SpeculativeLabel: "A Connected System Object would be provisioned"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated] =
-            new OutcomeDisplay("Export queued", CausalityTone.Info, Icons.Material.Filled.Schedule),
+            new OutcomeDisplay("Export queued", CausalityTone.Info, Icons.Material.Filled.Schedule,
+                SpeculativeLabel: "An export would be queued"),
         // The delete-flavoured staging outcome. Error-toned and named for what it will do, because "Export
         // queued" over a single distinguishedName row read as an attribute update rather than an account
         // being removed. AutoDelete (a clock inside a bin) is the queued form of Deprovisioned's CloudOff.
         [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] =
-            new OutcomeDisplay("Deprovision queued", CausalityTone.Error, Icons.Material.Filled.AutoDelete),
+            new OutcomeDisplay("Deprovision queued", CausalityTone.Error, Icons.Material.Filled.AutoDelete,
+                SpeculativeLabel: "Would be deprovisioned from its target Connected System"),
 
         // Export execution outcomes
         [ActivityRunProfileExecutionItemSyncOutcomeType.Exported] =
@@ -85,12 +94,14 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull] =
             new OutcomeDisplay("Blank asserted", CausalityTone.Warning, Icons.Material.Filled.DoNotDisturbOn),
         [ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor] =
-            new OutcomeDisplay("Value cleared", CausalityTone.Warning, Icons.Material.Filled.HighlightOff),
+            new OutcomeDisplay("Value cleared", CausalityTone.Warning, Icons.Material.Filled.HighlightOff,
+                SpeculativeLabel: "Value would be cleared"),
 
         // #1570: values kept as last known state because no import source remains to assert the object;
         // the preserving counterpart of NoContributor above, and just as worth drawing the eye to.
         [ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved] =
-            new OutcomeDisplay("Values preserved", CausalityTone.Warning, Icons.Material.Filled.AcUnit),
+            new OutcomeDisplay("Values preserved", CausalityTone.Warning, Icons.Material.Filled.AcUnit,
+                SpeculativeLabel: "Values would be preserved"),
 
         // Configuration change preview (#827): transitions a proposed configuration would cause. Nothing writes
         // these during a run, so they never reach an Activity's causality views; they are mapped because this is
@@ -212,6 +223,17 @@ public static class OutcomeDisplayMap
         return Map.TryGetValue(outcomeType, out var display)
             ? display
             : new OutcomeDisplay(outcomeType.ToString(), CausalityTone.Secondary, Icons.Material.Filled.Circle);
+    }
+
+    /// <summary>
+    /// The conditional-mood label a Sync Preview's speculative tree substitutes for the outcome's plain
+    /// label (#1519, D-S1/D-S9), or null for an outcome type the preview engine never emits. See
+    /// <see cref="OutcomeDisplay.SpeculativeLabel"/>; <c>SyncPreviewSpeculativeLabelCompletenessTests</c>
+    /// asserts every type <c>SyncPreviewServer</c> can produce has a non-null entry here.
+    /// </summary>
+    public static string? GetSpeculativeLabel(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        return Map.TryGetValue(outcomeType, out var display) ? display.SpeculativeLabel : null;
     }
 
     /// <summary>

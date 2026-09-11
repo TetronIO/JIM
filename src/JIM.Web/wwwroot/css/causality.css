@@ -55,6 +55,62 @@
     color: var(--cz-text);
 }
 
+/* ─── Speculative (Sync Preview) framing (#1519) ─── */
+
+/* A dashed, warning-toned frame distinguishes a preview from a recorded execution's panel at a
+   glance, whichever view is showing beneath it; the rails reuse the same tone so the frame reads as
+   one shape rather than a border plus a separately-coloured accent. */
+.causality-panel.speculative {
+    border: 1px dashed var(--cz-warning);
+    border-radius: var(--jim-container-radius);
+}
+
+.causality-panel.speculative .preview-band {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 24px;
+    background: var(--cz-warning-soft);
+    border-bottom: 1px dashed var(--cz-warning);
+}
+
+.causality-panel.speculative .preview-pill {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    padding: 3px 11px;
+    border-radius: 999px;
+    background: var(--cz-warning);
+    color: var(--mud-palette-warning-text, #fff);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.causality-panel.speculative .preview-text {
+    font-size: 0.875rem;
+    color: var(--cz-text-dim);
+    flex: 1 1 auto;
+}
+
+.causality-panel.speculative .preview-close {
+    flex: none;
+    background: none;
+    border: none;
+    color: var(--cz-text-dim);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 4px;
+    border-radius: 6px;
+}
+
+.causality-panel.speculative .preview-close:hover {
+    background: color-mix(in srgb, var(--cz-text) 8%, transparent);
+    color: var(--cz-text);
+}
+
 /* ─── Head-row controls: view switcher ─── */
 
 /* Right-aligned on the summary head row so the controls share the row with the run chip and

@@ -1,0 +1,61 @@
+@using JIM.Models.Transactional
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Renders a Sync Preview result (#1519): CausalityPanel does all of the rendering work, via
+   CausalityModelBuilder.BuildSpeculative, through the same summary band and Timeline view a
+   recorded execution renders through (see CausalityPanel's PreviewResult parameter and
+   SpeculativeViews for why the Lineage is not offered). This component supplies only what
+   CausalityPanel itself cannot: the preview's blocking errors and advisory warnings, which the
+   causality tree has no node for (a downstream object left disconnect-only with no matching export
+   Synchronisation Rule, for example, is recorded as a warning rather than a tree node -
+   SyncPreviewServer.BuildOutOfScopeCascadeAsync). Do not duplicate the panel's own view markup here. *@
+
+<div class="jim-sync-preview-panel" data-testid="jim-sync-preview-panel">
+    @if (PreviewResult.Errors.Count > 0)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3" data-testid="jim-sync-preview-errors">
+            <div class="d-flex flex-column">
+                @foreach (var error in PreviewResult.Errors)
+                {
+                    <span>@error.Detail</span>
+                }
+            </div>
+        </MudAlert>
+    }
+    @if (PreviewResult.Warnings.Count > 0)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3" data-testid="jim-sync-preview-warnings">
+            <div class="d-flex flex-column">
+                @foreach (var warning in PreviewResult.Warnings)
+                {
+                    <span>@warning.Detail</span>
+                }
+            </div>
+        </MudAlert>
+    }
+    <CausalityPanel PreviewResult="PreviewResult" Context="Context" OnClose="OnClose" />
+</div>
+
+@code {
+    /// <summary>
+    /// The Sync Preview result to render.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public SyncPreviewResult PreviewResult { get; set; } = null!;
+
+    /// <summary>
+    /// The page-level context (target system, record identity, Metaverse Object Type) used for the
+    /// summary sentence, the run chip and link building.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityPageContext Context { get; set; } = null!;
+
+    /// <summary>
+    /// Raised when the panel's close button is clicked, so the host page can dismiss the inline panel.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+}

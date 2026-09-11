@@ -23,8 +23,19 @@ namespace JIM.Web.Causality;
 /// the rest would be a vocabulary nobody reads and nobody keeps true. It lives here rather than in a second map
 /// beside the preview because an outcome's words belong in one place; splitting them is how two of them drift.
 /// </param>
+/// <param name="SpeculativeLabel">
+/// The full conditional-mood sentence fragment ("A Metaverse Object would be projected") a Sync Preview's
+/// speculative causality tree (#1519, D-S1) substitutes for <see cref="Label"/>. Distinct from
+/// <see cref="SentenceForm"/>'s bare infinitive: this reads as a complete card title on its own, the way
+/// <see cref="Label"/> does for the recorded tree, rather than completing an external "would " prefix.
+/// Populated only for the bounded set of outcome types <c>SyncPreviewServer</c> can emit (see
+/// <see cref="OutcomeDisplayMap.GetSpeculativeLabel"/> and its completeness test); null for every outcome
+/// type the preview engine never produces, since inventing conditional wording nothing ever exercises is
+/// exactly the vocabulary drift <see cref="SentenceForm"/>'s own doc comment warns against.
+/// </param>
 public sealed record OutcomeDisplay(
     string Label,
     CausalityTone Tone,
     string Icon,
-    string? SentenceForm = null);
+    string? SentenceForm = null,
+    string? SpeculativeLabel = null);

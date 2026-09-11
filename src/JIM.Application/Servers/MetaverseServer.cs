@@ -7,10 +7,13 @@ using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
@@ -1328,6 +1331,76 @@ public class MetaverseServer
     public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(metaverseObjectType, metaverseAttribute, attributeValue);
+    }
+
+    /// <summary>
+    /// Gets one row per Connected System Object joined to a Metaverse Object, for the Identity Connections
+    /// tab (#1519): the object's identity, its Connected System, its role (source/target, derived from
+    /// enabled Synchronisation Rules for its Connected System Object Type), its join type, its derived
+    /// connection state (D-S7) and when it was last synchronised. Returns an empty list for an unknown
+    /// Metaverse Object rather than throwing; callers distinguish "no connections" from "no such object"
+    /// via <see cref="GetMetaverseObjectHeaderAsync"/> where that distinction matters.
+    /// </summary>
+    /// <remarks>
+    /// Reads: one query for the joined Connected System Objects (with Type and Connected System),
+    /// one for the Metaverse Object's own type (to scope the Synchronisation Rule lookup), one for every
+    /// Synchronisation Rule of that Metaverse Object Type (used to derive <c>IsSource</c>/<c>IsTarget</c>
+    /// per row without a query per object), and one batched Pending Export lookup
+    /// (<see cref="IConnectedSystemRepository.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync"/>)
+    /// keyed by every joined object's id. Never a query per object.
+    /// </remarks>
+    public async Task<List<MetaverseObjectConnection>> GetMetaverseObjectConnectionsAsync(Guid metaverseObjectId)
+    {
+        var joinedCsos = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(metaverseObjectId);
+        if (joinedCsos.Count == 0)
+            return [];
+
+        var mvoHeader = await Application.Repository.Metaverse.GetMetaverseObjectHeaderAsync(metaverseObjectId);
+        IList<SyncRuleHeader> syncRuleHeaders = mvoHeader != null
+            ? await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync(mvoHeader.TypeId)
+            : new List<SyncRuleHeader>();
+
+        var pendingExportsByCsoId = await Application.Repository.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
+            joinedCsos.Select(cso => cso.Id));
+
+        var connections = new List<MetaverseObjectConnection>(joinedCsos.Count);
+        foreach (var cso in joinedCsos)
+        {
+            var rulesForThisConnection = syncRuleHeaders.Where(sr =>
+                sr.ConnectedSystemId == cso.ConnectedSystemId && sr.ConnectedSystemObjectTypeId == cso.TypeId);
+
+            var isSource = false;
+            var isTarget = false;
+            foreach (var rule in rulesForThisConnection.Where(sr => sr.Enabled))
+            {
+                if (rule.Direction == SyncRuleDirection.Import)
+                    isSource = true;
+                else if (rule.Direction == SyncRuleDirection.Export)
+                    isTarget = true;
+            }
+
+            pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
+            var state = ConnectedSystemObjectConnectionStateResolver.Resolve(cso.Status, pendingExport);
+
+            connections.Add(new MetaverseObjectConnection
+            {
+                ConnectedSystemObjectId = cso.Id,
+                DisplayName = cso.ExternalIdAttributeValue?.ToStringNoName() ?? cso.Id.ToString(),
+                ConnectedSystemId = cso.ConnectedSystemId,
+                ConnectedSystemName = cso.ConnectedSystem.Name,
+                ObjectTypeName = cso.Type.Name,
+                JoinType = cso.JoinType,
+                IsSource = isSource,
+                IsTarget = isTarget,
+                State = state,
+                PendingAttributeChangeCount = state == ConnectedSystemObjectConnectionState.UpdatePending
+                    ? pendingExport?.AttributeValueChanges.Count
+                    : null,
+                LastSynchronised = cso.LastUpdated
+            });
+        }
+
+        return connections;
     }
 
     /// <summary>

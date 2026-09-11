@@ -105,6 +105,7 @@ nav:
   - Configuration:
       - configuration/index.md
       - Configuration Changes: configuration/configuration-changes.md
+      - Sync Preview: configuration/sync-preview.md
       - Connected Systems: configuration/connected-systems.md
       - Run Profiles: configuration/run-profiles.md
       - Synchronisation Rules: configuration/synchronisation-rules.md
@@ -163,7 +164,7 @@ nav:
       - Service Settings: powershell/service-settings.md
       - Security: powershell/security.md
       - History: powershell/history.md
-      - Configuration Change Previews: powershell/previews.md
+      - Previews: powershell/previews.md
       - Example Data: powershell/example-data.md
       - Expressions: powershell/expressions.md
       - Worker Tasks: powershell/worker-tasks.md

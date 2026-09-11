@@ -30,6 +30,8 @@ Cancelling the confirmation abandons the save. Nothing is written.
 
 A confirmation tells you *what* you are changing. A **Configuration Change Preview** tells you what it would *do*: JIM evaluates the proposed change against the objects already in the metaverse and reports which of them would be affected, changing nothing.
 
+This is a preview of a **proposed edit**, across every affected object. For "what would synchronising *this one object* do with the configuration already saved?", see [Sync Preview](sync-preview.md) instead.
+
 Previews are available where a surface has an evaluator for it:
 
 - A Metaverse Object Type's [deletion settings](metaverse.md#previewing-a-deletion-settings-change), the change most worth asking about because it is the one that can make existing objects eligible for deletion the moment it is saved.
@@ -88,6 +90,7 @@ Changes made through the REST API and PowerShell are not prompted. An automated 
 
 ## See also
 
+- [Sync Preview](sync-preview.md) -- previewing what synchronising one object would do with the configuration you already have, including the destructive cascade
 - [Activities](activities.md) -- every configuration change is recorded as an Activity, with a versioned before-and-after snapshot
 - [Preview cmdlets](../powershell/previews.md) -- starting, reading and cancelling a preview from PowerShell
 - [Metaverse](metaverse.md#previewing-a-deletion-settings-change) -- previewing a change to deletion settings
