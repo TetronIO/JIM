@@ -84,4 +84,16 @@ public class TypesViewAdministratorGateTests
         Assert.That(IsInsideAdministratorGate(source, "MetaverseObjectConnectionsTable"), Is.True,
             "The Connections tab's table must be gated by <AuthorizeView Roles=\"Administrator\">.");
     }
+
+    [Test]
+    public void ConnectionsTab_CarriesTheConnectorCountBadge()
+    {
+        var source = ReadViewRazorSource();
+
+        var tabIndex = source.IndexOf("Text=\"Connections\"", System.StringComparison.Ordinal);
+        Assert.That(tabIndex, Is.GreaterThanOrEqualTo(0));
+        var tabDeclaration = source.Substring(tabIndex, 260);
+        Assert.That(tabDeclaration, Does.Contain("BadgeData=\"@(_connectorCount"),
+            "The Connections tab badges how many Connected System Objects are joined, as the Changes tab badges its count.");
+    }
 }

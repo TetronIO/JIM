@@ -27,6 +27,13 @@ public class MvoDetailResult
     public int ChangeCount { get; set; }
 
     /// <summary>
+    /// How many Connected System Objects are joined to this Metaverse Object. Surfaced as a count for the
+    /// same reason as <see cref="ChangeCount"/>: the Identity page badges its Connections tab without
+    /// loading the objects, which the tab reads on its own when opened (#1519).
+    /// </summary>
+    public int ConnectorCount { get; set; }
+
+    /// <summary>
     /// Initiator metadata of the earliest change (used for "Created By"). Null when the MVO has no change history.
     /// </summary>
     public MvoChangeInitiatorSummary? EarliestChangeInitiator { get; set; }

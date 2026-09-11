@@ -194,7 +194,8 @@
         @* (#1519, D-S6). Which systems hold data about someone is not something every signed-in user may *@
         @* see about every other person, so the tab carries its own Administrator gate, as Password does.  *@
         <AuthorizeView Roles="Administrator" Context="connectionsAuth">
-            <MudTabPanel Text="Connections" Icon="@Icons.Material.Filled.Hub">
+            <MudTabPanel Text="Connections" Icon="@Icons.Material.Filled.Hub" BadgeColor="Color.Primary"
+                         BadgeData="@(_connectorCount > 0 ? _connectorCount.ToString("N0") : null)">
                 <div>
                     <MetaverseObjectConnectionsTable IsLoading="_connectionsLoading" IsLoaded="_connectionsLoaded"
                                                       Connections="_connections" PreviewLoading="_connectionPreviewLoading"
@@ -299,6 +300,7 @@
     // The Connections tab (#1519): this Identity's joined Connected System Objects, loaded when the tab is
     // first opened, and the state of a per-row Sync Preview.
     private List<MetaverseObjectConnection> _connections = [];
+    private int _connectorCount;
     private bool _connectionsLoading;
     private bool _connectionsLoaded;
     private bool _connectionPreviewLoading;
@@ -603,6 +605,7 @@
         MetaverseObject = detailResult.MetaverseObject;
         _attributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
         _changeCount = detailResult.ChangeCount;
+        _connectorCount = detailResult.ConnectorCount;
 
         // A navigation from one person to another reuses this component, so the Password tab's data is forgotten
         // here and read again on its next activation; the badge is re-read below with the rest of the page.
@@ -685,6 +688,7 @@
             using var jim = JimFactory.Create();
             _connections = await jim.Metaverse.GetMetaverseObjectConnectionsAsync(MetaverseObject.Id);
             _connectionsLoaded = true;
+            _connectorCount = _connections.Count; // the badge agrees with the table once the table has loaded
         }
         finally
         {
