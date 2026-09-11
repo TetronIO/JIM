@@ -321,4 +321,81 @@ public class CausalityTableModelBuilderTests
             Assert.That(downstreamObjects, Has.All.Matches<CausalityTableObject>(o => o.Tone == CausalityTone.Error));
         }
     }
+
+    /// <summary>
+    /// A joined object's preview knows its Identity exists but not its name (no Identity-lane event links
+    /// it), and the Identity entry must not borrow the object's own name, which read as though the two
+    /// were one thing.
+    /// </summary>
+    [Test]
+    public void Build_SpeculativeModelWithNoIdentityLink_NamesTheIdentityEntryIdentity()
+    {
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                    TargetEntityDescription = "Glitterband",
+                    SyncRuleId = 42,
+                    SyncRuleName = "Export to Glitterband"
+                }
+            ]
+        };
+        var model = CausalityModelBuilder.BuildSpeculative(preview, PreviewContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var identity = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Identity);
+        var source = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Source);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(identity.DisplayName, Is.EqualTo("Identity"));
+            Assert.That(identity.DisplayName, Is.Not.EqualTo(source.DisplayName));
+        }
+    }
+
+    /// <summary>
+    /// A Provisioned node names its target system without an id while its queued-export child carries the
+    /// id; both must land on one downstream entry, not one each.
+    /// </summary>
+    [Test]
+    public void Build_ProvisionedNodeAndItsQueuedExportChild_ShareOneDownstreamEntry()
+    {
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                    TargetEntityDescription = "Glitterband",
+                    SyncRuleId = 42,
+                    SyncRuleName = "Export to Glitterband",
+                    Children =
+                    [
+                        new SyncOutcomeNode
+                        {
+                            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            TargetEntityDescription = "Glitterband",
+                            DetailMessage = "2",
+                            StagedChangeType = PendingExportChangeType.Create
+                        }
+                    ]
+                }
+            ]
+        };
+        var model = CausalityModelBuilder.BuildSpeculative(preview, PreviewContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var downstream = table.Objects.Where(o => o.Role == CausalityTableObjectRole.Downstream).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(downstream, Has.Count.EqualTo(1));
+            Assert.That(downstream[0].DisplayName, Is.EqualTo("Glitterband"));
+            Assert.That(downstream[0].RowCount, Is.EqualTo(2), "The provision row and the queued-export row");
+        }
+    }
 }

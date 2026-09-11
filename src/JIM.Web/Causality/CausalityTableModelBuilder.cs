@@ -75,7 +75,9 @@ public static class CausalityTableModelBuilder
         if (causalityEvent.Lane != CausalityLane.Downstream)
             return causalityEvent.Lane == CausalityLane.Source ? SourceKey : IdentityKey;
 
-        var key = $"ds:{(object?)causalityEvent.SystemId ?? causalityEvent.SystemName ?? "unknown"}";
+        // Keyed by name first: a Provisioned node names its target system without an id, while its queued
+        // export child carries the id, and the two must land on the same entry rather than one each.
+        var key = $"ds:{causalityEvent.SystemName ?? (object?)causalityEvent.SystemId ?? "unknown"}";
         if (!objectMeta.ContainsKey(key))
         {
             objectMeta[key] = new ObjectMeta(
@@ -242,7 +244,9 @@ public static class CausalityTableModelBuilder
             .FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity)
             ?.Label;
 
-        return linkedName ?? model.Context.RecordLabel ?? "Identity";
+        // Never the object's own label: a joined object's preview knows the Identity exists but not its
+        // name, and showing the object's name twice reads as though the object and the Identity were one.
+        return linkedName ?? "Identity";
     }
 
     private static List<CausalityTableObject> BuildObjects(
