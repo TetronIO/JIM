@@ -20,6 +20,8 @@ Each panel names the Connected System whose Full Synchronisation is being previe
 
 Every statement in the preview is conditional: "would project", "would join", "would be deprovisioned from Target". Nothing has happened. If the preview surfaces a blocking error, for example an Attribute Flow that could not be evaluated, the panel says so plainly: the synchronisation it describes would fail, not succeed as shown.
 
+The panel offers the same **Timeline** and **Table** views documented for a recorded [Run Profile Execution Item](activities.md#execution-items) (the Lineage view is not offered, since a preview has no recorded object graph to draw). On the Table view, the current-state and would-be columns read **Current** and **Would be** rather than **Before** and **After**.
+
 ## The destructive cascade
 
 When an object falls out of scope of every import Synchronisation Rule with Scoping Criteria, a real synchronisation does not stop at disconnecting it. Sync Preview walks the same chain:

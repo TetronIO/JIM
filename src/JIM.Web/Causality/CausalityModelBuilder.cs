@@ -148,8 +148,12 @@ public static class CausalityModelBuilder
         CausalityPageContext context,
         IReadOnlyDictionary<int, OutboundPreviewEntry> entriesBySyncRuleId,
         List<PendingExport> unmatchedCascadeDeletes,
-        SyncPreviewInboundSummary? inbound)
+        SyncPreviewInboundSummary? inbound,
+        int? parentSyncRuleId = null)
     {
+        // A queued-export child carries no rule of its own (the engine attributes the rule to the
+        // Provisioned parent), so the parent's rule is what keys its attribute changes.
+        var effectiveSyncRuleId = node.SyncRuleId ?? parentSyncRuleId;
         var display = ApplySpeculativeLabel(OutcomeDisplayMap.Get(node.OutcomeType), node.OutcomeType, isSpeculative: true);
         var lane = GetLane(node.OutcomeType);
         var (systemId, systemName) = GetSpeculativeOwningSystem(node, lane, context);
@@ -172,11 +176,11 @@ public static class CausalityModelBuilder
             SyncRuleId = node.SyncRuleId,
             SyncRuleName = node.SyncRuleName,
             Links = BuildSpeculativeLinks(node, lane, systemId, systemName, context),
-            AttributeRows = GetSpeculativeAttributeRows(node, inbound, entriesBySyncRuleId, unmatchedCascadeDeletes),
+            AttributeRows = GetSpeculativeAttributeRows(node, effectiveSyncRuleId, inbound, entriesBySyncRuleId, unmatchedCascadeDeletes),
             Operation = OutcomeDisplayMap.GetEventOperation(node.OutcomeType, exportReasonCode: null, node.StagedChangeType),
             Children = node.Children
                 .OrderBy(c => c.Ordinal)
-                .Select(c => BuildSpeculativeEvent(c, context, entriesBySyncRuleId, unmatchedCascadeDeletes, inbound))
+                .Select(c => BuildSpeculativeEvent(c, context, entriesBySyncRuleId, unmatchedCascadeDeletes, inbound, effectiveSyncRuleId))
                 .ToList()
         };
     }
@@ -257,6 +261,7 @@ public static class CausalityModelBuilder
     /// </summary>
     private static IReadOnlyList<CausalityAttributeRow> GetSpeculativeAttributeRows(
         SyncOutcomeNode node,
+        int? effectiveSyncRuleId,
         SyncPreviewInboundSummary? inbound,
         IReadOnlyDictionary<int, OutboundPreviewEntry> entriesBySyncRuleId,
         List<PendingExport> unmatchedCascadeDeletes)
@@ -268,7 +273,7 @@ public static class CausalityModelBuilder
             return [];
 
         List<PendingExportAttributeValueChange>? changes = null;
-        if (node.SyncRuleId is { } ruleId && entriesBySyncRuleId.TryGetValue(ruleId, out var entry))
+        if (effectiveSyncRuleId is { } ruleId && entriesBySyncRuleId.TryGetValue(ruleId, out var entry))
         {
             changes = entry.AttributeChanges;
         }

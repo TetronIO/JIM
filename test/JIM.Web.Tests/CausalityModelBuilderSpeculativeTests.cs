@@ -253,4 +253,71 @@ public class CausalityModelBuilderSpeculativeTests
 
         Assert.That(model.Roots, Is.Empty);
     }
+
+    /// <summary>
+    /// The engine attributes the Synchronisation Rule to the Provisioned parent only; its queued-export
+    /// child carries no rule of its own, so the child's attribute changes are keyed through the parent.
+    /// </summary>
+    [Test]
+    public void BuildSpeculative_QueuedExportChildWithNoRule_InheritsTheParentsRuleForAttributeRows()
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 7, Name = "mail", Type = AttributeDataType.Text };
+        var preview = new SyncPreviewResult
+        {
+            OutboundDecisions = new OutboundPreviewResult
+            {
+                Entries =
+                [
+                    new OutboundPreviewEntry
+                    {
+                        Kind = OutboundPreviewEntryKind.Staging,
+                        SyncRuleId = 42,
+                        SyncRuleName = "Export to Glitterband",
+                        ConnectedSystemId = 2,
+                        EffectiveChangeType = PendingExportChangeType.Create,
+                        AttributeChanges =
+                        [
+                            new PendingExportAttributeValueChange
+                            {
+                                Attribute = attribute,
+                                AttributeId = attribute.Id,
+                                StringValue = "liam.allen@example.com",
+                                ChangeType = PendingExportAttributeChangeType.Add
+                            }
+                        ]
+                    }
+                ]
+            },
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                    TargetEntityDescription = "Glitterband",
+                    SyncRuleId = 42,
+                    SyncRuleName = "Export to Glitterband",
+                    Children =
+                    [
+                        new SyncOutcomeNode
+                        {
+                            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            TargetEntityDescription = "Glitterband",
+                            DetailMessage = "2",
+                            DetailCount = 1,
+                            StagedChangeType = PendingExportChangeType.Create
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
+
+        var exportEvent = model.Roots[0].Children[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exportEvent.AttributeRows, Has.Count.EqualTo(1), "The child's rows come from the parent's rule");
+            Assert.That(exportEvent.AttributeRows[0].Name, Is.EqualTo("mail"));
+        }
+    }
 }

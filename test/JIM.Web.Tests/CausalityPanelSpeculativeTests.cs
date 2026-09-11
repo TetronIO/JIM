@@ -77,16 +77,33 @@ public class CausalityPanelSpeculativeTests
     }
 
     [Test]
-    public void Render_PreviewResult_OffersTimelineOnlyWithNoViewSwitcher()
+    public void Render_PreviewResult_OffersTimelineAndTableWithNoLineage()
     {
         var cut = _context.Render<CausalityPanel>(ps => ps
             .Add(c => c.PreviewResult, SimplePreview())
             .Add(c => c.Context, PreviewContext()));
 
-        // Only one view is available, so the switcher (which only renders when there is a choice) is absent.
-        Assert.That(cut.FindAll(".seg"), Is.Empty);
-        Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
+        var buttons = cut.FindAll(".seg button");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Timeline", "Table" }));
+            Assert.That(buttons[0].ClassList, Does.Contain("on"), "Timeline is the speculative default");
+            Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void Render_PreviewResult_SelectingTableRendersTheTableView()
+    {
+        var cut = _context.Render<CausalityPanel>(ps => ps
+            .Add(c => c.PreviewResult, SimplePreview())
+            .Add(c => c.Context, PreviewContext()));
+
+        cut.FindAll(".seg button").Single(b => b.TextContent.Trim() == "Table").Click();
+
+        Assert.That(cut.FindAll(".tv"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".tl"), Is.Empty);
     }
 
     [Test]

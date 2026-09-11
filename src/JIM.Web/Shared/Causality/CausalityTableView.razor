@@ -1,0 +1,275 @@
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The causality Table view (#1519 Phase 3): a left navigation of every object the causality events
+   touched (severity dot, name, subtitle, row-count pill), grouped by role in the chain, with
+   "Everything" first; and a grid of the selected object's rows, filterable by change kind and
+   sortable by column. Values render in the app's shared code face so old and new line up; a removed
+   value's Current reading is struck through, and a row whose outcome is destructive or constructive
+   colours its would-be text with the same tone the Timeline and Lineage already use for that event.
+   Selecting Everything adds a leading Object column so a row's owner is never ambiguous. *@
+
+<div class="tv">
+    <nav class="tv-nav" aria-label="Objects touched">
+        @RenderNavButton(EverythingObject)
+        @if (SourceObject is { } source)
+        {
+            <div class="tv-group-caption">Object being synchronised</div>
+            @RenderNavButton(source)
+        }
+        @if (IdentityObject is { } identity)
+        {
+            <div class="tv-group-caption">Identity</div>
+            @RenderNavButton(identity)
+        }
+        @if (DownstreamObjects.Count > 0)
+        {
+            <div class="tv-group-caption">Downstream objects</div>
+            @foreach (var downstream in DownstreamObjects)
+            {
+                @RenderNavButton(downstream)
+            }
+        }
+    </nav>
+
+    <div class="tv-main">
+        <div class="tv-title-row">
+            <div class="tv-title">
+                <span class="tv-title-name">@SelectedObject.DisplayName</span>
+                @if (!string.IsNullOrWhiteSpace(SelectedObject.Subtitle))
+                {
+                    <span class="tv-type-chip">@SelectedObject.Subtitle</span>
+                }
+            </div>
+            <div class="filter-chips" role="group" aria-label="Filter by change">
+                @foreach (var filter in Filters)
+                {
+                    <button type="button" class="@(filter == _filter ? "on" : null)"
+                            aria-pressed="@(filter == _filter ? "true" : "false")"
+                            @onclick="() => SetFilter(filter)">@GetFilterLabel(filter)</button>
+                }
+            </div>
+        </div>
+
+        <div class="tv-scroller">
+            <table class="tg">
+                <thead>
+                    <tr>
+                        @if (IsEverythingSelected)
+                        {
+                            <th>@SortHeader("object", "Object")</th>
+                        }
+                        <th>@SortHeader("change", "Change")</th>
+                        <th>@SortHeader("attribute", "Attribute")</th>
+                        <th>@SortHeader("current", Model.CurrentHeading)</th>
+                        <th>@SortHeader("wouldbe", Model.NextHeading)</th>
+                        <th>@SortHeader("via", "Via")</th>
+                        <th>@SortHeader("outcome", "Outcome")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in VisibleRows)
+                    {
+                        <tr>
+                            @if (IsEverythingSelected)
+                            {
+                                <td>@GetObjectDisplayName(row.ObjectKey)</td>
+                            }
+                            <td>
+                                <span class="tv-kind" style="--tone: @CausalityToneCss.CssVar(row.Tone)">@row.ChangeKindLabel</span>
+                            </td>
+                            <td>@row.Attribute</td>
+                            <td class="jim-text-code @(IsRemoval(row) ? "tv-removed" : null)">
+                                <TextValueDisplay Value="@row.Current" />
+                            </td>
+                            <td class="jim-text-code" style="@GetWouldBeStyle(row)">
+                                <TextValueDisplay Value="@row.WouldBe" />
+                            </td>
+                            <td><TextValueDisplay Value="@row.Via" /></td>
+                            <td>@(TechnicalNames ? row.TechnicalLabel : row.OutcomeLabel)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (VisibleRows.Count == 0)
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                                 PrimaryText="No rows match this filter"
+                                 SecondaryText="Choose All to see every change this object carries." />
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly CausalityTableFilter[] Filters =
+    [
+        CausalityTableFilter.All, CausalityTableFilter.ScopeAndJoin, CausalityTableFilter.AttributeChanges,
+        CausalityTableFilter.ObjectChanges, CausalityTableFilter.Destructive
+    ];
+
+    /// <summary>
+    /// The Table view's model, built by <see cref="CausalityTableModelBuilder.Build"/>.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityTableModel Model { get; set; } = null!;
+
+    /// <summary>
+    /// When true, technical labels are shown in the Outcome column instead of plain language.
+    /// </summary>
+    [Parameter]
+    public bool TechnicalNames { get; set; }
+
+    private string _selectedKey = string.Empty;
+    private CausalityTableFilter _filter = CausalityTableFilter.All;
+    private string _sortColumn = string.Empty;
+    private bool _sortDescending;
+    private CausalityTableModel? _builtFor;
+
+    protected override void OnParametersSet()
+    {
+        // A new model (a different Item/PreviewResult on the host panel) resets the selection and
+        // filter; the same model instance re-rendering (e.g. the technical-names toggle) must not.
+        if (ReferenceEquals(Model, _builtFor))
+            return;
+
+        _builtFor = Model;
+        _selectedKey = EverythingObject.Key;
+        _filter = CausalityTableFilter.All;
+    }
+
+    private CausalityTableObject EverythingObject =>
+        Model.Objects.First(o => o.Role == CausalityTableObjectRole.Everything);
+
+    private CausalityTableObject? SourceObject =>
+        Model.Objects.FirstOrDefault(o => o.Role == CausalityTableObjectRole.Source);
+
+    private CausalityTableObject? IdentityObject =>
+        Model.Objects.FirstOrDefault(o => o.Role == CausalityTableObjectRole.Identity);
+
+    private List<CausalityTableObject> DownstreamObjects =>
+        Model.Objects.Where(o => o.Role == CausalityTableObjectRole.Downstream).ToList();
+
+    private CausalityTableObject SelectedObject =>
+        Model.Objects.FirstOrDefault(o => o.Key == _selectedKey) ?? EverythingObject;
+
+    private bool IsEverythingSelected => SelectedObject.Role == CausalityTableObjectRole.Everything;
+
+    private List<CausalityTableRow> VisibleRows
+    {
+        get
+        {
+            IEnumerable<CausalityTableRow> rows = IsEverythingSelected
+                ? Model.Rows
+                : Model.Rows.Where(r => r.ObjectKey == SelectedObject.Key);
+
+            rows = rows.Where(r => CausalityTableFilters.Matches(r, _filter));
+
+            return Sort(rows).ToList();
+        }
+    }
+
+    private IEnumerable<CausalityTableRow> Sort(IEnumerable<CausalityTableRow> rows)
+    {
+        IOrderedEnumerable<CausalityTableRow> Order<TKey>(Func<CausalityTableRow, TKey> key, IComparer<TKey>? comparer = null) =>
+            _sortDescending ? rows.OrderByDescending(key, comparer) : rows.OrderBy(key, comparer);
+
+        return _sortColumn switch
+        {
+            "object" => Order(r => GetObjectDisplayName(r.ObjectKey), StringComparer.OrdinalIgnoreCase),
+            "change" => Order(r => r.ChangeKindLabel, StringComparer.OrdinalIgnoreCase),
+            "attribute" => Order(r => r.Attribute, StringComparer.OrdinalIgnoreCase),
+            "current" => Order(r => r.Current ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "wouldbe" => Order(r => r.WouldBe ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "via" => Order(r => r.Via ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "outcome" => Order(r => TechnicalNames ? r.TechnicalLabel : r.OutcomeLabel, StringComparer.OrdinalIgnoreCase),
+            // The order the model built the rows in: object-level rows first, then attribute rows.
+            _ => rows
+        };
+    }
+
+    private RenderFragment RenderNavButton(CausalityTableObject obj) => __builder =>
+    {
+        var selected = obj.Key == SelectedObject.Key;
+        <button type="button" class="tv-nav-btn @(selected ? "on" : null)"
+                aria-pressed="@(selected ? "true" : "false")"
+                @onclick="() => SelectObject(obj.Key)">
+            <span class="tv-dot" style="--tone: @CausalityToneCss.CssVar(obj.Tone)" aria-hidden="true"></span>
+            <span class="tv-nav-text">
+                <span class="tv-nav-name">@obj.DisplayName</span>
+                @if (!string.IsNullOrWhiteSpace(obj.Subtitle) && obj.Role != CausalityTableObjectRole.Everything)
+                {
+                    <span class="tv-nav-sub">@obj.Subtitle</span>
+                }
+            </span>
+            <span class="tv-count-pill">@obj.RowCount</span>
+        </button>
+    };
+
+    private RenderFragment SortHeader(string column, string title) => __builder =>
+    {
+        var active = _sortColumn == column;
+        <button type="button" class="tv-sort @(active ? "on" : null)" @onclick="() => ToggleSort(column)">
+            @title
+            @if (active)
+            {
+                <MudIcon Icon="@(_sortDescending ? Icons.Material.Filled.ArrowDownward : Icons.Material.Filled.ArrowUpward)"
+                         Size="Size.Small" aria-hidden="true" />
+            }
+        </button>
+    };
+
+    private void SelectObject(string key)
+    {
+        _selectedKey = key;
+    }
+
+    private void SetFilter(CausalityTableFilter filter)
+    {
+        _filter = filter;
+    }
+
+    private void ToggleSort(string column)
+    {
+        if (_sortColumn == column)
+        {
+            _sortDescending = !_sortDescending;
+        }
+        else
+        {
+            _sortColumn = column;
+            _sortDescending = false;
+        }
+    }
+
+    private string GetObjectDisplayName(string objectKey) =>
+        Model.Objects.FirstOrDefault(o => o.Key == objectKey)?.DisplayName ?? objectKey;
+
+    /// <summary>
+    /// A row whose value was removed with nothing replacing it: the current reading is struck through
+    /// rather than paired with an empty would-be cell.
+    /// </summary>
+    private static bool IsRemoval(CausalityTableRow row) =>
+        !string.IsNullOrEmpty(row.Current) && string.IsNullOrEmpty(row.WouldBe);
+
+    /// <summary>
+    /// Colours the would-be cell for a destructive (Error) or constructive (Success) outcome, matching
+    /// the tone the Timeline and Lineage already show for the same event; every other tone keeps the
+    /// grid's default text colour so the page is not painted end to end.
+    /// </summary>
+    private static string? GetWouldBeStyle(CausalityTableRow row) =>
+        row.Tone is CausalityTone.Error or CausalityTone.Success
+            ? $"color: {CausalityToneCss.TextCssVar(row.Tone)}"
+            : null;
+
+    private static string GetFilterLabel(CausalityTableFilter filter) => filter switch
+    {
+        CausalityTableFilter.ScopeAndJoin => "Scope & Join",
+        CausalityTableFilter.AttributeChanges => "Attribute changes",
+        CausalityTableFilter.ObjectChanges => "Object changes",
+        CausalityTableFilter.Destructive => "Destructive",
+        _ => "All"
+    };
+}
