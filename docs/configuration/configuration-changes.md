@@ -58,13 +58,15 @@ Where JIM recognises what kind of edit a summary row describes, it says so besid
 
 A pattern only appears where **every** object in the row makes the same kind of edit. A row covering a mixture is left unnamed, and the objects behind it carry their own patterns in the drill-down. Nothing is shown where JIM does not recognise the change, which is the normal case for rows whose values are dates or identifiers.
 
+In the drill-down, each object's name is a link to the object the change would act on, with a **CS** or **MV** marker saying which side of the Metaverse it leads to: the Connected System Object where the row has one (the object an export would remove, or the joined object an import would disconnect), otherwise the Metaverse Object.
+
 Three things are worth knowing before you act on a preview:
 
 - **A preview that failed shows nothing.** A part-way evaluation has seen an arbitrary subset of the objects, so its counts are real numbers about the wrong population. JIM withholds them rather than presenting them with a caveat beside them.
 - **Object detail may be a sample.** Each summary row keeps a capped number of detail rows by default; the row's own count is always exact. Where the cap applied, the drill-down is labelled as a sample, and you can ask for the full set when you start the preview.
 - **A preview describes the data as it stood.** An import that runs afterwards can move the answer. The panel says when the preview was evaluated so you can judge whether that matters.
 
-In the portal, previewing leaves the change unsaved: read the result, then save (or not). If you save, the confirmation opens with the same sentence, alongside the properties changing, and the change's [Activity](activities.md) records which preview informed it. Edit the settings after previewing and the preview is marked stale and contributes nothing to the confirmation, because it now describes a different change.
+In the portal, previewing leaves the change unsaved: read the result, then save (or not). If you save, the confirmation opens with the same sentence, alongside the properties changing, and the change's [Activity](activities.md) records which preview informed it. Edit the settings after previewing and the preview is marked stale and contributes nothing to the confirmation, because it now describes a different change. On a Synchronisation Rule, each preview's button appears only once you have edited what it answers for, since a preview of unedited settings can only report that nothing changes. Any preview panel you have finished with can be closed, which forgets the preview so the confirmation no longer cites it, while a preview still running finishes as an Activity.
 
 Automation gets the same evaluation. Start a preview with [`New-JIMConfigurationChangePreview`](../powershell/previews.md), or `POST` to the surface's own preview endpoint in the [REST API](../../api/reference/), then pass the preview's Activity id back on the change itself so the audit records the link.
 

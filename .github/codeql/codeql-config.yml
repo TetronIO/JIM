@@ -59,6 +59,13 @@
 #   enforcement point is scripts/Filter-Sarif.ps1, which the CodeQL
 #   workflow runs between analysis and upload; it reads this block, so
 #   this file remains the single place a path is excluded.
+#
+#   The filter also removes a result whose taint SOURCE is in an excluded
+#   path when every one of its code flows starts there. The same fixture
+#   reads above flow from the test into the LDAP Connector's own log calls,
+#   where CodeQL reports them as clear-text storage against shipped code;
+#   six such alerts stood open with a test file at the far end of every
+#   flow. A result with even one flow from shipped code is kept.
 
 #   test/JIM.TestScimServiceProvider/** (SCIM integration-test service provider)
 #   -----------------------------------------------------------------------------

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Transactional;
+
 namespace JIM.Worker.Processors;
 
 /// <summary>
@@ -30,4 +32,37 @@ internal static class ExportOutcomeMessage
 
     internal static string ForPreview(int pendingExports) =>
         $"Preview complete: {pendingExports:N0} export(s) would be processed";
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): the sentence appended to the Activity's warning for each change
+    /// type withheld this run. A run that would exceed a limit attempts none of that change type; there
+    /// is no partial attempt, so the sentence names what stopped it and how to let it through, rather
+    /// than a count of what was done.
+    /// </summary>
+    /// <param name="type">The change type withheld this run.</param>
+    /// <param name="limit">The Run Profile's limit for this change type.</param>
+    /// <param name="pending">How many of this type were pending at the start of the run, all of which
+    /// remain pending: the ledger decides the whole type withheld or not once, up front, so this is
+    /// never a partial figure.</param>
+    internal static string ForWithheld(PendingExportChangeType type, int limit, int pending)
+    {
+        var (singular, plural) = type switch
+        {
+            PendingExportChangeType.Create => ("create", "creates"),
+            PendingExportChangeType.Update => ("update", "updates"),
+            PendingExportChangeType.Delete => ("delete", "deletes"),
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported change type for a withheld-export warning.")
+        };
+
+        const string remedy = "Check what staged {0}, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.";
+
+        if (pending == 1)
+        {
+            return $"Max {plural} is {limit:N0}, but 1 {singular} was pending, so it was not attempted and remains pending. " +
+                   string.Format(remedy, "it");
+        }
+
+        return $"Max {plural} is {limit:N0}, but {pending:N0} {plural} were pending, so none were attempted and all {pending:N0} remain pending. " +
+               string.Format(remedy, "them");
+    }
 }

@@ -57,5 +57,50 @@ public enum PendingPasswordChangeStatus
     /// can retry the row back into the queue until its time to live runs out.
     /// </para>
     /// </summary>
-    Cancelled = 3
+    Cancelled = 3,
+
+    /// <summary>
+    /// The Password Delivery Service has claimed the change and is delivering it now.
+    /// <para>
+    /// A claim is what stops two deliverers (two Worker replicas, or one lane overlapping a safety poll) sending
+    /// the same password twice, and what lets the person who asked for the change be shown "delivering" rather
+    /// than "waiting". It is held under a lease: a deliverer that dies mid-flight leaves the row here, and once
+    /// the lease has run out the row is claimable again, which is the only way out of this state that does not
+    /// pass through the deliverer's own outcome write.
+    /// </para>
+    /// <para>
+    /// Not a terminal state and not a waiting one. The queue page groups it with Pending as "Waiting"; the
+    /// retention cleanup never removes it; expiry never touches it.
+    /// </para>
+    /// </summary>
+    Delivering = 4
+}
+
+/// <summary>
+/// Where a queued password change came from (#1635): the one fact that decides how it is delivered.
+/// <para>
+/// Both origins share the queue, the retry policy, the coalescing key, the Activity shape and the person's
+/// password history; that is the point of having one pipeline. They differ in exactly two places. A propagated
+/// change is aimed at whichever account the Connected System's configuration nominates and is held while that
+/// system is paused for Password Synchronisation; an explicit set is aimed at the account the administrator
+/// named and is delivered whether or not the system is configured, because the administrator has already made
+/// the decision a configuration exists to make (decision D1).
+/// </para>
+/// </summary>
+public enum PendingPasswordChangeOrigin
+{
+    /// <summary>
+    /// The password changed somewhere and JIM is carrying it to every Connected System configured to receive
+    /// synchronised passwords. The account is resolved on each attempt from the system's configuration; the
+    /// account is never enabled as a side effect; a paused system holds the change until it is switched back on.
+    /// </summary>
+    Propagated = 0,
+
+    /// <summary>
+    /// An administrator set a password on an account they named. The row carries that account, and the enable
+    /// decision they made with it, and is delivered even where the system has no Password Synchronisation
+    /// configuration or has it switched off. Every row queued before origins existed was propagated, which is
+    /// why that value is zero and this one is not.
+    /// </summary>
+    Explicit = 1
 }

@@ -5,6 +5,7 @@ using Asp.Versioning;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
+using JIM.Web.Services;
 using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Models.Core;
@@ -433,16 +434,18 @@ public class SynchronisationController(
         _logger.LogInformation("Bulk updating {Count} attributes for object type {ObjectTypeId} in Connected System {SystemId}",
             attributeCount, objectTypeId, connectedSystemId);
 
-        if (request.Attributes == null || request.Attributes.Count == 0)
-        {
-            return BadRequest(ApiErrorResponse.BadRequest("Attributes dictionary cannot be null or empty."));
-        }
-
+        // Settle who is calling before looking at what they sent: the identity check must not
+        // sit behind a condition the request body controls.
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
             _logger.LogWarning("Could not identify user from JWT claims for bulk attribute update");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        if (request.Attributes == null || request.Attributes.Count == 0)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest("Attributes dictionary cannot be null or empty."));
         }
 
         // Verify Connected System exists (Core retrieval — BulkUpdateAttributesAsync only reads
@@ -1047,34 +1050,53 @@ public class SynchronisationController(
     /// Set the password on a Connected System Object
     /// </summary>
     /// <remarks>
-    /// Writes the password straight to the Connected System. Nothing is staged, retried or stored: there is
-    /// nowhere in JIM to keep a password and no second attempt worth keeping one for. The attempt is recorded as
-    /// an Activity against the object, carrying the outcome and, where the target refused, its verbatim reason.
+    /// The account-scoped form of Set Password: the same operation as `POST /metaverse/objects/{id}/password` with
+    /// this one account named, for callers that hold the account rather than the person. The change is queued and
+    /// the Password Delivery Service writes it within about a second, whatever the synchronisation engine is doing;
+    /// by default the call waits up to 10 seconds and reports what the account did with the password. The response
+    /// is the same per-target shape the Metaverse Object operation returns, with one target.
+    ///
+    /// The password is encrypted the moment it is received and held only until it is delivered; once the account
+    /// has it, JIM's copy is gone. A copy the system refused is kept, still encrypted, so JIM can finish the job
+    /// once the cause is dealt with, until the change expires or retention removes it. It is never logged, never
+    /// returned, and never recorded on an Activity. A system that was unreachable is retried on its own clock; one
+    /// that refused the password parks it, with its own words in the target's `message`, for a person to look at.
     ///
     /// The password is supplied by the caller. To have JIM produce one that satisfies what the Connected System
     /// itself demands, call the generate endpoint first and pass the result here.
     ///
     /// This sets the password on whichever account it is pointed at: an administrator who can call it can take
     /// over any account in this connector space, subject only to what the Connected System's own service
-    /// account is permitted to do.
+    /// account is permitted to do. The account is delivered to even where the system's Password Synchronisation
+    /// is switched off; the caller named the account.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
-    /// <param name="request">The password to set, and how to apply it.</param>
-    /// <response code="200">The password was set. The body reports the expiry behaviour actually applied.</response>
-    /// <response code="400">The password was empty, the Connector cannot set passwords, or the Connected System refused the password. The reason is the target's own where there is one.</response>
-    /// <response code="404">No such Connected System, or no such object within it.</response>
+    /// <param name="request">The password to set, how to apply it, and how long to wait for delivery.</param>
+    /// <param name="waiter">Waits on the change's outcome when the request asks for it.</param>
+    /// <response code="200">The change was recorded and, where a wait applied, the account has settled: the target's `state` says whether the password was set, is retrying, or was parked with the system's own reason.</response>
+    /// <response code="202">A wait applied and ran out with the account still Queued or Delivering. The body carries what is known; delivery continues.</response>
+    /// <response code="400">The password was empty, `wait` is outside 0 to 30, or the Connector cannot set passwords.</response>
+    /// <response code="403">The transport is not one JIM will carry a password over.</response>
+    /// <response code="404">No such Connected System, no such object within it, or the object is not joined to a Metaverse Object, so there is no person whose password this would be.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
-    /// <response code="502">The Connected System could not be reached, so it is not known whether the password would be accepted. Try again.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/password", Name = "SetConnectedSystemObjectPassword")]
     [RequireSecureTransport]
-    [ProducesResponseType(typeof(SetConnectedSystemObjectPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SetMetaverseObjectPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SetMetaverseObjectPasswordResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
-    public async Task<IActionResult> SetConnectedSystemObjectPasswordAsync(int connectedSystemId, Guid csoId, [FromBody] SetConnectedSystemObjectPasswordRequest request)
+    public async Task<IActionResult> SetConnectedSystemObjectPasswordAsync(
+        int connectedSystemId,
+        Guid csoId,
+        [FromBody] SetConnectedSystemObjectPasswordRequest request,
+        [FromServices] IPasswordChangeOutcomeWaiter waiter)
     {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(waiter);
+
         // Deliberately logs the object rather than anything about the password. There is nothing about a
         // password value that belongs in a log line, including its length.
         _logger.LogInformation("Setting the password on Connected System Object {CsoId} in Connected System {ConnectedSystemId}", csoId, connectedSystemId);
@@ -1089,43 +1111,65 @@ public class SynchronisationController(
         if (string.IsNullOrWhiteSpace(request.Password))
             return BadRequest(ApiErrorResponse.BadRequest("A password is required."));
 
-        var requestedExpiryBehaviour = request.ExpiryBehaviour ?? PasswordExpiryBehaviour.RequireChangeAtNextSignIn;
-        var options = new PasswordSetOptions
+        if (request.Wait is < SetMetaverseObjectPasswordRequest.MinimumWaitSeconds or > SetMetaverseObjectPasswordRequest.MaximumWaitSeconds)
         {
-            ExpiryBehaviour = requestedExpiryBehaviour,
-            EnableAccount = request.EnableAccount
-        };
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"wait must be between {SetMetaverseObjectPasswordRequest.MinimumWaitSeconds} and {SetMetaverseObjectPasswordRequest.MaximumWaitSeconds} seconds."));
+        }
 
-        PasswordSetResult result;
+        var connectedSystemObject = await _application.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
+        if (connectedSystemObject == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System Object {csoId} was not found in Connected System {connectedSystemId}."));
+
+        // A password belongs to a person. An account nobody is joined to has no person whose password this would
+        // be, and no queue entry or history to record it under; the caller's move is to join it first.
+        if (connectedSystemObject.MetaverseObjectId is not { } metaverseObjectId)
+        {
+            return NotFound(ApiErrorResponse.NotFound(
+                $"Connected System Object {csoId} is not joined to a Metaverse Object, so there is no person whose password this would be. Join it to one first."));
+        }
+
+        var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);
+        if (metaverseObject == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object {metaverseObjectId}, which Connected System Object {csoId} is joined to, was not found."));
+
+        var displayName = metaverseObject.CachedDisplayName ?? metaverseObjectId.ToString();
+        var apiKey = await GetCurrentApiKeyAsync();
+
+        PasswordQueueResult result;
         try
         {
-            var apiKey = await GetCurrentApiKeyAsync();
-            result = apiKey != null
-                ? await _application.ConnectedSystems.SetConnectedSystemObjectPasswordAsync(connectedSystemId, csoId, request.Password, options, apiKey, HttpContext.RequestAborted)
-                : await _application.ConnectedSystems.SetConnectedSystemObjectPasswordAsync(connectedSystemId, csoId, request.Password, options, initiatedBy, HttpContext.RequestAborted);
+            result = await _application.PasswordSynchronisation.SetPasswordAsync(new SetPasswordRequest
+            {
+                MetaverseObjectId = metaverseObjectId,
+                DisplayName = displayName,
+                Password = request.Password,
+                Targets = [csoId],
+                // Requiring a change at next sign-in is the right default for a password somebody else chose.
+                ExpiryBehaviour = request.ExpiryBehaviour ?? PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+                EnableAccount = request.EnableAccount,
+                InitiatedBy = apiKey == null ? initiatedBy : null,
+                InitiatedByApiKey = apiKey
+            }, HttpContext.RequestAborted);
         }
         catch (ArgumentException ex)
         {
-            return NotFound(ApiErrorResponse.NotFound(ex.Message));
-        }
-        catch (NotSupportedException ex)
-        {
+            // The one thing left for the core to refuse here is a Connector that cannot set passwords; the account
+            // and its person were established above.
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
 
-        if (result.Success)
-            return Ok(SetConnectedSystemObjectPasswordResponse.FromResult(result, requestedExpiryBehaviour));
+        // A named account waits by default (decision D6): the caller is resetting a password and wants to know
+        // whether it took. Zero returns on enqueue with the states read once, so the shape is the same either way.
+        var wait = TimeSpan.FromSeconds(request.Wait ?? SetMetaverseObjectPasswordRequest.DefaultWaitSecondsForNamedAccounts);
+        var outcomes = wait > TimeSpan.Zero
+            ? await waiter.WaitForOutcomesAsync(result.ActivityId, wait, HttpContext.RequestAborted)
+            : await _application.PasswordSynchronisation.GetChangeOutcomesAsync(result.ActivityId);
 
-        var reason = result.ErrorMessage ?? "The Connected System refused the password without saying why.";
-        return result.FailureReason switch
-        {
-            // An account that is not there yet is a 404 like any other missing resource, and is commonly just
-            // replication: the caller's move is to wait and repeat the request, not to change the password.
-            PasswordSetFailureReason.TargetObjectNotFound => NotFound(ApiErrorResponse.NotFound(reason)),
-            // Nothing was established about the password itself, so this must not read as a rejection of it.
-            PasswordSetFailureReason.Transient => StatusCode(StatusCodes.Status502BadGateway, ApiErrorResponse.BadGateway(reason)),
-            _ => BadRequest(ApiErrorResponse.BadRequest(reason))
-        };
+        var response = SetMetaverseObjectPasswordResponse.FromResult(result, outcomes);
+        return wait > TimeSpan.Zero && !response.Settled
+            ? Accepted(response)
+            : Ok(response);
     }
 
     /// <summary>
@@ -2951,8 +2995,18 @@ public class SynchronisationController(
             RunType = request.RunType,
             PageSize = request.PageSize,
             FilePath = request.FilePath,
-            VerifyImportContentHashes = request.VerifyImportContentHashes
+            VerifyImportContentHashes = request.VerifyImportContentHashes,
+            MaxCreates = request.Safeguards?.MaxCreates,
+            MaxUpdates = request.Safeguards?.MaxUpdates,
+            MaxDeletes = request.Safeguards?.MaxDeletes,
+            MaxDetectedDeletions = request.Safeguards?.MaxDetectedDeletions,
+            MaxDetectedDeletionsPercent = request.Safeguards?.MaxDetectedDeletionsPercent
         };
+
+        // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
+        var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
+        if (safeguardsError != null)
+            return BadRequest(ApiErrorResponse.BadRequest(safeguardsError));
 
         // Set partition if provided
         if (request.PartitionId.HasValue)
@@ -3040,6 +3094,21 @@ public class SynchronisationController(
                 return BadRequest(ApiErrorResponse.BadRequest("VerifyImportContentHashes can only be enabled on a Full Import Run Profile."));
 
             runProfile.VerifyImportContentHashes = request.VerifyImportContentHashes.Value;
+        }
+
+        // Run Profile Safeguards (#1618): when present, the safeguards object replaces ALL members; a
+        // null member clears that limit, an absent object leaves every limit unchanged.
+        if (request.Safeguards != null)
+        {
+            runProfile.MaxCreates = request.Safeguards.MaxCreates;
+            runProfile.MaxUpdates = request.Safeguards.MaxUpdates;
+            runProfile.MaxDeletes = request.Safeguards.MaxDeletes;
+            runProfile.MaxDetectedDeletions = request.Safeguards.MaxDetectedDeletions;
+            runProfile.MaxDetectedDeletionsPercent = request.Safeguards.MaxDetectedDeletionsPercent;
+
+            var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
+            if (safeguardsError != null)
+                return BadRequest(ApiErrorResponse.BadRequest(safeguardsError));
         }
 
         // Update partition if provided
@@ -3396,12 +3465,12 @@ public class SynchronisationController(
     /// </summary>
     /// <remarks>
     /// Answers what changing the rule's behaviour toggles would do before anything is saved: how many objects
-    /// would stop having an identity created for them, how many would stop having an account created, and how many
+    /// would stop having an identity created for them, how many would stop having a Connected System Object created, and how many
     /// would be left free to drift from what JIM holds, along with each of their inverses.
     ///
     /// These are the settings whose consequences are hardest to picture, because none of them names a population.
     /// Disabling a rule reads like pausing it and is closer to withdrawing every value it owns; turning
-    /// `provisionToConnectedSystem` on reads like granting a capability and is account creation at scale.
+    /// `provisionToConnectedSystem` on reads like granting a capability and is Connected System Object creation at scale.
     ///
     /// Every omitted toggle is taken from the stored rule, exactly as the update endpoint does, so a caller
     /// proposing one change never silently proposes a second.

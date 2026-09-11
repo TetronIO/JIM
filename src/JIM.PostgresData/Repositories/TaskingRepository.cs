@@ -42,10 +42,6 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.ConfigurationChangePreviewWorkerTasks.Add(configurationChangePreviewWorkerTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
-            case PasswordDeliveryWorkerTask passwordDeliveryTask:
-                Repository.Database.PasswordDeliveryWorkerTasks.Add(passwordDeliveryTask);
-                await Repository.Database.SaveChangesAsync();
-                break;
             case TemporalScopeReconciliationWorkerTask temporalScopeReconciliationTask:
                 Repository.Database.TemporalScopeReconciliationWorkerTasks.Add(temporalScopeReconciliationTask);
                 await Repository.Database.SaveChangesAsync();
@@ -242,26 +238,6 @@ public class TaskingRepository : ITaskingRepository
     public async Task<ExampleDataTemplateWorkerTask?> GetFirstExampleDataWorkerTaskAsync(int dataGenerationTemplateId)
     {
         return await Repository.Database.ExampleDataTemplateWorkerTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);
-    }
-
-    public async Task<bool> HasQueuedPasswordDeliveryTaskAsync(int? connectedSystemId)
-    {
-        // Filtered off the shared Worker Task set rather than the typed one, so the discriminator this depends on
-        // is part of what the query does rather than something taken on trust.
-        var queued = Repository.Database.WorkerTasks
-            .AsNoTracking()
-            .OfType<PasswordDeliveryWorkerTask>()
-            .Where(t => t.Status == WorkerTaskStatus.Queued);
-
-        // A queued pass over every system covers a request for any one of them; a pass aimed at one system covers
-        // only that system, and covers no request for every system.
-        if (!connectedSystemId.HasValue)
-            return await queued.AnyAsync(t => t.ConnectedSystemId == null);
-
-        // Read out of the nullable before the predicate closes over it: the null check above already guarantees a
-        // value, but a nullable dereferenced inside an expression tree cannot be seen to be safe.
-        var requestedConnectedSystemId = connectedSystemId.Value;
-        return await queued.AnyAsync(t => t.ConnectedSystemId == null || t.ConnectedSystemId == requestedConnectedSystemId);
     }
 
     public async Task<WorkerTaskHeader?> GetFirstExampleDataTemplateWorkerTaskHeaderAsync(int templateId)
@@ -497,14 +473,6 @@ public class TaskingRepository : ITaskingRepository
                 var systemToDelete = await db.ConnectedSystems.SingleOrDefaultAsync(q => q.Id == deleteConnectedSystemTask.ConnectedSystemId);
                 return systemToDelete?.Name ?? $"Connected System {deleteConnectedSystemTask.ConnectedSystemId}";
             }
-            case PasswordDeliveryWorkerTask passwordDeliveryTask:
-            {
-                if (passwordDeliveryTask.ConnectedSystemId == null)
-                    return "Password Synchronisation (all Connected Systems)";
-
-                var passwordSystem = await db.ConnectedSystems.SingleOrDefaultAsync(q => q.Id == passwordDeliveryTask.ConnectedSystemId);
-                return passwordSystem?.Name ?? $"Connected System {passwordDeliveryTask.ConnectedSystemId}";
-            }
             case TemporalScopeReconciliationWorkerTask:
                 // the sweep carries no per-instance configuration, so the feature name is the display name
                 return "Temporal Scope Reconciliation";
@@ -540,7 +508,6 @@ public class TaskingRepository : ITaskingRepository
             // long-lived per-object work, where the immediate deletion is a bulk operation.
             DeleteConnectedSystemWorkerTask { SynchronisedDeprovisioning: true } => "Deprovision Connected System Worker Task",
             DeleteConnectedSystemWorkerTask => nameof(DeleteConnectedSystemWorkerTask).SplitOnCapitalLetters(),
-            PasswordDeliveryWorkerTask => nameof(PasswordDeliveryWorkerTask).SplitOnCapitalLetters(),
             TemporalScopeReconciliationWorkerTask => nameof(TemporalScopeReconciliationWorkerTask).SplitOnCapitalLetters(),
             HistoryRetentionCleanupWorkerTask => nameof(HistoryRetentionCleanupWorkerTask).SplitOnCapitalLetters(),
             SchemaRefreshRemovalWorkerTask => nameof(SchemaRefreshRemovalWorkerTask).SplitOnCapitalLetters(),

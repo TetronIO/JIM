@@ -124,4 +124,44 @@ Describe 'Lint-Changelog' {
             $result.Output | Should -Match 'WARNING'
         }
     }
+
+    Context 'near-identical entries (a re-add after a reword)' {
+
+        # The union driver's other signature: an entry was reworded on one
+        # branch while another still carried the original, and the merge kept
+        # both. The pair differs in a handful of words out of dozens, which is
+        # not how two genuinely different changes read. The original wording of
+        # the #1119 retention entry came back beside its #1547 rewrite this way
+        # and only warned, because it opened the same way, so it shipped as
+        # far as main.
+        BeforeAll {
+            $script:Rewritten = '- ✨ Password Synchronisation history is now kept under its own retention period, defaulting to a year. It governs the Activities recording what happened to each password change, and the queued changes that finished (parked, expired or cancelled). A parked or cancelled change still carries its encrypted password, so shortening the period is how you shorten that. (#1119)'
+            $script:Original  = '- ✨ Password Synchronisation history is now kept under its own retention period, defaulting to a year. It governs the Activities recording what happened to each password change, and the queue rows that finished (parked, expired or cancelled). A parked or cancelled row still carries its encrypted value, so shortening the period is how you shorten that. (#1119)'
+        }
+
+        It 'fails two entries in one subsection that differ in only a few words' {
+            $result = Invoke-Lint -UnreleasedEntries @($script:Rewritten, $script:Original)
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'near-identical'
+        }
+
+        It 'still passes two entries that open the same way but describe different changes' {
+            # Two real fixes from [Unreleased] that share their first eight
+            # words and nothing much after: the opening warns, the pair must
+            # not fail.
+            $result = Invoke-Lint -UnreleasedEntries @(
+                '- 🐛 Outlined and text buttons in the primary colour are now legible on the Black Dark theme, which took the accent straight where the other dark themes lighten it. (#5)',
+                '- 🐛 Outlined and text buttons in the primary colour are now legible on the light themes, whose pale page left the darkest accent below the contrast an accessible reading needs. (#6)'
+            )
+            $result.ExitCode | Should -Be 0
+            $result.Output | Should -Match 'WARNING'
+        }
+
+        It 'fails an [Unreleased] entry near-identical to one that already shipped' {
+            $result = Invoke-Lint -UnreleasedEntries @($script:Original) -ReleasedEntries @($script:Rewritten)
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'near-identical'
+            $result.Output | Should -Match '0\.14\.0'
+        }
+    }
 }

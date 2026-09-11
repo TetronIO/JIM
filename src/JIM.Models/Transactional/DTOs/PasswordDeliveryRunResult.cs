@@ -31,6 +31,13 @@ public class PasswordDeliveryRunResult
     public int ExpiredCount { get; set; }
 
     /// <summary>
+    /// Changes the lane claimed and then gave back unattempted because it was cancelled before reaching them
+    /// (#1635). Nothing was counted against them; they are Pending and due again. Not a problem to report, since
+    /// the cancellation was asked for, but a number the lane's summary line should carry.
+    /// </summary>
+    public int ReleasedCount { get; set; }
+
+    /// <summary>
     /// True where the Connector could not open its password channel at all, so nothing was attempted. Reported
     /// once for the pass rather than as a failure per change, which would inflate every attempt count for a
     /// problem that belongs to the connection.
@@ -51,9 +58,16 @@ public class PasswordDeliveryRunResult
     public bool PasswordChannelNotSecure { get; set; }
 
     /// <summary>
+    /// The Connected System names a Connector this build does not have, so nothing could be attempted; the
+    /// claimed changes were given back unattempted.
+    /// </summary>
+    public bool ConnectorCouldNotBeResolved { get; set; }
+
+    /// <summary>
     /// Whether this pass has anything worth telling an administrator about.
     /// </summary>
     public bool HasSomethingToReport =>
         DeliveredCount > 0 || RetryingCount > 0 || ParkedCount > 0 || ExpiredCount > 0
-        || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure;
+        || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure
+        || ConnectorCouldNotBeResolved;
 }

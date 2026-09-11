@@ -1257,7 +1257,8 @@ $templateIrrelevantScenarios = @(
     "*Scenario17*",  # Initial Password - asserts against one account; a larger template only lengthens the export
     "*Scenario18*",  # Writeback To Source - three seeded people; the question is per-object, not per-population
     "*Scenario19*",  # Auxiliary Classes - fixed six-user dataset per suffix, no template scaling
-    "*Scenario20*"   # Password Synchronisation - asserts against three accounts; a larger template only lengthens the export
+    "*Scenario20*",  # Password Synchronisation - asserts against three accounts; a larger template only lengthens the export
+    "*Scenario21*"   # Run Profile Safeguards - limits are asserted relative to the population; a larger template only lengthens the runs
 )
 
 function Test-TemplateRelevant {
@@ -2162,7 +2163,7 @@ else {
 }
 
 # For Scenario 2 and Scenario 8 with Samba AD, also check for Source and Target images
-if (($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") -and $DirectoryType -ne "OpenLDAP") {
+if (($Scenario -match 'Scenario2(\D|$)' -or $Scenario -like "*Scenario8*") -and $DirectoryType -ne "OpenLDAP") {
     # Check Source image
     $sourceImageTag = "ghcr.io/tetronio/jim-samba-ad:source"
     $sourceCheck = Test-SambaImageNeedsRebuild -ImageTag $sourceImageTag
@@ -2604,7 +2605,7 @@ if ($Scenario -like "*Scenario15*") {
 }
 
 # Start Scenario 2 containers if running Scenario 2
-if ($Scenario -like "*Scenario2*") {
+if ($Scenario -match 'Scenario2(\D|$)') {
     Write-Step "Starting Samba AD (Source and Target for Scenario 2)..."
     $scenario2Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -2756,7 +2757,7 @@ else {
 
 # Wait for Scenario 2 or Scenario 8 Samba AD containers if applicable
 # For OpenLDAP, the openldap-primary container wait is handled above
-if (($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") -and $DirectoryType -ne "OpenLDAP") {
+if (($Scenario -match 'Scenario2(\D|$)' -or $Scenario -like "*Scenario8*") -and $DirectoryType -ne "OpenLDAP") {
     Write-Step "Waiting for Samba AD Source to be ready..."
     $sourceReady = $false
     $elapsed = 0

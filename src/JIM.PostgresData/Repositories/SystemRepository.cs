@@ -3,6 +3,7 @@
 
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Operations;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -250,4 +251,63 @@ internal sealed class SystemRepository : ISystemRepository
         await db.ExecuteSqlRawAsync(@"INSERT INTO ""MetaverseObjectAttributeValues"" SELECT * FROM _reset_admin_mvav;");
         await db.ExecuteSqlRawAsync(@"INSERT INTO ""MetaverseObjectRole"" SELECT * FROM _reset_admin_role;");
     }
+
+    #region Service heartbeats
+
+    /// <inheritdoc />
+    public async Task UpsertServiceHeartbeatAsync(ServiceHeartbeat heartbeat)
+    {
+        // One statement, not read-then-write: this runs every few seconds from every service, and the unique index on
+        // (Service, InstanceId) is what lets the database do the "insert or replace" without a second round trip.
+        // Column lists come from the constants so they cannot drift from the model; the parameter order below MUST
+        // match ServiceHeartbeatBulkColumns.ServiceHeartbeats exactly.
+        var columns = BulkSqlHelpers.ToQuotedList(ServiceHeartbeatBulkColumns.ServiceHeartbeats);
+        var placeholders = string.Join(", ", Enumerable.Range(0, ServiceHeartbeatBulkColumns.ServiceHeartbeats.Length).Select(i => $"{{{i}}}"));
+        var assignments = string.Join(", ", ServiceHeartbeatBulkColumns.ServiceHeartbeatsUpdate
+            .Select(c => $"\"{c}\" = EXCLUDED.\"{c}\""));
+
+        var sql = $"""
+            INSERT INTO "ServiceHeartbeats" ({columns}) VALUES ({placeholders})
+            ON CONFLICT ("Service", "InstanceId") DO UPDATE SET {assignments}
+            """;
+
+        await _repository.Database.Database.ExecuteSqlRawAsync(sql,
+            (int)heartbeat.Service,
+            heartbeat.InstanceId,
+            heartbeat.HostName,
+            heartbeat.Version,
+            heartbeat.StartedAt,
+            heartbeat.LastSeenAt,
+            BulkSqlHelpers.NullableParam(heartbeat.CurrentWork, NpgsqlDbType.Text),
+            BulkSqlHelpers.NullableParam(heartbeat.CurrentWorkStartedAt, NpgsqlDbType.TimestampTz),
+            BulkSqlHelpers.NullableParam(heartbeat.LastProgressAt, NpgsqlDbType.TimestampTz),
+            BulkSqlHelpers.NullableParam(heartbeat.Detail, NpgsqlDbType.Text));
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ServiceHeartbeat>> GetLatestServiceHeartbeatsAsync()
+    {
+        // The table holds one row per service instance seen in the last day (each service prunes its own on start),
+        // so it is a handful of rows; reading them all and picking the newest per service in memory is one cheap
+        // query rather than a correlated sub-select.
+        var rows = await _repository.Database.ServiceHeartbeats
+            .AsNoTracking()
+            .OrderByDescending(h => h.LastSeenAt)
+            .ToListAsync();
+
+        return rows
+            .GroupBy(h => h.Service)
+            .Select(g => g.First())
+            .ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> PruneServiceHeartbeatsAsync(JimService service, DateTime olderThan)
+    {
+        return await _repository.Database.ServiceHeartbeats
+            .Where(h => h.Service == service && h.LastSeenAt < olderThan)
+            .ExecuteDeleteAsync();
+    }
+
+    #endregion
 }

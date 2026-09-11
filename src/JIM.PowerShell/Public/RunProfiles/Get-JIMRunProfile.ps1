@@ -28,6 +28,8 @@ function Get-JIMRunProfile {
           System. Such a Run Profile is inoperable; a deselected partition is not managed by JIM, so
           Start-JIMRunProfile refuses it rather than reading scope that has been withdrawn.
         - filePath, verifyImportContentHashes
+        - safeguards: the Run Profile Safeguards limits (maxCreates, maxUpdates, maxDeletes), always
+          present; each member is null when that limit is not set
         - ConnectedSystemId (added for pipeline chaining)
 
     .EXAMPLE

@@ -130,6 +130,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DeletedRecordsToDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("DetectedDeletionsWithheld")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ErrorDetail")
                         .HasColumnType("text");
 
@@ -150,6 +153,15 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<TimeSpan?>("ExecutionTime")
                         .HasColumnType("interval");
+
+                    b.Property<int?>("ExportCreatesWithheld")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ExportDeletesWithheld")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ExportUpdatesWithheld")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("FirstSeen")
                         .HasColumnType("timestamp with time zone");
@@ -1947,6 +1959,60 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("SyncRuleScopingCriteriaGroups");
                 });
 
+            modelBuilder.Entity("JIM.Models.Operations.ServiceHeartbeat", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CurrentWork")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("CurrentWorkStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("HostName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("InstanceId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("LastProgressAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Service")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Service", "InstanceId")
+                        .IsUnique();
+
+                    b.ToTable("ServiceHeartbeats");
+                });
+
             modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreview", b =>
                 {
                     b.Property<Guid>("ActivityId")
@@ -3455,6 +3521,21 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("LastUpdatedByType")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("MaxCreates")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxDeletes")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxDetectedDeletions")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxDetectedDeletionsPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxUpdates")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -4108,6 +4189,13 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("CancelledByName")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClaimedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
@@ -4116,6 +4204,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("EnableAccount")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("EncryptedPassword")
                         .IsRequired()
@@ -4138,6 +4229,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("NextRetryAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Origin")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -4324,22 +4418,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasBaseType("JIM.Models.Tasking.WorkerTask");
 
                     b.HasDiscriminator().HasValue("HistoryRetentionCleanupWorkerTask");
-                });
-
-            modelBuilder.Entity("JIM.Models.Tasking.PasswordDeliveryWorkerTask", b =>
-                {
-                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
-
-                    b.Property<int?>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.ToTable("WorkerTasks", t =>
-                        {
-                            t.Property("ConnectedSystemId")
-                                .HasColumnName("PasswordDeliveryWorkerTask_ConnectedSystemId");
-                        });
-
-                    b.HasDiscriminator().HasValue("PasswordDeliveryWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.SchemaRefreshRemovalWorkerTask", b =>

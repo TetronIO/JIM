@@ -20,26 +20,38 @@
       - WARNING: entries longer than the recommended length are flagged for
         tightening to one or two sentences.
       - HARD FAIL: two entries in the same subsection with identical text.
+      - HARD FAIL: two entries in the same subsection that are near-identical:
+        three quarters or more of their words in common. CHANGELOG.md carries
+        a `merge=union` driver, so an entry reworded on one branch while
+        another still carries the original is re-added alongside the version
+        that replaced it. Such a pair differs in a handful of words out of
+        dozens; two genuinely different changes never read that alike. The
+        closest genuine pair in the file's history scores 0.56 and the
+        re-adds 0.63 to 1.0; the threshold sits in that gap nearer the
+        re-adds, because a genuine pair that failed could only be silenced by
+        rewording, whereas a heavier reword that slips under it still warns
+        on its opening clause.
       - WARNING: two entries in the same subsection that open with the same
-        eight words. CHANGELOG.md carries a `merge=union` driver, so a
-        concurrently-edited entry can be re-added alongside the version that
-        replaced it: the pair then shares an opening clause and diverges later.
-        Eight words is the shortest prefix that flags every such pair in the
-        file's history without a false positive.
-      - HARD FAIL: an [Unreleased] entry identical to one in a released
-        section. This is the other half of what `merge=union` costs: union
-        merging re-adds lines rather than reconciling them, so a branch that
-        merges or rebases across a release brings the entries it contributed
-        back into [Unreleased], where they read as unshipped work and would
-        ship a second time in the next release notes. An entry that has
-        already shipped is never a judgement call.
+        eight words but then diverge. A weaker signal of the same re-add,
+        which also fires on two genuinely different fixes to the same
+        component; that is why it warns rather than fails.
+      - HARD FAIL: an [Unreleased] entry identical to, or near-identical to,
+        one in a released section. This is the other half of what
+        `merge=union` costs: union merging re-adds lines rather than
+        reconciling them, so a branch that merges or rebases across a release
+        brings the entries it contributed back into [Unreleased], where they
+        read as unshipped work and would ship a second time in the next
+        release notes. An entry that has already shipped is never a judgement
+        call, and neither is one that has been reworded since it shipped.
       - WARNING: an [Unreleased] entry opening with the same eight words as a
-        released one. Usually the same re-add after a reword; occasionally a
-        genuine follow-up that revisits shipped work, which is why it warns.
+        released one. Usually the same re-add after a heavier reword;
+        occasionally a genuine follow-up that revisits shipped work, which is
+        why it warns.
 
     Warnings do not fail the run unless -WarningsAsErrors is set. The emoji
-    whitelist and the identical-entry check always fail the run, because
-    neither has false positives.
+    whitelist, the identical-entry checks and the near-identical checks always
+    fail the run, because none of them has a false positive in the file's
+    history.
 
 .PARAMETER Path
     Path to the changelog file. Defaults to CHANGELOG.md in the repo root.
@@ -87,6 +99,14 @@ $internalPatterns = @(
 
 $maxEntryLength = 280  # characters; longer than this reads as "too verbose" for a changelog
 $duplicatePrefixWords = 8  # opening words compared when looking for a re-added entry
+# Share of words two entries must have in common (Sørensen-Dice on their word
+# bags) to count as one entry written twice. Measured against the file's
+# history: every genuine pair scored 0.56 or less, every union-merge re-add
+# 0.63 or more, and the resurrections that reached main scored 0.97 and 1.0.
+# Set nearer the re-adds than the genuine pairs: a genuine pair failing here
+# could only be silenced by rewording, while a re-add below the threshold is
+# still caught as a warning by its opening clause.
+$nearIdenticalThreshold = 0.75
 
 $lines = Get-Content -Path $Path
 $header = if ($Section -eq 'Unreleased') { '## [Unreleased]' } else { "## [$Section]" }
@@ -161,25 +181,80 @@ function Get-NormalisedEntryText {
     return (($stripped.ToLowerInvariant() -replace '[^a-z0-9 ]', ' ') -split '\s+' | Where-Object { $_ })
 }
 
+# Everything the duplicate checks need from an entry, computed once: its
+# normalised words, the exact and opening-clause keys, and a word bag (word to
+# count) for the similarity comparison.
+function Get-EntryShape {
+    param([pscustomobject]$Entry)
+    $words = @(Get-NormalisedEntryText -Text $Entry.Text)
+    if ($words.Count -eq 0) { return $null }
+    $bag = @{}
+    foreach ($w in $words) { $bag[$w] = 1 + $bag[$w] }
+    return [pscustomobject]@{
+        Entry  = $Entry
+        Count  = $words.Count
+        Exact  = ($words -join ' ')
+        Prefix = if ($words.Count -ge $duplicatePrefixWords) { ($words | Select-Object -First $duplicatePrefixWords) -join ' ' } else { $null }
+        Bag    = $bag
+    }
+}
+
+# Sørensen-Dice similarity of two word bags: twice the words in common over
+# the words in both. Order-insensitive, so a reword that moves a clause still
+# scores as the same entry; count-sensitive, so repeated words are not
+# over-credited.
+function Get-WordBagSimilarity {
+    param([pscustomobject]$A, [pscustomobject]$B)
+    # An upper bound from the lengths alone: if even a perfect overlap of the
+    # shorter entry could not reach the threshold, skip the intersection.
+    $shorter = [Math]::Min($A.Count, $B.Count)
+    if ((2.0 * $shorter) / ($A.Count + $B.Count) -lt $nearIdenticalThreshold) { return 0.0 }
+
+    $small, $large = if ($A.Bag.Count -le $B.Bag.Count) { $A.Bag, $B.Bag } else { $B.Bag, $A.Bag }
+    $common = 0
+    foreach ($word in $small.Keys) {
+        if ($large.ContainsKey($word)) { $common += [Math]::Min($small[$word], $large[$word]) }
+    }
+    return (2.0 * $common) / ($A.Count + $B.Count)
+}
+
+function Format-Similarity {
+    param([double]$Similarity)
+    return "$([Math]::Round($Similarity * 100))% of their words in common"
+}
+
 foreach ($group in $entries | Group-Object Subsection) {
     $byExact  = @{}
     $byPrefix = @{}
+    $seen     = [System.Collections.Generic.List[object]]::new()
     foreach ($entry in $group.Group) {
-        $words = Get-NormalisedEntryText -Text $entry.Text
-        if ($words.Count -eq 0) { continue }
+        $shape = Get-EntryShape -Entry $entry
+        if ($null -eq $shape) { continue }
 
-        $exact = $words -join ' '
-        if ($byExact.ContainsKey($exact)) {
-            $errors.Add("$Path`:$($entry.Number)  entry is identical to the one at line $($byExact[$exact]) under '$($group.Name)'; remove one: `"$($entry.Text)`"")
+        if ($byExact.ContainsKey($shape.Exact)) {
+            $errors.Add("$Path`:$($entry.Number)  entry is identical to the one at line $($byExact[$shape.Exact]) under '$($group.Name)'; remove one: `"$($entry.Text)`"")
+            continue
         }
-        else { $byExact[$exact] = $entry.Number }
+        $byExact[$shape.Exact] = $entry.Number
 
-        if ($words.Count -ge $duplicatePrefixWords) {
-            $prefix = ($words | Select-Object -First $duplicatePrefixWords) -join ' '
-            if ($byPrefix.ContainsKey($prefix)) {
-                $warnings.Add("$Path`:$($entry.Number)  entry opens with the same $duplicatePrefixWords words as the one at line $($byPrefix[$prefix]) under '$($group.Name)'; if they describe the same change, keep the version you want and delete the other (CHANGELOG.md merges by union, so a replaced entry can come back).")
+        # Near-identical: the re-add after a reword. Checked before the opening
+        # clause so the pair is reported once, as the failure it is.
+        $twin = $null
+        foreach ($earlier in $seen) {
+            $similarity = Get-WordBagSimilarity -A $shape -B $earlier
+            if ($similarity -ge $nearIdenticalThreshold) { $twin = @{ Shape = $earlier; Similarity = $similarity }; break }
+        }
+        $seen.Add($shape)
+        if ($null -ne $twin) {
+            $errors.Add("$Path`:$($entry.Number)  entry is near-identical to the one at line $($twin.Shape.Entry.Number) under '$($group.Name)' ($(Format-Similarity $twin.Similarity)); they are one change written twice, so keep the version you want and delete the other (CHANGELOG.md merges by union, so a replaced entry can come back): `"$($entry.Text)`"")
+            continue
+        }
+
+        if ($null -ne $shape.Prefix) {
+            if ($byPrefix.ContainsKey($shape.Prefix)) {
+                $warnings.Add("$Path`:$($entry.Number)  entry opens with the same $duplicatePrefixWords words as the one at line $($byPrefix[$shape.Prefix]) under '$($group.Name)'; if they describe the same change, keep the version you want and delete the other (CHANGELOG.md merges by union, so a replaced entry can come back).")
             }
-            else { $byPrefix[$prefix] = $entry.Number }
+            else { $byPrefix[$shape.Prefix] = $entry.Number }
         }
     }
 }
@@ -191,36 +266,40 @@ foreach ($group in $entries | Group-Object Subsection) {
 # re-add lands wherever the merge put it, which need not be where it shipped.
 $shippedByExact  = @{}
 $shippedByPrefix = @{}
+$shippedShapes   = [System.Collections.Generic.List[object]]::new()
 foreach ($other in $otherSectionEntries) {
-    $words = Get-NormalisedEntryText -Text $other.Text
-    if ($words.Count -eq 0) { continue }
+    $shape = Get-EntryShape -Entry $other
+    if ($null -eq $shape) { continue }
+    $shippedShapes.Add($shape)
 
-    $exact = $words -join ' '
-    if (-not $shippedByExact.ContainsKey($exact)) { $shippedByExact[$exact] = $other }
-
-    if ($words.Count -ge $duplicatePrefixWords) {
-        $prefix = ($words | Select-Object -First $duplicatePrefixWords) -join ' '
-        if (-not $shippedByPrefix.ContainsKey($prefix)) { $shippedByPrefix[$prefix] = $other }
-    }
+    if (-not $shippedByExact.ContainsKey($shape.Exact)) { $shippedByExact[$shape.Exact] = $other }
+    if ($null -ne $shape.Prefix -and -not $shippedByPrefix.ContainsKey($shape.Prefix)) { $shippedByPrefix[$shape.Prefix] = $other }
 }
 
 foreach ($entry in $entries) {
-    $words = Get-NormalisedEntryText -Text $entry.Text
-    if ($words.Count -eq 0) { continue }
+    $shape = Get-EntryShape -Entry $entry
+    if ($null -eq $shape) { continue }
 
-    $exact = $words -join ' '
-    if ($shippedByExact.ContainsKey($exact)) {
-        $shipped = $shippedByExact[$exact]
+    if ($shippedByExact.ContainsKey($shape.Exact)) {
+        $shipped = $shippedByExact[$shape.Exact]
         $errors.Add("$Path`:$($entry.Number)  entry has already shipped in [$($shipped.Section)] (line $($shipped.Number)); delete it from $header rather than releasing it twice (CHANGELOG.md merges by union, so merging or rebasing across a release re-adds the entries the branch contributed): `"$($entry.Text)`"")
         continue
     }
 
-    if ($words.Count -ge $duplicatePrefixWords) {
-        $prefix = ($words | Select-Object -First $duplicatePrefixWords) -join ' '
-        if ($shippedByPrefix.ContainsKey($prefix)) {
-            $shipped = $shippedByPrefix[$prefix]
-            $warnings.Add("$Path`:$($entry.Number)  entry opens with the same $duplicatePrefixWords words as one that already shipped in [$($shipped.Section)] (line $($shipped.Number)); delete it unless it genuinely describes further work on the same thing.")
-        }
+    $twin = $null
+    foreach ($shippedShape in $shippedShapes) {
+        $similarity = Get-WordBagSimilarity -A $shape -B $shippedShape
+        if ($similarity -ge $nearIdenticalThreshold) { $twin = @{ Shape = $shippedShape; Similarity = $similarity }; break }
+    }
+    if ($null -ne $twin) {
+        $shipped = $twin.Shape.Entry
+        $errors.Add("$Path`:$($entry.Number)  entry is near-identical to one that already shipped in [$($shipped.Section)] (line $($shipped.Number), $(Format-Similarity $twin.Similarity)); delete it from $header rather than releasing it twice (CHANGELOG.md merges by union, so merging or rebasing across a release re-adds the entries the branch contributed): `"$($entry.Text)`"")
+        continue
+    }
+
+    if ($null -ne $shape.Prefix -and $shippedByPrefix.ContainsKey($shape.Prefix)) {
+        $shipped = $shippedByPrefix[$shape.Prefix]
+        $warnings.Add("$Path`:$($entry.Number)  entry opens with the same $duplicatePrefixWords words as one that already shipped in [$($shipped.Section)] (line $($shipped.Number)); delete it unless it genuinely describes further work on the same thing.")
     }
 }
 

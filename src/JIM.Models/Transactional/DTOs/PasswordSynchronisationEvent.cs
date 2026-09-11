@@ -42,6 +42,14 @@ public class PasswordSynchronisationEvent
     public string? Message { get; set; }
 
     /// <summary>
+    /// Which way the change was aimed (#1635): an administrator's explicit set of named accounts, or a password
+    /// propagated to every configured Connected System. Read back from the Activity's TargetContext, where
+    /// <c>SetPasswordAsync</c> writes the origin's name; null for an Activity written before origins were
+    /// recorded, which the panel shows without a kind chip rather than with a guessed one.
+    /// </summary>
+    public PendingPasswordChangeOrigin? Origin { get; set; }
+
+    /// <summary>
     /// One entry per Connected System the change reached, oldest first. Empty where the change was queued for no
     /// system, or where none has been attempted yet.
     /// </summary>

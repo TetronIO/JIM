@@ -36,21 +36,6 @@ public interface ITaskingRepository
     public Task<DeleteConnectedSystemWorkerTask?> GetDeleteConnectedSystemWorkerTaskAsync(int connectedSystemId);
 
     /// <summary>
-    /// Whether a Password Delivery Worker Task that would cover the given scope is already waiting to run (#1119).
-    /// <para>
-    /// Only tasks still queued count. A pass already running may have read the queue before the work being
-    /// requested reached it, so relying on it would leave that work waiting for the next housekeeping tick; a
-    /// duplicated pass costs a query against an empty queue, which is the cheaper mistake by far.
-    /// </para>
-    /// <para>
-    /// A queued pass over every Connected System covers a request for any one of them. The reverse is not true: a
-    /// pass aimed at one system will not deliver to the others.
-    /// </para>
-    /// </summary>
-    /// <param name="connectedSystemId">The Connected System delivery is wanted for, or null for every system.</param>
-    public Task<bool> HasQueuedPasswordDeliveryTaskAsync(int? connectedSystemId);
-
-    /// <summary>
     /// Get all worker tasks that need cancelling.
     /// </summary>
     public Task<List<WorkerTask>> GetWorkerTasksThatNeedCancellingAsync();

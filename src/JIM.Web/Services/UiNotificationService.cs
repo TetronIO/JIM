@@ -6,12 +6,13 @@ using JIM.Models.Tasking;
 namespace JIM.Web.Services;
 
 /// <summary>
-/// Singleton implementation of <see cref="IUiNotificationService"/> (issue #307). The
+/// Singleton implementation of <see cref="IUiNotificationService"/> (issue #307) and of its Password Synchronisation
+/// leg, <see cref="IPasswordChangeNotifications"/> (#1635). The
 /// <c>NotificationListenerService</c> calls the internal publish methods as PostgreSQL NOTIFY events
 /// arrive; Blazor Server components subscribe to the events. Each subscriber is invoked in isolation so
 /// one faulty subscriber cannot prevent others from being notified.
 /// </summary>
-public sealed class UiNotificationService : IUiNotificationService
+public sealed class UiNotificationService : IUiNotificationService, IPasswordChangeNotifications
 {
     private readonly ILogger<UiNotificationService> _logger;
 
@@ -25,6 +26,9 @@ public sealed class UiNotificationService : IUiNotificationService
 
     /// <inheritdoc />
     public event Action<Guid>? ActivityProgressChanged;
+
+    /// <inheritdoc />
+    public event Action<int>? PasswordChangeChanged;
 
     /// <inheritdoc />
     public bool IsRealTimeAvailable { get; private set; }
@@ -46,6 +50,14 @@ public sealed class UiNotificationService : IUiNotificationService
     internal void PublishActivityProgress(Guid activityId)
     {
         RaiseIsolated(ActivityProgressChanged, activityId, nameof(ActivityProgressChanged));
+    }
+
+    /// <summary>
+    /// Raises <see cref="PasswordChangeChanged"/> for all subscribers, isolating subscriber exceptions.
+    /// </summary>
+    internal void PublishPasswordChange(int connectedSystemId)
+    {
+        RaiseIsolated(PasswordChangeChanged, connectedSystemId, nameof(PasswordChangeChanged));
     }
 
     /// <summary>

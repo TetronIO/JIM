@@ -155,6 +155,31 @@ public class ExportExecutionResult
     public int InitialPasswordStagingFailedCount { get; set; }
 
     #endregion
+
+    #region Run Profile Safeguards (issue #1618)
+
+    /// <summary>
+    /// Number of creates the Run Profile's Max creates limit withheld this run. Zero when there was
+    /// no limit, or the limit was never reached. The withheld creates stay Pending, untouched, for
+    /// the next Export run.
+    /// </summary>
+    public int CreatesWithheld { get; set; }
+
+    /// <summary>
+    /// Number of updates the Run Profile's Max updates limit withheld this run. Zero when there was
+    /// no limit, or the limit was never reached. The withheld updates stay Pending, untouched, for
+    /// the next Export run.
+    /// </summary>
+    public int UpdatesWithheld { get; set; }
+
+    /// <summary>
+    /// Number of deletes the Run Profile's Max deletes limit withheld this run. Zero when there was
+    /// no limit, or the limit was never reached. The withheld deletes stay Pending, untouched, for
+    /// the next Export run.
+    /// </summary>
+    public int DeletesWithheld { get; set; }
+
+    #endregion
 }
 
 /// <summary>

@@ -76,10 +76,6 @@ public class PasswordSynchronisationControllerQueueTests
             .Returns(Task.CompletedTask);
         activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
-        // A delivery pass is already queued, so a retry does not go on to create a worker task; this fixture is
-        // about the endpoints, and the fan-out has its own tests.
-        taskingRepo.Setup(r => r.HasQueuedPasswordDeliveryTaskAsync(It.IsAny<int?>())).ReturnsAsync(true);
-
         connectedSystemRepo
             .Setup(r => r.GetConnectedSystemCoreAsync(It.IsAny<int>(), It.IsAny<bool>()))
             .ReturnsAsync((int id, bool _) => id == UnknownSystemId

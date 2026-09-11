@@ -91,6 +91,18 @@
     [Parameter] public int ActivePanelIndex { get; set; }
     [Parameter] public EventCallback<int> ActivePanelIndexChanged { get; set; }
 
+    /// <summary>
+    /// Raised alongside <see cref="ActivePanelIndexChanged"/> with the slug of the newly active panel (the same
+    /// value the URL carries: "password" for a panel titled "Password"), whether the change came from a click, the
+    /// URL on first load, or the browser's back and forward buttons.
+    /// </summary>
+    /// <remarks>
+    /// For pages that load a tab's data on first activation. The index is the wrong key for that: a panel gated on
+    /// a role sits at a different index for different readers, so a lazy load keyed on "index 3" would silently
+    /// load the wrong tab's data the day a panel is added above it. The slug is stable across readers.
+    /// </remarks>
+    [Parameter] public EventCallback<string?> ActivePanelSlugChanged { get; set; }
+
     protected override void OnInitialized()
     {
         NavManager.LocationChanged += OnLocationChanged;
@@ -116,6 +128,7 @@
                     _activePanelIndex = index;
                     ActivePanelIndex = index;
                     ActivePanelIndexChanged.InvokeAsync(index);
+                    ActivePanelSlugChanged.InvokeAsync(GetSlugForPanelIndex(index));
                     StateHasChanged();
                 }
             }
@@ -144,6 +157,7 @@
         _activePanelIndex = newIndex;
         ActivePanelIndex = newIndex;
         await ActivePanelIndexChanged.InvokeAsync(newIndex);
+        await ActivePanelSlugChanged.InvokeAsync(GetSlugForPanelIndex(newIndex));
 
         // MudTabs also raises this callback when panels are removed, which happens while the page (or
         // the whole circuit) is being torn down, not just when the user switches tab. Navigating then
@@ -197,6 +211,7 @@
                 _activePanelIndex = targetIndex;
                 ActivePanelIndex = targetIndex;
                 ActivePanelIndexChanged.InvokeAsync(targetIndex);
+                ActivePanelSlugChanged.InvokeAsync(GetSlugForPanelIndex(targetIndex));
                 InvokeAsync(StateHasChanged);
             }
             finally

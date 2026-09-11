@@ -173,6 +173,42 @@ public static class Helpers
     }
 
     /// <summary>
+    /// The date half of <see cref="ToFriendlyDate"/> ("12 Jul 2026"), for a heading that names a day once so the
+    /// entries beneath it can carry the time alone. Same culture-independent form; callers convert to local time
+    /// first where the day should be the viewer's.
+    /// </summary>
+    public static string ToFriendlyDay(this DateTime dateTime)
+    {
+        return dateTime.ToString("dd MMM yyyy");
+    }
+
+    /// <summary>
+    /// The time half of <see cref="ToFriendlyDate"/> to the minute ("14:30"), for an entry under a day heading. The
+    /// seconds are dropped deliberately: they matter on a full timestamp read in isolation, not on a line whose
+    /// neighbours are minutes apart.
+    /// </summary>
+    public static string ToFriendlyTime(this DateTime dateTime)
+    {
+        return dateTime.ToString("HH:mm");
+    }
+
+    /// <summary>
+    /// The heading for the day a local time falls on, relative to a local "today": "Today", "Yesterday", then the
+    /// day itself via <see cref="ToFriendlyDay"/>. Both arguments are expected in the same (local) time zone; a
+    /// UTC value against a local today would name the wrong day either side of midnight.
+    /// </summary>
+    public static string ToDayHeading(this DateTime localDateTime, DateTime localToday)
+    {
+        var day = localDateTime.Date;
+        var today = localToday.Date;
+        if (day == today)
+            return "Today";
+        if (day == today.AddDays(-1))
+            return "Yesterday";
+        return day.ToFriendlyDay();
+    }
+
+    /// <summary>
     /// Extension method that converts a DateTime into a relative time string (e.g., "2 hours ago", "just now").
     /// </summary>
     public static string ToRelativeTime(this DateTime dateTime)

@@ -403,7 +403,7 @@
                             <MudSelect T="ConnectedSystemObjectTypeAttribute"
                                 @bind-Value="_attributeFlowMappingSource.ConnectedSystemAttribute" Label="Connected System Attribute"
                                 Placeholder="Please select the source Connected System attribute" Required="true" Class="mt-5"
-                                Variant="Variant.Outlined">
+                                Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
                                 @* Credential attributes are excluded entirely: they are handled by JIM's password channel, never by Attribute Flow *@
                                 @foreach (var connectedSystemAttribute in SyncRule.ConnectedSystemObjectType!.Attributes.Where(q =>
                                             !CredentialAttributes.IsCredentialAttribute(q.Name)))
@@ -649,7 +649,7 @@
                     <MudSelect T="ConnectedSystemObjectTypeAttribute"
                         @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" Label="Connected System Attribute"
                         Placeholder="Please select the target Connected System attribute" Required="true" Class="mt-5"
-                        Variant="Variant.Outlined">
+                        Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
                         @foreach (var connectedSystemAttribute in AvailableTargetConnectedSystemAttributes())
                         {
                             <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(connectedSystemAttribute)"
@@ -1151,6 +1151,16 @@
     /// the format shown for Connected System attributes.
     /// </summary>
     private static string MetaverseAttributeLabel(MetaverseAttribute? attribute)
+        => attribute == null
+            ? string.Empty
+            : $"{attribute.Name} ({attribute.Type} : {attribute.AttributePlurality.ToString().SplitOnCapitalLetters()})";
+
+    /// <summary>
+    /// The Connected System sibling of <see cref="MetaverseAttributeLabel"/>, and it is load-bearing rather than
+    /// cosmetic: without a text label MudSelect paints the chosen option itself inside the input, and the export
+    /// target's options carry a "Suggested" chip, which put a 32px chip on the bottom border of a 56px field.
+    /// </summary>
+    private static string ConnectedSystemAttributeLabel(ConnectedSystemObjectTypeAttribute? attribute)
         => attribute == null
             ? string.Empty
             : $"{attribute.Name} ({attribute.Type} : {attribute.AttributePlurality.ToString().SplitOnCapitalLetters()})";

@@ -133,6 +133,25 @@ public class NavigableMudTabsTests : JimComponentTestContext
         }
     }
 
+    /// <summary>
+    /// A page that loads a tab's data on first activation needs to know which tab that was, and the index is the
+    /// wrong key: a tab gated on a role sits at a different index for different readers, so a lazy load keyed on
+    /// "index 3" would silently load the wrong tab's data the day a panel is added above it. The slug is the same
+    /// thing the URL carries and is stable across readers.
+    /// </summary>
+    [Test]
+    public void ActivePanelSlugChanged_WhenATabIsClicked_ReportsThatTabsSlug()
+    {
+        var slugs = new List<string?>();
+        var cut = Render<NavigableMudTabs>(p => p
+            .Add(c => c.ActivePanelSlugChanged, slug => slugs.Add(slug))
+            .Add(c => c.ChildContent, Panels("Overview", "Password History")));
+
+        cut.FindAll(".mud-tab")[1].Click();
+
+        cut.WaitForAssertion(() => Assert.That(slugs, Is.EqualTo(new[] { "password-history" })));
+    }
+
     private static RenderFragment Panels(params string[] titles)
     {
         // Literal sequence numbers with a per-panel region: the analyser requires literals, and a region

@@ -272,6 +272,101 @@ Describe 'New-JIMRunProfile' {
             }
         }
     }
+
+    Context 'Run Profile Safeguards binding (#1618)' {
+
+        It 'Should have nullable int MaxCreates, MaxUpdates, MaxDeletes, MaxDetectedDeletions and MaxDetectedDeletionsPercent parameters' {
+            $command = Get-Command New-JIMRunProfile
+            foreach ($paramName in @('MaxCreates', 'MaxUpdates', 'MaxDeletes', 'MaxDetectedDeletions', 'MaxDetectedDeletionsPercent')) {
+                $param = $command.Parameters[$paramName]
+                $param | Should -Not -BeNullOrEmpty
+                $param.ParameterType.Name | Should -Be 'Nullable`1'
+            }
+        }
+
+        It 'Sends a safeguards object in the request body when any limit is bound' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Export' -RunType Export -MaxDeletes 100 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('safeguards') -and
+                    $Body.safeguards.maxDeletes -eq 100 -and
+                    $null -eq $Body.safeguards.maxCreates -and
+                    $null -eq $Body.safeguards.maxUpdates
+                }
+            }
+        }
+
+        It 'Omits safeguards from the request body when no limit is bound' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Export' -RunType Export -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('safeguards')
+                }
+            }
+        }
+
+        It 'Writes an error and sends no request for a negative limit' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Export' -RunType Export -MaxDeletes -1 -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable errors
+
+                $errors | Should -Not -BeNullOrEmpty
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+
+        It 'Sends a safeguards object carrying MaxDetectedDeletions and MaxDetectedDeletionsPercent when bound' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Full Import' -RunType FullImport -MaxDetectedDeletions 500 -MaxDetectedDeletionsPercent 10 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('safeguards') -and
+                    $Body.safeguards.maxDetectedDeletions -eq 500 -and
+                    $Body.safeguards.maxDetectedDeletionsPercent -eq 10 -and
+                    $null -eq $Body.safeguards.maxCreates -and
+                    $null -eq $Body.safeguards.maxUpdates -and
+                    $null -eq $Body.safeguards.maxDeletes
+                }
+            }
+        }
+
+        It 'Writes an error and sends no request for a negative MaxDetectedDeletions' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Full Import' -RunType FullImport -MaxDetectedDeletions -1 -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable errors
+
+                $errors | Should -Not -BeNullOrEmpty
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+
+        It 'Writes an error and sends no request for a MaxDetectedDeletionsPercent above 100' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Full Import' -RunType FullImport -MaxDetectedDeletionsPercent 101 -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable errors
+
+                $errors | Should -Not -BeNullOrEmpty
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+    }
 }
 
 Describe 'Set-JIMRunProfile' {
@@ -386,6 +481,169 @@ Describe 'Set-JIMRunProfile' {
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
                     -not $Body.ContainsKey('verifyImportContentHashes')
                 }
+            }
+        }
+    }
+
+    Context 'Run Profile Safeguards binding (#1618)' {
+
+        It 'Should have nullable int MaxCreates, MaxUpdates, MaxDeletes, MaxDetectedDeletions and MaxDetectedDeletionsPercent parameters' {
+            $command = Get-Command Set-JIMRunProfile
+            foreach ($paramName in @('MaxCreates', 'MaxUpdates', 'MaxDeletes', 'MaxDetectedDeletions', 'MaxDetectedDeletionsPercent')) {
+                $param = $command.Parameters[$paramName]
+                $param | Should -Not -BeNullOrEmpty
+                $param.ParameterType.Name | Should -Be 'Nullable`1'
+            }
+        }
+
+        It 'Fetches the current Run Profile and sends the merged safeguards object when one limit is bound' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'PUT') {
+                        return [PSCustomObject]@{ id = 12 }
+                    }
+                    # GET: the current state of the Run Profile before this update.
+                    return @([PSCustomObject]@{
+                        id = 12
+                        safeguards = [PSCustomObject]@{ maxCreates = 5; maxUpdates = $null; maxDeletes = 10 }
+                    })
+                }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDeletes 100 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Method -eq 'GET' -or -not $Method }
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and
+                    $Body.safeguards.maxDeletes -eq 100 -and
+                    $Body.safeguards.maxCreates -eq 5 -and
+                    $null -eq $Body.safeguards.maxUpdates
+                }
+            }
+        }
+
+        It 'Sends $null for a limit cleared with -MaxDeletes $null, preserving the other two' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'PUT') {
+                        return [PSCustomObject]@{ id = 12 }
+                    }
+                    return @([PSCustomObject]@{
+                        id = 12
+                        safeguards = [PSCustomObject]@{ maxCreates = 5; maxUpdates = 7; maxDeletes = 100 }
+                    })
+                }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDeletes $null -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and
+                    $Body.ContainsKey('safeguards') -and
+                    $null -eq $Body.safeguards.maxDeletes -and
+                    $Body.safeguards.maxCreates -eq 5 -and
+                    $Body.safeguards.maxUpdates -eq 7
+                }
+            }
+        }
+
+        It 'Omits safeguards from the request body, and makes no extra request, when no limit is bound' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -Name 'Renamed' -Confirm:$false
+
+                # No GET to fetch current safeguards, and no safeguards member on the PUT body.
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('safeguards')
+                }
+            }
+        }
+
+        It 'Writes an error and sends no request for a negative limit' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxCreates -1 -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable errors
+
+                $errors | Should -Not -BeNullOrEmpty
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+
+        It 'Fetches the current Run Profile and sends the merged safeguards object when MaxDetectedDeletionsPercent is bound' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'PUT') {
+                        return [PSCustomObject]@{ id = 12 }
+                    }
+                    # GET: the current state of the Run Profile before this update.
+                    return @([PSCustomObject]@{
+                        id = 12
+                        safeguards = [PSCustomObject]@{ maxCreates = $null; maxUpdates = $null; maxDeletes = $null; maxDetectedDeletions = 500; maxDetectedDeletionsPercent = $null }
+                    })
+                }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDetectedDeletionsPercent 10 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Method -eq 'GET' -or -not $Method }
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and
+                    $Body.safeguards.maxDetectedDeletionsPercent -eq 10 -and
+                    $Body.safeguards.maxDetectedDeletions -eq 500
+                }
+            }
+        }
+
+        It 'Sends $null for both deletion detection limits cleared together' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'PUT') {
+                        return [PSCustomObject]@{ id = 12 }
+                    }
+                    return @([PSCustomObject]@{
+                        id = 12
+                        safeguards = [PSCustomObject]@{ maxCreates = $null; maxUpdates = $null; maxDeletes = $null; maxDetectedDeletions = 500; maxDetectedDeletionsPercent = 10 }
+                    })
+                }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDetectedDeletions $null -MaxDetectedDeletionsPercent $null -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and
+                    $Body.ContainsKey('safeguards') -and
+                    $null -eq $Body.safeguards.maxDetectedDeletions -and
+                    $null -eq $Body.safeguards.maxDetectedDeletionsPercent
+                }
+            }
+        }
+
+        It 'Writes an error and sends no request for a negative MaxDetectedDeletions' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDetectedDeletions -1 -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable errors
+
+                $errors | Should -Not -BeNullOrEmpty
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+
+        It 'Writes an error and sends no request for a MaxDetectedDeletionsPercent below 0' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDetectedDeletionsPercent -1 -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable errors
+
+                $errors | Should -Not -BeNullOrEmpty
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
             }
         }
     }

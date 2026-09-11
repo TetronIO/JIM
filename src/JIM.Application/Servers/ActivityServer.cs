@@ -395,6 +395,16 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Run Profile Safeguards (#1618): the newest completed (not InProgress) Export Run Profile
+    /// execution Activity for a Connected System, so the Connected System page can surface a notice
+    /// when the last export withheld anything. One query per page load; the portal is the sole caller.
+    /// </summary>
+    public async Task<Activity?> GetLatestCompletedExportActivityAsync(int connectedSystemId)
+    {
+        return await Application.Repository.Activity.GetLatestCompletedExportActivityAsync(connectedSystemId);
+    }
+
+    /// <summary>
     /// Gets a page's worth of direct child activities for a given parent activity,
     /// ordered by creation date ascending.
     /// </summary>

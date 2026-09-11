@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Logic;
 
 namespace JIM.Models.Preview;
 
@@ -29,6 +30,16 @@ public record SyncRuleDestructiveToggleProposal(
     OutboundDeprovisionAction OutboundDeprovisionAction,
     InboundOutOfScopeAction InboundOutOfScopeAction)
 {
+    /// <summary>
+    /// The two toggles as a Synchronisation Rule currently holds them. One reading shared by every surface that
+    /// builds a proposal off a rule, so none of them names the two settings for itself.
+    /// </summary>
+    public static SyncRuleDestructiveToggleProposal FromCurrentSettings(SyncRule syncRule)
+    {
+        ArgumentNullException.ThrowIfNull(syncRule);
+        return new SyncRuleDestructiveToggleProposal(syncRule.OutboundDeprovisionAction, syncRule.InboundOutOfScopeAction);
+    }
+
     /// <summary>
     /// Whether <paramref name="other"/> proposes the same settings as this one. What decides whether a preview an
     /// administrator is looking at still answers the question they are about to ask; an editor compares what is

@@ -2,7 +2,8 @@
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 # ============================================================================
-# Trivy vulnerability suppressions for base image scans.
+# Trivy vulnerability suppressions for the production image scans (built JIM images in CI, and
+# the base images they build on).
 #
 # Each entry MUST include a CVE ID, justification, and review date. Entries
 # without justification will fail code review. Review dates give us a hook to

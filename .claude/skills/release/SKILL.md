@@ -38,7 +38,7 @@ Before starting, verify:
 
 4. **The `[Unreleased]` section of `CHANGELOG.md` has entries**. If it is empty, warn the user — a release with no changelog entries is unusual.
 
-5. **Review pinned Docker dependencies**: Check that base image digests and apt package versions are current. If Dependabot PRs for Docker digests have been merged since the last release, flag this so the user can verify pinned apt versions still match.
+5. **Review pinned Docker dependencies**: Check for open Dependabot base-image digest PRs and open `apt-pin-check` PRs, and flag them so the user can merge them before tagging. No manual verification of apt versions is needed: the production stages run `apt-get upgrade` before the pinned installs (a stale pin fails the build), and the `scan-images` CI job builds and scans every production image on each push to `main`.
 
 ## Documentation Review and Update
 

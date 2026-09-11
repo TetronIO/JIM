@@ -112,15 +112,15 @@ Describe 'Set-JIMMetaverseObjectPassword -Generate' {
     }
 
     <#
-        Which accounts and where the password comes from are two independent choices, and neither may be
-        inferred: defaulting the account choice would silently reset systems the caller never named, and
-        defaulting the password source would set one they did not choose. Four sets is what that costs.
+        Where the password is aimed and where it comes from are two independent choices, and the binder keeps
+        them apart: naming systems or propagating to every configured one (#1635, decision D5), and supplying
+        a password or having JIM generate one. Four sets is what that costs.
     #>
-    It 'Should let Generate combine with either way of choosing accounts' {
+    It 'Should let Generate combine with either way of aiming the password' {
         $generateSets = $command.Parameters['Generate'].ParameterSets.Keys
 
-        $generateSets | Should -Contain 'BySystemGeneratedPassword'
-        $generateSets | Should -Contain 'AllAccountsGeneratedPassword'
+        $generateSets | Should -Contain 'NamedGeneratedPassword'
+        $generateSets | Should -Contain 'PropagateGeneratedPassword'
     }
 
     It 'Should not let Password and Generate be given together' {
@@ -130,11 +130,11 @@ Describe 'Set-JIMMetaverseObjectPassword -Generate' {
         ($passwordSets | Where-Object { $generateSets -contains $_ }) | Should -BeNullOrEmpty
     }
 
-    It 'Should still require the accounts to be chosen when generating' {
-        $systemSets = $command.Parameters['ConnectedSystemId'].ParameterSets.Keys
-        $allSets = $command.Parameters['AllAccounts'].ParameterSets.Keys
+    It 'Should require the systems to be named in the named-account sets when generating' {
+        $systemSets = $command.Parameters['ConnectedSystemId'].ParameterSets
 
-        $systemSets | Should -Contain 'BySystemGeneratedPassword'
-        $allSets | Should -Contain 'AllAccountsGeneratedPassword'
+        $systemSets.Keys | Should -Contain 'NamedGeneratedPassword'
+        $systemSets['NamedGeneratedPassword'].IsMandatory | Should -BeTrue
+        $systemSets.Keys | Should -Not -Contain 'PropagateGeneratedPassword'
     }
 }

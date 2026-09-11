@@ -377,9 +377,15 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
             {
                 if (targetObject == null)
                 {
-                    // Nothing to deprovision: the rule never got as far as creating anything for this identity.
-                    yield return MetaverseScopeDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope,
-                        rule, mvo, null, InScopeValue, OutOfScopeValue);
+                    // Nothing to deprovision: the rule never got as far as creating anything for this identity. What
+                    // the exit costs is the Connected System Object a provisioning rule would have created and now
+                    // will not; under a rule that does not provision it costs nothing at all. Either way this is a Metaverse Object
+                    // leaving an EXPORT rule's scope, so the import-side transition, which the panel labels "Leaves
+                    // import scope", would name a direction the rule does not have.
+                    var exit = rule.ProvisionToConnectedSystem == true
+                        ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning
+                        : ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope;
+                    yield return MetaverseScopeDelta(exit, rule, mvo, null, InScopeValue, OutOfScopeValue);
                     continue;
                 }
 
@@ -398,10 +404,10 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
 
             // Entering scope. A rule that provisions creates the target object; one that does not simply begins
             // flowing attributes to an object that must already exist, so reporting a provisioning would overstate
-            // what the change does.
+            // what the change does. The export-side entry rather than the import-side one, for the reason above.
             var transition = targetObject == null && rule.ProvisionToConnectedSystem == true
                 ? ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
-                : ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope;
+                : ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope;
 
             yield return MetaverseScopeDelta(transition, rule, mvo, targetObject, OutOfScopeValue, InScopeValue);
         }

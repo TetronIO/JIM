@@ -6,6 +6,7 @@ using JIM.Web.Extensions.Api;
 using JIM.Web.Middleware.Api;
 using JIM.Models.Staging;
 using JIM.Web.Models.Api;
+using JIM.Web.Services;
 using JIM.Application;
 using JIM.Application.Exceptions;
 using JIM.Application.Services;
@@ -14,6 +15,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Preview;
+using JIM.Models.Transactional.DTOs;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -1402,79 +1404,161 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Synchronise a password for an identity
+    /// Set a password for an identity
     /// </summary>
     /// <remarks>
-    /// Records that this person's password has changed, and queues it for delivery to every Connected System
-    /// that is enabled for Password Synchronisation and in which they have an account.
+    /// Sets a person's password, aimed one of two ways:
     ///
-    /// This is not the same operation as setting a password on chosen accounts
-    /// (`POST /synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password`), which
-    /// sets a chosen password on one named account immediately and reports whether the target accepted it. This
-    /// one returns as soon
-    /// as the change is recorded: delivery runs on its own clock and retries, so a directory being unavailable
-    /// delays the password rather than losing it, and the caller is not held while every target is written to.
+    /// - **Named accounts.** Pass `connectedSystemObjectIds`: the accounts to set the password on, one per
+    ///   Connected System. This is the reset case: an administrator or a service desk tool chose the password for
+    ///   somebody. By default the password expires at next sign-in, and the call waits up to 10 seconds to report
+    ///   what each account did with it. A named account is delivered to even where its system's Password
+    ///   Synchronisation is switched off; the caller named the account, which is the decision that switch exists
+    ///   to make. `enableAccount` is accepted in this mode only.
+    /// - **Every configured system.** Omit `connectedSystemObjectIds`: the password goes to every Connected System
+    ///   configured for Password Synchronisation in which the person has an account, including systems switched
+    ///   off (held until switched on) and systems where the account does not exist yet (delivered once it does).
+    ///   This is the event case: the person's password changed somewhere, and the rest should hold it. By default
+    ///   expiry is left to each system's own policy, since a password the person chose should not demand they
+    ///   choose another, and the call returns as soon as the change is recorded.
     ///
-    /// The password is encrypted before it is stored and is never logged, never returned, and never recorded on
-    /// an Activity. A newer change for the same person and system replaces an older undelivered one, so only the
-    /// most recent password is ever sent.
+    /// Either way the change is queued, one entry per Connected System, and the Password Delivery Service makes
+    /// the first attempt within about a second, whatever the synchronisation engine is doing. A system that is
+    /// unavailable delays the password rather than losing it: delivery is retried on its own clock, and a system
+    /// that refuses the password parks it for a person to look at rather than retrying into the same refusal.
     ///
-    /// A change that reaches no system is still recorded and says so, rather than appearing to have propagated.
+    /// The password is encrypted the moment it is received and held only until it is delivered; once a system has
+    /// it, JIM's copy for that system is gone. A copy a system refused is kept, still encrypted, so JIM can finish
+    /// the job once the cause is dealt with, until the change expires or retention removes it. The password is
+    /// never logged, never returned, and never recorded on an Activity. A newer change for the same person and
+    /// system replaces an older undelivered one, so only the most recent password is ever sent.
+    ///
+    /// To choose how long to be held, pass `wait` (seconds, 0 to 30); it overrides either default. The response is
+    /// `200` once every target has settled, or `202 Accepted` with what is known when the time runs out; delivery
+    /// continues either way. Each target carries its `state` (`Queued`, `Delivering`, `Set`, `Retrying` with
+    /// `nextAttemptAt`, `Parked` with the target's `message`, `Held` behind a switched-off system, `Expired`,
+    /// `Cancelled`), `settled` says whether anything is still in flight, and `origin` says which way the change
+    /// was aimed. Without a wait the same fields are read once as the change is recorded, so they usually read
+    /// `Queued`. The Activity named by `activityId` is the durable record either way.
+    ///
+    /// A propagated change that reaches no system is still recorded and says so, rather than appearing to have
+    /// propagated. Named accounts are checked before anything is recorded: an id that is not one of this person's
+    /// accounts, an account in a system whose Connector cannot set passwords, two accounts in one system, or an
+    /// empty list are all refused with nothing queued.
     /// </remarks>
-    /// <param name="id">The unique identifier (GUID) of the Metaverse Object whose password changed.</param>
-    /// <param name="request">The password, and how it should behave once each target holds it.</param>
-    /// <response code="200">The change was recorded. The body names the Connected Systems it was queued for.</response>
-    /// <response code="400">No password was supplied.</response>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object whose password this is.</param>
+    /// <param name="request">The password, where to aim it, how it should behave once each target holds it, and how long to wait for delivery.</param>
+    /// <param name="waiter">Waits on the change's outcomes when the request asks for it.</param>
+    /// <response code="200">The change was recorded and, where a wait applied, every target has settled. The body names the Connected Systems it was queued for and where each stands.</response>
+    /// <response code="202">A wait applied and ran out with a target still Queued or Delivering. The body carries what is known; delivery continues.</response>
+    /// <response code="400">No password was supplied; `wait` is outside 0 to 30; `enableAccount` was supplied without named accounts; or a named account is not this person's, is in a system whose Connector cannot set passwords, shares a Connected System with another, or the list is empty.</response>
     /// <response code="403">The transport is not one JIM will carry a password over.</response>
     /// <response code="404">No such Metaverse Object.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
-    [HttpPost("objects/{id:guid}/password", Name = "SynchroniseMetaverseObjectPassword")]
+    [HttpPost("objects/{id:guid}/password", Name = "SetMetaverseObjectPassword")]
     [RequireSecureTransport]
-    [ProducesResponseType(typeof(SynchroniseMetaverseObjectPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SetMetaverseObjectPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SetMetaverseObjectPasswordResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> SynchroniseMetaverseObjectPasswordAsync(Guid id, [FromBody] SynchroniseMetaverseObjectPasswordRequest request)
+    public async Task<IActionResult> SetMetaverseObjectPasswordAsync(
+        Guid id,
+        [FromBody] SetMetaverseObjectPasswordRequest request,
+        [FromServices] IPasswordChangeOutcomeWaiter waiter)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(waiter);
 
         // Deliberately logs the identity rather than anything about the password. There is nothing about a
         // password value that belongs in a log line, including its length.
-        _logger.LogInformation("Synchronising a password change for Metaverse Object {MetaverseObjectId}", id);
+        _logger.LogInformation("Setting a password for Metaverse Object {MetaverseObjectId}", id);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for a Metaverse Object password synchronisation");
+            _logger.LogWarning("Could not identify user from JWT claims for a Metaverse Object password set");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
         if (string.IsNullOrWhiteSpace(request.Password))
             return BadRequest(ApiErrorResponse.BadRequest("A password is required."));
 
+        // Checked here as well as by the model's Range attribute so the answer is the same ApiErrorResponse shape
+        // as every other refusal from this endpoint, and so nothing is queued before the request is known to be sound.
+        if (request.Wait is < SetMetaverseObjectPasswordRequest.MinimumWaitSeconds or > SetMetaverseObjectPasswordRequest.MaximumWaitSeconds)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"wait must be between {SetMetaverseObjectPasswordRequest.MinimumWaitSeconds} and {SetMetaverseObjectPasswordRequest.MaximumWaitSeconds} seconds."));
+        }
+
+        var namedAccounts = request.ConnectedSystemObjectIds != null;
+
+        // Refused rather than silently ignored. A propagated password reaches accounts an administrator may have
+        // disabled on purpose, so the core never enables one; a caller who asked for it would otherwise believe
+        // it happened.
+        if (!namedAccounts && request.EnableAccount.HasValue)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "enableAccount applies only to named accounts. Pass connectedSystemObjectIds to enable the accounts the password is set on; a password propagated to every configured system never enables an account."));
+        }
+
         var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(id);
         if (metaverseObject == null)
             return NotFound(ApiErrorResponse.NotFound($"Metaverse Object {id} was not found."));
 
-        // Defaults to the target's own policy rather than to a forced change at next sign-in. This password came
-        // from the person whose account it is; demanding they choose another one immediately would defeat the
-        // point of synchronising the one they just set. The other operation, where an administrator sets a
-        // password on somebody's behalf, defaults the other way for the same reason read in reverse.
-        var expiryBehaviour = request.ExpiryBehaviour ?? PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy;
+        // The defaults follow who chose the password. Named accounts mean somebody set it for the person, and a
+        // password somebody else chose should be replaced at next sign-in. No accounts named means the person's
+        // password changed and JIM is carrying it; demanding they choose another one immediately would defeat the
+        // point of propagating the one they just set.
+        var expiryBehaviour = request.ExpiryBehaviour
+            ?? (namedAccounts ? PasswordExpiryBehaviour.RequireChangeAtNextSignIn : PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy);
 
         // Attribution follows whoever authenticated: an administrator at a screen, or the API key an automation
-        // presented. Automation is the expected caller here, since a synchronised password change usually starts
-        // in a self-service portal or a service desk tool rather than in JIM.
+        // presented.
         var displayName = metaverseObject.CachedDisplayName ?? id.ToString();
         var apiKey = await GetCurrentApiKeyAsync();
-        var result = apiKey != null
-            ? await _application.PasswordSynchronisation.QueuePasswordChangeAsync(
-                id, displayName, request.Password, expiryBehaviour, apiKey, HttpContext.RequestAborted)
-            : await _application.PasswordSynchronisation.QueuePasswordChangeAsync(
-                id, displayName, request.Password, expiryBehaviour, initiatedBy, HttpContext.RequestAborted);
 
-        return Ok(SynchroniseMetaverseObjectPasswordResponse.FromResult(result));
+        PasswordQueueResult result;
+        try
+        {
+            result = await _application.PasswordSynchronisation.SetPasswordAsync(new SetPasswordRequest
+            {
+                MetaverseObjectId = id,
+                DisplayName = displayName,
+                Password = request.Password,
+                Targets = request.ConnectedSystemObjectIds,
+                ExpiryBehaviour = expiryBehaviour,
+                EnableAccount = request.EnableAccount,
+                InitiatedBy = apiKey == null ? initiatedBy : null,
+                InitiatedByApiKey = apiKey
+            }, HttpContext.RequestAborted);
+        }
+        catch (ArgumentException ex)
+        {
+            // The core's validation of named accounts: an empty list, an account that is not this person's or
+            // whose Connector cannot set passwords, or two accounts in one system. Nothing was recorded, and the
+            // message is written for the caller rather than about JIM's own method signature.
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+
+        // Decision D6: named accounts wait 10 seconds unless told otherwise, a propagated change returns on
+        // enqueue unless told otherwise. A change queued for no systems has nothing to wait for either way.
+        // Without a wait the states are still read once, so the response has the same shape whichever way it was
+        // called; they will usually read Queued.
+        var waitSeconds = request.Wait ?? (namedAccounts ? SetMetaverseObjectPasswordRequest.DefaultWaitSecondsForNamedAccounts : 0);
+        var wait = TimeSpan.FromSeconds(waitSeconds);
+        var outcomes = result.NoTargets
+            ? null
+            : wait > TimeSpan.Zero
+                ? await waiter.WaitForOutcomesAsync(result.ActivityId, wait, HttpContext.RequestAborted)
+                : await _application.PasswordSynchronisation.GetChangeOutcomesAsync(result.ActivityId);
+
+        var response = SetMetaverseObjectPasswordResponse.FromResult(result, outcomes);
+        return wait > TimeSpan.Zero && !response.Settled
+            ? Accepted(response)
+            : Ok(response);
     }
 
     /// <summary>

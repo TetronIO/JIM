@@ -1,4 +1,4 @@
-﻿// Copyright (c) Tetron Limited. All rights reserved.
+// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
@@ -36,6 +36,13 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
     private readonly Dictionary<Guid, PendingInitialPassword> _pendingInitialPasswords = new();
     private readonly Dictionary<Guid, PendingPasswordChange> _pendingPasswordChanges = new();
+
+    /// <summary>
+    /// The queue rows a claim has handed out and not yet had back. Lets the attempt write honour the real
+    /// repository's guard (only a row still Delivering takes an outcome) for rows that were claimed, while
+    /// fixtures that arrange a row's state through the same write without ever claiming it are unaffected.
+    /// </summary>
+    private readonly HashSet<Guid> _claimedPasswordChangeIds = [];
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
     private readonly Dictionary<Guid, CausalEdge> _causalEdges = new();
@@ -279,7 +286,7 @@ public class SyncRepository : ISyncRepository
             cso = null;
 
         // Cloned per #1079 Regression B - see CloneForHydration. Callers such as
-        // SyncImportTaskProcessor.ObsoleteConnectedSystemObjectAsync add the result to the
+        // SyncImportTaskProcessor.ApplyDeletionCandidateAsync add the result to the
         // update-path working set and later release its AttributeValues.
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
@@ -2472,18 +2479,36 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(count);
     }
 
+    /// <summary>
+    /// Run Profile Safeguards (#1618): mirrors the Postgres GROUP BY implementation over the same
+    /// executable predicate as <see cref="GetExecutableExportCountAsync"/>.
+    /// </summary>
+    public Task<Dictionary<PendingExportChangeType, int>> GetExecutableExportCountsByChangeTypeAsync(int connectedSystemId)
+    {
+        var result = GetExecutableExportsForSystem(connectedSystemId)
+            .GroupBy(pe => pe.ChangeType)
+            .ToDictionary(g => g.Key, g => g.Count());
+        return Task.FromResult(result);
+    }
+
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
     {
         var result = GetExecutableExportsForSystem(connectedSystemId).ToList();
         return Task.FromResult(result);
     }
 
-    public virtual Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
+    public virtual Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+        IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
     {
         // Keyset pagination on (CreatedAt, Id), mirroring the Postgres implementation.
         // Guid ordering only needs to be self-consistent within this store; .NET's
         // Guid comparison is used for both the predicate and the ordering.
         var query = GetExecutableExportsForSystem(connectedSystemId);
+
+        // Run Profile Safeguards (#1618): mirrors the Postgres exclusion, so a withheld change type
+        // is never returned in a batch, whichever repository the test harness or the worker uses.
+        if (excludedChangeTypes is { Count: > 0 })
+            query = query.Where(pe => !excludedChangeTypes.Contains(pe.ChangeType));
 
         if (afterCreatedAt.HasValue && afterId.HasValue)
         {
@@ -2847,9 +2872,7 @@ public class SyncRepository : ISyncRepository
 
             if (existing != null)
             {
-                existing.ConnectedSystemObjectId = change.ConnectedSystemObjectId;
-                existing.Supersede(change.EncryptedPassword, change.ExpiryBehaviour, change.ActivityId,
-                    change.ExpiresAt - change.CreatedAt, change.CreatedAt);
+                existing.Supersede(change);
                 continue;
             }
 
@@ -2873,14 +2896,14 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(due);
     }
 
-    public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf)
+    public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf, TimeSpan claimLease)
     {
         // Deliberately without the real implementation's "and the system is enabled" condition: this fake holds
         // password changes and no Connected System configuration, so it has nothing to answer that from. The
-        // condition is what stops the worker sweeping for a switched-off system for ever, and it is covered
-        // against real PostgreSQL in PasswordDeliveryReadsDatabaseTests rather than here.
+        // condition is what stops the service running a lane for a switched-off system for ever, and it is
+        // covered against real PostgreSQL in PasswordDeliveryReadsDatabaseTests rather than here.
         var systems = _pendingPasswordChanges.Values
-            .Where(c => c.IsDue(asOf))
+            .Where(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease))
             .Select(c => c.ConnectedSystemId)
             .Distinct()
             .ToList();
@@ -2888,11 +2911,87 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(systems);
     }
 
+    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool explicitOnly)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
+
+        // The claim is applied to the stored row and a copy handed back, mirroring the real repository, which
+        // returns rows materialised from the statement rather than tracked entities. A lane mutating what it was
+        // handed must therefore go back through RecordPasswordChangeAttemptsAsync for the store to see it, exactly
+        // as it must against PostgreSQL.
+        var claimed = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && (c.IsDue(asOf) || c.IsClaimExpired(asOf, lease)))
+            .Where(c => !explicitOnly || c.IsExplicit)
+            .OrderBy(c => c.CreatedAt)
+            .ThenBy(c => c.Id)
+            .Take(maximum)
+            .ToList();
+
+        foreach (var change in claimed)
+        {
+            change.Claim(claimedBy, asOf);
+            _claimedPasswordChangeIds.Add(change.Id);
+        }
+
+        return Task.FromResult(claimed.Select(Copy).ToList());
+    }
+
+    public Task<int> ReleasePasswordChangeClaimsAsync(IEnumerable<Guid> ids)
+    {
+        var released = 0;
+        foreach (var id in ids)
+        {
+            _claimedPasswordChangeIds.Remove(id);
+            if (!_pendingPasswordChanges.TryGetValue(id, out var stored) || stored.Status != PendingPasswordChangeStatus.Delivering)
+                continue;
+
+            stored.ReleaseClaim();
+            released++;
+        }
+
+        return Task.FromResult(released);
+    }
+
+    public Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    {
+        // As with the due-systems read above, this fake has no Connected System configuration to restrict to
+        // enabled systems by; every queued change counts.
+        var changes = _pendingPasswordChanges.Values.ToList();
+        var retrying = changes.Where(c => c.Status == PendingPasswordChangeStatus.Pending && c.NextRetryAt > asOf).ToList();
+
+        return Task.FromResult(new PasswordQueueDeliveryOutlook
+        {
+            DueCount = changes.Count(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease)),
+            RetryingCount = retrying.Count,
+            NextAttemptAt = retrying.Count == 0 ? null : retrying.Min(c => c.NextRetryAt)
+        });
+    }
+
+    public Task<List<PendingPasswordChange>> GetPasswordChangesByActivityAsync(Guid activityId)
+    {
+        var changes = _pendingPasswordChanges.Values
+            .Where(c => c.ActivityId == activityId)
+            .OrderBy(c => c.ConnectedSystemId)
+            .Select(Copy)
+            .ToList();
+
+        return Task.FromResult(changes);
+    }
+
     public Task RecordPasswordChangeAttemptsAsync(IEnumerable<PendingPasswordChange> changes)
     {
         foreach (var change in changes.Where(c => _pendingPasswordChanges.ContainsKey(c.Id)))
         {
             var stored = _pendingPasswordChanges[change.Id];
+
+            // The real write is guarded on the row still being Delivering (a cancellation or a newer password
+            // that arrived mid-attempt keeps its outcome). The fake honours the guard only for rows that were
+            // claimed: fixtures that never claim use this write to arrange a row's state directly, and those
+            // rows were never anybody's to take away.
+            var wasClaimed = _claimedPasswordChangeIds.Remove(change.Id);
+            if (wasClaimed && stored.Status != PendingPasswordChangeStatus.Delivering)
+                continue;
+
             stored.ConnectedSystemObjectId = change.ConnectedSystemObjectId;
             stored.Status = change.Status;
             stored.FailureReason = change.FailureReason;
@@ -2900,23 +2999,60 @@ public class SyncRepository : ISyncRepository
             stored.AttemptCount = change.AttemptCount;
             stored.NextRetryAt = change.NextRetryAt;
             stored.LastAttemptedAt = change.LastAttemptedAt;
+            stored.ClaimedAt = change.ClaimedAt;
+            stored.ClaimedBy = change.ClaimedBy;
         }
 
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// A detached copy of a stored row, so a caller cannot mutate the store by mutating what it was handed. The
+    /// PostgreSQL repository's reads are all no-tracking, and a fake that handed out live references would let a
+    /// lane pass tests it fails against the real database.
+    /// </summary>
+    private static PendingPasswordChange Copy(PendingPasswordChange source) => new()
+    {
+        Id = source.Id,
+        MetaverseObjectId = source.MetaverseObjectId,
+        ConnectedSystemId = source.ConnectedSystemId,
+        ConnectedSystemObjectId = source.ConnectedSystemObjectId,
+        EncryptedPassword = source.EncryptedPassword,
+        ExpiryBehaviour = source.ExpiryBehaviour,
+        Status = source.Status,
+        FailureReason = source.FailureReason,
+        TargetMessage = source.TargetMessage,
+        AttemptCount = source.AttemptCount,
+        NextRetryAt = source.NextRetryAt,
+        CreatedAt = source.CreatedAt,
+        LastAttemptedAt = source.LastAttemptedAt,
+        ExpiresAt = source.ExpiresAt,
+        ActivityId = source.ActivityId,
+        CancelledAt = source.CancelledAt,
+        CancelledById = source.CancelledById,
+        CancelledByName = source.CancelledByName,
+        ClaimedAt = source.ClaimedAt,
+        ClaimedBy = source.ClaimedBy,
+        Origin = source.Origin,
+        EnableAccount = source.EnableAccount
+    };
+
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
     {
         foreach (var id in ids)
+        {
             _pendingPasswordChanges.Remove(id);
+            _claimedPasswordChangeIds.Remove(id);
+        }
 
         return Task.CompletedTask;
     }
 
-    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf)
+    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool explicitOnly)
     {
         var expiring = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && c.HasExpired(asOf))
+            .Where(c => !explicitOnly || c.IsExplicit)
             .ToList();
 
         foreach (var change in expiring)
@@ -2978,6 +3114,7 @@ public class SyncRepository : ISyncRepository
                     MetaverseObjectTypePluralName = mvo?.Type?.PluralName,
                     ConnectedSystemId = c.ConnectedSystemId,
                     ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
+                    Origin = c.Origin,
                     Status = c.Status,
                     FailureReason = c.FailureReason,
                     TargetMessage = c.TargetMessage,
@@ -3041,7 +3178,7 @@ public class SyncRepository : ISyncRepository
 
         return Task.FromResult(new PasswordQueueSummary
         {
-            WaitingCount = changes.Count(c => c.Status == PendingPasswordChangeStatus.Pending),
+            WaitingCount = changes.Count(c => c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering),
             DueCount = changes.Count(c => c.IsDue(asOf)),
             ParkedCount = changes.Count(c => c.Status == PendingPasswordChangeStatus.Parked),
             ExpiredCount = changes.Count(c => c.Status == PendingPasswordChangeStatus.Expired),
@@ -3054,7 +3191,7 @@ public class SyncRepository : ISyncRepository
         ArgumentNullException.ThrowIfNull(filter);
 
         var retrying = FilterPasswordChanges(filter)
-            .Where(c => c.Status != PendingPasswordChangeStatus.Expired)
+            .Where(c => c.Status is not (PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Delivering))
             .ToList();
 
         foreach (var change in retrying)
@@ -3072,7 +3209,7 @@ public class SyncRepository : ISyncRepository
         ArgumentNullException.ThrowIfNull(filter);
 
         var cancelling = FilterPasswordChanges(filter)
-            .Where(c => c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Parked)
+            .Where(c => c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Parked or PendingPasswordChangeStatus.Delivering)
             .ToList();
 
         foreach (var change in cancelling)
@@ -3101,8 +3238,11 @@ public class SyncRepository : ISyncRepository
 
         if (filter.Status.HasValue)
         {
+            // Pending covers Delivering, as the PostgreSQL twin's ApplyChangeFilter explains (#1635).
             var status = filter.Status.Value;
-            query = query.Where(c => c.Status == status);
+            query = status == PendingPasswordChangeStatus.Pending
+                ? query.Where(c => c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering)
+                : query.Where(c => c.Status == status);
         }
 
         if (filter.FailureReason.HasValue)
@@ -3129,7 +3269,8 @@ public class SyncRepository : ISyncRepository
     public Task<int> DeleteTerminalPasswordChangesAsync(DateTime olderThan, int maxRecords)
     {
         var removing = _pendingPasswordChanges.Values
-            .Where(c => c.Status != PendingPasswordChangeStatus.Pending && (c.LastAttemptedAt ?? c.CreatedAt) < olderThan)
+            .Where(c => c.Status is PendingPasswordChangeStatus.Parked or PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Cancelled
+                        && (c.LastAttemptedAt ?? c.CreatedAt) < olderThan)
             .OrderBy(c => c.LastAttemptedAt ?? c.CreatedAt)
             .Take(maxRecords)
             .Select(c => c.Id)

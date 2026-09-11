@@ -20,6 +20,8 @@ Full imports are used for:
 - **Periodic reconciliation to ensure the connector space is accurate**<br /> Regular checks to verify imported data matches the source system.
 - **Recovery after errors or data issues**<br /> Reloading all data to restore consistency after problems.
 
+A Full Import Run Profile can also bound how many Connected System Objects a single run's deletion detection may newly mark as deleted, as a count and/or a share of the Connector Space, so a broken filter or base DN cannot turn a Full Import into a mass deprovisioning. If either limit is exceeded, JIM marks none of them; objects the import did see are still created and updated as normal, and the Activity completes as Complete with warning, naming the limit and what to do next. A run whose deletion detection was refused this way does not count as a successful Full Import for the post-clear reconciliation gate (see [Connected Systems > Clearing the connector space](../configuration/connected-systems.md#clearing-the-connector-space)). See [Run Profiles > Safeguards](../configuration/run-profiles.md#full-import).
+
 ### Delta Import
 
 A **delta import** reads only the objects that have changed since the last import. This is significantly faster than a full import for large directories, but requires the Connected System to support change tracking.
@@ -114,6 +116,10 @@ An export does not wait whole for its references. Everything that can be written
 ### Pre-Export Reconciliation
 
 JIM performs intelligent reconciliation before export. For example, if an object is created and then deleted before the export runs, the redundant Pending Exports are automatically cancelled -- avoiding unnecessary operations on the target system.
+
+### Safeguards
+
+An Export Run Profile can bound how many creates, updates and deletes a single run may attempt, so a broken import filter, a mistaken Synchronisation Rule change, or a Connector Space clear followed by a partial re-import cannot turn one run into a mass write. If more of a change type are pending than its limit allows, JIM attempts none of that type at all and leaves every one of them exactly as Pending Exports for a later run; the Activity completes as Complete with warning, naming the limit, what was pending and what to do next. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards).
 
 ### Applying Exported Changes Straight Away
 

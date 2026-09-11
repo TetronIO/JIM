@@ -1,4 +1,4 @@
-﻿// Copyright (c) Tetron Limited. All rights reserved.
+// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
@@ -10,6 +10,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Scheduling;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
@@ -516,6 +517,20 @@ public class ActivityRepository : IActivityRepository
             .SingleOrDefaultAsync(a => a.Id == id);
     }
 
+    /// <inheritdoc />
+    public async Task<Activity?> GetLatestCompletedExportActivityAsync(int connectedSystemId)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ConnectedSystemId == connectedSystemId
+                        && a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                        && a.ConnectedSystemRunType == ConnectedSystemRunType.Export
+                        && a.Status != ActivityStatus.InProgress)
+            .OrderByDescending(a => a.Created)
+            .ThenByDescending(a => a.Id)
+            .FirstOrDefaultAsync();
+    }
+
     /// <summary>
     /// Gets a page's worth of direct child activities for a given parent activity ID,
     /// ordered by creation date ascending.
@@ -542,7 +557,13 @@ public class ActivityRepository : IActivityRepository
                 Created = a.Created,
                 InitiatedByName = a.InitiatedByName,
                 InitiatedByType = a.InitiatedByType,
-                Message = a.Message
+                Message = a.Message,
+                // The origin is the enum's name in TargetContext (#1635), written by SetPasswordAsync. Spelt out as
+                // string comparisons rather than Enum.Parse so it translates to a CASE in the database, and so an
+                // Activity from before origins were recorded (null, or anything else) projects to null.
+                Origin = a.TargetContext == nameof(PendingPasswordChangeOrigin.Explicit) ? PendingPasswordChangeOrigin.Explicit
+                    : a.TargetContext == nameof(PendingPasswordChangeOrigin.Propagated) ? PendingPasswordChangeOrigin.Propagated
+                    : (PendingPasswordChangeOrigin?)null
             })
             .ToListAsync();
 
@@ -558,6 +579,8 @@ public class ActivityRepository : IActivityRepository
             .Select(a => new
             {
                 ParentActivityId = a.ParentActivityId!.Value,
+                // The same fields as OutcomeProjection below; an expression cannot be invoked inside another
+                // projection, so the shape is repeated here and the per-change read keeps the shared one.
                 Outcome = new PasswordSynchronisationEventOutcome
                 {
                     ActivityId = a.Id,
@@ -583,6 +606,35 @@ public class ActivityRepository : IActivityRepository
 
         return changes;
     }
+
+    /// <inheritdoc />
+    public async Task<List<PasswordSynchronisationEventOutcome>> GetPasswordSynchronisationOutcomesAsync(Guid changeActivityId)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentActivityId == changeActivityId)
+            .OrderBy(a => a.Created)
+            .ThenBy(a => a.Id)
+            .Select(OutcomeProjection)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// One delivery outcome Activity in the shape the password surfaces read. An expression tree over the entity
+    /// so EF Core projects it in the database rather than materialising the Activity; it must stay field-for-field
+    /// identical to the inline projection in <see cref="GetPasswordSynchronisationEventsAsync"/>.
+    /// </summary>
+    private static readonly System.Linq.Expressions.Expression<Func<Activity, PasswordSynchronisationEventOutcome>> OutcomeProjection = a =>
+        new PasswordSynchronisationEventOutcome
+        {
+            ActivityId = a.Id,
+            ConnectedSystemId = a.ConnectedSystemId,
+            ConnectedSystemName = a.TargetName ?? string.Empty,
+            Status = a.Status,
+            ErrorMessage = a.ErrorMessage,
+            Message = a.Message,
+            OccurredAt = a.Created
+        };
 
     public async Task<PagedResultSet<Activity>> GetChildActivitiesAsync(Guid parentActivityId, int page, int pageSize)
     {

@@ -15,6 +15,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -1144,6 +1145,92 @@ public class ActivitiesControllerTests
             Assert.That(dto.ClearedConnectedSystemObjectCount, Is.Null);
             Assert.That(dto.ClearedJoinRecordCount, Is.Null);
         }
+    }
+
+    #endregion
+
+    #region Run Profile Safeguards export withheld statistics (#1618)
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_ExportActivity_CarriesEveryWithheldCount()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            ConnectedSystemRunType = ConnectedSystemRunType.Export,
+            ExportCreatesWithheld = 2,
+            ExportUpdatesWithheld = 0,
+            ExportDeletesWithheld = 342
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ExportCreatesWithheld, Is.EqualTo(2));
+            Assert.That(dto.ExportUpdatesWithheld, Is.EqualTo(0));
+            Assert.That(dto.ExportDeletesWithheld, Is.EqualTo(342));
+        }
+    }
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_NonExportActivity_LeavesEveryWithheldCountNull()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            ConnectedSystemRunType = ConnectedSystemRunType.FullImport
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ExportCreatesWithheld, Is.Null);
+            Assert.That(dto.ExportUpdatesWithheld, Is.Null);
+            Assert.That(dto.ExportDeletesWithheld, Is.Null);
+        }
+    }
+
+    #endregion
+
+    #region Run Profile Safeguards detected deletions withheld statistic (#1618, Layer 2)
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_FullImportActivity_CarriesDetectedDeletionsWithheld()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            ConnectedSystemRunType = ConnectedSystemRunType.FullImport,
+            DetectedDeletionsWithheld = 4120
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        Assert.That(dto.DetectedDeletionsWithheld, Is.EqualTo(4120));
+    }
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_NonFullImportActivity_LeavesDetectedDeletionsWithheldNull()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            ConnectedSystemRunType = ConnectedSystemRunType.Export
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        Assert.That(dto.DetectedDeletionsWithheld, Is.Null);
     }
 
     #endregion

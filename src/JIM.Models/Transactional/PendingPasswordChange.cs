@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations;
 using JIM.Models.Staging;
 
 namespace JIM.Models.Transactional;
@@ -77,6 +78,24 @@ public class PendingPasswordChange
     /// </summary>
     public PasswordExpiryBehaviour ExpiryBehaviour { get; set; } = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy;
 
+    /// <summary>
+    /// Where this change came from (#1635), which is what decides how it is delivered: see
+    /// <see cref="PendingPasswordChangeOrigin"/>. Replaced along with the password when a newer change supersedes
+    /// this row, because it describes the password the row is carrying now.
+    /// </summary>
+    public PendingPasswordChangeOrigin Origin { get; set; } = PendingPasswordChangeOrigin.Propagated;
+
+    /// <summary>
+    /// Whether to enable the account as the password is set, or null to leave it as it is.
+    /// <para>
+    /// Carried only by an <see cref="PendingPasswordChangeOrigin.Explicit"/> change, and read only for one: the
+    /// administrator who named the account made this decision with it. A propagated change never enables an
+    /// account, because it reaches accounts an administrator may have disabled on purpose, and re-enabling one
+    /// as a side effect of somebody changing their password elsewhere would undo that silently.
+    /// </para>
+    /// </summary>
+    public bool? EnableAccount { get; set; }
+
     public PendingPasswordChangeStatus Status { get; set; } = PendingPasswordChangeStatus.Pending;
 
     /// <summary>
@@ -143,11 +162,82 @@ public class PendingPasswordChange
     public string? CancelledByName { get; set; }
 
     /// <summary>
+    /// When the Password Delivery Service claimed this change for delivery, or null while nobody holds it.
+    /// <para>
+    /// A claim is a lease, not a lock: it is honoured for <see cref="ClaimLease"/> and then ignored, so a
+    /// deliverer that died mid-flight cannot strand the row in <see cref="PendingPasswordChangeStatus.Delivering"/>.
+    /// Set and cleared only in the database, by the claim statement and by whichever transition ends the claim.
+    /// </para>
+    /// </summary>
+    public DateTime? ClaimedAt { get; set; }
+
+    /// <summary>
+    /// The service instance holding the claim (host name plus a per-process id), or null while nobody does.
+    /// Recorded so an administrator reading a row stuck in Delivering can tell which process to look at.
+    /// </summary>
+    [MaxLength(200)]
+    public string? ClaimedBy { get; set; }
+
+    /// <summary>
+    /// How long a claim is honoured before the change is claimable again.
+    /// <para>
+    /// A minute comfortably outlives one attempt against one directory, and is short enough that a deliverer
+    /// that dies leaves the person waiting about a minute rather than until somebody notices. A lane claims in
+    /// small batches so a long queue never holds a claim for much longer than the attempts it covers.
+    /// </para>
+    /// </summary>
+    public static readonly TimeSpan ClaimLease = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Whether an administrator named this change's account (<see cref="PendingPasswordChangeOrigin.Explicit"/>),
+    /// as opposed to JIM propagating a password to whichever account the system's configuration nominates.
+    /// </summary>
+    public bool IsExplicit => Origin == PendingPasswordChangeOrigin.Explicit;
+
+    /// <summary>
     /// Whether a delivery pass at <paramref name="asOf"/> should attempt this change: it is still pending, and
-    /// either has no retry scheduled or has reached it.
+    /// either has no retry scheduled or has reached it. A claimed change is not due; it is being delivered.
     /// </summary>
     public bool IsDue(DateTime asOf) =>
         Status == PendingPasswordChangeStatus.Pending && (NextRetryAt == null || NextRetryAt <= asOf);
+
+    /// <summary>
+    /// Whether a claim on this change has outlived <paramref name="lease"/> and the change is claimable again:
+    /// it is <see cref="PendingPasswordChangeStatus.Delivering"/> and was claimed at least a lease ago. False for
+    /// a change nobody holds, whatever its status.
+    /// </summary>
+    public bool IsClaimExpired(DateTime asOf, TimeSpan lease) =>
+        Status == PendingPasswordChangeStatus.Delivering && ClaimedAt != null && ClaimedAt + lease <= asOf;
+
+    /// <summary>
+    /// Takes the change for delivery: the in-memory twin of the claim statement, for the in-memory repository
+    /// and for reasoning about the transition in tests. The status, and only the status, changes with the
+    /// stamp; everything describing the password and its attempts is left alone, because a claim is a promise
+    /// to attempt rather than an attempt.
+    /// </summary>
+    public void Claim(string claimedBy, DateTime asOf)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
+
+        Status = PendingPasswordChangeStatus.Delivering;
+        ClaimedAt = asOf;
+        ClaimedBy = claimedBy;
+    }
+
+    /// <summary>
+    /// Gives a claimed change back unattempted, for a lane that claimed and then could not deliver at all: the
+    /// Connector has no password capability, the channel could not be opened or was refused as insecure, or the
+    /// lane was cancelled before reaching the change. Nothing is counted against the change, because nothing was
+    /// tried; it goes back to Pending exactly as it was, still due.
+    /// </summary>
+    public void ReleaseClaim()
+    {
+        if (Status != PendingPasswordChangeStatus.Delivering)
+            return;
+
+        Status = PendingPasswordChangeStatus.Pending;
+        ClearClaim();
+    }
 
     /// <summary>
     /// Whether this change has outlived its time to live and should be expired rather than attempted.
@@ -180,6 +270,10 @@ public class PendingPasswordChange
         FailureReason = reason;
         TargetMessage = targetMessage;
 
+        // An attempt ends the claim whichever way it went: the row goes back to waiting (Pending or Parked), and
+        // a stale claim stamp on a waiting row would read as a deliverer that never let go.
+        ClearClaim();
+
         // A policy rejection and an unsupported operation are answers rather than accidents: the same password
         // presented again earns the same reply. Requirement 13 is why the policy case cannot be retried out of,
         // as an initial password can: JIM did not generate this password and has no other to offer.
@@ -211,19 +305,29 @@ public class PendingPasswordChange
     /// Carrying it forward would let a newer password inherit an exhausted retry budget, or a park earned by a
     /// password nobody is trying to deliver any more.
     /// </para>
+    /// <para>
+    /// Everything the newer change says about the password it carries comes across: its origin, its enable
+    /// decision and the account it names, as well as the value and the expiry behaviour. Coalescing is by
+    /// identity and system whatever the origin (#1635); an administrator's reset replaces a propagated change
+    /// that was still waiting, and a later propagated change replaces the reset.
+    /// </para>
     /// </summary>
-    public void Supersede(
-        string encryptedPassword,
-        PasswordExpiryBehaviour expiryBehaviour,
-        Guid activityId,
-        TimeSpan timeToLive,
-        DateTime asOf)
+    /// <param name="newer">
+    /// The change taking this row over. Its <see cref="CreatedAt"/> is the instant of the supersession and its
+    /// <see cref="ExpiresAt"/> the new window; the row's identity and coalescing key are untouched.
+    /// </param>
+    public void Supersede(PendingPasswordChange newer)
     {
-        EncryptedPassword = encryptedPassword;
-        ExpiryBehaviour = expiryBehaviour;
-        ActivityId = activityId;
-        CreatedAt = asOf;
-        ExpiresAt = asOf + timeToLive;
+        ArgumentNullException.ThrowIfNull(newer);
+
+        EncryptedPassword = newer.EncryptedPassword;
+        ExpiryBehaviour = newer.ExpiryBehaviour;
+        Origin = newer.Origin;
+        EnableAccount = newer.EnableAccount;
+        ConnectedSystemObjectId = newer.ConnectedSystemObjectId;
+        ActivityId = newer.ActivityId;
+        CreatedAt = newer.CreatedAt;
+        ExpiresAt = newer.ExpiresAt;
 
         Status = PendingPasswordChangeStatus.Pending;
         AttemptCount = 0;
@@ -232,6 +336,10 @@ public class PendingPasswordChange
         NextRetryAt = null;
         LastAttemptedAt = null;
         ClearCancellation();
+
+        // A newer password replaces whatever the deliverer was holding. Its outcome write is guarded on the row
+        // still being Delivering, so it lands nowhere; the new password is delivered on its own claim.
+        ClearClaim();
     }
 
     /// <summary>
@@ -254,6 +362,7 @@ public class PendingPasswordChange
         // Retrying is also how a cancellation is undone, so the stamp goes with it: a pending row still claiming
         // to have been cancelled would be read as a cancellation that failed to take.
         ClearCancellation();
+        ClearClaim();
     }
 
     /// <summary>
@@ -276,6 +385,11 @@ public class PendingPasswordChange
         CancelledById = cancelledById;
         CancelledByName = cancelledByName;
         NextRetryAt = null;
+
+        // Cancelling a change mid-delivery wins: the deliverer's outcome write is guarded on the row still being
+        // Delivering, so a cancelled row stays cancelled unless the password actually landed, in which case the
+        // row is deleted and there is nothing left to have cancelled.
+        ClearClaim();
     }
 
     /// <summary>
@@ -297,11 +411,22 @@ public class PendingPasswordChange
     {
         Status = PendingPasswordChangeStatus.Expired;
         NextRetryAt = null;
+        ClearClaim();
+    }
+
+    /// <summary>
+    /// Drops the claim stamp, for every transition that ends a claim. Kept separate from the status change so a
+    /// transition cannot leave a waiting or terminal row still naming a deliverer.
+    /// </summary>
+    private void ClearClaim()
+    {
+        ClaimedAt = null;
+        ClaimedBy = null;
     }
 
     public override string ToString()
     {
         return $"{nameof(PendingPasswordChange)}: Metaverse Object {MetaverseObjectId} to Connected System " +
-               $"{ConnectedSystemId} ({Status})";
+               $"{ConnectedSystemId} ({Origin}, {Status})";
     }
 }

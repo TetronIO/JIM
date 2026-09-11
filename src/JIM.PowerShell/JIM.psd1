@@ -159,7 +159,6 @@
         # Metaverse
         'Get-JIMMetaverseObject',
         'Set-JIMMetaverseObjectPassword',
-        'Sync-JIMMetaverseObjectPassword',
         'Get-JIMMetaverseObjectChangeHistory',
         'Get-JIMPendingDeletion',
         'Search-JIMMetaverseObject',
@@ -246,6 +245,7 @@
 
         # System
         'Get-JIMHealth',
+        'Get-JIMServiceHealth',
         'Get-JIMVersion',
         'Get-JIMAuthConfig',
         'Get-JIMUserInfo',

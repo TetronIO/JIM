@@ -10,7 +10,7 @@ namespace JIM.Web.Models;
 /// <summary>
 /// How a queued password change reads on screen (#1119).
 /// <para>
-/// Shared by the Password Synchronisation queue page and the Metaverse Object's panel because they show the same
+/// Shared by the Passwords tab of Operations and the Metaverse Object's panel because they show the same
 /// rows and must say the same thing about them. Written separately in each, they had already drifted: one named
 /// the failure reason before the target's message and the other showed the message alone, so the same parked
 /// change read as two different problems depending on which page an administrator opened.
@@ -22,7 +22,9 @@ public static class PendingPasswordChangeDisplay
     /// What the row's state is called on screen.
     /// <para>
     /// Pending is shown as "Waiting", which is what it is from the administrator's side. "Pending" is the
-    /// storage name and says nothing about whether anything is happening.
+    /// storage name and says nothing about whether anything is happening. Delivering is the one state where
+    /// something is happening right now (the Password Delivery Service has claimed the row, #1635), and reads as
+    /// itself.
     /// </para>
     /// </summary>
     public static string Status(PendingPasswordChangeHeader change)
@@ -32,6 +34,7 @@ public static class PendingPasswordChangeDisplay
         return change.Status switch
         {
             PendingPasswordChangeStatus.Pending => "Waiting",
+            PendingPasswordChangeStatus.Delivering => "Delivering",
             PendingPasswordChangeStatus.Parked => "Parked",
             PendingPasswordChangeStatus.Expired => "Expired",
             PendingPasswordChangeStatus.Cancelled => "Cancelled",

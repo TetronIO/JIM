@@ -60,7 +60,7 @@ public class PasswordSynchronisationController(
     /// </remarks>
     /// <param name="pagination">Pagination and sort parameters (page, pageSize, sortBy, sortDirection).</param>
     /// <param name="connectedSystemId">Optional. Restrict to one Connected System.</param>
-    /// <param name="status">Optional. Restrict to one state: Pending, Parked, Expired or Cancelled.</param>
+    /// <param name="status">Optional. Restrict to one state: Pending, Delivering, Parked, Expired or Cancelled. Pending also returns changes being delivered right now, since both are waiting from the caller's side; ask for Delivering to see only those.</param>
     /// <param name="failureReason">Optional. Restrict to changes whose last attempt failed this way.</param>
     /// <param name="metaverseObjectId">Optional. Restrict to one identity's queued changes.</param>
     /// <param name="search">Optional. Free-text search over the identity and Connected System names.</param>

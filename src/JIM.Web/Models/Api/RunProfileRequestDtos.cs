@@ -49,6 +49,13 @@ public class CreateRunProfileRequest
     /// error for any disagreement the skip optimisation would otherwise have missed. Defaults to false.
     /// </summary>
     public bool VerifyImportContentHashes { get; set; }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): the limits this Run Profile should carry. Optional; omit for
+    /// no limits. Only valid on an Export Run Profile; the API rejects a non-null member on any other
+    /// Run Type with a 400 response.
+    /// </summary>
+    public RunProfileSafeguardsDto? Safeguards { get; set; }
 }
 
 /// <summary>
@@ -85,4 +92,12 @@ public class UpdateRunProfileRequest
     /// See <see cref="CreateRunProfileRequest.VerifyImportContentHashes"/> for behaviour.
     /// </summary>
     public bool? VerifyImportContentHashes { get; set; }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618): when present, replaces ALL members of the Run Profile's
+    /// safeguards: a null member clears that limit, a populated member sets it. Omit the whole object
+    /// to leave every limit unchanged. Only valid on an Export Run Profile; the API rejects a non-null
+    /// member on any other Run Type with a 400 response.
+    /// </summary>
+    public RunProfileSafeguardsDto? Safeguards { get; set; }
 }

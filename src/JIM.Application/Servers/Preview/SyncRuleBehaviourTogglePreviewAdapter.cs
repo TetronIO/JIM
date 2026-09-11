@@ -17,7 +17,7 @@ namespace JIM.Application.Servers.Preview;
 ///
 /// These are the settings whose consequences are hardest to picture, because none of them names a population.
 /// Disabling a rule reads like pausing it and is closer to withdrawing every value it owns. Turning Provision To
-/// Connected System on reads like granting a capability and is account creation at scale. Turning Enforce State
+/// Connected System on reads like granting a capability and is Connected System Object creation at scale. Turning Enforce State
 /// off reads like relaxing a constraint and is a standing decision to let a target system diverge. So the
 /// preview's whole job here is to put a count and a list of objects against each.
 ///
@@ -114,9 +114,9 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         {
             findings.Add(new PreviewValidationFinding(
                 PreviewValidationSeverity.Warning,
-                "Turning Provision To Connected System on creates an account in the target system for every " +
-                "in-scope Metaverse Object that has none. This is account creation at scale, and the count below " +
-                "is how many.",
+                "Turning Provision To Connected System on creates a Connected System Object in the target system for " +
+                "every in-scope Metaverse Object that has none. This is object creation at scale, and the count " +
+                "below is how many.",
                 nameof(SyncRule.ProvisionToConnectedSystem)));
         }
 
@@ -256,19 +256,20 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            var ids = batch.Select(member => member.Id).ToList();
             var baseline = await _application.SyncPreview.PreviewSyncForCsosAsync(
-                rule.ConnectedSystemId, batch, cancellationToken: cancellationToken);
+                rule.ConnectedSystemId, ids, cancellationToken: cancellationToken);
             var proposed = await _application.SyncPreview.PreviewSyncForCsosAsync(
-                rule.ConnectedSystemId, batch, cancellationToken: cancellationToken, proposedRuleSet: ruleSet);
+                rule.ConnectedSystemId, ids, cancellationToken: cancellationToken, proposedRuleSet: ruleSet);
 
-            foreach (var id in batch)
+            foreach (var member in batch)
             {
-                var before = baseline.GetValueOrDefault(id);
-                var after = proposed.GetValueOrDefault(id);
+                var before = baseline.GetValueOrDefault(member.Id);
+                var after = proposed.GetValueOrDefault(member.Id);
                 if (before == null || after == null)
                     continue;
 
-                var delta = DescribeProjection(id, before, after, rule, objectTypeName);
+                var delta = DescribeProjection(member, before, after, rule, objectTypeName);
                 if (delta != null)
                     yield return delta;
             }
@@ -286,19 +287,20 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            var ids = batch.Select(member => member.Id).ToList();
             var baseline = await _application.SyncPreview.PreviewSyncForMvosAsync(
-                batch, cancellationToken: cancellationToken);
+                ids, cancellationToken: cancellationToken);
             var proposed = await _application.SyncPreview.PreviewSyncForMvosAsync(
-                batch, cancellationToken: cancellationToken, proposedRuleSet: ruleSet);
+                ids, cancellationToken: cancellationToken, proposedRuleSet: ruleSet);
 
-            foreach (var id in batch)
+            foreach (var member in batch)
             {
-                var before = baseline.GetValueOrDefault(id);
-                var after = proposed.GetValueOrDefault(id);
+                var before = baseline.GetValueOrDefault(member.Id);
+                var after = proposed.GetValueOrDefault(member.Id);
                 if (before == null || after == null)
                     continue;
 
-                foreach (var delta in DescribeOutbound(id, before, after, rule))
+                foreach (var delta in DescribeOutbound(member, before, after, rule))
                     yield return delta;
             }
         }
@@ -308,7 +310,7 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
     /// Whether this object's identity would still be created, expressed as a transition, or null where the answer
     /// is the same either way.
     /// </summary>
-    private static PreviewDelta? DescribeProjection(Guid connectedSystemObjectId, SyncPreviewResult before,
+    private static PreviewDelta? DescribeProjection(PopulationMember member, SyncPreviewResult before,
         SyncPreviewResult after, SyncRule rule, string? objectTypeName)
     {
         var projectedBefore = before.Inbound?.WouldProject ?? false;
@@ -320,9 +322,11 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
             projectedBefore
                 ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProjecting
                 : ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+            ObjectDisplayName: member.Name,
             ObjectTypeName: objectTypeName,
             MetaverseObjectTypeId: rule.MetaverseObjectTypeId,
-            ConnectedSystemObjectId: connectedSystemObjectId,
+            MetaverseObjectId: member.MetaverseObjectId,
+            ConnectedSystemObjectId: member.Id,
             ConnectedSystemId: rule.ConnectedSystemId,
             AttributeName: BehaviourAttributeName,
             OldValue: projectedBefore ? WouldHappenValue : WouldNotHappenValue,
@@ -338,7 +342,7 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
     /// Update export against a joined object is a drift correction, so the two questions are answered by the same
     /// evaluation the next synchronisation would perform.
     /// </remarks>
-    private static IEnumerable<PreviewDelta> DescribeOutbound(Guid metaverseObjectId, SyncPreviewResult before,
+    private static IEnumerable<PreviewDelta> DescribeOutbound(PopulationMember member, SyncPreviewResult before,
         SyncPreviewResult after, SyncRule rule)
     {
         var createdBefore = Stages(before, PendingExportChangeType.Create);
@@ -349,7 +353,7 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
                 createdBefore
                     ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning
                     : ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
-                metaverseObjectId, rule, createdBefore, createdAfter);
+                member, rule, createdBefore, createdAfter);
         }
 
         var correctedBefore = Stages(before, PendingExportChangeType.Update);
@@ -360,7 +364,7 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
                 correctedBefore
                     ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopCorrectingDrift
                     : ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection,
-                metaverseObjectId, rule, correctedBefore, correctedAfter);
+                member, rule, correctedBefore, correctedAfter);
         }
     }
 
@@ -368,11 +372,12 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         result.Outbound.ProposedExports.Exists(export => export.ChangeType == changeType);
 
     private static PreviewDelta OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType transition,
-        Guid metaverseObjectId, SyncRule rule, bool before, bool after) =>
+        PopulationMember member, SyncRule rule, bool before, bool after) =>
         new(transition,
+            ObjectDisplayName: member.Name,
             ObjectTypeName: rule.MetaverseObjectType?.Name,
             MetaverseObjectTypeId: rule.MetaverseObjectTypeId,
-            MetaverseObjectId: metaverseObjectId,
+            MetaverseObjectId: member.Id,
             ConnectedSystemId: rule.ConnectedSystemId,
             AttributeName: BehaviourAttributeName,
             OldValue: before ? WouldHappenValue : WouldNotHappenValue,
@@ -382,25 +387,33 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
 
     #region population
 
-    private async Task<List<Guid>> PopulationAsync(SyncRule rule)
+    /// <summary>
+    /// One object of the walked population: the id the engine is asked about, the name its drill-down row shows,
+    /// and (for a Connected System Object) the identity it is joined to. Read off the stream as it passes, because
+    /// the engine's answer is keyed by id alone and a row that names nothing renders as a blank the panel cannot
+    /// link (the panel links a row only where it has a name to hang the link on).
+    /// </summary>
+    private sealed record PopulationMember(Guid Id, string? Name, Guid? MetaverseObjectId);
+
+    private async Task<List<PopulationMember>> PopulationAsync(SyncRule rule)
     {
-        var ids = new List<Guid>();
+        var members = new List<PopulationMember>();
         await foreach (var cso in _application.ConnectedSystems
                            .StreamConnectedSystemObjectsOfType(rule.ConnectedSystemId, rule.ConnectedSystemObjectTypeId))
         {
-            ids.Add(cso.Id);
+            members.Add(new PopulationMember(cso.Id, cso.NameOrId, cso.MetaverseObjectId));
         }
 
-        return ids;
+        return members;
     }
 
-    private async Task<List<Guid>> MetaverseObjectPopulationAsync(SyncRule rule)
+    private async Task<List<PopulationMember>> MetaverseObjectPopulationAsync(SyncRule rule)
     {
-        var ids = new List<Guid>();
+        var members = new List<PopulationMember>();
         await foreach (var mvo in _application.Metaverse.StreamMetaverseObjectsOfType(rule.MetaverseObjectTypeId))
-            ids.Add(mvo.Id);
+            members.Add(new PopulationMember(mvo.Id, mvo.NameOrId, null));
 
-        return ids;
+        return members;
     }
 
     private async Task<int> MetaverseObjectCountAsync(SyncRule rule)

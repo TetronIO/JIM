@@ -18,41 +18,8 @@
         <MudTextField T="string" Label="Description" @bind-Value="SyncRule.Description" @bind-Value:after="NotifyChangedAsync"
                       Sizing="InputSizing.Auto" Lines="2" MaxLines="12" MaxLength="1000" Variant="Variant.Outlined" Class="mt-5" />
 
-        @if (SyncRule.Id > 0 && SyncRule.ConnectedSystem != null)
-        {
-            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4" Spacing="3">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudIcon Icon="@Icons.Material.Filled.Power" Class="mud-text-secondary" />
-                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Connected System:</MudText>
-                    <MudLink Href="@($"/admin/connected-systems/{SyncRule.ConnectedSystemId}")" Typo="Typo.body1">
-                        @SyncRule.ConnectedSystem.Name
-                    </MudLink>
-                </MudStack>
-                <MudDivider Vertical="true" FlexItem="true" />
-                <MudChip T="string" Variant="Variant.Text"
-                         Color="@(SyncRule.Direction == SyncRuleDirection.Import ? Color.Info : Color.Warning)">
-                    @(SyncRule.Direction == SyncRuleDirection.Import ? "Inbound" : "Outbound")
-                </MudChip>
-                <MudDivider Vertical="true" FlexItem="true" />
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Object Types:</MudText>
-                    <MudChip T="string" Size="Size.Medium">
-                        <AvatarContent>
-                            <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                        </AvatarContent>
-                        <ChildContent>@SyncRule.MetaverseObjectType?.Name</ChildContent>
-                    </MudChip>
-                    <MudText Class="mud-text-secondary">→</MudText>
-                    <MudChip T="string" Size="Size.Medium">
-                        <AvatarContent>
-                            <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                        </AvatarContent>
-                        <ChildContent>@SyncRule.ConnectedSystemObjectType?.Name</ChildContent>
-                    </MudChip>
-                </MudStack>
-            </MudStack>
-        }
-
+        @* An existing rule's Connected System, direction and object types are stated by the page's identity
+           strip beneath the breadcrumbs (Shared/SyncRuleIdentityStrip.razor), not here among the fields. *@
         @if (SyncRule.Id == 0)
         {
             @if (ConnectedSystemHeaders != null)
@@ -141,16 +108,19 @@
 
     @if (SyncRule.Direction == SyncRuleDirection.Export)
     {
+        @* Headed like the Deprovisioning group beneath it, so the two halves of an export rule's lifecycle read as
+           a pair rather than as a stray switch above a titled group. *@
+        <MudText Typo="Typo.h6" Class="mt-5">Provisioning</MudText>
         @* The label pluralises the Object Type's name, never the stand-in used before one is chosen: that is
            already plural, and pluralising it again read "Provision objectses to the Connected System?". *@
-        <MudSwitch Class="mt-5" @bind-Value="@SyncRule.ProvisionToConnectedSystem" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
+        <MudSwitch Class="mt-1" @bind-Value="@SyncRule.ProvisionToConnectedSystem" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
                    Label="@($"Provision {SyncRule.ConnectedSystemObjectType?.Name.Pluralise() ?? "objects"} to the Connected System?")" />
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, Metaverse Objects scoped to
             this Synchronisation Rule will not be created (provisioned) in the Connected Systems. Enabling this
             option will cause the Metaverse Object to be created in the Connected System. You would typically enable
             this option for a destination system.</MudText>
 
-        <MudText Typo="Typo.body1" Class="mt-5">Deprovisioning Action</MudText>
+        <MudText Typo="Typo.h6" Class="mt-5">Deprovisioning</MudText>
         <MudRadioGroup T="OutboundDeprovisionAction" @bind-Value="@SyncRule.OutboundDeprovisionAction" @bind-Value:after="NotifyChangedAsync">
             <div class="mt-1">
                 <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Disconnect" Color="Color.Primary">Disconnect</MudRadio>

@@ -182,8 +182,14 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<PendingPasswordChange>> GetDuePasswordChangesAsync(int connectedSystemId, DateTime asOf, int maximum)
         => _inner.GetDuePasswordChangesAsync(connectedSystemId, asOf, maximum);
 
-    public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf)
-        => _inner.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf);
+    public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf, TimeSpan claimLease)
+        => _inner.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf, claimLease);
+
+    public Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+        => _inner.GetPasswordQueueDeliveryOutlookAsync(asOf, claimLease);
+
+    public Task<List<PendingPasswordChange>> GetPasswordChangesByActivityAsync(Guid activityId)
+        => _inner.GetPasswordChangesByActivityAsync(activityId);
 
     public Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds)
         => _inner.GetPasswordQueueAttentionAsync(connectedSystemIds);
@@ -284,11 +290,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> GetExecutableExportCountAsync(int connectedSystemId)
         => _inner.GetExecutableExportCountAsync(connectedSystemId);
 
+    public Task<Dictionary<PendingExportChangeType, int>> GetExecutableExportCountsByChangeTypeAsync(int connectedSystemId)
+        => _inner.GetExecutableExportCountsByChangeTypeAsync(connectedSystemId);
+
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
         => _inner.GetExecutableExportsAsync(connectedSystemId);
 
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
-        => _inner.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId);
+    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+        IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
+        => _inner.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
 
     public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _inner.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);
@@ -393,13 +403,19 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(QueuePasswordChangesAsync));
 
+    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool explicitOnly)
+        => throw new PreviewWriteAttemptedException(nameof(ClaimDuePasswordChangesAsync));
+
+    public Task<int> ReleasePasswordChangeClaimsAsync(IEnumerable<Guid> ids)
+        => throw new PreviewWriteAttemptedException(nameof(ReleasePasswordChangeClaimsAsync));
+
     public Task RecordPasswordChangeAttemptsAsync(IEnumerable<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(RecordPasswordChangeAttemptsAsync));
 
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
         => throw new PreviewWriteAttemptedException(nameof(DeletePasswordChangesAsync));
 
-    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf)
+    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool explicitOnly)
         => throw new PreviewWriteAttemptedException(nameof(ExpirePasswordChangesAsync));
 
     public Task<int> ReleasePasswordChangesForDeliveryAsync(int connectedSystemId)

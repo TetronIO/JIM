@@ -1,4 +1,4 @@
-﻿// Copyright (c) Tetron Limited. All rights reserved.
+// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data;
@@ -6,6 +6,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Logic;
+using JIM.Models.Operations;
 using JIM.Models.Preview;
 using JIM.Models.Scheduling;
 using JIM.Models.Search;
@@ -86,6 +87,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ApiKey> ApiKeys { get; set; } = null!;
     public virtual DbSet<ServiceSettings> ServiceSettings { get; set; } = null!;
     public virtual DbSet<ServiceSetting> ServiceSettingItems { get; set; } = null!;
+    public virtual DbSet<ServiceHeartbeat> ServiceHeartbeats { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRule> ObjectMatchingRules { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRuleSource> ObjectMatchingRuleSources { get; set; } = null!;
     public virtual DbSet<SyncRule> SyncRules { get; set; } = null!;
@@ -97,7 +99,6 @@ public class JimDbContext : DbContext
     public virtual DbSet<DeleteSyncRuleWorkerTask> DeleteSyncRuleWorkerTasks { get; set; } = null!;
     public virtual DbSet<SchemaRefreshRemovalWorkerTask> SchemaRefreshRemovalWorkerTasks { get; set; } = null!;
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
-    public virtual DbSet<PasswordDeliveryWorkerTask> PasswordDeliveryWorkerTasks { get; set; } = null!;
     public virtual DbSet<TemporalScopeReconciliationWorkerTask> TemporalScopeReconciliationWorkerTasks { get; set; } = null!;
     public virtual DbSet<HistoryRetentionCleanupWorkerTask> HistoryRetentionCleanupWorkerTasks { get; set; } = null!;
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
@@ -506,6 +507,12 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mo => mo.Roles)
             .WithMany(r => r.StaticMembers);
+
+        // One row per running service instance; the unique pair is what the heartbeat upsert conflicts on
+        // (SystemRepository.UpsertServiceHeartbeatAsync), so it must exist for the upsert to be a single statement.
+        modelBuilder.Entity<ServiceHeartbeat>()
+            .HasIndex(h => new { h.Service, h.InstanceId })
+            .IsUnique();
 
         // ApiKey to Role many-to-many relationship
         modelBuilder.Entity<ApiKey>()

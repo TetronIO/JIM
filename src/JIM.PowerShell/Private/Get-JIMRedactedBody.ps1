@@ -9,8 +9,8 @@ function Get-JIMRedactedBody {
     .DESCRIPTION
         Invoke-JIMApi writes the outgoing body to Write-Debug so an operator can see what a cmdlet
         sent. Several cmdlets send a password: Set-JIMMetaverseObjectPassword,
-        Sync-JIMMetaverseObjectPassword, Set-JIMConnectedSystemObjectPassword and
-        Set-JIMSyncRuleInitialPassword each take one as a SecureString, precisely to keep it out of
+        Set-JIMConnectedSystemObjectPassword and Set-JIMSyncRuleInitialPassword each take one as a
+        SecureString, precisely to keep it out of
         the session history, and then have to unwrap it to put it on the wire. Logging the body
         undid that: the value the SecureString protected went to the debug stream in clear text, and
         into any transcript running at the time.

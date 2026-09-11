@@ -28,6 +28,28 @@ public class PendingPasswordChangeTests
         ActivityId = Guid.NewGuid()
     };
 
+    /// <summary>
+    /// A newer change for the same identity and Connected System, as fan-out would build it: what
+    /// <see cref="PendingPasswordChange.Supersede"/> takes its replacement values from.
+    /// </summary>
+    private static PendingPasswordChange Newer(
+        string encryptedPassword,
+        PasswordExpiryBehaviour expiryBehaviour,
+        Guid activityId,
+        TimeSpan timeToLive,
+        DateTime createdAt,
+        PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Propagated,
+        bool? enableAccount = null) => new()
+    {
+        EncryptedPassword = encryptedPassword,
+        ExpiryBehaviour = expiryBehaviour,
+        ActivityId = activityId,
+        CreatedAt = createdAt,
+        ExpiresAt = createdAt + timeToLive,
+        Origin = origin,
+        EnableAccount = enableAccount
+    };
+
     [Test]
     public void NewChange_StartsPendingWithNoAttempts()
     {
@@ -249,8 +271,8 @@ public class PendingPasswordChangeTests
         change.TargetMessage = "Password too short";
         change.NextRetryAt = now.AddHours(3);
 
-        change.Supersede("$JIMPW$v1$newer", PasswordExpiryBehaviour.NeverExpires, newActivityId,
-            TimeSpan.FromDays(7), now);
+        change.Supersede(Newer("$JIMPW$v1$newer", PasswordExpiryBehaviour.NeverExpires, newActivityId,
+            TimeSpan.FromDays(7), now));
 
         using (Assert.EnterMultipleScope())
         {
@@ -418,8 +440,8 @@ public class PendingPasswordChangeTests
         var change = Change();
         change.Cancel(Guid.NewGuid(), "Ada Lovelace", now);
 
-        change.Supersede("$JIMPW$v1$newer", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
-            Guid.NewGuid(), TimeSpan.FromHours(12), now.AddMinutes(5));
+        change.Supersede(Newer("$JIMPW$v1$newer", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+            Guid.NewGuid(), TimeSpan.FromHours(12), now.AddMinutes(5)));
 
         using (Assert.EnterMultipleScope())
         {
@@ -429,4 +451,284 @@ public class PendingPasswordChangeTests
             Assert.That(change.CancelledByName, Is.Null);
         }
     }
+
+    private static ConnectedSystemPasswordSynchronisation Configuration() => new()
+    {
+        ConnectedSystemId = 3,
+        Enabled = true,
+        TargetObjectTypeId = 200,
+        MaxRetries = 3,
+        RetryBackoffBase = TimeSpan.FromMinutes(5)
+    };
+
+    /// <summary>
+    /// The claim (#1635): a deliverer takes the change, and only the status and the stamp change. Everything
+    /// describing the password and its attempts survives, because a claim is a promise to attempt rather than
+    /// an attempt.
+    /// </summary>
+    [Test]
+    public void Claim_MarksTheChangeDeliveringAndStampsWho()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.AttemptCount = 2;
+
+        change.Claim("worker-1a2b3c4d", now);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Delivering));
+            Assert.That(change.ClaimedAt, Is.EqualTo(now));
+            Assert.That(change.ClaimedBy, Is.EqualTo("worker-1a2b3c4d"));
+            Assert.That(change.AttemptCount, Is.EqualTo(2), "A claim is not an attempt.");
+            Assert.That(change.IsDue(now), Is.False, "A claimed change is being delivered, not waiting to be.");
+        }
+    }
+
+    [Test]
+    public void IsClaimExpired_WithinTheLease_IsFalse()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.Claim("worker-1a2b3c4d", now);
+
+        Assert.That(change.IsClaimExpired(now.AddSeconds(59), TimeSpan.FromSeconds(60)), Is.False);
+    }
+
+    [Test]
+    public void IsClaimExpired_AtOrAfterTheLease_IsTrue()
+    {
+        // A deliverer that died mid-flight leaves the row Delivering. The lease running out is the only way
+        // back that does not pass through that deliverer's own outcome write.
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.Claim("worker-1a2b3c4d", now);
+
+        Assert.That(change.IsClaimExpired(now.AddSeconds(60), TimeSpan.FromSeconds(60)), Is.True);
+    }
+
+    [Test]
+    public void IsClaimExpired_WhenNotClaimed_IsFalse()
+    {
+        var change = Change();
+
+        Assert.That(change.IsClaimExpired(DateTime.UtcNow.AddDays(1), TimeSpan.FromSeconds(60)), Is.False);
+    }
+
+    [Test]
+    public void ReleaseClaim_PutsTheChangeBackToPendingUnattempted()
+    {
+        // A lane that claimed and then found it could not deliver at all (no password capability, channel
+        // refused, cancelled) gives the change back exactly as it was: still due, nothing counted against it.
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.Claim("worker-1a2b3c4d", now);
+
+        change.ReleaseClaim();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+            Assert.That(change.AttemptCount, Is.Zero);
+            Assert.That(change.IsDue(now), Is.True);
+        }
+    }
+
+    [Test]
+    public void ReleaseClaim_OnAnUnclaimedChange_ChangesNothing()
+    {
+        var change = Change();
+        change.Status = PendingPasswordChangeStatus.Parked;
+
+        change.ReleaseClaim();
+
+        Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked),
+            "Releasing is only for a claim; it must not un-park a change nobody holds.");
+    }
+
+    [Test]
+    public void RecordAttempt_EndsTheClaim()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.Claim("worker-1a2b3c4d", now);
+
+        change.RecordAttempt(PasswordSetFailureReason.Transient, "Server unavailable", Configuration(), now);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+        }
+    }
+
+    [Test]
+    public void RecordAttempt_ThatParks_EndsTheClaim()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.Claim("worker-1a2b3c4d", now);
+
+        change.RecordAttempt(PasswordSetFailureReason.PolicyRejection, "Too short", Configuration(), now);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked));
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+        }
+    }
+
+    [Test]
+    public void Retry_EndsTheClaim()
+    {
+        var change = Change();
+        change.Claim("worker-1a2b3c4d", DateTime.UtcNow);
+
+        change.Retry();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+        }
+    }
+
+    [Test]
+    public void Cancel_EndsTheClaim()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.Claim("worker-1a2b3c4d", now);
+
+        change.Cancel(Guid.NewGuid(), "Ada Lovelace", now.AddSeconds(5));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Cancelled));
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+        }
+    }
+
+    [Test]
+    public void Expire_EndsTheClaim()
+    {
+        var change = Change();
+        change.Claim("worker-1a2b3c4d", DateTime.UtcNow);
+
+        change.Expire();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Expired));
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+        }
+    }
+
+    [Test]
+    public void Supersede_EndsTheClaim()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.Claim("worker-1a2b3c4d", now);
+
+        change.Supersede(Newer("$JIMPW$v1$newer", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+            Guid.NewGuid(), TimeSpan.FromHours(12), now.AddSeconds(5)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+        }
+    }
+
+    [Test]
+    public void HasExpired_WhileDelivering_IsFalse()
+    {
+        // Expiry never touches a claimed change: the deliverer holding it records its own outcome, and two
+        // writers deciding the same row's fate at once is what the claim exists to prevent.
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.ExpiresAt = now.AddDays(-1);
+        change.Claim("worker-1a2b3c4d", now);
+
+        Assert.That(change.HasExpired(now), Is.False);
+    }
+
+    #region origin (#1635)
+
+    /// <summary>
+    /// Every row queued before origins existed was a propagated change, and the column defaults to that so the
+    /// migration needs no backfill. An explicit set is the case that has to be said out loud.
+    /// </summary>
+    [Test]
+    public void NewChange_IsPropagatedWithNoEnableDecision()
+    {
+        var change = Change();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(change.EnableAccount, Is.Null);
+            Assert.That(change.IsExplicit, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// Coalescing is by identity and system, whatever the origin: an administrator's reset arriving after a
+    /// propagated change replaces it, and a later propagated change replaces the reset. The row carries the
+    /// origin of the password it is now holding, because that is what decides how it is delivered.
+    /// </summary>
+    [Test]
+    public void Supersede_ReplacesTheOriginAndTheEnableDecision()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+
+        change.Supersede(Newer("$JIMPW$v1$reset", PasswordExpiryBehaviour.RequireChangeAtNextSignIn, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now, PendingPasswordChangeOrigin.Explicit, enableAccount: true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
+            Assert.That(change.EnableAccount, Is.True);
+            Assert.That(change.IsExplicit, Is.True);
+        }
+
+        change.Supersede(Newer("$JIMPW$v1$propagated", PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now.AddMinutes(1)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(change.EnableAccount, Is.Null,
+                "A propagated password never carries an enable decision, and must not inherit the reset's.");
+        }
+    }
+
+    [Test]
+    public void Supersede_TakesTheNewerChangesAccount()
+    {
+        // An explicit row names its account; a propagated row may not have one yet. Whichever arrives later is
+        // the truth about which account the password is for.
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var accountId = Guid.NewGuid();
+        var change = Change();
+        var newer = Newer("$JIMPW$v1$reset", PasswordExpiryBehaviour.RequireChangeAtNextSignIn, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now, PendingPasswordChangeOrigin.Explicit);
+        newer.ConnectedSystemObjectId = accountId;
+
+        change.Supersede(newer);
+
+        Assert.That(change.ConnectedSystemObjectId, Is.EqualTo(accountId));
+    }
+
+    #endregion
 }

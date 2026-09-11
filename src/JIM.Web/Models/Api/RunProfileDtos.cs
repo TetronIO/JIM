@@ -62,6 +62,11 @@ public class RunProfileDto
     public bool VerifyImportContentHashes { get; set; }
 
     /// <summary>
+    /// Run Profile Safeguards (#1618): the limits on what this Run Profile may attempt. Always present.
+    /// </summary>
+    public RunProfileSafeguardsDto Safeguards { get; set; } = new();
+
+    /// <summary>
     /// Creates a DTO from a ConnectedSystemRunProfile entity.
     /// </summary>
     public static RunProfileDto FromEntity(ConnectedSystemRunProfile runProfile)
@@ -76,9 +81,52 @@ public class RunProfileDto
             PartitionName = runProfile.Partition?.Name,
             TargetsDeselectedPartition = runProfile.TargetsADeselectedPartition(),
             FilePath = runProfile.FilePath,
-            VerifyImportContentHashes = runProfile.VerifyImportContentHashes
+            VerifyImportContentHashes = runProfile.VerifyImportContentHashes,
+            Safeguards = new RunProfileSafeguardsDto
+            {
+                MaxCreates = runProfile.MaxCreates,
+                MaxUpdates = runProfile.MaxUpdates,
+                MaxDeletes = runProfile.MaxDeletes,
+                MaxDetectedDeletions = runProfile.MaxDetectedDeletions,
+                MaxDetectedDeletionsPercent = runProfile.MaxDetectedDeletionsPercent
+            }
         };
     }
+}
+
+/// <summary>
+/// Run Profile Safeguards (#1618): the limits an administrator can set on what a Run Profile may
+/// attempt in a single run. Null means no limit; zero is a valid limit ("attempt none of these").
+/// </summary>
+public class RunProfileSafeguardsDto
+{
+    /// <summary>
+    /// The maximum number of creates an Export run may attempt. Export Run Profiles only.
+    /// </summary>
+    public int? MaxCreates { get; set; }
+
+    /// <summary>
+    /// The maximum number of updates an Export run may attempt. Export Run Profiles only.
+    /// </summary>
+    public int? MaxUpdates { get; set; }
+
+    /// <summary>
+    /// The maximum number of deletes an Export run may attempt. Export Run Profiles only.
+    /// </summary>
+    public int? MaxDeletes { get; set; }
+
+    /// <summary>
+    /// The maximum number of Connected System Objects a Full Import may newly mark as deleted in one
+    /// run. Full Import Run Profiles only. If either this or <see cref="MaxDetectedDeletionsPercent"/>
+    /// would be exceeded, deletion detection marks nothing.
+    /// </summary>
+    public int? MaxDetectedDeletions { get; set; }
+
+    /// <summary>
+    /// The maximum share, 0 to 100, of the Connected System Objects in the run's scope at the start of
+    /// the run that a Full Import may newly mark as deleted. Full Import Run Profiles only.
+    /// </summary>
+    public int? MaxDetectedDeletionsPercent { get; set; }
 }
 
 /// <summary>

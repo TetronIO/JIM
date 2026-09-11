@@ -35,6 +35,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
 | `<OneLineText Text="@x" Secondary="@y" />` | A cell's text (and the secondary text that would otherwise sit under it) kept to one line | "One line per row" below |
 | `<OverflowList TItem="X" Items="@xs" ItemTemplate="..." Title="Roles" />` | A cell holding a list: the first item, then "+n more" | "One line per row" below |
+| `<SyncRuleIdentityStrip Direction="@d" MetaverseObjectTypeName="@mv" ConnectedSystemObjectTypeName="@cs" ConnectedSystemId="@id" ConnectedSystemName="@n" />` | A Synchronisation Rule's Connected System, direction and object types, beneath the page's breadcrumbs | "Synchronisation Rule identity strip" below |
 
 ## Choosing Containers
 
@@ -78,10 +79,19 @@ The marker is not decoration. Both sides of a flow are just names, and which sid
 
 - **`Href` makes it a link, and only a linked chip gets the hover treatment.** `jim-chip-link` goes on the link wrapper rather than the chip because the link is the hover target; the component owns that, so no call site places the class.
 - **A chip with no `Name` renders the type without a trailing colon.** The colon joins the type to the identifier, so a record with no external ID yet (nothing exported) would otherwise trail punctuation pointing at nothing.
+- **A chip with no `TypeName` renders the name alone.** The inverse: where the surrounding table already carries a Type column (a Configuration Change Preview's drill-down), the chip is the side marker and the link, and repeating the type on it would spend the row's one line saying it twice.
 - **`Class` is the call site's, for the surrounding geometry only:** `ma-0` inside a detail table's cell, nothing in a stack of its own. Do not restyle the chip itself per call site.
 - The avatar colours (`Color.Secondary` for CS, `Color.Primary` for MV) are load-bearing: the hover rule in `site.css` recolours `mud-avatar-filled-secondary` and `mud-avatar-filled-primary` by name, and both must stay in step or a badge stops responding to its own chip's hover.
 
 **Why this is a component.** The markup was duplicated by hand across `ActivityRunProfileExecutionItemDetail` and `PendingExportDetail`, and that duplication is exactly what let a defect live: the avatar hover rule was written for the MV badge only, so every CS badge kept its resting colour when its chip filled. `PendingExportDetail` rendered both badges side by side and still nothing tied them together. It was also measurably wrong for the MV badge it did cover (1.2:1 to 1.7:1 against the fill); see the rule's comment in `site.css` for the palette measurements behind the treatment that replaced it.
+
+## Synchronisation Rule identity strip
+
+**A Synchronisation Rule's Connected System, direction and object types are stated once, by `<SyncRuleIdentityStrip />` beneath the page's breadcrumbs.** They are facts about the rule, not settings on it, so they do not belong among the Details tab's fields (where they used to sit between Description and the first switch), and they are context for Matching, Scope and Attribute Flow as much as for Details, so they belong where every tab can see them: the slot under the breadcrumbs that the Connected System page uses for its own strip.
+
+- **The Metaverse type is always on the left and the Connected System type on the right; only the arrow turns.** The create form draws the pair the same way, and a rule that read one way while being created and another once saved would be worse than either. The arrowhead sits against the side that receives the data, drawn in CSS from the direction class (`jim-identity-flow-outbound` / `-inbound`), so the shape cannot disagree with the label. The row this replaced drew a fixed arrow, so every Inbound rule read as an export.
+- The two type chips are `<ObjectChip />`s with no `Name`, which is the supported "type alone" case; do not hand-roll MV/CS avatars here.
+- Nothing is shown on the New page: those facts are chosen in its form, exactly as `<AuditInfo />` is hidden until the rule exists.
 
 ## Form action gating and input immediacy
 
@@ -260,6 +270,10 @@ An explanatory tooltip that runs as one long line is hard to read and stretches 
 3. **Never hand-place the break.** No `<br>` and no line-break character written into a description string. Descriptions range from a few words to two sentences and get added over time, so a break authored for one string lands in the wrong place in the next and has to be re-judged every time one is added. Derive it or leave it.
 
 A single-sentence description needs none of this and renders unchanged. The site-wide `24rem` measure cap and left-alignment (`site.css` > "Tooltip measure") is what keeps a long *single* sentence from running off the page; MudBlazor sets no `max-width` on `.mud-tooltip` at all.
+
+## Configuration Change Preview panels
+
+**Every editing surface that opens a `<ConfigurationChangePreviewPanel />` passes `OnClose`.** Point it at the surface's existing `Discard...Preview()` method (the one that forgets the Activity id, the previewed proposal and the last read), so closing removes the panel and the save confirmation stops citing the preview. The panel renders the close control only when the callback is set, so the one surface that shows a preview as a record rather than as a question, the Activity page, leaves it unset. A running preview closed this way is not cancelled; it finishes as an Activity. The affordance itself is covered by `ConfigurationChangePreviewPanelTests`; the wiring is a convention, so check it by reading the panel's call sites (`grep -n "<ConfigurationChangePreviewPanel" -A4`).
 
 ## Alerts
 - ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components

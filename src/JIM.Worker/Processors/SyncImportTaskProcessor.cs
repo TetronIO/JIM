@@ -18,6 +18,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -558,7 +559,7 @@ public class SyncImportTaskProcessor
             var deletionsSw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
-                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, deletionPartitionId);
+                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, deletionPartitionId, existingCsoCount);
             }
             deletionsSw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
@@ -986,10 +987,35 @@ public class SyncImportTaskProcessor
         importSpan.SetSuccess();
     }
 
-    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId)
+    /// <summary>
+    /// Run Profile Safeguards (#1618, Layer 2): what deletion detection found, sorted into the two
+    /// groups <see cref="ApplyDeletionCandidatesAsync"/> treats differently. Objects not found in the
+    /// Connector Space, and objects already processed elsewhere in this import run, are dropped before
+    /// this point and never appear in either list; see <see cref="ResolveDeletionCandidateAsync{T}"/>.
+    /// </summary>
+    /// <param name="AlreadyObsolete">
+    /// Candidates already <see cref="ConnectedSystemObjectStatus.Obsolete"/> when resolved: this is not
+    /// their first missing import, so applying only clears any stale Pending Export against them.
+    /// </param>
+    /// <param name="NewlyMarked">
+    /// Candidates that would be newly marked as deleted this run: the count the Run Profile's
+    /// <see cref="ConnectedSystemRunProfile.MaxDetectedDeletions"/> and
+    /// <see cref="ConnectedSystemRunProfile.MaxDetectedDeletionsPercent"/> limits are checked against.
+    /// </param>
+    private sealed record DeletionCandidates(List<ConnectedSystemObject> AlreadyObsolete, List<ConnectedSystemObject> NewlyMarked);
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618, Layer 2) Phase A: resolves which Connected System Objects
+    /// deletion detection would act on, with no side effects, so Phase B
+    /// (<see cref="ApplyDeletionCandidatesAsync"/>) can decide whether the whole run's worth of
+    /// detected deletions is within the Run Profile's limits before anything is touched.
+    /// </summary>
+    private async Task<DeletionCandidates> ResolveDeletionCandidatesAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId)
     {
+        var candidates = new DeletionCandidates([], []);
+
         if (_connectedSystem.ObjectTypes == null)
-            return;
+            return candidates;
 
         // Get the IDs of CSOs that were already processed in this import run
         // These should not be marked as obsolete even if their external ID isn't in the import (e.g., because their
@@ -1017,9 +1043,9 @@ public class SyncImportTaskProcessor
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeInt.Except(connectedSystemIntExternalIdValues);
 
-                    // obsolete the Connected System Objects no longer in the Connected System for this object type
+                    // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
+                        await ResolveAndClassifyDeletionCandidateAsync(externalId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.Text:
@@ -1035,9 +1061,9 @@ public class SyncImportTaskProcessor
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(connectedSystemStringExternalIdValues);
 
-                    // obsolete the Connected System Objects no longer in the Connected System for this object type
+                    // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
+                        await ResolveAndClassifyDeletionCandidateAsync(externalId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.Guid:
@@ -1053,9 +1079,9 @@ public class SyncImportTaskProcessor
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeGuid.Except(connectedSystemGuidExternalIdValues);
 
-                    // obsolete the Connected System Objects no longer in the Connected System for this object type
+                    // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
+                        await ResolveAndClassifyDeletionCandidateAsync(externalId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.LongNumber:
@@ -1071,9 +1097,9 @@ public class SyncImportTaskProcessor
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeLong.Except(connectedSystemLongExternalIdValues);
 
-                    // obsolete the Connected System Objects no longer in the Connected System for this object type
+                    // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
+                        await ResolveAndClassifyDeletionCandidateAsync(externalId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.Decimal:
@@ -1092,9 +1118,9 @@ public class SyncImportTaskProcessor
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeDecimal.Except(connectedSystemDecimalExternalIdValues);
 
-                    // obsolete the Connected System Objects no longer in the Connected System for this object type
+                    // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
+                        await ResolveAndClassifyDeletionCandidateAsync(externalId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.NotSet:
@@ -1113,6 +1139,87 @@ public class SyncImportTaskProcessor
                         $"Deletion detection cannot handle an external ID attribute of type {objectTypeExternalIdAttribute.Type} " +
                         $"('{objectTypeExternalIdAttribute.Name}' on Object Type '{selectedObjectType.Name}').");
             }
+        }
+
+        return candidates;
+    }
+
+    /// <summary>
+    /// Resolves one external id to its Connected System Object (dropping it, per
+    /// <see cref="ResolveDeletionCandidateAsync{T}"/>, if it cannot be found or was already processed
+    /// this run) and sorts it into <paramref name="candidates"/> by its current status.
+    /// </summary>
+    private async Task ResolveAndClassifyDeletionCandidateAsync<T>(T externalId, int connectedSystemAttributeId, HashSet<Guid> processedCsoIds, DeletionCandidates candidates)
+    {
+        var cso = await ResolveDeletionCandidateAsync(externalId, connectedSystemAttributeId, processedCsoIds);
+        if (cso == null)
+            return;
+
+        if (cso.Status == ConnectedSystemObjectStatus.Obsolete)
+            candidates.AlreadyObsolete.Add(cso);
+        else
+            candidates.NewlyMarked.Add(cso);
+    }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618, Layer 2) orchestrator: resolves every deletion candidate
+    /// (Phase A, no side effects), decides whether the count of objects that would be newly marked as
+    /// deleted is within the Run Profile's <see cref="ConnectedSystemRunProfile.MaxDetectedDeletions"/>
+    /// and <see cref="ConnectedSystemRunProfile.MaxDetectedDeletionsPercent"/> limits, and either
+    /// refuses outright (Phase B leaves every candidate untouched, including the stale Pending Export
+    /// cleanup for already-Obsolete ones) or applies exactly today's per-candidate behaviour.
+    /// </summary>
+    /// <param name="existingCsoCount">
+    /// How many Connected System Objects were in the run's scope at the start of the run: the base the
+    /// percentage limit is measured against.
+    /// </param>
+    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId, int existingCsoCount)
+    {
+        if (_connectedSystem.ObjectTypes == null)
+            return;
+
+        var candidates = await ResolveDeletionCandidatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, partitionId);
+        var newlyMarkedCount = candidates.NewlyMarked.Count;
+
+        var maxCount = _connectedSystemRunProfile.MaxDetectedDeletions;
+        var maxPercent = _connectedSystemRunProfile.MaxDetectedDeletionsPercent;
+
+        var countLimitExceeded = maxCount.HasValue && newlyMarkedCount > maxCount.Value;
+        var percentLimitExceeded = maxPercent.HasValue && ShareThreshold.Exceeds(newlyMarkedCount, existingCsoCount, maxPercent.Value);
+
+        if (countLimitExceeded || percentLimitExceeded)
+        {
+            // Refused: nothing is touched, not even the stale Pending Export cleanup for candidates
+            // already Obsolete. The import that fed this detection may itself be wrong (a broken filter
+            // or base DN), so nothing about the Connector Space's existing state may be changed on the
+            // strength of it.
+            _activity.DetectedDeletionsWithheld = newlyMarkedCount;
+
+            var warning = ImportOutcomeMessage.ForRefusedDeletionDetection(newlyMarkedCount, existingCsoCount, maxCount, maxPercent);
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+                ? warning
+                : $"{_activity.WarningMessage}\n{warning}";
+
+            Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection refused. {NewlyMarkedCount} of {ExistingCsoCount} Connected System Objects in scope would have been newly marked as deleted, above the Run Profile's limit(s) (MaxDetectedDeletions={MaxCount}, MaxDetectedDeletionsPercent={MaxPercent}). None were marked; {AlreadyObsoleteCount} already-Obsolete candidate(s) also left untouched.",
+                newlyMarkedCount, existingCsoCount, maxCount, maxPercent, candidates.AlreadyObsolete.Count);
+            return;
+        }
+
+        _activity.DetectedDeletionsWithheld = 0;
+
+        // Applied: exactly today's per-candidate behaviour. Already-Obsolete candidates only ever
+        // needed the stale Pending Export cleanup (they were Obsolete before this run started); newly
+        // marked candidates get the cleanup, an execution item and the status change.
+        foreach (var cso in candidates.AlreadyObsolete)
+            await ApplyDeletionCandidateAsync(cso, connectedSystemObjectsToBeUpdated);
+
+        foreach (var cso in candidates.NewlyMarked)
+            await ApplyDeletionCandidateAsync(cso, connectedSystemObjectsToBeUpdated);
+
+        if (newlyMarkedCount > 0 || candidates.AlreadyObsolete.Count > 0)
+        {
+            Log.Information("ProcessConnectedSystemObjectDeletionsAsync: deletion detection applied. {NewlyMarkedCount} Connected System Object(s) newly marked as deleted, {AlreadyObsoleteCount} already-Obsolete candidate(s) re-checked for stale Pending Exports.",
+                newlyMarkedCount, candidates.AlreadyObsolete.Count);
         }
     }
 
@@ -1206,14 +1313,18 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// Have any CSOs in our Connected System not been imported, and thus are now no longer valid? Put them into an
-    /// Obsolete state, so they can be processed for deletion during a synchronisation run.
+    /// Run Profile Safeguards (#1618, Layer 2) Phase A step: resolves one external id to the Connected
+    /// System Object deletion detection would act on, with no side effects. Returns null, having
+    /// logged why, for an id that cannot be found (already gone, or the External ID changed mid-run)
+    /// or that belongs to a CSO already processed elsewhere in this import run (e.g. matched by a
+    /// secondary external id): neither is a deletion candidate.
     /// </summary>
     /// <param name="connectedSystemObjectExternalId">The value for the External ID attribute.</param>
     /// <param name="connectedSystemAttributeId">The unique identifier for the attribute that represents the External ID in the current Connected System.</param>
-    /// <param name="connectedSystemObjectsToBeUpdated">The cache of CSOs that have been updated as part of this import run.</param>
+    /// <param name="processedCsoIds">CSOs already updated elsewhere in this import run, which must not be treated as deletion candidates even if their External ID is not in the import.</param>
     /// <typeparam name="T">The type for the External ID attribute.</typeparam>
-    private async Task ObsoleteConnectedSystemObjectAsync<T>(T connectedSystemObjectExternalId, int connectedSystemAttributeId, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, HashSet<Guid> processedCsoIds)
+    /// <exception cref="ArgumentOutOfRangeException">The External ID's runtime type has no known lookup.</exception>
+    private async Task<ConnectedSystemObject?> ResolveDeletionCandidateAsync<T>(T connectedSystemObjectExternalId, int connectedSystemAttributeId, HashSet<Guid> processedCsoIds)
     {
         // find the cso
         var cso = connectedSystemObjectExternalId switch
@@ -1240,19 +1351,32 @@ public class SyncImportTaskProcessor
 
         if (cso == null)
         {
-            Log.Information($"ObsoleteConnectedSystemObjectAsync: CSO with external id '{LogSanitiser.Sanitise(connectedSystemObjectExternalId?.ToString())}' not found. No work to do.");
-            return;
+            Log.Information($"ResolveDeletionCandidateAsync: CSO with external id '{LogSanitiser.Sanitise(connectedSystemObjectExternalId?.ToString())}' not found. No work to do.");
+            return null;
         }
 
         // Skip CSOs that were already processed in this import run (e.g., matched by secondary external ID)
         // Their external ID may have been updated during import, so they appear as "not in import" by old ID
         if (processedCsoIds.Contains(cso.Id))
         {
-            Log.Debug("ObsoleteConnectedSystemObjectAsync: CSO {CsoId} was already processed in this import run. Skipping obsolete.",
+            Log.Debug("ResolveDeletionCandidateAsync: CSO {CsoId} was already processed in this import run. Skipping obsolete.",
                 cso.Id);
-            return;
+            return null;
         }
 
+        return cso;
+    }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618, Layer 2) Phase B step: applies deletion detection to one
+    /// already-resolved candidate. Always clears any stale Pending Export against it; additionally
+    /// records the deletion and flips the status only when the candidate was not already Obsolete
+    /// (i.e. this is genuinely its first missing import). Called only once the whole run's worth of
+    /// candidates has been confirmed within the Run Profile's limits; never re-resolves the candidate,
+    /// so it costs no further lookup.
+    /// </summary>
+    private async Task ApplyDeletionCandidateAsync(ConnectedSystemObject cso, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    {
         // Clean up any stale Pending Exports for this CSO. When a CSO's object is deleted from the
         // target system, any Exported-status Delete PEs (awaiting confirmation) or other stale PEs
         // are no longer relevant. Without this cleanup, stale PEs accumulate and can cause duplicate
@@ -1266,7 +1390,7 @@ public class SyncImportTaskProcessor
             .DeletePendingExportsByConnectedSystemObjectIdsAsync(new[] { cso.Id });
         if (deletedPeCount > 0)
         {
-            Log.Information("ObsoleteConnectedSystemObjectAsync: Cleaned up {Count} stale Pending Export(s) for obsolete CSO {CsoId}",
+            Log.Information("ApplyDeletionCandidateAsync: Cleaned up {Count} stale Pending Export(s) for obsolete CSO {CsoId}",
                 deletedPeCount, cso.Id);
         }
 
@@ -1278,7 +1402,7 @@ public class SyncImportTaskProcessor
         // deletion arriving out of nowhere is exactly what it looks like. Report nothing, write nothing.
         if (cso.Status == ConnectedSystemObjectStatus.Obsolete)
         {
-            Log.Debug("ObsoleteConnectedSystemObjectAsync: CSO {CsoId} is already Obsolete and awaiting a synchronisation run. Nothing to report.",
+            Log.Debug("ApplyDeletionCandidateAsync: CSO {CsoId} is already Obsolete and awaiting a synchronisation run. Nothing to report.",
                 cso.Id);
             return;
         }

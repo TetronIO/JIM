@@ -69,6 +69,25 @@ public class ObjectChipTests : JimComponentTestContext
     }
 
     [Test]
+    public void ObjectChip_WithNoTypeName_RendersTheNameAloneRatherThanLeadingWithAColon()
+    {
+        // The inverse of the case above: a Configuration Change Preview's drill-down carries the type in its own
+        // column, so its chip is the side marker and the link. Joining a name to a type that is not there would
+        // lead the chip with a colon and a space.
+        var cut = Render<ObjectChip>(p => p
+            .Add(c => c.Kind, ObjectChipKind.Metaverse)
+            .Add(c => c.Name, "Amelia Sullivan"));
+
+        var prefix = cut.Find("b");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(prefix.TextContent, Is.Empty);
+            Assert.That(prefix.ParentElement!.TextContent, Is.EqualTo("Amelia Sullivan"),
+                "the chip's text is the name alone: no colon, and no non-breaking space where the type would have been");
+        }
+    }
+
+    [Test]
     public void ObjectChip_WithHref_WrapsTheChipInTheHoverTreatmentLink()
     {
         var cut = Render<ObjectChip>(p => p
