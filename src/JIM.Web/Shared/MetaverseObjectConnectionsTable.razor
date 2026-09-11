@@ -28,12 +28,12 @@ else if (IsLoaded)
             <TableObjectCount Count="@Connections.Count" SingularName="connection" PluralName="connections" ShowSeparator="true" />
         </ToolBarContent>
         <HeaderContent>
-            <MudTh>Connected System</MudTh>
-            <MudTh>Object</MudTh>
-            <MudTh>Role</MudTh>
-            <MudTh>Join</MudTh>
-            <MudTh>State</MudTh>
-            <MudTh>Last synchronised</MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.ConnectedSystemName)" InitialDirection="SortDirection.Ascending">Connected System</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.DisplayName)">Object</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => GetRoleSortKey(c))">Role</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.JoinType)">Join</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.State)">State</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.LastSynchronised ?? DateTime.MinValue)">Last synchronised</MudTableSortLabel></MudTh>
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -160,6 +160,19 @@ else if (IsLoaded)
             // JS interop not yet available; the next render retries.
         }
     }
+
+    /// <summary>
+    /// Sort key for the Role column: sources before targets, and a connection that is both sorts with
+    /// the sources, so a sort by role reads as "where does this Identity come from, then where does it go".
+    /// </summary>
+    private static string GetRoleSortKey(MetaverseObjectConnection connection) =>
+        (connection.IsSource, connection.IsTarget) switch
+        {
+            (true, true) => "1 source and target",
+            (true, false) => "0 source",
+            (false, true) => "2 target",
+            _ => "3 none"
+        };
 
     private static MudBlazor.Color GetJoinTypeColor(ConnectedSystemObjectJoinType joinType)
     {

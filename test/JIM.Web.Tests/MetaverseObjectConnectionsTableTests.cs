@@ -137,4 +137,15 @@ public class MetaverseObjectConnectionsTableTests : JimComponentTestContext
         Assert.That(cut.Markup, Does.Contain("Source"));
         Assert.That(cut.Markup, Does.Not.Contain(">Target<"));
     }
+
+    [Test]
+    public void ConnectionsTable_EveryDataColumn_IsSortable()
+    {
+        var cut = Render<MetaverseObjectConnectionsTable>(p => p
+            .Add(c => c.IsLoaded, true)
+            .Add(c => c.Connections, [BuildConnection(ConnectedSystemObjectConnectionState.InSync)]));
+
+        var sortLabels = cut.FindComponents<MudBlazor.MudTableSortLabel<MetaverseObjectConnection>>();
+        Assert.That(sortLabels, Has.Count.EqualTo(6), "Connected System, Object, Role, Join, State and Last synchronised sort; the action column does not");
+    }
 }
