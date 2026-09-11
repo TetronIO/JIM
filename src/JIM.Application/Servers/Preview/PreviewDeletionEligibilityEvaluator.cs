@@ -80,26 +80,14 @@ internal static class PreviewDeletionEligibilityEvaluator
 
     /// <summary>
     /// The Connected Systems that would still hold an object joined to this Metaverse Object, one entry per joined
-    /// object because that is what the engine counts.
+    /// object because that is what the engine counts. Delegates to the shared <see cref="RemainingConnectorsCalculator"/>
+    /// (#288 Phase 1 of the Sync Preview Surface plan) so this adapter and the destructive-cascade preview compute
+    /// the identical arithmetic.
     /// </summary>
     private static List<int> RemainingConnectorsAfterDisconnection(
-        MetaverseObjectDisconnectionCandidate candidate, int disconnectingSystemId, int disconnectingCount)
-    {
-        var remaining = new List<int>(candidate.JoinedConnectedSystemIds.Count);
-        var stillToRemove = disconnectingCount;
-
-        foreach (var systemId in candidate.JoinedConnectedSystemIds)
-        {
-            // Only the disconnecting system's entries are removed, and only as many as actually leave scope: a
-            // system holding two joined objects where one stays is still a connector.
-            if (systemId == disconnectingSystemId && stillToRemove > 0)
-                stillToRemove--;
-            else
-                remaining.Add(systemId);
-        }
-
-        return remaining;
-    }
+        MetaverseObjectDisconnectionCandidate candidate, int disconnectingSystemId, int disconnectingCount) =>
+        RemainingConnectorsCalculator.RemainingConnectorsAfterDisconnection(
+            candidate.JoinedConnectedSystemIds, disconnectingSystemId, disconnectingCount);
 
     /// <summary>
     /// The candidate as the shape the engine's deletion rule reads: its origin, and its type's deletion settings.

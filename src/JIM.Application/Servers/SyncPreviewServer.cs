@@ -3,6 +3,7 @@
 
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
+using JIM.Application.Servers.Preview;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -349,13 +350,24 @@ public class SyncPreviewServer
             afterId = page.Results[^1].Id;
 
             // One outbound-cache refresh per page for the joined objects' Metaverse Objects, instead of
-            // one per object inside the core.
+            // one per object inside the core. The same page-batched Connected System Object set also feeds
+            // the out-of-scope destructive cascade's deletion-rule and downstream-deprovisioning reads
+            // (#288 Phase 1 of the Sync Preview Surface plan): whichever of this page's joined objects turns
+            // out to be out of scope finds its Metaverse Object's other joined objects already in memory,
+            // rather than issuing its own read.
             var joinedMvoIds = page.Results
                 .Where(c => c.MetaverseObjectId.HasValue)
                 .Select(c => c.MetaverseObjectId!.Value)
                 .ToList();
             if (joinedMvoIds.Count > 0)
+            {
                 await previewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, joinedMvoIds);
+                context.JoinedCsosByMvoIdForDeletion = await guardedRepository.GetConnectedSystemObjectsForMvoDeletionAsync(joinedMvoIds);
+            }
+            else
+            {
+                context.JoinedCsosByMvoIdForDeletion = null;
+            }
 
             foreach (var cso in page.Results)
             {
@@ -522,6 +534,17 @@ public class SyncPreviewServer
                 Detail = $"The object is out of scope of every import Synchronisation Rule with Scoping Criteria; a synchronisation would apply the out-of-scope action '{outOfScopeAction}'.",
                 ConnectedSystemId = connectedSystemId
             });
+
+            // The destructive cascade (#288 Phase 1 of the Sync Preview Surface plan): a real synchronisation
+            // does not stop at the warning above for a JOINED object whose out-of-scope action is Disconnect.
+            // It disconnects the object, puts the Metaverse Object to its type's Deletion Rule, and when the
+            // object dies, deprovisions every downstream joined Connected System Object. Mirror that so the
+            // preview's tree matches what the run would record (SyncTaskProcessorBase.HandleCsoOutOfScopeAsync
+            // is the reference). An object that is not joined has nothing to cascade; RemainJoined keeps the
+            // join intact, so nothing downstream changes either.
+            if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.Disconnect)
+                await BuildOutOfScopeCascadeAsync(result, cso, importRules, context);
+
             return result;
         }
 
@@ -699,6 +722,289 @@ public class SyncPreviewServer
     }
 
     /// <summary>
+    /// The Connected System Objects joined to a Metaverse Object, for the out-of-scope cascade's
+    /// deletion-rule and downstream-deprovisioning reads. Prefers the full-system walk's per-page
+    /// prefetch (<see cref="CsoPreviewContext.JoinedCsosByMvoIdForDeletion"/>) when one was populated, so a
+    /// page's out-of-scope objects cost one batched query rather than one each; falls back to a live
+    /// per-object read for the single/few-object preview entry points, which have no page to batch across.
+    /// </summary>
+    private static async Task<List<ConnectedSystemObject>> GetJoinedCsosForDeletionAsync(CsoPreviewContext context, Guid mvoId)
+    {
+        if (context.JoinedCsosByMvoIdForDeletion != null)
+            return context.JoinedCsosByMvoIdForDeletion.GetValueOrDefault(mvoId) ?? [];
+
+        var joinedCsosByMvo = await context.GuardedRepository.GetConnectedSystemObjectsForMvoDeletionAsync([mvoId]);
+        return joinedCsosByMvo.GetValueOrDefault(mvoId) ?? [];
+    }
+
+    /// <summary>
+    /// The out-of-scope destructive cascade (#288 Phase 1 of the Sync Preview Surface plan): a JOINED object
+    /// whose out-of-scope action is Disconnect does not just leave scope in a real synchronisation, it
+    /// disconnects, puts the Metaverse Object to its type's Deletion Rule, and (when the object dies)
+    /// deprovisions every other joined Connected System Object. Every decision here is put to the same pure
+    /// engine method the real run calls (<see cref="ISyncEngine.EvaluateMvoDeletionRule"/> and
+    /// <see cref="ISyncEngine.DecideMvoDeletionExport"/>); nothing about the decisions is reimplemented, only
+    /// the node construction that <c>SyncTaskProcessorBase</c> and <c>ExportEvaluationServer</c> would
+    /// otherwise perform against real entities. Every read goes through the caller's guarded repository, and
+    /// the Metaverse Object worked on is a preview-owned clone (<see cref="CloneForPreview"/>), so nothing
+    /// shared is mutated and nothing is persisted.
+    /// </summary>
+    /// <param name="result">The preview result to add the cascade's tree nodes, warnings and proposed
+    /// deletions to. The disconnecting object's <see cref="SyncPreviewMessageCode.OutOfScope"/> warning has
+    /// already been added by the caller.</param>
+    /// <param name="cso">The Connected System Object falling out of scope. Must be joined
+    /// (<see cref="ConnectedSystemObject.MetaverseObjectId"/> set); the caller checks this before calling.</param>
+    /// <param name="importRules">The applicable import Synchronisation Rules, for the scoping rule
+    /// attribution (#1085): the same first-applicable rule the real run attributes the disconnect to.</param>
+    /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    private async Task BuildOutOfScopeCascadeAsync(
+        SyncPreviewResult result,
+        ConnectedSystemObject cso,
+        List<SyncRule> importRules,
+        CsoPreviewContext context)
+    {
+        var guardedRepository = context.GuardedRepository;
+        var mvoId = cso.MetaverseObjectId!.Value;
+
+        var joinedMvo = (await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync([mvoId])).SingleOrDefault();
+        if (joinedMvo == null)
+            return; // defensive: nothing to cascade if the joined object has vanished since the CSO was loaded
+
+        // A preview-owned clone, exactly as the ordinary inbound chain works on: attribute recall mutates
+        // pending-change lists, and none of that may touch the shared instance.
+        var workingMvo = CloneForPreview(joinedMvo);
+        var mvoDisplayName = ObjectNaming.FirstPresent(joinedMvo.Name);
+
+        // The same first-applicable-scoping-rule attribution the real run's DisconnectedOutOfScope root
+        // carries (#1085): the CSO fell out of scope of every rule with Scoping Criteria, so when several
+        // exist the attribution is the deterministic first one, the one whose action governs the disconnect.
+        var scopingSyncRule = importRules.FirstOrDefault(sr => sr.ObjectScopingCriteriaGroups.Count > 0);
+
+        // Every Connected System Object still joined to the Metaverse Object (the disconnecting CSO
+        // included: this preview never actually disconnects it). One dataset answers both questions the
+        // cascade asks: the Connected System of each entry is the remaining-connectors input to the
+        // deletion rule below, and the entries themselves are the downstream deprovisioning candidates
+        // further down. Read once, from the page-batched prefetch when the full-system walk populated one
+        // (context.JoinedCsosByMvoIdForDeletion), or as a live per-object read otherwise.
+        var joinedCsos = await GetJoinedCsosForDeletionAsync(context, mvoId);
+        if (joinedCsos.All(c => c.Id != cso.Id))
+            joinedCsos = [.. joinedCsos, cso]; // defensive: keep the arithmetic correct if the lean read ever omits it
+
+        // Remaining connectors after this one CSO's disconnect: the joined Connected System ids, minus one
+        // occurrence of the disconnecting system's id (RemainingConnectorsCalculator mirrors
+        // HandleCsoOutOfScopeAsync's List.Remove semantics exactly for the single-CSO case; see its remarks).
+        var joinedSystemIds = joinedCsos.Select(c => c.ConnectedSystemId).ToList();
+        var remainingConnectedSystemIds = RemainingConnectorsCalculator.RemainingConnectorsAfterDisconnection(
+            joinedSystemIds, context.ConnectedSystemId);
+
+        // The disconnecting system's name, so the decision's reason reads as the real run's does (which has
+        // the system to hand as _connectedSystem.Name); the shared name lookup is what this preview has.
+        context.SystemNames.TryGetValue(context.ConnectedSystemId, out var disconnectingSystemName);
+        var deletionDecision = _syncEngine.EvaluateMvoDeletionRule(
+            workingMvo, context.ConnectedSystemId, remainingConnectedSystemIds, disconnectingSystemName);
+
+        // Attribute recall, mirrored from HandleCsoOutOfScopeAsync (#91, #1570): skipped entirely when the
+        // Metaverse Object would be deleted immediately, since the work would be discarded moments later
+        // (#390 optimisation) - the real run applies the identical short-circuit.
+        var attributeChangeCount = 0;
+        var clearedAttributeCount = 0;
+        var preservedNoSourceAttributeCount = 0;
+        // Pending covers both a deletion this disconnect would schedule and one already scheduled from an
+        // earlier disconnect (DeletionEligibleDate set), exactly as HandleCsoOutOfScopeAsync tests it.
+        var mvoDeletionPending = deletionDecision.Fate == MvoDeletionFate.DeletionScheduled
+            || joinedMvo.DeletionEligibleDate != null;
+        var skipRecallForImmediateDeletion = deletionDecision.Fate == MvoDeletionFate.DeletedImmediately;
+        var csoType = context.ObjectTypes.FirstOrDefault(ot => ot.Id == cso.TypeId);
+
+        if (csoType is { RemoveContributedAttributesOnObsoletion: true } && !skipRecallForImmediateDeletion && workingMvo.Type != null)
+        {
+            var contributedAttributes = workingMvo.AttributeValues
+                .Where(av => av.ContributedBySystemId == context.ConnectedSystemId)
+                .ToList();
+            foreach (var attributeValue in contributedAttributes)
+                workingMvo.PendingAttributeValueRemovals.Add(attributeValue);
+
+            // Next-contributor recall fallback (#91): re-elect any still-joined lower-priority contributor
+            // before the attribute is treated as genuinely cleared, exactly as the real disconnect does.
+            await ContributorReElectionService.ReElectSurvivingContributorsAsync(
+                workingMvo,
+                contributedAttributes,
+                ContributorRecallScope.ForObsoletingConnectedSystemObject(cso),
+                context.PriorityContext,
+                _syncEngine,
+                guardedRepository,
+                (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
+                context.ObjectTypes,
+                ExpressionEvaluator);
+
+            var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(guardedRepository);
+            var noImportSourceRemains = !await remainingImportSourceEvaluator.AnyImportSourceRemainsAsync(
+                remainingConnectedSystemIds, workingMvo.Type.Id);
+
+            if (mvoDeletionPending || noImportSourceRemains)
+            {
+                // Freeze: an attribute with no surviving contributor is preserved (a pending deletion's
+                // grace window, or as last-known state when no import source remains), not cleared.
+                // Re-elected attributes still replace the leaver's value; only the non-re-elected ones
+                // are unmarked.
+                var reElectedDuringFreeze = workingMvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
+                var frozenValues = contributedAttributes.Where(av => !reElectedDuringFreeze.Contains(av.AttributeId)).ToList();
+                foreach (var frozen in frozenValues)
+                    workingMvo.PendingAttributeValueRemovals.Remove(frozen);
+
+                // A pending deletion explains itself via the deletion outcome; only the no-source
+                // preservation gets its own ValuesPreserved outcome (#1570).
+                if (!mvoDeletionPending)
+                    preservedNoSourceAttributeCount = frozenValues.Count;
+            }
+
+            attributeChangeCount = workingMvo.PendingAttributeValueRemovals.Count + workingMvo.PendingAttributeValueAdditions.Count;
+            if (attributeChangeCount > 0)
+            {
+                clearedAttributeCount = ContributorReElectionService.GetClearedAttributeIds(
+                    workingMvo, workingMvo.PendingAttributeValueAdditions, workingMvo.PendingAttributeValueRemovals).Count;
+            }
+        }
+
+        // The DisconnectedOutOfScope root: same shape as the real run's (#1085 attribution, #1086 identity
+        // snapshot), DetailCount carrying the attribute change count only when there is one to show.
+        var root = new SyncOutcomeNode
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
+            TargetEntityId = mvoId,
+            TargetEntityDescription = mvoDisplayName,
+            SyncRuleId = scopingSyncRule?.Id,
+            SyncRuleName = scopingSyncRule?.Name,
+            DetailCount = attributeChangeCount > 0 ? attributeChangeCount : null
+        };
+        result.OutcomeTree.Add(root);
+
+        if (attributeChangeCount > 0)
+        {
+            root.Children.Add(new SyncOutcomeNode
+            {
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                TargetEntityDescription = mvoDisplayName,
+                DetailCount = attributeChangeCount,
+                Ordinal = root.Children.Count
+            });
+        }
+
+        if (clearedAttributeCount > 0)
+        {
+            root.Children.Add(new SyncOutcomeNode
+            {
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
+                TargetEntityDescription = mvoDisplayName,
+                DetailCount = clearedAttributeCount,
+                Ordinal = root.Children.Count
+            });
+        }
+
+        if (preservedNoSourceAttributeCount > 0)
+        {
+            root.Children.Add(new SyncOutcomeNode
+            {
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved,
+                TargetEntityDescription = mvoDisplayName,
+                DetailCount = preservedNoSourceAttributeCount,
+                Ordinal = root.Children.Count
+            });
+        }
+
+        if (deletionDecision.Fate == MvoDeletionFate.NotDeleted)
+            return;
+
+        var deletionOutcomeType = deletionDecision.Fate == MvoDeletionFate.DeletedImmediately
+            ? ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+            : ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled;
+        // A speculative eligible-deletion date, computed for display only (never persisted): the real run
+        // stamps LastConnectorDisconnectedDate at the moment it marks the object and adds the grace period;
+        // "now" is this preview's best estimate of that moment.
+        var speculativeEligibleDate = deletionDecision.Fate == MvoDeletionFate.DeletionScheduled
+            ? DateTime.UtcNow.Add(deletionDecision.GracePeriod ?? TimeSpan.Zero)
+            : (DateTime?)null;
+        var deletionNode = new SyncOutcomeNode
+        {
+            OutcomeType = deletionOutcomeType,
+            TargetEntityId = mvoId,
+            TargetEntityDescription = mvoDisplayName,
+            DetailMessage = ConnectedSystemObjectObsoletionService.BuildMvoDeletionDetailMessage(
+                deletionDecision.Fate, deletionDecision.Reason, deletionDecision.GracePeriod, speculativeEligibleDate),
+            Ordinal = root.Children.Count
+        };
+        root.Children.Add(deletionNode);
+
+        // A scheduled deletion stages nothing: the object still exists, so there is nothing yet to
+        // deprovision downstream. Only an immediate deletion cascades further (mirrors
+        // SyncTaskProcessorBase.FindMvoDeletedOutcomeNodes, which nests deprovisioning only under MvoDeleted).
+        if (deletionDecision.Fate != MvoDeletionFate.DeletedImmediately)
+            return;
+
+        // Downstream deprovisioning: every OTHER Connected System Object still joined to the Metaverse
+        // Object, from the same dataset already read above (the disconnecting CSO is excluded explicitly:
+        // this preview never actually disconnects it, so it is still present in that joined set).
+        var exportRulesByMvoTypeId = context.Cache.ExportRulesByMvoTypeId;
+        foreach (var downstreamCso in joinedCsos.Where(c => c.Id != cso.Id))
+        {
+            var exportDecision = _syncEngine.DecideMvoDeletionExport(
+                downstreamCso, workingMvo.Type?.Id, exportRulesByMvoTypeId, existingPendingExport: null);
+            context.SystemNames.TryGetValue(downstreamCso.ConnectedSystemId, out var targetSystemName);
+
+            if (!exportDecision.ShouldStageDeleteExport)
+            {
+                // No node in the real tree either (SyncEngine.ExportEvaluation.DecideMvoDeletionExport's
+                // disconnect-only verdicts get no outcome; ExportEvaluationServer.EvaluateMvoDeletionsAsync
+                // just disconnects). Surfaced as a warning instead, so the surfaces can still show it.
+                result.Warnings.Add(new SyncPreviewMessage
+                {
+                    Code = SyncPreviewMessageCode.DownstreamDisconnectOnly,
+                    Detail = $"The Metaverse Object's deletion would disconnect its Connected System Object in " +
+                        $"'{targetSystemName ?? downstreamCso.ConnectedSystemId.ToString()}' without deprovisioning it " +
+                        "(no matching export Synchronisation Rule stages a delete).",
+                    ConnectedSystemId = downstreamCso.ConnectedSystemId
+                });
+                continue;
+            }
+
+            // The secondary external ID (e.g. DN for LDAP), captured the same way
+            // ExportEvaluationServer.EvaluateMvoDeletionsAsync builds the delete export, so the DetailCount
+            // below matches what the real run would record.
+            var attributeChanges = new List<PendingExportAttributeValueChange>();
+            if (exportDecision.SecondaryExternalIdAttribute != null && exportDecision.SecondaryExternalIdValue != null)
+            {
+                attributeChanges.Add(new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    Attribute = exportDecision.SecondaryExternalIdAttribute,
+                    AttributeId = exportDecision.SecondaryExternalIdAttribute.Id,
+                    StringValue = exportDecision.SecondaryExternalIdValue,
+                    ChangeType = PendingExportAttributeChangeType.Update
+                });
+            }
+
+            result.Outbound.ProposedExports.Add(new PendingExport
+            {
+                ChangeType = PendingExportChangeType.Delete,
+                ConnectedSystemId = downstreamCso.ConnectedSystemId,
+                ConnectedSystemObjectId = downstreamCso.Id,
+                SourceMetaverseObjectId = mvoId,
+                AttributeValueChanges = attributeChanges
+            });
+
+            deletionNode.Children.Add(new SyncOutcomeNode
+            {
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued,
+                TargetEntityDescription = targetSystemName,
+                DetailCount = attributeChanges.Count,
+                DetailMessage = downstreamCso.ConnectedSystemId.ToString(),
+                StagedChangeType = PendingExportChangeType.Delete,
+                Ordinal = deletionNode.Children.Count
+            });
+        }
+    }
+
+    /// <summary>
     /// The shared, read-only inputs one Connected System's CSO previews evaluate against.
     /// </summary>
     private sealed record CsoPreviewContext(
@@ -709,7 +1015,19 @@ public class SyncPreviewServer
         ExportEvaluationCache Cache,
         Dictionary<int, string> SystemNames,
         ISyncRepository GuardedRepository,
-        AttributePriorityContext PriorityContext);
+        AttributePriorityContext PriorityContext)
+    {
+        /// <summary>
+        /// Per-page prefetch of every Connected System Object joined to this page's joined Metaverse
+        /// Objects (#288 Phase 1 of the Sync Preview Surface plan), keyed by Metaverse Object id: the
+        /// out-of-scope destructive cascade's deletion-rule and downstream-deprovisioning reads consult
+        /// this first. Set once per page by <see cref="PreviewFullSyncAsync"/>; null for the single/few-object
+        /// preview entry points (<see cref="PreviewSyncForCsoAsync"/>, <see cref="PreviewSyncForCsosAsync"/>),
+        /// which have no page to batch across and fall back to a live per-object read in
+        /// <see cref="BuildOutOfScopeCascadeAsync"/>.
+        /// </summary>
+        public Dictionary<Guid, List<ConnectedSystemObject>>? JoinedCsosByMvoIdForDeletion { get; set; }
+    }
 
     /// <summary>
     /// Classifies one per-object preview into its full-system category. Blocking errors take precedence:

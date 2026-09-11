@@ -298,4 +298,148 @@ public class FullSyncPreviewServerTests
             Assert.That(result.Samples, Is.Empty);
         }
     }
+
+    #region Out-of-Scope Destructive Cascade (#288 Phase 1 of the Sync Preview Surface plan)
+
+    /// <summary>
+    /// Arranges a single, joined, out-of-scope Connected System Object whose Metaverse Object's type
+    /// deletes immediately once the source disconnects (WhenAuthoritativeSourceDisconnected, the source as
+    /// trigger), and a downstream target Connected System Object whose export Synchronisation Rule stages
+    /// a delete on that deletion (#655).
+    /// </summary>
+    private (ConnectedSystemObject Cso, MetaverseObject Mvo, ConnectedSystemObject TargetCso) ArrangeOutOfScopeCascadeFixture()
+    {
+        var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
+        var sourceUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER");
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvUserType.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        mvUserType.DeletionGracePeriod = TimeSpan.Zero;
+        mvUserType.DeletionTriggerConnectedSystemIds = [sourceSystem.Id];
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+
+        var importRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Import Synchronisation Rule 1");
+        importRule.MetaverseObjectType = mvUserType;
+        importRule.MetaverseObjectTypeId = mvUserType.Id;
+        importRule.ConnectedSystemId = sourceSystem.Id;
+        importRule.ConnectedSystemObjectTypeId = sourceUserType.Id;
+        importRule.ConnectedSystemObjectType = sourceUserType;
+        importRule.Direction = SyncRuleDirection.Import;
+        importRule.AttributeFlowRules.Clear();
+
+        var csEmployeeIdAttr = sourceUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID);
+        importRule.ObjectScopingCriteriaGroups.Clear();
+        importRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    ConnectedSystemAttribute = csEmployeeIdAttr,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "IN_SCOPE_VALUE"
+                }
+            }
+        });
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = sourceSystem.Id,
+            ConnectedSystem = sourceSystem,
+            Type = sourceUserType,
+            TypeId = sourceUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = csEmployeeIdAttr,
+            AttributeId = csEmployeeIdAttr.Id,
+            StringValue = "OUT_OF_SCOPE_VALUE" // fails the scoping criterion above
+        });
+        SyncRepo.SeedConnectedSystemObject(cso);
+        SyncRepo.SeedMetaverseObject(mvo);
+
+        var targetSystem = ConnectedSystemsData.First(s => s.Id != sourceSystem.Id);
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>();
+
+        var targetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned
+        };
+        SyncRepo.SeedConnectedSystemObject(targetCso);
+
+        return (cso, mvo, targetCso);
+    }
+
+    [Test]
+    public async Task PreviewFullSyncAsync_OutOfScopeJoinedObjectWithImmediateDeletion_CountsTheCascadeAndPersistsNothingAsync()
+    {
+        // Arrange - a population of one, out of scope, whose Metaverse Object's deletion cascades to a
+        // downstream target Connected System Object staged for deletion (#655)
+        var (cso, mvo, targetCso) = ArrangeOutOfScopeCascadeFixture();
+        var mvoCountBefore = MetaverseObjectsData.Count;
+
+        // Act - the per-page context refresh (#288 Phase 1) must batch the cascade's reads for this page
+        // rather than the core issuing its own per-object read; behaviourally that is invisible here, so
+        // this asserts the resulting counts and samples rather than the query shape.
+        var result = await Jim.SyncPreview.PreviewFullSyncAsync(cso.ConnectedSystemId);
+
+        // Assert - the whole-population counters include the cascade (FullSyncPreviewCounts.ObjectsToDelete
+        // derives from the proposed Delete exports, which the cascade adds to alongside the ordinary path)
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.TotalObjectCount, Is.EqualTo(1));
+            Assert.That(result.EvaluatedObjectCount, Is.EqualTo(1));
+            Assert.That(result.Counts.OutOfScope, Is.EqualTo(1));
+            Assert.That(result.Counts.ObjectsToDelete, Is.EqualTo(1),
+                "The cascade's downstream delete Pending Export must be counted");
+        }
+
+        var sample = result.Samples.Single(s => s.Category == FullSyncPreviewCategory.OutOfScope);
+        var root = sample.Preview.OutcomeTree.Single();
+        var deletionNode = root.Children.Single(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope));
+            Assert.That(deletionNode.Children.Single().OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued));
+        }
+
+        // Zero side effects
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "A preview must never break the join");
+            Assert.That(targetCso.MetaverseObjectId, Is.EqualTo(mvo.Id), "A preview must never disconnect the downstream object");
+            Assert.That(SyncRepo.MetaverseObjects.ContainsKey(mvo.Id), Is.True, "A preview must never delete the Metaverse Object");
+            Assert.That(MetaverseObjectsData, Has.Count.EqualTo(mvoCountBefore));
+            Assert.That(PendingExportsData, Is.Empty);
+        }
+    }
+
+    #endregion
 }

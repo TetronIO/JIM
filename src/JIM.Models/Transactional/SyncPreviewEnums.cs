@@ -31,7 +31,13 @@ public enum SyncPreviewMessageCode
     ObjectNotFound,
     /// <summary>More than one Metaverse Object matched the Object Matching Rules; the real sync would fail the
     /// object with an AmbiguousMatch error.</summary>
-    AmbiguousMatch
+    AmbiguousMatch,
+    /// <summary>The Metaverse Object's deletion (cascading from this object falling out of scope) would
+    /// disconnect a downstream joined Connected System Object without deprovisioning it: no export
+    /// Synchronisation Rule matches it, or a matching rule's Outbound Deprovision Action is Disconnect. The
+    /// real run records no outcome node for a disconnect-only downstream object (#288 Phase 1 of the Sync
+    /// Preview Surface plan); this warning is how the preview still surfaces it.</summary>
+    DownstreamDisconnectOnly
 }
 
 /// <summary>
