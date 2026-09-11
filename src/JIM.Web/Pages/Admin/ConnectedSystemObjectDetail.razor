@@ -128,7 +128,9 @@
 
     @if (_previewResult != null)
     {
-        <SyncPreviewPanel PreviewResult="_previewResult" Context="BuildPreviewContext()" OnClose="ClosePreview" />
+        <div class="mt-6">
+            <SyncPreviewPanel PreviewResult="_previewResult" Context="BuildPreviewContext()" OnClose="ClosePreview" />
+        </div>
     }
 
     @if (PendingExport != null && _pendingExportTotalCount > 0)

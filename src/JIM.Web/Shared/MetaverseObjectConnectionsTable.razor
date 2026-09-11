@@ -1,6 +1,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
+@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -21,7 +22,11 @@ else if (IsLoaded && Connections.Count == 0)
 }
 else if (IsLoaded)
 {
-    <MudTable Items="Connections" Hover="true" Dense="false" data-testid="jim-mvo-connections-table">
+    <MudTable Items="Connections" Hover="true" Dense="@_dense" Outlined="true" Elevation="0" data-testid="jim-mvo-connections-table">
+        <ToolBarContent>
+            <TableDensityToggle @bind-Dense="_dense" />
+            <TableObjectCount Count="@Connections.Count" SingularName="connection" PluralName="connections" ShowSeparator="true" />
+        </ToolBarContent>
         <HeaderContent>
             <MudTh>Connected System</MudTh>
             <MudTh>Object</MudTh>
@@ -44,11 +49,11 @@ else if (IsLoaded)
                 <MudStack Row="true" Spacing="1">
                     @if (context.IsSource)
                     {
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">Source</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Source</MudChip>
                     }
                     @if (context.IsTarget)
                     {
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary">Target</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary">Target</MudChip>
                     }
                     @if (!context.IsSource && !context.IsTarget)
                     {
@@ -57,13 +62,13 @@ else if (IsLoaded)
                 </MudStack>
             </MudTd>
             <MudTd DataLabel="Join">
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="GetJoinTypeColor(context.JoinType)">
+                <MudChip T="string" Variant="Variant.Text" Color="GetJoinTypeColor(context.JoinType)">
                     @context.JoinType
                 </MudChip>
             </MudTd>
             <MudTd DataLabel="State">
                 <MudStack Spacing="0">
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="GetConnectionStateColor(context.State)"
+                    <MudChip T="string" Variant="Variant.Text" Color="GetConnectionStateColor(context.State)"
                              Class="jim-connection-state-chip" data-state="@context.State">
                         @GetConnectionStateLabel(context.State)
                     </MudChip>
@@ -88,7 +93,7 @@ else if (IsLoaded)
                 }
             </MudTd>
             <MudTd>
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" DropShadow="false"
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Visibility"
                            Disabled="@PreviewLoading"
                            OnClick="@(() => OnPreview.InvokeAsync(context))"
@@ -131,6 +136,30 @@ else if (IsLoaded)
     /// </summary>
     [Parameter]
     public EventCallback<MetaverseObjectConnection> OnPreview { get; set; }
+
+    private bool _dense;
+    private bool _preferencesLoaded;
+
+    /// <summary>
+    /// Loads the saved row-density preference on first render, per the shared table convention
+    /// (src/JIM.Web/CLAUDE.md, "Row density"), so the table paints at the user's density straight away.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_preferencesLoaded)
+            return;
+
+        try
+        {
+            _dense = await PreferenceService.GetTableDenseAsync() == true;
+            _preferencesLoaded = true;
+            StateHasChanged();
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not yet available; the next render retries.
+        }
+    }
 
     private static MudBlazor.Color GetJoinTypeColor(ConnectedSystemObjectJoinType joinType)
     {

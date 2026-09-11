@@ -195,14 +195,14 @@
         @* see about every other person, so the tab carries its own Administrator gate, as Password does.  *@
         <AuthorizeView Roles="Administrator" Context="connectionsAuth">
             <MudTabPanel Text="Connections" Icon="@Icons.Material.Filled.Hub">
-                <div class="mt-3">
+                <div>
                     <MetaverseObjectConnectionsTable IsLoading="_connectionsLoading" IsLoaded="_connectionsLoaded"
                                                       Connections="_connections" PreviewLoading="_connectionPreviewLoading"
                                                       OnPreview="PreviewConnectionAsync" />
 
                     @if (_connectionPreviewResult != null)
                     {
-                        <div class="mt-4">
+                        <div class="mt-6">
                             <SyncPreviewPanel PreviewResult="_connectionPreviewResult" Context="_connectionPreviewContext!" OnClose="CloseConnectionPreview" />
                         </div>
                     }
@@ -234,7 +234,7 @@
 
                     @if (_outboundPreviewResult != null)
                     {
-                        <div class="mt-4">
+                        <div class="mt-6">
                             <SyncPreviewPanel PreviewResult="_outboundPreviewResult" Context="BuildOutboundPreviewContext()" OnClose="CloseOutboundPreview" />
                         </div>
                     }

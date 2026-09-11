@@ -13,10 +13,10 @@
    Synchronisation Rule, for example, is recorded as a warning rather than a tree node -
    SyncPreviewServer.BuildOutOfScopeCascadeAsync). Do not duplicate the panel's own view markup here. *@
 
-<div class="jim-sync-preview-panel" data-testid="jim-sync-preview-panel">
+<div class="jim-sync-preview-panel d-flex flex-column gap-6" data-testid="jim-sync-preview-panel">
     @if (PreviewResult.Errors.Count > 0)
     {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3" data-testid="jim-sync-preview-errors">
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" data-testid="jim-sync-preview-errors">
             <div class="d-flex flex-column">
                 @foreach (var error in PreviewResult.Errors)
                 {
@@ -27,7 +27,7 @@
     }
     @if (PreviewResult.Warnings.Count > 0)
     {
-        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3" data-testid="jim-sync-preview-warnings">
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="jim-sync-preview-warnings">
             <div class="d-flex flex-column">
                 @foreach (var warning in PreviewResult.Warnings)
                 {
