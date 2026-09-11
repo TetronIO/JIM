@@ -12,6 +12,22 @@
        nothing tying them together. Deliberately not --mud-default-borderradius, which is smaller
        because it also drives buttons, inputs and other interactive controls. */
     --jim-container-radius: 10px;
+
+    /* The label colour of a Text or Outlined chip in each semantic colour, and of anything else that paints a
+       palette colour AS TEXT on a tint of itself (the causality panel's outcome pills, its Table view's change
+       chips, its lineage operation chips). The palette colour is a fill chosen to sit behind white text and
+       fails as text: used raw, the Text chip label measured below WCAG AA in seven of the twelve themes, the
+       default dark theme's primary at 2.80:1 against the 4.5:1 floor. Blending 60% of the colour toward the
+       theme's text colour keeps the hue while lifting it off the background, and adapts per mode because text
+       colour is near-white on dark themes and near-black on light ones; every theme now measures at or above
+       4.72:1. ThemeContrastTests reads the chip rules below and fails the build if a theme drifts under. Use
+       these for text only; fills, borders and accent bars keep the raw palette colour. */
+    --jim-chip-text-primary: color-mix(in srgb, var(--mud-palette-primary) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-secondary: color-mix(in srgb, var(--mud-palette-secondary) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-info: color-mix(in srgb, var(--mud-palette-info) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-success: color-mix(in srgb, var(--mud-palette-success) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-warning: color-mix(in srgb, var(--mud-palette-warning) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-error: color-mix(in srgb, var(--mud-palette-error) 60%, var(--mud-palette-text-primary));
 }
 
 /* App.razor's <FocusOnNavigate Selector="h1" /> (standard Blazor Web App template
@@ -115,29 +131,63 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
 }
 
 /* Text-variant chips: increase background opacity for better visibility on dark themes.
-   MudBlazor uses ~5% opacity by default which is too subtle on purple backgrounds. */
+   MudBlazor uses ~5% opacity by default which is too subtle on purple backgrounds. The label takes the
+   --jim-chip-text-* blend (see :root) rather than MudBlazor's raw palette colour, for the contrast reasons
+   given there; the selected-state rules further down override it with the solid fill. */
 .mud-chip.mud-chip-text.mud-chip-color-primary {
     background-color: color-mix(in srgb, var(--mud-palette-primary) 15%, transparent) !important;
+    color: var(--jim-chip-text-primary) !important;
 }
 
 .mud-chip.mud-chip-text.mud-chip-color-secondary {
     background-color: color-mix(in srgb, var(--mud-palette-secondary) 15%, transparent) !important;
+    color: var(--jim-chip-text-secondary) !important;
 }
 
 .mud-chip.mud-chip-text.mud-chip-color-info {
     background-color: color-mix(in srgb, var(--mud-palette-info) 15%, transparent) !important;
+    color: var(--jim-chip-text-info) !important;
 }
 
 .mud-chip.mud-chip-text.mud-chip-color-success {
     background-color: color-mix(in srgb, var(--mud-palette-success) 15%, transparent) !important;
+    color: var(--jim-chip-text-success) !important;
 }
 
 .mud-chip.mud-chip-text.mud-chip-color-warning {
     background-color: color-mix(in srgb, var(--mud-palette-warning) 15%, transparent) !important;
+    color: var(--jim-chip-text-warning) !important;
 }
 
 .mud-chip.mud-chip-text.mud-chip-color-error {
     background-color: color-mix(in srgb, var(--mud-palette-error) 15%, transparent) !important;
+    color: var(--jim-chip-text-error) !important;
+}
+
+/* Outlined chips: the same label blend, for the same reason. The border stays MudBlazor's raw palette
+   colour, where the contrast requirement is a line's 3:1 and the brand colour is right. */
+.mud-chip.mud-chip-outlined.mud-chip-color-primary {
+    color: var(--jim-chip-text-primary) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-secondary {
+    color: var(--jim-chip-text-secondary) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-info {
+    color: var(--jim-chip-text-info) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-success {
+    color: var(--jim-chip-text-success) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-warning {
+    color: var(--jim-chip-text-warning) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-error {
+    color: var(--jim-chip-text-error) !important;
 }
 
 /* A selected chip is a solid fill in its own colour, not that colour as text on a tint of itself.

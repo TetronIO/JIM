@@ -37,14 +37,14 @@ public static class CausalityToneCss
     }
 
     /// <summary>
-    /// A CSS var() reference for a tone's TEXT colour, as used by a lineage chain-hop card's operation
-    /// chip. Primary resolves to <c>--cz-primary-text</c>: the raw palette primary fails WCAG AA as text
-    /// (see the note on that custom property in causality.css), and blending it toward the theme's text
-    /// colour is what fixes it. Every other tone's fill already meets contrast as text, so it resolves to
-    /// the ordinary <see cref="CssVar"/>.
+    /// A CSS var() reference for a tone's TEXT colour (e.g. "var(--cz-primary-text)"), for a tone painted as
+    /// text on a tint of itself: an outcome pill, the Table view's change chip, a lineage operation chip. The
+    /// raw palette colour is a fill and fails WCAG AA as text in several themes; each <c>--cz-*-text</c> token
+    /// is the portal-wide chip label blend defined in site.css, so these chips match every Text-variant
+    /// MudChip in the portal.
     /// </summary>
     public static string TextCssVar(CausalityTone tone)
     {
-        return tone == CausalityTone.Primary ? "var(--cz-primary-text)" : CssVar(tone);
+        return $"var(--cz-{CssClass(tone)}-text)";
     }
 }
