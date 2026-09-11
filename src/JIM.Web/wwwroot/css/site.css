@@ -20,10 +20,13 @@
        default dark theme's primary at 2.80:1 against the 4.5:1 floor. Blending 60% of the colour toward the
        theme's text colour keeps the hue while lifting it off the background, and adapts per mode because text
        colour is near-white on dark themes and near-black on light ones; every theme now measures at or above
-       4.72:1. ThemeContrastTests reads the chip rules below and fails the build if a theme drifts under. Use
-       these for text only; fills, borders and accent bars keep the raw palette colour. */
+       4.72:1. A theme may still override these for its own chips (the navy themes do, under html[lang] with
+       !important); ThemeContrastTests reads the rules below and any theme's override of them, and fails the
+       build if either drifts under. Use these for text only; fills, borders and accent bars keep the raw
+       palette colour. */
     --jim-chip-text-primary: color-mix(in srgb, var(--mud-palette-primary) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-secondary: color-mix(in srgb, var(--mud-palette-secondary) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-tertiary: color-mix(in srgb, var(--mud-palette-tertiary) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-info: color-mix(in srgb, var(--mud-palette-info) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-success: color-mix(in srgb, var(--mud-palette-success) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-warning: color-mix(in srgb, var(--mud-palette-warning) 60%, var(--mud-palette-text-primary));
@@ -144,6 +147,11 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     color: var(--jim-chip-text-secondary) !important;
 }
 
+.mud-chip.mud-chip-text.mud-chip-color-tertiary {
+    background-color: color-mix(in srgb, var(--mud-palette-tertiary) 15%, transparent) !important;
+    color: var(--jim-chip-text-tertiary) !important;
+}
+
 .mud-chip.mud-chip-text.mud-chip-color-info {
     background-color: color-mix(in srgb, var(--mud-palette-info) 15%, transparent) !important;
     color: var(--jim-chip-text-info) !important;
@@ -172,6 +180,10 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
 
 .mud-chip.mud-chip-outlined.mud-chip-color-secondary {
     color: var(--jim-chip-text-secondary) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-tertiary {
+    color: var(--jim-chip-text-tertiary) !important;
 }
 
 .mud-chip.mud-chip-outlined.mud-chip-color-info {

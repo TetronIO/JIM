@@ -68,7 +68,7 @@ public class ThemeContrastTests
     /// The six semantic chip colours JIM restyles in <c>site.css</c>. Default and Dark are left to MudBlazor,
     /// which paints them as near-black on light grey and measures far above the floor.
     /// </summary>
-    private static readonly string[] ChipColours = ["primary", "secondary", "info", "success", "warning", "error"];
+    private static readonly string[] ChipColours = ["primary", "secondary", "tertiary", "info", "success", "warning", "error"];
 
     /// <summary>
     /// A Text-variant chip's label sits on a tint of its own colour, and an Outlined chip's on the bare surface.
@@ -100,12 +100,21 @@ public class ThemeContrastTests
             if (surface is null)
                 continue;
 
+            var themeCss = File.ReadAllText(themeFile);
             foreach (var colour in ChipColours)
             {
-                // MudBlazor's own defaults, which any site.css declaration overrides.
+                if (Resolve(variables, $"--mud-palette-{colour}") is null)
+                    continue;
+
+                // MudBlazor's own defaults, which a site.css declaration overrides, which a theme's own
+                // html[lang]-prefixed rule (higher specificity, and every one of them !important) overrides again.
                 var mudDefaultLabel = $"var(--mud-palette-{colour})";
                 var textRule = ReadDeclarations(siteCss, $".mud-chip.mud-chip-text.mud-chip-color-{colour}");
+                foreach (var (property, value) in ReadDeclarations(themeCss, $"html[lang] .mud-chip-text.mud-chip-color-{colour}"))
+                    textRule[property] = value;
                 var outlinedRule = ReadDeclarations(siteCss, $".mud-chip.mud-chip-outlined.mud-chip-color-{colour}");
+                foreach (var (property, value) in ReadDeclarations(themeCss, $"html[lang] .mud-chip-outlined.mud-chip-color-{colour}"))
+                    outlinedRule[property] = value;
 
                 var textLabel = ResolveExpression(textRule.GetValueOrDefault("color", mudDefaultLabel), variables, surface.Value);
                 var textTint = ResolveExpression(textRule.GetValueOrDefault("background-color", "transparent"), variables, surface.Value);

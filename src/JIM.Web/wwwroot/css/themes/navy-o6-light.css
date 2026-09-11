@@ -269,7 +269,7 @@ html[lang] .mud-chip-text.mud-chip-color-info {
 
 html[lang] .mud-chip-text.mud-chip-color-success {
     background-color: color-mix(in srgb, var(--mud-palette-success) 16%, transparent) !important;
-    color: #1a7a2e !important;
+    color: #177029 !important;
 }
 
 html[lang] .mud-chip-text.mud-chip-color-warning {

@@ -314,9 +314,10 @@ html[lang] .mud-chip-outlined.mud-chip-color-primary {
     border-color: var(--mud-palette-primary-lighten) !important;
 }
 
-/* Text primary chips — brighten text with subtle primary background */
+/* Text primary chips — the theme's bright primary (the same one the outlined chip, active tab and
+   tab indicator use) on a stronger primary tint. #a583ff measured 4.28:1 on this tint, under AA. */
 html[lang] .mud-chip-text.mud-chip-color-primary {
-    color: #a583ff !important;
+    color: var(--mud-palette-primary-lighten) !important;
     background-color: color-mix(in srgb, var(--mud-palette-primary) 32%, transparent) !important;
 }
 
@@ -326,10 +327,11 @@ html[lang] .mud-chip-outlined.mud-chip-color-secondary {
     border-color: var(--mud-palette-secondary-lighten) !important;
 }
 
-/* Text secondary chips — brighten text with subtle secondary background */
+/* Text secondary chips — brighter text on a stronger secondary tint. The tint used to name no colour
+   (an invalid color-mix the browser dropped), so it fell back to the portal's 15% rule. */
 html[lang] .mud-chip-text.mud-chip-color-secondary {
-    color: #9fb8d5 !important;
-    background-color: color-mix(in srgb, 32%, transparent) !important;
+    color: #b4c9e0 !important;
+    background-color: color-mix(in srgb, var(--mud-palette-secondary) 32%, transparent) !important;
 }
 
 /* Text tertiary chips — brighten text with subtle tertiary background */
