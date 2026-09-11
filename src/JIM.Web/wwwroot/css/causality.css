@@ -88,10 +88,16 @@
     letter-spacing: 0.03em;
 }
 
+/* Full text colour, not the dimmed one: the band's warning tint already lowers contrast, and the
+   sentence is the one thing on the panel that says nothing happened. The leading statement is bold. */
 .causality-panel.speculative .preview-text {
     font-size: 0.875rem;
-    color: var(--cz-text-dim);
+    color: var(--cz-text);
     flex: 1 1 auto;
+}
+
+.causality-panel.speculative .preview-text strong {
+    font-weight: 650;
 }
 
 .causality-panel.speculative .preview-close {
