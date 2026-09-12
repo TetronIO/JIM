@@ -59,7 +59,11 @@ public class CausalityTableViewTests
 
             var navNames = cut.FindAll(".tv-nav-name").Select(n => n.TextContent.Trim()).ToList();
             Assert.That(navNames[0], Is.EqualTo("Everything"), "Everything is first, outside every group");
-            Assert.That(navNames, Has.Some.EqualTo("Glitterband EMEA"));
+            // The downstream entry reads the provisioned Connected System Object's own identity, not the
+            // Connected System's name (#1519 Table view fix 1); the system name moves to the subtitle.
+            Assert.That(navNames, Has.Some.EqualTo($"person: {CausalityTestData.ProvisionedCsoId}"));
+            var navSubs = cut.FindAll(".tv-nav-sub").Select(n => n.TextContent.Trim()).ToList();
+            Assert.That(navSubs, Has.Some.EqualTo("Glitterband EMEA"));
 
             // Everything is selected by default, so the grid carries the leading Object column.
             Assert.That(cut.Find("thead tr").Children.First().TextContent.Trim(), Is.EqualTo("Object"));
@@ -207,5 +211,109 @@ public class CausalityTableViewTests
         var removedCell = cut.FindAll("td.tv-removed");
         Assert.That(removedCell, Has.Count.EqualTo(1));
         Assert.That(removedCell[0].TextContent, Does.Contain("liam.allen@example.com"));
+    }
+
+    // ─── Attribute column empty for object-level rows (#1519 Table view fix 2) ───
+
+    [Test]
+    public void Render_ObjectLevelRow_LeavesTheAttributeCellEmpty()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var provisionRow = cut.FindAll("tbody tr").Single(r => r.QuerySelector(".tv-kind")!.TextContent.Trim() == "Provision");
+        var attributeCell = provisionRow.Children[2];
+
+        Assert.That(attributeCell.TextContent.Trim(), Is.EqualTo("-"), "an object-level row's Attribute cell renders the empty-value hyphen, not a connector label");
+    }
+
+    [Test]
+    public void Render_AttributeChangeRow_StillNamesItsAttribute()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var attributeRow = cut.FindAll("tbody tr").Single(r => r.QuerySelector(".tv-kind")!.TextContent.Trim() == "Attribute change"
+            && r.TextContent.Contains("mail"));
+        var attributeCell = attributeRow.Children[2];
+
+        Assert.That(attributeCell.TextContent.Trim(), Is.EqualTo("mail"));
+    }
+
+    // ─── Object column identity link (#1519 Table view fix 1) ───
+
+    [Test]
+    public void Render_EverythingObjectColumn_LinksTheObjectWhenItsIdentityIsKnown()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var provisionRow = cut.FindAll("tbody tr").Single(r => r.QuerySelector(".tv-kind")!.TextContent.Trim() == "Provision");
+        var objectCell = provisionRow.Children[0];
+        var link = objectCell.QuerySelector("a");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(link, Is.Not.Null);
+            Assert.That(link!.TextContent.Trim(), Is.EqualTo($"person: {CausalityTestData.ProvisionedCsoId}"));
+            Assert.That(link.GetAttribute("href"), Does.Contain("/connector-space/"));
+        }
+    }
+
+    [Test]
+    public void Render_EverythingObjectColumn_PlainTextWhenTheObjectsIdentityIsUnknown()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var cut = Render(CausalityTableModelBuilder.Build(model));
+
+        var deprovisionRows = cut.FindAll("tbody tr").Where(r => r.QuerySelector(".tv-kind")!.TextContent.Trim() == "Deprovision").ToList();
+
+        Assert.That(deprovisionRows, Has.Count.GreaterThan(0));
+        Assert.That(deprovisionRows, Has.All.Matches<AngleSharp.Dom.IElement>(r => r.Children[0].QuerySelector("a") == null));
+    }
+
+    // ─── Synchronisation Rule column (#1519 Table view fix 3) ───
+
+    [Test]
+    public void Render_TableHeaders_ShowSynchronisationRuleNotVia()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var headers = cut.FindAll("thead th").Select(h => h.TextContent.Trim()).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(headers, Has.Some.EqualTo("Synchronisation Rule"));
+            Assert.That(headers, Has.None.EqualTo("Via"));
+        }
+    }
+
+    [Test]
+    public void Render_RowWithKnownSyncRule_LinksTheSynchronisationRuleCell()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var provisionRow = cut.FindAll("tbody tr").Single(r => r.QuerySelector(".tv-kind")!.TextContent.Trim() == "Provision");
+        var syncRuleCell = provisionRow.Children[5];
+        var link = syncRuleCell.QuerySelector("a");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(link, Is.Not.Null);
+            Assert.That(link!.GetAttribute("href"), Is.EqualTo("/admin/sync-rules/9"));
+            Assert.That(link.TextContent.Trim(), Is.EqualTo("Glitterband People - Outbound"));
+        }
+    }
+
+    [Test]
+    public void Render_RowWithReasoningTextOnly_RendersPlainTextNotALink()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var cut = Render(CausalityTableModelBuilder.Build(model));
+
+        var deleteRow = cut.FindAll("tbody tr").Single(r => r.QuerySelector(".tv-kind")!.TextContent.Trim() == "Delete");
+        var syncRuleCell = deleteRow.Children[5];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(syncRuleCell.QuerySelector("a"), Is.Null);
+            Assert.That(syncRuleCell.TextContent.Trim(), Is.EqualTo("Deleted immediately: last authoritative source disconnected"));
+        }
     }
 }

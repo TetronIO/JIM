@@ -510,6 +510,75 @@ public class CausalityModelBuilderTests
         Assert.That(model.Roots[0].Links.Any(l => l.Kind == CausalityEntityKind.SynchronisationRule), Is.False);
     }
 
+    // ─── Effective Synchronisation Rule threading (#1519 Table view fix 4) ───
+
+    /// <summary>
+    /// A queued export staged beneath a Provisioned parent carries no Synchronisation Rule of its own
+    /// (the engine attributes the provisioning decision to the parent alone), so it must inherit the
+    /// parent's effective rule. <see cref="CausalityEvent.SyncRuleId"/> itself is untouched: the child's
+    /// own recorded attribution stays null, exactly as it always has.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportChildOfProvisionedParent_InheritsTheParentsEffectiveSyncRule()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var provisionedEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+        var exportEvent = provisionedEvent.Children.Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provisionedEvent.EffectiveSyncRuleId, Is.EqualTo(9));
+            Assert.That(provisionedEvent.EffectiveSyncRuleName, Is.EqualTo("Glitterband People - Outbound"));
+            Assert.That(exportEvent.SyncRuleId, Is.Null, "the outcome itself was never attributed a rule");
+            Assert.That(exportEvent.SyncRuleName, Is.Null);
+            Assert.That(exportEvent.EffectiveSyncRuleId, Is.EqualTo(9));
+            Assert.That(exportEvent.EffectiveSyncRuleName, Is.EqualTo("Glitterband People - Outbound"));
+        }
+    }
+
+    /// <summary>
+    /// A rule is inherited within a lane only. A leaver's cascade runs Source (out of scope, attributed to
+    /// the import rule that scoped it) to Identity (deleted) to Downstream (deprovision queued per target);
+    /// the import rule that decided the scope exit did not decide the deprovisioning, so the Downstream
+    /// events must not inherit it across the lane boundary.
+    /// </summary>
+    [Test]
+    public void Build_DeprovisionQueuedBeneathADeletedIdentity_DoesNotInheritTheImportRuleAcrossLanes()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+
+        var scopeExit = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
+        var deprovisions = model.AllEvents().Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(scopeExit.EffectiveSyncRuleId, Is.EqualTo(7), "the scope exit's own import rule");
+            Assert.That(deprovisions, Has.Count.EqualTo(2));
+            foreach (var deprovision in deprovisions)
+            {
+                Assert.That(deprovision.EffectiveSyncRuleId, Is.Null, $"{deprovision.SystemName} must not be credited to the import rule");
+                Assert.That(deprovision.EffectiveSyncRuleName, Is.Null);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Regression guard: EffectiveSyncRuleId/Name must never leak into the Links the Timeline and
+    /// Lineage views consume via <see cref="CausalityEntityKind.SynchronisationRule"/>. Those views keep
+    /// reading the outcome's own <see cref="CausalityEvent.SyncRuleId"/> directly and must be unaffected
+    /// by the Table view's ancestor fallback.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportChildWithNoOwnRule_GainsNoInheritedSynchronisationRuleLink()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+        Assert.That(exportEvent.Links.Any(l => l.Kind == CausalityEntityKind.SynchronisationRule), Is.False);
+    }
+
     [Test]
     public void Build_SyncRuleNameWithoutId_ProducesUnlinkedRuleLabel()
     {

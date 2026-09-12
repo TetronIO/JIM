@@ -149,13 +149,17 @@ public static class CausalityModelBuilder
         IReadOnlyDictionary<int, OutboundPreviewEntry> entriesBySyncRuleId,
         List<PendingExport> unmatchedCascadeDeletes,
         SyncPreviewInboundSummary? inbound,
-        int? parentSyncRuleId = null)
+        int? parentSyncRuleId = null,
+        string? parentSyncRuleName = null,
+        CausalityLane? parentLane = null)
     {
         // A queued-export child carries no rule of its own (the engine attributes the rule to the
-        // Provisioned parent), so the parent's rule is what keys its attribute changes.
-        var effectiveSyncRuleId = node.SyncRuleId ?? parentSyncRuleId;
-        var display = ApplySpeculativeLabel(OutcomeDisplayMap.Get(node.OutcomeType), node.OutcomeType, isSpeculative: true);
+        // Provisioned parent), so the parent's rule is what keys its attribute changes. Inherited within
+        // a lane only; see ResolveEffectiveSyncRule.
         var lane = GetLane(node.OutcomeType);
+        var (effectiveSyncRuleId, effectiveSyncRuleName) = ResolveEffectiveSyncRule(
+            node.SyncRuleId, node.SyncRuleName, lane, parentSyncRuleId, parentSyncRuleName, parentLane);
+        var display = ApplySpeculativeLabel(OutcomeDisplayMap.Get(node.OutcomeType), node.OutcomeType, isSpeculative: true);
         var (systemId, systemName) = GetSpeculativeOwningSystem(node, lane, context);
 
         return new CausalityEvent
@@ -175,12 +179,14 @@ public static class CausalityModelBuilder
             DetailMessage = SyncOutcomeTypes.IsPendingExport(node.OutcomeType) ? null : node.DetailMessage,
             SyncRuleId = node.SyncRuleId,
             SyncRuleName = node.SyncRuleName,
+            EffectiveSyncRuleId = effectiveSyncRuleId,
+            EffectiveSyncRuleName = effectiveSyncRuleName,
             Links = BuildSpeculativeLinks(node, lane, systemId, systemName, context),
             AttributeRows = GetSpeculativeAttributeRows(node, effectiveSyncRuleId, inbound, entriesBySyncRuleId, unmatchedCascadeDeletes),
             Operation = OutcomeDisplayMap.GetEventOperation(node.OutcomeType, exportReasonCode: null, node.StagedChangeType),
             Children = node.Children
                 .OrderBy(c => c.Ordinal)
-                .Select(c => BuildSpeculativeEvent(c, context, entriesBySyncRuleId, unmatchedCascadeDeletes, inbound, effectiveSyncRuleId))
+                .Select(c => BuildSpeculativeEvent(c, context, entriesBySyncRuleId, unmatchedCascadeDeletes, inbound, effectiveSyncRuleId, effectiveSyncRuleName, lane))
                 .ToList()
         };
     }
@@ -398,8 +404,19 @@ public static class CausalityModelBuilder
         IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
         IReadOnlyList<CausalityAttributeRow> identityAttributeRows,
         IReadOnlySet<Guid>? livePendingExportIds,
-        CausalChain? chain)
+        CausalChain? chain,
+        int? parentSyncRuleId = null,
+        string? parentSyncRuleName = null,
+        CausalityLane? parentLane = null)
     {
+        // A queued export staged beneath a Provisioned parent carries no rule of its own (the engine
+        // attributes the decision to the parent), so the parent's rule is what the Table view's
+        // Synchronisation Rule column falls back to for it and for its attribute-change rows (#1519).
+        // Inherited within a lane only; see ResolveEffectiveSyncRule.
+        var lane = GetLane(outcome.OutcomeType);
+        var (effectiveSyncRuleId, effectiveSyncRuleName) = ResolveEffectiveSyncRule(
+            outcome.SyncRuleId, outcome.SyncRuleName, lane, parentSyncRuleId, parentSyncRuleName, parentLane);
+
         // Resolved once and shared by the outcome's own title (decision-aware for Exported, #1495) and
         // its operation chip (#1495 follow-up), rather than each re-walking the chain independently.
         var exportReasonCode = outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported
@@ -408,7 +425,6 @@ public static class CausalityModelBuilder
         var display = GetEventDisplay(outcome, exportReasonCode, isSpeculative: false);
         var parsedDetail = OutcomeDetailMessageParser.Parse(outcome.DetailMessage);
         var usesIdChannel = UsesDetailMessageIdChannel(outcome.OutcomeType);
-        var lane = GetLane(outcome.OutcomeType);
 
         var childOutcomes = childrenByParentId.TryGetValue(outcome.Id, out var children)
             ? children
@@ -431,12 +447,14 @@ public static class CausalityModelBuilder
             DetailMessage = usesIdChannel ? parsedDetail.PlainMessage : outcome.DetailMessage,
             SyncRuleId = outcome.SyncRuleId,
             SyncRuleName = outcome.SyncRuleName,
+            EffectiveSyncRuleId = effectiveSyncRuleId,
+            EffectiveSyncRuleName = effectiveSyncRuleName,
             Links = links,
             AttributeRows = GetAttributeRows(outcome, recordAttributeRows, identityAttributeRows),
             Operation = OutcomeDisplayMap.GetEventOperation(outcome.OutcomeType, exportReasonCode, outcome.StagedChangeType),
             Children = childOutcomes
                 .Select(c => BuildEvent(c, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
-                    livePendingExportIds, chain))
+                    livePendingExportIds, chain, effectiveSyncRuleId, effectiveSyncRuleName, lane))
                 .ToList()
         };
     }
@@ -512,6 +530,22 @@ public static class CausalityModelBuilder
     {
         return outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
             || SyncOutcomeTypes.IsPendingExport(outcomeType);
+    }
+
+    /// <summary>
+    /// The Synchronisation Rule an event is credited with for the Table view: its own where it recorded
+    /// one, else its parent's effective rule when the parent sits in the same lane. A Provisioned parent
+    /// and its queued export child share the Downstream lane, so the child inherits the provisioning
+    /// rule; a Downstream deprovision beneath an Identity deletion beneath a Source scope exit inherits
+    /// nothing, because the import rule that scoped the exit made none of the decisions below it.
+    /// </summary>
+    private static (int? Id, string? Name) ResolveEffectiveSyncRule(
+        int? ownId, string? ownName, CausalityLane lane, int? parentId, string? parentName, CausalityLane? parentLane)
+    {
+        if (ownId.HasValue || !string.IsNullOrWhiteSpace(ownName))
+            return (ownId, ownName);
+
+        return parentLane == lane ? (parentId, parentName) : (null, null);
     }
 
     private static CausalityLane GetLane(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)

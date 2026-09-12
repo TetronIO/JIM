@@ -16,16 +16,21 @@ namespace JIM.Web.Causality;
 /// </param>
 /// <param name="ChangeKind">What kind of change this row states.</param>
 /// <param name="Attribute">
-/// The attribute name for an attribute-change row, or the object-level subject for every other kind
-/// ("Metaverse Object", "connector: Glitterband EMEA", or the attribute a No Contributor/Values
-/// Preserved fact names).
+/// The attribute name for an attribute-change row, or the attribute a No Contributor/Values Preserved
+/// fact names; null for every other object-level row (Scope, Join / Projection, Disconnect, Delete,
+/// Deprovision, Provision, Export queued), which states no attribute at all.
 /// </param>
 /// <param name="Current">The current (recorded: before) value or state text; null where there is none.</param>
 /// <param name="WouldBe">The would-be (recorded: after) value or state text; null where there is none.</param>
 /// <param name="Via">
-/// What decided this row: the event's Synchronisation Rule name, or Deletion Rule / out-of-scope
+/// What decided this row: the event's effective Synchronisation Rule name (its own, or the nearest
+/// ancestor's; see <see cref="CausalityEvent.EffectiveSyncRuleName"/>), or Deletion Rule / out-of-scope
 /// reasoning text drawn from the event's detail message where it carries one; null when neither is
 /// present.
+/// </param>
+/// <param name="SyncRuleId">
+/// The Synchronisation Rule to link <see cref="Via"/> to, when it names one; null when <see cref="Via"/>
+/// is reasoning text, an unlinked legacy name snapshot, or absent.
 /// </param>
 /// <param name="OutcomeLabel">
 /// The owning event's plain-language label (already the conditional-mood <c>SpeculativeLabel</c> where
@@ -36,10 +41,11 @@ namespace JIM.Web.Causality;
 public sealed record CausalityTableRow(
     string ObjectKey,
     CausalityTableChangeKind ChangeKind,
-    string Attribute,
+    string? Attribute,
     string? Current,
     string? WouldBe,
     string? Via,
+    int? SyncRuleId,
     string OutcomeLabel,
     string TechnicalLabel,
     CausalityTone Tone)

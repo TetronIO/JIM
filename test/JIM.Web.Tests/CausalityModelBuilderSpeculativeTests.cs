@@ -205,6 +205,50 @@ public class CausalityModelBuilderSpeculativeTests
         Assert.That(node.AttributeRows[0].Value, Is.EqualTo("liam.allen@example.com"));
     }
 
+    /// <summary>
+    /// A queued-export child node carries no Synchronisation Rule of its own (the engine attributes the
+    /// rule to the Provisioned parent), so its effective pair must fall back to the parent's, mirroring
+    /// <see cref="CausalityModelBuilder.BuildEvent"/>'s recorded-tree behaviour (#1519 Table view fix 4).
+    /// </summary>
+    [Test]
+    public void BuildSpeculative_QueuedExportChildWithNoRuleOfItsOwn_InheritsProvisionedParentsEffectiveSyncRule()
+    {
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                    TargetEntityDescription = "Glitterband",
+                    SyncRuleId = 42,
+                    SyncRuleName = "Export to Glitterband",
+                    Children =
+                    [
+                        new SyncOutcomeNode
+                        {
+                            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            TargetEntityDescription = "Glitterband",
+                            DetailMessage = "2",
+                            StagedChangeType = PendingExportChangeType.Create
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
+
+        var provisionedEvent = model.Roots.Single();
+        var exportEvent = provisionedEvent.Children.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exportEvent.SyncRuleId, Is.Null, "the node itself carries no rule");
+            Assert.That(exportEvent.EffectiveSyncRuleId, Is.EqualTo(42));
+            Assert.That(exportEvent.EffectiveSyncRuleName, Is.EqualTo("Export to Glitterband"));
+        }
+    }
+
     [Test]
     public void BuildSpeculative_CascadeDeprovisionNodeWithNoSyncRule_CorrelatesByConnectedSystemId()
     {

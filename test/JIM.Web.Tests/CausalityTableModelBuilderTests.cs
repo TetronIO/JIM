@@ -8,6 +8,7 @@ using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Web.Causality;
 using NUnit.Framework;
+using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Tests;
 
@@ -49,7 +50,7 @@ public class CausalityTableModelBuilderTests
 
             var provisionRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Provision);
             Assert.That(provisionRow.ObjectKey, Does.StartWith("ds:"));
-            Assert.That(provisionRow.Attribute, Is.EqualTo("connector: Glitterband EMEA"));
+            Assert.That(provisionRow.Attribute, Is.Null, "a Provision row is an object-level fact, not an attribute change");
 
             var exportRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.ExportQueued);
             Assert.That(exportRow.ObjectKey, Is.EqualTo(provisionRow.ObjectKey),
@@ -90,12 +91,18 @@ public class CausalityTableModelBuilderTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(downstreamObjects, Has.Count.EqualTo(2));
+            // A DeprovisionQueued outcome never carries the target's own Connected System Object identity
+            // (see CausalityModelBuilder.BuildLinks), so the entry stays on its placeholder name; the
+            // Connected System's own name lives in the Subtitle instead (#1519 Table view, D-S8 follow-up).
             Assert.That(downstreamObjects.Select(o => o.DisplayName),
+                Is.EquivalentTo(new[] { "New object in Glitterband EMEA", "New object in Contoso AD" }));
+            Assert.That(downstreamObjects.Select(o => o.Subtitle),
                 Is.EquivalentTo(new[] { "Glitterband EMEA", "Contoso AD" }));
+            Assert.That(downstreamObjects.Select(o => o.Href), Has.All.Null);
             // Glitterband's deprovision carries the target's distinguishedName as a recalled attribute
             // row (the connector's resolution key); Contoso's fixture has none, so it stays at 1.
-            var contoso = downstreamObjects.Single(o => o.DisplayName == "Contoso AD");
-            var glitterband = downstreamObjects.Single(o => o.DisplayName == "Glitterband EMEA");
+            var contoso = downstreamObjects.Single(o => o.Subtitle == "Contoso AD");
+            var glitterband = downstreamObjects.Single(o => o.Subtitle == "Glitterband EMEA");
             Assert.That(contoso.RowCount, Is.EqualTo(1));
             Assert.That(glitterband.RowCount, Is.EqualTo(2));
 
@@ -103,6 +110,7 @@ public class CausalityTableModelBuilderTests
             Assert.That(deleteRow.ObjectKey, Is.EqualTo("identity"));
             Assert.That(deleteRow.WouldBe, Is.EqualTo("Deleted"));
             Assert.That(deleteRow.Via, Is.EqualTo("Deleted immediately: last authoritative source disconnected"));
+            Assert.That(deleteRow.SyncRuleId, Is.Null, "reasoning text names no Synchronisation Rule to link");
         }
     }
 
@@ -146,9 +154,9 @@ public class CausalityTableModelBuilderTests
     [Test]
     public void Matches_ScopeAndJoinFilter_MatchesOnlyScopeAndJoinRows()
     {
-        var scopeRow = new CausalityTableRow("identity", CausalityTableChangeKind.Scope, "Import scope", "In scope", "Out of scope", null, "l", "t", CausalityTone.Warning);
-        var joinRow = new CausalityTableRow("identity", CausalityTableChangeKind.JoinOrProjection, "Metaverse Object", null, "New Identity", null, "l", "t", CausalityTone.Primary);
-        var deleteRow = new CausalityTableRow("identity", CausalityTableChangeKind.Delete, "Metaverse Object", "Active", "Deleted", null, "l", "t", CausalityTone.Error);
+        var scopeRow = new CausalityTableRow("identity", CausalityTableChangeKind.Scope, "Import scope", "In scope", "Out of scope", null, null, "l", "t", CausalityTone.Warning);
+        var joinRow = new CausalityTableRow("identity", CausalityTableChangeKind.JoinOrProjection, "Metaverse Object", null, "New Identity", null, null, "l", "t", CausalityTone.Primary);
+        var deleteRow = new CausalityTableRow("identity", CausalityTableChangeKind.Delete, "Metaverse Object", "Active", "Deleted", null, null, "l", "t", CausalityTone.Error);
 
         using (Assert.EnterMultipleScope())
         {
@@ -169,19 +177,19 @@ public class CausalityTableModelBuilderTests
 
         foreach (var kind in kinds)
         {
-            var row = new CausalityTableRow("identity", kind, "Metaverse Object", "a", "b", null, "l", "t", CausalityTone.Error);
+            var row = new CausalityTableRow("identity", kind, "Metaverse Object", "a", "b", null, null, "l", "t", CausalityTone.Error);
             Assert.That(CausalityTableFilters.Matches(row, CausalityTableFilter.Destructive), Is.True, $"{kind} must be destructive");
         }
 
-        var provisionRow = new CausalityTableRow("ds:2", CausalityTableChangeKind.Provision, "connector: X", null, "Account provisioned", null, "l", "t", CausalityTone.Primary);
+        var provisionRow = new CausalityTableRow("ds:2", CausalityTableChangeKind.Provision, "connector: X", null, "Account provisioned", null, null, "l", "t", CausalityTone.Primary);
         Assert.That(CausalityTableFilters.Matches(provisionRow, CausalityTableFilter.Destructive), Is.False);
     }
 
     [Test]
     public void Matches_AttributeAndObjectChangeFilters_ArePartitionsOfEachOther()
     {
-        var attributeRow = new CausalityTableRow("identity", CausalityTableChangeKind.AttributeChange, "mail", "old", "new", null, "l", "t", CausalityTone.Info);
-        var objectRow = new CausalityTableRow("identity", CausalityTableChangeKind.Delete, "Metaverse Object", "Active", "Deleted", null, "l", "t", CausalityTone.Error);
+        var attributeRow = new CausalityTableRow("identity", CausalityTableChangeKind.AttributeChange, "mail", "old", "new", null, null, "l", "t", CausalityTone.Info);
+        var objectRow = new CausalityTableRow("identity", CausalityTableChangeKind.Delete, "Metaverse Object", "Active", "Deleted", null, null, "l", "t", CausalityTone.Error);
 
         using (Assert.EnterMultipleScope())
         {
@@ -195,7 +203,7 @@ public class CausalityTableModelBuilderTests
     [Test]
     public void Matches_AllFilter_MatchesEveryRow()
     {
-        var row = new CausalityTableRow("identity", CausalityTableChangeKind.ValuesPreserved, "department", "x", "x", null, "l", "t", CausalityTone.Warning);
+        var row = new CausalityTableRow("identity", CausalityTableChangeKind.ValuesPreserved, "department", "x", "x", null, null, "l", "t", CausalityTone.Warning);
 
         Assert.That(CausalityTableFilters.Matches(row, CausalityTableFilter.All), Is.True);
     }
@@ -394,8 +402,93 @@ public class CausalityTableModelBuilderTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(downstream, Has.Count.EqualTo(1));
-            Assert.That(downstream[0].DisplayName, Is.EqualTo("Glitterband"));
+            // A preview's Provisioned node never carries a Record link (nothing has been created yet;
+            // see CausalityModelBuilder.BuildSpeculativeLinks), so the entry stays on its placeholder name.
+            Assert.That(downstream[0].DisplayName, Is.EqualTo("New object in Glitterband"));
+            Assert.That(downstream[0].Href, Is.Null);
             Assert.That(downstream[0].RowCount, Is.EqualTo(2), "The provision row and the queued-export row");
+        }
+    }
+
+    // ─── Object column identity resolution (#1519 Table view fix 1) ───
+
+    /// <summary>
+    /// A recorded Provisioned outcome's own Record-kind link (the Connected System Object it created)
+    /// upgrades the downstream entry from its "New object in..." placeholder to the object's own
+    /// identity, keeping the Connected System's name as the entry's Subtitle rather than its name.
+    /// </summary>
+    [Test]
+    public void Build_ProvisionedEvent_UpgradesTheDownstreamObjectsIdentityAndHref()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var downstream = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Downstream);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(downstream.DisplayName, Is.EqualTo($"person: {CausalityTestData.ProvisionedCsoId}"));
+            Assert.That(downstream.Subtitle, Is.EqualTo("Glitterband EMEA"));
+            Assert.That(downstream.Href, Is.EqualTo(JimUtilities.GetConnectedSystemObjectHref(2, CausalityTestData.ProvisionedCsoId)));
+        }
+    }
+
+    /// <summary>
+    /// The "Everything" object always carries no href of its own: it is the flattened view, not a
+    /// single object with a detail page.
+    /// </summary>
+    [Test]
+    public void Build_EverythingObject_CarriesNoHref()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var everything = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Everything);
+        Assert.That(everything.Href, Is.Null);
+    }
+
+    // ─── Synchronisation Rule column (#1519 Table view fix 3 & 4) ───
+
+    /// <summary>
+    /// An object-level row decided by a Synchronisation Rule carries the rule's id, so the view can
+    /// link it; the Provisioned row here (NewJoinerItem) is directly attributed, not inherited.
+    /// </summary>
+    [Test]
+    public void Build_ProvisionRow_CarriesItsOwnSyncRuleId()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var provisionRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Provision);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provisionRow.Via, Is.EqualTo("Glitterband People - Outbound"));
+            Assert.That(provisionRow.SyncRuleId, Is.EqualTo(9));
+        }
+    }
+
+    /// <summary>
+    /// A queued export staged beneath a Provisioned parent carries no Synchronisation Rule of its own
+    /// (the engine attributes the decision to the parent), so its object-level row AND its attribute
+    /// rows fall back to the parent's effective rule (#1519 Table view fix 4).
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportChildAndItsAttributeRows_InheritTheProvisionedParentsSyncRule()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var exportRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.ExportQueued);
+        var attributeRows = table.Rows.Where(r => r.ChangeKind == CausalityTableChangeKind.AttributeChange).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exportRow.Via, Is.EqualTo("Glitterband People - Outbound"));
+            Assert.That(exportRow.SyncRuleId, Is.EqualTo(9));
+            Assert.That(attributeRows.Select(r => r.Via), Has.All.EqualTo("Glitterband People - Outbound"));
+            Assert.That(attributeRows.Select(r => r.SyncRuleId), Has.All.EqualTo(9));
         }
     }
 }

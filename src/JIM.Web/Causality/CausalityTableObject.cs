@@ -22,10 +22,17 @@ namespace JIM.Web.Causality;
 /// success/secondary), or <see cref="CausalityTone.Secondary"/> when it carries no rows.
 /// </param>
 /// <param name="RowCount">How many rows belong to this object.</param>
+/// <param name="Href">
+/// The object's own detail page, when known; null otherwise. A downstream object starts out known only
+/// by the Connected System it belongs to ("New object in Glitterband EMEA"), and is upgraded to its own
+/// Connected System Object identity and href the moment an event carries one (a Provisioned outcome's
+/// own record link); see <see cref="CausalityTableModelBuilder"/>.
+/// </param>
 public sealed record CausalityTableObject(
     string Key,
     CausalityTableObjectRole Role,
     string DisplayName,
     string? Subtitle,
     CausalityTone Tone,
-    int RowCount);
+    int RowCount,
+    string? Href = null);

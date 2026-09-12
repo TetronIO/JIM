@@ -69,6 +69,16 @@ public static class CausalityTableModelBuilder
     /// fixed by <see cref="CausalityEvent.Lane"/>; a Downstream-lane event's target Connected System
     /// (or, once addressable, its own Connected System Object) is discovered as events are walked.
     /// </summary>
+    /// <remarks>
+    /// A downstream entry starts out named after the Connected System it belongs to, since that is all
+    /// any Downstream-lane event is guaranteed to carry (#1519 Table view, D-S8 follow-up: previously the
+    /// system name stood in for the object's own name everywhere, including "Everything" mode's Object
+    /// column, which read as though the row belonged to the system rather than an object within it). The
+    /// moment an event on the same downstream key carries the object's own identity, a Record-kind link
+    /// (currently: the CSO a Provisioned outcome created), the entry is upgraded in place so the
+    /// Provision parent and its queued export child still land on one entry, whichever of them brought
+    /// the identity.
+    /// </remarks>
     private static string ResolveObjectKey(
         CausalityEvent causalityEvent, Dictionary<string, ObjectMeta> objectMeta, List<string> downstreamOrder)
     {
@@ -82,13 +92,25 @@ public static class CausalityTableModelBuilder
         {
             objectMeta[key] = new ObjectMeta(
                 CausalityTableObjectRole.Downstream,
-                causalityEvent.SystemName ?? "Downstream system",
-                "Connected System");
+                DownstreamPlaceholderName(causalityEvent.SystemName),
+                causalityEvent.SystemName ?? "Connected System");
             downstreamOrder.Add(key);
         }
 
+        var recordLink = causalityEvent.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Record);
+        if (recordLink != null)
+            objectMeta[key] = objectMeta[key] with { DisplayName = recordLink.Label, Href = recordLink.Href };
+
         return key;
     }
+
+    /// <summary>
+    /// The name a downstream entry carries until an event reveals the object's own identity: true for
+    /// every preview (nothing has been created yet) and for a recorded run's queued-export-only outcomes
+    /// (a Pending Export names its queue, not the object it will create).
+    /// </summary>
+    private static string DownstreamPlaceholderName(string? systemName) =>
+        systemName != null ? $"New object in {systemName}" : "New downstream object";
 
     /// <summary>
     /// The curated object-level row for an outcome type, or null for a type the Table view leaves to
@@ -96,78 +118,97 @@ public static class CausalityTableModelBuilder
     /// their story entirely through the values that changed, and a headline row for them would repeat
     /// what the attribute rows already say.
     /// </summary>
+    /// <remarks>
+    /// The two Via resolutions below are used deliberately, not interchangeably. The
+    /// provisioning/export family (Provision, Deprovision, Export queued) uses the <em>effective</em>
+    /// pair, because a queued export or deprovision genuinely IS the Provisioned/export decision's own
+    /// rule continuing (#1519 Table view fix 4: production never stamps a Pending Export's own
+    /// SyncRuleId, only its Provisioned parent's). The Identity "fate" family (Scope, Join /
+    /// Projection, Disconnect, Delete) uses the event's <em>own</em> rule only, exactly as
+    /// MvoDeletionScheduled already did before this change: a Deletion Rule or import-scope decision is
+    /// never the Synchronisation Rule that happened to run earlier in the same tree, and crediting one
+    /// (proven by <c>Build_LeaverItem_GroupsEachDeprovisioningTargetAsItsOwnDownstreamObject</c>, which
+    /// failed against effective resolution here) would misattribute the deletion to an unrelated inbound
+    /// rule.
+    /// </remarks>
     private static CausalityTableRow? BuildObjectLevelRow(
         CausalityEvent causalityEvent, ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string objectKey)
     {
+        var (ownVia, ownSyncRuleId) = ResolveViaOwnOnly(causalityEvent);
+        var (effectiveVia, effectiveSyncRuleId) = ResolveVia(causalityEvent);
+
         return outcomeType switch
         {
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Scope, "Import scope",
-                "In scope", "Out of scope", Via(causalityEvent)),
+                causalityEvent, objectKey, CausalityTableChangeKind.Scope, null,
+                "In scope", "Out of scope", ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.JoinOrProjection, "Metaverse Object",
-                null, "New Identity", Via(causalityEvent)),
+                causalityEvent, objectKey, CausalityTableChangeKind.JoinOrProjection, null,
+                null, "New Identity", ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.JoinOrProjection, "Metaverse Object",
-                null, "Joined to existing Identity", Via(causalityEvent)),
+                causalityEvent, objectKey, CausalityTableChangeKind.JoinOrProjection, null,
+                null, "Joined to existing Identity", ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.JoinOrProjection, "Metaverse Object",
-                "Deletion scheduled", "Rejoined; deletion cancelled", Via(causalityEvent)),
+                causalityEvent, objectKey, CausalityTableChangeKind.JoinOrProjection, null,
+                "Deletion scheduled", "Rejoined; deletion cancelled", ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Disconnect, "Metaverse Object",
-                "Joined", "Disconnected", Via(causalityEvent)),
+                causalityEvent, objectKey, CausalityTableChangeKind.Disconnect, null,
+                "Joined", "Disconnected", ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Delete, "Metaverse Object",
-                "Active", "Deleted", Via(causalityEvent)),
+                causalityEvent, objectKey, CausalityTableChangeKind.Delete, null,
+                "Active", "Deleted", ownVia, ownSyncRuleId),
 
             // The schedule/grace reasoning lives in the would-be cell rather than Via, so it is not
-            // stated twice; Via here is the Synchronisation Rule attribution alone (ordinarily none,
-            // since a Deletion Rule decision is not a Synchronisation Rule's).
+            // stated twice: unlike ownVia above, this never falls back to DetailMessage, which for this
+            // outcome type IS that same schedule/grace text. Via here is the Synchronisation Rule
+            // attribution alone (ordinarily none, since a Deletion Rule decision is not a
+            // Synchronisation Rule's), and deliberately the event's own rule, not the effective one.
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Delete, "Metaverse Object", "Active",
+                causalityEvent, objectKey, CausalityTableChangeKind.Delete, null, "Active",
                 !string.IsNullOrWhiteSpace(causalityEvent.DetailMessage)
                     ? $"Scheduled: {causalityEvent.DetailMessage}"
                     : "Scheduled for deletion",
-                string.IsNullOrWhiteSpace(causalityEvent.SyncRuleName) ? null : causalityEvent.SyncRuleName),
+                string.IsNullOrWhiteSpace(causalityEvent.SyncRuleName) ? null : causalityEvent.SyncRuleName,
+                causalityEvent.SyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Deprovision, ConnectorSubject(causalityEvent),
-                "Provisioned", "Deprovision queued", Via(causalityEvent)),
+                causalityEvent, objectKey, CausalityTableChangeKind.Deprovision, null,
+                "Provisioned", "Deprovision queued", effectiveVia, effectiveSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Deprovision, ConnectorSubject(causalityEvent),
-                "Provisioned", "Deprovisioned", Via(causalityEvent)),
+                causalityEvent, objectKey, CausalityTableChangeKind.Deprovision, null,
+                "Provisioned", "Deprovisioned", effectiveVia, effectiveSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Provision, ConnectorSubject(causalityEvent),
-                null, "Account provisioned", Via(causalityEvent)),
+                causalityEvent, objectKey, CausalityTableChangeKind.Provision, null,
+                null, "Account provisioned", effectiveVia, effectiveSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.ExportQueued, ConnectorSubject(causalityEvent),
-                null, "Export queued", Via(causalityEvent)),
+                causalityEvent, objectKey, CausalityTableChangeKind.ExportQueued, null,
+                null, "Export queued", effectiveVia, effectiveSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.NoContributor, AttributeSubject(causalityEvent),
-                "Has a value", "Cleared (no contributor)", null),
+                "Has a value", "Cleared (no contributor)", null, null),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.ValuesPreserved, AttributeSubject(causalityEvent),
-                "Value", "Preserved (no import source)", null),
+                "Value", "Preserved (no import source)", null, null),
 
             _ => null
         };
     }
 
     private static CausalityTableRow Row(
-        CausalityEvent causalityEvent, string objectKey, CausalityTableChangeKind kind, string attribute,
-        string? current, string? wouldBe, string? via)
+        CausalityEvent causalityEvent, string objectKey, CausalityTableChangeKind kind, string? attribute,
+        string? current, string? wouldBe, string? via, int? syncRuleId)
     {
-        return new CausalityTableRow(objectKey, kind, attribute, current, wouldBe, via,
+        return new CausalityTableRow(objectKey, kind, attribute, current, wouldBe, via, syncRuleId,
             causalityEvent.PlainLabel, causalityEvent.TechnicalLabel, causalityEvent.Tone);
     }
 
@@ -179,7 +220,7 @@ public static class CausalityTableModelBuilder
     /// </summary>
     private static IEnumerable<CausalityTableRow> BuildAttributeRows(CausalityEvent causalityEvent, string objectKey)
     {
-        var via = Via(causalityEvent);
+        var (via, syncRuleId) = ResolveVia(causalityEvent);
 
         foreach (var attributeRow in causalityEvent.AttributeRows)
         {
@@ -189,29 +230,44 @@ public static class CausalityTableModelBuilder
             var wouldBe = attributeRow.Operation == CausalityAttributeOperation.Remove ? null : attributeRow.Value;
 
             yield return new CausalityTableRow(objectKey, CausalityTableChangeKind.AttributeChange,
-                attributeRow.Name, current, wouldBe, via, causalityEvent.PlainLabel, causalityEvent.TechnicalLabel,
-                causalityEvent.Tone);
+                attributeRow.Name, current, wouldBe, via, syncRuleId, causalityEvent.PlainLabel,
+                causalityEvent.TechnicalLabel, causalityEvent.Tone);
         }
     }
 
     /// <summary>
-    /// What decided this row: the attributed Synchronisation Rule where one was recorded, else the
-    /// event's own detail message where it carries plain reasoning text (never a bare numeric id: a
-    /// Downstream-lane event's detail message can still hold its unparsed target system id for an
-    /// outcome type the recorded and speculative builders do not scrub it from, e.g. a cascade's
-    /// plain Disconnected child).
+    /// What decided this row, and the Synchronisation Rule to link it to: the event's effective
+    /// Synchronisation Rule (its own, or the nearest ancestor's; see
+    /// <see cref="CausalityEvent.EffectiveSyncRuleId"/>) where one was recorded, else the event's own
+    /// detail message where it carries plain reasoning text (never a bare numeric id: a Downstream-lane
+    /// event's detail message can still hold its unparsed target system id for an outcome type the
+    /// recorded and speculative builders do not scrub it from, e.g. a cascade's plain Disconnected
+    /// child). Reasoning text carries no Synchronisation Rule id.
     /// </summary>
-    private static string? Via(CausalityEvent causalityEvent)
+    private static (string? Via, int? SyncRuleId) ResolveVia(CausalityEvent causalityEvent)
     {
-        if (!string.IsNullOrWhiteSpace(causalityEvent.SyncRuleName))
-            return causalityEvent.SyncRuleName;
+        if (!string.IsNullOrWhiteSpace(causalityEvent.EffectiveSyncRuleName))
+            return (causalityEvent.EffectiveSyncRuleName, causalityEvent.EffectiveSyncRuleId);
 
         var detail = causalityEvent.DetailMessage;
-        return !string.IsNullOrWhiteSpace(detail) && !detail.All(char.IsAsciiDigit) ? detail : null;
+        return !string.IsNullOrWhiteSpace(detail) && !detail.All(char.IsAsciiDigit) ? (detail, null) : (null, null);
     }
 
-    private static string ConnectorSubject(CausalityEvent causalityEvent) =>
-        $"connector: {causalityEvent.SystemName ?? "Connected System"}";
+    /// <summary>
+    /// The event's own Synchronisation Rule attribution only, never an ancestor's: for the Identity
+    /// "fate" rows (Scope, Join / Projection, Disconnect, Delete), inheriting a rule that merely ran
+    /// earlier in the same tree would credit it with a Deletion Rule or import-scope decision it did not
+    /// make. See <see cref="BuildObjectLevelRow"/>'s remarks for why these rows do not use
+    /// <see cref="ResolveVia"/>.
+    /// </summary>
+    private static (string? Via, int? SyncRuleId) ResolveViaOwnOnly(CausalityEvent causalityEvent)
+    {
+        if (!string.IsNullOrWhiteSpace(causalityEvent.SyncRuleName))
+            return (causalityEvent.SyncRuleName, causalityEvent.SyncRuleId);
+
+        var detail = causalityEvent.DetailMessage;
+        return !string.IsNullOrWhiteSpace(detail) && !detail.All(char.IsAsciiDigit) ? (detail, null) : (null, null);
+    }
 
     /// <summary>
     /// The attribute a No Contributor / Values Preserved fact names, drawn from the event's detail
@@ -256,24 +312,24 @@ public static class CausalityTableModelBuilder
         orderedKeys.AddRange(downstreamOrder);
 
         var objects = new List<CausalityTableObject> { BuildObject(EverythingKey, CausalityTableObjectRole.Everything,
-            "Everything", null, rows) };
+            "Everything", null, null, rows) };
 
         objects.AddRange(orderedKeys.Select(key =>
         {
             var meta = objectMeta[key];
-            return BuildObject(key, meta.Role, meta.DisplayName, meta.Subtitle, rows);
+            return BuildObject(key, meta.Role, meta.DisplayName, meta.Subtitle, meta.Href, rows);
         }));
 
         return objects;
     }
 
     private static CausalityTableObject BuildObject(
-        string key, CausalityTableObjectRole role, string displayName, string? subtitle,
+        string key, CausalityTableObjectRole role, string displayName, string? subtitle, string? href,
         IReadOnlyList<CausalityTableRow> allRows)
     {
         var rows = role == CausalityTableObjectRole.Everything ? allRows : allRows.Where(r => r.ObjectKey == key).ToList();
         var tone = rows.Count > 0 ? rows.Select(r => r.Tone).OrderByDescending(SeverityRank).First() : CausalityTone.Secondary;
-        return new CausalityTableObject(key, role, displayName, subtitle, tone, rows.Count);
+        return new CausalityTableObject(key, role, displayName, subtitle, tone, rows.Count, href);
     }
 
     /// <summary>
@@ -288,5 +344,5 @@ public static class CausalityTableModelBuilder
         _ => 0
     };
 
-    private sealed record ObjectMeta(CausalityTableObjectRole Role, string DisplayName, string? Subtitle);
+    private sealed record ObjectMeta(CausalityTableObjectRole Role, string DisplayName, string? Subtitle, string? Href = null);
 }
