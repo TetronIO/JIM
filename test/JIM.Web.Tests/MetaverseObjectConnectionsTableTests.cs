@@ -63,6 +63,20 @@ public class MetaverseObjectConnectionsTableTests : JimComponentTestContext
         Assert.That(cut.FindAll("[data-testid='jim-mvo-connections-table']"), Is.Empty);
     }
 
+    /// <summary>
+    /// The provisioning states say what is outstanding, not that the object was provisioned: the Join column
+    /// beside them already reads Provisioned, and "Pending export" is the term the rest of JIM uses for a
+    /// queued export.
+    /// </summary>
+    [TestCase(ConnectedSystemObjectConnectionState.ProvisioningExportPending, "Pending export")]
+    [TestCase(ConnectedSystemObjectConnectionState.ProvisioningAwaitingConfirmation, "Awaiting confirmation")]
+    [TestCase(ConnectedSystemObjectConnectionState.UpdatePending, "Update pending")]
+    [TestCase(ConnectedSystemObjectConnectionState.DeletePending, "Delete pending")]
+    public void GetConnectionStateLabel_NamesWhatIsOutstanding(ConnectedSystemObjectConnectionState state, string expected)
+    {
+        Assert.That(MetaverseObjectConnectionsTable.GetConnectionStateLabel(state), Is.EqualTo(expected));
+    }
+
     [TestCaseSource(nameof(AllStates))]
     public void Render_EveryConnectionState_RendersItsLabel(ConnectedSystemObjectConnectionState state)
     {
