@@ -651,9 +651,15 @@ public static class CausalityModelBuilder
 
                     if (outcome.TargetEntityId is { } provisionedCsoId && provisionedCsoId != Guid.Empty)
                     {
-                        var recordLabel = parsedDetail.CsoTypeName != null
-                            ? $"{parsedDetail.CsoTypeName}: {provisionedCsoId}"
-                            : provisionedCsoId.ToString();
+                        // A recorded run captured only what it knew at the time: a newly-created object had no
+                        // external id yet, so the fallback is "type: id". The context's name map, when supplied,
+                        // resolves the object's CURRENT display label instead, so the Timeline and Table view
+                        // stop showing the internal id once the object has since been exported and named.
+                        var recordLabel = context.ConnectedSystemObjectNames?.TryGetValue(provisionedCsoId, out var currentName) == true
+                            ? currentName
+                            : parsedDetail.CsoTypeName != null
+                                ? $"{parsedDetail.CsoTypeName}: {provisionedCsoId}"
+                                : provisionedCsoId.ToString();
                         links.Add(new CausalityEntityLink(
                             recordLabel,
                             JimUtilities.GetConnectedSystemObjectHref(provisioningSystemId, provisionedCsoId),

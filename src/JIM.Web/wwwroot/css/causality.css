@@ -1142,8 +1142,11 @@
 }
 
 .causality-panel .tv-nav-btn.on {
-    background: var(--cz-surface);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+    background: var(--cz-primary-soft);
+}
+
+.causality-panel .tv-nav-btn.on .tv-nav-name {
+    color: var(--cz-primary-text);
 }
 
 .causality-panel .tv-nav-btn:focus-visible {

@@ -20,7 +20,8 @@ public static class CausalityTableFilters
         return filter switch
         {
             CausalityTableFilter.ScopeAndJoin => row.ChangeKind is CausalityTableChangeKind.Scope
-                or CausalityTableChangeKind.JoinOrProjection,
+                or CausalityTableChangeKind.Projection
+                or CausalityTableChangeKind.Join,
             CausalityTableFilter.AttributeChanges => row.ChangeKind == CausalityTableChangeKind.AttributeChange,
             CausalityTableFilter.ObjectChanges => row.ChangeKind != CausalityTableChangeKind.AttributeChange,
             CausalityTableFilter.Destructive => row.ChangeKind is CausalityTableChangeKind.Delete

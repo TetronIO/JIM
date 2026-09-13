@@ -88,7 +88,7 @@ public class CausalityTableViewTests
                 "a single-object selection carries no Object column");
             var rows = cut.FindAll("tbody tr");
             Assert.That(rows, Has.Count.EqualTo(1));
-            Assert.That(rows[0].TextContent, Does.Contain("Join / Projection"));
+            Assert.That(rows[0].TextContent, Does.Contain("Projection"));
         }
     }
 
@@ -133,7 +133,7 @@ public class CausalityTableViewTests
 
         var rows = cut.FindAll("tbody tr");
         Assert.That(rows, Has.Count.EqualTo(1));
-        Assert.That(rows[0].TextContent, Does.Contain("Join / Projection"));
+        Assert.That(rows[0].TextContent, Does.Contain("Projection"));
     }
 
     [Test]

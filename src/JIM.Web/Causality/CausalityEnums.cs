@@ -92,8 +92,11 @@ public enum CausalityTableChangeKind
     /// <summary>The object's import scope changed (DisconnectedOutOfScope).</summary>
     Scope,
 
-    /// <summary>The Identity was created, joined, or a scheduled deletion was cancelled by a rejoin.</summary>
-    JoinOrProjection,
+    /// <summary>A new Identity was created for the object (Projected).</summary>
+    Projection,
+
+    /// <summary>The object was joined to an existing Identity, or a scheduled deletion was cancelled by a rejoin (Joined, MvoDeletionCancelled).</summary>
+    Join,
 
     /// <summary>A join broke without an out-of-scope determination, or a downstream target lost its join with no matching export rule.</summary>
     Disconnect,

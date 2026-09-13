@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using JIM.Models.Activities;
 using JIM.Models.Sync;
@@ -44,7 +45,7 @@ public class CausalityTableModelBuilderTests
 
         using (Assert.EnterMultipleScope())
         {
-            var identityRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.JoinOrProjection);
+            var identityRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Projection);
             Assert.That(identityRow.ObjectKey, Is.EqualTo("identity"));
             Assert.That(identityRow.WouldBe, Is.EqualTo("New Identity"));
 
@@ -61,6 +62,41 @@ public class CausalityTableModelBuilderTests
             Assert.That(attributeRows.Select(r => r.ObjectKey), Has.All.EqualTo(provisionRow.ObjectKey));
             Assert.That(attributeRows.Select(r => r.Attribute), Is.EquivalentTo(new[] { "displayName", "mail", "title" }));
         }
+    }
+
+    [Test]
+    public void Build_JoinedOutcome_IsAJoinRowNotAProjection()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen",
+            syncRuleId: 5, syncRuleName: "Yellowstone People - Inbound");
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var joinRow = table.Rows.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(joinRow.ChangeKind, Is.EqualTo(CausalityTableChangeKind.Join));
+            Assert.That(joinRow.WouldBe, Is.EqualTo("Joined to existing Identity"));
+        }
+    }
+
+    [Test]
+    public void Build_MvoDeletionCancelledOutcome_IsAJoinRow()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen",
+            syncRuleId: 5, syncRuleName: "Yellowstone People - Inbound");
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var joinRow = table.Rows.Single();
+        Assert.That(joinRow.ChangeKind, Is.EqualTo(CausalityTableChangeKind.Join),
+            "a rejoin that cancels a scheduled deletion is a Join, since the Identity already existed");
     }
 
     [Test]
@@ -152,15 +188,17 @@ public class CausalityTableModelBuilderTests
     // ─── Filter semantics ───
 
     [Test]
-    public void Matches_ScopeAndJoinFilter_MatchesOnlyScopeAndJoinRows()
+    public void Matches_ScopeAndJoinFilter_MatchesOnlyScopeProjectionAndJoinRows()
     {
         var scopeRow = new CausalityTableRow("identity", CausalityTableChangeKind.Scope, "Import scope", "In scope", "Out of scope", null, null, "l", "t", CausalityTone.Warning);
-        var joinRow = new CausalityTableRow("identity", CausalityTableChangeKind.JoinOrProjection, "Metaverse Object", null, "New Identity", null, null, "l", "t", CausalityTone.Primary);
+        var projectionRow = new CausalityTableRow("identity", CausalityTableChangeKind.Projection, "Metaverse Object", null, "New Identity", null, null, "l", "t", CausalityTone.Primary);
+        var joinRow = new CausalityTableRow("identity", CausalityTableChangeKind.Join, "Metaverse Object", null, "Joined to existing Identity", null, null, "l", "t", CausalityTone.Primary);
         var deleteRow = new CausalityTableRow("identity", CausalityTableChangeKind.Delete, "Metaverse Object", "Active", "Deleted", null, null, "l", "t", CausalityTone.Error);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(CausalityTableFilters.Matches(scopeRow, CausalityTableFilter.ScopeAndJoin), Is.True);
+            Assert.That(CausalityTableFilters.Matches(projectionRow, CausalityTableFilter.ScopeAndJoin), Is.True);
             Assert.That(CausalityTableFilters.Matches(joinRow, CausalityTableFilter.ScopeAndJoin), Is.True);
             Assert.That(CausalityTableFilters.Matches(deleteRow, CausalityTableFilter.ScopeAndJoin), Is.False);
         }
@@ -431,6 +469,26 @@ public class CausalityTableModelBuilderTests
             Assert.That(downstream.Subtitle, Is.EqualTo("Glitterband EMEA"));
             Assert.That(downstream.Href, Is.EqualTo(JimUtilities.GetConnectedSystemObjectHref(2, CausalityTestData.ProvisionedCsoId)));
         }
+    }
+
+    /// <summary>
+    /// The downstream object's name follows the context's current-name map when the page supplied one,
+    /// rather than the recorded run's "type: id" fallback (#1519 Table view fix 5): the Record link built
+    /// from the map propagates into the Table view exactly as the recorded fallback already did above.
+    /// </summary>
+    [Test]
+    public void Build_ProvisionedEvent_DisplayNameFollowsTheContextsCurrentNameWhenSupplied()
+    {
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [CausalityTestData.ProvisionedCsoId] = "liam.allen" }
+        };
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var downstream = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Downstream);
+        Assert.That(downstream.DisplayName, Is.EqualTo("liam.allen"));
     }
 
     /// <summary>

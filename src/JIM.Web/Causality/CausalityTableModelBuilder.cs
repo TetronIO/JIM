@@ -123,8 +123,8 @@ public static class CausalityTableModelBuilder
     /// provisioning/export family (Provision, Deprovision, Export queued) uses the <em>effective</em>
     /// pair, because a queued export or deprovision genuinely IS the Provisioned/export decision's own
     /// rule continuing (#1519 Table view fix 4: production never stamps a Pending Export's own
-    /// SyncRuleId, only its Provisioned parent's). The Identity "fate" family (Scope, Join /
-    /// Projection, Disconnect, Delete) uses the event's <em>own</em> rule only, exactly as
+    /// SyncRuleId, only its Provisioned parent's). The Identity "fate" family (Scope, Projection,
+    /// Join, Disconnect, Delete) uses the event's <em>own</em> rule only, exactly as
     /// MvoDeletionScheduled already did before this change: a Deletion Rule or import-scope decision is
     /// never the Synchronisation Rule that happened to run earlier in the same tree, and crediting one
     /// (proven by <c>Build_LeaverItem_GroupsEachDeprovisioningTargetAsItsOwnDownstreamObject</c>, which
@@ -144,15 +144,17 @@ public static class CausalityTableModelBuilder
                 "In scope", "Out of scope", ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.JoinOrProjection, null,
+                causalityEvent, objectKey, CausalityTableChangeKind.Projection, null,
                 null, "New Identity", ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.JoinOrProjection, null,
+                causalityEvent, objectKey, CausalityTableChangeKind.Join, null,
                 null, "Joined to existing Identity", ownVia, ownSyncRuleId),
 
+            // A rejoin cancels the object's scheduled deletion: it is a Join, not a Projection, since
+            // the Identity already existed.
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.JoinOrProjection, null,
+                causalityEvent, objectKey, CausalityTableChangeKind.Join, null,
                 "Deletion scheduled", "Rejoined; deletion cancelled", ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Row(
@@ -255,7 +257,7 @@ public static class CausalityTableModelBuilder
 
     /// <summary>
     /// The event's own Synchronisation Rule attribution only, never an ancestor's: for the Identity
-    /// "fate" rows (Scope, Join / Projection, Disconnect, Delete), inheriting a rule that merely ran
+    /// "fate" rows (Scope, Projection, Join, Disconnect, Delete), inheriting a rule that merely ran
     /// earlier in the same tree would credit it with a Deletion Rule or import-scope decision it did not
     /// make. See <see cref="BuildObjectLevelRow"/>'s remarks for why these rows do not use
     /// <see cref="ResolveVia"/>.

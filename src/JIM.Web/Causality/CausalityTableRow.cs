@@ -5,7 +5,7 @@ namespace JIM.Web.Causality;
 
 /// <summary>
 /// One row of the Table view (#1519 Phase 3): either an object-level fact derived from a causality
-/// event's outcome type (Scope, Join / Projection, Disconnect, Delete, Deprovision, Provision, Export
+/// event's outcome type (Scope, Projection, Join, Disconnect, Delete, Deprovision, Provision, Export
 /// queued, No contributor, Values preserved), or an individual attribute change carried by an event's
 /// own <see cref="CausalityAttributeRow"/>s. <see cref="CausalityTableModelBuilder"/> is the only
 /// place that derives rows; this type is a plain data carrier.
@@ -17,7 +17,7 @@ namespace JIM.Web.Causality;
 /// <param name="ChangeKind">What kind of change this row states.</param>
 /// <param name="Attribute">
 /// The attribute name for an attribute-change row, or the attribute a No Contributor/Values Preserved
-/// fact names; null for every other object-level row (Scope, Join / Projection, Disconnect, Delete,
+/// fact names; null for every other object-level row (Scope, Projection, Join, Disconnect, Delete,
 /// Deprovision, Provision, Export queued), which states no attribute at all.
 /// </param>
 /// <param name="Current">The current (recorded: before) value or state text; null where there is none.</param>
@@ -56,7 +56,8 @@ public sealed record CausalityTableRow(
     public string ChangeKindLabel => ChangeKind switch
     {
         CausalityTableChangeKind.Scope => "Scope",
-        CausalityTableChangeKind.JoinOrProjection => "Join / Projection",
+        CausalityTableChangeKind.Projection => "Projection",
+        CausalityTableChangeKind.Join => "Join",
         CausalityTableChangeKind.Disconnect => "Disconnect",
         CausalityTableChangeKind.Delete => "Delete",
         CausalityTableChangeKind.Deprovision => "Deprovision",

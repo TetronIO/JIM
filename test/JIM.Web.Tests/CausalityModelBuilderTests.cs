@@ -181,6 +181,34 @@ public class CausalityModelBuilderTests
     }
 
     [Test]
+    public void Build_ProvisionedOutcome_RecordLinkPrefersTheContextsCurrentNameOverTheRecordedTypeAndId()
+    {
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [CausalityTestData.ProvisionedCsoId] = "liam.allen" }
+        };
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+        var provisioned = model.Roots[0].Children[0].Children[0];
+
+        var recordLink = provisioned.Links.Single(l => l.Kind == CausalityEntityKind.Record);
+        Assert.That(recordLink.Label, Is.EqualTo("liam.allen"));
+    }
+
+    [Test]
+    public void Build_ProvisionedOutcome_RecordLinkFallsBackToTypeAndIdWhenTheContextNamesNothing()
+    {
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string>()
+        };
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+        var provisioned = model.Roots[0].Children[0].Children[0];
+
+        var recordLink = provisioned.Links.Single(l => l.Kind == CausalityEntityKind.Record);
+        Assert.That(recordLink.Label, Is.EqualTo($"person: {CausalityTestData.ProvisionedCsoId}"));
+    }
+
+    [Test]
     public void Build_PendingExportCreatedOutcome_LinksConnectedSystemAndPendingExports()
     {
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());

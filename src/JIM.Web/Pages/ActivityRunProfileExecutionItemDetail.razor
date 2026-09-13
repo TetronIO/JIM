@@ -462,6 +462,12 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private IReadOnlySet<Guid>? _livePendingExportIds;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
 
+    // The current display label of every Connected System Object this item's tree Provisioned, keyed by
+    // id (#1519 Table view fix 5). A recorded Provisioned outcome's own link is built from what the run
+    // captured at the time (only the object's internal id, since it had no external id yet); this is
+    // resolved once here so the causality panel can show the object's CURRENT name instead.
+    private IReadOnlyDictionary<Guid, string>? _provisionedConnectedSystemObjectNames;
+
     // The upward causal chain (#1223): why the changes on this item happened. Loaded here rather than in
     // the panel so the panel stays a rendering component with no data access of its own.
     private CausalChain? _causalChain;
@@ -496,7 +502,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                            ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot,
         MvoTypeName: _metaverseObjectType?.Name ?? _identityHeader?.TypeName,
         MvoTypePluralName: _metaverseObjectType?.PluralName ?? _identityHeader?.TypePluralName,
-        DeletedMetaverseObjectId: _deletedIdentityId);
+        DeletedMetaverseObjectId: _deletedIdentityId,
+        ConnectedSystemObjectNames: _provisionedConnectedSystemObjectNames);
 
     /// <summary>
     /// The outcome types whose <c>TargetEntityId</c> is the Metaverse Object's own id. Only these are used to
@@ -653,6 +660,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         }
 
         await LoadLivePendingExportIdsAsync(jim);
+        await LoadProvisionedConnectedSystemObjectNamesAsync(jim);
 
         // Only items with outcomes render the causality panel, and the chain renders inside it, so an item
         // without outcomes has nowhere to show a chain and the walk is not worth paying for.
@@ -748,6 +756,46 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         _livePendingExportIds = live.ToHashSet();
     }
 
+    /// <summary>
+    /// Resolves the current display label of every Connected System Object this item's tree Provisioned
+    /// (#1519 Table view fix 5), so the causality panel can show the object's name as it stands now
+    /// rather than the "type: id" label a recorded run captured at creation time, before the object had
+    /// an external id. A Provisioned outcome's own <c>DetailMessage</c> carries its target Connected
+    /// System's id (see <see cref="OutcomeDetailMessageParser"/>); PendingExportCreated children under a
+    /// Provisioned parent target the same object, so only the Provisioned outcomes themselves need
+    /// collecting. Bounded by the number of Provisioned outcomes on this one item, and grouped by
+    /// Connected System since a single item can provision to several targets.
+    /// </summary>
+    private async Task LoadProvisionedConnectedSystemObjectNamesAsync(JimApplication jim)
+    {
+        var provisionedByConnectedSystem = _activityRunProfileExecutionItem?.SyncOutcomes
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+                        && o.TargetEntityId is { } id && id != Guid.Empty)
+            .Select(o => (ConnectedSystemId: OutcomeDetailMessageParser.Parse(o.DetailMessage).ConnectedSystemId, CsoId: o.TargetEntityId!.Value))
+            .Where(t => t.ConnectedSystemId.HasValue)
+            .GroupBy(t => t.ConnectedSystemId!.Value, t => t.CsoId)
+            .ToList() ?? [];
+
+        if (provisionedByConnectedSystem.Count == 0)
+        {
+            _provisionedConnectedSystemObjectNames = null;
+            return;
+        }
+
+        var names = new Dictionary<Guid, string>();
+        foreach (var group in provisionedByConnectedSystem)
+        {
+            var csos = await jim.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(group.Key, group.Distinct());
+            foreach (var cso in csos)
+            {
+                // A deleted-since object simply has no entry: the recorded "type: id" label stands.
+                if (cso.NameOrId is { } nameOrId)
+                    names[cso.Id] = nameOrId;
+            }
+        }
+
+        _provisionedConnectedSystemObjectNames = names;
+    }
 
     /// <summary>
     /// Returns true if the parent activity is a sync Run Profile, indicating that
