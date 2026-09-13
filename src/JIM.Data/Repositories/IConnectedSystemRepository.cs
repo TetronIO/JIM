@@ -1017,6 +1017,15 @@ public interface IConnectedSystemRepository
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
+    /// Gets just the <c>Name</c> of every requested Synchronisation Rule, keyed by id (#1519 follow-up). An id
+    /// with no corresponding row (the rule has been deleted) is simply absent from the result; callers resolve
+    /// that as "name unknown" rather than treating it as an error. Used to back a change-history attribution
+    /// name lookup that must resolve many ids in one round trip rather than one query per id.
+    /// </summary>
+    /// <param name="syncRuleIds">The Synchronisation Rule ids to resolve. Deduplicated internally.</param>
+    public Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
     /// Gets just a Synchronisation Rule's initial-password configuration, or null where it sets no initial
     /// passwords.
     /// <para>

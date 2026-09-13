@@ -388,6 +388,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
         => _repo.ConnectedSystems.GetSyncRulesAsync(withChangeTracking);
 
+    public Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds)
+        => _repo.ConnectedSystems.GetSyncRuleNamesByIdsAsync(syncRuleIds);
+
     public async Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
     {
         var latestRuleChange = await _context.SyncRules

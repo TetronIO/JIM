@@ -232,6 +232,73 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
         }
     }
 
+    /// <summary>
+    /// The actual defect this guards (observed live after #1519 landed): a Full Synchronisation builds a
+    /// brand new <see cref="MetaverseObjectAttributeValue"/> with only <c>ContributedBySyncRuleId</c> set;
+    /// the <c>ContributedBySyncRule</c> navigation is never populated for a freshly-created value, so
+    /// <see cref="MetaverseObjectChange.AddAttributeValueChange"/> must go through a resolver (the shape
+    /// <c>SyncRuleNameResolverCache</c> supplies in the Worker) to record a name at all. Every other test in
+    /// this file pre-sets <c>ContributedBySyncRuleName</c> directly on the constructed change record and so
+    /// never exercises this path; this test goes through <c>AddAttributeValueChange</c> itself, then round
+    /// trips the result via the same raw-SQL persistence path as the rest of this file.
+    /// </summary>
+    [Test]
+    public async Task PersistPendingMvoChangesAsync_ValueHasOnlyContributingSyncRuleIdWithResolver_ResolvesAndRoundTripsNameAsync()
+    {
+        // Arrange
+        var (mvType, attribute, rule) = await SeedMvoTypeAndSyncRuleAsync();
+
+        Guid mvoId;
+        await using (var seed = NewContext())
+        {
+            seed.Attach(mvType);
+            var mvo = new MetaverseObject { Type = mvType, Created = DateTime.UtcNow };
+            seed.Add(mvo);
+            await seed.SaveChangesAsync();
+            mvoId = mvo.Id;
+        }
+
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObject = new MetaverseObject { Id = mvoId },
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Updated,
+            ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
+        };
+
+        // A freshly-created value exactly as the sync engine builds one during Attribute Flow: only the FK
+        // is set, the navigation is never populated.
+        var value = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = attribute,
+            AttributeId = attribute.Id,
+            StringValue = "jsmith@example.com",
+            ContributedBySyncRuleId = rule.Id
+        };
+
+        change.AddAttributeValueChange(value, ValueChangeType.Add, id => id == rule.Id ? rule.Name : null);
+
+        // Act
+        await using (var writeCtx = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeCtx);
+            await repository.Sync.PersistPendingMvoChangesAsync([change], []);
+        }
+
+        // Assert
+        await using var verify = NewContext();
+        var persisted = await verify.MetaverseObjectChangeAttributeValues
+            .AsNoTracking()
+            .SingleAsync(v => v.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject!.Id == mvoId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ContributedBySyncRuleId, Is.EqualTo(rule.Id));
+            Assert.That(persisted.ContributedBySyncRuleName, Is.EqualTo(rule.Name));
+        }
+    }
+
     [Test]
     public async Task PersistRpeiCsoChangesAsync_ValueChangeCarriesSyncRuleAttribution_RoundTripsIdAndNameAsync()
     {

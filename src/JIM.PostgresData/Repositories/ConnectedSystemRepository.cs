@@ -6230,6 +6230,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(cs => cs.Id == connectedSystemId);
     }
 
+    public async Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return new Dictionary<int, string>();
+
+        var distinctIds = syncRuleIds.Distinct().ToList();
+
+        // Name-only projection, no tracking, no Includes: this backs a change-history attribution lookup
+        // for ids that were not already known in memory, and must stay cheap however many distinct rules
+        // a batch touches.
+        var rows = await Repository.Database.SyncRules
+            .AsNoTracking()
+            .Where(sr => distinctIds.Contains(sr.Id))
+            .Select(sr => new { sr.Id, sr.Name })
+            .ToListAsync();
+
+        return rows.ToDictionary(row => row.Id, row => row.Name);
+    }
+
     public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)
     {
         // Read-only comparison input, so no tracking: attaching it would put a second instance of this row in

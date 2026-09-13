@@ -236,6 +236,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
         => _inner.GetAllSyncRulesAsync(withChangeTracking);
 
+    public Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds)
+        => _inner.GetSyncRuleNamesByIdsAsync(syncRuleIds);
+
     public Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
         => _inner.GetLatestSyncRuleConfigurationChangeAsync();
 

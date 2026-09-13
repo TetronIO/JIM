@@ -140,8 +140,16 @@ public class SyncServer : ISyncServer
                 DeletedObjectDisplayName = displayName
             };
 
+            // Contributor provenance (#1519 follow-up): attributesToCapture may be a snapshot taken before
+            // this MVO's own navigation was loaded (the Worker's pre-recall capture), so resolve any
+            // unloaded ContributedBySyncRule names via a single batched lookup rather than leaving them null.
+            var syncRuleNameCache = new SyncRuleNameResolverCache(_syncRepo);
+            await syncRuleNameCache.WarmAsync(attributesToCapture
+                .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
+                .Select(av => av.ContributedBySyncRuleId!.Value));
+
             foreach (var attributeValue in attributesToCapture)
-                change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove);
+                change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove, syncRuleNameCache.Resolve);
 
             await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
             await _syncRepo.CreateMetaverseObjectChangeDirectAsync(change);
@@ -178,6 +186,15 @@ public class SyncServer : ISyncServer
         var changes = new List<MetaverseObjectChange>();
         if (changeTrackingEnabled)
         {
+            // Contributor provenance (#1519 follow-up): one cache shared across the whole batch, so a
+            // Synchronisation Rule contributing to many of these deletions costs at most one repository
+            // round trip in total rather than one per deletion.
+            var syncRuleNameCache = new SyncRuleNameResolverCache(_syncRepo);
+            await syncRuleNameCache.WarmAsync(deletions
+                .SelectMany(d => d.FinalAttributeValues)
+                .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
+                .Select(av => av.ContributedBySyncRuleId!.Value));
+
             foreach (var (metaverseObject, finalAttributeValues) in deletions)
             {
                 var attributesToCapture = finalAttributeValues;
@@ -201,7 +218,7 @@ public class SyncServer : ISyncServer
                 };
 
                 foreach (var attributeValue in attributesToCapture)
-                    change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove);
+                    change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove, syncRuleNameCache.Resolve);
 
                 changes.Add(change);
             }

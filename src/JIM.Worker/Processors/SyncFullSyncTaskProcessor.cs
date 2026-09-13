@@ -291,7 +291,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 await PersistPendingMetaverseObjectsAsync();
 
                 // create MVO change objects for change tracking (after MVOs persisted so IDs available)
-                await CreatePendingMvoChangeObjectsAsync();
+                await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
 
                 // evaluate queued drift detection (after MVOs persisted so corrective Pending Exports
                 // capture real Metaverse Object ids, before the export flush persists them)

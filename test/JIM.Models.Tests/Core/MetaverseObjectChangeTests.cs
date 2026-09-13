@@ -181,4 +181,66 @@ public class MetaverseObjectChangeTests
             Assert.That(recorded.ContributedBySyncRuleName, Is.Null);
         }
     }
+
+    /// <summary>
+    /// The defect this guards (observed live after #1519 landed): a Full Synchronisation creates a brand new
+    /// <see cref="MetaverseObjectAttributeValue"/> with only <c>ContributedBySyncRuleId</c> set (the navigation
+    /// is never loaded for a freshly-constructed value); without a resolver the name was silently lost. The
+    /// resolver is the caller's way of supplying that name from whatever Synchronisation Rules it already has
+    /// in memory, or a cached repository lookup, without this method triggering a lazy load itself.
+    /// </summary>
+    [Test]
+    public void AddAttributeValueChange_ValueHasContributingSyncRuleIdOnlyWithResolver_ResolvesNameViaResolver()
+    {
+        var change = new MetaverseObjectChange();
+        var value = CreateDecimalValue(42m);
+        value.ContributedBySyncRuleId = 7;
+
+        change.AddAttributeValueChange(value, ValueChangeType.Add, id => id == 7 ? "Resolved Rule" : null);
+
+        var recorded = change.AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recorded.ContributedBySyncRuleId, Is.EqualTo(7));
+            Assert.That(recorded.ContributedBySyncRuleName, Is.EqualTo("Resolved Rule"));
+        }
+    }
+
+    /// <summary>
+    /// The loaded navigation is always authoritative when present; the resolver exists only to cover the case
+    /// where the navigation was never loaded, so it must not override a name that is already known.
+    /// </summary>
+    [Test]
+    public void AddAttributeValueChange_ValueHasContributingSyncRuleLoadedWithResolver_PrefersLoadedNavigationOverResolver()
+    {
+        var change = new MetaverseObjectChange();
+        var value = CreateDecimalValue(42m);
+        value.ContributedBySyncRuleId = 7;
+        value.ContributedBySyncRule = new SyncRule { Id = 7, Name = "Loaded Name" };
+
+        change.AddAttributeValueChange(value, ValueChangeType.Add, _ => "Resolver Name");
+
+        var recorded = change.AttributeChanges.Single().ValueChanges.Single();
+        Assert.That(recorded.ContributedBySyncRuleName, Is.EqualTo("Loaded Name"));
+    }
+
+    /// <summary>
+    /// A resolver must only ever be consulted for a value that actually has a contributing Synchronisation
+    /// Rule id; calling it regardless would be wasted work for every attribute value with no contributor.
+    /// </summary>
+    [Test]
+    public void AddAttributeValueChange_ValueHasNoContributorWithResolver_ResolverNotInvoked()
+    {
+        var change = new MetaverseObjectChange();
+        var value = CreateDecimalValue(42m);
+        var resolverCalled = false;
+
+        change.AddAttributeValueChange(value, ValueChangeType.Add, _ =>
+        {
+            resolverCalled = true;
+            return "should not be used";
+        });
+
+        Assert.That(resolverCalled, Is.False);
+    }
 }
