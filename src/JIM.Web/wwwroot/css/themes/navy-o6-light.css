@@ -88,10 +88,17 @@ html[lang] {
     /* === Table === */
     --mud-palette-table-lines: rgba(30, 58, 95, 0.28);
     --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
-    --mud-palette-table-hover: rgba(0, 118, 211, 0.06);
+    /* The structural navy the theme already uses for lines and borders, not the unrelated cyan-blue this
+       was. Every other surface in the theme is navy-tinted, so a bright blue row highlight read as a
+       foreign colour, most visibly against the Attribute column's own shade. Slightly stronger than the
+       0.06 it replaces so the row still lifts clearly now the hue is a quiet one. */
+    --mud-palette-table-hover: rgba(30, 58, 95, 0.09);
 
     /* === JIM Custom: Attribute table name column === */
-    --jim-attr-name-bg: #f2f0f0;
+    /* A cool grey from the same navy as the borders. It was #f2f0f0, a warm grey, which is the other half
+       of why the old blue hover jarred here: a cool highlight over a warm ground. Same weight against the
+       white surface as before, so the column still reads as a row header. */
+    --jim-attr-name-bg: #eef1f4;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
     --jim-json-key: #005da8;
@@ -113,8 +120,13 @@ html[lang] {
     --jim-nav-child-color: #4a5568;
     --jim-nav-hover-color: #1a2230;
     --jim-nav-active-color: #1a2230;
-    --jim-nav-active-bg: #d8dce2;
-    --jim-nav-hover-bg: #bcc2ca;
+    /* Both are the theme's navy laid over the sidebar (#f3f3f3) at 8% and 15%, so the rest state, the
+       selected pill and the hover all sit on one ramp of a single hue. The pair they replace (#d8dce2 and
+       #bcc2ca) were heavy enough against a light sidebar to read as filled blocks rather than as a
+       highlight. Hover stays the stronger of the two, per the rule in site.css: it has to remain visible
+       on an item that is already selected. */
+    --jim-nav-active-bg: #e2e4e7;
+    --jim-nav-hover-bg: #d3d7dd;
 
     /* === JIM Custom: Paper border === */
     --jim-paper-border-color: rgba(30, 58, 95, 0.26);

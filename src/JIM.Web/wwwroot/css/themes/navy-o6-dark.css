@@ -85,10 +85,18 @@ html[lang] {
     /* === Table === */
     --mud-palette-table-lines: #243a52;
     --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
-    --mud-palette-table-hover: rgba(97, 75, 158, 0.06);
+    /* A light tint, not a dark one. On a #0d1e30 surface the 6% purple this replaces moved the row by
+       about five levels, which is below what the eye picks up as a highlight at all; darkening or tinting
+       a dark surface has far less room than the equivalent move on white, so the lift has to come from a
+       light colour to be seen. Kept in the theme's blue family rather than plain white so it reads as a
+       highlight rather than as a wash. */
+    --mud-palette-table-hover: rgba(150, 190, 240, 0.10);
 
     /* === JIM Custom: Attribute table name column === */
-    --jim-attr-name-bg: #0e1d30;
+    /* The inner-surface value, which is what this column is: a surface nested inside another surface. It
+       was #0e1d30, one level off the #0d1e30 table surface behind it, so the column that reads clearly as
+       a row header in light mode was invisible here. */
+    --jim-attr-name-bg: #15293c;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
     --jim-json-key: #67b9ff;

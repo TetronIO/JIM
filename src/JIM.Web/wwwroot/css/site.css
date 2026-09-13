@@ -666,6 +666,22 @@ html[lang] .jim-expansion-panel .mud-table .mud-table-body .mud-table-cell.jim-a
     }
 }
 
+/* The same problem, one scope wider, for the one column that carries its own background everywhere it
+   appears. The rule above is scoped to a table nested INSIDE a paper or an expansion panel, because only
+   there do the other cells get an opaque surface of their own. A MudDataGrid, though, IS the paper: its
+   root carries both class sets, so a descendant selector never matches it and none of its cells were
+   covered. Its ordinary cells are transparent and MudBlazor's row-hover paints them, but .jim-attr-name is
+   opaque in every scope and so painted over that hover, leaving the Attribute column static while the rest
+   of the row lifted (the Connector Space attributes grid is the worked example). Layering the hover colour
+   over the cell's own background rather than replacing it keeps the column's row-header shade and lifts it
+   by the same amount as the rest of the row, so the row reads as one band. */
+@media (hover: hover) and (pointer: fine) {
+    html[lang] .mud-table.mud-table-hover .mud-table-body .mud-table-row:hover > .mud-table-cell.jim-attr-name,
+    html[lang] .mud-simple-table.mud-table-hover tbody tr:hover > td.jim-attr-name {
+        background-image: linear-gradient(var(--mud-palette-table-hover), var(--mud-palette-table-hover));
+    }
+}
+
 /* Footer / pagination row in nested tables matches the header background.
    Uses !important to override MudBlazor's inherited surface colour. */
 html[lang] .mud-paper .mud-table .mud-table-foot,
