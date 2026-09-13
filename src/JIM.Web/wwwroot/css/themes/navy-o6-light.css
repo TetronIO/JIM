@@ -116,11 +116,17 @@ html[lang] {
     --jim-nav-active-bg: #d8dce2;
     --jim-nav-hover-bg: #bcc2ca;
 
-    /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
-    --jim-drawer-border-color: rgba(30, 58, 95, 0.26);
-
     /* === JIM Custom: Paper border === */
     --jim-paper-border-color: rgba(30, 58, 95, 0.26);
+
+    /* === JIM Custom: Drawer border === */
+    /* The opaque rendering of --jim-paper-border-color over the panel surface (#ffffff), so the sidebar's
+       right-hand edge reads as exactly the same line as a panel's border. The token itself is translucent
+       and the sidebar is --mud-palette-drawer-background (#f3f3f3) rather than the panels' white, so
+       reusing it directly composites 9 levels darker (#bcc3cd against a panel's #c5ccd5), which is visible
+       as a mismatched edge. This is the only theme where the drawer background and the panel surface
+       differ while the border token is translucent. */
+    --jim-drawer-border-color: #c5ccd5;
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */
     /* The inner surface matches --jim-inner-surface above: a surface nested inside another surface has one

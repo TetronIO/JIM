@@ -113,10 +113,7 @@ html[lang] {
     --jim-nav-active-bg: #15273c;
     --jim-nav-hover-bg: #243a52;
 
-    /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
-    --jim-drawer-border-color: #243a52;
-
-    /* === JIM Custom: Paper border === */
+    /* === JIM Custom: Paper border (also used for the drawer's right-hand edge) === */
     --jim-paper-border-color: #243a52;
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */

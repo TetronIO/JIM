@@ -892,7 +892,9 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
 }
 
 .jim-drawer {
-    border-right: 1px solid var(--jim-drawer-border-color);
+    /* Themes normally take the panel border colour; --jim-drawer-border-color is only ever set explicitly
+       where a theme deliberately wants a different (or no) separator, e.g. the "blended" nav themes. */
+    border-right: 1px solid var(--jim-drawer-border-color, var(--jim-paper-border-color, var(--mud-palette-lines-default)));
     position: fixed !important;
     top: 0;
     left: 0;
