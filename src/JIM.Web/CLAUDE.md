@@ -328,12 +328,33 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 ## UI element sizing
 - ALWAYS use normal/default sizes for ALL UI elements when adding new components
 - Text: Use `Typo.body1` (default readable size)
-- Chips: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
+- Chips: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium). The Size parameter still means what it says, but a Text-variant chip is a compact pill whatever its size; see "Chips" below
 - Buttons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
 - Icons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
 - Other MudBlazor components: Omit Size parameter to use default sizing
 - Only use smaller sizes (`Typo.body2`, `Size.Small`, etc.) when explicitly requested by the user
 - Users prefer readable, appropriately-sized UI elements by default
+
+## Chips
+
+**A `Variant.Text` MudChip is the portal's standard chip, and it is styled from one place.** `site.css`
+carries both halves: `--jim-chip-padding` / `--jim-chip-radius` / `--jim-chip-font-weight` give it the shape
+(a compact pill with a semibold label), and the `--jim-chip-text-*` blend beside them gives the label a
+colour that clears WCAG AA in every theme. A call site passes `Variant` and `Color` and nothing else.
+
+- **Never restyle a chip at the call site**, and never hand-roll a pill from a `span` to get this look. Two
+  places in the causality panel did exactly that, arriving at a better chip than the portal's and keeping it
+  to themselves; promoting it here is what retired them. If a chip needs to look different, the question is
+  whether the design system should change, not whether this page should opt out.
+- **The shape is deliberately independent of `Size`.** `Size.Small` still yields a smaller chip, because only
+  MudBlazor's per-size font size is left alone; the padding, radius and weight are the same at every size. So
+  the sizing rule above is unaffected: omit `Size` and you get the standard chip.
+- The one span that legitimately remains is the Table view's change chip (`.tv-kind`), whose tone arrives as
+  an inline `--tone` custom property rather than a MudBlazor `Color`. It consumes the same tokens, so it
+  cannot drift from the chips around it.
+- **The `html[lang]` qualifier on the shape rule is load-bearing.** MudBlazor's `.mud-chip.mud-chip-size-medium`
+  has the same specificity a bare `.mud-chip.mud-chip-text` would, and its stylesheet loads after `site.css`,
+  so without the qualifier the height and radius silently do nothing. See "Custom CSS in `site.css`" above.
 
 ## Tabs
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation

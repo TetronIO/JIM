@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using MudBlazor;
+
 namespace JIM.Web.Causality;
 
 /// <summary>
@@ -24,6 +26,25 @@ public static class CausalityToneCss
             CausalityTone.Warning => "warning",
             CausalityTone.Error => "error",
             _ => "secondary"
+        };
+    }
+
+    /// <summary>
+    /// The MudBlazor <see cref="Color"/> a tone corresponds to, for a tone rendered as an ordinary
+    /// Text-variant MudChip rather than through this panel's own CSS. The portal styles those chips from
+    /// one place (see the chip tokens in site.css), so an outcome pill is the same object as a chip
+    /// anywhere else in JIM instead of a lookalike this panel maintains.
+    /// </summary>
+    public static Color MudColor(CausalityTone tone)
+    {
+        return tone switch
+        {
+            CausalityTone.Primary => Color.Primary,
+            CausalityTone.Success => Color.Success,
+            CausalityTone.Info => Color.Info,
+            CausalityTone.Warning => Color.Warning,
+            CausalityTone.Error => Color.Error,
+            _ => Color.Secondary
         };
     }
 

@@ -181,50 +181,12 @@
     margin-top: 12px;
 }
 
-/* Outcome pills are MudChips; restyle them to the mock-up's soft tone pills */
-.causality-panel .mud-chip.oc-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: auto;
+/* The outcome pills were this panel's own restyle of a MudChip, and are now simply Text-variant MudChips
+   carrying a Color: site.css gives every one of those the pill shape this panel arrived at first, and the
+   --jim-chip-text-* label blend these already used. All that is left is the spacing, because the strip
+   above lays them out on a flex gap and MudBlazor's own 4px chip margin would be added on top of it. */
+.causality-panel .outcome-strip .mud-chip {
     margin: 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    background: var(--cz-secondary-soft);
-    color: var(--cz-secondary-text);
-}
-
-.causality-panel .mud-chip.oc-pill.primary {
-    color: var(--cz-primary-text);
-    background: var(--cz-primary-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.success {
-    color: var(--cz-success-text);
-    background: var(--cz-success-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.info {
-    color: var(--cz-info-text);
-    background: var(--cz-info-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.warning {
-    color: var(--cz-warning-text);
-    background: var(--cz-warning-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.error {
-    color: var(--cz-error-text);
-    background: var(--cz-error-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.secondary {
-    color: var(--cz-secondary-text);
-    background: var(--cz-secondary-soft);
 }
 
 /* ─── View canvas ─── */

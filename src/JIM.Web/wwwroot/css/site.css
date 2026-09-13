@@ -31,6 +31,19 @@
     --jim-chip-text-success: color-mix(in srgb, var(--mud-palette-success) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-warning: color-mix(in srgb, var(--mud-palette-warning) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-error: color-mix(in srgb, var(--mud-palette-error) 60%, var(--mud-palette-text-primary));
+
+    /* The SHAPE of a Text-variant chip, as against the label colours above. A compact pill with a semibold
+       label, promoted into the design system from the causality panel, where the outcome pills and the
+       Table view's change chips had arrived at it independently of the portal and looked better than it.
+       MudBlazor's own chip is a fixed-height box (24/32/40px per size) carrying a normal-weight label,
+       which reads as a button rather than as a label and, in a table cell, outweighs the value beside it.
+       Font size is deliberately NOT set here: it stays MudBlazor's per-size figure, so a call site passing
+       Size.Small still gets a smaller chip and the Size parameter keeps its meaning. */
+    --jim-chip-padding-y: 3px;
+    --jim-chip-padding-x: 10px;
+    --jim-chip-padding: var(--jim-chip-padding-y) var(--jim-chip-padding-x);
+    --jim-chip-radius: 999px;
+    --jim-chip-font-weight: 600;
 }
 
 /* App.razor's <FocusOnNavigate Selector="h1" /> (standard Blazor Web App template
@@ -131,6 +144,19 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     text-decoration: none !important;
     color: var(--jim-link-hover-color) !important;
     transition: color 0.25s ease !important;
+}
+
+/* Every Text-variant chip takes that shape. The height MudBlazor pins per size gives way to the padding, so
+   the chip wraps its label rather than standing in a box two-thirds empty.
+
+   The html[lang] qualifier is load-bearing, not decoration: MudBlazor's own `.mud-chip.mud-chip-size-medium`
+   is (0,2,0), exactly what `.mud-chip.mud-chip-text` would be, and its stylesheet is loaded after this one,
+   so on a tie it wins and the height and radius below would silently do nothing. */
+html[lang] .mud-chip.mud-chip-text {
+    height: auto;
+    padding: var(--jim-chip-padding);
+    border-radius: var(--jim-chip-radius);
+    font-weight: var(--jim-chip-font-weight);
 }
 
 /* Text-variant chips: increase background opacity for better visibility on dark themes.
@@ -1851,12 +1877,19 @@ html[lang] .jim-schema-change-table td {
 }
 
 .jim-attribute-table.mud-table-dense .mud-chip {
-    height: 24px;
     font-size: 0.75rem;
     margin: 3px 4px 3px 0;
 }
 
-.jim-attribute-table.mud-table-dense .mud-chip .mud-chip-content {
+/* Filled and Outlined chips still need compacting by hand here, because MudBlazor sizes them from a fixed
+   height and a padding that does not follow it. A Text chip already sizes itself from the design system's
+   chip padding (see the chip tokens at the top of this file), so adding this on top would double its
+   horizontal padding, and pinning a height would undo the shape it gets everywhere else. */
+.jim-attribute-table.mud-table-dense .mud-chip:not(.mud-chip-text) {
+    height: 24px;
+}
+
+.jim-attribute-table.mud-table-dense .mud-chip:not(.mud-chip-text) .mud-chip-content {
     padding: 0 8px;
 }
 
@@ -2046,13 +2079,20 @@ html[lang] .jim-schema-change-table td {
     margin: 0;
 }
 
-/* A chip carries 12px of its own horizontal padding, so its label starts indented
-   relative to the plain-text values above and below it in the same column. Pull a
-   top-level chip back by that much so every value in the column shares one left edge.
-   Chips nested inside a link (the CSO/MVO chip links) are deliberately excluded: they
-   lead with an avatar that already carries its own negative margin. */
+/* A chip carries horizontal padding of its own, so its label starts indented relative to the plain-text
+   values above and below it in the same column. Pull a top-level chip back by exactly that much so every
+   value in the column shares one left edge. Chips nested inside a link (the CSO/MVO chip links) are
+   deliberately excluded: they lead with an avatar that already carries its own negative margin.
+
+   Two figures, because there are two paddings: a Text chip takes the design system's, so the pull reads
+   from the same token and cannot fall out of step with it, while Filled and Outlined chips still carry
+   MudBlazor's own 12px. */
 .jim-detail-table tbody tr td>.mud-chip {
     margin-left: -12px;
+}
+
+.jim-detail-table tbody tr td>.mud-chip.mud-chip-text {
+    margin-left: calc(-1 * var(--jim-chip-padding-x));
 }
 
 /* The sub-line beneath an object chip naming its type and where it lives (#1669), e.g.
