@@ -136,6 +136,11 @@ public static class CausalityTableModelBuilder
     {
         var (ownVia, ownSyncRuleId) = ResolveViaOwnOnly(causalityEvent);
         var (effectiveVia, effectiveSyncRuleId) = ResolveVia(causalityEvent);
+        // An export or deprovision with no rule of its own and nothing same-lane to inherit from (an update
+        // export on an existing object, a cascade's deprovision) is credited to the one rule its value
+        // changes agree on; values from several rules leave it unattributed rather than guessed.
+        if (effectiveSyncRuleId is null && string.IsNullOrWhiteSpace(effectiveVia))
+            (effectiveVia, effectiveSyncRuleId) = RuleTheValueChangesAgreeOn(causalityEvent);
 
         return outcomeType switch
         {
@@ -260,6 +265,20 @@ public static class CausalityTableModelBuilder
 
         var detail = causalityEvent.DetailMessage;
         return !string.IsNullOrWhiteSpace(detail) && !detail.All(char.IsAsciiDigit) ? (detail, null) : (null, null);
+    }
+
+    /// <summary>
+    /// The single Synchronisation Rule every one of the event's recorded value changes names, or nothing
+    /// when they name none or more than one.
+    /// </summary>
+    private static (string? Via, int? SyncRuleId) RuleTheValueChangesAgreeOn(CausalityEvent causalityEvent)
+    {
+        var rules = causalityEvent.AttributeRows
+            .Where(r => r.SyncRuleId.HasValue && !string.IsNullOrWhiteSpace(r.SyncRuleName))
+            .Select(r => (r.SyncRuleName, r.SyncRuleId))
+            .Distinct()
+            .ToList();
+        return rules.Count == 1 ? rules[0] : (null, null);
     }
 
     /// <summary>

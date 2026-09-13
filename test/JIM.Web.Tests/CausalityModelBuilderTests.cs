@@ -592,6 +592,59 @@ public class CausalityModelBuilderTests
     }
 
     /// <summary>
+    /// An export queued for an object that already exists names that object: the change record beneath
+    /// the outcome carries the Connected System Object's id, and the page supplies its current name.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_LinksThatObjectByItsCurrentName()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = targetCsoId;
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "liam.allen" }
+        };
+
+        var model = CausalityModelBuilder.Build(item, context);
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var recordLink = exportEvent.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.Record);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recordLink, Is.Not.Null);
+            Assert.That(recordLink!.Label, Is.EqualTo("liam.allen"));
+            Assert.That(recordLink.Href, Is.EqualTo($"/admin/connected-systems/2/connector-space/{targetCsoId}"));
+        }
+    }
+
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_FallsBackToTheObjectsIdWithoutAContextName()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = targetCsoId;
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var recordLink = exportEvent.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.Record);
+        Assert.That(recordLink?.Label, Is.EqualTo(targetCsoId.ToString()));
+    }
+
+    [Test]
+    public void Build_QueuedExportWhoseChangeNamesNoObject_AddsNoRecordLink()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        Assert.That(exportEvent.Links.Any(l => l.Kind == CausalityEntityKind.Record), Is.False,
+            "the fixture's export change names no object, so the Provisioned parent alone names it");
+    }
+
+    /// <summary>
     /// Regression guard: EffectiveSyncRuleId/Name must never leak into the Links the Timeline and
     /// Lineage views consume via <see cref="CausalityEntityKind.SynchronisationRule"/>. Those views keep
     /// reading the outcome's own <see cref="CausalityEvent.SyncRuleId"/> directly and must be unaffected

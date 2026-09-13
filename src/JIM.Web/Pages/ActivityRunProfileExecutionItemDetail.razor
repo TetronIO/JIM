@@ -768,12 +768,21 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// </summary>
     private async Task LoadProvisionedConnectedSystemObjectNamesAsync(JimApplication jim)
     {
+        // A Provisioned outcome's target is the object it created; a queued export's or deprovision's target
+        // is the Pending Export, so the object comes from the change record beneath it (an update to an
+        // existing object names it there; a provisioning export's change may name the new object too).
         var provisionedByConnectedSystem = _activityRunProfileExecutionItem?.SyncOutcomes
-            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
-                        && o.TargetEntityId is { } id && id != Guid.Empty)
-            .Select(o => (ConnectedSystemId: OutcomeDetailMessageParser.Parse(o.DetailMessage).ConnectedSystemId, CsoId: o.TargetEntityId!.Value))
-            .Where(t => t.ConnectedSystemId.HasValue)
-            .GroupBy(t => t.ConnectedSystemId!.Value, t => t.CsoId)
+            .Select(o => (
+                ConnectedSystemId: OutcomeDetailMessageParser.Parse(o.DetailMessage).ConnectedSystemId,
+                CsoId: o.OutcomeType switch
+                {
+                    ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => o.TargetEntityId,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+                        or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued => o.ConnectedSystemObjectChange?.ConnectedSystemObjectId,
+                    _ => null
+                }))
+            .Where(t => t.ConnectedSystemId.HasValue && t.CsoId is { } id && id != Guid.Empty)
+            .GroupBy(t => t.ConnectedSystemId!.Value, t => t.CsoId!.Value)
             .ToList() ?? [];
 
         if (provisionedByConnectedSystem.Count == 0)

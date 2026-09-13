@@ -697,6 +697,22 @@ public static class CausalityModelBuilder
                         isLinkable ? "Pending Export" : "Pending Exports",
                         isLinkable ? $"{queueHref}/{outcome.TargetEntityId}" : queueHref,
                         CausalityEntityKind.PendingExport));
+
+                    // The object the export or deprovision is queued against, where the change record beneath
+                    // the outcome names it (an update to an existing object, or a cascade's deprovision). A
+                    // provisioning export's Provisioned parent names the new object itself, so a change with
+                    // no object id adds nothing here. Labelled by the object's current name when the page
+                    // resolved one (see CausalityPageContext.ConnectedSystemObjectNames), else by its id.
+                    if (outcome.ConnectedSystemObjectChange?.ConnectedSystemObjectId is { } targetCsoId && targetCsoId != Guid.Empty)
+                    {
+                        var targetLabel = context.ConnectedSystemObjectNames?.TryGetValue(targetCsoId, out var currentTargetName) == true
+                            ? currentTargetName
+                            : targetCsoId.ToString();
+                        links.Add(new CausalityEntityLink(
+                            targetLabel,
+                            JimUtilities.GetConnectedSystemObjectHref(targetSystemId, targetCsoId),
+                            CausalityEntityKind.Record));
+                    }
                 }
                 else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
                 {

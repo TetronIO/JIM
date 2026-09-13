@@ -5,6 +5,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using JIM.Models.Activities;
+using JIM.Models.Core;
+using JIM.Models.Enums;
+using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Web.Causality;
@@ -559,6 +562,66 @@ public class CausalityTableModelBuilderTests
             Assert.That(others, Is.Not.Empty);
             Assert.That(others.Select(r => r.SyncRuleId), Has.All.EqualTo(9), "rows with no recorded rule still inherit the Provision decision's");
         }
+    }
+
+    /// <summary>
+    /// A queued export or deprovision with no rule of its own and no same-lane ancestor to inherit from
+    /// (an update export on an existing object, a cascade's deprovision) takes the one rule its value
+    /// changes agree on; values from several rules leave the row unattributed rather than guessed.
+    /// </summary>
+    [Test]
+    public void Build_DeprovisionRowWithNoRuleOfItsOwn_TakesTheRuleItsValuesAgreeOn()
+    {
+        var item = CausalityTestData.LeaverItem();
+        var deprovision = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
+                                                        && o.ConnectedSystemObjectChange != null);
+        foreach (var value in deprovision.ConnectedSystemObjectChange!.AttributeChanges.SelectMany(a => a.ValueChanges))
+        {
+            value.SyncRuleId = 9;
+            value.SyncRuleName = "Glitterband People - Outbound";
+        }
+
+        var table = CausalityTableModelBuilder.Build(CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext()));
+
+        var attributed = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Deprovision && r.SyncRuleId != null);
+        var unattributed = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Deprovision && r.SyncRuleId == null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attributed.Via, Is.EqualTo("Glitterband People - Outbound"));
+            Assert.That(attributed.SyncRuleId, Is.EqualTo(9));
+            Assert.That(unattributed.Via, Is.Null, "the target with no value changes has nothing to agree on");
+        }
+    }
+
+    [Test]
+    public void Build_DeprovisionRowWhoseValuesDisagree_StaysUnattributed()
+    {
+        var item = CausalityTestData.LeaverItem();
+        var deprovision = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
+                                                        && o.ConnectedSystemObjectChange != null);
+        var change = deprovision.ConnectedSystemObjectChange!;
+        change.AttributeChanges.First().ValueChanges.First().SyncRuleId = 9;
+        change.AttributeChanges.First().ValueChanges.First().SyncRuleName = "Glitterband People - Outbound";
+        var second = new ConnectedSystemObjectChangeAttribute
+        {
+            Id = Guid.NewGuid(),
+            AttributeName = "memberOf",
+            AttributeType = AttributeDataType.Text,
+            Attribute = new ConnectedSystemObjectTypeAttribute { Name = "memberOf", AttributePlurality = AttributePlurality.MultiValued }
+        };
+        second.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue
+        {
+            ValueChangeType = ValueChangeType.Remove,
+            StringValue = "cn=leavers",
+            SyncRuleId = 12,
+            SyncRuleName = "Glitterband Groups - Outbound"
+        });
+        change.AttributeChanges.Add(second);
+
+        var table = CausalityTableModelBuilder.Build(CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext()));
+
+        var rows = table.Rows.Where(r => r.ChangeKind == CausalityTableChangeKind.Deprovision).ToList();
+        Assert.That(rows.Select(r => r.SyncRuleId), Has.All.Null);
     }
 
     [Test]
