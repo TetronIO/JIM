@@ -222,7 +222,7 @@ public static class CausalityTableModelBuilder
     /// </summary>
     private static IEnumerable<CausalityTableRow> BuildAttributeRows(CausalityEvent causalityEvent, string objectKey)
     {
-        var (via, syncRuleId) = ResolveVia(causalityEvent);
+        var (eventVia, eventSyncRuleId) = ResolveVia(causalityEvent);
 
         foreach (var attributeRow in causalityEvent.AttributeRows)
         {
@@ -230,6 +230,13 @@ public static class CausalityTableModelBuilder
                 ? attributeRow.Value
                 : attributeRow.PreviousValue;
             var wouldBe = attributeRow.Operation == CausalityAttributeOperation.Remove ? null : attributeRow.Value;
+
+            // A value change that recorded its own contributing rule is the truth for that row (one export
+            // or flow can carry values from several rules); only a value with no recorded rule falls back
+            // to the event's own or inherited rule.
+            var (via, syncRuleId) = string.IsNullOrWhiteSpace(attributeRow.SyncRuleName)
+                ? (eventVia, eventSyncRuleId)
+                : (attributeRow.SyncRuleName, attributeRow.SyncRuleId);
 
             yield return new CausalityTableRow(objectKey, CausalityTableChangeKind.AttributeChange,
                 attributeRow.Name, current, wouldBe, via, syncRuleId, causalityEvent.PlainLabel,

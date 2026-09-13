@@ -532,6 +532,35 @@ public class CausalityTableModelBuilderTests
     /// (the engine attributes the decision to the parent), so its object-level row AND its attribute
     /// rows fall back to the parent's effective rule (#1519 Table view fix 4).
     /// </summary>
+    /// <summary>
+    /// A value change that recorded its own contributing rule names that rule, ahead of anything inherited
+    /// from the event: one export can carry values from several rules, and the recorded attribution is
+    /// the truth for each row.
+    /// </summary>
+    [Test]
+    public void Build_AttributeRowWithItsOwnRecordedRule_NamesThatRuleAheadOfTheInheritedOne()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var exportOutcome = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var firstValue = exportOutcome.ConnectedSystemObjectChange!.AttributeChanges.First().ValueChanges.First();
+        firstValue.SyncRuleId = 42;
+        firstValue.SyncRuleName = "Glitterband Managers - Outbound";
+        var attributeName = exportOutcome.ConnectedSystemObjectChange.AttributeChanges.First().AttributeName;
+
+        var table = CausalityTableModelBuilder.Build(CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext()));
+
+        var attributeRows = table.Rows.Where(r => r.ChangeKind == CausalityTableChangeKind.AttributeChange).ToList();
+        var attributed = attributeRows.Single(r => r.Attribute == attributeName);
+        var others = attributeRows.Where(r => r.Attribute != attributeName).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attributed.Via, Is.EqualTo("Glitterband Managers - Outbound"));
+            Assert.That(attributed.SyncRuleId, Is.EqualTo(42));
+            Assert.That(others, Is.Not.Empty);
+            Assert.That(others.Select(r => r.SyncRuleId), Has.All.EqualTo(9), "rows with no recorded rule still inherit the Provision decision's");
+        }
+    }
+
     [Test]
     public void Build_QueuedExportChildAndItsAttributeRows_InheritTheProvisionedParentsSyncRule()
     {
