@@ -40,4 +40,66 @@ public class PendingExportAttributeValueChangeDtoTests
 
         Assert.That(dto.ByteValue, Is.EqualTo(byteValue));
     }
+
+    /// <summary>
+    /// Attribute value change provenance (#1519): the export Synchronisation Rule that produced this
+    /// value must survive the entity-to-DTO mapping so REST clients can see who contributed it.
+    /// </summary>
+    [Test]
+    public void FromEntity_WithSyncRuleAttribution_MapsSyncRuleIdAndName()
+    {
+        var entity = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute
+            {
+                Id = 11,
+                Name = "mail",
+                Type = AttributeDataType.Text
+            },
+            AttributeId = 11,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = "jsmith@example.com",
+            SyncRuleId = 42,
+            SyncRuleName = "HR to AD - Users"
+        };
+
+        var dto = PendingExportAttributeValueChangeDto.FromEntity(entity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.SyncRuleId, Is.EqualTo(42));
+            Assert.That(dto.SyncRuleName, Is.EqualTo("HR to AD - Users"));
+        }
+    }
+
+    /// <summary>
+    /// A value with no contributing rule (or a since-deleted rule) must map to null on both fields,
+    /// not throw or default to zero.
+    /// </summary>
+    [Test]
+    public void FromEntity_WithNoSyncRuleAttribution_MapsNullSyncRuleFields()
+    {
+        var entity = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            Attribute = new ConnectedSystemObjectTypeAttribute
+            {
+                Id = 12,
+                Name = "sAMAccountName",
+                Type = AttributeDataType.Text
+            },
+            AttributeId = 12,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = "jsmith"
+        };
+
+        var dto = PendingExportAttributeValueChangeDto.FromEntity(entity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.SyncRuleId, Is.Null);
+            Assert.That(dto.SyncRuleName, Is.Null);
+        }
+    }
 }

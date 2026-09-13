@@ -77,6 +77,18 @@ public class CsoValueChangeDto
     public CsoChangeReferenceDto? ReferenceValue { get; set; }
 
     /// <summary>
+    /// The export Synchronisation Rule whose mapping produced this value. Null when the value was not
+    /// produced by an export mapping (e.g. import-side changes carry no rule attribution), or the
+    /// contributing rule has since been deleted.
+    /// </summary>
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// Snapshot of the contributing Synchronisation Rule's name, surviving deletion of the rule.
+    /// </summary>
+    public string? SyncRuleName { get; set; }
+
+    /// <summary>
     /// Returns the human-readable representation of the value, mirroring the behaviour of
     /// <c>ConnectedSystemObjectChangeAttributeValue.ToStringNoName()</c> so the UI does not
     /// need access to the original entity.

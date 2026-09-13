@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Linq;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Logic;
 using NUnit.Framework;
 
 namespace JIM.Models.Tests.Core;
@@ -113,6 +114,71 @@ public class MetaverseObjectChangeTests
         finally
         {
             CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    /// <summary>
+    /// Contributor provenance (#1519): AddAttributeValueChange must copy the contributing Synchronisation
+    /// Rule's id and name onto the recorded change, so change history is self-describing about which rule
+    /// contributed the value even after the live value's own provenance has moved on.
+    /// </summary>
+    [Test]
+    public void AddAttributeValueChange_ValueHasContributingSyncRuleLoaded_CopiesIdAndName()
+    {
+        var change = new MetaverseObjectChange();
+        var value = CreateDecimalValue(42m);
+        value.ContributedBySyncRuleId = 7;
+        value.ContributedBySyncRule = new SyncRule { Id = 7, Name = "HR to AD - Users" };
+
+        change.AddAttributeValueChange(value, ValueChangeType.Add);
+
+        var recorded = change.AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recorded.ContributedBySyncRuleId, Is.EqualTo(7));
+            Assert.That(recorded.ContributedBySyncRuleName, Is.EqualTo("HR to AD - Users"));
+        }
+    }
+
+    /// <summary>
+    /// When only the FK is set (the navigation not loaded, the normal shape for a projection or a
+    /// no-tracking read), the id must still be copied, and the method must not trigger a lazy load of the
+    /// navigation to get the name; the name is simply unavailable at this call and stays null.
+    /// </summary>
+    [Test]
+    public void AddAttributeValueChange_ValueHasContributingSyncRuleIdOnly_CopiesIdAndLeavesNameNull()
+    {
+        var change = new MetaverseObjectChange();
+        var value = CreateDecimalValue(42m);
+        value.ContributedBySyncRuleId = 7;
+
+        change.AddAttributeValueChange(value, ValueChangeType.Add);
+
+        var recorded = change.AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recorded.ContributedBySyncRuleId, Is.EqualTo(7));
+            Assert.That(recorded.ContributedBySyncRuleName, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// A value with no contributor at all (managed internally, not via a Synchronisation Rule) must record
+    /// null for both fields rather than defaulting to zero or throwing.
+    /// </summary>
+    [Test]
+    public void AddAttributeValueChange_ValueHasNoContributor_RecordsNullSyncRuleFields()
+    {
+        var change = new MetaverseObjectChange();
+        var value = CreateDecimalValue(42m);
+
+        change.AddAttributeValueChange(value, ValueChangeType.Add);
+
+        var recorded = change.AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recorded.ContributedBySyncRuleId, Is.Null);
+            Assert.That(recorded.ContributedBySyncRuleName, Is.Null);
         }
     }
 }

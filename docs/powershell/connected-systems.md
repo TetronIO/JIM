@@ -1260,7 +1260,7 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -A
 
 ### Output
 
-Returns one `PSCustomObject` per change record, including the initiator, Run Profile context, and per-attribute value changes.
+Returns one `PSCustomObject` per change record, including the initiator, Run Profile context, and per-attribute value changes. Each value change produced by an export carries `SyncRuleId` and `SyncRuleName`, naming the export Synchronisation Rule whose mapping produced that value; both are `$null` for import-side changes, or when the contributing rule has since been deleted.
 
 ### Examples
 
@@ -1515,7 +1515,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All 
 ### Output
 
 - **List / ListAll**: Pending Export operations with export type (Add, Update, Delete) and summary of changes.
-- **ById**: Detailed view of a single Pending Export, including all attribute changes. `UnresolvedReferences` lists each reference change not yet written (`AttributeName`, `ReferencedMetaverseObjectId`, `ReferencedMetaverseObjectDisplayName`) with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object exists in this Connected System but has no anchor yet) or `NotInTargetSystem` (the referenced object has no Connected System Object in this Connected System). See [Unresolved reference handling on export](../configuration/connected-systems.md#on-export).
+- **ById**: Detailed view of a single Pending Export, including all attribute changes. Each attribute change carries `SyncRuleId` and `SyncRuleName`, naming the export Synchronisation Rule whose mapping produced it; both are `$null` if the contributing rule has since been deleted. `UnresolvedReferences` lists each reference change not yet written (`AttributeName`, `ReferencedMetaverseObjectId`, `ReferencedMetaverseObjectDisplayName`) with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object exists in this Connected System but has no anchor yet) or `NotInTargetSystem` (the referenced object has no Connected System Object in this Connected System). See [Unresolved reference handling on export](../configuration/connected-systems.md#on-export).
 - **AttributeChanges / AttributeChangesAll**: Paged or complete list of changes for a specific multi-valued attribute.
 
 ### Examples

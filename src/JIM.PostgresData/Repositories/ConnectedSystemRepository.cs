@@ -5909,7 +5909,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                                 .Select(av => av.StringValue)
                                                 .FirstOrDefault()
                                             : null
-                                    }
+                                    },
+                                SyncRuleId = vc.SyncRuleId,
+                                SyncRuleName = vc.SyncRuleName
                             })
                             .ToList()
                     })

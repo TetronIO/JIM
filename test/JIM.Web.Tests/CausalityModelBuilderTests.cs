@@ -606,6 +606,91 @@ public class CausalityModelBuilderTests
         Assert.That(rows.All(r => r.TypeAndPlurality == "Text · Multi-valued"), Is.True);
     }
 
+    /// <summary>
+    /// Attribute value change provenance (#1519): a collapsed single-valued Set row carries the
+    /// contributing Synchronisation Rule of the new (Add) value, not the value being replaced.
+    /// </summary>
+    [Test]
+    public void Build_AttributeFlowWithMvoChanges_SetRowCarriesAddValuesContributingSyncRule()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            parent: null, ordinal: 0, detailCount: 1);
+
+        var mvoChange = new MetaverseObjectChange { Id = Guid.NewGuid() };
+        var attribute = new MetaverseObjectChangeAttribute
+        {
+            Id = Guid.NewGuid(),
+            AttributeName = "Job Title",
+            AttributeType = AttributeDataType.Text,
+            Attribute = new MetaverseAttribute { Name = "Job Title", AttributePlurality = AttributePlurality.SingleValued }
+        };
+        attribute.ValueChanges.Add(new MetaverseObjectChangeAttributeValue
+        {
+            ValueChangeType = ValueChangeType.Add,
+            StringValue = "Senior Analyst",
+            ContributedBySyncRuleId = 12,
+            ContributedBySyncRuleName = "HR to Metaverse - Job Titles"
+        });
+        attribute.ValueChanges.Add(new MetaverseObjectChangeAttributeValue
+        {
+            ValueChangeType = ValueChangeType.Remove,
+            StringValue = "Analyst",
+            ContributedBySyncRuleId = 999,
+            ContributedBySyncRuleName = "A rule that no longer wins priority"
+        });
+        mvoChange.AttributeChanges.Add(attribute);
+        item.MetaverseObjectChange = mvoChange;
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var row = model.Roots[0].AttributeRows.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.SyncRuleId, Is.EqualTo(12));
+            Assert.That(row.SyncRuleName, Is.EqualTo("HR to Metaverse - Job Titles"));
+        }
+    }
+
+    /// <summary>
+    /// Export-side attribute value change provenance (#1519): each Connected System Object change row
+    /// carries the export Synchronisation Rule whose mapping produced that specific value.
+    /// </summary>
+    [Test]
+    public void Build_ExportedEventWithCsoChanges_RowCarriesContributingSyncRule()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0, detailCount: 1);
+
+        var csoChange = new ConnectedSystemObjectChange { Id = Guid.NewGuid() };
+        var attribute = new ConnectedSystemObjectChangeAttribute
+        {
+            Id = Guid.NewGuid(),
+            AttributeName = "departmentNumber",
+            AttributeType = AttributeDataType.Text,
+            Attribute = new ConnectedSystemObjectTypeAttribute { Name = "departmentNumber", AttributePlurality = AttributePlurality.SingleValued }
+        };
+        attribute.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue
+        {
+            ValueChangeType = ValueChangeType.Add,
+            StringValue = "Retail Ops",
+            SyncRuleId = 34,
+            SyncRuleName = "Metaverse to AD - Users"
+        });
+        csoChange.AttributeChanges.Add(attribute);
+        item.ConnectedSystemObjectChange = csoChange;
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var row = model.Roots[0].AttributeRows.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.SyncRuleId, Is.EqualTo(34));
+            Assert.That(row.SyncRuleName, Is.EqualTo("Metaverse to AD - Users"));
+        }
+    }
+
     [Test]
     public void Build_ItemWithBothCsoAndMvoChanges_AttributesRowsToTheirOwningEvents()
     {

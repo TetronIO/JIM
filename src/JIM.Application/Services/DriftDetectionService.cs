@@ -750,7 +750,9 @@ public class DriftDetectionService
                             {
                                 Id = Guid.NewGuid(),
                                 AttributeId = drifted.Attribute.Id,
-                                ChangeType = PendingExportAttributeChangeType.Add
+                                ChangeType = PendingExportAttributeChangeType.Add,
+                                SyncRuleId = exportRule.Id,
+                                SyncRuleName = exportRule.Name
                             };
                             SetAttributeChangeValue(addChange, expectedValue, drifted.Attribute.Type);
                             attributeChanges.Add(addChange);
@@ -770,7 +772,9 @@ public class DriftDetectionService
                             {
                                 Id = Guid.NewGuid(),
                                 AttributeId = drifted.Attribute.Id,
-                                ChangeType = PendingExportAttributeChangeType.Remove
+                                ChangeType = PendingExportAttributeChangeType.Remove,
+                                SyncRuleId = exportRule.Id,
+                                SyncRuleName = exportRule.Name
                             };
                             SetAttributeChangeValue(removeChange, actualValue, drifted.Attribute.Type);
                             attributeChanges.Add(removeChange);
@@ -787,7 +791,9 @@ public class DriftDetectionService
                     {
                         Id = Guid.NewGuid(),
                         AttributeId = drifted.Attribute.Id,
-                        ChangeType = PendingExportAttributeChangeType.Update
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        SyncRuleId = exportRule.Id,
+                        SyncRuleName = exportRule.Name
                     };
 
                     // Set the expected value on the change
@@ -900,7 +906,9 @@ public class DriftDetectionService
 
                 // Add rather than Update: class membership is multi-valued, and restating the classes the
                 // object already carries is a change the Connected System has no reason to accept.
-                ChangeType = PendingExportAttributeChangeType.Add
+                ChangeType = PendingExportAttributeChangeType.Add,
+                SyncRuleId = exportRule.Id,
+                SyncRuleName = exportRule.Name
             });
 
             Log.Debug("AddClassMembershipCorrections: Corrective export for Object Type '{ObjectType}' will write {AttributeName}: {ClassName}",

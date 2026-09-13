@@ -544,6 +544,16 @@ public class JimDbContext : DbContext
             .HasForeignKey(moav => moav.ContributedBySyncRuleId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // Change-history mirror of the provenance FK above (#1519): the attribute value change history row
+        // is self-describing about which rule contributed the value, independent of the live attribute
+        // value's current provenance. SetNull on rule deletion so the denormalised ContributedBySyncRuleName
+        // record survives; ContributedBySyncRuleId then reads null.
+        modelBuilder.Entity<MetaverseObjectChangeAttributeValue>()
+            .HasOne(mocav => mocav.ContributedBySyncRule)
+            .WithMany()
+            .HasForeignKey(mocav => mocav.ContributedBySyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // Asserted-null marker (#91): false by default. The store-level default backfills existing rows so they
         // remain ordinary value rows, never asserted nulls.
         modelBuilder.Entity<MetaverseObjectAttributeValue>()

@@ -740,7 +740,9 @@ public class ExportEvaluationServer
                         Attribute = decision.SecondaryExternalIdAttribute,
                         AttributeId = decision.SecondaryExternalIdAttribute.Id,
                         StringValue = decision.SecondaryExternalIdValue,
-                        ChangeType = PendingExportAttributeChangeType.Update
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        SyncRuleId = decision.WinningRule?.Id,
+                        SyncRuleName = decision.WinningRule?.Name
                     });
 
                     Log.Debug("EvaluateMvoDeletionsAsync: Will store secondary external ID '{Value}' (attr {AttrName}) on delete PE for CSO {CsoId}",
@@ -1430,7 +1432,12 @@ public class ExportEvaluationServer
 
                 // Add rather than Update: class membership is multi-valued, and an update that restated the classes
                 // an object already carries is a change the Connected System has no reason to accept.
-                ChangeType = PendingExportAttributeChangeType.Add
+                ChangeType = PendingExportAttributeChangeType.Add,
+
+                // Class membership is JIM-computed rather than sourced from an explicit mapping, but it is
+                // this export rule's evaluation that decided to write it, so attribute it the same way.
+                SyncRuleId = exportRule.Id,
+                SyncRuleName = exportRule.Name
             });
         }
 
@@ -2284,7 +2291,9 @@ public class ExportEvaluationServer
                         BoolValue = avc.BoolValue,
                         UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
                         ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId,
-                        ChangeType = avc.ChangeType
+                        ChangeType = avc.ChangeType,
+                        SyncRuleId = avc.SyncRuleId,
+                        SyncRuleName = avc.SyncRuleName
                     })
                     .ToList();
 

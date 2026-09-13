@@ -1389,6 +1389,8 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

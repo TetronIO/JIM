@@ -442,7 +442,9 @@ public partial class SyncEngine
                             Id = Guid.NewGuid(),
                             Attribute = mapping.TargetConnectedSystemAttribute,
                             AttributeId = mapping.TargetConnectedSystemAttribute.Id,
-                            ChangeType = PendingExportAttributeChangeType.Update
+                            ChangeType = PendingExportAttributeChangeType.Update,
+                            SyncRuleId = exportRule.Id,
+                            SyncRuleName = exportRule.Name
                         };
 
                         // Set the value based on the result type
@@ -643,7 +645,9 @@ public partial class SyncEngine
                         Id = Guid.NewGuid(),
                         Attribute = mapping.TargetConnectedSystemAttribute,
                         AttributeId = mapping.TargetConnectedSystemAttribute.Id,
-                        ChangeType = attrChangeType
+                        ChangeType = attrChangeType,
+                        SyncRuleId = exportRule.Id,
+                        SyncRuleName = exportRule.Name
                     };
 
                     // Set the appropriate value based on data type.
