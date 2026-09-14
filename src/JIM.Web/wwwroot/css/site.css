@@ -4027,19 +4027,16 @@ html[lang] .jim-scope-text .mud-input-slot {
     margin-top: 0.25rem;
 }
 
-/* Connectors list: auto table layout sizes a column to its widest content before .jim-one-line ever gets a
-   chance to clip it, so the SCIM Connector's long, unbroken Description grows its column past the grid's own
-   width and the whole table gains a horizontal scrollbar instead of the cell's ellipsis firing. Fixed layout
-   gives every column a bounded box up front instead: the three narrow columns keep their explicit
-   HeaderStyle width (the pattern already used in Logs.razor and OperationsQueueTab.razor) and Description
-   takes what is left. Scoped to this one grid rather than added to .jim-virtualised-list generally: several
-   other grids (the Activity list's Target column among them) rely on auto layout handing them more room than
-   their content needs and have no width hint or .jim-one-line of their own, so applying this portal-wide
-   turns their cells' overflow into a wrap instead, which breaks the virtualiser's fixed row height. Fixing
-   those is a separate, larger sweep (audit every virtualised grid's columns for a width hint or
-   OneLineText), not a side effect of this one page's fix. */
-#connector-list .mud-table-root {
-    table-layout: fixed;
+/* A fill column: the one column of an auto-layout table that takes every pixel the others do not need, and
+   clips its content (with .jim-one-line) rather than growing. Auto layout sizes a column to its widest
+   content, so a long, unbroken value (the SCIM Connector's Description) would otherwise push the table past
+   its own width and gain a horizontal scrollbar. width: 100% claims the remaining space; max-width: 0 stops
+   the cell's content counting towards the column's minimum, so the other columns (kept to one line with
+   .jim-nowrap) size to their content and this one absorbs the rest. Fixed layout is not the answer: it splits
+   the spare width evenly, so a short Name column is handed as much room as the Description beside it. */
+.mud-table-root .mud-table-cell.jim-fill-column {
+    width: 100%;
+    max-width: 0;
 }
 
 /* ---------------------------------------------------------------------------
