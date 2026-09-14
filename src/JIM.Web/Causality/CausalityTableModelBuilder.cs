@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Causality;
 
@@ -27,8 +28,8 @@ public static class CausalityTableModelBuilder
 
         var objectMeta = new Dictionary<string, ObjectMeta>
         {
-            [SourceKey] = new(CausalityTableObjectRole.Source, SourceDisplayName(model), SourceSubtitle(model)),
-            [IdentityKey] = new(CausalityTableObjectRole.Identity, IdentityDisplayName(model), model.Context.MvoTypeName)
+            [SourceKey] = new(CausalityTableObjectRole.Source, SourceDisplayName(model), SourceSubtitle(model), SourceHref(model)),
+            [IdentityKey] = new(CausalityTableObjectRole.Identity, IdentityDisplayName(model), model.Context.MvoTypeName, IdentityHref(model))
         };
         var downstreamOrder = new List<string>();
         var rows = new List<CausalityTableRow>();
@@ -144,79 +145,80 @@ public static class CausalityTableModelBuilder
 
         return outcomeType switch
         {
+            // Before/After are for attribute values only (#1519 Table view fix 7): every one of these
+            // is an object-level fact, and Row() below leaves Current and WouldBe null for all of them.
+            // The Outcome column's label already says what happened ("Identity created", "Left scope",
+            // "Deprovisioned", ...); only MvoDeletionScheduled loses information by going silent on
+            // Current/WouldBe, since its schedule/grace reasoning lived nowhere else, so that one case
+            // alone carries it forward as an OutcomeDetail line instead.
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Scope, null,
-                "In scope", "Out of scope", ownVia, ownSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.Scope, null, ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Projection, null,
-                null, "New Identity", ownVia, ownSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.Projection, null, ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Join, null,
-                null, "Joined to existing Identity", ownVia, ownSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.Join, null, ownVia, ownSyncRuleId),
 
             // A rejoin cancels the object's scheduled deletion: it is a Join, not a Projection, since
             // the Identity already existed.
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Join, null,
-                "Deletion scheduled", "Rejoined; deletion cancelled", ownVia, ownSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.Join, null, ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Disconnect, null,
-                "Joined", "Disconnected", ownVia, ownSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.Disconnect, null, ownVia, ownSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Delete, null,
-                "Active", "Deleted", ownVia, ownSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.Delete, null, ownVia, ownSyncRuleId),
 
-            // The schedule/grace reasoning lives in the would-be cell rather than Via, so it is not
-            // stated twice: unlike ownVia above, this never falls back to DetailMessage, which for this
-            // outcome type IS that same schedule/grace text. Via here is the Synchronisation Rule
-            // attribution alone (ordinarily none, since a Deletion Rule decision is not a
-            // Synchronisation Rule's), and deliberately the event's own rule, not the effective one.
+            // Via here is the Synchronisation Rule attribution alone (ordinarily none, since a Deletion
+            // Rule decision is not a Synchronisation Rule's), and deliberately the event's own rule, not
+            // the effective one. The schedule/grace reasoning is the one piece of information Current/
+            // WouldBe used to carry that the Outcome label ("Identity deletion scheduled") does not
+            // already state, so it survives as an OutcomeDetail line instead of going silent.
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Delete, null, "Active",
-                !string.IsNullOrWhiteSpace(causalityEvent.DetailMessage)
-                    ? $"Scheduled: {causalityEvent.DetailMessage}"
-                    : "Scheduled for deletion",
+                causalityEvent, objectKey, CausalityTableChangeKind.Delete, null,
                 string.IsNullOrWhiteSpace(causalityEvent.SyncRuleName) ? null : causalityEvent.SyncRuleName,
-                causalityEvent.SyncRuleId),
+                causalityEvent.SyncRuleId,
+                !string.IsNullOrWhiteSpace(causalityEvent.DetailMessage)
+                    ? causalityEvent.DetailMessage
+                    : "Scheduled for deletion"),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Deprovision, null,
-                "Provisioned", "Deprovision queued", effectiveVia, effectiveSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.Deprovision, null, effectiveVia, effectiveSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Deprovision, null,
-                "Provisioned", "Deprovisioned", effectiveVia, effectiveSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.Deprovision, null, effectiveVia, effectiveSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.Provision, null,
-                null, "Account provisioned", effectiveVia, effectiveSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.Provision, null, effectiveVia, effectiveSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.ExportQueued, null,
-                null, "Export queued", effectiveVia, effectiveSyncRuleId),
+                causalityEvent, objectKey, CausalityTableChangeKind.ExportQueued, null, effectiveVia, effectiveSyncRuleId),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.NoContributor, AttributeSubject(causalityEvent),
-                "Has a value", "Cleared (no contributor)", null, null),
+                causalityEvent, objectKey, CausalityTableChangeKind.NoContributor, AttributeSubject(causalityEvent), null, null),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved => Row(
-                causalityEvent, objectKey, CausalityTableChangeKind.ValuesPreserved, AttributeSubject(causalityEvent),
-                "Value", "Preserved (no import source)", null, null),
+                causalityEvent, objectKey, CausalityTableChangeKind.ValuesPreserved, AttributeSubject(causalityEvent), null, null),
 
             _ => null
         };
     }
 
+    /// <summary>
+    /// Builds an object-level row: Current and WouldBe are always null, since those columns state
+    /// attribute values and every row built here states an object-level fact instead (#1519 Table view
+    /// fix 7). <paramref name="outcomeDetail"/> is the one exception that needs to say more than its
+    /// <see cref="CausalityEvent.PlainLabel"/>/<see cref="CausalityEvent.TechnicalLabel"/> already do
+    /// (MvoDeletionScheduled's grace reasoning); every other case leaves it null.
+    /// </summary>
     private static CausalityTableRow Row(
         CausalityEvent causalityEvent, string objectKey, CausalityTableChangeKind kind, string? attribute,
-        string? current, string? wouldBe, string? via, int? syncRuleId)
+        string? via, int? syncRuleId, string? outcomeDetail = null)
     {
-        return new CausalityTableRow(objectKey, kind, attribute, current, wouldBe, via, syncRuleId,
-            causalityEvent.PlainLabel, causalityEvent.TechnicalLabel, causalityEvent.Tone);
+        return new CausalityTableRow(objectKey, kind, attribute, null, null, via, syncRuleId,
+            causalityEvent.PlainLabel, causalityEvent.TechnicalLabel, causalityEvent.Tone, outcomeDetail);
     }
 
     /// <summary>
@@ -314,6 +316,32 @@ public static class CausalityTableModelBuilder
             .ToList();
         return parts.Count > 0 ? string.Join(" · ", parts) : null;
     }
+
+    /// <summary>
+    /// The object being synchronised's own Connected System Object page (#1519 Table view fix 6): built
+    /// from the page context's record id and the Connected System it lives on (never the run's own
+    /// system; see <see cref="CausalityPageContext.CsoConnectedSystemId"/>'s remarks on the two not being
+    /// interchangeable). Null when either half is unresolved, e.g. a record that has since been deleted.
+    /// </summary>
+    private static string? SourceHref(CausalityModel model) =>
+        model.Context.CsoId is { } csoId && csoId != Guid.Empty && model.Context.CsoConnectedSystemId is { } systemId
+            ? JimUtilities.GetConnectedSystemObjectHref(systemId, csoId)
+            : null;
+
+    /// <summary>
+    /// The Identity's own Metaverse Object page (#1519 Table view fix 6): the href carried by the first
+    /// Identity-kind link with one among the model's Identity-lane events, the same link
+    /// <see cref="IdentityDisplayName"/> reads its name from. Null where no event yet names a linkable
+    /// Identity (a speculative preview whose join has no Identity of its own to point at yet) or where the
+    /// Identity has since been deleted (its link then points at the deletion record instead, carrying no
+    /// href of its own kind).
+    /// </summary>
+    private static string? IdentityHref(CausalityModel model) =>
+        model.AllEvents()
+            .Where(e => e.Lane == CausalityLane.Identity)
+            .SelectMany(e => e.Links)
+            .FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity && l.Href != null)
+            ?.Href;
 
     /// <summary>
     /// The Identity's display name: the name an Identity-lane event's own link names it by, where one

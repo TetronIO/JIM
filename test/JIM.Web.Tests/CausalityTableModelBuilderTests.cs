@@ -50,7 +50,9 @@ public class CausalityTableModelBuilderTests
         {
             var identityRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Projection);
             Assert.That(identityRow.ObjectKey, Is.EqualTo("identity"));
-            Assert.That(identityRow.WouldBe, Is.EqualTo("New Identity"));
+            // Before/After are for attribute values only (#1519 Table view fix 7); the Outcome column's
+            // "Identity created" label already says what happened.
+            Assert.That(identityRow.WouldBe, Is.Null);
 
             var provisionRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Provision);
             Assert.That(provisionRow.ObjectKey, Does.StartWith("ds:"));
@@ -82,7 +84,9 @@ public class CausalityTableModelBuilderTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(joinRow.ChangeKind, Is.EqualTo(CausalityTableChangeKind.Join));
-            Assert.That(joinRow.WouldBe, Is.EqualTo("Joined to existing Identity"));
+            // Before/After are for attribute values only (#1519 Table view fix 7); the Outcome column's
+            // "Joined to Identity" label already says what happened.
+            Assert.That(joinRow.WouldBe, Is.Null);
         }
     }
 
@@ -100,6 +104,48 @@ public class CausalityTableModelBuilderTests
         var joinRow = table.Rows.Single();
         Assert.That(joinRow.ChangeKind, Is.EqualTo(CausalityTableChangeKind.Join),
             "a rejoin that cancels a scheduled deletion is a Join, since the Identity already existed");
+    }
+
+    /// <summary>
+    /// Before/After are for attribute values only (#1519 Table view fix 7); a scheduled deletion's grace
+    /// reasoning is the one thing lost by going silent on them, so it survives as an OutcomeDetail line
+    /// instead, under the Outcome column's "Identity deletion scheduled" label.
+    /// </summary>
+    [Test]
+    public void Build_MvoDeletionScheduledOutcome_LeavesBeforeAfterNullAndCarriesTheGraceReasoningAsOutcomeDetail()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        const string graceReasoning = "Deletion Rule: last connector disconnected. Grace period: 7 days. Eligible for deletion: 10 Aug 2026 08:00:57 UTC";
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen",
+            detailMessage: graceReasoning);
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var row = table.Rows.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.ChangeKind, Is.EqualTo(CausalityTableChangeKind.Delete));
+            Assert.That(row.Current, Is.Null);
+            Assert.That(row.WouldBe, Is.Null);
+            Assert.That(row.OutcomeDetail, Is.EqualTo(graceReasoning));
+        }
+    }
+
+    /// <summary>
+    /// Every other non-attribute row (nothing left to say beyond its Outcome label) carries no
+    /// OutcomeDetail at all.
+    /// </summary>
+    [Test]
+    public void Build_ObjectLevelRowsOtherThanMvoDeletionScheduled_CarryNoOutcomeDetail()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var objectLevelRows = table.Rows.Where(r => r.ChangeKind != CausalityTableChangeKind.AttributeChange).ToList();
+        Assert.That(objectLevelRows, Has.All.Matches<CausalityTableRow>(r => r.OutcomeDetail == null));
     }
 
     [Test]
@@ -147,7 +193,9 @@ public class CausalityTableModelBuilderTests
 
             var deleteRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Delete);
             Assert.That(deleteRow.ObjectKey, Is.EqualTo("identity"));
-            Assert.That(deleteRow.WouldBe, Is.EqualTo("Deleted"));
+            // Before/After are for attribute values only (#1519 Table view fix 7); the Outcome column's
+            // "Identity deleted" label already says what happened.
+            Assert.That(deleteRow.WouldBe, Is.Null);
             Assert.That(deleteRow.Via, Is.EqualTo("Deleted immediately: last authoritative source disconnected"));
             Assert.That(deleteRow.SyncRuleId, Is.Null, "reasoning text names no Synchronisation Rule to link");
         }
@@ -343,7 +391,9 @@ public class CausalityTableModelBuilderTests
         {
             var scopeRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Scope);
             Assert.That(scopeRow.ObjectKey, Is.EqualTo("identity"));
-            Assert.That(scopeRow.WouldBe, Is.EqualTo("Out of scope"));
+            // Before/After are for attribute values only (#1519 Table view fix 7); the Outcome column's
+            // "Left scope" label already says what happened.
+            Assert.That(scopeRow.WouldBe, Is.Null);
 
             var deleteRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Delete);
             Assert.That(deleteRow.ObjectKey, Is.EqualTo("identity"));
@@ -507,6 +557,68 @@ public class CausalityTableModelBuilderTests
 
         var everything = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Everything);
         Assert.That(everything.Href, Is.Null);
+    }
+
+    // ─── Source and Identity links (#1519 Table view fix 6) ───
+
+    /// <summary>
+    /// The object being synchronised links to its own Connected System Object page, built from the page
+    /// context's record id and the Connected System it lives on.
+    /// </summary>
+    [Test]
+    public void Build_SourceObject_LinksToItsConnectedSystemObjectPage()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var source = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Source);
+        Assert.That(source.Href, Is.EqualTo(JimUtilities.GetConnectedSystemObjectHref(1, CausalityTestData.CsoId)));
+    }
+
+    /// <summary>
+    /// A deleted record (or any context that never resolved the record's own system) renders plain,
+    /// rather than a link to a page that would 404.
+    /// </summary>
+    [Test]
+    public void Build_SourceObject_HasNoHrefWhenTheRecordIsUnresolved()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.EmptyContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var source = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Source);
+        Assert.That(source.Href, Is.Null);
+    }
+
+    /// <summary>
+    /// The Identity links to its own Metaverse Object page, taken from the first Identity-kind link with
+    /// an href among the model's Identity-lane events (the Projected outcome's own link here).
+    /// </summary>
+    [Test]
+    public void Build_IdentityObject_LinksToItsMetaverseObjectPageFromTheFirstIdentityLinkWithAnHref()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var identity = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Identity);
+        Assert.That(identity.Href, Is.EqualTo(JimUtilities.GetMetaverseObjectHref(CausalityTestData.MvoId, "People")));
+    }
+
+    /// <summary>
+    /// A deleted Identity's link points at its deletion record rather than a live detail page, so it
+    /// carries no href of the Identity's own kind: the Table view must render it plain, not linked.
+    /// </summary>
+    [Test]
+    public void Build_IdentityObject_HasNoHrefWhenTheIdentityHasBeenDeleted()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var identity = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Identity);
+        Assert.That(identity.Href, Is.Null);
     }
 
     // ─── Synchronisation Rule column (#1519 Table view fix 3 & 4) ───

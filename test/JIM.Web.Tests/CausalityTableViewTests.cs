@@ -194,6 +194,160 @@ public class CausalityTableViewTests
         }
     }
 
+    // ─── Truncated names get a tooltip (#1519 Table view fix 5) ───
+
+    [Test]
+    public void Render_NavButtonName_CarriesTheFullDisplayNameAsATitle()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var everythingName = cut.FindAll(".tv-nav-name").First();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(everythingName.TextContent.Trim(), Is.EqualTo("Everything"));
+            Assert.That(everythingName.GetAttribute("title"), Is.EqualTo("Everything"));
+        }
+    }
+
+    [Test]
+    public void Render_EverythingObjectColumnCell_CarriesTheFullDisplayNameAsATitle()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var provisionRow = cut.FindAll("tbody tr").Single(r => r.QuerySelector(".tv-kind")!.TextContent.Trim() == "Provision");
+        var objectCell = provisionRow.Children[0];
+        var link = objectCell.QuerySelector("a")!;
+
+        Assert.That(link.GetAttribute("title"), Is.EqualTo($"person: {CausalityTestData.ProvisionedCsoId}"));
+    }
+
+    // ─── Resizable sidebar (#1519 Table view fix 6) ───
+
+    [Test]
+    public void Render_ResizeHandle_IsAFocusableVerticalSeparatorWithALabel()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var handle = cut.Find(".tv-resize-handle");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handle.GetAttribute("role"), Is.EqualTo("separator"));
+            Assert.That(handle.GetAttribute("aria-orientation"), Is.EqualTo("vertical"));
+            Assert.That(handle.GetAttribute("aria-label"), Is.Not.Null.And.Not.Empty);
+            Assert.That(handle.GetAttribute("tabindex"), Is.EqualTo("0"));
+        }
+    }
+
+    // ─── Every object column value links (#1519 Table view fix 7) ───
+
+    /// <summary>
+    /// Only Downstream objects were linked before this fix; the Source and Identity are as addressable
+    /// as any downstream object once the builder knows their href, and the Everything column must reflect
+    /// that. Built directly, rather than through the model builder, so the test proves the view's own
+    /// rendering rather than re-proving the builder tests already covering where each href comes from.
+    /// </summary>
+    [Test]
+    public void Render_SourceAndIdentityObjectColumnCells_RenderAnchorsWhenHrefsAreKnown()
+    {
+        var model = new CausalityTableModel
+        {
+            Objects =
+            [
+                new CausalityTableObject("everything", CausalityTableObjectRole.Everything, "Everything", null, CausalityTone.Secondary, 2),
+                new CausalityTableObject("source", CausalityTableObjectRole.Source, "Liam Allen", null, CausalityTone.Secondary, 1,
+                    "/admin/connected-systems/1/connector-space/22222222-2222-2222-2222-222222222222"),
+                new CausalityTableObject("identity", CausalityTableObjectRole.Identity, "Liam Allen", "Person", CausalityTone.Primary, 1,
+                    "/t/people/v/11111111-1111-1111-1111-111111111111")
+            ],
+            Rows =
+            [
+                new CausalityTableRow("source", CausalityTableChangeKind.AttributeChange, "mail", "old", "new", null, null, "l", "t", CausalityTone.Info),
+                new CausalityTableRow("identity", CausalityTableChangeKind.Join, null, null, null, null, null, "Joined to Identity", "CSO Joined", CausalityTone.Secondary)
+            ],
+            CurrentHeading = "Before",
+            NextHeading = "After"
+        };
+
+        var cut = Render(model);
+
+        var rows = cut.FindAll("tbody tr");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows[0].Children[0].QuerySelector("a"), Is.Not.Null, "the Source cell links when its href is known");
+            Assert.That(rows[1].Children[0].QuerySelector("a"), Is.Not.Null, "the Identity cell links when its href is known");
+        }
+    }
+
+    // ─── Before/After are for attribute values only (#1519 Table view fix 8) ───
+
+    [Test]
+    public void Render_ObjectLevelRow_LeavesCurrentAndWouldBeEmpty()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var provisionRow = cut.FindAll("tbody tr").Single(r => r.QuerySelector(".tv-kind")!.TextContent.Trim() == "Provision");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provisionRow.Children[3].TextContent.Trim(), Is.EqualTo("-"), "Before is for attribute values only");
+            Assert.That(provisionRow.Children[4].TextContent.Trim(), Is.EqualTo("-"), "After is for attribute values only");
+        }
+    }
+
+    [Test]
+    public void Render_MvoDeletionScheduledRow_ShowsTheGraceReasoningAsAMutedOutcomeDetailLine()
+    {
+        const string graceReasoning = "Deletion Rule: last connector disconnected. Grace period: 7 days.";
+        var model = new CausalityTableModel
+        {
+            Objects =
+            [
+                new CausalityTableObject("everything", CausalityTableObjectRole.Everything, "Everything", null, CausalityTone.Warning, 1),
+                new CausalityTableObject("identity", CausalityTableObjectRole.Identity, "Liam Allen", "Person", CausalityTone.Warning, 1)
+            ],
+            Rows =
+            [
+                new CausalityTableRow("identity", CausalityTableChangeKind.Delete, null, null, null, null, null,
+                    "Identity deletion scheduled", "MVO Deletion Scheduled", CausalityTone.Warning, graceReasoning)
+            ],
+            CurrentHeading = "Before",
+            NextHeading = "After"
+        };
+
+        var cut = Render(model);
+
+        var outcomeCell = cut.Find("tbody tr").Children.Last();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomeCell.TextContent, Does.Contain("Identity deletion scheduled"));
+            var detail = outcomeCell.QuerySelector(".tv-outcome-detail");
+            Assert.That(detail, Is.Not.Null);
+            Assert.That(detail!.TextContent.Trim(), Is.EqualTo(graceReasoning));
+        }
+    }
+
+    // ─── Deterministic order with a way back (#1519 Table view fix 9) ───
+
+    [Test]
+    public void Render_ClickingAHeaderThreeTimes_RestoresTheOriginalRowOrder()
+    {
+        var cut = Render(NewJoinerTableModel());
+        var originalOrder = cut.FindAll("tbody tr").Select(r => r.TextContent).ToList();
+
+        // Re-queried before each click: a click re-renders, and a handler id captured from the previous
+        // render tree is stale.
+        cut.FindAll(".tv-sort").Single(h => h.TextContent.Trim() == "Change").Click(); // ascending
+        cut.FindAll(".tv-sort").Single(h => h.TextContent.Trim() == "Change").Click(); // descending
+        var sortedOrder = cut.FindAll("tbody tr").Select(r => r.TextContent).ToList();
+        cut.FindAll(".tv-sort").Single(h => h.TextContent.Trim() == "Change").Click(); // off: back to the model's own causal order
+
+        var restoredOrder = cut.FindAll("tbody tr").Select(r => r.TextContent).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sortedOrder, Is.Not.EqualTo(originalOrder), "the column must actually have changed the order to prove anything");
+            Assert.That(restoredOrder, Is.EqualTo(originalOrder));
+        }
+    }
+
     [Test]
     public void Render_RemovedAttributeValue_StrikesThroughTheCurrentCellWithNoWouldBe()
     {

@@ -1,4 +1,6 @@
 @using JIM.Web.Causality
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -11,7 +13,7 @@
    colours its would-be text with the same tone the Timeline and Lineage already use for that event.
    Selecting Everything adds a leading Object column so a row's owner is never ambiguous. *@
 
-<div class="tv">
+<div class="tv" @ref="_panelRef">
     <nav class="tv-nav" aria-label="Objects touched">
         @RenderNavButton(EverythingObject)
         @if (SourceObject is { } source)
@@ -33,6 +35,13 @@
             }
         }
     </nav>
+
+    @* Drag-resizes the nav column; JS owns the live width (a per-pixel round trip through Blazor would
+       lag), holding it as the --tv-nav-width custom property on the panel div above. Nothing here is
+       persisted: a reload always returns to the 240px default the grid's var() fallback names. *@
+    <div class="tv-resize-handle" role="separator" aria-orientation="vertical"
+         aria-label="Resize the objects list" tabindex="0"
+         @ref="_resizeHandleRef" @onkeydown="OnResizeHandleKeyDownAsync"></div>
 
     <div class="tv-main">
         <div class="tv-title-row">
@@ -88,7 +97,13 @@
                                 <TextValueDisplay Value="@row.WouldBe" />
                             </td>
                             <td>@RenderSyncRuleCell(row)</td>
-                            <td>@(TechnicalNames ? row.TechnicalLabel : row.OutcomeLabel)</td>
+                            <td>
+                                @(TechnicalNames ? row.TechnicalLabel : row.OutcomeLabel)
+                                @if (!string.IsNullOrWhiteSpace(row.OutcomeDetail))
+                                {
+                                    <div class="tv-outcome-detail">@row.OutcomeDetail</div>
+                                }
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -122,11 +137,31 @@
     [Parameter]
     public bool TechnicalNames { get; set; }
 
+    /// <summary>
+    /// The nav column never shrinks below this width, whichever way it is resized (drag or arrow keys).
+    /// </summary>
+    private const int MinNavWidthPx = 180;
+
+    /// <summary>
+    /// The nav column never grows past this fraction of the panel's own width, so the grid it shares the
+    /// row with always keeps a usable share.
+    /// </summary>
+    private const double MaxNavWidthFraction = 0.5;
+
+    /// <summary>
+    /// How far Left/Right moves the handle per key press.
+    /// </summary>
+    private const int NavWidthNudgePx = 16;
+
     private string _selectedKey = string.Empty;
     private CausalityTableFilter _filter = CausalityTableFilter.All;
     private string _sortColumn = string.Empty;
     private bool _sortDescending;
     private CausalityTableModel? _builtFor;
+
+    private ElementReference _panelRef;
+    private ElementReference _resizeHandleRef;
+    private bool _resizerAttached;
 
     protected override void OnParametersSet()
     {
@@ -138,6 +173,56 @@
         _builtFor = Model;
         _selectedKey = EverythingObject.Key;
         _filter = CausalityTableFilter.All;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _resizerAttached = await InvokeInteropAsync<bool>(
+                "jimTableViewResizer.attach", _resizeHandleRef, _panelRef, MinNavWidthPx, MaxNavWidthFraction);
+        }
+    }
+
+    private async Task OnResizeHandleKeyDownAsync(KeyboardEventArgs e)
+    {
+        var delta = e.Key switch
+        {
+            "ArrowLeft" => -NavWidthNudgePx,
+            "ArrowRight" => NavWidthNudgePx,
+            _ => 0
+        };
+        if (delta == 0)
+            return;
+
+        await InvokeInteropAsync<object>("jimTableViewResizer.nudge", _panelRef, delta, MinNavWidthPx, MaxNavWidthFraction);
+    }
+
+    /// <summary>
+    /// Calls into JS, treating "interop not ready yet" and "circuit already gone" as a quiet no-op rather
+    /// than an error: both are reachable here, since this component talks to JavaScript from
+    /// <see cref="OnAfterRenderAsync"/>, from a keyboard handler, and from disposal.
+    /// </summary>
+    private async Task<TResult?> InvokeInteropAsync<TResult>(string identifier, params object?[] args)
+    {
+        try
+        {
+            return await JS.InvokeAsync<TResult>(identifier, args);
+        }
+        catch (JSDisconnectedException)
+        {
+            return default;
+        }
+        catch (InvalidOperationException)
+        {
+            return default;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_resizerAttached)
+            await InvokeInteropAsync<object>("jimTableViewResizer.detach", _resizeHandleRef);
     }
 
     private CausalityTableObject EverythingObject =>
@@ -198,7 +283,7 @@
                 @onclick="() => SelectObject(obj.Key)">
             <span class="tv-dot" style="--tone: @CausalityToneCss.CssVar(obj.Tone)" aria-hidden="true"></span>
             <span class="tv-nav-text">
-                <span class="tv-nav-name">@obj.DisplayName</span>
+                <span class="tv-nav-name" title="@obj.DisplayName">@obj.DisplayName</span>
                 @if (!string.IsNullOrWhiteSpace(obj.Subtitle) && obj.Role != CausalityTableObjectRole.Everything)
                 {
                     <span class="tv-nav-sub">@obj.Subtitle</span>
@@ -231,15 +316,28 @@
         _filter = filter;
     }
 
+    /// <summary>
+    /// Cycles a header through ascending -> descending -> off (the model's own causal order), so a
+    /// sorted grid always has a way back rather than being stuck re-sorted forever. Choosing a different
+    /// column always starts it ascending, matching the click a reader expects from a column they have
+    /// not sorted by yet.
+    /// </summary>
     private void ToggleSort(string column)
     {
-        if (_sortColumn == column)
+        if (_sortColumn != column)
         {
-            _sortDescending = !_sortDescending;
+            _sortColumn = column;
+            _sortDescending = false;
+            return;
+        }
+
+        if (!_sortDescending)
+        {
+            _sortDescending = true;
         }
         else
         {
-            _sortColumn = column;
+            _sortColumn = string.Empty;
             _sortDescending = false;
         }
     }
@@ -257,13 +355,14 @@
     private RenderFragment RenderObjectCell(string objectKey) => __builder =>
     {
         var obj = GetObjectForKey(objectKey);
+        var displayName = obj?.DisplayName ?? objectKey;
         if (obj?.Href is { } href)
         {
-            <a class="ln-link" href="@href">@obj.DisplayName</a>
+            <a class="ln-link" href="@href" title="@displayName">@displayName</a>
         }
         else
         {
-            @(obj?.DisplayName ?? objectKey)
+            <span title="@displayName">@displayName</span>
         }
     };
 
@@ -293,10 +392,12 @@
     /// <summary>
     /// Colours the would-be cell for a destructive (Error) or constructive (Success) outcome, matching
     /// the tone the Timeline and Lineage already show for the same event; every other tone keeps the
-    /// grid's default text colour so the page is not painted end to end.
+    /// grid's default text colour so the page is not painted end to end. Never applied to an empty cell:
+    /// every non-attribute row carries a tone but no WouldBe text of its own any more (#1519 Table view
+    /// fix 7), and colouring the empty-value placeholder would read as a stray coloured dash.
     /// </summary>
     private static string? GetWouldBeStyle(CausalityTableRow row) =>
-        row.Tone is CausalityTone.Error or CausalityTone.Success
+        row.Tone is CausalityTone.Error or CausalityTone.Success && !string.IsNullOrEmpty(row.WouldBe)
             ? $"color: {CausalityToneCss.TextCssVar(row.Tone)}"
             : null;
 

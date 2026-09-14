@@ -1091,12 +1091,46 @@
    list-and-detail rather than as two loose blocks. Inside the canvas's own 24px padding, like the other views. */
 .causality-panel .tv {
     display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
+    /* --tv-nav-width is set (and cleared, on double-click) by jimTableViewResizer directly on this
+       element; the 240px fallback is the only place the default width is stated. The handle's own
+       track is a fixed 6px, never resized itself. */
+    grid-template-columns: var(--tv-nav-width, 240px) 6px minmax(0, 1fr);
     align-items: stretch;
     border: 1px solid var(--cz-line-soft);
     border-radius: var(--jim-container-radius);
     overflow: hidden;
     min-height: 320px;
+}
+
+.causality-panel .tv-resize-handle {
+    grid-row: 1 / -1;
+    align-self: stretch;
+    position: relative;
+    cursor: col-resize;
+    background: none;
+    border: none;
+    padding: 0;
+    touch-action: none;
+}
+
+.causality-panel .tv-resize-handle::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: var(--cz-line-soft);
+    transform: translateX(-50%);
+}
+
+.causality-panel .tv-resize-handle:hover::before,
+.causality-panel .tv-resize-handle:focus-visible::before {
+    background: var(--cz-primary);
+}
+
+.causality-panel .tv-resize-handle:focus-visible {
+    outline: none;
 }
 
 .causality-panel .tv-nav {
@@ -1308,10 +1342,23 @@
     color: var(--cz-text-faint);
 }
 
+/* A scheduled deletion's grace reasoning, the one non-attribute row whose Outcome cell needs more than
+   its label (#1519 Table view fix 7): a muted line beneath it rather than restating it in Before/After. */
+.causality-panel .tv-outcome-detail {
+    margin-top: 2px;
+    font-size: 0.75rem;
+    color: var(--cz-text-dim);
+}
+
 @media (max-width: 820px) {
-    /* The Table view stacks its navigation above the grid, matching the Lineage's own breakpoint. */
+    /* The Table view stacks its navigation above the grid, matching the Lineage's own breakpoint. The
+       resize handle has nothing to do in a single-column stack, so it is hidden rather than laid out. */
     .causality-panel .tv {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    .causality-panel .tv-resize-handle {
+        display: none;
     }
 
     .causality-panel .tv-nav {

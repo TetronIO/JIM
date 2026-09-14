@@ -213,3 +213,85 @@ window.jimVirtualList = {
         delete window.jimVirtualList._observed[selector];
     }
 };
+
+// The causality Table view's drag-resizable nav column. The live width lives entirely in the DOM (a
+// --tv-nav-width custom property on the panel element the grid reads via var(--tv-nav-width, 240px)),
+// never round-tripped through Blazor: a per-pixel SignalR message while dragging would lag visibly.
+// Keyed by the handle element (not a selector) because bUnit and the component both already hold
+// ElementReferences, and a selector would have to be unique per panel on a page that could show more
+// than one causality panel.
+window.jimTableViewResizer = {
+    _attached: new Map(),
+    // Clamps a candidate width between minPx and maxFraction of the panel's own current width.
+    _clamp: function (panel, width, minPx, maxFraction) {
+        var max = Math.max(minPx, Math.round(panel.getBoundingClientRect().width * maxFraction));
+        return Math.min(Math.max(Math.round(width), minPx), max);
+    },
+    _currentWidth: function (panel, minPx) {
+        var nav = panel.querySelector('.tv-nav');
+        return nav ? nav.getBoundingClientRect().width : minPx;
+    },
+    // Wires pointer-drag resizing and a double-click reset onto handle. setPointerCapture means every
+    // subsequent pointer event targets handle directly until release, wherever the pointer physically
+    // travels, so one set of listeners on the handle itself is enough; no document-level listener needed.
+    attach: function (handle, panel, minPx, maxFraction) {
+        window.jimTableViewResizer.detach(handle);
+        if (!handle || !panel) return false;
+
+        var self = window.jimTableViewResizer;
+        var state = { dragging: false, startX: 0, startWidth: 0 };
+
+        var entry = {
+            onPointerDown: function (e) {
+                if (typeof e.button === 'number' && e.button !== 0) return;
+                state.dragging = true;
+                state.startX = e.clientX;
+                state.startWidth = self._currentWidth(panel, minPx);
+                handle.setPointerCapture(e.pointerId);
+                e.preventDefault();
+            },
+            onPointerMove: function (e) {
+                if (!state.dragging) return;
+                var width = self._clamp(panel, state.startWidth + (e.clientX - state.startX), minPx, maxFraction);
+                panel.style.setProperty('--tv-nav-width', width + 'px');
+            },
+            onPointerUp: function (e) {
+                state.dragging = false;
+                if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId);
+            },
+            // Removing the property lets the grid's var(--tv-nav-width, 240px) fallback take back over,
+            // so the default only needs stating once, in the CSS.
+            onDoubleClick: function () {
+                panel.style.removeProperty('--tv-nav-width');
+            }
+        };
+
+        handle.addEventListener('pointerdown', entry.onPointerDown);
+        handle.addEventListener('pointermove', entry.onPointerMove);
+        handle.addEventListener('pointerup', entry.onPointerUp);
+        handle.addEventListener('pointercancel', entry.onPointerUp);
+        handle.addEventListener('dblclick', entry.onDoubleClick);
+
+        self._attached.set(handle, entry);
+        return true;
+    },
+    // Moves the handle by deltaPx (negative to shrink), for the keyboard equivalent of a drag.
+    nudge: function (panel, deltaPx, minPx, maxFraction) {
+        if (!panel) return false;
+        var self = window.jimTableViewResizer;
+        var width = self._clamp(panel, self._currentWidth(panel, minPx) + deltaPx, minPx, maxFraction);
+        panel.style.setProperty('--tv-nav-width', width + 'px');
+        return true;
+    },
+    detach: function (handle) {
+        var entry = window.jimTableViewResizer._attached.get(handle);
+        if (!entry) return;
+
+        handle.removeEventListener('pointerdown', entry.onPointerDown);
+        handle.removeEventListener('pointermove', entry.onPointerMove);
+        handle.removeEventListener('pointerup', entry.onPointerUp);
+        handle.removeEventListener('pointercancel', entry.onPointerUp);
+        handle.removeEventListener('dblclick', entry.onDoubleClick);
+        window.jimTableViewResizer._attached.delete(handle);
+    }
+};

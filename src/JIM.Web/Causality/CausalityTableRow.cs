@@ -38,6 +38,12 @@ namespace JIM.Web.Causality;
 /// </param>
 /// <param name="TechnicalLabel">The owning event's technical label, shown when the panel's technical-names toggle is on.</param>
 /// <param name="Tone">The owning event's visual tone.</param>
+/// <param name="OutcomeDetail">
+/// A muted secondary line shown under <see cref="OutcomeLabel"/>/<see cref="TechnicalLabel"/> in the
+/// Outcome cell, for the one non-attribute row whose reasoning is not already stated in full by its
+/// outcome label: a scheduled deletion's grace text (<see cref="CausalityTableModelBuilder"/>). Null for
+/// every other row, including every attribute-change row (its reasoning is the value change itself).
+/// </param>
 public sealed record CausalityTableRow(
     string ObjectKey,
     CausalityTableChangeKind ChangeKind,
@@ -48,7 +54,8 @@ public sealed record CausalityTableRow(
     int? SyncRuleId,
     string OutcomeLabel,
     string TechnicalLabel,
-    CausalityTone Tone)
+    CausalityTone Tone,
+    string? OutcomeDetail = null)
 {
     /// <summary>
     /// The plain label for <see cref="ChangeKind"/>, shown in the grid's Change column.
