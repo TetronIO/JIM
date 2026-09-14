@@ -1103,7 +1103,9 @@
 }
 
 .causality-panel .tv-resize-handle {
-    grid-row: 1 / -1;
+    /* Placed by column, never by row: an item locked to a row is auto-placed before its siblings and
+       would take the first column, pushing the nav into the handle's 6px track. */
+    grid-column: 2;
     align-self: stretch;
     position: relative;
     cursor: col-resize;
@@ -1134,6 +1136,7 @@
 }
 
 .causality-panel .tv-nav {
+    grid-column: 1;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -1233,6 +1236,7 @@
 }
 
 .causality-panel .tv-main {
+    grid-column: 3;
     min-width: 0;
     padding: 14px 18px 18px;
 }
@@ -1355,6 +1359,11 @@
        resize handle has nothing to do in a single-column stack, so it is hidden rather than laid out. */
     .causality-panel .tv {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    .causality-panel .tv-nav,
+    .causality-panel .tv-main {
+        grid-column: auto;
     }
 
     .causality-panel .tv-resize-handle {
