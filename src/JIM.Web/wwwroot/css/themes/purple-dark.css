@@ -193,3 +193,34 @@ html[lang] .mud-paper .mud-table .mud-table-foot .mud-table-cell,
 html[lang] .mud-paper .mud-table .mud-table-empty-row {
     background-color: #121228 !important;
 }
+
+/* Neutral status pills and dots: site.css colours them from --mud-palette-lines-default, which on a dark theme is
+   barely lighter than the card, so the pill's 45% border and the dot all but disappear. The secondary text colour
+   keeps them neutral (grey, no verdict) while giving the border a visible edge. */
+html[lang] .jim-status-pill--neutral,
+html[lang] .jim-status-dot--neutral {
+    --jim-status-colour: var(--mud-palette-text-secondary);
+}
+
+/* Text alerts: MudBlazor's default wash (the severity colour at 6%, and site.css's 8% neutral) all but vanishes
+   against a dark surface. A 14% wash makes the alert read as a block of its own while staying far below a filled
+   alert. Background only: alert text colour is site.css's (see ThemeContrastTests). */
+html[lang] .mud-alert-text-normal {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 12%, transparent) !important;
+}
+
+html[lang] .mud-alert-text-info {
+    background-color: color-mix(in srgb, var(--mud-palette-info) 14%, transparent) !important;
+}
+
+html[lang] .mud-alert-text-success {
+    background-color: color-mix(in srgb, var(--mud-palette-success) 14%, transparent) !important;
+}
+
+html[lang] .mud-alert-text-warning {
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 14%, transparent) !important;
+}
+
+html[lang] .mud-alert-text-error {
+    background-color: color-mix(in srgb, var(--mud-palette-error) 14%, transparent) !important;
+}
