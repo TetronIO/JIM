@@ -50,9 +50,10 @@
                      PluralName="Connected Systems">
     <ToolBarExtras>
         @* Beside the table rather than in a filter row of its own: it is the only page-owned filter here, and a
-           full row of chrome above the grid for one control would cost more than it explains. *@
+           full row of chrome above the grid for one control would cost more than it explains. Outlined at the dense
+           margin, like every other filter in the portal and the search box it shares this toolbar with. *@
         <MudSelect T="PasswordSynchronisationFilter" Label="Password Synchronisation" Value="_passwordSyncFilter"
-                   ValueChanged="OnPasswordSynchronisationFilterChangedAsync" Variant="Variant.Text" Dense="true"
+                   ValueChanged="OnPasswordSynchronisationFilterChangedAsync" Variant="Variant.Outlined" Dense="true"
                    Margin="Margin.Dense" Class="mt-0" Style="max-width: 260px;">
             <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.Any">Any</MudSelectItem>
             <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.NeedsAttention">Needs attention</MudSelectItem>
