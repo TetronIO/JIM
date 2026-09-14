@@ -239,15 +239,6 @@ html[lang] .mud-alert-outlined-normal {
 
 html[lang] .mud-alert-outlined-info {
     background-color: color-mix(in srgb, var(--mud-palette-info) 6%, transparent) !important;
-    color: var(--mud-palette-info) !important;
-}
-
-/* Info alert text colour — match border/icon for outlined and text variants
-   only. The filled variant uses a bright info background, so its text must
-   stay on the dark text colour from --mud-palette-info-text instead. */
-html[lang] .mud-alert-outlined-info .mud-alert-message,
-html[lang] .mud-alert-text-info .mud-alert-message {
-    color: var(--mud-palette-info) !important;
 }
 
 /* Filled alerts use bright semantic colours as backgrounds, so links inside

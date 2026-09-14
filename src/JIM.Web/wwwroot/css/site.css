@@ -373,10 +373,51 @@ html[lang] .mud-alert-icon {
     padding-top: 8.5px;
 }
 
-/* Links inside alerts: inherit the alert's text colour with bold + underline for emphasis.
-   Overrides the global --jim-link-color so links don't appear as clashing blue/purple
-   inside coloured alert boxes (e.g., yellow warning, green success). */
-.mud-alert .mud-alert-message a.mud-link {
+/* Alert text. A Text or Outlined alert of a semantic severity is coloured on the alert itself with the chip label
+   blend (see :root), so the message, its links, any inheriting button and the close control read in one legible
+   severity colour; MudBlazor colours the icon with a rule of its own, which keeps it on the palette colour. MudBlazor
+   paints this text in --mud-palette-{severity}-darken, which no JIM theme defines: it is generated at runtime from
+   MudBlazor's default palette, so the text ignored each theme's accessible colours and Info, Success and Warning read
+   faint. One block per alert so ThemeContrastTests can read each rule. A theme must not recolour alert text: theme
+   stylesheets load after this one, so its rule would win. */
+html[lang] .mud-alert-text-info {
+    color: var(--jim-chip-text-info) !important;
+}
+
+html[lang] .mud-alert-outlined-info {
+    color: var(--jim-chip-text-info) !important;
+}
+
+html[lang] .mud-alert-text-success {
+    color: var(--jim-chip-text-success) !important;
+}
+
+html[lang] .mud-alert-outlined-success {
+    color: var(--jim-chip-text-success) !important;
+}
+
+html[lang] .mud-alert-text-warning {
+    color: var(--jim-chip-text-warning) !important;
+}
+
+html[lang] .mud-alert-outlined-warning {
+    color: var(--jim-chip-text-warning) !important;
+}
+
+html[lang] .mud-alert-text-error {
+    color: var(--jim-chip-text-error) !important;
+}
+
+html[lang] .mud-alert-outlined-error {
+    color: var(--jim-chip-text-error) !important;
+}
+
+/* Links inside alerts inherit the alert's text colour, bold and underlined, instead of the global --jim-link-color,
+   which clashes inside a coloured alert. The :visited states are listed explicitly because every theme paints a
+   visited link with html[lang] a.mud-link.mud-primary-text:visited, which outranks a stateless rule: a link to a page
+   already visited (the Operations queue's "Connected System" link) came out in the site link colour. */
+html[lang] .mud-alert .mud-alert-message a.mud-link,
+html[lang] .mud-alert .mud-alert-message a.mud-link.mud-primary-text:visited {
     color: inherit !important;
     font-weight: 600 !important;
     text-decoration: underline !important;
@@ -384,7 +425,8 @@ html[lang] .mud-alert-icon {
 }
 
 /* Hover: reduce opacity to provide visual feedback while keeping the inherited colour */
-.mud-alert .mud-alert-message a.mud-link:hover {
+html[lang] .mud-alert .mud-alert-message a.mud-link:hover,
+html[lang] .mud-alert .mud-alert-message a.mud-link.mud-primary-text:visited:hover {
     color: inherit !important;
     opacity: 0.7 !important;
     text-decoration: underline !important;
@@ -2695,9 +2737,9 @@ html[lang] .jim-schema-change-table td {
 
 /* A button offered inside an alert belongs to that alert's message. Left to itself it renders in the page's
    default text colour while its icon picks up MudBlazor's accent, so the label and the icon read as two unrelated
-   things sitting inside a third. Both now take the alert's severity colour from the palette, which is the
-   text-grade shade rather than the brighter one the alert's border and icon use, so the label keeps its contrast
-   against the alert's tinted background (measured 4.6:1 light, 7.5:1 dark: WCAG AA).
+   things sitting inside a third. Both now take the same --jim-chip-text-* label blend as the alert's own text (see
+   "Alert text" near the top of this file), so the button reads as part of the message it sits in and keeps the
+   contrast ThemeContrastTests measures for that text in every theme.
 
    Scoped to buttons that asked to inherit their colour. A button that names its own Color has made a deliberate
    choice and keeps it, which is what the filled Primary/Warning/Info buttons already sitting inside alerts rely
@@ -2707,26 +2749,26 @@ html[lang] .jim-schema-change-table td {
    Written against the alert rather than any one component, so every button placed in one from here on picks the
    behaviour up without anybody having to remember it. */
 :is(.mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) {
-    color: var(--mud-palette-error) !important;
+    color: var(--jim-chip-text-error) !important;
 }
 
 :is(.mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
-    color: var(--mud-palette-error) !important;
+    color: var(--jim-chip-text-error) !important;
 }
 
 :is(.mud-alert-text-warning, .mud-alert-outlined-warning) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
 :is(.mud-alert-text-warning, .mud-alert-outlined-warning) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
-    color: var(--mud-palette-warning) !important;
+    color: var(--jim-chip-text-warning) !important;
 }
 
 :is(.mud-alert-text-info, .mud-alert-outlined-info) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
 :is(.mud-alert-text-info, .mud-alert-outlined-info) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
-    color: var(--mud-palette-info) !important;
+    color: var(--jim-chip-text-info) !important;
 }
 
 :is(.mud-alert-text-success, .mud-alert-outlined-success) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
 :is(.mud-alert-text-success, .mud-alert-outlined-success) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
-    color: var(--mud-palette-success) !important;
+    color: var(--jim-chip-text-success) !important;
 }
 
 /* The hover and focus wash, and the click ripple, follow the button's own colour rather than MudBlazor's

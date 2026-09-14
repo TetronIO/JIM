@@ -145,6 +145,81 @@ public class ThemeContrastTests
     }
 
     /// <summary>
+    /// The four semantic severities JIM colours in <c>site.css</c>. Normal is MudBlazor's own primary text colour, and a
+    /// Filled alert pairs each fill with its palette <c>-text</c> colour, which the pairing test above already measures.
+    /// </summary>
+    private static readonly string[] AlertSeverities = ["info", "success", "warning", "error"];
+
+    /// <summary>
+    /// A Text or Outlined alert's message sits on a tint of its severity colour. MudBlazor paints it in
+    /// <c>--mud-palette-{severity}-darken</c>, which no JIM theme defines: MudBlazor generates that shade at runtime from
+    /// its own default palette, so the text ignored the theme's accessible colour altogether and Info, Success and
+    /// Warning read faint. This reads the alert rules out of <c>site.css</c> and each theme, as the chip test does, so the
+    /// measurement tracks the stylesheets. A tint no stylesheet sets is MudBlazor's default hover wash (the severity
+    /// colour at 6%) for a Text alert, and nothing at all for an Outlined one.
+    /// </summary>
+    [Test]
+    public void EveryTheme_EveryAlertMessage_MeetsWcagAa()
+    {
+        var siteCss = File.ReadAllText(Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "wwwroot", "css", "site.css"));
+        var siteVariables = ReadVariables(siteCss);
+        var themeDirectory = Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "wwwroot", "css", "themes");
+        var themeFiles = Directory.EnumerateFiles(themeDirectory, "*.css").OrderBy(path => path, StringComparer.Ordinal).ToList();
+        Assert.That(themeFiles, Is.Not.Empty, "Expected at least one theme stylesheet to check.");
+
+        var failures = new List<string>();
+        foreach (var themeFile in themeFiles)
+        {
+            var themeName = Path.GetFileName(themeFile);
+            var themeCss = File.ReadAllText(themeFile);
+            var variables = siteVariables.Concat(ReadVariables(themeCss))
+                .GroupBy(pair => pair.Key, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.Ordinal);
+
+            var surface = Resolve(variables, "--mud-palette-surface");
+            if (surface is null)
+                continue;
+
+            foreach (var severity in AlertSeverities)
+            {
+                if (Resolve(variables, $"--mud-palette-{severity}") is null)
+                    continue;
+
+                foreach (var variant in new[] { "text", "outlined" })
+                {
+                    // site.css first, then the theme's own rule for the same alert, which loads later and wins a tie;
+                    // a theme that recolours the message element itself overrides both.
+                    var rule = ReadDeclarations(siteCss, $"html[lang] .mud-alert-{variant}-{severity}");
+                    foreach (var (property, value) in ReadDeclarations(themeCss, $"html[lang] .mud-alert-{variant}-{severity}"))
+                        rule[property] = value;
+                    if (ReadDeclarations(themeCss, $"html[lang] .mud-alert-{variant}-{severity} .mud-alert-message").TryGetValue("color", out var messageColour))
+                        rule["color"] = messageColour;
+
+                    var defaultTint = variant == "text" ? $"color-mix(in srgb, var(--mud-palette-{severity}) 6%, transparent)" : "transparent";
+                    var text = ResolveExpression(rule.GetValueOrDefault("color", $"var(--mud-palette-{severity}-darken)"), variables, surface.Value);
+                    var tint = ResolveExpression(rule.GetValueOrDefault("background-color", defaultTint), variables, surface.Value);
+                    var description = $"{severity} {variant} alert text on its tint";
+
+                    if (text is null || tint is null)
+                    {
+                        failures.Add($"  {themeName,-26} {description,-40} could not be resolved; the alert takes a colour no stylesheet defines");
+                        continue;
+                    }
+
+                    var composedTint = Composite(tint.Value, surface.Value);
+                    var ratio = ContrastRatio(Composite(text.Value, composedTint), composedTint);
+                    if (ratio < AaFloor)
+                        failures.Add(string.Format(CultureInfo.InvariantCulture, "  {0,-26} {1,-40} {2:0.00} (needs {3})", themeName, description, ratio, AaFloor));
+                }
+            }
+        }
+
+        Assert.That(failures, Is.Empty, () => BuildFailureMessage(failures,
+            "Fix in site.css, not the theme: alert text takes the --jim-chip-text-* blend there, and a theme rule loads",
+            "after site.css, so a per-theme alert colour silently wins over it."));
+    }
+
+    /// <summary>
     /// The declarations of the first rule block whose selector list is exactly <paramref name="selector"/>,
     /// with any <c>!important</c> stripped. Empty when site.css has no such rule.
     /// </summary>
