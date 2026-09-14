@@ -4091,28 +4091,58 @@ html[lang] .jim-scope-text .mud-input-slot {
    the only coloured element on a card, painted by the shared status-pill vocabulary below. Nothing else on the
    card carries colour, so a red pill reads as red from across the room without the whole strip turning red.
    --------------------------------------------------------------------------- */
+/* The header is the whole panel when it is collapsed, so it carries the verdict on the left (title and summary) and
+   the panel's own controls grouped on the right (the live indicator, then the collapse chevron). It has no gap
+   beneath it: the space between header and cards lives inside the collapsing body, so a collapsed panel ends at
+   its header instead of trailing an empty band. */
 .jim-service-health-header {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
     column-gap: 0.75rem;
     row-gap: 0.25rem;
-    margin-bottom: 1rem;
 }
 
-/* The summary sits beside the title; the live indicator is pushed to the far right. */
 .jim-service-health-summary {
     color: var(--mud-palette-text-secondary);
+}
+
+/* The right-hand group is what takes margin-left: auto, and it has to be. The live indicator and the chevron are
+   each wrapped in a MudTooltip, whose root is the actual flex child, so an auto margin on the indicator's own span
+   had no free space to take and the indicator sat beside the summary rather than on the right as intended. */
+.jim-service-health-header-end {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    gap: 0.5rem;
+    margin-left: auto;
 }
 
 .jim-service-health-live {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    margin-left: auto;
     color: var(--mud-palette-text-secondary);
     font-size: 0.875rem;
     white-space: nowrap;
+}
+
+/* The same control as each card's details chevron: the same icon, turned to point up while what it controls is open. */
+.jim-service-health-collapse-toggle.mud-icon-button {
+    padding: 2px;
+    color: var(--mud-palette-text-secondary);
+    transition: transform 0.25s ease;
+}
+
+.jim-service-health-collapse-toggle--open.mud-icon-button {
+    transform: rotate(180deg);
+}
+
+/* The gap between the header and the cards is the grid's own top padding, which sits inside the collapse and so
+   disappears with the cards. Left as a bottom margin on the header, as it was, it would stay behind and leave a
+   collapsed panel 1rem taller than its header. */
+.jim-service-health-strip .jim-service-health-grid {
+    padding-top: 1rem;
 }
 
 /* Three across on a wide screen, two on a medium one, one on a narrow one; the breakpoints are MudBlazor's md and
@@ -4341,16 +4371,19 @@ html[lang] .jim-scope-text .mud-input-slot {
     font-size: 0.8125rem;
 }
 
-/* The version-skew chip is the one fact on the card an administrator must act on, said in words rather than in
+/* The version-skew note is the one fact on the card an administrator must act on, said in words rather than in
    colour: the pill already owns the card's colour, and amber text beside it would read as a second verdict. It
    sits on the card's face beside the pill so it is seen without opening the details, and again on the Version
-   row so the number and the warning sit together. Compact so it fits either line. */
-.jim-service-health-skew.mud-chip {
-    height: 1.25rem;
-    font-family: var(--mud-typography-default-family);
-    font-size: 0.75rem;
+   row so the number and the warning sit together.
+
+   It is a neutral .jim-status-pill rather than a MudChip so that it and the status pill beside it are one shape
+   by construction. As a Size.Small chip its height was pinned by MudBlazor at 24px whatever its text, with a
+   12px label, while the pill's height follows its content (26px at 13px), so the two sat visibly out of line;
+   matching the font size alone would still have left the chip short. Only the differences from the pill are
+   stated here: no dot, so the padding the dot's side needed evens out, and the secondary text colour. */
+.jim-service-health-skew.jim-status-pill {
+    padding-inline: 0.625rem;
     color: var(--mud-palette-text-secondary);
-    border-color: var(--mud-palette-lines-default);
 }
 
 /* The banner's links sit after the sentence and stay together when the alert wraps. */

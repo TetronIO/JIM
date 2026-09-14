@@ -125,6 +125,18 @@ public interface IUserPreferenceService
     /// </summary>
     /// <param name="view">"lineage" or "timeline".</param>
     Task SetCausalityViewAsync(string view);
+
+    /// <summary>
+    /// Gets whether the user has collapsed the Service Health panel on the Operations page.
+    /// </summary>
+    /// <returns>True if collapsed, false if expanded, null if no preference (default to expanded).</returns>
+    Task<bool?> GetServiceHealthCollapsedAsync();
+
+    /// <summary>
+    /// Sets whether the Service Health panel on the Operations page is collapsed.
+    /// </summary>
+    /// <param name="collapsed">Whether the panel is collapsed.</param>
+    Task SetServiceHealthCollapsedAsync(bool collapsed);
 }
 
 /// <summary>
@@ -139,6 +151,7 @@ public class UserPreferenceService : IUserPreferenceService
     private const string MvoDetailViewModeKey = "mvoDetailViewMode";
     private const string TableDenseKey = "tableDense";
     private const string CausalityViewKey = "causalityView";
+    private const string ServiceHealthCollapsedKey = "serviceHealthCollapsed";
     private const int DefaultRowsPerPage = 10;
 
     /// <summary>
@@ -554,6 +567,48 @@ public class UserPreferenceService : IUserPreferenceService
         try
         {
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", CausalityViewKey, view);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool?> GetServiceHealthCollapsedAsync()
+    {
+        try
+        {
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", ServiceHealthCollapsedKey);
+            return value switch
+            {
+                "true" => true,
+                "false" => false,
+                _ => null // No preference saved - default to expanded
+            };
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetServiceHealthCollapsedAsync(bool collapsed)
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", ServiceHealthCollapsedKey, collapsed ? "true" : "false");
         }
         catch (JSDisconnectedException)
         {
