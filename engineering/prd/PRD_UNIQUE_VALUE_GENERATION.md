@@ -5,6 +5,7 @@
 - **Updated:** 2026-09-16 (design revised after review: JIM-owned generated value assignments replace the confirming-import model; Collision Remediation added; Import and Export Attribute Flow modes; causality integration against #1087/#1495; Set Value deferred)
 - **Author:** JayVDZ (PRD drafted and revised via Claude Code)
 - **Issue:** [#242](https://github.com/TetronIO/JIM/issues/242)
+- **Plan:** [UNIQUE_VALUE_GENERATION.md](../plans/UNIQUE_VALUE_GENERATION.md)
 - **Related:** [#549](https://github.com/TetronIO/JIM/issues/549) example-data expressions (closed; interim tracker), [#223](https://github.com/TetronIO/JIM/issues/223) Initial Export Only (per-mapping flag precedent), [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning (parked-state and queue-and-follow precedents), [#1087](https://github.com/TetronIO/JIM/issues/1087) / [#1495](https://github.com/TetronIO/JIM/issues/1495) causality views, [#1079](https://github.com/TetronIO/JIM/issues/1079) optimistic export apply
 - **UI mockups:** [Unique Value Generation: Design and Mockups](https://claude.ai/artifact/G9R6cK7WR7QwmPukctFpkb) (design explainers, diagrams and six screens, built against `engineering/DESIGN.md` tokens)
 
