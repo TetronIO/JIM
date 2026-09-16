@@ -9,6 +9,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudPaper Class="pa-4" Outlined="true">
+    <div class="d-flex align-center">
+        <MudText Typo="Typo.h6">Object Matching Rules</MudText>
+        <TermHint Term="Term.ObjectMatchingRule" />
+        <TermHint Term="Term.Join" />
+    </div>
     @if (SyncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
     {
         <div class="d-flex justify-end">

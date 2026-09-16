@@ -16,9 +16,13 @@
 else
 {
     <MudPaper Class="pa-4" Outlined="true">
+        <div class="d-flex align-center">
+            <MudText Typo="Typo.h6">Scoping</MudText>
+            <TermHint Term="Term.Scoping" />
+        </div>
         @if (SyncRule.Direction == SyncRuleDirection.Export)
         {
-            <MudText>
+            <MudText Class="mt-2">
                 By default, all Metaverse Objects of type <code class="jim-code-inline">@SyncRule.MetaverseObjectType.Name</code> will be in scope of this
                 Synchronisation Rule, though to have it apply to a subset of those objects, use a filter. i.e. you might
                 only want this rule to apply to Staff, not Contractors.
@@ -26,7 +30,7 @@ else
         }
         else
         {
-            <MudText>
+            <MudText Class="mt-2">
                 By default, all Connected System Objects of type <code class="jim-code-inline">@SyncRule.ConnectedSystemObjectType.Name</code> will be in scope
                 of this Synchronisation Rule. Use a filter to import only specific objects, e.g. only Active users, not Disabled.
             </MudText>
