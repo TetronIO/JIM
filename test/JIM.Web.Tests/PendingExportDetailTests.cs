@@ -355,12 +355,45 @@ public class PendingExportDetailTests : JimComponentTestContext
     // ─── Naming the Target and Source objects (#1669) ───
 
     /// <summary>
-    /// The Target and Source rows say what the object is and where it lives beneath its chip, using the
-    /// same wording <see cref="ObjectDescription"/> produces everywhere else on the portal: a reader
-    /// never needs to know what a Connected System Object or a Metaverse Object is to follow the row.
+    /// The Target and Source row labels stay short: the object's type is already named once, by the
+    /// chip beneath the label ("user: ...", "User: ..."), so restating "Connected System Object" /
+    /// "Metaverse Object" in the row label itself would say the same thing twice and wrap the label
+    /// onto three lines beside the chip (#1669 follow-up, found on a live check of the page).
     /// </summary>
     [Test]
-    public void PendingExportDetail_TargetAndSourceObjects_NameTheirTypeAndPlaceBeneathTheChipAsync()
+    public void PendingExportDetail_TargetAndSourceRows_UseTheShortLabelsAsync()
+    {
+        SetupRelatedObjects(
+            cso: new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                Type = new ConnectedSystemObjectType { Name = "user" }
+            },
+            mvo: null);
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Markup, Does.Contain("<strong>Target</strong>"));
+                Assert.That(cut.Markup, Does.Contain("<strong>Source</strong>"));
+                Assert.That(cut.Markup, Does.Not.Contain("Target Connected System Object"));
+                Assert.That(cut.Markup, Does.Not.Contain("Source Metaverse Object"));
+            }
+        });
+    }
+
+    /// <summary>
+    /// The Target and Source rows' sub-lines carry only the place ("in Cross-Domain Export", "in the
+    /// Metaverse"), never the type: the chip above each already names the type once ("user: ...",
+    /// "User: ..."), so the sub-line repeating it would say it twice (#1669 follow-up, found on a live
+    /// check of the page: the old "user in Cross-Domain Export" sub-line duplicated the chip's own
+    /// "user: e6d5…").
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_TargetAndSourceObjects_SubLinesNameOnlyThePlaceAsync()
     {
         SetupRelatedObjects(
             cso: new ConnectedSystemObject
@@ -381,21 +414,23 @@ public class PendingExportDetailTests : JimComponentTestContext
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(cut.Markup, Does.Contain("user in Directory"),
-                    "the Target row must say what the Connected System Object is and where it lives");
-                Assert.That(cut.Markup, Does.Contain("User in the Metaverse"),
-                    "the Source row must say what the Metaverse Object's type is");
+                var places = cut.FindAll(".jim-object-place");
+                Assert.That(places, Has.Count.EqualTo(2));
+                Assert.That(places[0].TextContent.Trim(), Is.EqualTo("in Directory"),
+                    "the Target sub-line must not repeat the chip's own type prefix");
+                Assert.That(places[1].TextContent.Trim(), Is.EqualTo("in the Metaverse"),
+                    "the Source sub-line must not repeat the chip's own type prefix");
             }
         });
     }
 
     /// <summary>
-    /// A Connected System Object whose type is not known (the schema import predates it, say) still
-    /// names its Connected System; <see cref="ObjectDescription.ForConnectedSystemObjectPlace"/> owns
-    /// this fallback, and the page must not hide it by hand-building the string itself.
+    /// The Target sub-line never varies with the Connected System Object's type, known or not: it takes
+    /// no type argument at all, because the chip beside it is the one and only place that names the
+    /// type (#1669 follow-up).
     /// </summary>
     [Test]
-    public void PendingExportDetail_TargetObjectWithNoType_StillNamesTheConnectedSystemAsync()
+    public void PendingExportDetail_TargetObjectSubLine_NeverNamesTheTypeRegardlessOfWhetherItIsKnownAsync()
     {
         SetupRelatedObjects(
             cso: new ConnectedSystemObject { Id = Guid.NewGuid(), Type = new ConnectedSystemObjectType() },
@@ -403,7 +438,8 @@ public class PendingExportDetailTests : JimComponentTestContext
 
         var cut = RenderPage();
 
-        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("in Directory")));
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.Find(".jim-object-place").TextContent.Trim(), Is.EqualTo("in Directory")));
     }
 
     /// <summary>

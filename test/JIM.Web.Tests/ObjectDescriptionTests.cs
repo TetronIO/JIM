@@ -127,6 +127,24 @@ public class ObjectDescriptionTests
         Assert.That(text, Is.EqualTo("Connected System Object"));
     }
 
+    // ─── ForConnectedSystemObjectPlace (system only): sub-line beneath a chip that already shows the type ───
+
+    [Test]
+    public void ForConnectedSystemObjectPlace_SystemNameOnly_NamesTheSystemAlone()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectPlace("Panoply AD");
+
+        Assert.That(text, Is.EqualTo("in Panoply AD"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectPlace_SystemNameOnlyUnknown_FallsBackToTheFullProductNoun()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectPlace((string?)null);
+
+        Assert.That(text, Is.EqualTo("Connected System Object"));
+    }
+
     // ─── ForMetaverseObject: full mention, including the object's name ───
 
     [Test]
@@ -169,5 +187,15 @@ public class ObjectDescriptionTests
         var text = ObjectDescription.ForMetaverseObjectPlace(null);
 
         Assert.That(text, Is.EqualTo("Metaverse Object"));
+    }
+
+    // ─── ForMetaverseObjectPlace (no type): sub-line beneath a chip that already shows the type ───
+
+    [Test]
+    public void ForMetaverseObjectPlace_NoArguments_AlwaysNamesTheMetaverse()
+    {
+        var text = ObjectDescription.ForMetaverseObjectPlace();
+
+        Assert.That(text, Is.EqualTo("in the Metaverse"));
     }
 }
