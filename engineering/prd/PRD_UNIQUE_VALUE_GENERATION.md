@@ -107,7 +107,7 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 **Surface parity**
 
-22. Every configuration element above (source type, generation settings, exclusions, Collision Remediation switch) is settable through the portal, the REST API (Synchronisation Rule and Attribute Flow DTOs) and PowerShell (`Set-JIMSyncRule` / the Attribute Flow cmdlets) in the same PR, with tests and docs. The NeedsDecision list and its Allow-the-rename and Retry actions ship across all three surfaces likewise; REST answers `202 Accepted` for actions whose effect lands on a later run, following the #1121 pattern.
+22. Every configuration element above (source type, generation settings, exclusions, Collision Remediation switch) is settable through the portal, the REST API (Synchronisation Rule and Attribute Flow DTOs) and PowerShell (`New-JIMSyncRuleMapping` / `Set-JIMSyncRuleMapping` for the flow; `Set-JIMSyncRule` where rule-level settings are involved) in the same PR, with tests and docs. The NeedsDecision list and its Allow-the-rename and Retry actions ship across all three surfaces likewise; REST answers `202 Accepted` for actions whose effect lands on a later run, following the #1121 pattern.
 
 ### Non-Functional Requirements
 
@@ -188,6 +188,30 @@ Mockups for all six screens, plus the design explainers and diagrams (assignment
 | 5 | Activity, Timeline view | `/activity/{id}` | Summary band and pills; remediated (Warning) and needs-a-decision (Error) events with the three exits |
 | 6 | Allow the rename | `/t/{type}/v/{id}` | Confirmation naming every system that will change, and when |
 
+## Integration Testing
+
+Unit and database-tier tests cannot prove the parts of this feature that matter most, because those parts are interactions with a real directory: the probe's silent-ACL behaviour, an export rejected by the target, and a rename carried through a live account. Two integration requirements follow.
+
+### A dedicated scenario
+
+A new scenario, `Invoke-Scenario22-UniqueValueGeneration.ps1` (numbered after the current highest), exercises every positive and negative path and every configuration permutation against the standard Samba AD and OpenLDAP targets plus a CSV target that can neither probe nor classify. Setup, run and teardown follow the runner's conventions (`Run-IntegrationTests.ps1`; scenario scripts are never invoked directly). It must cover, at minimum:
+
+| Area | Cases |
+|------|-------|
+| Modes | Import Attribute Flow (value in the Metaverse, exported to two directories); Export Attribute Flow (value on one Connected System Object only, Metaverse untouched) |
+| Strategy | Number and letter suffixes; start value; separator; suffix placed before `@` for an email-shaped value and appended otherwise |
+| Gates | Collision caught by the Metaverse; by a connector space holding an optimistically applied value the target does not yet have; intra-batch within one page; brownfield object in an OU outside the connector's import scope caught by the probe; probe reporting CouldNotDetermine (under-privileged bind) falling back to local gates without reporting NotFound |
+| Collision Remediation | Post-probe collision remediated within the export run and committed; the accepted value reaching the second directory on its next export; remediation off recording an ordinary export error; a CSV target with no classification recording an ordinary export error while the LDAP targets remediate (mixed capability) |
+| Anchoring | Value accepted by one directory then rejected by the other: Needs Decision entered, no rename performed, needs-attention indicators present; each exit exercised: Allow the rename (rename carried out on the next runs and recorded as authorised), Retry after removing the conflicting object, release on flow configuration change |
+| Failure | Attempt limit exhausted: object failed via RPEI, nothing written |
+| Stability | Full and delta re-runs leave committed values unchanged; a higher-priority source later supplying a value supersedes the generated one visibly |
+| Transparency | Assertions against the Activity's outcomes and causal edges (`GeneratedValueRemediated`, `GeneratedValueCollisionUnresolved`, the revision edge and its reason codes) and against the identity's attribute history |
+| Surface parity | The same flow configured through the REST API and through PowerShell produces identical behaviour; Needs Decision listing and actions exercised through both |
+
+### Converting existing scenarios
+
+Because JIM could not generate identifiers before this feature, the shared HR feed (`Generate-TestCSV.ps1`) carries IT-owned attributes as source data: `samAccountName`, `email` and `userPrincipalName`. Scenario 1 (HR to Identity Directory) imports `samAccountName` to Account Name from HR and exports it to the directory, which is the unrepresentative shape this feature exists to remove; Scenarios 2, 8, 10, 12, 13, 15, 17 and 18 reference the same columns. As part of this feature, every existing scenario is audited against one criterion: **an IT-owned attribute that flows from a source feed into the Metaverse is converted to generation; an attribute used as a join key or external identifier (the cross-domain scenarios) is kept.** Scenario 1 is the canonical conversion. The generator gains a switch so converted scenarios receive feeds without those columns while unconverted ones are unchanged. Converted scenarios must still pass with identical downstream expectations, which is itself a regression test of the feature under realistic load.
+
 ## Constraints
 
 - Must reuse `IExpressionEvaluator`; the evaluator stays stateless and side-effect-free. Uniqueness state (reservations, lookups, probes, assignments) lives in the application service and is threaded into the sync engine the way the evaluator is.
@@ -207,7 +231,7 @@ Mockups for all six screens, plus the design explainers and diagrams (assignment
 | Worker | Own and pass the reservation set across pages; thread the service into the import processors; remediation loop inside the export processor. |
 | Web | `SyncRuleAttributeFlowTab.razor`: source type, generation form, derived system list, Collision Remediation switch. Identity page: attribute chips and scoped Timeline. Activity page: new event labels, tones and the Allow/Retry actions. Needs-attention indicators on Synchronisation Rule and Connected System lists. |
 | API / PowerShell | Attribute Flow DTOs and cmdlets gain the generation settings and switch; NeedsDecision list and actions (`202 Accepted` with optional wait); Pester and API tests. |
-| Tests | Unit: candidate sequencing, suffix position, four-gate ordering and probe three-state handling, reservation set, stickiness, priority interaction, anchoring, remediation loop, exhaustion, enum ordinals. Database tier: assignment persistence and by-value lookups. Integration: brownfield probe against Samba AD, export-time remediation, anchored NeedsDecision. bUnit: causality rendering of the new outcomes. Red first. |
+| Tests | Unit: candidate sequencing, suffix position, four-gate ordering and probe three-state handling, reservation set, stickiness, priority interaction, anchoring, remediation loop, exhaustion, enum ordinals. Database tier: assignment persistence and by-value lookups. Integration: a dedicated scenario covering every positive and negative path and configuration permutation, plus conversion of existing scenarios that source IT-owned attributes from HR feeds (see Integration Testing). bUnit: causality rendering of the new outcomes. Red first. |
 
 ## Documentation Impact
 
@@ -262,6 +286,8 @@ Taken during review of the linked artefact (July to September 2026). Recorded he
 - [ ] The unique value service is caller-agnostic and unit-testable without a synchronisation run (FR 21).
 - [ ] Portal, REST and PowerShell parity for configuration and for the Needs Decision list and actions, with tests and docs (FR 22).
 - [ ] `JIM.Web` gains no connector dependency.
+- [ ] A dedicated integration scenario covers every case in the Integration Testing table and is green in the full suite.
+- [ ] Existing scenarios that source IT-owned attributes from HR feeds are converted to generation per the stated criterion, with join-key uses kept, and remain green.
 - [ ] Public docs and `CHANGELOG.md` updated; `dotnet build JIM.sln` and `dotnet test JIM.sln` pass with zero errors and warnings; new behaviour covered by tests written red-first; brownfield probe and remediation covered by integration scenarios.
 
 ## Open Questions
