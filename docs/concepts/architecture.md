@@ -17,6 +17,12 @@ At the heart of JIM is the **metaverse**: a centralised repository of identity o
 
 **Key principle**: All identity data flows through the metaverse. JIM never synchronises directly between Connected Systems.
 
+### Identities and the Metaverse
+
+The Metaverse holds one Metaverse Object for each real-world thing JIM manages: a person's identity, a group, a role. Each is the canonical, aggregated version, assembled from the Connected System Objects that contribute values to it under [Attribute Priority](attribute-priority.md).
+
+Connected Systems hold instances of it: an account in a directory, a row in an HR system, a mail-enabled group. JIM's job is to keep every instance consistent with the canonical object, creating, updating and removing instances as the object changes. This is why the product names the two sides **Metaverse Object** and **Connected System Object** throughout: "identity" describes what the Metaverse is for, and the objects are what JIM actually manages.
+
 ## System Context
 
 The following diagram shows JIM in the context of the systems and users it interacts with:
