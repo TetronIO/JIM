@@ -11,14 +11,14 @@
         Permanently delete this Connected System and all its related data, including:
     </MudText>
     <ul class="mt-2 ml-4">
-        <li>All Connected System Objects (CSOs)</li>
+        <li>All Connected System Objects</li>
         <li>All Synchronisation Rules</li>
         <li>All Run Profiles</li>
         <li>All Partitions and Containers</li>
         <li>All Pending Exports</li>
     </ul>
     <MudText Class="mt-2">
-        Metaverse Objects joined to this system's CSOs will be disconnected but not deleted.
+        Metaverse Objects joined to this system's Connected System Objects will be disconnected but not deleted.
     </MudText>
 
     @if (ConnectedSystem.Status == ConnectedSystemStatus.Deleting)

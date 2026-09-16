@@ -15,8 +15,8 @@
 <MudText Typo="Typo.h3">Pending Deletions</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    Metaverse Objects in the deletion pipeline. Includes identities being deprovisioned from Connected Systems
-    and those awaiting automatic deletion after their grace period expires.
+    Metaverse Objects in the deletion pipeline. Includes Metaverse Objects being deprovisioned from Connected
+    Systems and those awaiting automatic deletion after their grace period expires.
 </MudText>
 
 @* Summary cards *@
@@ -30,7 +30,7 @@
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-warning);">
             <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Deprovisioning</MudText>
-            <MudTooltip Text="MVOs still connected to other systems, awaiting cascade deletion" Arrow="true" Placement="Placement.Top">
+            <MudTooltip Text="Metaverse Objects still connected to other systems, awaiting cascade deletion" Arrow="true" Placement="Placement.Top">
                 <MudText Typo="Typo.h4" Color="@(_deprovisioningCount > 0 ? Color.Warning : Color.Default)">@_deprovisioningCount.ToString("N0")</MudText>
             </MudTooltip>
         </MudPaper>
@@ -38,7 +38,7 @@
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-info);">
             <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Awaiting Grace Period</MudText>
-            <MudTooltip Text="MVOs fully disconnected, waiting for grace period to expire" Arrow="true" Placement="Placement.Top">
+            <MudTooltip Text="Metaverse Objects fully disconnected, waiting for grace period to expire" Arrow="true" Placement="Placement.Top">
                 <MudText Typo="Typo.h4">@_awaitingGracePeriodCount.ToString("N0")</MudText>
             </MudTooltip>
         </MudPaper>
@@ -46,7 +46,7 @@
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-error);">
             <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Ready for Deletion</MudText>
-            <MudTooltip Text="MVOs eligible for deletion (grace period expired, no connectors)" Arrow="true" Placement="Placement.Top">
+            <MudTooltip Text="Metaverse Objects eligible for deletion (grace period expired, no connectors)" Arrow="true" Placement="Placement.Top">
                 <MudText Typo="Typo.h4" Color="@(_readyForDeletionCount > 0 ? Color.Error : Color.Default)">@_readyForDeletionCount.ToString("N0")</MudText>
             </MudTooltip>
         </MudPaper>
@@ -229,7 +229,7 @@
         {
             <TableEmptyState Icon="@Icons.Material.Filled.AutoDelete"
                              PrimaryText="There are no Metaverse Objects pending deletion"
-                             SecondaryText="Identities appear here when a disconnection schedules their automatic deletion." />
+                             SecondaryText="Metaverse Objects appear here when a disconnection schedules their automatic deletion." />
         }
     </EmptyContent>
 </VirtualisedDataGrid>

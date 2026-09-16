@@ -47,7 +47,7 @@
                          RowClicked="HandleRowClicked"
                          SingularName="Pending Export"
                          PluralName="Pending Exports"
-                         SearchPlaceholder="Search target, source MVO, or errors">
+                         SearchPlaceholder="Search target, source Metaverse Object, or errors">
         <Columns>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
@@ -71,7 +71,7 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Source MVO" Name="sourcemvo" />
+                    <VirtualisedSortHeader Title="Source Metaverse Object" Name="sourcemvo" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.SourceMetaverseObjectId.HasValue)

@@ -24,7 +24,7 @@
 </MudText>
 
 <NavigableMudTabs TabPanelsClass="pa-0 mt-4" Class="mt-4" @bind-ActivePanelIndex="_activeTabIndex">
-    <MudTabPanel Text="Deleted CSOs">
+    <MudTabPanel Text="Deleted Connected System Objects">
         <MudPaper Class="pa-5" Outlined="true">
             <!-- Query criteria, applied by the Search button. The free-text External ID search lives in the
                  grid's own search box below, where it filters live as the reader types. -->
@@ -180,7 +180,7 @@
         </VirtualisedDataGrid>
     </MudTabPanel>
 
-    <MudTabPanel Text="Deleted MVOs">
+    <MudTabPanel Text="Deleted Metaverse Objects">
         <MudPaper Class="pa-5" Outlined="true">
             <!-- Query criteria, applied by the Search button. The free-text Display Name search lives in the
                  grid's own search box below, where it filters live as the reader types. -->
@@ -351,7 +351,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-3" />
-            Change History: @(_selectedCsoChange?.DeletedObjectExternalId ?? "Deleted CSO")
+            Change History: @(_selectedCsoChange?.DeletedObjectExternalId ?? "Deleted Connected System Object")
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -382,7 +382,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-3" />
-            Change History: @(_selectedMvoChange?.DeletedObjectDisplayName ?? "Deleted MVO")
+            Change History: @(_selectedMvoChange?.DeletedObjectDisplayName ?? "Deleted Metaverse Object")
         </MudText>
     </TitleContent>
     <DialogContent>

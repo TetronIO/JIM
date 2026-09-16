@@ -494,9 +494,9 @@ public static class Helpers
         {
             // Import operations
             ObjectChangeType.Added =>
-                "A new Connected System Object (CSO) was discovered in the source system and added to the connector space.",
+                "A new Connected System Object was discovered in the source system and added to the connector space.",
             ObjectChangeType.Updated =>
-                "An existing Connected System Object (CSO) was updated with changed attribute values from the source system.",
+                "An existing Connected System Object was updated with changed attribute values from the source system.",
             ObjectChangeType.Deleted when !isSyncContext =>
                 "The object was detected as deleted from the source system. It is now pending removal during the next synchronisation.",
             ObjectChangeType.Deleted when isSyncContext =>
@@ -504,13 +504,13 @@ public static class Helpers
 
             // Sync operations
             ObjectChangeType.Projected =>
-                "A new Metaverse Object (MVO) was created because no existing match was found. The CSO's attributes were projected into the metaverse.",
+                "A new Metaverse Object was created because no existing match was found. The Connected System Object's attributes were projected into the metaverse.",
             ObjectChangeType.Joined =>
-                "The Connected System Object (CSO) was matched to an existing Metaverse Object (MVO) using the configured join rules.",
+                "The Connected System Object was matched to an existing Metaverse Object using the configured join rules.",
             ObjectChangeType.AttributeFlow =>
                 "Attribute values were flowed from the Connected System Object to the Metaverse Object according to the Synchronisation Rule mappings.",
             ObjectChangeType.Disconnected =>
-                "The Connected System Object (CSO) was disconnected from its Metaverse Object (MVO). Attribute Flow has stopped.",
+                "The Connected System Object was disconnected from its Metaverse Object. Attribute Flow has stopped.",
             ObjectChangeType.DisconnectedOutOfScope =>
                 "The object fell out of scope of the import Synchronisation Rule scoping criteria and was disconnected from the metaverse.",
             ObjectChangeType.OutOfScopeRetainJoin =>
