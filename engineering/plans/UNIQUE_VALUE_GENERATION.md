@@ -93,7 +93,11 @@ Causality: outcome GeneratedValueRemediated, error GeneratedValueCollisionUnreso
 
 11. **Example data migration (PRD Open Question 4)** is a follow-up issue filed at the end of Phase 2, not v1.
 
-12. **Third gloss: the configuration surfaces come before the connector work.** Integration scenarios configure JIM through PowerShell and REST, and Scenario 1's conversion needs only the local gates. Landing the three configuration surfaces right after the engine means the conversion and the dedicated scenario start early and the connector phase is verified against a real feed.
+12. **The assignment is state, not history.** It is deleted the moment a generated mapping stops being responsible for the value (object gone, mapping gone or retyped, another contributor winning, value recalled), by FK cascade or by a page-flush reconciliation; nothing expires and nothing accumulates. See Assignment lifecycle.
+
+13. **Missing knowledge never permits a rename, and export mode never generates over a value the target holds.** Both rules exist because a connector space clear removes what anchoring and stickiness read; see Assignment lifecycle.
+
+14. **Third gloss: the configuration surfaces come before the connector work.** Integration scenarios configure JIM through PowerShell and REST, and Scenario 1's conversion needs only the local gates. Landing the three configuration surfaces right after the engine means the conversion and the dedicated scenario start early and the connector phase is verified against a real feed.
 
 ### Data model
 
@@ -121,14 +125,31 @@ Suffix position is not stored: before the first `@` if present, else appended (p
 | `Value` | string | Current assigned value |
 | `PreviousValue` | string? | Value before the last remediation |
 | `State` | enum `GeneratedValueAssignmentState { Proposed = 0, Committed = 1, Remediated = 2, NeedsDecision = 3 }` | |
-| `OriginSyncRuleMappingId` | int?, FK set-null | The mapping that produced it; survives mapping removal with the kept value (#1537) |
+| `SyncRuleMappingGenerationId` | int, FK cascade | The generation row that produced it. Removing the mapping, deleting its Synchronisation Rule or changing its source type all delete the generation row, and the assignment goes with it (see Lifecycle) |
 | `RemediationCount` | int | Decision 9 |
 | `RenameAuthorised`, `RenameAuthorisedAt`, `RenameAuthorisedByName` | bool, DateTime?, string? | Decision 6; cleared on the next successful export of the value |
 | `RejectedByConnectedSystemId`, `AnchoredByConnectedSystemId` | int?, int? | Populated on NeedsDecision entry for the error message and the list |
 | `NeedsDecisionEnteredAt`, `NeedsDecisionActivityRunProfileExecutionItemId` | DateTime?, Guid? | Links the list row to the item that raised it |
 | `Created`, `LastUpdated`, `CommittedAt` | DateTime, DateTime, DateTime? | `LastUpdated` drives delta pickup (decision 4) |
 
-Cascade delete from the owning Metaverse Object or Connected System Object. Index on `State` for the NeedsDecision list and on `LastUpdated` for delta pickup.
+Cascade delete from the owning Metaverse Object or Connected System Object and from the generation row. Index on `State` for the NeedsDecision list and on `LastUpdated` for delta pickup.
+
+### Assignment lifecycle
+
+An assignment is **state, not history**: it exists exactly while a generated mapping is responsible for that object's attribute. The history of what was generated, corrected or decided lives in Activities and causality, which have their own retention. The table is therefore bounded at one row per (object, generated attribute), never grows with events, and needs no retention job.
+
+| Trigger | Mechanism |
+|---|---|
+| Metaverse Object or Connected System Object deleted, including a connector space clear | FK cascade from the object |
+| Generated mapping removed (recall or keep, #1537), its Synchronisation Rule deleted, or its source type changed away from "JIM generates it" | FK cascade from `SyncRuleMappingGeneration`; a kept value becomes an ordinary orphan value as #1537 defines |
+| Another contributor wins the attribute (priority takeover), or the value is recalled or cleared | Page-flush reconciliation in the worker: for objects in the page that have assignments, delete any whose current value or provenance no longer matches (one query per page, only when assignments exist). A parked NeedsDecision export whose assignment is deleted is dropped with it |
+| Mapping disabled; Metaverse Object awaiting deletion under a grace period | Retained: the value is dormant or still reserved, not gone |
+
+Three rules follow from deletion being ordinary:
+
+- **An object's own current value is always free for it.** After an assignment is deleted and later regenerated (a mapping re-created, a connector space cleared and re-imported), the gates would otherwise see the value held by the requesting object itself and move it to the next candidate. Every gate excludes the requesting object.
+- **Export mode never generates over a value the target already has.** A Connected System Object that already holds a value for the target attribute (a joined pre-existing account, or an account re-imported after a clear) adopts that value and records the assignment as Committed. Generation fires only when the target has no value. Without this, a clear and re-import would lose the sticky knowledge and rename accounts back to their base value.
+- **Missing knowledge never permits a rename.** Anchoring reads the connector space, and a cleared connector space is empty until its next full import. A participating Connected System with no completed full import since its last clear answers "cannot tell", and "cannot tell" resolves to NeedsDecision, never to remediation; the same rule the probe's `CouldNotDetermine` follows.
 
 **Appended enum members** (all in Phase 1 so the ordinal tests change once):
 
@@ -174,7 +195,7 @@ Each phase is a PR off `main`, TDD throughout, `dotnet build JIM.sln` and `dotne
 3. Two migrations (mapping generation; assignments), appended after `20260905125649_AddPasswordChangeOrigin`, named in the style of `AddInboundValueProcessingToSyncRuleMapping`.
 4. Repository: `IMetaverseRepository.GetMetaverseObjectIdsByAttributeValuesAsync(attributeId, values)` as raw SQL over the existing `(AttributeId, StringValue)` index (the batched sibling of `GetMetaverseObjectByTypeAndAttributeAsync`); assignment CRUD and by-object lookups; NeedsDecision paged listing; the delta-pickup query (Metaverse Object ids whose assignment `LastUpdated` is after a watermark and which are joined to a given Connected System). Each member implemented in `JIM.PostgresData`, `JIM.InMemoryData` and registered with `ReadOnlySyncRepositoryGuard`.
 5. Configuration change capture: `ConfigurationSnapshotService` / `ConfigurationDiffService` include the generation settings so Configuration Change Preview, diff and drift see them; `ConfigurationChangeClassifier` classifies a base-expression change on a generated mapping as affecting *new* objects only (committed values are sticky).
-6. Mapping removal (#1537): recall deletes the affected assignments; keep leaves them Committed with `OriginSyncRuleMappingId` null.
+6. Lifecycle by cascade: assignments hang off the generation row and the owning object, so mapping removal (either #1537 choice), Synchronisation Rule deletion, source type change, object deletion and connector space clear all delete them at the database. Database-tier tests for each cascade.
 7. Tests: model validation, ordinal tests, database-tier persistence and lookup tests in `test/JIM.Worker.Tests/` (database tests job).
 
 ### Phase 2: Generation engine
@@ -186,8 +207,9 @@ Each phase is a PR off `main`, TDD throughout, `dotnet build JIM.sln` and `dotne
 5. Delta pickup (decision 4): `SyncDeltaSyncTaskProcessor` selection unions the Metaverse Objects from the Phase 1 query.
 6. Sync Preview: `SyncRuleAttributeFlowPreviewAdapter` and `SyncRuleAttributeFlowProposalMaterialiser` learn the source type; dry-run resolution renders "would generate `<candidate>`" with the gate that was consulted (zero side effects, per `engineering/SYNC_PREVIEW_ZERO_SIDE_EFFECTS.md`).
 7. Stat counters on `ActivityRunProfileExecutionStats` (`TotalGeneratedValues`, `TotalGeneratedValueExhaustions`) and the `CausalitySummaryBuilder` clause for them.
-8. Tests (red first): candidate sequencing and suffix position; letter strategy; reservation set under contention; gate ordering and short-circuit; stickiness across re-runs; priority supersession; intra-page collisions; exhaustion; dependency ordering with `mv[...]`; export-mode keyed on the Connected System Object; delta pickup selection. Runtime check on the light stack: CSV import generating Account Name into the Metaverse.
-9. File the example-data migration follow-up issue (decision 11).
+8. Lifecycle at flush: the page-flush reconciliation that deletes assignments whose value or provenance no longer matches (priority takeover, recall, clear), dropping any parked export with them; every gate excludes the requesting object; export mode adopts an existing target value as Committed instead of generating.
+9. Tests (red first): candidate sequencing and suffix position; letter strategy; reservation set under contention; gate ordering and short-circuit; stickiness across re-runs; priority supersession deleting the assignment; recall deleting the assignment; regeneration after deletion keeping the object's own value; export mode adopting a pre-existing value; intra-page collisions; exhaustion; dependency ordering with `mv[...]`; export-mode keyed on the Connected System Object; delta pickup selection. Runtime check on the light stack: CSV import generating Account Name into the Metaverse.
+10. File the example-data migration follow-up issue (decision 11).
 
 ### Phase 3: Configuration surfaces (portal, REST, PowerShell)
 
@@ -211,7 +233,7 @@ Surface parity is delivered per capability, so this phase ships all three for co
 ### Phase 5: Collision Remediation and anchoring
 
 1. `ExportExecutionServer.ProcessBatchSuccessAsync` failure branch: on `UniqueValueAlreadyInUse`, attribute the rejection (decision 7), look up the assignment, check the mapping's switch and the connector's classification capability, check anchoring (decision 5, or `RenameAuthorised`), then `TryRemediateAsync` → update the Pending Export's attribute value change, revise the Metaverse value in import mode (with provenance and change history), re-export within the run bounded by the limit; on acceptance `CommitAsync`. Parallel batches share the run's reservation set.
-2. Anchored (or remediation exhausted): `EnterNeedsDecisionAsync`; Pending Export to `Failed` (no automatic retry); execution item error `GeneratedValueCollisionUnresolved` naming the rejecting and anchoring systems with remediation advice.
+2. Anchored, anchoring unknown (a participating system with no completed full import since its last clear), or remediation exhausted: `EnterNeedsDecisionAsync`; Pending Export to `Failed` (no automatic retry); execution item error `GeneratedValueCollisionUnresolved` naming the rejecting and anchoring systems with remediation advice.
 3. Switch off or unclassified: ordinary export error, assignment unchanged (FR 15).
 4. Release on configuration change: `ConnectedSystemServer` calls `ReleaseNeedsDecisionForMappingAsync` when a generated mapping's settings change, mirroring `ReleaseParkedInitialPasswordsIfDeliveryChangedAsync`; released exports return to `Pending`.
 5. Causality: `SyncExportTaskProcessor` maps the new export error type; `GeneratedValueRemediated` outcome with the attribute row Set and previous value; `ExportCausalEdgeBuilder.RecordGeneratedValueRevision` writes the `ExportRejectionCausedGeneratedValueRevision` edge from the rejecting export item to the revised object's next queueing item with the right reason code; `TotalGeneratedValuesRemediated` and `TotalGeneratedValuesNeedingDecision` on the stats with their summary-band clause.
@@ -225,7 +247,7 @@ Surface parity is delivered per capability, so this phase ships all three for co
 
 ### Phase 7: Integration testing
 
-1. `Invoke-Scenario22-UniqueValueGeneration.ps1` (numbered after Scenario 21) with setup, run and teardown through `Run-IntegrationTests.ps1`, covering every row of the PRD's case table: modes, strategies, all four gates including the under-privileged bind, remediation on and off, mixed capability with a CSV target, anchoring and each exit, exhaustion, full and delta stability, supersession, causality assertions, and REST versus PowerShell parity.
+1. `Invoke-Scenario22-UniqueValueGeneration.ps1` (numbered after Scenario 21) with setup, run and teardown through `Run-IntegrationTests.ps1`, covering every row of the PRD's case table: modes, strategies, all four gates including the under-privileged bind, remediation on and off, mixed capability with a CSV target, anchoring and each exit, exhaustion, full and delta stability, supersession, lifecycle (supersession and recall deleting the assignment; a connector space clear and re-import in export mode adopting the target's value rather than renaming; a clear in import mode sending a rejection to NeedsDecision instead of remediating), causality assertions, and REST versus PowerShell parity.
 2. `Generate-TestCSV.ps1` gains an `-OmitItOwnedAttributes` switch touching its three emission sites (hr-users row, the second dataset, the cross-domain header array), with the switch folded into the cache key in `Get-OrGenerate-TestCSV.ps1` / `Test-CsvCache.ps1` so cached archives for unconverted scenarios stay valid. `Setup-Scenario1.ps1` replaces the `samAccountName → Account Name` import mapping with a generated one, adds generated Email and UPN from it (exercising decision 3), and keeps the export mappings and DN expression unchanged; `Invoke-Scenario1` expectations are unchanged.
 3. Audit of every scenario that references `samAccountName`, `email` or `userPrincipalName` (invoke scripts 1, 4, 5, 6, 10, 12, 13; setups 1, 2, 8, 10, 12, 13; data files for 4 and 5; the Samba populators) against the PRD's criterion (convert IT-owned flows; keep join keys and external identifiers, so the cross-domain scenarios 2 and 8 keep theirs), each conversion in its own commit, the decision per scenario recorded in the PR.
 4. Full suite green in the sandbox (image builds with the proxy CA, per `CLAUDE.md`).
