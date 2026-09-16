@@ -3,6 +3,7 @@
 @attribute [Authorize(Roles = "User")]
 @implements IDisposable
 @using JIM.Models.Activities
+@using JIM.Models.Core
 @using JIM.Models.Enums
 @using JIM.Models.Staging
 @using JIM.Utilities
@@ -96,7 +97,7 @@
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ObjectMatchingRule">Object Matching Rule</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ServiceSetting">Service Setting</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.HistoryRetentionCleanup">History Retention Cleanup</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseObjectHousekeeping">Scheduled Identity Deletion</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseObjectHousekeeping">@Constants.ActivityTargetNames.ScheduledMetaverseObjectDeletion</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.Authentication">Authentication</MudSelectItem>
         </MudSelect>
     </MudItem>

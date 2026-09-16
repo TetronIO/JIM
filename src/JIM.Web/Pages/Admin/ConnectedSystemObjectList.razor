@@ -137,7 +137,7 @@
                 <CellTemplate>
                     @if (!string.IsNullOrEmpty(context.Item.PendingExternalId))
                     {
-                        <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="Pending Export awaiting confirmation" Arrow="true" Placement="Placement.Top">
                             <MudText Color="Color.Info">@context.Item.PendingExternalId</MudText>
                         </MudTooltip>
                     }
@@ -162,7 +162,7 @@
                     }
                     else if (!string.IsNullOrEmpty(context.Item.PendingSecondaryExternalId))
                     {
-                        <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="Pending Export awaiting confirmation" Arrow="true" Placement="Placement.Top">
                             <MudText Color="Color.Info">@context.Item.PendingSecondaryExternalId</MudText>
                         </MudTooltip>
                     }
@@ -179,7 +179,7 @@
                     }
                     else if (!string.IsNullOrEmpty(context.Item.PendingDisplayName))
                     {
-                        <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="Pending Export awaiting confirmation" Arrow="true" Placement="Placement.Top">
                             <MudText Color="Color.Info">@context.Item.PendingDisplayName</MudText>
                         </MudTooltip>
                     }
@@ -309,7 +309,7 @@
             <MudCheckBox @bind-Value="_clearDeleteChangeHistory" Class="mt-4" Color="Color.Primary">
                 <MudText>Delete change history for cleared objects</MudText>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    When enabled, all change history records for the cleared CSOs will also be deleted.
+                    When enabled, all change history records for the cleared Connected System Objects will also be deleted.
                     This is recommended when clearing for re-import as the old history becomes irrelevant.
                 </MudText>
             </MudCheckBox>
