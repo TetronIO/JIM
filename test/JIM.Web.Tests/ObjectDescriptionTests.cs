@@ -1,0 +1,173 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Web;
+using NUnit.Framework;
+
+namespace JIM.Web.Tests;
+
+/// <summary>
+/// Tests for <see cref="ObjectDescription"/> (#1669): the single place that turns a Connected System
+/// Object's or Metaverse Object's type, name and system into the wording the portal uses wherever it
+/// mentions the object in running text, so a reader never needs to know what a "Connected System
+/// Object" is to follow the sentence. Covers every fallback tier for both the full running-text
+/// mention (name included) and the "place" sub-line used beneath a name already shown elsewhere.
+/// </summary>
+[TestFixture]
+public class ObjectDescriptionTests
+{
+    // ─── ForConnectedSystemObject: full mention, including the object's name ───
+
+    [Test]
+    public void ForConnectedSystemObject_TypeAndSystemKnown_NamesTypeNameAndSystem()
+    {
+        var text = ObjectDescription.ForConnectedSystemObject("user", "Baseline User", "Panoply AD");
+
+        Assert.That(text, Is.EqualTo("user Baseline User in Panoply AD"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObject_TypeLowerCaseAsStored_IsNotReCased()
+    {
+        // The schema may store a type name lower-case; it must be printed exactly as given.
+        var text = ObjectDescription.ForConnectedSystemObject("person", "EMP000001", "HR CSV Source");
+
+        Assert.That(text, Is.EqualTo("person EMP000001 in HR CSV Source"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObject_TypeUnknown_NamesNameAndSystem()
+    {
+        var text = ObjectDescription.ForConnectedSystemObject(null, "Baseline User", "Panoply AD");
+
+        Assert.That(text, Is.EqualTo("Baseline User in Panoply AD"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObject_TypeKnownSystemUnknown_NamesTypeAndName()
+    {
+        var text = ObjectDescription.ForConnectedSystemObject("user", "Baseline User", null);
+
+        Assert.That(text, Is.EqualTo("user Baseline User"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObject_TypeAndSystemUnknown_FallsBackToTheFullProductNoun()
+    {
+        var text = ObjectDescription.ForConnectedSystemObject(null, "Baseline User", null);
+
+        Assert.That(text, Is.EqualTo("Connected System Object Baseline User"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObject_EmptyTypeAndSystem_AreTreatedAsUnknown()
+    {
+        var text = ObjectDescription.ForConnectedSystemObject(string.Empty, "Baseline User", "   ");
+
+        Assert.That(text, Is.EqualTo("Connected System Object Baseline User"));
+    }
+
+    // ─── ForConnectedSystemObjectLabel: the "type: name" form for a label, not running text ───
+
+    [Test]
+    public void ForConnectedSystemObjectLabel_TypeKnown_NamesTypeThenName()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectLabel("user", "Baseline User");
+
+        Assert.That(text, Is.EqualTo("user: Baseline User"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectLabel_TypeUnknown_NamesTheNameAlone()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectLabel(null, "Baseline User");
+
+        Assert.That(text, Is.EqualTo("Baseline User"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectLabel_EmptyType_IsTreatedAsUnknown()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectLabel("   ", "Baseline User");
+
+        Assert.That(text, Is.EqualTo("Baseline User"));
+    }
+
+    // ─── ForConnectedSystemObjectPlace: sub-line, name already shown elsewhere ───
+
+    [Test]
+    public void ForConnectedSystemObjectPlace_TypeAndSystemKnown_NamesTypeAndSystem()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectPlace("user", "Panoply AD");
+
+        Assert.That(text, Is.EqualTo("user in Panoply AD"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectPlace_TypeUnknown_NamesTheSystemAlone()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectPlace(null, "Panoply AD");
+
+        Assert.That(text, Is.EqualTo("in Panoply AD"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectPlace_SystemUnknown_NamesTheTypeAlone()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectPlace("user", null);
+
+        Assert.That(text, Is.EqualTo("user"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectPlace_TypeAndSystemUnknown_FallsBackToTheFullProductNoun()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectPlace(null, null);
+
+        Assert.That(text, Is.EqualTo("Connected System Object"));
+    }
+
+    // ─── ForMetaverseObject: full mention, including the object's name ───
+
+    [Test]
+    public void ForMetaverseObject_TypeKnown_NamesTypeAndName()
+    {
+        var text = ObjectDescription.ForMetaverseObject("User", "Baseline User");
+
+        Assert.That(text, Is.EqualTo("User Baseline User"));
+    }
+
+    [Test]
+    public void ForMetaverseObject_TypeUnknown_FallsBackToTheFullProductNoun()
+    {
+        var text = ObjectDescription.ForMetaverseObject(null, "Baseline User");
+
+        Assert.That(text, Is.EqualTo("Metaverse Object Baseline User"));
+    }
+
+    [Test]
+    public void ForMetaverseObject_EmptyType_IsTreatedAsUnknown()
+    {
+        var text = ObjectDescription.ForMetaverseObject("   ", "Baseline User");
+
+        Assert.That(text, Is.EqualTo("Metaverse Object Baseline User"));
+    }
+
+    // ─── ForMetaverseObjectPlace: sub-line, name already shown elsewhere ───
+
+    [Test]
+    public void ForMetaverseObjectPlace_TypeKnown_NamesTheTypeInTheMetaverse()
+    {
+        var text = ObjectDescription.ForMetaverseObjectPlace("User");
+
+        Assert.That(text, Is.EqualTo("User in the Metaverse"));
+    }
+
+    [Test]
+    public void ForMetaverseObjectPlace_TypeUnknown_FallsBackToTheFullProductNoun()
+    {
+        var text = ObjectDescription.ForMetaverseObjectPlace(null);
+
+        Assert.That(text, Is.EqualTo("Metaverse Object"));
+    }
+}

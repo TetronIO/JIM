@@ -108,22 +108,10 @@
                         <MudText Typo="Typo.button">Display Name</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        @if (!string.IsNullOrEmpty(context.Item.DeletedObjectDisplayName))
-                        {
-                            @context.Item.DeletedObjectDisplayName
-                        }
-                        else
-                        {
-                            <EmptyValue />
-                        }
-                    </CellTemplate>
-                </TemplateColumn>
-                <TemplateColumn Sortable="false">
-                    <HeaderTemplate>
-                        <MudText Typo="Typo.button">Object Type</MudText>
-                    </HeaderTemplate>
-                    <CellTemplate>
-                        @(context.Item.DeletedObjectType?.Name ?? "Unknown")
+                        @* Names what the object is and where it lives beneath its name, so the type is no
+                           longer a separate column a reader has to line up against this one (#1669). *@
+                        <OneLineText Text="@context.Item.DeletedObjectDisplayName"
+                                     Secondary="@GetCsoPlace(context.Item)" />
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Sortable="false">
@@ -254,22 +242,10 @@
                         <MudText Typo="Typo.button">Display Name</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        @if (!string.IsNullOrEmpty(context.Item.DeletedObjectDisplayName))
-                        {
-                            @context.Item.DeletedObjectDisplayName
-                        }
-                        else
-                        {
-                            <EmptyValue />
-                        }
-                    </CellTemplate>
-                </TemplateColumn>
-                <TemplateColumn Sortable="false">
-                    <HeaderTemplate>
-                        <MudText Typo="Typo.button">Object Type</MudText>
-                    </HeaderTemplate>
-                    <CellTemplate>
-                        @(context.Item.DeletedObjectType?.Name ?? "Unknown")
+                        @* Names the object's type beneath its name, so the type is no longer a separate
+                           column a reader has to line up against this one (#1669). *@
+                        <OneLineText Text="@context.Item.DeletedObjectDisplayName"
+                                     Secondary="@ObjectDescription.ForMetaverseObjectPlace(context.Item.DeletedObjectType?.Name)" />
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Sortable="false">
@@ -683,6 +659,17 @@
             _mvoHistoryLoading = false;
             StateHasChanged();
         }
+    }
+
+    /// <summary>
+    /// What a deleted Connected System Object is and where it lived, for the sub-line beneath its
+    /// Display Name (#1669): "user in Panoply AD". The Connected System is resolved from the reference
+    /// data this page already loaded rather than a per-row query.
+    /// </summary>
+    private string GetCsoPlace(ConnectedSystemObjectChange change)
+    {
+        var systemName = _connectedSystems?.FirstOrDefault(c => c.Id == change.ConnectedSystemId)?.Name;
+        return ObjectDescription.ForConnectedSystemObjectPlace(change.DeletedObjectType?.Name, systemName);
     }
 
     private List<ChangeHistoryTimeline.ChangeGroup> GetCsoHistoryAsChangeGroups()

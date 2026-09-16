@@ -9,6 +9,7 @@ using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Web;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
 using NUnit.Framework;
@@ -240,6 +241,65 @@ public class CausalityLineageViewTests
                 "only the system's name is the link, not the whole 'in ...' phrase");
             Assert.That(sub.TextContent.Trim(), Is.EqualTo("in Yellowstone APAC"));
         }
+    }
+
+    /// <summary>
+    /// The head is a label, not a sentence, so it keeps the "type: name" form (#1669 follow-up):
+    /// "user: Baseline User", sourced from <see cref="ObjectDescription.ForConnectedSystemObjectLabel"/>
+    /// so the head and the causality entity chip's own "type: name" text can never quietly disagree.
+    /// The Connected System follows on its own linked sub-line beneath (see
+    /// <see cref="Render_RecordHead_LinksItsConnectedSystem"/>).
+    /// </summary>
+    [Test]
+    public void Render_RecordHeadWithAKnownType_NamesTheTypeAndNameAsALabel()
+    {
+        var model = new CausalityLineageModel
+        {
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Record,
+                    Objects = [new CausalityLineageObject
+                    {
+                        Title = "Baseline User",
+                        ObjectTypeName = "user",
+                        SystemName = "Panoply AD"
+                    }]
+                }
+            ],
+            Joins = []
+        };
+
+        var cut = RenderLineage(model);
+
+        Assert.That(cut.Find(".ln-obj-title").TextContent.Trim(), Is.EqualTo("user: Baseline User"));
+    }
+
+    /// <summary>
+    /// A role head speaks for several objects and carries no type name of its own (its Title, "Users",
+    /// already is one); it must not pick up ObjectDescription's "unknown type" fallback and read as
+    /// "Connected System Object Users".
+    /// </summary>
+    [Test]
+    public void Render_RoleHead_KeepsItsBareTitle()
+    {
+        var model = new CausalityLineageModel
+        {
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Record,
+                    Objects = [new CausalityLineageObject { Title = "Users", IsRoleHead = true }]
+                }
+            ],
+            Joins = []
+        };
+
+        var cut = RenderLineage(model);
+
+        Assert.That(cut.Find(".ln-obj-title").TextContent.Trim(), Is.EqualTo("Users"));
     }
 
     /// <summary>

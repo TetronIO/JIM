@@ -226,8 +226,14 @@
 
     private static string GetObjectTitle(CausalityLineageColumn column, CausalityLineageObject lineageObject)
     {
+        // The head is a label, not a sentence, so it keeps the "type: name" form
+        // (ForConnectedSystemObjectLabel) rather than the running-text mention with "in {system}";
+        // the Connected System already follows on its own linked sub-line beneath. A role head or a
+        // chain-derived record whose type the snapshot did not carry keeps its bare name: IsRoleHead's
+        // Title is already a type noun ("Users"), and the label method's own null-type branch already
+        // falls back to the bare name, so this reads correctly either way.
         return column.Kind == CausalityLineageColumnKind.Record && lineageObject.ObjectTypeName != null
-            ? $"{lineageObject.ObjectTypeName}: {lineageObject.Title}"
+            ? ObjectDescription.ForConnectedSystemObjectLabel(lineageObject.ObjectTypeName, lineageObject.Title)
             : lineageObject.Title;
     }
 

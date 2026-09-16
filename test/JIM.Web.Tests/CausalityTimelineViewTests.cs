@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using AngleSharp.Dom;
 using Bunit;
+using JIM.Web;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
 using NUnit.Framework;
@@ -57,6 +58,30 @@ public class CausalityTimelineViewTests
         // The Timeline is the one view with room to be precise: it reads RecordLabel while the summary
         // sentence and the Flow and Graph views read RecordName. Pinned so the two never quietly converge.
         Assert.That(cut.Markup, Does.Contain("Liam Allen (S8-287551)"));
+    }
+
+    /// <summary>
+    /// The record chip is a label, not a sentence, so it keeps the "type: name" form (#1669 follow-up):
+    /// "person: Liam Allen (S8-287551)", sourced from <see cref="ObjectDescription.ForConnectedSystemObjectLabel"/>
+    /// so the chip and the Lineage column head can never quietly disagree on how that form reads. The
+    /// type prefix is a separate, dimmed span for display only ("person:"); the visible text of the
+    /// two spans together must still read identically to the single-string label.
+    /// </summary>
+    [Test]
+    public async Task Render_SourceRowRecordChip_NamesTheTypeAndNameAsALabelAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var cut = RenderTimeline(context, model);
+
+        var chip = cut.Find(".evt-entities .chip");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.TextContent.Trim(), Is.EqualTo("person: Liam Allen (S8-287551)"));
+            Assert.That(chip.QuerySelector(".sub")!.TextContent.Trim(), Is.EqualTo("person:"),
+                "the dimmed type prefix is its own span, split from the name purely for display");
+        }
     }
 
     [Test]

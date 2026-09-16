@@ -11,11 +11,13 @@ using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
+using JIM.Web;
 using JIM.Web.Models;
 using JIM.Web.Pages.Admin;
 using JIM.Web.Shared;
@@ -348,6 +350,85 @@ public class PendingExportDetailTests : JimComponentTestContext
                     "a search that matched nothing has a way out, and the empty state must offer it");
             }
         });
+    }
+
+    // ─── Naming the Target and Source objects (#1669) ───
+
+    /// <summary>
+    /// The Target and Source rows say what the object is and where it lives beneath its chip, using the
+    /// same wording <see cref="ObjectDescription"/> produces everywhere else on the portal: a reader
+    /// never needs to know what a Connected System Object or a Metaverse Object is to follow the row.
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_TargetAndSourceObjects_NameTheirTypeAndPlaceBeneathTheChipAsync()
+    {
+        SetupRelatedObjects(
+            cso: new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                Type = new ConnectedSystemObjectType { Name = "user" }
+            },
+            mvo: new MetaverseObject
+            {
+                Id = Guid.NewGuid(),
+                Type = new MetaverseObjectType { Name = "User", PluralName = "Users" },
+                CachedDisplayName = "Baseline User"
+            });
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Markup, Does.Contain("user in Directory"),
+                    "the Target row must say what the Connected System Object is and where it lives");
+                Assert.That(cut.Markup, Does.Contain("User in the Metaverse"),
+                    "the Source row must say what the Metaverse Object's type is");
+            }
+        });
+    }
+
+    /// <summary>
+    /// A Connected System Object whose type is not known (the schema import predates it, say) still
+    /// names its Connected System; <see cref="ObjectDescription.ForConnectedSystemObjectPlace"/> owns
+    /// this fallback, and the page must not hide it by hand-building the string itself.
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_TargetObjectWithNoType_StillNamesTheConnectedSystemAsync()
+    {
+        SetupRelatedObjects(
+            cso: new ConnectedSystemObject { Id = Guid.NewGuid(), Type = new ConnectedSystemObjectType() },
+            mvo: null);
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("in Directory")));
+    }
+
+    /// <summary>
+    /// Sets the Target and Source objects on the Pending Export the page loads, keeping every other field
+    /// (attribute changes, counts) as the empty baseline <see cref="SetupChanges"/> establishes.
+    /// </summary>
+    private void SetupRelatedObjects(ConnectedSystemObject? cso, MetaverseObject? mvo)
+    {
+        _connectedSystems
+            .Setup(r => r.GetPendingExportDetailAsync(PendingExportId))
+            .ReturnsAsync(new PendingExportDetailResult
+            {
+                PendingExport = new PendingExport
+                {
+                    Id = PendingExportId,
+                    ConnectedSystemId = ConnectedSystemId,
+                    ConnectedSystem = new ConnectedSystem { Id = ConnectedSystemId, Name = "Directory" },
+                    ChangeType = PendingExportChangeType.Update,
+                    Status = PendingExportStatus.Pending,
+                    ConnectedSystemObject = cso,
+                    SourceMetaverseObject = mvo,
+                    AttributeValueChanges = []
+                },
+                AttributeChangeTotalCounts = new()
+            });
     }
 
     [Test]
