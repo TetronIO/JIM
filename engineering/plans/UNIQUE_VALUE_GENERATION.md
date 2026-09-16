@@ -5,6 +5,7 @@
 - **PRD:** [`../prd/PRD_UNIQUE_VALUE_GENERATION.md`](../prd/PRD_UNIQUE_VALUE_GENERATION.md)
 - **Related:** [#223](https://github.com/TetronIO/JIM/issues/223) Initial Export Only (per-mapping flag precedent), [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning (parked state, release on configuration change, queue-and-follow), [#1087](https://github.com/TetronIO/JIM/issues/1087) / [#1495](https://github.com/TetronIO/JIM/issues/1495) causality views, [#1079](https://github.com/TetronIO/JIM/issues/1079) optimistic export apply, [#91](https://github.com/TetronIO/JIM/issues/91) attribute priority, [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour
 - **UI mockups:** [Unique Value Generation: Design and Mockups](https://claude.ai/artifact/G9R6cK7WR7QwmPukctFpkb)
+- **Plan explainer:** [Unique Value Generation Plan](https://claude.ai/artifact/WsfoqDR7PrwiQZLQBPCt9q) (what changes per layer, the data model, the three data flows, the assignment lifecycle and the phases)
 - **Last Updated:** 2026-09-16
 
 ## Overview
