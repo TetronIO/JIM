@@ -16,14 +16,13 @@ namespace JIM.Web.Tests;
 public class OutcomeDisplayMapExportDecisionTests
 {
     [Test]
-    public void GetExportDecision_CreateStaged_ReadsRecordCreated()
+    public void GetExportDecision_CreateStaged_ReadsConnectedSystemObjectCreated()
     {
         var display = OutcomeDisplayMap.GetExportDecision(CausalReasonCode.ExportCreateStaged);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display.PlainLabel, Is.EqualTo("Record created"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Exported (Create)"));
+            Assert.That(display.Label, Is.EqualTo("Connected System Object created"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Success));
         }
     }
@@ -35,21 +34,19 @@ public class OutcomeDisplayMapExportDecisionTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display.PlainLabel, Is.EqualTo("Changes applied"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Exported (Update)"));
+            Assert.That(display.Label, Is.EqualTo("Changes applied"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Info));
         }
     }
 
     [Test]
-    public void GetExportDecision_DeleteStaged_ReadsRecordDeleted()
+    public void GetExportDecision_DeleteStaged_ReadsConnectedSystemObjectDeleted()
     {
         var display = OutcomeDisplayMap.GetExportDecision(CausalReasonCode.ExportDeleteStaged);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display.PlainLabel, Is.EqualTo("Record deleted"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Exported (Delete)"));
+            Assert.That(display.Label, Is.EqualTo("Connected System Object deleted"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Error));
         }
     }

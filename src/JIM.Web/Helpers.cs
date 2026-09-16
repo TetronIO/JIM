@@ -1249,27 +1249,29 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Gets the technical display name for a sync outcome type (e.g. "MVO Projected"). Delegates to
+    /// Gets the display name for a sync outcome type (e.g. "Projected to the Metaverse"). Delegates to
     /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>
     public static string GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return OutcomeDisplayMap.Get(outcomeType).TechnicalLabel;
+        return OutcomeDisplayMap.Get(outcomeType).Label;
     }
 
     /// <summary>
-    /// Gets the plain-language display name for a sync outcome type (e.g. "Identity created"). Delegates to
+    /// Gets the display name for a sync outcome type (e.g. "Projected to the Metaverse"). Delegates to
     /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>
     /// <remarks>
-    /// The sibling of <see cref="GetOutcomeTypeDisplayName"/>, and the right one for a Configuration Change
-    /// Preview (#827): an operator reading a completed run's outcomes wants the exact outcome name, whereas an
-    /// administrator deciding whether to save a configuration change wants written English. Having both named
-    /// makes a surface state which audience it is writing for, rather than picking a label by accident.
+    /// Identical to <see cref="GetOutcomeTypeDisplayName"/>: the causality panel and the Activity views
+    /// used to carry a plain-language label alongside a more technical one, and a Configuration Change
+    /// Preview (#827) read the plain one. That split is gone: every outcome now has exactly one label, so
+    /// both methods delegate to the same <see cref="OutcomeDisplay.Label"/>. Kept as a separate method
+    /// rather than removed so existing callers (the Configuration Change Preview panel and its counts)
+    /// need no change.
     /// </remarks>
     public static string GetOutcomeTypePlainName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return OutcomeDisplayMap.Get(outcomeType).PlainLabel;
+        return OutcomeDisplayMap.Get(outcomeType).Label;
     }
 
     /// <summary>

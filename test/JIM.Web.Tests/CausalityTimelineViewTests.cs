@@ -13,8 +13,8 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// bUnit tests for <see cref="CausalityTimelineView"/>: event order and nesting, the
-/// plain-vs-technical emphasis swap, deletion-record linking and inline attribute expansion.
+/// bUnit tests for <see cref="CausalityTimelineView"/>: event order and nesting, the portal's one
+/// vocabulary per outcome, deletion-record linking and inline attribute expansion.
 /// </summary>
 [TestFixture]
 public class CausalityTimelineViewTests
@@ -29,27 +29,21 @@ public class CausalityTimelineViewTests
 
     private static IRenderedComponent<CausalityTimelineView> RenderTimeline(
         BunitContext context,
-        CausalityModel model,
-        bool technicalNames = false)
+        CausalityModel model)
     {
         return context.Render<CausalityTimelineView>(ps => ps
-            .Add(c => c.Model, model)
-            .Add(c => c.TechnicalNames, technicalNames));
+            .Add(c => c.Model, model));
     }
 
     [Test]
-    public async Task Render_TechnicalNames_RenamesTheOpeningVerbTooAsync()
+    public async Task Render_OpeningVerb_NamesTheConnectedSystemObjectAsync()
     {
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        var plain = RenderTimeline(context, model);
-        Assert.That(plain.FindAll(".verb")[0].TextContent.Trim(), Is.EqualTo("Record processed"));
+        var cut = RenderTimeline(context, model);
 
-        await using var technicalContext = CausalityBunitContext.Create();
-        var technical = RenderTimeline(technicalContext, model, technicalNames: true);
-        Assert.That(technical.FindAll(".verb")[0].TextContent.Trim(),
-            Is.EqualTo("Connected System Object processed"));
+        Assert.That(cut.FindAll(".verb")[0].TextContent.Trim(), Is.EqualTo("Connected System Object processed"));
     }
 
     [Test]
@@ -76,7 +70,7 @@ public class CausalityTimelineViewTests
         var verbs = cut.FindAll(".tl-line .verb").Select(v => v.TextContent.Trim()).ToList();
         Assert.That(verbs, Is.EqualTo(new[]
         {
-            "Record processed", "Identity created", "Attributes flowed", "Provisioned", "Export queued"
+            "Connected System Object processed", "Projected to the Metaverse", "Attributes flowed", "Provisioned", "Export queued"
         }));
     }
 
@@ -116,36 +110,19 @@ public class CausalityTimelineViewTests
     }
 
     [Test]
-    public async Task Render_PlainNames_ShowsNoTechnicalVocabularyAtAllAsync()
-    {
-        // Same rule as the Lineage view's cards: with the toggle off, no CSO or MVO vocabulary appears.
-        await using var context = CausalityBunitContext.Create();
-        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-
-        var cut = RenderTimeline(context, model, technicalNames: false);
-
-        var projectedRow = cut.FindAll(".tl-row")[1];
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(projectedRow.QuerySelector(".verb")!.TextContent.Trim(), Is.EqualTo("Identity created"));
-            Assert.That(projectedRow.QuerySelector(".tech"), Is.Null);
-            Assert.That(cut.Markup, Does.Not.Contain("MVO Projected"));
-        }
-    }
-
-    [Test]
-    public async Task Render_TechnicalNames_ShowsTheTechnicalLabelInsteadAsync()
+    public async Task Render_ProjectedRow_ShowsNoCsoOrMvoVocabularyAtAllAsync()
     {
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        var cut = RenderTimeline(context, model, technicalNames: true);
+        var cut = RenderTimeline(context, model);
 
         var projectedRow = cut.FindAll(".tl-row")[1];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(projectedRow.QuerySelector(".verb")!.TextContent.Trim(), Is.EqualTo("MVO Projected"));
-            Assert.That(projectedRow.QuerySelector(".tech"), Is.Null);
+            Assert.That(projectedRow.QuerySelector(".verb")!.TextContent.Trim(), Is.EqualTo("Projected to the Metaverse"));
+            Assert.That(cut.Markup, Does.Not.Contain("MVO"));
+            Assert.That(cut.Markup, Does.Not.Contain("CSO"));
         }
     }
 
@@ -256,7 +233,7 @@ public class CausalityTimelineViewTests
         var verbs = cut.FindAll(".tl-line .verb").Select(v => v.TextContent.Trim()).ToList();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(verbs, Does.Contain("Identity created"));
+            Assert.That(verbs, Does.Contain("Projected to the Metaverse"));
             Assert.That(verbs, Does.Contain("Provisioned"));
         }
     }

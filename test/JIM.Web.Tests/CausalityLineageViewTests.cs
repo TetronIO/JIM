@@ -16,11 +16,11 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// bUnit tests for <see cref="CausalityLineageView"/> (#1495): column heads carrying the R/ID chip
-/// vocabulary with the system named beneath, this-run cards rendered primary (ring and badge) around
-/// the shared event card, chain cards rendered subdued with their run kind, timestamp and activity
-/// link, cohort expansion in place, endings as quiet footers, the technical-names cascade and the
-/// selection callback for the shared attribute drawer.
+/// bUnit tests for <see cref="CausalityLineageView"/> (#1495): column heads named in the portal's own
+/// vocabulary with the system or type named beneath, this-run cards rendered primary (ring and badge)
+/// around the shared event card, chain cards rendered subdued with their run kind, timestamp and
+/// activity link, cohort expansion in place, endings as quiet footers, and the selection callback for
+/// the shared attribute drawer.
 /// </summary>
 [TestFixture]
 public class CausalityLineageViewTests
@@ -148,14 +148,13 @@ public class CausalityLineageViewTests
     }
 
     private IRenderedComponent<CausalityLineageView> RenderLineage(
-        CausalityLineageModel model, bool technicalNames = false,
+        CausalityLineageModel model,
         Action<CausalityEvent?>? onSelectionChanged = null,
         DateTime? timestamp = null)
     {
         return _context.Render<CausalityLineageView>(ps =>
         {
             ps.Add(c => c.Model, model);
-            ps.Add(c => c.TechnicalNames, technicalNames);
             ps.Add(c => c.Timestamp, timestamp);
             if (onSelectionChanged != null)
                 ps.Add(c => c.SelectedEventChanged, onSelectionChanged);
@@ -238,8 +237,8 @@ public class CausalityLineageViewTests
             Assert.That(link, Is.Not.Null);
             Assert.That(link!.GetAttribute("href"), Is.EqualTo("/admin/connected-systems/1"));
             Assert.That(link.TextContent.Trim(), Is.EqualTo("Yellowstone APAC"),
-                "only the system's name is the link, not the whole 'record in ...' phrase");
-            Assert.That(sub.TextContent.Trim(), Is.EqualTo("record in Yellowstone APAC"));
+                "only the system's name is the link, not the whole 'in ...' phrase");
+            Assert.That(sub.TextContent.Trim(), Is.EqualTo("in Yellowstone APAC"));
         }
     }
 
@@ -268,7 +267,7 @@ public class CausalityLineageViewTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(sub.QuerySelector("a"), Is.Null);
-            Assert.That(sub.TextContent.Trim(), Is.EqualTo("record in Retired System"));
+            Assert.That(sub.TextContent.Trim(), Is.EqualTo("in Retired System"));
         }
     }
 
@@ -433,7 +432,7 @@ public class CausalityLineageViewTests
     }
 
     [Test]
-    public void Render_ExportCreateStory_HeadsColumnsWithRecordAndIdentityChips()
+    public void Render_ExportCreateStory_HeadsNameRecordsAndTheMetaverseObjectWithNoGlyph()
     {
         var cut = RenderLineage(ExportCreateLineage());
 
@@ -441,14 +440,12 @@ public class CausalityLineageViewTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(heads, Has.Count.EqualTo(3));
-            Assert.That(heads[0].QuerySelector(".glyph")!.TextContent.Trim(), Is.EqualTo("R"));
             Assert.That(heads[0].TextContent, Does.Contain("Liam Allen"));
-            Assert.That(heads[0].TextContent, Does.Contain("record in Yellowstone APAC"));
-            Assert.That(heads[1].QuerySelector(".glyph")!.TextContent.Trim(), Is.EqualTo("ID"));
-            Assert.That(heads[2].TextContent, Does.Contain("record in Glitterband EMEA"));
-            // The column is the record, never the system: no head carries the CS glyph.
-            Assert.That(heads.Select(h => h.QuerySelector(".glyph")!.TextContent.Trim()),
-                Has.None.EqualTo("CS"));
+            Assert.That(heads[0].TextContent, Does.Contain("in Yellowstone APAC"));
+            Assert.That(heads[2].TextContent, Does.Contain("in Glitterband EMEA"));
+            // Column heads carry no glyph of their own: the Metaverse Object and the Connected System
+            // Objects either side of it are told apart by their own text, not by an abbreviation.
+            Assert.That(heads.SelectMany(h => h.QuerySelectorAll(".glyph")), Is.Empty);
         }
     }
 
@@ -611,15 +608,6 @@ public class CausalityLineageViewTests
     }
 
     [Test]
-    public void Render_TechnicalNames_FlowThroughToTheEventCards()
-    {
-        var cut = RenderLineage(NewJoinerLineage(), technicalNames: true);
-
-        Assert.That(cut.FindComponents<CausalityEventCard>(),
-            Has.All.Matches<IRenderedComponent<CausalityEventCard>>(card => card.Instance.TechnicalNames));
-    }
-
-    [Test]
     public void Render_ClickingAClickableEventCard_RaisesSelectionChanged()
     {
         CausalityEvent? selected = null;
@@ -694,19 +682,6 @@ public class CausalityLineageViewTests
     }
 
     /// <summary>
-    /// The technical-names toggle swaps the chip's label exactly as it swaps an event card's, so the
-    /// vocabulary a reader asked for is consistent across every card on the panel.
-    /// </summary>
-    [Test]
-    public void Render_TechnicalNames_SwapsTheOperationChipLabel()
-    {
-        var cut = RenderLineage(IdentityCreationLineage(), technicalNames: true);
-
-        var chainCard = cut.Find(".ln-card");
-        Assert.That(chainCard.QuerySelector(".ln-op")!.TextContent.Trim(), Is.EqualTo("MVO Projected"));
-    }
-
-    /// <summary>
     /// A confirmation is not an object operation, so it carries no chip and no tone custom properties.
     /// </summary>
     [Test]
@@ -733,14 +708,15 @@ public class CausalityLineageViewTests
     {
         var cut = RenderLineage(IdentityCreationLineage());
 
+        // The Identity column's sub-line always names "... · Metaverse"; no other column carries that.
         var identityObject = cut.FindAll(".ln-object")
-            .Single(o => o.QuerySelector(".glyph")!.TextContent.Trim() == "ID");
+            .Single(o => o.QuerySelector(".ln-obj-sub")?.TextContent.Contains("Metaverse") == true);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(identityObject.QuerySelector(".ln-card"), Is.Not.Null,
                 "the creation hop is a chain card under the Identity column");
             Assert.That(identityObject.QuerySelector(".ln-card")!.TextContent,
-                Does.Contain("was created as a new Identity"));
+                Does.Contain("was projected to the Metaverse"));
         }
     }
 

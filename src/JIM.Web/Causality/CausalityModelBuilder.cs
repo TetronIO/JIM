@@ -35,7 +35,7 @@ public static class CausalityModelBuilder
     /// </param>
     /// <param name="deletionPolicySnapshot">
     /// The decision-time Metaverse Object deletion policy recorded on the item, where one was captured. Supplies
-    /// the synthetic "Identity not deleted" event; see <see cref="BuildDeclinedDeletionEvent"/>.
+    /// the synthetic "Metaverse Object not deleted" event; see <see cref="BuildDeclinedDeletionEvent"/>.
     /// </param>
     /// <param name="isSynchronisationRun">
     /// Whether the Run Profile that produced this item was a Full or Delta Synchronisation. Only a
@@ -131,8 +131,7 @@ public static class CausalityModelBuilder
             // entirely on the deployment's intent, and the panel does not know it.
             Tone = CausalityTone.Secondary,
             Icon = Icons.Material.Filled.ShieldMoon,
-            PlainLabel = "Identity not deleted",
-            TechnicalLabel = "Metaverse Object not deleted",
+            Label = "Metaverse Object not deleted",
             DetailMessage = DeclinedDeletionDetail(snapshot)
         };
     }
@@ -143,7 +142,7 @@ public static class CausalityModelBuilder
     private static string DeclinedDeletionDetail(MvoDeletionPolicySnapshot snapshot)
     {
         if (snapshot.DeletionRule == MetaverseObjectDeletionRule.Manual)
-            return "This object type's Deletion Rule is Manual, so a disconnection never deletes the Identity.";
+            return "This object type's Deletion Rule is Manual, so a disconnection never deletes the Metaverse Object.";
 
         if (snapshot.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
             && snapshot.TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
@@ -153,7 +152,7 @@ public static class CausalityModelBuilder
             return $"An authoritative source is still connected ({remaining}), and this object type deletes only when all of them disconnect.";
         }
 
-        return "The Deletion Rule in force at the time was evaluated and did not delete the Identity.";
+        return "The Deletion Rule in force at the time was evaluated and did not delete the Metaverse Object.";
     }
 
     private static CausalityEvent BuildEvent(
@@ -185,8 +184,7 @@ public static class CausalityModelBuilder
         return new CausalityEvent
         {
             OutcomeType = outcome.OutcomeType,
-            PlainLabel = display.PlainLabel,
-            TechnicalLabel = display.TechnicalLabel,
+            Label = display.Label,
             Tone = display.Tone,
             Icon = display.Icon,
             Lane = lane,
@@ -450,7 +448,7 @@ public static class CausalityModelBuilder
                     && childOutcomes.All(c => c.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted))
                 {
                     links.Add(new CausalityEntityLink(
-                        outcome.TargetEntityDescription ?? "Identity",
+                        outcome.TargetEntityDescription ?? "Metaverse Object",
                         GetMetaverseObjectHref(mvoId, context),
                         CausalityEntityKind.Identity));
                 }

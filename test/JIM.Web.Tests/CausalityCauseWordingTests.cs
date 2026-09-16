@@ -310,33 +310,33 @@ public class CausalityCauseWordingTests
         var sentence = CausalityCauseWording.Sentence(cohort, effectName: null);
 
         Assert.That(Read(sentence), Is.EqualTo(
-            "Mia Young (S8-352) was provisioned to Glitterband EMEA, so this run created the record"));
+            "Mia Young (S8-352) was provisioned to Glitterband EMEA, so this run created the Connected System Object"));
     }
 
     [Test]
-    public void Sentence_QueueingCohortForAnUpdate_LeadsWithTheIdentityChange()
+    public void Sentence_QueueingCohortForAnUpdate_LeadsWithTheMetaverseObjectChange()
     {
         var cohort = QueueingCohort("Sam Scott (S8-198)", CausalReasonCode.ExportUpdateStaged);
 
         var sentence = CausalityCauseWording.Sentence(cohort, effectName: null);
 
         Assert.That(Read(sentence), Is.EqualTo(
-            "Sam Scott (S8-198)'s Identity changed, so this run applied the changes to the record"));
+            "Sam Scott (S8-198)'s Metaverse Object changed, so this run applied the changes to the Connected System Object"));
     }
 
     /// <summary>
-    /// The flagship case: an account being removed leads with the Identity's deletion, whose own causes
-    /// continue above it.
+    /// The flagship case: an account being removed leads with the Metaverse Object's deletion, whose own
+    /// causes continue above it.
     /// </summary>
     [Test]
-    public void Sentence_QueueingCohortForADelete_LeadsWithTheIdentityDeletion()
+    public void Sentence_QueueingCohortForADelete_LeadsWithTheMetaverseObjectDeletion()
     {
         var cohort = QueueingCohort("Tina Adams (S8-999)", CausalReasonCode.ExportDeleteStaged);
 
         var sentence = CausalityCauseWording.Sentence(cohort, effectName: null);
 
         Assert.That(Read(sentence), Is.EqualTo(
-            "The Identity Tina Adams (S8-999) was deleted, so this run deleted the record"));
+            "The Metaverse Object Tina Adams (S8-999) was deleted, so this run deleted the Connected System Object"));
     }
 
     /// <summary>
@@ -405,12 +405,12 @@ public class CausalityCauseWordingTests
     /// no chip; the rule is one appearance of the system per hop.
     /// </summary>
     [Test]
-    public void Sentence_SourceImportHopForAnAdd_ReadsAsTheRecordArriving()
+    public void Sentence_SourceImportHopForAnAdd_ReadsAsTheConnectedSystemObjectArriving()
     {
         var sentence = CausalityCauseWording.Sentence(SourceImportCohort(ObjectChangeType.Added), effectName: null);
 
         Assert.That(Read(sentence), Is.EqualTo(
-            "Mia Young (S8-352) was imported into Yellowstone APAC as a new record"));
+            "Mia Young (S8-352) was imported into Yellowstone APAC as a new Connected System Object"));
     }
 
     [Test]
@@ -427,12 +427,12 @@ public class CausalityCauseWordingTests
     /// off.
     /// </summary>
     [Test]
-    public void Sentence_SourceImportHopForADelete_ReadsAsTheSourceRecordDisappearing()
+    public void Sentence_SourceImportHopForADelete_ReadsAsTheSourceConnectedSystemObjectDisappearing()
     {
         var sentence = CausalityCauseWording.Sentence(SourceImportCohort(ObjectChangeType.Deleted), effectName: null);
 
         Assert.That(Read(sentence), Is.EqualTo(
-            "Mia Young (S8-352)'s record was deleted from Yellowstone APAC"));
+            "Mia Young (S8-352)'s Connected System Object was deleted from Yellowstone APAC"));
     }
 
     [Test]
@@ -463,19 +463,19 @@ public class CausalityCauseWordingTests
     }
 
     [Test]
-    public void Sentence_IdentityCreationHopForAProjection_ReadsAsANewIdentity()
+    public void Sentence_IdentityCreationHopForAProjection_ReadsAsProjectedToTheMetaverse()
     {
         var sentence = CausalityCauseWording.Sentence(CreationCohort(ObjectChangeType.Projected), effectName: null);
 
-        Assert.That(Read(sentence), Is.EqualTo("Mia Young (S8-352) was created as a new Identity"));
+        Assert.That(Read(sentence), Is.EqualTo("Mia Young (S8-352) was projected to the Metaverse"));
     }
 
     [Test]
-    public void Sentence_IdentityCreationHopForAJoin_ReadsAsJoinedToTheExistingIdentity()
+    public void Sentence_IdentityCreationHopForAJoin_ReadsAsJoinedToTheExistingMetaverseObject()
     {
         var sentence = CausalityCauseWording.Sentence(CreationCohort(ObjectChangeType.Joined), effectName: null);
 
-        Assert.That(Read(sentence), Is.EqualTo("Mia Young (S8-352) was joined to this existing Identity"));
+        Assert.That(Read(sentence), Is.EqualTo("Mia Young (S8-352) was joined to this existing Metaverse Object"));
     }
 
     [Test]
@@ -483,7 +483,7 @@ public class CausalityCauseWordingTests
     {
         var sentence = CausalityCauseWording.Sentence(CreationCohort(ObjectChangeType.Created), effectName: null);
 
-        Assert.That(Read(sentence), Is.EqualTo("This Identity was created directly in JIM"));
+        Assert.That(Read(sentence), Is.EqualTo("This Metaverse Object was created directly in JIM"));
     }
 
     [Test]

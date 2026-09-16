@@ -166,10 +166,10 @@ what your edited toggles would do without saving them:
 
 | Transition | What it means |
 |---|---|
-| No longer creates an identity | Objects that would have had a Metaverse Object projected for them and now would not. They stay in the connector space, unmanaged. |
+| No longer creates a Metaverse Object | Objects that would have had a Metaverse Object projected for them and now would not. They stay in the connector space, unmanaged. |
 | No longer creates a Connected System Object | Metaverse Objects that would have had a Connected System Object created in the target system and now would not. Nothing existing is destroyed, which is why it goes unnoticed. |
 | Free to drift from JIM | Objects whose divergence from what JIM holds would no longer be corrected. |
-| Identity created / Provisioned / Drift corrected | The inverses, for a toggle being turned on. |
+| Projected to the Metaverse / Provisioned / Drift corrected | The inverses, for a toggle being turned on. |
 
 **Direction cannot be previewed, and cannot be changed.** A saved rule's Attribute Flow mappings and Object
 Matching Rules are written for the direction it has: an import rule's mappings write Metaverse Attributes and its
@@ -188,8 +188,8 @@ Automation gets the same evaluation: `New-JIMConfigurationChangePreview -SyncRul
 
 ### Previewing an Object Matching change
 
-Matching mistakes do not fail. A rule matched too loosely joins an account to the wrong identity, and everything it
-contributes goes with it; a rule matched too tightly projects a second identity beside the right one. Both look like
+Matching mistakes do not fail. A rule matched too loosely joins an account to the wrong Metaverse Object, and everything it
+contributes goes with it; a rule matched too tightly projects a second Metaverse Object beside the right one. Both look like
 a successful synchronisation, and both are found later by a person.
 
 The Matching tab therefore offers **Preview Impact** beside **Add Matching Rule**, and again on the Simple/Advanced
@@ -199,9 +199,9 @@ The preview reports:
 
 | Transition | What it means |
 |---|---|
-| Joins a different Metaverse Object | The object joins one identity under the rules as they stand and would join a different one. The most dangerous outcome a matching change can produce. |
-| Joins instead of projecting | The object matches nothing today, so the next synchronisation would create a new identity for it, and under the proposal it would join an existing one. Usually what a widened rule is for. |
-| Projects instead of joining | The inverse, and a duplicate-identity risk: the object matches today and would match nothing, so a second identity would be created beside the one it should have joined. |
+| Joins a different Metaverse Object | The object joins one Metaverse Object under the rules as they stand and would join a different one. The most dangerous outcome a matching change can produce. |
+| Joins instead of projecting | The object matches nothing today, so the next synchronisation would create a new Metaverse Object for it, and under the proposal it would join an existing one. Usually what a widened rule is for. |
+| Projects instead of joining | The inverse, and a duplicate Metaverse Object risk: the object matches today and would match nothing, so a second Metaverse Object would be created beside the one it should have joined. |
 | Matches more than one Metaverse Object | The proposal is ambiguous for this object, so its next synchronisation refuses it rather than joining it to anything. |
 
 One thing decides how to read every one of those counts: **Object Matching Rules are evaluated only for objects that
@@ -223,7 +223,7 @@ These determine what happens when no match is found.
 
 ## Deprovisioning Action
 
-Provisioning's counterpart: each export rule's **Deprovisioning Action** determines what happens to the object in the Connected System when its Metaverse Object leaves the rule's scope or is deleted (for example, when a leaver's identity is removed by a [deletion rule](../concepts/jml-lifecycle.md#deletion-rules)):
+Provisioning's counterpart: each export rule's **Deprovisioning Action** determines what happens to the object in the Connected System when its Metaverse Object leaves the rule's scope or is deleted (for example, when a leaver's Metaverse Object is removed by a [deletion rule](../concepts/jml-lifecycle.md#deletion-rules)):
 
 - **Disconnect** (default): JIM breaks the join and leaves the object in place in the Connected System. Nothing is exported.
 - **Delete**: JIM queues a delete so the object is removed from the Connected System on the next export run.
@@ -234,9 +234,9 @@ Configure the action in the export section of the Synchronisation Rule editor. T
 
 ### Seeing what a run has deprovisioned
 
-Every delete queued by a Deprovisioning Action is reported on the Activity of the run that staged it, so you can see exactly which accounts are about to be removed before the next export runs. Each queued delete appears on the deleted identity's execution item as a **Pending Export** outcome nested beneath the **MVO Deleted** outcome that caused it, naming the Connected System the account is being removed from, and is counted in the Activity's Pending Exports total. A leaver's execution item therefore reads as the whole chain: disconnected, Connected System Object deleted, identity deleted, then one Pending Export per downstream account being deprovisioned. Open the outcome to see the Pending Export's detail.
+Every delete queued by a Deprovisioning Action is reported on the Activity of the run that staged it, so you can see exactly which accounts are about to be removed before the next export runs. Each queued delete appears on the deleted Metaverse Object's execution item as a **Pending Export** outcome nested beneath the **Metaverse Object deleted** outcome that caused it, naming the Connected System the account is being removed from, and is counted in the Activity's Pending Exports total. A leaver's execution item therefore reads as the whole chain: disconnected, Connected System Object deleted, Metaverse Object deleted, then one Pending Export per downstream account being deprovisioned. Open the outcome to see the Pending Export's detail.
 
-This applies wherever the deletion happens: during a Synchronisation Run Profile (when the Metaverse Object Type's [deletion rule](../concepts/jml-lifecycle.md#deletion-rules) has no grace period, so the identity is deleted inline), and in the background [Scheduled Identity Deletion](activities.md#scheduled-identity-deletion) batch that deletes identities once their grace period expires.
+This applies wherever the deletion happens: during a Synchronisation Run Profile (when the Metaverse Object Type's [deletion rule](../concepts/jml-lifecycle.md#deletion-rules) has no grace period, so the Metaverse Object is deleted inline), and in the background [Scheduled Identity Deletion](activities.md#scheduled-identity-deletion) batch that deletes Metaverse Objects once their grace period expires.
 
 ### Previewing a destructive toggle change
 
@@ -458,7 +458,7 @@ The **Preview Attribute Flow Impact** button, which appears beside the editor's 
 
 The evaluation is the synchronisation engine's own, run twice per object (once against the saved configuration and once against the proposal) and compared, so [Attribute Priority](#attribute-priority), Missing Input Behaviour and Expression evaluation are answered by the engine rather than approximated.
 
-Both directions state a true before-and-after. An **import** mapping's old value is what the identity holds in the metaverse today; an **export** mapping's is what the object holds in the target Connected System today, including where the saved configuration would write nothing because the target is already correct, which is exactly the case a domain cutover is.
+Both directions state a true before-and-after. An **import** mapping's old value is what the Metaverse Object holds in the metaverse today; an **export** mapping's is what the object holds in the target Connected System today, including where the saved configuration would write nothing because the target is already correct, which is exactly the case a domain cutover is.
 
 Three answers are deliberately negative rather than reassuring:
 
@@ -482,7 +482,7 @@ For a given Metaverse attribute, JIM evaluates every contributing import rule in
 - **A rule with no opinion is skipped.**<br /> If a rule does not apply to the object (it is disabled, no object from its Connected System is joined, or the joined object is out of the rule's scope), it is passed over and the next priority is considered.
 - **If nobody contributes, the attribute is left unset.**
 
-For example, an identity drawing data from two source systems:
+For example, a Metaverse Object drawing data from two source systems:
 
 - HR system provides `First Name` and `Last Name` (priority 1: authoritative)
 - Badge system also provides `First Name` (priority 2: secondary)

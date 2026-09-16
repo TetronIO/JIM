@@ -125,19 +125,6 @@ public interface IUserPreferenceService
     /// </summary>
     /// <param name="view">"lineage" or "timeline".</param>
     Task SetCausalityViewAsync(string view);
-
-    /// <summary>
-    /// Gets the user's causality technical-names preference (emphasise MVO/CSO vocabulary over
-    /// plain language).
-    /// </summary>
-    /// <returns>True if technical names are emphasised, false if plain language, null if no preference (default to off).</returns>
-    Task<bool?> GetCausalityTechNamesAsync();
-
-    /// <summary>
-    /// Sets the user's causality technical-names preference.
-    /// </summary>
-    /// <param name="enabled">Whether technical names are emphasised.</param>
-    Task SetCausalityTechNamesAsync(bool enabled);
 }
 
 /// <summary>
@@ -152,7 +139,6 @@ public class UserPreferenceService : IUserPreferenceService
     private const string MvoDetailViewModeKey = "mvoDetailViewMode";
     private const string TableDenseKey = "tableDense";
     private const string CausalityViewKey = "causalityView";
-    private const string CausalityTechNamesKey = "causalityTechNames";
     private const int DefaultRowsPerPage = 10;
 
     /// <summary>
@@ -568,48 +554,6 @@ public class UserPreferenceService : IUserPreferenceService
         try
         {
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", CausalityViewKey, view);
-        }
-        catch (JSDisconnectedException)
-        {
-            // Circuit disconnected, ignore
-        }
-        catch (InvalidOperationException)
-        {
-            // JS interop not available (e.g., during prerendering), ignore
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task<bool?> GetCausalityTechNamesAsync()
-    {
-        try
-        {
-            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", CausalityTechNamesKey);
-            return value switch
-            {
-                "true" => true,
-                "false" => false,
-                _ => null // No preference saved - default to plain language
-            };
-        }
-        catch (JSDisconnectedException)
-        {
-            // Circuit disconnected, return default
-        }
-        catch (InvalidOperationException)
-        {
-            // JS interop not available (e.g., during prerendering), return default
-        }
-
-        return null;
-    }
-
-    /// <inheritdoc />
-    public async Task SetCausalityTechNamesAsync(bool enabled)
-    {
-        try
-        {
-            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", CausalityTechNamesKey, enabled ? "true" : "false");
         }
         catch (JSDisconnectedException)
         {

@@ -3,9 +3,14 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* A causality entity chip: a glyph circle identifying the entity kind (CS, R, ID, SR, ...), an
-   optional demoted sub-label and the entity name with ellipsis overflow. Renders as a link when
-   Href is provided, otherwise as a plain chip. *@
+@* A causality entity chip: a glyph circle identifying the entity kind (CS, SR, PE, DR, RP), an
+   optional demoted sub-label and the entity name with ellipsis overflow. A Connected System Object
+   or Metaverse Object mention carries no glyph at all: its name (and, where the head above already
+   states it, its object type) is enough, and the two-letter abbreviation gained nothing beside it.
+   The remaining glyph kinds keep theirs, with the glyph's own title attribute spelling out the
+   abbreviation ("Connected System", "Synchronisation Rule", ...), since nothing else on the chip
+   explains it. The chip's own title stays the entity's name throughout, for the tooltip an
+   ellipsis-clipped name needs. Renders as a link when Href is provided, otherwise as a plain chip. *@
 
 @if (!string.IsNullOrEmpty(Href))
 {
@@ -36,14 +41,17 @@ else
     public CausalityEntityKind Kind { get; set; }
 
     /// <summary>
-    /// Optional demoted sub-label rendered before the name (e.g. the record's object type).
+    /// Optional demoted sub-label rendered before the name (e.g. the Connected System Object's own type).
     /// </summary>
     [Parameter]
     public string? SubLabel { get; set; }
 
     private RenderFragment ChipContent => __builder =>
     {
-        <span class="glyph @GetGlyphClass()" aria-hidden="true">@GetGlyphText()</span>
+        @if (GetGlyphText() is { } glyphText)
+        {
+            <span class="glyph @GetGlyphClass()" aria-hidden="true" title="@GetGlyphFullName()">@glyphText</span>
+        }
         @if (!string.IsNullOrEmpty(SubLabel))
         {
             <span class="sub">@SubLabel:</span>
@@ -51,17 +59,37 @@ else
         <span class="name-ellip">@Label</span>
     };
 
-    private string GetGlyphText()
+    /// <summary>
+    /// The glyph circle's text, or null for a Connected System Object or Metaverse Object mention,
+    /// which renders label-only.
+    /// </summary>
+    private string? GetGlyphText()
     {
         return Kind switch
         {
             CausalityEntityKind.ConnectedSystem => "CS",
-            CausalityEntityKind.Record => "R",
-            CausalityEntityKind.Identity => "ID",
+            CausalityEntityKind.Record => null,
+            CausalityEntityKind.Identity => null,
             CausalityEntityKind.SynchronisationRule => "SR",
             CausalityEntityKind.PendingExport => "PE",
             CausalityEntityKind.DeletionRecord => "DR",
             _ => "RP"
+        };
+    }
+
+    /// <summary>
+    /// The glyph's full name, for the abbreviation's own title attribute. Only called where
+    /// <see cref="GetGlyphText"/> is non-null.
+    /// </summary>
+    private string GetGlyphFullName()
+    {
+        return Kind switch
+        {
+            CausalityEntityKind.ConnectedSystem => "Connected System",
+            CausalityEntityKind.SynchronisationRule => "Synchronisation Rule",
+            CausalityEntityKind.PendingExport => "Pending Export",
+            CausalityEntityKind.DeletionRecord => "Deletion record",
+            _ => "Run Profile"
         };
     }
 
@@ -70,8 +98,6 @@ else
         return Kind switch
         {
             CausalityEntityKind.ConnectedSystem => "sys",
-            CausalityEntityKind.Record => "rec",
-            CausalityEntityKind.Identity => "idn",
             CausalityEntityKind.SynchronisationRule => "rule",
             _ => "other"
         };

@@ -5,11 +5,10 @@
 
 @* The causality summary band: a run context chip (Connected System · Run Profile with a status
    dot), the execution timestamp, an optional right-aligned Actions slot (the panel's view switcher
-   and technical-names toggle share this head row rather than a separate toolbar band above), the
-   plain-English summary sentence with entity mentions rendered as highlighted token chips (linked
-   where possible), and the colour-coded outcome pill strip. Sentence segments are rendered as text
-   through Blazor's encoder; MarkupString is never used, so values sourced from connected systems
-   cannot inject markup. *@
+   sits in this head row rather than a separate toolbar band above), the plain-English summary
+   sentence with entity mentions rendered as highlighted token chips (linked where possible), and the
+   colour-coded outcome pill strip. Sentence segments are rendered as text through Blazor's encoder;
+   MarkupString is never used, so values sourced from connected systems cannot inject markup. *@
 
 <div class="summary">
     <div class="summary-head">
@@ -38,7 +37,7 @@
         {
             @if (segment is SummarySegment.Text text)
             {
-                @(TechnicalNames && text.Technical != null ? text.Technical : text.Value)
+                @text.Value
             }
             else if (segment is SummarySegment.Entity entity)
             {
@@ -82,14 +81,6 @@
     /// </summary>
     [Parameter]
     public DateTime? Timestamp { get; set; }
-
-    /// <summary>
-    /// When true, sentence segments that carry a technical wording render it instead of the plain-language
-    /// one, so the summary answers the technical-names toggle exactly as the views beneath it do. A segment
-    /// with no technical alternative is unaffected.
-    /// </summary>
-    [Parameter]
-    public bool TechnicalNames { get; set; }
 
     /// <summary>
     /// The tone of the run chip's status dot (Success when the item completed cleanly, Error when
