@@ -3,11 +3,13 @@
 
 using System.Linq;
 using System.Threading.Tasks;
+using AngleSharp.Dom;
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Transactional;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
+using Microsoft.AspNetCore.Components.Web;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -469,5 +471,192 @@ public class CausalityTableViewTests
             Assert.That(syncRuleCell.QuerySelector("a"), Is.Null);
             Assert.That(syncRuleCell.TextContent.Trim(), Is.EqualTo("Deleted immediately: last authoritative source disconnected"));
         }
+    }
+
+    // ─── Resizable columns (#1519 Table view fix 10) ───
+
+    private static IElement SelectIdentityObject(IRenderedComponent<CausalityTableView> cut)
+    {
+        var identityButton = cut.FindAll(".tv-nav-btn").Single(b =>
+            b.QuerySelector(".tv-nav-name")!.TextContent.Trim() == "Liam Allen"
+            && b.QuerySelector(".tv-nav-sub")?.TextContent.Trim() == "Person");
+        identityButton.Click();
+        return identityButton;
+    }
+
+    [Test]
+    public void Render_EverythingSelected_EveryHeaderCellHasExactlyOneNamedColumnGrip()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var headers = cut.FindAll("thead th");
+        var expectedLabels = new[]
+        {
+            "Resize the Object column", "Resize the Change column", "Resize the Attribute column",
+            "Resize the Before column", "Resize the After column",
+            "Resize the Synchronisation Rule column", "Resize the Outcome column"
+        };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(headers, Has.Count.EqualTo(7));
+            for (var i = 0; i < headers.Count; i++)
+            {
+                var grips = headers[i].QuerySelectorAll(".tv-col-grip");
+                Assert.That(grips, Has.Count.EqualTo(1), $"header {i} ({headers[i].TextContent.Trim()}) must carry exactly one grip");
+                var grip = grips[0];
+                Assert.That(grip.GetAttribute("role"), Is.EqualTo("separator"));
+                Assert.That(grip.GetAttribute("aria-orientation"), Is.EqualTo("vertical"));
+                Assert.That(grip.GetAttribute("tabindex"), Is.EqualTo("0"));
+                Assert.That(grip.GetAttribute("aria-label"), Is.EqualTo(expectedLabels[i]));
+            }
+        }
+    }
+
+    [Test]
+    public void Render_SingleObjectSelected_SixHeaderCellsAndNoObjectGrip()
+    {
+        var cut = Render(NewJoinerTableModel());
+        SelectIdentityObject(cut);
+
+        var headers = cut.FindAll("thead th");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(headers, Has.Count.EqualTo(6));
+            Assert.That(headers.SelectMany(h => h.QuerySelectorAll(".tv-col-grip"))
+                .Select(g => g.GetAttribute("aria-label")), Has.None.EqualTo("Resize the Object column"));
+        }
+    }
+
+    [Test]
+    public void Render_EverythingSelected_ColgroupColCountMatchesHeaderCount()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        Assert.That(cut.FindAll("colgroup col"), Has.Count.EqualTo(cut.FindAll("thead th").Count));
+    }
+
+    [Test]
+    public void Render_SingleObjectSelected_ColgroupColCountMatchesHeaderCount()
+    {
+        var cut = Render(NewJoinerTableModel());
+        SelectIdentityObject(cut);
+
+        Assert.That(cut.FindAll("colgroup col"), Has.Count.EqualTo(cut.FindAll("thead th").Count));
+    }
+
+    [Test]
+    public void Render_ArrowRightOnAColumnGrip_InvokesColumnResizerNudge()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var attributeGrip = cut.FindAll("thead th").Single(h => h.TextContent.Trim() == "Attribute")
+            .QuerySelector(".tv-col-grip")!;
+        attributeGrip.KeyDown(new KeyboardEventArgs { Key = "ArrowRight" });
+
+        Assert.That(_context.JSInterop.Invocations.Any(i => i.Identifier == "jimTableViewColumnResizer.nudge"), Is.True);
+    }
+
+    [Test]
+    public void Render_ArrowUpOnAColumnGrip_DoesNotInvokeColumnResizerNudge()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var attributeGrip = cut.FindAll("thead th").Single(h => h.TextContent.Trim() == "Attribute")
+            .QuerySelector(".tv-col-grip")!;
+        attributeGrip.KeyDown(new KeyboardEventArgs { Key = "ArrowUp" });
+
+        Assert.That(_context.JSInterop.Invocations.Any(i => i.Identifier == "jimTableViewColumnResizer.nudge"), Is.False);
+    }
+
+    [Test]
+    public void Render_AttributeChangeRow_BeforeAfterAndAttributeCellsCarryTitles()
+    {
+        var model = new CausalityTableModel
+        {
+            Objects =
+            [
+                new CausalityTableObject("everything", CausalityTableObjectRole.Everything, "Everything", null, CausalityTone.Info, 1)
+            ],
+            Rows =
+            [
+                new CausalityTableRow("everything", CausalityTableChangeKind.AttributeChange, "mail",
+                    "liam.allen@old.example.com", "liam.allen@example.com", null, null,
+                    "Attribute change", "Attribute change", CausalityTone.Info)
+            ],
+            CurrentHeading = "Before",
+            NextHeading = "After"
+        };
+
+        var cut = Render(model);
+
+        var row = cut.Find("tbody tr");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Children[2].GetAttribute("title"), Is.EqualTo("mail"));
+            Assert.That(row.Children[3].GetAttribute("title"), Is.EqualTo("liam.allen@old.example.com"));
+            Assert.That(row.Children[4].GetAttribute("title"), Is.EqualTo("liam.allen@example.com"));
+        }
+    }
+
+    [Test]
+    public void Render_ObjectLevelRow_EmptyBeforeCellCarriesNoTitle()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var provisionRow = cut.FindAll("tbody tr").Single(r => r.QuerySelector(".tv-kind")!.TextContent.Trim() == "Provision");
+        Assert.That(provisionRow.Children[3].HasAttribute("title"), Is.False);
+    }
+
+    [Test]
+    public void Render_OutcomeCellWithoutDetail_CarriesTitleEqualToTheLabelAlone()
+    {
+        var model = new CausalityTableModel
+        {
+            Objects = [new CausalityTableObject("everything", CausalityTableObjectRole.Everything, "Everything", null, CausalityTone.Success, 1)],
+            Rows =
+            [
+                new CausalityTableRow("everything", CausalityTableChangeKind.Provision, null, null, null, null, null,
+                    "Object provisioned", "CSO Provisioned", CausalityTone.Success)
+            ],
+            CurrentHeading = "Before",
+            NextHeading = "After"
+        };
+
+        var cut = Render(model);
+
+        var outcomeCell = cut.Find("tbody tr").Children.Last();
+        Assert.That(outcomeCell.GetAttribute("title"), Is.EqualTo("Object provisioned"));
+    }
+
+    [Test]
+    public void Render_OutcomeCellWithDetail_CarriesTitleJoiningLabelAndDetail()
+    {
+        const string graceReasoning = "Deletion Rule: last connector disconnected. Grace period: 7 days.";
+        var model = new CausalityTableModel
+        {
+            Objects = [new CausalityTableObject("everything", CausalityTableObjectRole.Everything, "Everything", null, CausalityTone.Warning, 1)],
+            Rows =
+            [
+                new CausalityTableRow("everything", CausalityTableChangeKind.Delete, null, null, null, null, null,
+                    "Identity deletion scheduled", "MVO Deletion Scheduled", CausalityTone.Warning, graceReasoning)
+            ],
+            CurrentHeading = "Before",
+            NextHeading = "After"
+        };
+
+        var cut = Render(model);
+
+        var outcomeCell = cut.Find("tbody tr").Children.Last();
+        Assert.That(outcomeCell.GetAttribute("title"), Is.EqualTo($"Identity deletion scheduled: {graceReasoning}"));
+    }
+
+    [Test]
+    public void Render_FirstRender_InvokesColumnResizerAttach()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        cut.WaitForAssertion(() =>
+            Assert.That(_context.JSInterop.Invocations.Any(i => i.Identifier == "jimTableViewColumnResizer.attach"), Is.True));
     }
 }

@@ -295,3 +295,142 @@ window.jimTableViewResizer = {
         window.jimTableViewResizer._attached.delete(handle);
     }
 };
+
+// The causality Table view's drag-resizable table columns (#1519 Table view fix 10), alongside
+// jimTableViewResizer above. Unlike the nav's single handle, a grip exists per header cell and Blazor
+// re-renders the header row on every sort/selection change, so listeners are delegated onto the table
+// itself (attached once) rather than onto each grip; a grip re-rendered under the same table keeps
+// working with no re-attach. The table starts in ordinary auto layout: only the first drag or nudge
+// snapshots every header's current width onto its <col> and switches the table into table-layout: fixed
+// (see the CSS), because a fixed layout only honours <col> widths once the table itself has an explicit
+// width, so that width is kept in step with the sum of the columns on every change.
+window.jimTableViewColumnResizer = {
+    _attached: new Map(),
+    _headerCells: function (table) {
+        var row = table.tHead && table.tHead.rows.length ? table.tHead.rows[0] : null;
+        return row ? Array.prototype.slice.call(row.cells) : [];
+    },
+    _cols: function (table) {
+        var group = table.querySelector('colgroup');
+        return group ? Array.prototype.slice.call(group.children) : [];
+    },
+    _sumWidth: function (table) {
+        var cols = window.jimTableViewColumnResizer._cols(table);
+        var total = 0;
+        for (var i = 0; i < cols.length; i++) total += parseFloat(cols[i].style.width) || 0;
+        return total;
+    },
+    // Snapshots every header's rendered width onto its <col> the first time this table is resized, so
+    // table-layout: fixed has something to honour; a no-op on every call after the first.
+    _ensureFixed: function (table) {
+        if (table.classList.contains('tv-cols-fixed')) return;
+        var self = window.jimTableViewColumnResizer;
+        var ths = self._headerCells(table);
+        var cols = self._cols(table);
+        var total = 0;
+        for (var i = 0; i < ths.length && i < cols.length; i++) {
+            var width = Math.round(ths[i].getBoundingClientRect().width);
+            cols[i].style.width = width + 'px';
+            total += width;
+        }
+        table.classList.add('tv-cols-fixed');
+        table.style.width = total + 'px';
+    },
+    _columnIndex: function (table, grip) {
+        var th = grip.closest('th');
+        if (!th) return -1;
+        return window.jimTableViewColumnResizer._headerCells(table).indexOf(th);
+    },
+    // Widens/narrows one column by deltaPx (negative to shrink), clamped to minPx with no maximum, and
+    // keeps the table's own width equal to the sum of its columns.
+    _resizeColumn: function (table, columnIndex, deltaPx, minPx) {
+        var self = window.jimTableViewColumnResizer;
+        self._ensureFixed(table);
+        var cols = self._cols(table);
+        if (columnIndex < 0 || columnIndex >= cols.length) return;
+        var current = parseFloat(cols[columnIndex].style.width) || 0;
+        cols[columnIndex].style.width = Math.max(minPx, Math.round(current + deltaPx)) + 'px';
+        table.style.width = self._sumWidth(table) + 'px';
+    },
+    // Wires delegated pointer-drag resizing and a double-click reset onto the table once; e.target is
+    // checked against '.tv-col-grip' on every event, so grips Blazor re-renders keep working unattended.
+    attach: function (table, minPx) {
+        window.jimTableViewColumnResizer.detach(table);
+        if (!table) return false;
+
+        var self = window.jimTableViewColumnResizer;
+        var state = { dragging: false, columnIndex: -1, startX: 0, startWidth: 0 };
+
+        var entry = {
+            onPointerDown: function (e) {
+                var grip = e.target.closest && e.target.closest('.tv-col-grip');
+                if (!grip || !table.contains(grip)) return;
+                if (typeof e.button === 'number' && e.button !== 0) return;
+
+                var columnIndex = self._columnIndex(table, grip);
+                if (columnIndex < 0) return;
+
+                self._ensureFixed(table);
+                var cols = self._cols(table);
+                state.dragging = true;
+                state.columnIndex = columnIndex;
+                state.startX = e.clientX;
+                state.startWidth = parseFloat(cols[columnIndex].style.width) || 0;
+                grip.setPointerCapture(e.pointerId);
+                e.preventDefault();
+            },
+            onPointerMove: function (e) {
+                if (!state.dragging) return;
+                var cols = self._cols(table);
+                var width = Math.max(minPx, Math.round(state.startWidth + (e.clientX - state.startX)));
+                cols[state.columnIndex].style.width = width + 'px';
+                table.style.width = self._sumWidth(table) + 'px';
+            },
+            onPointerUp: function (e) {
+                state.dragging = false;
+                var grip = e.target.closest && e.target.closest('.tv-col-grip');
+                if (grip && grip.hasPointerCapture(e.pointerId)) grip.releasePointerCapture(e.pointerId);
+            },
+            onDoubleClick: function (e) {
+                var grip = e.target.closest && e.target.closest('.tv-col-grip');
+                if (!grip || !table.contains(grip)) return;
+                self.reset(table);
+            }
+        };
+
+        table.addEventListener('pointerdown', entry.onPointerDown);
+        table.addEventListener('pointermove', entry.onPointerMove);
+        table.addEventListener('pointerup', entry.onPointerUp);
+        table.addEventListener('pointercancel', entry.onPointerUp);
+        table.addEventListener('dblclick', entry.onDoubleClick);
+
+        self._attached.set(table, entry);
+        return true;
+    },
+    // The keyboard equivalent of a drag: moves one column by deltaPx (negative to shrink).
+    nudge: function (table, columnIndex, deltaPx, minPx) {
+        if (!table) return false;
+        window.jimTableViewColumnResizer._resizeColumn(table, columnIndex, deltaPx, minPx);
+        return true;
+    },
+    // Removes tv-cols-fixed, every <col>'s inline width and the table's own inline width, so the CSS
+    // defaults (auto layout, 100% width) take back over. No width is persisted anywhere.
+    reset: function (table) {
+        if (!table) return;
+        var cols = window.jimTableViewColumnResizer._cols(table);
+        for (var i = 0; i < cols.length; i++) cols[i].style.removeProperty('width');
+        table.classList.remove('tv-cols-fixed');
+        table.style.removeProperty('width');
+    },
+    detach: function (table) {
+        var entry = window.jimTableViewColumnResizer._attached.get(table);
+        if (!entry) return;
+
+        table.removeEventListener('pointerdown', entry.onPointerDown);
+        table.removeEventListener('pointermove', entry.onPointerMove);
+        table.removeEventListener('pointerup', entry.onPointerUp);
+        table.removeEventListener('pointercancel', entry.onPointerUp);
+        table.removeEventListener('dblclick', entry.onDoubleClick);
+        window.jimTableViewColumnResizer._attached.delete(table);
+    }
+};

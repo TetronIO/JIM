@@ -63,19 +63,34 @@
         </div>
 
         <div class="tv-scroller">
-            <table class="tg">
+            <table class="tg" @ref="_tableRef">
+                @* One <col> per rendered column, following the Object column's own IsEverythingSelected
+                   condition, so jimTableViewColumnResizer's snapshot-on-first-drag always maps one <col>
+                   to one <th> (#1519 Table view fix 10). *@
+                <colgroup>
+                    @if (IsEverythingSelected)
+                    {
+                        <col />
+                    }
+                    <col />
+                    <col />
+                    <col />
+                    <col />
+                    <col />
+                    <col />
+                </colgroup>
                 <thead>
                     <tr>
                         @if (IsEverythingSelected)
                         {
-                            <th>@SortHeader("object", "Object")</th>
+                            <th>@RenderHeader(0, "object", "Object")</th>
                         }
-                        <th>@SortHeader("change", "Change")</th>
-                        <th>@SortHeader("attribute", "Attribute")</th>
-                        <th>@SortHeader("current", Model.CurrentHeading)</th>
-                        <th>@SortHeader("wouldbe", Model.NextHeading)</th>
-                        <th>@SortHeader("via", "Synchronisation Rule")</th>
-                        <th>@SortHeader("outcome", "Outcome")</th>
+                        <th>@RenderHeader(ColumnIndex(0), "change", "Change")</th>
+                        <th>@RenderHeader(ColumnIndex(1), "attribute", "Attribute")</th>
+                        <th>@RenderHeader(ColumnIndex(2), "current", Model.CurrentHeading)</th>
+                        <th>@RenderHeader(ColumnIndex(3), "wouldbe", Model.NextHeading)</th>
+                        <th>@RenderHeader(ColumnIndex(4), "via", "Synchronisation Rule")</th>
+                        <th>@RenderHeader(ColumnIndex(5), "outcome", "Outcome")</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -89,15 +104,15 @@
                             <td>
                                 <span class="tv-kind" style="--tone: @CausalityToneCss.CssVar(row.Tone)">@row.ChangeKindLabel</span>
                             </td>
-                            <td><TextValueDisplay Value="@row.Attribute" /></td>
-                            <td class="jim-text-code @(IsRemoval(row) ? "tv-removed" : null)">
+                            <td title="@EmptyToNull(row.Attribute)"><TextValueDisplay Value="@row.Attribute" /></td>
+                            <td class="jim-text-code @(IsRemoval(row) ? "tv-removed" : null)" title="@EmptyToNull(row.Current)">
                                 <TextValueDisplay Value="@row.Current" />
                             </td>
-                            <td class="jim-text-code" style="@GetWouldBeStyle(row)">
+                            <td class="jim-text-code" style="@GetWouldBeStyle(row)" title="@EmptyToNull(row.WouldBe)">
                                 <TextValueDisplay Value="@row.WouldBe" />
                             </td>
                             <td>@RenderSyncRuleCell(row)</td>
-                            <td>
+                            <td title="@GetOutcomeTitle(row)">
                                 @(TechnicalNames ? row.TechnicalLabel : row.OutcomeLabel)
                                 @if (!string.IsNullOrWhiteSpace(row.OutcomeDetail))
                                 {
@@ -149,9 +164,15 @@
     private const double MaxNavWidthFraction = 0.5;
 
     /// <summary>
-    /// How far Left/Right moves the handle per key press.
+    /// How far Left/Right moves a drag handle (the nav's or a column's) per key press.
     /// </summary>
-    private const int NavWidthNudgePx = 16;
+    private const int WidthNudgePx = 16;
+
+    /// <summary>
+    /// A table column never shrinks below this width, whichever way it is resized (drag or arrow keys).
+    /// There is no maximum: unlike the nav column, a column has nothing else in the row to starve.
+    /// </summary>
+    private const int MinColumnWidthPx = 64;
 
     private string _selectedKey = string.Empty;
     private CausalityTableFilter _filter = CausalityTableFilter.All;
@@ -161,7 +182,17 @@
 
     private ElementReference _panelRef;
     private ElementReference _resizeHandleRef;
+    private ElementReference _tableRef;
     private bool _resizerAttached;
+    private bool _columnResizerAttached;
+
+    /// <summary>
+    /// Whether the last render carried the Object column, so <see cref="OnAfterRenderAsync"/> can spot
+    /// the one transition that invalidates any snapshotted column widths: the Everything selection
+    /// gaining or losing that leading column when the selection switches between Everything and a
+    /// single object. Null before the first render, so no reset fires on it.
+    /// </summary>
+    private bool? _lastRenderHadObjectColumn;
 
     protected override void OnParametersSet()
     {
@@ -181,21 +212,47 @@
         {
             _resizerAttached = await InvokeInteropAsync<bool>(
                 "jimTableViewResizer.attach", _resizeHandleRef, _panelRef, MinNavWidthPx, MaxNavWidthFraction);
+            _columnResizerAttached = await InvokeInteropAsync<bool>(
+                "jimTableViewColumnResizer.attach", _tableRef, MinColumnWidthPx);
         }
+
+        // The column set only ever changes shape by gaining or losing the Object column, whether that is
+        // the user switching the nav selection or a new Model resetting it back to Everything; either way
+        // any widths jimTableViewColumnResizer snapshotted belong to the previous column set and must not
+        // be carried onto columns they no longer describe.
+        if (_lastRenderHadObjectColumn is { } hadObjectColumn && hadObjectColumn != IsEverythingSelected)
+        {
+            await InvokeInteropAsync<object>("jimTableViewColumnResizer.reset", _tableRef);
+        }
+        _lastRenderHadObjectColumn = IsEverythingSelected;
     }
 
     private async Task OnResizeHandleKeyDownAsync(KeyboardEventArgs e)
     {
         var delta = e.Key switch
         {
-            "ArrowLeft" => -NavWidthNudgePx,
-            "ArrowRight" => NavWidthNudgePx,
+            "ArrowLeft" => -WidthNudgePx,
+            "ArrowRight" => WidthNudgePx,
             _ => 0
         };
         if (delta == 0)
             return;
 
         await InvokeInteropAsync<object>("jimTableViewResizer.nudge", _panelRef, delta, MinNavWidthPx, MaxNavWidthFraction);
+    }
+
+    private async Task OnColumnGripKeyDownAsync(KeyboardEventArgs e, int columnIndex)
+    {
+        var delta = e.Key switch
+        {
+            "ArrowLeft" => -WidthNudgePx,
+            "ArrowRight" => WidthNudgePx,
+            _ => 0
+        };
+        if (delta == 0)
+            return;
+
+        await InvokeInteropAsync<object>("jimTableViewColumnResizer.nudge", _tableRef, columnIndex, delta, MinColumnWidthPx);
     }
 
     /// <summary>
@@ -223,7 +280,16 @@
     {
         if (_resizerAttached)
             await InvokeInteropAsync<object>("jimTableViewResizer.detach", _resizeHandleRef);
+        if (_columnResizerAttached)
+            await InvokeInteropAsync<object>("jimTableViewColumnResizer.detach", _tableRef);
     }
+
+    /// <summary>
+    /// Maps a column's position counting from Change (0) to its actual rendered index, which shifts by
+    /// one whenever the leading Object column is present.
+    /// </summary>
+    private int ColumnIndex(int indexExcludingObjectColumn) =>
+        IsEverythingSelected ? indexExcludingObjectColumn + 1 : indexExcludingObjectColumn;
 
     private CausalityTableObject EverythingObject =>
         Model.Objects.First(o => o.Role == CausalityTableObjectRole.Everything);
@@ -293,7 +359,13 @@
         </button>
     };
 
-    private RenderFragment SortHeader(string column, string title) => __builder =>
+    /// <summary>
+    /// A header cell's contents: the sort button, then its own drag-resize grip (a sibling, not nested
+    /// inside the button, so the grip's hit target is independent of it). <paramref name="index"/> is
+    /// the column's rendered position, passed straight to the JS column resizer so it can address the
+    /// matching &lt;col&gt; without needing to search the header row itself.
+    /// </summary>
+    private RenderFragment RenderHeader(int index, string column, string title) => __builder =>
     {
         var active = _sortColumn == column;
         <button type="button" class="tv-sort @(active ? "on" : null)" @onclick="() => ToggleSort(column)">
@@ -304,6 +376,9 @@
                          Size="Size.Small" aria-hidden="true" />
             }
         </button>
+        <span class="tv-col-grip" role="separator" aria-orientation="vertical"
+              aria-label="@($"Resize the {title} column")" tabindex="0"
+              @onkeydown="e => OnColumnGripKeyDownAsync(e, index)"></span>
     };
 
     private void SelectObject(string key)
@@ -400,6 +475,22 @@
         row.Tone is CausalityTone.Error or CausalityTone.Success && !string.IsNullOrEmpty(row.WouldBe)
             ? $"color: {CausalityToneCss.TextCssVar(row.Tone)}"
             : null;
+
+    /// <summary>
+    /// A cell's full value as its <c>title</c>, so a value cropped by <c>tv-cols-fixed</c>'s ellipsis is
+    /// still readable on hover; null (no attribute rendered) rather than an empty tooltip for a blank cell.
+    /// </summary>
+    private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>
+    /// The Outcome cell's title: the label as shown (plain or technical, matching <see cref="TechnicalNames"/>),
+    /// plus the detail line beneath it when there is one, joined the same way a sentence would read it.
+    /// </summary>
+    private string GetOutcomeTitle(CausalityTableRow row)
+    {
+        var label = TechnicalNames ? row.TechnicalLabel : row.OutcomeLabel;
+        return string.IsNullOrWhiteSpace(row.OutcomeDetail) ? label : $"{label}: {row.OutcomeDetail}";
+    }
 
     private static string GetFilterLabel(CausalityTableFilter filter) => filter switch
     {

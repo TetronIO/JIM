@@ -1294,12 +1294,64 @@
 }
 
 .causality-panel .tg thead th {
+    position: relative;
     color: var(--cz-text-dim);
     font-weight: 600;
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.02em;
     border-bottom: 1px solid var(--cz-line);
+}
+
+/* One per header cell, at its right edge (jimTableViewColumnResizer, #1519 Table view fix 10): a
+   sibling of .tv-sort rather than nested inside it, so the grip's own hit target does not compete with
+   the sort button's. Styling mirrors .tv-resize-handle above: no visible line at rest, a thin one on
+   hover/focus. It sits wholly inside its own cell (right: 0, not straddling the border) and above the
+   next cell: every th is position: relative, so a later sibling would otherwise paint over, and hence
+   intercept, the half of a straddling grip that lies in it; inside the cell it also survives the
+   overflow: hidden that tv-cols-fixed applies to th. */
+.causality-panel .tv-col-grip {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 8px;
+    z-index: 1;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.causality-panel .tv-col-grip::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: transparent;
+    transform: translateX(-50%);
+}
+
+.causality-panel .tv-col-grip:hover::before,
+.causality-panel .tv-col-grip:focus-visible::before {
+    background: var(--cz-primary);
+}
+
+.causality-panel .tv-col-grip:focus-visible {
+    outline: none;
+}
+
+/* table-layout: fixed only honours <col> widths once the table itself has an explicit width, which is
+   why jimTableViewColumnResizer writes both together on the first drag/nudge, and clears both together
+   on reset/double-click. Until then the table stays in ordinary auto layout, sized by its content. */
+.causality-panel .tg.tv-cols-fixed {
+    table-layout: fixed;
+}
+
+.causality-panel .tg.tv-cols-fixed th,
+.causality-panel .tg.tv-cols-fixed td {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .causality-panel .tv-sort {
