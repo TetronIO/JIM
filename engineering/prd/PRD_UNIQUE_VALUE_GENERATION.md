@@ -1,12 +1,12 @@
-# Unique Value Generation for Metaverse and Connected System Attributes
+# Unique Value Generation and Collision Remediation
 
 - **Status:** Planned
 - **Created:** 2026-07-07
-- **Updated:** 2026-08-02 (refreshed against landed work: #549 closed, #223 `InitialExportOnly` shipped, #843 plan Done, #1121 Phases 1-3, #1122 Standard Mappings editor; UI Mocks added)
-- **Author:** JayVDZ (PRD drafted via Claude Code)
+- **Updated:** 2026-09-16 (design revised after review: JIM-owned generated value assignments replace the confirming-import model; Collision Remediation added; Import and Export Attribute Flow modes; causality integration against #1087/#1495; Set Value deferred)
+- **Author:** JayVDZ (PRD drafted and revised via Claude Code)
 - **Issue:** [#242](https://github.com/TetronIO/JIM/issues/242)
-- **Related:** [#549](https://github.com/TetronIO/JIM/issues/549) example-data expressions (closed; interim tracker), [#223](https://github.com/TetronIO/JIM/issues/223) Initial Export Only (per-mapping flag precedent), [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning (JIM-generated values sibling)
-- **UI mockups:** [Unique Value Generation: UI Mockups](https://claude.ai/code/artifact/7aa5e153-900d-4bc5-8a80-91e23ecb9d7c) (all six screens, built against `engineering/DESIGN.md` tokens)
+- **Related:** [#549](https://github.com/TetronIO/JIM/issues/549) example-data expressions (closed; interim tracker), [#223](https://github.com/TetronIO/JIM/issues/223) Initial Export Only (per-mapping flag precedent), [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning (parked-state and queue-and-follow precedents), [#1087](https://github.com/TetronIO/JIM/issues/1087) / [#1495](https://github.com/TetronIO/JIM/issues/1495) causality views, [#1079](https://github.com/TetronIO/JIM/issues/1079) optimistic export apply
+- **UI mockups:** [Unique Value Generation: Design and Mockups](https://claude.ai/artifact/G9R6cK7WR7QwmPukctFpkb) (design explainers, diagrams and six screens, built against `engineering/DESIGN.md` tokens)
 
 ## Problem Statement
 
@@ -14,261 +14,298 @@ In real deployments the HR system is authoritative for identity data (name, empl
 
 Generating these identifiers is not just string construction; JIM already has an expression engine that can build `firstname.lastname` from source attributes. The missing capability is **uniqueness**: a generated account name must not collide with one already in use, and when the natural candidate is taken the value must be disambiguated deterministically (`joe.bloggs`, then `joe.bloggs1`, `joe.bloggs2`, ...). An expression alone cannot do this, for three concrete architectural reasons found in the current codebase:
 
-1. **Expressions have no uniqueness state.** `DynamicExpressoEvaluator` is deliberately stateless and side-effect-free, with a process-wide thread-safe compiled-expression cache (`src/JIM.Application/Expressions/DynamicExpressoEvaluator.cs`). `Evaluate` is synchronous (`object? Evaluate(string, ExpressionContext)`) and performs no I/O. A uniqueness check needs a database query and a cross-object reservation set; neither belongs inside a pure, cached, synchronous evaluator.
-2. **The suffix must land mid-string.** For an account name the disambiguating suffix is appended (`joe.bloggs1`); for email and UPN it must be inserted **before** the `@` (`joe.bloggs1@corp.local`). An expression that concatenates a suffix token cannot position it inside a value it does not yet know is a collision. This is the exact limitation that caused the example-data feature (#549) to defer uniqueness to this issue.
-3. **Siblings within a batch are invisible to a database check.** Synchronisation processes Connected System Objects in configurable **pages**, one object at a time within a page, collecting Metaverse Objects and batch-persisting them at page boundaries (`src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs`). Two new starters named "John Smith" imported in the same page would both query the database, both find `john.smith` free, and both take it, because neither is committed until the page flush.
+1. **Expressions have no uniqueness state.** `DynamicExpressoEvaluator` is deliberately stateless and side-effect-free, with a process-wide thread-safe compiled-expression cache (`src/JIM.Application/Expressions/DynamicExpressoEvaluator.cs`). `Evaluate` is synchronous and performs no I/O. A uniqueness check needs database queries, connector calls and a cross-object reservation set; none belongs inside a pure, cached, synchronous evaluator.
+2. **Attribute Flows recompute every synchronisation.** A generated value that is recomputed from its expression on every run cannot survive being corrected by a target (see below): the next run would recompute the original and fight the correction for ever. A generated value has to be remembered, not recomputed.
+3. **Siblings within a batch are invisible to a database check.** Synchronisation processes Connected System Objects in pages and batch-persists at page boundaries (`src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs`). Two new starters named "John Smith" in the same page would both find `john.smith` free and both take it.
 
-JIM therefore needs a first-class uniqueness-and-collision primitive that composes with the existing expression engine, checks candidates against the right scope, disambiguates deterministically, and is safe within a single sync batch. A close analogue already exists for demo-data generation: `ExampleDataValueTrackerStore` (`src/JIM.Application/Servers/ExampleDataValueTrackerStore.cs`) is a lock-free, per-execution `ConcurrentDictionary`-based collision tracker backing the `[UniqueInt]` token. That is the model to generalise, not reinvent. (Since this PRD was drafted, #549 has shipped and closed using that interim tracker as-is; the generalised primitive is now this feature's to build; see Dependencies.)
+There is a fourth reason, which the first draft of this PRD underestimated: **uniqueness only matters in the target system, and JIM's view of the target is a proxy.** A value can be unique across everything JIM knows and still collide in a directory, because the conflicting object sits in an OU outside the connector's import scope, or was created by someone else between JIM's check and JIM's write. No check, however thorough, closes that gap. Only the target can arbitrate, so the design has to treat an export-time rejection as an expected outcome to be handled, not an error to be reported and abandoned.
 
 ## Goals
 
-- An administrator can configure an attribute (for example account name, email, UPN) to be **generated by JIM** when the authoritative source provides no value, using a base value built from other attributes.
-- Generated values are **unique** within a configurable scope; verifiable by importing two identities that produce the same base value and confirming the second is disambiguated, not duplicated.
-- Collision disambiguation is **deterministic and re-runnable**: re-importing the same population produces the same assignments, and an already-assigned identity keeps its value rather than being renumbered; verifiable by running the same import twice and diffing the generated values.
-- Uniqueness holds **within a single sync batch/page**, not only against already-committed data; verifiable by generating a page containing a forced collision and confirming no duplicate is written.
-- The suffix can be positioned correctly for `firstname.lastname`-style names **and** for email/UPN where it must precede the `@`; verifiable by generating a colliding email and confirming `joe.bloggs1@domain`, not `joe.bloggs@domain1`.
-- The feature reuses the existing `IExpressionEvaluator` for base-value construction rather than introducing a second value-construction language; verifiable by the base template accepting the same `mv[...]`/`cs[...]` syntax and function library used by Synchronisation Rule Attribute Flows today.
-- The uniqueness/collision primitive is designed **once**, parameterised by scope, and consumable by example-data generation; verifiable by the component's scope parameterisation covering both use cases. (#549 has since shipped with its own interim per-run tracker, so this feature owns building the generalised primitive; migrating example data onto it is a non-blocking follow-up.)
+- An administrator can configure an Attribute Flow so that **JIM generates** an attribute value from a base expression and guarantees it is not already in use, on an import Synchronisation Rule (the value becomes Metaverse data, reusable by every downstream export) or on an export Synchronisation Rule (the value belongs to one Connected System Object only).
+- Generated values are checked for availability against everything JIM can see before they are proposed: in-run reservations, the Metaverse, the relevant connector spaces, and, where the connector supports it, the target directory itself.
+- When a target nevertheless rejects a generated value as already in use, JIM **self-heals** by generating the next candidate and exporting again, without administrator involvement, unless doing so would rename an account another system has already provisioned; in that case JIM stops and gives the administrator a clear decision with remediation advice. This behaviour is called **Collision Remediation** and is controllable per Attribute Flow.
+- Generated values are **sticky**: assigned once, remembered, never renumbered on a re-run, and never recomputed from the expression once committed.
+- Everything JIM generates, corrects or declines to correct is **fully transparent**: visible on the identity's attribute history, on the Run Profile execution item, and in the causality views, with what happened, why, when and by which Activity.
+- The generation and uniqueness capability is built once, as a service keyed on the object and attribute rather than on the caller, so that internally managed identities and workflow-driven generation can reuse it later without a second implementation.
 
 ## Non-Goals
 
-- **No approval or review workflow.** Generated values are applied automatically. Manual review, approval steps, and human override of a generated value (issue Option 3, "workflow-based generation") are out of scope; JIM has no workflow engine yet.
-- **No general-purpose "sequence"/"counter" service** beyond what collision disambiguation needs (e.g. employee-number allocation, gap-reuse policies). Suffixing is scoped to resolving collisions on a generated attribute.
-- **No live write-time query of an external directory as the primary uniqueness store** in v1 (see Design Option 2). Uniqueness is checked against JIM's own Metaverse and connector-space (Connected System Object) data, which is JIM's cached view of the target.
-- **No new expression-language dialect or engine.** This builds on `DynamicExpressoEvaluator`.
-- **No change to export/outbound flow semantics.** Generation happens on the inbound path where the Metaverse identity is assembled; export continues to flow whatever value the Metaverse holds.
-- **No retrospective renumbering.** Once an identity owns a generated value, later changes to higher-priority peers do not reclaim or renumber it.
+- **No manual setting of a Metaverse attribute value by an administrator (Set Value).** This was designed and is deliberately deferred out of #242: it is the first non-import write of Identity data in JIM and belongs with the internally managed identities design. The analysis is preserved in the linked artefact; the service keeps the manual caller as a seam.
+- **No immediate or on-demand export lane.** Generated and remediated values reach targets through ordinary synchronisation and export runs. JIM's password delivery lane (#1121) bypasses Pending Exports because a password is never Metaverse data; that precedent is explicitly not copied for values that are.
+- **No connector calls from the web tier.** `JIM.Web` does not instantiate connectors today and does not start here. Live checks in the authoring dialog use JIM's own data only.
+- **No automatic renaming of a value another target has already provisioned** (see the anchoring rule). JIM will not silently rename a live account.
+- **No workflow engine, approval step, or human override of a generated value** beyond the actions defined for the Needs Decision state.
+- **No general-purpose sequence or counter service.** Suffixing exists only to resolve collisions on a generated attribute.
+- **No new expression dialect.** Base values are built with `DynamicExpressoEvaluator`; there is no `{n}` placeholder or similar token for administrators to learn.
+
+## Key Concepts
+
+**Generated value assignment.** A record that JIM owns: the object it belongs to (a Metaverse Object for an import flow, a Connected System Object for an export flow), the attribute, the value, its state and how it came to be. Because a generated value has no external source, JIM is its authority, and JIM revises its own assignment when a target rejects it. States: `Proposed` (generated and checked, not yet accepted by a target), `Committed` (accepted; sticky from here), `Remediated` (revised after a rejection; transitions to Committed when the revised value is accepted), `NeedsDecision` (remediation declined to act; awaiting an administrator).
+
+**The boundary that keeps the pipeline clean.** JIM revises only values JIM itself generated. It never writes to a value a Connected System contributed. This is narrow and checkable in code.
+
+**The four gates.** Every candidate passes, cheapest first: the in-run reservation set; Metaverse values; the connector space of each participating Connected System (which holds staged and optimistically applied values the target does not yet have, #1079); and, where the connector implements it, a live probe of the target that deliberately searches wider than the connector's import scope. All four are always on and are not administrator configuration. A local hit suppresses a probe, so the ordering reduces cost rather than adding it.
+
+**Two connector capabilities.** *Probing* (can the connector check availability in the target before export?) and *rejection classification* (can the connector report that an export failed specifically because a value was already in use?). They are independent. Probing makes collisions rare; classification is what makes Collision Remediation possible at all.
+
+**Collision Remediation.** On a classified uniqueness rejection, JIM generates the next candidate, updates the Pending Export and exports again, bounded by the attempt limit. A per-Attribute-Flow switch, on by default where any participating connector classifies rejections, disabled with an explanation where none does. Off means an ordinary export error is recorded.
+
+**Anchoring.** In import mode a value is exported to several systems. Once any target has accepted it, the value is *anchored*: revising it would rename a live account. Remediation acts only while a value is unanchored; an anchored collision enters Needs Decision instead. Export-mode values are always unanchored by definition.
 
 ## User Stories
 
 1. As an IDAM administrator, I want JIM to generate a unique account name from an identity's first and last name when HR does not supply one, so that I do not have to pollute the HR feed with IT-owned attributes.
-2. As an IDAM administrator, I want the second "John Smith" to receive `john.smith1` automatically, so that account names never collide across the directory.
-3. As an IDAM administrator, I want email and UPN to be derived from the (already unique) account name with the disambiguating suffix in the correct place (`john.smith1@corp.local`), so that the technical identifiers stay internally consistent.
-4. As an IDAM administrator onboarding into an existing (brownfield) Active Directory, I want uniqueness checked against the accounts already present in the connector space, not just accounts JIM created, so that JIM does not generate a name that already exists in the target.
-5. As an administrator, I want generation to run only when the source provides no value, so that an authoritative HR-supplied identifier is never overwritten.
-6. As an administrator, I want a bulk import that forces many collisions to fail loudly if it cannot allocate a unique value within a bounded number of attempts, so that JIM never silently writes a duplicate or hangs.
+2. As an IDAM administrator, I want the second "John Smith" to receive `john.smith1` automatically, and the third `john.smith2`, so that account names never collide.
+3. As an IDAM administrator onboarding into an existing directory, I want JIM to check the directory itself, including OUs JIM does not import, so that a generated name does not collide with an account JIM has never seen.
+4. As an IDAM administrator, when a directory rejects a generated value as already in use, I want JIM to pick the next value and try again without waking me, and to tell me afterwards what it did and why.
+5. As an IDAM administrator, I do not want JIM to rename an account that already exists in production because a second system happened to have the same name; I want to be told and to decide.
+6. As an IDAM administrator, I want to see on the identity exactly which values JIM generated, which it corrected, when, and because of which system, in the same views I use for everything else JIM does.
+7. As an IDAM administrator, I want to be able to turn Collision Remediation off for a flow and have collisions recorded as plain export errors instead.
+8. As an IDAM administrator, I want the same feature available on an export Synchronisation Rule for a value that only one target needs and that I do not want held as identity data.
+9. As an IDAM administrator, I want a bulk import that forces many collisions to fail loudly if it cannot allocate a unique value within a bounded number of attempts, so that JIM never silently writes a duplicate or hangs.
 
 ## Requirements
 
 ### Functional Requirements
 
-1. An attribute mapping can be configured as **generated-with-uniqueness**: a base value produced from a template/expression, plus a uniqueness scope and a collision-suffix strategy. Configuration is per Synchronisation Rule Attribute Flow mapping (the existing `SyncRuleMapping`), targeting a single-valued text Metaverse attribute.
-2. The base value is constructed using the existing expression mechanism (the same `IExpressionEvaluator` and function library used by Attribute Flows today), so administrators reuse one syntax.
-3. Generation is **conditional**: it runs only when the mapping would otherwise contribute no value (the source attribute is empty/absent after inbound value processing, the `ConnectedNoValue` state from #91/#843). An authoritative supplied value always wins and is never replaced by a generated one.
-4. Before assigning a candidate, JIM checks it for uniqueness against the configured **scope** (see Design Option 2). If the candidate is free, it is assigned. If taken, the **collision-suffix strategy** (see Design Option 3) produces the next candidate, repeating until a free value is found or the attempt cap is reached.
-5. Uniqueness holds within a single sync run/page as well as against persisted data: a **per-run reservation set** records every value generated so far in the batch, so siblings processed earlier in the same page are treated as taken even before the page is flushed (see Design Option 4).
-6. The suffix strategy can position the disambiguator correctly for both trailing-suffix values (account name) and mid-string values (email/UPN, where the suffix must precede the `@`). The template therefore declares where the suffix goes, rather than always appending.
-7. Generation is **idempotent across runs**: if the target identity already holds a generated value that still satisfies uniqueness, that value is retained and not regenerated or renumbered. Only an identity with no current value is assigned one.
-8. If a unique value cannot be allocated within a configurable maximum number of attempts, JIM **fails the object hard** via the standard RPEI/Activity error surface (never silently writes a duplicate, never loops unbounded), consistent with the Synchronisation Integrity rules (`src/JIM.Application/CLAUDE.md`).
-9. Attribute-generation **ordering** is handled so that a value derived from another generated value (email/UPN derived from account name) is generated after its dependency within the same object's flow. The design must state how this ordering is achieved given that Attribute Flow mappings are currently evaluated in list order with the expression context exposing only `cs[...]`, not the Metaverse Object's freshly generated attributes (see Design Option 5 and Open Question 1).
-10. The uniqueness-and-collision component is implemented as a **shared, scope-parameterised primitive** consumable by both this feature (scope: existing Metaverse/connector-space objects) and example-data generation (scope: within-a-generation-run). `ExampleDataValueTrackerStore` is the existing precedent to generalise. Since #549 shipped and closed with that interim tracker, this feature owns building the generalised component; retrofitting example data onto it is a follow-up, not a blocker.
-11. A generated value is **attributable**: the resulting Metaverse Object attribute value records that it was system-generated (via the existing contribution provenance, `ContributedBySyncRuleId`/`ContributedBySystemId`), so operators can distinguish generated identifiers from sourced ones.
+**Configuration**
+
+1. "JIM generates it" is a **source type** on the Add/Edit Attribute Flow dialog, alongside "An attribute" and "An expression", available on import and export Synchronisation Rules for single-valued text target attributes.
+2. The generation form captures: the base expression (the existing expression syntax and function library; no uniqueness token); the target attribute ("Assign the value to"); the collision strategy (add a number, or add a letter; start value; separator); the attempt limit; and the Collision Remediation switch.
+3. Suffix position is determined by JIM: before the first `@` where the base value contains one, otherwise appended. The dialog shows a live preview of the first candidate and the collision sequence for sample inputs.
+4. For an import flow, the dialog shows the **derived** list of Connected Systems the value is exported to (every Connected System with an export Attribute Flow targeting that Metaverse attribute), with each system's probe and rejection-classification capability stated, and a per-system exclusion from availability checks. The list is not editable otherwise and updates automatically as export Synchronisation Rules change. For an export flow the list is the one Connected System.
+5. The Collision Remediation switch is enabled when at least one participating Connected System's connector classifies uniqueness rejections, and defaults to on. Where none does, it is rendered disabled with the reason. Where some do and some do not, it stays enabled and the system list states which systems will record an export error instead.
+
+**Generation**
+
+6. Generation is a contribution to the target attribute like any other mapping and participates in attribute priority (#91). It contributes only when every higher-priority contribution is silent, which delivers "only when the authoritative source supplies no value" without a bespoke flag. A source at higher priority later supplying a value supersedes the generated one, visibly.
+7. Each candidate passes the four gates in order. A candidate is proposed only when all four report it free, or when the probe reports it cannot determine and the local three report it free.
+8. The live probe is three-state: Found, NotFound, CouldNotDetermine. A directory applies access control to searches as a silent filter, so an empty result from an under-privileged account is indistinguishable from absence; the probe must not report NotFound in that case. (The same trap #1121 documented for the Fine-Grained Password Policy signal.) Probes are batched per candidate set where the protocol allows, so latency does not scale with attempt count.
+9. A proposed value is recorded as a generated value assignment in state Proposed, keyed on the object and attribute, with the Synchronisation Rule mapping that produced it recorded as its origin.
+10. A committed assignment is sticky: the value is never recomputed from the expression and never renumbered. Re-running any import or synchronisation produces the same value.
+11. If no free candidate is found within the attempt limit, the object fails hard through the standard RPEI/Activity error surface, naming the attribute, the last candidate tried and the scope that rejected it. No value is written.
+12. Uniqueness holds within a single run via the in-run reservation set, which persists across pages within the run and is released at run end.
+
+**Collision Remediation**
+
+13. When an export fails and the connector classifies the failure as a uniqueness rejection, and Collision Remediation is on for the flow, and the value is unanchored: JIM generates the next candidate, updates the assignment to Remediated, updates the Pending Export and retries within the same export run, bounded by the attempt limit. On acceptance the assignment becomes Committed with the accepted value.
+14. When the value is anchored (any other target has already accepted it): JIM does not revise it. The assignment enters NeedsDecision, the export item records an error naming the rejecting system, the value, and the system that has provisioned it, and the identity, its Synchronisation Rule and the Connected System carry a needs-attention indicator.
+15. When Collision Remediation is off, or the connector cannot classify the rejection: an ordinary export error is recorded and the assignment is unchanged.
+16. NeedsDecision has three exits: **Allow the rename** (per identity; a confirmation names every system that will change and what it will receive; unanchors this identity so the next synchronisation and export runs carry the change, recorded as authorised by the administrator); **Retry** (releases NeedsDecision so the next export run tries the same value again, for when the conflict has been fixed at its source); **Leave it** (visible until resolved). Saving a change to the flow's configuration also releases NeedsDecision, as #1121 releases parked items. NeedsDecision never expires.
+17. In import mode, a remediated value flows to every other target through ordinary synchronisation and export. Derived values (an email built from the account name) recompute and re-export the same way. Nothing special-cases the dependency.
+
+**Transparency**
+
+18. Every generation, remediation, NeedsDecision entry and administrator action is recorded against the assignment and surfaces through the existing causality model (#1087, #1495): a sync outcome `GeneratedValueRemediated` (tone Warning, plain label "Value corrected", technical "Collision Remediation", attribute row Set with the previous value) on the export item; an execution item error type `GeneratedValueCollisionUnresolved` (tone Error, "Needs a decision") for the anchored case; and, for the import-mode consequence that crosses execution items, a new append-only `CausalEdgeType.ExportRejectionCausedGeneratedValueRevision` with reason codes `GeneratedValueAlreadyInUse`, `GeneratedValueAnchoredElsewhere` and `GeneratedValueRenameAuthorised`. A retry within one export item is an outcome, not an edge, per the edge rules in `CausalEdgeEnums.cs`.
+19. The identity's attribute history for a generated attribute is the causality Timeline scoped to that attribute, rendered by the same event model, with `Generated by JIM` and `Corrected` chips on the attribute row. No bespoke history widget.
+20. The Run Profile execution summary reports counts of values generated, collisions remediated and items needing a decision via the existing stat-counter mechanism; the summary band sentence names the systems involved.
+
+**Reuse**
+
+21. Pattern evaluation, candidate sequencing, the four-gate oracle and assignment persistence live in `JIM.Application` as a service behind an interface, with data access threaded in from the worker as `IExpressionEvaluator` is today. The service knows nothing about which caller asked. The assignment is keyed on object and attribute so that a future workflow step or administrator action becomes another caller, not another implementation.
+
+**Surface parity**
+
+22. Every configuration element above (source type, generation settings, exclusions, Collision Remediation switch) is settable through the portal, the REST API (Synchronisation Rule and Attribute Flow DTOs) and PowerShell (`New-JIMSyncRuleMapping` / `Set-JIMSyncRuleMapping` for the flow; `Set-JIMSyncRule` where rule-level settings are involved) in the same PR, with tests and docs. The NeedsDecision list and its Allow-the-rename and Retry actions ship across all three surfaces likewise; REST answers `202 Accepted` for actions whose effect lands on a later run, following the #1121 pattern.
 
 ### Non-Functional Requirements
 
-- **Performance at scale.** Uniqueness checks must not degrade bulk import. A per-object candidate check must be a single indexed lookup (or an in-memory reservation-set hit), not a table scan. The schema already carries the composite index `IX_MetaverseObjectAttributeValues_AttributeId_StringValue` and the CSO equivalent, so the lookup a Metaverse-scope check needs is index-backed; only the repository query method is missing today (the MVO repository has aggregate count methods but no by-value lookup). Target: no material throughput regression versus a non-generated text flow on a 100k-object import.
-- **Batch safety.** The reservation set must be correct under the worker's page-based processing. The inbound attribute-flow path is currently sequential per object within a page, so single-threaded correctness suffices for v1; however the reservation set should be thread-safe (as `ExampleDataValueTrackerStore` already is) so it composes with the parallel example-data generator and any future parallelisation of the flow.
-- **Air-gapped.** No external service; all uniqueness data comes from JIM's own store or the connector space already imported into JIM.
-- **British English throughout; proper-noun casing** for Metaverse Object, Connected System Object, Synchronisation Rule, Attribute Flow in all UI text, comments, and docs.
+- **Performance at scale.** Local gates are single indexed lookups (the `(AttributeId, StringValue)` indexes on both Metaverse and Connected System Object attribute values already exist; the Metaverse-by-value repository method does not) or reservation-set hits. Probes are made only for candidates that clear the local gates and are batched. Target: no material throughput regression versus a non-generated text flow on a 100k-object import.
+- **Batch safety.** The reservation set is thread-safe and run-scoped, generalised from `ExampleDataValueTrackerStore`.
+- **Synchronisation Integrity.** Fail fast; every failure reported via RPEIs and Activities; never write a duplicate silently; never loop unbounded (`src/JIM.Application/CLAUDE.md`).
+- **Air-gapped.** No external service; probes go to the Connected System the connector already talks to.
+- **Append-only enums.** New `CausalEdgeType`, `CausalReasonCode`, sync outcome, RPEI error and export error members are appended, never inserted; ordinal tests updated.
+- **British English throughout; proper-noun casing** for Metaverse Object, Connected System Object, Synchronisation Rule, Attribute Flow in all UI text, comments and docs.
 
 ## Examples and Scenarios
 
 ### Scenario 1: Account name generated when HR supplies none
 
-**Given** an import Synchronisation Rule whose account-name mapping has base template `Lower(mv["First Name"]) + "." + Lower(mv["Last Name"])`, uniqueness scope Metaverse, and numeric suffix strategy, and an incoming identity First Name "Joe", Last Name "Bloggs" with no account name in the feed
-**When** the import runs and no existing Metaverse Object holds `joe.bloggs`
-**Then** the identity's account name is set to `joe.bloggs`, stamped as contributed by the rule.
+**Given** an import Synchronisation Rule whose Account Name Attribute Flow uses "JIM generates it" with base `Lower(mv["First Name"]) + "." + Lower(mv["Last Name"])`, and an incoming identity Joe Bloggs with no account name in the feed
+**When** the import runs and all four gates report `joe.bloggs` free
+**Then** the assignment is created as Proposed with `joe.bloggs`, the Metaverse holds it, and the attribute shows `Generated by JIM`.
 
-### Scenario 2: Collision disambiguated
+### Scenario 2: Collision caught by a local gate
 
-**Given** a Metaverse Object already holds account name `joe.bloggs`, and a second identity generates the same base value
-**When** the second identity is processed
-**Then** it receives `joe.bloggs1`; a third receives `joe.bloggs2`.
+**Given** a Metaverse Object already holds `joe.bloggs`
+**When** a second identity generates the same base value
+**Then** it receives `joe.bloggs1` without any probe being made; a third receives `joe.bloggs2`.
 
-### Scenario 3: Suffix placed before the @ for email
+### Scenario 3: Intra-batch collision within one page
 
-**Given** an email mapping with base template `{account} + "@corp.local"` and a collision on `joe.bloggs@corp.local`
-**When** the colliding identity is processed
-**Then** it receives `joe.bloggs1@corp.local` (suffix before the `@`), not `joe.bloggs@corp.local1`.
+**Given** two new identities producing `john.smith` in the same page, neither yet persisted
+**Then** the first gets `john.smith` and the second `john.smith1`; the page flush writes no duplicate.
 
-### Scenario 4: Intra-batch collision within one page
+### Scenario 4: Brownfield, caught by the probe
 
-**Given** two new identities that both produce base value `john.smith`, imported in the same sync page, with neither yet persisted
-**When** the page is processed
-**Then** the first gets `john.smith` and the second gets `john.smith1`; the page flush writes no duplicate.
+**Given** Corporate AD contains an account `joe.bloggs` in an OU outside the connector's import scope, and the LDAP connector implements probing
+**When** generation proposes `joe.bloggs`
+**Then** the probe reports Found and JIM proposes `joe.bloggs1` instead.
 
-### Scenario 5: Brownfield uniqueness against the connector space
+### Scenario 5: Collision Remediation at export
 
-**Given** uniqueness scope includes a Connected System (Active Directory) whose connector space already contains a Connected System Object with sAMAccountName `joe.bloggs` that JIM did not create
-**When** an identity generates base value `joe.bloggs`
-**Then** JIM treats it as taken and generates `joe.bloggs1`.
+**Given** Scenario 4's account was created after the probe, or the probe reported CouldNotDetermine, so `joe.bloggs` was proposed and staged
+**When** the export to Corporate AD fails with a classified uniqueness rejection and no other target has accepted the value
+**Then** JIM generates `joe.bloggs1`, updates the Pending Export and the assignment (Remediated), retries in the same run, and on acceptance commits `joe.bloggs1`. The export item records `GeneratedValueRemediated`; the identity's history shows the correction with the reason; other targets receive `joe.bloggs1` on their next export.
 
-### Scenario 6: Re-run is stable
+### Scenario 6: Anchored collision enters Needs Decision
 
-**Given** Scenario 2 has run and `joe.bloggs1` is assigned to the second identity
-**When** the same import is re-run
-**Then** the second identity keeps `joe.bloggs1` (its existing value still satisfies uniqueness); no renumbering occurs.
+**Given** an import-mode Account Name `r.okafor` accepted by Corporate AD, and a later export to Contractor LDAP rejected as already in use
+**Then** JIM does not revise the value. The assignment enters NeedsDecision; the export item records `GeneratedValueCollisionUnresolved` naming both systems; the identity, Synchronisation Rule and Connected System show needs-attention. The administrator can Allow the rename (JIM then remediates to `r.okafor1` everywhere on the next runs), Retry after fixing the conflict in Contractor LDAP, or leave it.
 
 ### Scenario 7: Allocation exhaustion fails hard
 
-**Given** a maximum-attempts cap and a pathological population that exhausts it
-**When** JIM cannot find a free value within the cap
-**Then** the object is failed with an attributed RPEI error describing the exhausted generation, and no duplicate is written.
+**Given** an attempt limit and a pathological population that exhausts it
+**Then** the object fails with an attributed RPEI error describing the exhausted generation, and no duplicate is written.
+
+### Scenario 8: Re-run is stable
+
+**Given** Scenario 5 has committed `joe.bloggs1`
+**When** the same import runs again, in full or delta
+**Then** the identity keeps `joe.bloggs1`; nothing is recomputed or renumbered.
+
+### Scenario 9: Export-mode generation
+
+**Given** an export Synchronisation Rule to a ticketing system whose Attribute Flow for a login name uses "JIM generates it"
+**Then** the assignment is keyed on the Connected System Object, uniqueness is checked against that one system, and Collision Remediation always applies because an export-mode value is never anchored. The Metaverse is untouched.
+
+### Scenario 10: Collision Remediation off
+
+**Given** the switch is off for the flow in Scenario 5
+**Then** the export records an ordinary export error for `joe.bloggs`, the assignment stays Proposed, and the administrator resolves it.
 
 ## UI Mocks
 
-Mockups for all six screens are linked in the document header, rendered in JIM's navy-o6 portal styling (light and dark) with annotations tying each control back to the requirement it satisfies.
-
-Every screen extends an existing surface; none is a new page. The dialog structure (outlined selects, dense checkboxes, a subtitle-with-explainer options section) and the row-chip affordance follow the shipped patterns from #843 (Value processing section) and #223 (`Initial Export Only` checkbox and chip), so the feature adds no new visual language.
+Mockups for all six screens, plus the design explainers and diagrams (assignment lifecycle, the service and its callers, the three Set Value shapes), are linked in the document header. Screens extend existing surfaces; none is a new page. Dialog structure and row chips follow the shipped patterns from #843 (Value processing section) and #223 (`Initial Export Only` checkbox and chip); events follow the causality idiom from #1087 and #1495.
 
 | # | Screen | Route | Shows |
 |---|--------|-------|-------|
-| 1 | Attribute Flows tab, mapping row | `/admin/sync-rules/{id}` | `Generated (unique)` chip; derived Email inheriting the Account Name suffix (FR 1, 9) |
-| 2 | Add/Edit Attribute Flow dialog | `/admin/sync-rules/{id}` | Unique value generation section: enable, scope, suffix start, separator, attempt cap (FR 1, 3, 8) |
-| 3 | Uniqueness scope selector, open | `/admin/sync-rules/{id}` | Metaverse and connector spaces as combinable multi-select (Decision 2) |
-| 4 | Live candidate preview | `/admin/sync-rules/{id}` | Collision sequence and `{n}` suffix placement before the `@` (FR 6, Scenario 3) |
-| 5 | Metaverse Object detail | `/metaverse/objects/{id}` | Generated-value provenance against sourced values (FR 11) |
-| 6 | Run Profile execution item | `/activities/{id}` | Allocation-exhausted error naming attribute, last candidate and scope (FR 8, Scenario 7) |
+| 1 | Add Attribute Flow, source type | `/admin/sync-rules/{id}` | "JIM generates it" beside Attribute and Expression |
+| 2 | Generation form | `/admin/sync-rules/{id}` | Base expression, "Assign the value to", collision strategy, derived system list with both capabilities, Collision Remediation on, live preview |
+| 3 | Collision Remediation, unavailable and off | `/admin/sync-rules/{id}` | Disabled-with-reason and off-with-consequence states |
+| 4 | Identity attribute history | `/t/{type}/v/{id}` | Causality Timeline scoped to the attribute; `Generated by JIM` and `Corrected` chips |
+| 5 | Activity, Timeline view | `/activity/{id}` | Summary band and pills; remediated (Warning) and needs-a-decision (Error) events with the three exits |
+| 6 | Allow the rename | `/t/{type}/v/{id}` | Confirmation naming every system that will change, and when |
 
-The mockups assume the recommended answers to Decisions 1, 2, 3 and 6; deciding differently changes the affected screens.
+## Integration Testing
+
+Unit and database-tier tests cannot prove the parts of this feature that matter most, because those parts are interactions with a real directory: the probe's silent-ACL behaviour, an export rejected by the target, and a rename carried through a live account. Two integration requirements follow.
+
+### A dedicated scenario
+
+A new scenario, `Invoke-Scenario22-UniqueValueGeneration.ps1` (numbered after the current highest), exercises every positive and negative path and every configuration permutation against the standard Samba AD and OpenLDAP targets plus a CSV target that can neither probe nor classify. Setup, run and teardown follow the runner's conventions (`Run-IntegrationTests.ps1`; scenario scripts are never invoked directly). It must cover, at minimum:
+
+| Area | Cases |
+|------|-------|
+| Modes | Import Attribute Flow (value in the Metaverse, exported to two directories); Export Attribute Flow (value on one Connected System Object only, Metaverse untouched) |
+| Strategy | Number and letter suffixes; start value; separator; suffix placed before `@` for an email-shaped value and appended otherwise |
+| Gates | Collision caught by the Metaverse; by a connector space holding an optimistically applied value the target does not yet have; intra-batch within one page; brownfield object in an OU outside the connector's import scope caught by the probe; probe reporting CouldNotDetermine (under-privileged bind) falling back to local gates without reporting NotFound |
+| Collision Remediation | Post-probe collision remediated within the export run and committed; the accepted value reaching the second directory on its next export; remediation off recording an ordinary export error; a CSV target with no classification recording an ordinary export error while the LDAP targets remediate (mixed capability) |
+| Anchoring | Value accepted by one directory then rejected by the other: Needs Decision entered, no rename performed, needs-attention indicators present; each exit exercised: Allow the rename (rename carried out on the next runs and recorded as authorised), Retry after removing the conflicting object, release on flow configuration change |
+| Failure | Attempt limit exhausted: object failed via RPEI, nothing written |
+| Stability | Full and delta re-runs leave committed values unchanged; a higher-priority source later supplying a value supersedes the generated one visibly |
+| Transparency | Assertions against the Activity's outcomes and causal edges (`GeneratedValueRemediated`, `GeneratedValueCollisionUnresolved`, the revision edge and its reason codes) and against the identity's attribute history |
+| Surface parity | The same flow configured through the REST API and through PowerShell produces identical behaviour; Needs Decision listing and actions exercised through both |
+
+### Converting existing scenarios
+
+Because JIM could not generate identifiers before this feature, the shared HR feed (`Generate-TestCSV.ps1`) carries IT-owned attributes as source data: `samAccountName`, `email` and `userPrincipalName`. Scenario 1 (HR to Identity Directory) imports `samAccountName` to Account Name from HR and exports it to the directory, which is the unrepresentative shape this feature exists to remove; Scenarios 2, 8, 10, 12, 13, 15, 17 and 18 reference the same columns. As part of this feature, every existing scenario is audited against one criterion: **an IT-owned attribute that flows from a source feed into the Metaverse is converted to generation; an attribute used as a join key or external identifier (the cross-domain scenarios) is kept.** Scenario 1 is the canonical conversion. The generator gains a switch so converted scenarios receive feeds without those columns while unconverted ones are unchanged. Converted scenarios must still pass with identical downstream expectations, which is itself a regression test of the feature under realistic load.
 
 ## Constraints
 
-- Must reuse `IExpressionEvaluator`; no second expression dialect (`src/JIM.Application/Expressions/DynamicExpressoEvaluator.cs`).
-- The expression evaluator must remain stateless and side-effect-free; uniqueness state (DB access, reservation set) lives in the sync engine/worker layer, not inside registered expression functions. Note the engine itself is documented as a pure, synchronous, no-I/O domain engine, and receives `IExpressionEvaluator` as a method parameter (the worker's `SyncTaskProcessorBase` holds the instance), not by constructor injection; the uniqueness lookup must be threaded in the same way.
-- EF Core migrations are append-only; any new config column is a new migration, never an edit to an existing one. The value-lookup index already exists.
-- Any new Metaverse-value lookup on the sync hot path should follow the raw-SQL-over-EF-projection guidance for worker paths (`src/CLAUDE.md`).
-- Synchronisation Integrity is paramount: fail fast, report every error via RPEI/Activity, never write a duplicate silently (`src/JIM.Application/CLAUDE.md`).
+- Must reuse `IExpressionEvaluator`; the evaluator stays stateless and side-effect-free. Uniqueness state (reservations, lookups, probes, assignments) lives in the application service and is threaded into the sync engine the way the evaluator is.
+- EF Core migrations are append-only. New tables and columns (assignments; mapping configuration) are new migrations. The value-lookup indexes already exist.
+- Raw SQL over EF projection for any new worker hot-path lookup (`src/CLAUDE.md`).
+- `JIM.Web` must not gain connector dependencies.
+- Existing `CausalEdgeType` / `CausalReasonCode` / outcome / error enums are extended only by appending.
 
 ## Affected Areas
 
 | Area | Impact |
 |------|--------|
-| Database | New indexed lookup **method** for Metaverse-scope uniqueness (the `(AttributeId, StringValue)` index exists; the query does not). Possible new config columns on `SyncRuleMapping` (generation enabled, scope, suffix strategy, attempt cap) via an append-only migration. |
-| Models | `SyncRuleMapping` gains generation/uniqueness configuration, following the per-mapping flag pattern #223 established with `InitialExportOnly` (model field + append-only migration + editor control + row chip); a shared collision-and-suffix component and its options model (in `JIM.Models`), generalising `ExampleDataValueTrackerStore`. |
-| Application | `SyncEngine` attribute-flow path (`SyncEngine.AttributeFlow.cs`): build base value via the existing expression path, then run uniqueness/suffix post-processing on conditional-generation mappings; thread a per-run reservation set and a uniqueness-lookup delegate through the flow (matching how `IExpressionEvaluator` is already threaded). Shared primitive consumed by `ExampleDataServer` (#549). |
-| Data | New repository method(s) for Metaverse-scope uniqueness lookup (index-backed); reuse `GetConnectedSystemObjectIdByAttributeValueAsync` / `GetConnectedSystemObjectsByAttributeValuesAsync` for connector-space scope. |
-| Worker | Own and pass the per-run reservation set across the page loop (`SyncFullSyncTaskProcessor`, delta/import processors); ensure reservation survives across pages within a run. |
-| UI | `SyncRuleAttributeFlowTab.razor` authoring. The editor is no longer a bare expression textbox: it has an add/edit dialog (source-type select, expression field with Standard Mapping suggestions from #1122, target select, a "Value processing" options section from #843, and the per-mapping `Initial Export Only` checkbox from #223, with matching chips on mapping rows). Add a "Unique value generation" section to that dialog (enable toggle, scope, suffix strategy, attempt cap, live candidate preview) and a `Generated (unique)` row chip. See UI Mocks. |
-| Tests | `JIM.Worker.Tests` / relevant homes: base generation, collision suffixing, mid-string suffix placement, intra-batch reservation, brownfield connector-space scope, idempotent re-run, exhaustion failure, ordering/dependency. TDD, red first. |
+| Models | `SyncRuleMapping`: source type "generated", generation settings (strategy, start, separator, attempt limit), per-system exclusions, `CollisionRemediation` flag. New `GeneratedValueAssignment` (object reference, attribute, value, state, origin, timestamps) and its enums. Appended members on `CausalEdgeType`, `CausalReasonCode`, sync outcome type, `ActivityRunProfileExecutionItemErrorType`, `ConnectedSystemExportErrorType`. |
+| Interfaces | New optional connector capability `IConnectorUniquenessProbe` (three-state, batched). Uniqueness-rejection classification added to the export error path; LDAP maps `EntryAlreadyExists` / attribute-uniqueness `ConstraintViolation`; SCIM maps `409`. |
+| Application | New unique value service (pattern, candidates, four-gate oracle, assignment persistence) in `JIM.Application/Servers/`. `SyncEngine.AttributeFlow.cs`: generated source type evaluated as a contribution under attribute priority; sticky assignment short-circuits recomputation. `ExportExecutionServer`: classified rejection, remediation retry loop, anchoring check, NeedsDecision entry. `ExportCausalEdgeBuilder`: the new edge. NeedsDecision release on configuration change in `ConnectedSystemServer`, mirroring `ReleaseParkedInitialPasswordsIfDeliveryChangedAsync`. |
+| Data | Repository methods: Metaverse-by-attribute-value lookup (index exists); assignment CRUD; NeedsDecision listing. Reuse of connector-space by-value lookups. |
+| Worker | Own and pass the reservation set across pages; thread the service into the import processors; remediation loop inside the export processor. |
+| Web | `SyncRuleAttributeFlowTab.razor`: source type, generation form, derived system list, Collision Remediation switch. Identity page: attribute chips and scoped Timeline. Activity page: new event labels, tones and the Allow/Retry actions. Needs-attention indicators on Synchronisation Rule and Connected System lists. |
+| API / PowerShell | Attribute Flow DTOs and cmdlets gain the generation settings and switch; NeedsDecision list and actions (`202 Accepted` with optional wait); Pester and API tests. |
+| Tests | Unit: candidate sequencing, suffix position, four-gate ordering and probe three-state handling, reservation set, stickiness, priority interaction, anchoring, remediation loop, exhaustion, enum ordinals. Database tier: assignment persistence and by-value lookups. Integration: a dedicated scenario covering every positive and negative path and configuration permutation, plus conversion of existing scenarios that source IT-owned attributes from HR feeds (see Integration Testing). bUnit: causality rendering of the new outcomes. Red first. |
 
 ## Documentation Impact
 
 | Doc | Change |
 |------|--------|
-| `docs/concepts/expressions.md` (or a new Synchronisation Rules generation section) | Document generated-with-uniqueness attribute flow: base template, scope, suffix strategy, conditional generation, ordering for derived values. |
-| `CHANGELOG.md` | `✨` entry under `[Unreleased]` for unique value generation on Attribute Flows. |
-| `engineering/` reference docs | Update the developer/architecture guide if a new shared uniqueness component is introduced. |
+| `docs/` Synchronisation Rules and expressions concepts | New page or section: generated values, the four gates, Collision Remediation, anchoring, Needs Decision and its exits, import versus export mode. |
+| `docs/` connectors | Which connectors probe and which classify uniqueness rejections. |
+| `CHANGELOG.md` | `✨` entries for Unique Value Generation and Collision Remediation under `[Unreleased]`. |
+| `engineering/` | Developer guide: the unique value service, assignment model and its reuse seam; causality reference: new outcome, edge and reason members. |
 
 ## Dependencies
 
-- **Related: [#549](https://github.com/TetronIO/JIM/issues/549) and `engineering/prd/PRD_EXAMPLE_DATA_EXPRESSIONS.md`.** #549 deferred value uniqueness to this issue and has **since shipped and closed** using its interim per-run tracker (`ExampleDataValueTrackerStore`, the lock-free `ConcurrentDictionary` behind `[UniqueInt]`) without generalising it. The original plan was "whichever feature lands first exposes the shared primitive"; #549 landed first and did not, so **this feature now owns building the scope-parameterised primitive**. Migrating example data onto it is a non-blocking follow-up.
-- **Related: [#223](https://github.com/TetronIO/JIM/issues/223) Initial Export Only (landed).** `SyncRuleMapping.InitialExportOnly` is the shipped precedent for exactly the shape this feature adds: a per-mapping behaviour flag with an append-only migration, a checkbox in the attribute-flow dialog, an explanatory chip on the mapping row, and sync-engine gating keyed off the flag. Follow its pattern for the generation configuration.
-- **Related: [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning** (`engineering/plans/INITIAL_PASSWORD_PROVISIONING.md`, Status: Doing, Phases 1-3 landed). The closest sibling: JIM generating a value itself at provisioning time (password generator, target policy discovery, preflight, RPEI feedback loop when the target rejects the value). Passwords are export-side and deliberately unmanaged afterwards, so the two features do not share code, but its UI mockups convention and its "JIM-generated value" admin messaging should stay consistent with this feature's.
-- **Related: #843 Inbound Value Processing** (`engineering/plans/done/INBOUND_VALUE_PROCESSING.md`, Status: Done). Its per-mapping post-processing model (transforms applied to the flowed text value, threaded through `ProcessMapping` via `ApplyInboundTextProcessing`) is the closest precedent for where uniqueness/suffix post-processing should sit in the flow, and its "collapses to no value" (`ConnectedNoValue`) result is the signal that triggers conditional generation.
+- **#1087 / #1495 causality views (landed).** All transparency requirements are expressed in that model; nothing bespoke.
+- **#1121 Initial Password Provisioning (Phases 1-3 landed).** Parked-state pattern (`Pending` / `Parked`, release on configuration change) and the queue-and-follow pattern for portal and API actions are reused. Its password delivery lane is explicitly *not* reused for Metaverse data.
+- **#1079 optimistic export apply (landed).** The reason the connector space is a distinct gate from the probe: it holds values the target does not yet have.
+- **#223 Initial Export Only (landed).** The per-mapping flag pattern (model field, migration, dialog control, row chip, engine gating) that the generation configuration follows.
+- **#843 Inbound Value Processing (Done).** The per-mapping post-processing precedent and the `ConnectedNoValue` result.
+- **#91 attribute priority (landed).** Generation participates as a contribution; conditional generation and supersession by a real source both fall out of it.
+- **#549 example-data expressions (closed).** Shipped with its interim `ExampleDataValueTrackerStore`; this feature owns the generalised primitive; migrating example data onto it is a non-blocking follow-up.
 - No blocking external dependencies.
 
-## Design Options and Trade-offs
+## Design Decisions
 
-This section lays out the options for each open design question so the product owner can decide. Recommendations are summarised in **Decisions Needed** at the end.
+Taken during review of the linked artefact (July to September 2026). Recorded here so implementation planning does not re-open them.
 
-### Design Option 1: Expression function vs dedicated generator
-
-**Option 1a: An `UniqueValue("{template}", "attribute")` expression function** (issue Option 1). Authored inside the existing expression textbox; feels unified.
-- Against: the evaluator is stateless, synchronous, side-effect-free, and process-cached (static `ConcurrentDictionary<string, Lambda>`). A uniqueness function must do async I/O (a DB/connector-space query) and consult a per-run reservation set. Injecting that into a DynamicExpresso function forces mutable, request-scoped state and I/O into a component whose whole design is purity and cacheability, and the shared compiled-expression cache would cache a lambda closing over run-specific state. It also cannot place the suffix mid-string cleanly, and the synchronous signature (`object? Evaluate`) has nowhere to await a query.
-
-**Option 1b: A dedicated generation-and-uniqueness step on the mapping**, where the base value is produced by the existing expression mechanism and uniqueness+suffixing is a declarative post-process executed by the sync engine/worker (the layer that already has the repository and the run context). This mirrors Inbound Value Processing (#843), which post-processes the flowed value inside `ProcessMapping`.
-- For: keeps the evaluator pure; puts async I/O and reservation state where they belong; makes suffix placement explicit; reuses the expression engine for the readable part (base construction).
-- Against: a second concept on the mapping (base template + uniqueness config) rather than one expression string.
-
-**Recommendation: Option 1b.** The expression builds the base; a dedicated, scope-parameterised uniqueness/suffix post-process resolves collisions. This also gives #549 the same shared primitive.
-
-### Design Option 2: Uniqueness scope (Metaverse vs Connected System vs live target query)
-
-- **Metaverse scope**: candidate must be unique across existing Metaverse Object values of the target attribute/type. This is JIM's logical, directory-wide notion of uniqueness. No MVO-by-attribute-value lookup exists today, but the backing `(AttributeId, StringValue)` index does, so this is a new query, not new schema.
-- **Connected System (connector-space) scope**: candidate must be unique against a Connected System Object attribute in a chosen system (e.g. existing AD sAMAccountNames). Essential for brownfield onboarding, where the target already contains accounts JIM did not create. `GetConnectedSystemObjectIdByAttributeValueAsync` and a bulk variant already exist.
-- **Live target query**: query the actual target directory (e.g. LDAP search) at generation time. Most authoritative for brownfield, but slow, couples generation to connector availability, cannot run when the target is not part of the current operation, and is hard to make batch-safe.
-
-**Recommendation: support Metaverse scope and Connected System (connector-space) scope, selectable and combinable per mapping; default Metaverse.** For a brownfield AD, an administrator combines "Metaverse + the AD connector space" so JIM avoids both logical duplicates and names already present in the target's imported view. Defer live target query (performance and coupling); the connector space is JIM's cached view of the target and is the pragmatic proxy, kept fresh by import.
-
-### Design Option 3: Collision suffix strategy
-
-- **Numeric increment** (`joe.bloggs`, `joe.bloggs1`, `joe.bloggs2`), matching the issue examples and the existing `[UniqueInt]` behaviour (first occurrence bare, subsequent occurrences suffixed). Simple, predictable, human-readable.
-- **Variants**: configurable start index (start at 1 vs 2), zero-padding (`001`), a separator (`joe.bloggs.1`), or random digits (avoids sequential enumeration but hurts predictability and can itself collide).
-- **Suffix placement**: for account names the suffix trails; for email/UPN it must precede the `@`. A plain "append token" cannot express this, so the base template must declare the insertion point (for example a `{n}` placeholder, or a base/suffix/tail split so email is `base + suffix + "@domain"`).
-
-**Recommendation: numeric increment by default, first value suffix-free, with a configurable start index and separator, and an explicit suffix-position mechanism** (placeholder or base/tail split) so the suffix lands correctly for mid-string values. Avoid random suffixing as a default; offer it only if enumeration resistance is explicitly wanted.
-
-### Design Option 4: Intra-batch collision handling
-
-The worker processes Connected System Objects in configurable pages, sequentially within a page, and batch-persists Metaverse Objects at page boundaries, so a value generated earlier in a page is not yet in the database when a sibling is processed.
-
-- **Database-only check**: simplest, but wrong within a batch (Scenario 4 duplicates).
-- **Per-run in-memory reservation set layered over the DB/connector-space check**: every candidate assigned in the run is recorded and treated as taken by later siblings. Correct within the batch; must persist across pages within a run. `ExampleDataValueTrackerStore` is the existing lock-free `ConcurrentDictionary` implementation of exactly this idea for generation.
-- **Per-page reset**: cheaper memory, but a collision spanning a page boundary slips through.
-
-**Recommendation: DB/connector-space check plus a per-run (whole-operation) reservation set**, thread-safe, released at run end, generalised from `ExampleDataValueTrackerStore`. Combined with the hard-fail attempt cap (FR 8) this guarantees no duplicate is written. This reservation mechanism is exactly the shared primitive example-data generation needs (its scope is only the reservation set, no DB check); #549 shipped with the interim tracker, so adopting the generalised component there is a follow-up.
-
-### Design Option 5: Ordering of derived values (email/UPN from account name)
-
-Attribute Flow mappings are evaluated in list order (`SyncEngine.cs`, `foreach (var syncRuleMapping in syncRule.AttributeFlowRules)`), and the expression context for a mapping exposes only `cs[...]`; it does **not** expose the Metaverse Object's freshly generated attributes (`metaverseAttributes: null` in `ProcessExpressionMapping`). So today an email expression cannot read an account name that another mapping generated moments earlier in the same object's flow.
-
-- **Option 5a**: derive email/UPN from the same source inputs as the account name (recompute `firstname.lastname` in each), and share the reservation/suffix so all three land on the same suffix. Avoids cross-attribute reads but duplicates the base logic and risks the three attributes disagreeing on the suffix.
-- **Option 5b**: make generated Metaverse values available to later mappings within the same object's flow by populating `mv[...]` in the expression context with values generated earlier in this flow, and evaluate generated mappings in dependency order. Cleaner authoring (email genuinely references the account name), but a real change to the flow's context construction and ordering.
-
-**Recommendation: Option 5b, evaluated in dependency order with the in-flow Metaverse values exposed to later mappings**, so derived identifiers reference the generated account name directly and inherit its suffix through a shared reservation. Flag the scope of the `mv[...]`-in-flow change for the product owner (Open Question 1); if that change is judged too large for v1, fall back to 5a with a shared suffix.
+1. **Mechanism:** a dedicated "JIM generates it" source type, with the base value built by the existing expression engine and uniqueness and suffixing applied by the unique value service. Not an expression function (stateless, cached, synchronous evaluator; no place for I/O or a mid-string suffix).
+2. **Uniqueness layers:** all four gates always on and not configurable. The set of systems is derived from export Attribute Flows (import mode) or is the one target (export mode), with per-system exclusion only.
+3. **Suffix:** numeric by default, first value bare, start 1, no separator; letters and a separator as options; position determined by JIM (before the first `@`, else appended); no authoring token.
+4. **Attempt limit:** 1000, hard fail via RPEI on exhaustion.
+5. **Export arbitration:** Option B, self-healing. Collision Remediation is a per-Attribute-Flow switch, default on where any participating connector classifies rejections, disabled with reason otherwise. Not per Connected System: the decision is about the value, the anchoring rule already protects live accounts, and per-system capability is shown as information rather than policy.
+6. **Feedback to JIM:** a JIM-owned generated value assignment, keyed on object and attribute, replaces the earlier confirming-import model; no import Attribute Flow is required for remediation to work, and generated values are sticky.
+7. **Anchoring:** remediate while unanchored; escalate to Needs Decision once any target has accepted the value.
+8. **Needs Decision exits:** Allow the rename, Retry, Leave it; release on flow configuration change; never expires.
+9. **Set Value:** deferred out of #242 (2026-09-16). If it returns, it takes the schedule-consistent shape described in the artefact (assignment written now, propagated by the next synchronisation and export runs), never an immediate lane; and it brings the delta-synchronisation change needed to pick up Metaverse-side changes.
+10. **Both modes:** import and export Attribute Flows are first-class.
+11. **Causality:** retry within an item is an outcome; the import-mode cross-item consequence is an edge; wording derived from codes at render time.
 
 ## Acceptance Criteria
 
-- [ ] An attribute-flow mapping can be configured to generate a unique value from a base template with a uniqueness scope, suffix strategy, and attempt cap.
-- [ ] Generation runs only when the source contributes no value; an authoritative supplied value is never overwritten (Scenario 1, FR 3).
-- [ ] A colliding candidate is disambiguated deterministically with a numeric suffix (Scenario 2).
-- [ ] The suffix is placed correctly for mid-string values such as email/UPN, before the `@` (Scenario 3).
-- [ ] Uniqueness holds within a single sync page/run via a per-run reservation set; no duplicate survives a page flush (Scenario 4).
-- [ ] Uniqueness can be checked against a Connected System connector space for brownfield onboarding (Scenario 5).
-- [ ] Re-running the same import is stable: existing generated values are retained, not renumbered (Scenario 6).
-- [ ] Exhausting the attempt cap fails the object with an attributed RPEI/Activity error and writes no duplicate (Scenario 7).
-- [ ] Derived identifiers (email/UPN) are generated after, and consistent with, the account name they depend on (FR 9, Design Option 5).
-- [ ] The collision-and-suffix primitive is scope-parameterised and designed for adoption by example-data generation (#549 shipped an interim tracker; the retrofit is tracked as a follow-up, not a blocker here).
-- [ ] Generated Metaverse values are attributed as system-generated via existing contribution provenance (FR 11).
-- [ ] Base-value construction reuses `IExpressionEvaluator`; the evaluator remains stateless and side-effect-free (no uniqueness I/O inside expression functions).
-- [ ] Public docs and `CHANGELOG.md` updated; `dotnet build JIM.sln` and `dotnet test JIM.sln` pass with zero errors and warnings; new behaviour covered by tests written red-first.
-
-## Decisions Needed
-
-The product owner must decide the following before implementation planning. Each carries a recommendation.
-
-1. **Mechanism: expression function vs dedicated generation step (Design Option 1).**
-   Recommendation: **dedicated generation-and-uniqueness step** on the mapping, with the base value built by the existing expression engine and uniqueness/suffixing post-processed by the sync engine. Rejects an `UniqueValue(...)` expression function because it forces async I/O and per-run mutable state into the deliberately pure, process-cached evaluator and cannot place a mid-string suffix.
-
-2. **Uniqueness scope (Design Option 2).**
-   Recommendation: **support Metaverse scope and Connected System connector-space scope, combinable per mapping, defaulting to Metaverse.** Defer live target-directory queries in v1. Requires a new Metaverse-by-attribute-value lookup method (the backing index already exists); connector-space reuses existing CSO-by-value lookups.
-
-3. **Collision suffix strategy (Design Option 3).**
-   Recommendation: **numeric increment, first value suffix-free, configurable start index and separator, with an explicit suffix-position mechanism** so the suffix can precede the `@` in email/UPN. Random/zero-padded suffixing offered only if explicitly wanted.
-
-4. **Intra-batch collision handling (Design Option 4).**
-   Recommendation: **database/connector-space check plus a per-run in-memory reservation set** (thread-safe, whole-operation lifetime, generalised from `ExampleDataValueTrackerStore`), backed by a hard-fail attempt cap, so no duplicate is ever written and generation never loops unbounded.
-
-5. **Derived-value ordering and `mv[...]`-in-flow (Design Option 5, Open Question 1).**
-   Recommendation: **evaluate generated mappings in dependency order and expose in-flow generated Metaverse values to later mappings**, so email/UPN reference the generated account name and share its suffix. Confirm whether extending the attribute-flow expression context to populate `mv[...]` with freshly generated values is acceptable for v1; if not, fall back to recomputing the base per attribute with a shared suffix.
-
-6. **Attempt cap default.** What is the default maximum number of suffix attempts before hard failure (for example 1000)? Recommendation: a conservative but finite default, configurable per mapping, chosen so a realistic collision cluster resolves while a pathological loop fails fast.
+- [ ] "JIM generates it" is available as a source type on import and export Attribute Flows for single-valued text targets, with the generation form and live preview as mocked (FR 1-3).
+- [ ] The derived system list shows probe and classification capability per system and supports exclusion; the Collision Remediation switch follows FR 5 in all three states.
+- [ ] Generation participates in attribute priority; a higher-priority source supersedes it visibly (FR 6).
+- [ ] Candidates pass the four gates in order; the probe is three-state and never reports NotFound on an undetermined result; probes are batched (FR 7-8).
+- [ ] Assignments are persisted, keyed on object and attribute, and committed values are sticky across full and delta runs (FR 9-10, Scenario 8).
+- [ ] Intra-run uniqueness holds across pages (FR 12, Scenario 3).
+- [ ] Exhaustion fails the object with an attributed RPEI error and writes nothing (FR 11, Scenario 7).
+- [ ] A classified, unanchored uniqueness rejection is remediated within the export run; the accepted value is committed and flows to other targets on their next export (FR 13, 17, Scenario 5).
+- [ ] An anchored rejection enters Needs Decision with the three exits, needs-attention indicators, release on configuration change and no expiry (FR 14, 16, Scenario 6).
+- [ ] Collision Remediation off, or an unclassified rejection, records an ordinary export error (FR 15, Scenario 10).
+- [ ] Export-mode generation keys on the Connected System Object and never touches the Metaverse (Scenario 9).
+- [ ] All events render through the causality model with the members named in FR 18; the identity attribute history is the scoped Timeline; ordinal tests cover every appended enum member (FR 18-20).
+- [ ] The unique value service is caller-agnostic and unit-testable without a synchronisation run (FR 21).
+- [ ] Portal, REST and PowerShell parity for configuration and for the Needs Decision list and actions, with tests and docs (FR 22).
+- [ ] `JIM.Web` gains no connector dependency.
+- [ ] A dedicated integration scenario covers every case in the Integration Testing table and is green in the full suite.
+- [ ] Existing scenarios that source IT-owned attributes from HR feeds are converted to generation per the stated criterion, with join-key uses kept, and remain green.
+- [ ] Public docs and `CHANGELOG.md` updated; `dotnet build JIM.sln` and `dotnet test JIM.sln` pass with zero errors and warnings; new behaviour covered by tests written red-first; brownfield probe and remediation covered by integration scenarios.
 
 ## Open Questions
 
-1. **`mv[...]` in the inbound flow context (ties to Decision 5).** Extending the Attribute Flow expression context so a mapping can read Metaverse values generated earlier in the same object's flow is the clean way to derive email/UPN from account name, but it is a behavioural change to `ProcessExpressionMapping`'s context construction and flow ordering. How large a change is acceptable in v1?
-2. **Scope of "unique" for the Metaverse check.** Unique per target attribute across all Metaverse Objects of the type, or across all types? Account name is realistically unique per person-type; confirm whether cross-type collisions matter.
-3. **Reservation persistence across interrupted runs.** The per-run reservation set is in memory. If a run aborts mid-way, partially generated values are already (or not yet) persisted; on the next run the DB/connector-space check covers committed values, but confirm no assumption is broken for values that were reserved but not flushed.
-4. **Interaction with attribute priority (#91).** Generation targets a single Metaverse attribute that may have multiple contributing rules. Confirm generation only fires for the winning contribution and does not fight the priority gate (`AttributePriorityContext`).
-5. **Docs-coupling.** Confirm the public-docs change (expressions/generation concept page) satisfies `changelog-lint`'s docs-coupling rule for the `✨` entry.
+1. **Derived values in the same flow.** Email built from the generated account name can either read the assigned value within the same object's flow (requires exposing values assigned earlier in the flow to later mappings, in dependency order) or lag by one synchronisation. The artefact assumes the former. Decide at implementation planning; either satisfies the requirements.
+2. **Attempt limit scope.** Per identity per run (recommended) or per identity for ever. Per run is simpler and matches "give up after N tries".
+3. **Probe batch size** for the LDAP filter, and whether SCIM filtering is worth a probe implementation in v1 or classification only.
+4. **Migration of example data** onto the generalised primitive: follow-up issue, not v1.
 
 ## Additional Context
 
-- Expression engine: `src/JIM.Application/Expressions/DynamicExpressoEvaluator.cs`; interface `src/JIM.Models/Interfaces/IExpressionEvaluator.cs`; context `src/JIM.Models/Expressions/ExpressionContext.cs` and `AttributeAccessor.cs` (case-insensitive attribute-name lookup; `Eq()` required for value comparison because the indexer returns `object?`). Stateless, synchronous, process-wide thread-safe compiled cache; `Validate()`/`Test()` present; function library includes `Lower`, `Upper`, `Trim`, `Left`, `Right`, `Substring`, `Replace`, `Coalesce`, `IIF`, `Eq`, plus DN/date/password/bitwise helpers, but no uniqueness function.
-- Attribute Flow evaluation: `src/JIM.Application/Servers/SyncEngine.cs` (`FlowInboundAttributes`, iterating `syncRule.AttributeFlowRules` in list order; the engine is a pure synchronous domain engine and receives `IExpressionEvaluator` as a method parameter, held by the worker's `SyncTaskProcessorBase`) and `src/JIM.Application/Servers/SyncEngine.AttributeFlow.cs` (`ProcessMapping`, `ProcessExpressionMapping`; expression context built with `metaverseAttributes: null`, so only `cs[...]` is available; `BuildCsoAttributeDictionary`). Mapping model: `src/JIM.Models/Logic/SyncRuleMapping.cs`, `SyncRuleMappingSource.cs` (a source is exactly one of ConnectedSystemAttribute / MetaverseAttribute / Expression).
-- Page-based, sequential worker processing with batch persistence: `src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs`, `SyncImportTaskProcessor.cs`, `SyncTaskProcessorBase.cs`; MVOs collected per page and flushed at page boundaries. Parallelism exists only in reference resolution and export reconciliation, not the inbound attribute-flow path.
-- Value-lookup building blocks: `GetConnectedSystemObjectIdByAttributeValueAsync` / `GetConnectedSystemObjectsByAttributeValuesAsync` (`src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`); no Metaverse-by-attribute-value equivalent (only `GetAttributeValueObjectCountAsync`). Indexes `IX_MetaverseObjectAttributeValues_AttributeId_StringValue` and `IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue` already exist (`src/JIM.PostgresData/JimDbContext.cs`).
-- Existing per-run collision primitive to generalise: `ExampleDataValueTrackerStore` (`src/JIM.Application/Servers/`), a lock-free `ConcurrentDictionary`-based tracker backing `[UniqueInt]`, one instance per template execution.
-- Inbound value-processing precedent for per-mapping post-processing: `engineering/plans/done/INBOUND_VALUE_PROCESSING.md` (#843); the `InboundValueProcessing`/`CaseNormalisation` fields on `SyncRuleMapping` and `ApplyInboundTextProcessing` in `ProcessMapping`. The per-mapping flag precedent is `SyncRuleMapping.InitialExportOnly` (#223), surfaced as a dialog checkbox and row chip in `SyncRuleAttributeFlowTab.razor`.
-- Related example-data uniqueness deferral: `engineering/prd/PRD_EXAMPLE_DATA_EXPRESSIONS.md` (#549), which frames the shared collision-and-suffix primitive.
+- Expression engine: `src/JIM.Application/Expressions/DynamicExpressoEvaluator.cs`; context built with `metaverseAttributes: null` in `ProcessExpressionMapping` (`src/JIM.Application/Servers/SyncEngine.AttributeFlow.cs`), which is the constraint behind Open Question 1.
+- Attribute Flow evaluation and mapping model: `SyncEngine.cs`, `SyncEngine.AttributeFlow.cs`, `src/JIM.Models/Logic/SyncRuleMapping.cs` (`InboundValueProcessing`, `CaseNormalisation`, `Priority`, `NullIsValue`, `InitialExportOnly`).
+- Page-based worker processing and the delta selection from Connected System Objects modified since the watermark: `SyncFullSyncTaskProcessor.cs`, `SyncDeltaSyncTaskProcessor.cs`, `SyncTaskProcessorBase.cs`.
+- Export execution, optimistic apply and error classification: `ExportExecutionServer.cs` (`ApplyOptimisticExportUpdatesAsync`), `LdapConnectorExport.cs` (`IsPlaceholderConstraintViolation` as the classification precedent), `ConnectedSystemExportErrorType`.
+- Pending Export reconciliation: `PendingExportReconciliationResult` (Confirmed / Retry / Failed), `SyncEngine.Reconciliation.cs`.
+- Causality: `src/JIM.Models/Activities/CausalEdgeEnums.cs` (append-only; edge rules in the type comment), `src/JIM.Web/Causality/` (`CausalityEvent`, `CausalityEnums`, `CausalityCauseWording`), `src/JIM.Worker/Processors/ExportCausalEdgeBuilder.cs`.
+- Parked-state and queue-and-follow precedents: `PendingPasswordChangeStatus`, `ReleaseParkedInitialPasswordsIfDeliveryChangedAsync` in `ConnectedSystemServer.cs`, `PasswordChangeOutcomeWaiter` and the `wait` / `202 Accepted` shape in `MetaverseController.cs`; the password delivery lane `src/JIM.Worker/PasswordDeliveryService.cs` (not reused for Metaverse data).
+- Connector capability precedent for a live target read: `IConnectorPasswordPolicyDiscovery` and its three-state Fine-Grained signal, including the silent-ACL-filter finding recorded in `engineering/plans/INITIAL_PASSWORD_PROVISIONING.md`.
+- Existing per-run collision primitive to generalise: `src/JIM.Application/Servers/ExampleDataValueTrackerStore.cs`.
+- Value-lookup building blocks: `GetConnectedSystemObjectIdByAttributeValueAsync` / `GetConnectedSystemObjectsByAttributeValuesAsync`; indexes `IX_MetaverseObjectAttributeValues_AttributeId_StringValue` and `IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue`.
