@@ -3810,10 +3810,12 @@ function Assert-SyncStateInvariants {
         Each invariant is a state that is wrong whatever the scenario was testing, read directly from the
         database (same pattern as Get-MvoDeletionMarkers) so it needs no API surface and sees every system:
 
-        1. No stranded Pending Provisioning object. A Connected System Object that is Pending Provisioning,
-           not joined, and has no Create in flight (no Pending Export, or one that has never been attempted)
-           does not exist in the target system and has nothing left that would ever create or remove it.
-           Import deletion detection excludes Pending Provisioning objects, so it stays for ever.
+        1. No stranded Pending Provisioning object. A Connected System Object that is Pending Provisioning and
+           not joined, with either no Pending Export at all or only an unsent Create, has nothing left that
+           would ever resolve it: import deletion detection excludes Pending Provisioning objects, so it stays
+           for ever. (An unsent Create on a disconnected object would also provision something nobody asked
+           for.) A Delete still waiting to be exported for such an object is NOT a violation: that is
+           deprovisioning in flight, for an object whose Create was exported.
         2. No unexecutable Delete. A Pending-status Delete Pending Export that carries no attribute changes,
            for a Connected System Object holding no attribute values, gives a Connector nothing to identify
            the object by; the export fails with "Delete export has no External ID value".
@@ -3844,8 +3846,7 @@ LEFT JOIN "PendingExports" pe ON pe."ConnectedSystemObjectId" = cso."Id"
 WHERE cso."Status" = 2
   AND cso."JoinType" = 0
   AND (pe."Id" IS NULL
-       OR pe."ChangeType" <> 0
-       OR (pe."Status" = 0 AND pe."LastAttemptedAt" IS NULL))
+       OR (pe."ChangeType" = 0 AND pe."Status" = 0 AND pe."LastAttemptedAt" IS NULL))
 ORDER BY cs."Name", cso."Id";
 "@
         },

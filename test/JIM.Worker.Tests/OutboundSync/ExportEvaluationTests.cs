@@ -585,6 +585,36 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
+    /// A Pending Provisioning CSO carrying NO Pending Export has been exported, not skipped: an auto-confirming
+    /// export (the file-based path) deletes the Create the moment it succeeds, while the CSO stays Pending
+    /// Provisioning until an import sees the object. The object exists in the target system, so deleting the
+    /// Metaverse Object must deprovision it. Cancelling here removed the CSO and staged nothing, orphaning a live
+    /// object in the target with nothing left in JIM to delete it (reproduced on the dev stack).
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_PendingProvisioningCsoWithNoPendingExport_WasExportedSoStagesADeleteAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
+        var cso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1), "The exported object must be deprovisioned, not abandoned in the target system");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+            Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.True,
+                "The CSO is JIM's only handle on the target object; it must survive until the Delete is dealt with");
+        }
+    }
+
+    /// <summary>
     /// A cancelled CSO must not disturb its siblings: a live CSO joined to the same Metaverse Object is
     /// handled exactly as before.
     /// </summary>

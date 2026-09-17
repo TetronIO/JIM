@@ -192,14 +192,18 @@ public class SyncEngineExportEvaluationTests
     }
 
     [Test]
-    public void IsProvisioningNeverExported_PendingProvisioningCsoWithNoPendingExport_IsNeverExported()
+    public void IsProvisioningNeverExported_PendingProvisioningCsoWithNoPendingExport_HasBeenExportedSoIsNotNeverExported()
     {
-        // A sent Create stays attached until the confirming import reconciles it away, so a Pending Provisioning
-        // CSO carrying no Pending Export at all has nothing in flight and nothing in the target system.
+        // No Pending Export does NOT mean nothing was sent; it means the opposite. Provisioning always stages a
+        // Create with the CSO, and an auto-confirming export (the file-based path) deletes that Create the moment
+        // it succeeds, while the CSO stays Pending Provisioning until an import sees the object. So a Pending
+        // Provisioning CSO with no Pending Export is one whose Create WAS exported: the object exists in the
+        // target system. Treating it as never exported cancelled the CSO and staged no Delete, orphaning a live
+        // object in the target (reproduced on the dev stack: export, withdraw before the confirming import).
         var cso = Cso();
         cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
 
-        Assert.That(_engine.IsProvisioningNeverExported(cso, existingPendingExport: null), Is.True);
+        Assert.That(_engine.IsProvisioningNeverExported(cso, existingPendingExport: null), Is.False);
     }
 
     [TestCase(PendingExportStatus.Exported)]

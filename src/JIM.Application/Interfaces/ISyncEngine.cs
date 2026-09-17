@@ -203,8 +203,9 @@ public interface ISyncEngine
         PendingExport? existingPendingExport);
 
     /// <summary>
-    /// Decides whether a CSO's provisioning was provably never exported: it is Pending Provisioning, and the
-    /// Pending Export it carries (if any) is a Create no Connector has ever been handed. Such an object does not
+    /// Decides whether a CSO's provisioning was provably never exported: it is Pending Provisioning, and it still
+    /// carries its Create Pending Export, unsent (no Pending Export at all means the Create WAS exported and
+    /// auto-confirmed, so the object exists in the target system). Such an object does not
     /// exist in the target system, so deprovisioning it means cancelling the provisioning (removing the Create
     /// and the CSO), never staging a Delete or leaving the CSO behind disconnected. Asked ahead of both
     /// deprovisioning decisions above, and independent of any rule's OutboundDeprovisionAction: there is

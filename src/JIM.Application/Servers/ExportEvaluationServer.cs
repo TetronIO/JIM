@@ -590,11 +590,12 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
-    /// Scope-out form of the never-exported cancellation. Unlike the Metaverse Object deletion path, the CSO here
-    /// comes from the per-page cache, which also holds Pending Provisioning CSOs created earlier in the same page
-    /// and not yet persisted (their Create is deferred to the page flush alongside them). Those are left to the
-    /// flush's own reconciliation of deferred Creates against persisted Deletes, which already unwinds them; a
-    /// persisted, unsent Create is the proof that the CSO itself is persisted and safe to remove here.
+    /// Scope-out form of the never-exported cancellation. The CSO here comes from the per-page cache, which also
+    /// holds Pending Provisioning CSOs created earlier in the same page and not yet persisted (their Create is
+    /// deferred to the page flush alongside them). Those have no persisted Pending Export, so the engine's verdict
+    /// leaves them alone, and the flush's own reconciliation of deferred Creates against persisted Deletes unwinds
+    /// them as it always has. A persisted, unsent Create is the proof both that nothing was exported and that the
+    /// CSO itself is persisted and safe to remove here.
     /// </summary>
     /// <returns>True when the provisioning was cancelled and no further deprovisioning applies.</returns>
     private async Task<bool> TryCancelNeverExportedProvisioningOnScopeOutAsync(
@@ -630,13 +631,11 @@ public class ExportEvaluationServer
 
     /// <summary>
     /// The scope-out cancellation verdict, shared by the real run and the outbound preview so the two cannot
-    /// drift: the engine's never-exported verdict, confined to a persisted unsent Create (see
-    /// <see cref="TryCancelNeverExportedProvisioningOnScopeOutAsync"/> for why none at all is not enough here),
-    /// and never under an unrecognised deprovisioning action, which does nothing at all (deprovisioning
-    /// semantics are never guessed at; <see cref="HandleOutboundDeprovisioningAsync"/> surfaces the warning).
+    /// drift: the engine's never-exported verdict, and never under an unrecognised deprovisioning action, which
+    /// does nothing at all (deprovisioning semantics are never guessed at;
+    /// <see cref="HandleOutboundDeprovisioningAsync"/> surfaces the warning).
     /// </summary>
     private bool ScopeOutCancelsNeverExportedProvisioning(ConnectedSystemObject cso, SyncRule exportRule, PendingExport? existingPendingExport) =>
-        existingPendingExport != null &&
         _syncEngine.IsProvisioningNeverExported(cso, existingPendingExport) &&
         _syncEngine.DecideOutOfScopeDeprovisioning(exportRule, existingPendingExport: null).Action != OutOfScopeDeprovisioningAction.UnknownAction;
 
@@ -752,7 +751,7 @@ public class ExportEvaluationServer
 
         // Provisioning that was never exported is cancelled outright, ahead of and regardless of the rules
         // below: the object does not exist in the target system, so neither a Delete nor a Disconnect means
-        // anything about it. These CSOs come from the database, so every one of them is persisted.
+        // anything about it.
         var cancelledCsoIds = await CancelNeverExportedProvisioningAsync(
             csosByMvo.Values.SelectMany(joinedCsos => joinedCsos).ToList(), nameof(EvaluateMvoDeletionsAsync));
 
