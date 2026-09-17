@@ -180,6 +180,77 @@ public class SyncEngineExportEvaluationTests
     }
 
     [Test]
+    public void IsProvisioningNeverExported_PendingProvisioningCsoWithAnUnattemptedCreate_IsNeverExported()
+    {
+        // The object does not exist in the target system: the Create that would have made it has never been
+        // sent. Deprovisioning it must cancel the Create, not stage a Delete for an object that was never there.
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var unattemptedCreate = new PendingExport { ChangeType = PendingExportChangeType.Create, Status = PendingExportStatus.Pending };
+
+        Assert.That(_engine.IsProvisioningNeverExported(cso, unattemptedCreate), Is.True);
+    }
+
+    [Test]
+    public void IsProvisioningNeverExported_PendingProvisioningCsoWithNoPendingExport_IsNeverExported()
+    {
+        // A sent Create stays attached until the confirming import reconciles it away, so a Pending Provisioning
+        // CSO carrying no Pending Export at all has nothing in flight and nothing in the target system.
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+
+        Assert.That(_engine.IsProvisioningNeverExported(cso, existingPendingExport: null), Is.True);
+    }
+
+    [TestCase(PendingExportStatus.Exported)]
+    [TestCase(PendingExportStatus.ExportNotConfirmed)]
+    [TestCase(PendingExportStatus.Executing)]
+    [TestCase(PendingExportStatus.Failed)]
+    public void IsProvisioningNeverExported_TheCreateHasLeftPendingStatus_MayExistInTheTargetSoIsNotNeverExported(PendingExportStatus status)
+    {
+        // Once a Create has been handed to a Connector the object may exist in the target system, confirmed or
+        // not. Cancelling would strand it there, so the ordinary deprovisioning path must run.
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var sentCreate = new PendingExport { ChangeType = PendingExportChangeType.Create, Status = status };
+
+        Assert.That(_engine.IsProvisioningNeverExported(cso, sentCreate), Is.False);
+    }
+
+    [Test]
+    public void IsProvisioningNeverExported_ThePendingCreateHasBeenAttempted_IsNotNeverExported()
+    {
+        // A Create that errored returns to Pending for retry, but the Connector was called: a partial success
+        // in the target system cannot be ruled out, so this is not provably "never exported".
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var attemptedCreate = new PendingExport
+        {
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            ErrorCount = 1,
+            LastAttemptedAt = DateTime.UtcNow
+        };
+
+        Assert.That(_engine.IsProvisioningNeverExported(cso, attemptedCreate), Is.False);
+    }
+
+    [Test]
+    public void IsProvisioningNeverExported_ACsoThatIsNotPendingProvisioning_IsNotNeverExported()
+    {
+        // A Normal CSO represents a live object in the target system, whatever Pending Export it carries.
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.Normal;
+        var create = new PendingExport { ChangeType = PendingExportChangeType.Create, Status = PendingExportStatus.Pending };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_engine.IsProvisioningNeverExported(cso, create), Is.False);
+            Assert.That(_engine.IsProvisioningNeverExported(cso, existingPendingExport: null), Is.False);
+        }
+    }
+
+    [Test]
     public void WorkingSet_ADecisionRecordedForACso_IsReturnedOnTheSecondAsk()
     {
         // The in-run working set is what replaces reading back this run's own staged decisions from the

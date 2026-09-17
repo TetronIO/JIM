@@ -785,7 +785,9 @@ public class SyncPreviewServerTests
             ConnectedSystem = targetSystem,
             Type = targetUserType,
             TypeId = targetUserType.Id,
-            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            // A live target: a Pending Provisioning one that was never exported has its provisioning cancelled
+            // instead (DownstreamProvisioningCancelled), whatever the rule's action.
+            Status = ConnectedSystemObjectStatus.Normal,
             MetaverseObjectId = mvo.Id,
             JoinType = ConnectedSystemObjectJoinType.Provisioned
         };

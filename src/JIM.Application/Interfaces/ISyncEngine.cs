@@ -213,6 +213,18 @@ public interface ISyncEngine
         PendingExport? existingPendingExport);
 
     /// <summary>
+    /// Decides whether a CSO's provisioning was provably never exported: it is Pending Provisioning, and the
+    /// Pending Export it carries (if any) is a Create no Connector has ever been handed. Such an object does not
+    /// exist in the target system, so deprovisioning it means cancelling the provisioning (removing the Create
+    /// and the CSO), never staging a Delete or leaving the CSO behind disconnected. Asked ahead of both
+    /// deprovisioning decisions above, and independent of any rule's OutboundDeprovisionAction: there is
+    /// nothing in the target system for a Delete or a Disconnect to mean anything about.
+    /// </summary>
+    /// <param name="cso">The CSO being deprovisioned.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to the CSO, if any, from the caller's pre-read.</param>
+    bool IsProvisioningNeverExported(ConnectedSystemObject cso, PendingExport? existingPendingExport);
+
+    /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
     /// LastConnectorDisconnectedDate, starting the deletion grace period. Ask AFTER removing the disconnected
     /// CSO from the object's collection. Only a Projected object whose Type's Deletion Rule is

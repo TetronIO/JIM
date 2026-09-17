@@ -36,6 +36,8 @@ When an object falls out of scope of every import Synchronisation Rule with Scop
 
 A downstream object that would only be disconnected (no matching export rule, or a matching rule whose Deprovisioning Action is Disconnect) is not deprovisioned, so it does not appear as its own node in the outcome tree; it is reported as a warning instead, naming the object and the Connected System it belongs to.
 
+The same goes for a downstream object whose provisioning was **never exported**: JIM has staged a Create for it, but no export has run, so nothing exists in the target system. Deleting the Metaverse Object cancels that provisioning outright (the unsent Create Pending Export and the Connected System Object are both removed, and nothing is exported), whatever the export rule's Deprovisioning Action. There is nothing to deprovision, so this too is reported as a warning rather than a node.
+
 !!! warning "Provisioned targets are connectors too"
 
     Under the **When Last Connector Disconnected** Deletion Rule, an account JIM has provisioned to a target system counts as a connector like any other. A Metaverse Object with target accounts is therefore **not** deleted just because its source system leaves scope; the target accounts keep it alive, holding their last known values. If you want a departing source to remove those target accounts, the Metaverse Object's type needs **When Authoritative Source Disconnected** with that source listed, which is the rule that actually deprovisions targets when an authoritative source disconnects. See [Deletion behaviour](metaverse.md#deletion-behaviour) for the full explanation, including the grace period and how a reconnection can cancel a scheduled deletion.

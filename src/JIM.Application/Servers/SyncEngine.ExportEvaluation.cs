@@ -115,6 +115,34 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// Decides whether a CSO's provisioning was provably never exported, in which case deprovisioning it means
+    /// cancelling the provisioning (removing the Create and the CSO) rather than staging a Delete or leaving the
+    /// CSO behind disconnected. The object does not exist in the target system, so a Delete would ask a
+    /// Connector to remove something that was never there, with no identifier to remove it by; and the CSO,
+    /// holding no external ID, is invisible to import deletion detection, so nothing would ever confirm it away.
+    /// "Provably" is deliberately strict. Once a Create has been handed to a Connector (any status but Pending,
+    /// or a Pending one carrying an attempt) the object may exist in the target system, confirmed or not, and
+    /// the ordinary deprovisioning decision must run instead.
+    /// </summary>
+    /// <param name="cso">The CSO being deprovisioned.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to the CSO, if any. None at all
+    /// counts as never exported: a sent Create stays attached until the confirming import reconciles it away,
+    /// so a Pending Provisioning CSO without one has nothing in flight.</param>
+    public bool IsProvisioningNeverExported(ConnectedSystemObject cso, PendingExport? existingPendingExport)
+    {
+        if (cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+            return false;
+
+        if (existingPendingExport == null)
+            return true;
+
+        return existingPendingExport.ChangeType == PendingExportChangeType.Create &&
+               existingPendingExport.Status == PendingExportStatus.Pending &&
+               existingPendingExport.LastAttemptedAt == null &&
+               existingPendingExport.ErrorCount == 0;
+    }
+
+    /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
     /// LastConnectorDisconnectedDate, starting the deletion grace period. Ask AFTER removing the disconnected
     /// CSO from the object's collection: no connectors remaining is the collection being empty. Only a Projected
