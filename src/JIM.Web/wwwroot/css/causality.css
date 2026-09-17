@@ -1379,15 +1379,19 @@
     border-radius: 4px;
 }
 
+/* The same pill as a Text-variant MudChip, taking its shape from the design system's chip tokens so the
+   two cannot drift. It stays a <span> rather than becoming a MudChip because its tone arrives as an inline
+   --tone custom property (one of six, set per row from the change kind) rather than as one of MudBlazor's
+   Color values, and a chip per row in a virtualised table is markup this column does not need. */
 .causality-panel .tv-kind {
     display: inline-flex;
     align-items: center;
-    padding: 2px 9px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--tone) 14%, transparent);
-    color: var(--tone);
+    padding: var(--jim-chip-padding);
+    border-radius: var(--jim-chip-radius);
+    background: color-mix(in srgb, var(--tone) 12%, transparent);
+    color: var(--tone-text, var(--tone));
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: var(--jim-chip-font-weight);
     white-space: nowrap;
 }
 

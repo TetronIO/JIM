@@ -102,7 +102,7 @@
                                 <td>@RenderObjectCell(row.ObjectKey)</td>
                             }
                             <td>
-                                <span class="tv-kind" style="--tone: @CausalityToneCss.CssVar(row.Tone)">@row.ChangeKindLabel</span>
+                                <span class="tv-kind" style="--tone: @CausalityToneCss.CssVar(row.Tone); --tone-text: @CausalityToneCss.TextCssVar(row.Tone)">@row.ChangeKindLabel</span>
                             </td>
                             <td title="@EmptyToNull(row.Attribute)"><TextValueDisplay Value="@row.Attribute" /></td>
                             <td class="jim-text-code @(IsRemoval(row) ? "tv-removed" : null)" title="@EmptyToNull(row.Current)">

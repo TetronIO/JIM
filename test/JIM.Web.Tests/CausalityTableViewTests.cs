@@ -137,6 +137,30 @@ public class CausalityTableViewTests
         Assert.That(rows[0].TextContent, Does.Contain("Projection"));
     }
 
+    /// <summary>
+    /// The Change chip paints its label with the tone's TEXT blend, the same colour the outcome pills above the
+    /// table use, rather than the raw palette tone the fill uses; the two read as different purples otherwise.
+    /// </summary>
+    [Test]
+    public void Render_ChangeChip_CarriesTheTonesTextColourAlongsideItsFill()
+    {
+        var cut = Render(NewJoinerTableModel());
+
+        var chips = cut.FindAll(".tv-kind");
+        Assert.That(chips, Is.Not.Empty);
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var chip in chips)
+            {
+                var style = chip.GetAttribute("style") ?? string.Empty;
+                var toneVar = System.Text.RegularExpressions.Regex.Match(style, @"--tone: var\((--cz-[a-z]+)\)").Groups[1].Value;
+                Assert.That(toneVar, Is.Not.Empty, $"Chip '{chip.TextContent}' must set --tone");
+                Assert.That(style, Does.Contain($"--tone-text: var({toneVar}-text)"),
+                    $"Chip '{chip.TextContent}' must pair --tone with the same tone's text blend");
+            }
+        }
+    }
+
     [Test]
     public void Render_NoTechnicalNamesToggle_ShowsOnlyTheOutcomesOwnLabel()
     {
