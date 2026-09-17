@@ -78,7 +78,7 @@
                                         Timestamp="Timestamp" @bind-SelectedEvent="_selectedEvent" />
                     break;
                 case CausalityView.Table when _tableModel is { } tableModel:
-                    <CausalityTableView Model="tableModel" TechnicalNames="_technicalNames" />
+                    <CausalityTableView Model="tableModel" />
                     break;
                 case CausalityView.Timeline:
                 default:

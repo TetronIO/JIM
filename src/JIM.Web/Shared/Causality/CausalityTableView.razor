@@ -23,7 +23,7 @@
         }
         @if (IdentityObject is { } identity)
         {
-            <div class="tv-group-caption">Identity</div>
+            <div class="tv-group-caption">Metaverse Object</div>
             @RenderNavButton(identity)
         }
         @if (DownstreamObjects.Count > 0)
@@ -113,7 +113,7 @@
                             </td>
                             <td>@RenderSyncRuleCell(row)</td>
                             <td title="@GetOutcomeTitle(row)">
-                                @(TechnicalNames ? row.TechnicalLabel : row.OutcomeLabel)
+                                @row.OutcomeLabel
                                 @if (!string.IsNullOrWhiteSpace(row.OutcomeDetail))
                                 {
                                     <div class="tv-outcome-detail">@row.OutcomeDetail</div>
@@ -145,12 +145,6 @@
     /// </summary>
     [Parameter, EditorRequired]
     public CausalityTableModel Model { get; set; } = null!;
-
-    /// <summary>
-    /// When true, technical labels are shown in the Outcome column instead of plain language.
-    /// </summary>
-    [Parameter]
-    public bool TechnicalNames { get; set; }
 
     /// <summary>
     /// The nav column never shrinks below this width, whichever way it is resized (drag or arrow keys).
@@ -335,7 +329,7 @@
             "current" => Order(r => r.Current ?? string.Empty, StringComparer.OrdinalIgnoreCase),
             "wouldbe" => Order(r => r.WouldBe ?? string.Empty, StringComparer.OrdinalIgnoreCase),
             "via" => Order(r => r.Via ?? string.Empty, StringComparer.OrdinalIgnoreCase),
-            "outcome" => Order(r => TechnicalNames ? r.TechnicalLabel : r.OutcomeLabel, StringComparer.OrdinalIgnoreCase),
+            "outcome" => Order(r => r.OutcomeLabel, StringComparer.OrdinalIgnoreCase),
             // The order the model built the rows in: object-level rows first, then attribute rows.
             _ => rows
         };
@@ -483,13 +477,12 @@
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     /// <summary>
-    /// The Outcome cell's title: the label as shown (plain or technical, matching <see cref="TechnicalNames"/>),
-    /// plus the detail line beneath it when there is one, joined the same way a sentence would read it.
+    /// The Outcome cell's title: the label as shown, plus the detail line beneath it when there is one,
+    /// joined the same way a sentence would read it.
     /// </summary>
-    private string GetOutcomeTitle(CausalityTableRow row)
+    private static string GetOutcomeTitle(CausalityTableRow row)
     {
-        var label = TechnicalNames ? row.TechnicalLabel : row.OutcomeLabel;
-        return string.IsNullOrWhiteSpace(row.OutcomeDetail) ? label : $"{label}: {row.OutcomeDetail}";
+        return string.IsNullOrWhiteSpace(row.OutcomeDetail) ? row.OutcomeLabel : $"{row.OutcomeLabel}: {row.OutcomeDetail}";
     }
 
     private static string GetFilterLabel(CausalityTableFilter filter) => filter switch

@@ -241,10 +241,10 @@ public class CausalityTableModelBuilderTests
     [Test]
     public void Matches_ScopeAndJoinFilter_MatchesOnlyScopeProjectionAndJoinRows()
     {
-        var scopeRow = new CausalityTableRow("identity", CausalityTableChangeKind.Scope, "Import scope", "In scope", "Out of scope", null, null, "l", "t", CausalityTone.Warning);
-        var projectionRow = new CausalityTableRow("identity", CausalityTableChangeKind.Projection, "Metaverse Object", null, "New Identity", null, null, "l", "t", CausalityTone.Primary);
-        var joinRow = new CausalityTableRow("identity", CausalityTableChangeKind.Join, "Metaverse Object", null, "Joined to existing Identity", null, null, "l", "t", CausalityTone.Primary);
-        var deleteRow = new CausalityTableRow("identity", CausalityTableChangeKind.Delete, "Metaverse Object", "Active", "Deleted", null, null, "l", "t", CausalityTone.Error);
+        var scopeRow = new CausalityTableRow("identity", CausalityTableChangeKind.Scope, "Import scope", "In scope", "Out of scope", null, null, "l", CausalityTone.Warning);
+        var projectionRow = new CausalityTableRow("identity", CausalityTableChangeKind.Projection, "Metaverse Object", null, "New Identity", null, null, "l", CausalityTone.Primary);
+        var joinRow = new CausalityTableRow("identity", CausalityTableChangeKind.Join, "Metaverse Object", null, "Joined to existing Identity", null, null, "l", CausalityTone.Primary);
+        var deleteRow = new CausalityTableRow("identity", CausalityTableChangeKind.Delete, "Metaverse Object", "Active", "Deleted", null, null, "l", CausalityTone.Error);
 
         using (Assert.EnterMultipleScope())
         {
@@ -266,19 +266,19 @@ public class CausalityTableModelBuilderTests
 
         foreach (var kind in kinds)
         {
-            var row = new CausalityTableRow("identity", kind, "Metaverse Object", "a", "b", null, null, "l", "t", CausalityTone.Error);
+            var row = new CausalityTableRow("identity", kind, "Metaverse Object", "a", "b", null, null, "l", CausalityTone.Error);
             Assert.That(CausalityTableFilters.Matches(row, CausalityTableFilter.Destructive), Is.True, $"{kind} must be destructive");
         }
 
-        var provisionRow = new CausalityTableRow("ds:2", CausalityTableChangeKind.Provision, "connector: X", null, "Account provisioned", null, null, "l", "t", CausalityTone.Primary);
+        var provisionRow = new CausalityTableRow("ds:2", CausalityTableChangeKind.Provision, "connector: X", null, "Account provisioned", null, null, "l", CausalityTone.Primary);
         Assert.That(CausalityTableFilters.Matches(provisionRow, CausalityTableFilter.Destructive), Is.False);
     }
 
     [Test]
     public void Matches_AttributeAndObjectChangeFilters_ArePartitionsOfEachOther()
     {
-        var attributeRow = new CausalityTableRow("identity", CausalityTableChangeKind.AttributeChange, "mail", "old", "new", null, null, "l", "t", CausalityTone.Info);
-        var objectRow = new CausalityTableRow("identity", CausalityTableChangeKind.Delete, "Metaverse Object", "Active", "Deleted", null, null, "l", "t", CausalityTone.Error);
+        var attributeRow = new CausalityTableRow("identity", CausalityTableChangeKind.AttributeChange, "mail", "old", "new", null, null, "l", CausalityTone.Info);
+        var objectRow = new CausalityTableRow("identity", CausalityTableChangeKind.Delete, "Metaverse Object", "Active", "Deleted", null, null, "l", CausalityTone.Error);
 
         using (Assert.EnterMultipleScope())
         {
@@ -292,7 +292,7 @@ public class CausalityTableModelBuilderTests
     [Test]
     public void Matches_AllFilter_MatchesEveryRow()
     {
-        var row = new CausalityTableRow("identity", CausalityTableChangeKind.ValuesPreserved, "department", "x", "x", null, null, "l", "t", CausalityTone.Warning);
+        var row = new CausalityTableRow("identity", CausalityTableChangeKind.ValuesPreserved, "department", "x", "x", null, null, "l", CausalityTone.Warning);
 
         Assert.That(CausalityTableFilters.Matches(row, CausalityTableFilter.All), Is.True);
     }
@@ -397,7 +397,7 @@ public class CausalityTableModelBuilderTests
 
             var deleteRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.Delete);
             Assert.That(deleteRow.ObjectKey, Is.EqualTo("identity"));
-            Assert.That(deleteRow.OutcomeLabel, Is.EqualTo("Identity would be deleted"));
+            Assert.That(deleteRow.OutcomeLabel, Is.EqualTo("The Metaverse Object would be deleted"));
 
             var deprovisionRows = table.Rows.Where(r => r.ChangeKind == CausalityTableChangeKind.Deprovision).ToList();
             Assert.That(deprovisionRows, Has.Count.EqualTo(2));
@@ -450,7 +450,7 @@ public class CausalityTableModelBuilderTests
         var source = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Source);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(identity.DisplayName, Is.EqualTo("Identity"));
+            Assert.That(identity.DisplayName, Is.EqualTo("Metaverse Object"));
             Assert.That(identity.DisplayName, Is.Not.EqualTo(source.DisplayName));
         }
     }

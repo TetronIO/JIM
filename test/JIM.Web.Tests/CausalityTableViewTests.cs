@@ -42,11 +42,10 @@ public class CausalityTableViewTests
         return CausalityTableModelBuilder.Build(model);
     }
 
-    private IRenderedComponent<CausalityTableView> Render(CausalityTableModel model, bool technicalNames = false)
+    private IRenderedComponent<CausalityTableView> Render(CausalityTableModel model)
     {
         return _context.Render<CausalityTableView>(ps => ps
-            .Add(c => c.Model, model)
-            .Add(c => c.TechnicalNames, technicalNames));
+            .Add(c => c.Model, model));
     }
 
     [Test]
@@ -57,7 +56,7 @@ public class CausalityTableViewTests
         using (Assert.EnterMultipleScope())
         {
             var captions = cut.FindAll(".tv-group-caption").Select(c => c.TextContent.Trim()).ToList();
-            Assert.That(captions, Is.EqualTo(new[] { "Object being synchronised", "Identity", "Downstream objects" }));
+            Assert.That(captions, Is.EqualTo(new[] { "Object being synchronised", "Metaverse Object", "Downstream objects" }));
 
             var navNames = cut.FindAll(".tv-nav-name").Select(n => n.TextContent.Trim()).ToList();
             Assert.That(navNames[0], Is.EqualTo("Everything"), "Everything is first, outside every group");
@@ -139,16 +138,11 @@ public class CausalityTableViewTests
     }
 
     [Test]
-    public void Render_TechnicalNames_SwapsTheOutcomeColumnToTechnicalLabels()
+    public void Render_NoTechnicalNamesToggle_ShowsOnlyTheOutcomesOwnLabel()
     {
-        var cutPlain = Render(NewJoinerTableModel());
-        var cutTechnical = Render(NewJoinerTableModel(), technicalNames: true);
+        var cut = Render(NewJoinerTableModel());
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(cutPlain.Markup, Does.Contain("Identity created"));
-            Assert.That(cutTechnical.Markup, Does.Contain("MVO Projected"));
-        }
+        Assert.That(cut.Markup, Does.Contain("Projected to the Metaverse"));
     }
 
     [Test]
@@ -263,8 +257,8 @@ public class CausalityTableViewTests
             ],
             Rows =
             [
-                new CausalityTableRow("source", CausalityTableChangeKind.AttributeChange, "mail", "old", "new", null, null, "l", "t", CausalityTone.Info),
-                new CausalityTableRow("identity", CausalityTableChangeKind.Join, null, null, null, null, null, "Joined to Identity", "CSO Joined", CausalityTone.Secondary)
+                new CausalityTableRow("source", CausalityTableChangeKind.AttributeChange, "mail", "old", "new", null, null, "l", CausalityTone.Info),
+                new CausalityTableRow("identity", CausalityTableChangeKind.Join, null, null, null, null, null, "Joined to Metaverse Object", CausalityTone.Secondary)
             ],
             CurrentHeading = "Before",
             NextHeading = "After"
@@ -309,7 +303,7 @@ public class CausalityTableViewTests
             Rows =
             [
                 new CausalityTableRow("identity", CausalityTableChangeKind.Delete, null, null, null, null, null,
-                    "Identity deletion scheduled", "MVO Deletion Scheduled", CausalityTone.Warning, graceReasoning)
+                    "Metaverse Object deletion scheduled", CausalityTone.Warning, graceReasoning)
             ],
             CurrentHeading = "Before",
             NextHeading = "After"
@@ -320,7 +314,7 @@ public class CausalityTableViewTests
         var outcomeCell = cut.Find("tbody tr").Children.Last();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(outcomeCell.TextContent, Does.Contain("Identity deletion scheduled"));
+            Assert.That(outcomeCell.TextContent, Does.Contain("Metaverse Object deletion scheduled"));
             var detail = outcomeCell.QuerySelector(".tv-outcome-detail");
             Assert.That(detail, Is.Not.Null);
             Assert.That(detail!.TextContent.Trim(), Is.EqualTo(graceReasoning));
@@ -582,7 +576,7 @@ public class CausalityTableViewTests
             [
                 new CausalityTableRow("everything", CausalityTableChangeKind.AttributeChange, "mail",
                     "liam.allen@old.example.com", "liam.allen@example.com", null, null,
-                    "Attribute change", "Attribute change", CausalityTone.Info)
+                    "Attribute change", CausalityTone.Info)
             ],
             CurrentHeading = "Before",
             NextHeading = "After"
@@ -617,7 +611,7 @@ public class CausalityTableViewTests
             Rows =
             [
                 new CausalityTableRow("everything", CausalityTableChangeKind.Provision, null, null, null, null, null,
-                    "Object provisioned", "CSO Provisioned", CausalityTone.Success)
+                    "Object provisioned", CausalityTone.Success)
             ],
             CurrentHeading = "Before",
             NextHeading = "After"
@@ -639,7 +633,7 @@ public class CausalityTableViewTests
             Rows =
             [
                 new CausalityTableRow("everything", CausalityTableChangeKind.Delete, null, null, null, null, null,
-                    "Identity deletion scheduled", "MVO Deletion Scheduled", CausalityTone.Warning, graceReasoning)
+                    "Metaverse Object deletion scheduled", CausalityTone.Warning, graceReasoning)
             ],
             CurrentHeading = "Before",
             NextHeading = "After"
@@ -648,7 +642,7 @@ public class CausalityTableViewTests
         var cut = Render(model);
 
         var outcomeCell = cut.Find("tbody tr").Children.Last();
-        Assert.That(outcomeCell.GetAttribute("title"), Is.EqualTo($"Identity deletion scheduled: {graceReasoning}"));
+        Assert.That(outcomeCell.GetAttribute("title"), Is.EqualTo($"Metaverse Object deletion scheduled: {graceReasoning}"));
     }
 
     [Test]

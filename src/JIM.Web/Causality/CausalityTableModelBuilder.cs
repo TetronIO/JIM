@@ -210,15 +210,15 @@ public static class CausalityTableModelBuilder
     /// Builds an object-level row: Current and WouldBe are always null, since those columns state
     /// attribute values and every row built here states an object-level fact instead (#1519 Table view
     /// fix 7). <paramref name="outcomeDetail"/> is the one exception that needs to say more than its
-    /// <see cref="CausalityEvent.PlainLabel"/>/<see cref="CausalityEvent.TechnicalLabel"/> already do
-    /// (MvoDeletionScheduled's grace reasoning); every other case leaves it null.
+    /// <see cref="CausalityEvent.Label"/> already does (MvoDeletionScheduled's grace reasoning); every
+    /// other case leaves it null.
     /// </summary>
     private static CausalityTableRow Row(
         CausalityEvent causalityEvent, string objectKey, CausalityTableChangeKind kind, string? attribute,
         string? via, int? syncRuleId, string? outcomeDetail = null)
     {
         return new CausalityTableRow(objectKey, kind, attribute, null, null, via, syncRuleId,
-            causalityEvent.PlainLabel, causalityEvent.TechnicalLabel, causalityEvent.Tone, outcomeDetail);
+            causalityEvent.Label, causalityEvent.Tone, outcomeDetail);
     }
 
     /// <summary>
@@ -246,8 +246,8 @@ public static class CausalityTableModelBuilder
                 : (attributeRow.SyncRuleName, attributeRow.SyncRuleId);
 
             yield return new CausalityTableRow(objectKey, CausalityTableChangeKind.AttributeChange,
-                attributeRow.Name, current, wouldBe, via, syncRuleId, causalityEvent.PlainLabel,
-                causalityEvent.TechnicalLabel, causalityEvent.Tone);
+                attributeRow.Name, current, wouldBe, via, syncRuleId, causalityEvent.Label,
+                causalityEvent.Tone);
         }
     }
 
@@ -344,9 +344,9 @@ public static class CausalityTableModelBuilder
             ?.Href;
 
     /// <summary>
-    /// The Identity's display name: the name an Identity-lane event's own link names it by, where one
-    /// exists (the same name the recorded and speculative link builders use for the Identity itself),
-    /// else the record's own name, since the two are ordinarily the same person or object.
+    /// The Metaverse Object's display name: the name an Identity-lane event's own link names it by,
+    /// where one exists (the same name the recorded and speculative link builders use for the Metaverse
+    /// Object itself), else the record's own name, since the two are ordinarily the same person or object.
     /// </summary>
     private static string IdentityDisplayName(CausalityModel model)
     {
@@ -356,9 +356,10 @@ public static class CausalityTableModelBuilder
             .FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity)
             ?.Label;
 
-        // Never the object's own label: a joined object's preview knows the Identity exists but not its
-        // name, and showing the object's name twice reads as though the object and the Identity were one.
-        return linkedName ?? "Identity";
+        // Never the object's own label: a joined object's preview knows the Metaverse Object exists but
+        // not its name, and showing the object's name twice reads as though the object and the Metaverse
+        // Object were one.
+        return linkedName ?? "Metaverse Object";
     }
 
     private static List<CausalityTableObject> BuildObjects(

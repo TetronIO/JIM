@@ -33,16 +33,16 @@ namespace JIM.Web.Causality;
 /// is reasoning text, an unlinked legacy name snapshot, or absent.
 /// </param>
 /// <param name="OutcomeLabel">
-/// The owning event's plain-language label (already the conditional-mood <c>SpeculativeLabel</c> where
-/// the model is speculative; see <see cref="CausalityModelBuilder.BuildSpeculative"/>).
+/// The owning event's one label, in the portal's own vocabulary (already the conditional-mood
+/// <c>SpeculativeLabel</c> where the model is speculative; see
+/// <see cref="CausalityModelBuilder.BuildSpeculative"/>).
 /// </param>
-/// <param name="TechnicalLabel">The owning event's technical label, shown when the panel's technical-names toggle is on.</param>
 /// <param name="Tone">The owning event's visual tone.</param>
 /// <param name="OutcomeDetail">
-/// A muted secondary line shown under <see cref="OutcomeLabel"/>/<see cref="TechnicalLabel"/> in the
-/// Outcome cell, for the one non-attribute row whose reasoning is not already stated in full by its
-/// outcome label: a scheduled deletion's grace text (<see cref="CausalityTableModelBuilder"/>). Null for
-/// every other row, including every attribute-change row (its reasoning is the value change itself).
+/// A muted secondary line shown under <see cref="OutcomeLabel"/> in the Outcome cell, for the one
+/// non-attribute row whose reasoning is not already stated in full by its outcome label: a scheduled
+/// deletion's grace text (<see cref="CausalityTableModelBuilder"/>). Null for every other row, including
+/// every attribute-change row (its reasoning is the value change itself).
 /// </param>
 public sealed record CausalityTableRow(
     string ObjectKey,
@@ -53,7 +53,6 @@ public sealed record CausalityTableRow(
     string? Via,
     int? SyncRuleId,
     string OutcomeLabel,
-    string TechnicalLabel,
     CausalityTone Tone,
     string? OutcomeDetail = null)
 {
