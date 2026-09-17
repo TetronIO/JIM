@@ -279,6 +279,7 @@ A single-sentence description needs none of this and renders unchanged. The site
 - ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components
 - This ensures a consistent outlined style across the entire UI
 - **A button placed inside an alert should carry `Color="Color.Inherit"`** unless it genuinely needs a colour of its own. `site.css` then paints it, and its icon, in the alert's severity colour, so the action reads as part of the message rather than as something dropped into it. This works for every severity and both themes; do not hand-pick a colour per call site. A button that names its own `Color` (the filled Primary/Warning/Info actions in the Schema, Partitions and Example Data alerts) is left exactly as specified.
+- **Alert text and links take their colour from `site.css`, never from a call site or a theme.** A Text or Outlined alert of Info, Success, Warning or Error severity is coloured on the alert itself with the `--jim-chip-text-*` label blend, so the message, its links (visited or not), inheriting buttons and the close control share one legible severity colour; the icon keeps the raw palette colour. Put a link in an alert as a plain `<MudLink>`: no class is needed. MudBlazor's own text colour, `--mud-palette-{severity}-darken`, is generated from MudBlazor's default palette rather than the theme's, which is why Info, Success and Warning alerts read faint until this rule existed. `ThemeContrastTests.EveryTheme_EveryAlertMessage_MeetsWcagAa` measures every theme; do not add a per-theme alert text colour, because theme stylesheets load after `site.css` and would silently win.
 
 ## Custom CSS in `site.css` (look at the rendered page)
 
@@ -328,12 +329,33 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 ## UI element sizing
 - ALWAYS use normal/default sizes for ALL UI elements when adding new components
 - Text: Use `Typo.body1` (default readable size)
-- Chips: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
+- Chips: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium). The Size parameter still means what it says, but a Text-variant chip is a compact pill whatever its size; see "Chips" below
 - Buttons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
 - Icons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
 - Other MudBlazor components: Omit Size parameter to use default sizing
 - Only use smaller sizes (`Typo.body2`, `Size.Small`, etc.) when explicitly requested by the user
 - Users prefer readable, appropriately-sized UI elements by default
+
+## Chips
+
+**A `Variant.Text` MudChip is the portal's standard chip, and it is styled from one place.** `site.css`
+carries both halves: `--jim-chip-padding` / `--jim-chip-radius` / `--jim-chip-font-weight` give it the shape
+(a compact pill with a semibold label), and the `--jim-chip-text-*` blend beside them gives the label a
+colour that clears WCAG AA in every theme. A call site passes `Variant` and `Color` and nothing else.
+
+- **Never restyle a chip at the call site**, and never hand-roll a pill from a `span` to get this look. Two
+  places in the causality panel did exactly that, arriving at a better chip than the portal's and keeping it
+  to themselves; promoting it here is what retired them. If a chip needs to look different, the question is
+  whether the design system should change, not whether this page should opt out.
+- **The shape is deliberately independent of `Size`.** `Size.Small` still yields a smaller chip, because only
+  MudBlazor's per-size font size is left alone; the padding, radius and weight are the same at every size. So
+  the sizing rule above is unaffected: omit `Size` and you get the standard chip.
+- The one span that legitimately remains is the Table view's change chip (`.tv-kind`), whose tone arrives as
+  an inline `--tone` custom property rather than a MudBlazor `Color`. It consumes the same tokens, so it
+  cannot drift from the chips around it.
+- **The `html[lang]` qualifier on the shape rule is load-bearing.** MudBlazor's `.mud-chip.mud-chip-size-medium`
+  has the same specificity a bare `.mud-chip.mud-chip-text` would, and its stylesheet loads after `site.css`,
+  so without the qualifier the height and radius silently do nothing. See "Custom CSS in `site.css`" above.
 
 ## Tabs
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation

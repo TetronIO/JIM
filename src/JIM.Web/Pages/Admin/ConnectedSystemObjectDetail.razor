@@ -569,6 +569,9 @@
         // and re-grouping every value on every scroll would do the same work again for no new information.
         _attributeGroups = GetGroupedAttributes();
 
+        ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
+        SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
+
         Breadcrumbs = new List<BreadcrumbItem>
         {
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
@@ -578,9 +581,6 @@
             new("Connector Space", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
             new(GetDisplayIdentifier(), href: null, disabled: true)
         };
-
-        ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
-        SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
 
         _supportedExpiryBehaviours = await jim.ConnectedSystems.GetSupportedPasswordExpiryBehavioursAsync(CsId);
         if (_supportedExpiryBehaviours.Count > 0)

@@ -21,253 +21,286 @@
 @* mt-5 rather than a tab-panel padding: the Operations page hands its tabs no top padding of their own, because
    the Schedules tab opens straight onto a grid that already supplies this same gap. *@
 <MudText Typo="Typo.h6" Class="mt-5 mb-1">Execute a Run Profile</MudText>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Add a Synchronisation Run to the queue. If it's empty, it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Add a Synchronisation Run to the queue. If it's empty,
+    it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
 
-@if (_connectedSystemHeaders is { Count: > 0 })
-{
-    <MudForm>
-        <MudGrid>
-            <MudItem xs="12" sm="5">
-                <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="Please select a Connected System">
-                    @foreach (var connectedSystem in _connectedSystemHeaders)
-                    {
-                        <MudSelectItem Value="@connectedSystem" />
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" sm="5">
-                <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="A Run Profile is required" Disabled="@(_connectedSystemRunProfiles == null)">
-                    @if (_connectedSystemRunProfiles != null)
-                    {
-                        @foreach (var runProfile in _connectedSystemRunProfiles)
-                        {
-                            <MudSelectItem Value="@runProfile" />
-                        }
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" sm="2" Class="d-flex align-end pb-2">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync" DropShadow="false" FullWidth="true" Style="height: 50px;"
-                           Disabled="@(_selectedConnectedSystemHeader == null || _selectedConnectedSystemRunProfile == null)">Execute</MudButton>
-            </MudItem>
-        </MudGrid>
-    </MudForm>
-}
-else
-{
-    <MudAlert Class="my-5" Severity="Severity.Warning" Variant="Variant.Outlined">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
-}
-
-@* Worker status bar: always present so the queue region's top block keeps a stable height as tasks move through it, rather than appearing and disappearing with the processing state *@
-<div class="jim-worker-activity-bar mt-5 @(_hasProcessingTasks ? "" : "jim-worker-activity-bar--idle")">
-    @if (_hasProcessingTasks)
+    @if (_connectedSystemHeaders is { Count: > 0 })
     {
-        <div class="jim-worker-activity-shimmer"></div>
-    }
-    <div class="jim-worker-activity-text">
-        <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
-        <span>@(_hasProcessingTasks ? "Worker processing (from top to bottom)" : "Worker idle")</span>
-    </div>
-</div>
-
-@if (_workerTaskHeaders.Count == 0)
-{
-    <MudPaper Outlined="true" Class="pa-6 d-flex justify-center jim-queue-empty-connected">
-        <MudText Class="mud-text-secondary">There are no tasks queued.</MudText>
-    </MudPaper>
-}
+        <MudForm>
+            <MudGrid>
+                <MudItem xs="12" sm="5">
+                    <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync"
+                               Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true"
+                               RequiredError="Please select a Connected System">
+                        @foreach (var connectedSystem in _connectedSystemHeaders)
+                        {
+                            <MudSelectItem Value="@connectedSystem" />
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="5">
+                    <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile"
+                               Label="Run Profile" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true"
+                               RequiredError="A Run Profile is required" Disabled="@(_connectedSystemRunProfiles == null)">
+                        @if (_connectedSystemRunProfiles != null)
+                        {
+                            @foreach (var runProfile in _connectedSystemRunProfiles)
+                            {
+                                <MudSelectItem Value="@runProfile" />
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="2" Class="d-flex align-end pb-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync"
+                               DropShadow="false" FullWidth="true" Style="height: 50px;"
+                               Disabled="@(_selectedConnectedSystemHeader == null || _selectedConnectedSystemRunProfile == null)">
+                        Execute</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+        }
 else
-{
-    @* One grid per Schedule Execution, plus one for everything running outside a Schedule. MudBlazor's grouping
+        {
+            <MudAlert Class="my-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected
+                System</MudLink> first.</MudAlert>
+            }
+
+            @* Worker status bar: always present so the queue region's top block keeps a stable height as tasks move through it,
+rather than appearing and disappearing with the processing state *@
+            <div class="jim-worker-activity-bar mt-5 @(_hasProcessingTasks ? "" : "jim-worker-activity-bar--idle")">
+                @if (_hasProcessingTasks)
+                {
+                    <div class="jim-worker-activity-shimmer"></div>
+                }
+                <div class="jim-worker-activity-text">
+                    <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
+                    <span>@(_hasProcessingTasks ? "Worker processing (from top to bottom)" : "Worker idle")</span>
+                </div>
+            </div>
+
+            @if (_workerTaskHeaders.Count == 0)
+            {
+                <MudPaper Outlined="true" Class="pa-6 d-flex justify-center jim-queue-empty-connected">
+                    <MudText Class="mud-text-secondary">There are no tasks queued.</MudText>
+                </MudPaper>
+            }
+            else
+            {
+                @* One grid per Schedule Execution, plus one for everything running outside a Schedule. MudBlazor's grouping
        and its virtualisation are mutually exclusive branches of the same component, so the queue cannot be a
        single virtualised grid that also groups; a grid per group keeps both, and each grid windows only its own
        rows. They are Embedded (several to a page: no density toggle repeated per Schedule, no URL state for
        siblings to collide over), carry no search box (a box over one Schedule's handful of steps is a control
        asking to be used for no benefit) and take an explicit height ceiling, so a Schedule with twenty steps
        cannot push every other block off the page. *@
-    @for (var i = 0; i < _queueGroups.Count; i++)
-    {
-        var group = _queueGroups[i];
-        var groupKey = group.Key;
-        var collapsed = _collapsedGroups.Contains(groupKey);
+                @for (var i = 0; i < _queueGroups.Count; i++)
+                {
+                    var group = _queueGroups[i];
+                    var groupKey = group.Key;
+                    var collapsed = _collapsedGroups.Contains(groupKey);
 
-        @* The worker status bar above is drawn as the top of whichever block leads the queue, so the first one
+                    @* The worker status bar above is drawn as the top of whichever block leads the queue, so the first one
            squares off its top corners and joins it. *@
-        var joinsWorkerBar = i == 0;
+                    var joinsWorkerBar = i == 0;
 
-        <div @key="groupKey" class="@(joinsWorkerBar ? "" : "mt-6")">
-            @if (group.ScheduleExecutionId.HasValue)
-            {
-                var executionId = group.ScheduleExecutionId.Value;
-                var scheduleName = group.ScheduleName ?? "Schedule";
-                var processing = group.Tasks.Count(t => t.Status == WorkerTaskStatus.Processing);
-                var queued = group.Tasks.Count(t => t.Status == WorkerTaskStatus.Queued);
-                var waiting = group.Tasks.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
-                var scheduleProgress = _scheduleProgress.GetValueOrDefault(executionId);
-
-                <div class="jim-queue-group-header @(joinsWorkerBar ? "jim-queue-group-header--joined" : "") @(collapsed ? "jim-queue-group-header--collapsed" : "")">
-                    <div class="jim-queue-group-toggle d-flex align-center gap-3" @onclick="() => ToggleGroupCollapse(groupKey)">
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" />
-                        <div>
-                            <MudText Typo="Typo.body1"><b>@scheduleName</b></MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                @SchedulePosition(scheduleProgress, group.Tasks.Count)@if (processing > 0)
-                                {<span>, @processing processing</span>}@if (queued > 0)
-                                {<span>, @queued queued</span>}@if (waiting > 0)
-                                {<span>, @waiting waiting</span>}
-                            </MudText>
-                        </div>
-                    </div>
-                    <ScheduleStepRail Progress="@scheduleProgress" />
-
-                    @* Pushed right so they land over the Actions column, in line with the per-task cancel
-                       buttons in the rows below rather than adrift in the middle of the header. *@
-                    <div class="jim-queue-group-actions d-flex align-center gap-2">
-                        <MudTooltip Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced" Arrow="true" Placement="Placement.Top">
-                            <MudButton Variant="Variant.Text" Size="Size.Small" DropShadow="false"
-                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                       Href="@($"/admin/operations/schedule-executions/{executionId}")">
-                                View execution
-                            </MudButton>
-                        </MudTooltip>
-                        <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Left">
-                            <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
-                                           OnClick="() => HandleCancelScheduleExecutionAsync(executionId)" Size="Size.Small" />
-                        </MudTooltip>
-                    </div>
-                </div>
-            }
-
-            @if (!collapsed)
-            {
-                <VirtualisedDataGrid T="WorkerTaskHeader" @ref="_grids[groupKey]"
-                                     ContainerId="@($"operations-queue-{groupKey}")"
-                                     Embedded="true"
-                                     ShowSearch="false"
-                                     MaxHeight="400px"
-                                     GridClass="@GroupGridClass(joinsWorkerBar || group.ScheduleExecutionId.HasValue)"
-                                     DefaultSortBy="step"
-                                     LoadWindow="@((request, _) => LoadGroupWindowAsync(groupKey, request))"
-                                     SingularName="Worker Task"
-                                     PluralName="Worker Tasks">
-                    <Columns>
-                        @* A task outside a Schedule has no step, so its grid does not carry a column of blanks. *@
+                    <div @key="groupKey" class="@(joinsWorkerBar ? "" : "mt-6")">
                         @if (group.ScheduleExecutionId.HasValue)
                         {
-                            <TemplateColumn T="WorkerTaskHeader" Title="Step" Sortable="false" HeaderStyle="width: 70px;">
-                                <HeaderTemplate>
-                                    <MudText Typo="Typo.button">Step</MudText>
-                                </HeaderTemplate>
-                                <CellTemplate>
-                                    @{ var task = context.Item; }
-                                    @if (task.ScheduleExecutionId.HasValue)
-                                    {
-                                        var stepDisplay = (task.ScheduleStepIndex ?? 0) + 1;
-                                        @if (IsParallelStep(task))
-                                        {
-                                            <MudTooltip Text="Parallel step: runs concurrently with other tasks in this step" Arrow="true" Placement="Placement.Right">
-                                                <div class="d-flex align-center gap-1">
-                                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@stepDisplay</MudText>
-                                                    <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mud-text-secondary" Style="font-size: 0.875rem;" />
-                                                </div>
-                                            </MudTooltip>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@stepDisplay</MudText>
-                                        }
-                                    }
-                                </CellTemplate>
-                            </TemplateColumn>
-                        }
-                        <TemplateColumn T="WorkerTaskHeader" Title="Name" Sortable="false">
-                            <HeaderTemplate>
-                                <MudText Typo="Typo.button">Name</MudText>
-                            </HeaderTemplate>
-                            <CellTemplate>
-                                @{ var task = context.Item; }
-                                @if (task.ActivityId.HasValue)
-                                {
-                                    var activityId = task.ActivityId.Value;
-                                    <MudLink Href="@($"/activity/{activityId}?from=operations")">@task.Name</MudLink>
-                                }
-                                else
-                                {
-                                    @task.Name
-                                }
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn T="WorkerTaskHeader" Title="Status" Sortable="false">
-                            <HeaderTemplate>
-                                <MudText Typo="Typo.button">Status</MudText>
-                            </HeaderTemplate>
-                            <CellTemplate>
-                                <MudChip T="string" Variant="Variant.Text" Color="GetTaskStatusColor(context.Item.Status)" Class="ml-0">@GetTaskStatusDisplay(context.Item)</MudChip>
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn T="WorkerTaskHeader" Title="Progress" Sortable="false" HeaderStyle="min-width: 200px;">
-                            <HeaderTemplate>
-                                <MudText Typo="Typo.button">Progress</MudText>
-                            </HeaderTemplate>
-                            <CellTemplate>
-                                @{ var task = context.Item; }
-                                <WorkerTaskProgress Status="@task.Status" ObjectsToProcess="@task.ObjectsToProcess" ObjectsProcessed="@task.ObjectsProcessed" ProgressMessage="@task.ProgressMessage" Steps="@task.Steps" />
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn T="WorkerTaskHeader" Title="Initiated By" Sortable="false">
-                            <HeaderTemplate>
-                                <MudText Typo="Typo.button">Initiated By</MudText>
-                            </HeaderTemplate>
-                            <CellTemplate>
-                                @{ var task = context.Item; }
-                                @if (task.InitiatedByType == ActivityInitiatorType.User)
-                                {
-                                    <div class="d-flex align-center">
-                                        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" />
-                                        <AuditPrincipalLink PrincipalType="task.InitiatedByType" PrincipalId="task.InitiatedById" PrincipalName="@task.InitiatedByName" />
+                            var executionId = group.ScheduleExecutionId.Value;
+                            var scheduleName = group.ScheduleName ?? "Schedule";
+                            var processing = group.Tasks.Count(t => t.Status == WorkerTaskStatus.Processing);
+                            var queued = group.Tasks.Count(t => t.Status == WorkerTaskStatus.Queued);
+                            var waiting = group.Tasks.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
+                            var scheduleProgress = _scheduleProgress.GetValueOrDefault(executionId);
+
+                            <div
+                                class="jim-queue-group-header @(joinsWorkerBar ? "jim-queue-group-header--joined" : "") @(collapsed ? "jim-queue-group-header--collapsed" : "")">
+                                <div class="jim-queue-group-toggle d-flex align-center gap-3" @onclick="() => ToggleGroupCollapse(groupKey)">
+                                    <MudIcon Icon="@Icons.Material.Filled.Schedule" />
+                                    <div>
+                                        <MudText Typo="Typo.body1"><b>@scheduleName</b></MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @SchedulePosition(scheduleProgress, group.Tasks.Count)@if (processing > 0)
+                                            {
+                                                <span>, @processing processing</span>
+                                            }
+                                            @if (queued > 0)
+                                            {
+                                                <span>, @queued queued</span>
+                                            }
+                                            @if (waiting > 0)
+                                            {
+                                                <span>, @waiting waiting</span>
+                                            }
+                                        </MudText>
                                     </div>
-                                }
-                                else if (task.InitiatedByType == ActivityInitiatorType.ApiKey)
-                                {
-                                    <div class="d-flex align-center">
-                                        <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" />
-                                        <AuditPrincipalLink PrincipalType="task.InitiatedByType" PrincipalId="task.InitiatedById" PrincipalName="@task.InitiatedByName" />
-                                    </div>
-                                }
-                                else if (task.InitiatedByType == ActivityInitiatorType.System)
-                                {
-                                    <div class="d-flex align-center">
-                                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" />
-                                        <span>@(task.InitiatedByName ?? "Scheduler")</span>
-                                    </div>
-                                }
-                                else if (!string.IsNullOrEmpty(task.InitiatedByName))
-                                {
-                                    <span>@task.InitiatedByName</span>
-                                }
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn T="WorkerTaskHeader" Title="Actions" Sortable="false"
-                                        HeaderStyle="text-align: right;" CellStyle="text-align: right;">
-                            <HeaderTemplate>
-                                <MudText Typo="Typo.button">Actions</MudText>
-                            </HeaderTemplate>
-                            <CellTemplate>
-                                @{ var task = context.Item; }
-                                @if (task.Status != WorkerTaskStatus.WaitingForPreviousStep)
-                                {
-                                    <MudTooltip Text="Cancel Task" Arrow="true" Placement="Placement.Left">
-                                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" OnClick="() => HandleCancelTaskAsync(task)" Size="Size.Small" />
+                                </div>
+                                <ScheduleStepRail Progress="@scheduleProgress" />
+
+                                @* Pushed right so they land over the Actions column, in line with the per-task cancel
+                       buttons in the rows below rather than adrift in the middle of the header. *@
+                                <div class="jim-queue-group-actions d-flex align-center gap-2">
+                                    <MudTooltip
+                                        Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced"
+                                        Arrow="true" Placement="Placement.Top">
+                                        <MudButton Variant="Variant.Text" Size="Size.Small" DropShadow="false"
+                                                   StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                   Href="@($"/admin/operations/schedule-executions/{executionId}")">
+                                            View execution
+                                        </MudButton>
                                     </MudTooltip>
-                                }
-                            </CellTemplate>
-                        </TemplateColumn>
-                    </Columns>
-                </VirtualisedDataGrid>
+                                    <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Left">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
+                                                       OnClick="() => HandleCancelScheduleExecutionAsync(executionId)" Size="Size.Small" />
+                                    </MudTooltip>
+                                </div>
+                            </div>
+                        }
+
+                        @if (!collapsed)
+                        {
+                            <VirtualisedDataGrid T="WorkerTaskHeader" @ref="_grids[groupKey]" ContainerId="@($"operations-queue-{groupKey}")"
+                                                 Embedded="true" ShowSearch="false" MaxHeight="400px"
+                                                 GridClass="@GroupGridClass(joinsWorkerBar || group.ScheduleExecutionId.HasValue)" DefaultSortBy="step"
+                                                 LoadWindow="@((request, _) => LoadGroupWindowAsync(groupKey, request))" SingularName="Worker Task"
+                                                 PluralName="Worker Tasks">
+                                <Columns>
+                                    @* A task outside a Schedule has no step, so its grid does not carry a column of blanks. *@
+                                    @if (group.ScheduleExecutionId.HasValue)
+                                    {
+                                        <TemplateColumn T="WorkerTaskHeader" Title="Step" Sortable="false" HeaderStyle="width: 70px;">
+                                            <HeaderTemplate>
+                                                <MudText Typo="Typo.button">Step</MudText>
+                                            </HeaderTemplate>
+                                            <CellTemplate>
+                                                @{
+                                                    var task = context.Item;
+                                                }
+                                                @if (task.ScheduleExecutionId.HasValue)
+                                                {
+                                                    var stepDisplay = (task.ScheduleStepIndex ?? 0) + 1;
+                                                    @if (IsParallelStep(task))
+                                                    {
+                                                        <MudTooltip Text="Parallel step: runs concurrently with other tasks in this step" Arrow="true"
+                                                                    Placement="Placement.Right">
+                                                            <div class="d-flex align-center gap-1">
+                                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@stepDisplay</MudText>
+                                                                <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small"
+                                                                         Class="mud-text-secondary" Style="font-size: 0.875rem;" />
+                                                            </div>
+                                                        </MudTooltip>
+                                                    }
+                                                    else
+                                                    {
+                                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@stepDisplay</MudText>
+                                                    }
+                                                }
+                                            </CellTemplate>
+                                        </TemplateColumn>
+                                    }
+                                    <TemplateColumn T="WorkerTaskHeader" Title="Name" Sortable="false">
+                                        <HeaderTemplate>
+                                            <MudText Typo="Typo.button">Name</MudText>
+                                        </HeaderTemplate>
+                                        <CellTemplate>
+                                            @{
+                                                var task = context.Item;
+                                            }
+                                            @if (task.ActivityId.HasValue)
+                                            {
+                                                var activityId = task.ActivityId.Value;
+                                                <MudLink Href="@($"/activity/{activityId}?from=operations")">@task.Name</MudLink>
+                                            }
+                                            else
+                                            {
+                                                @task.Name
+                                            }
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="WorkerTaskHeader" Title="Status" Sortable="false">
+                                        <HeaderTemplate>
+                                            <MudText Typo="Typo.button">Status</MudText>
+                                        </HeaderTemplate>
+                                        <CellTemplate>
+                                            <MudChip T="string" Variant="Variant.Text" Color="GetTaskStatusColor(context.Item.Status)"
+                                                     Class="ml-0">@GetTaskStatusDisplay(context.Item)</MudChip>
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="WorkerTaskHeader" Title="Progress" Sortable="false" HeaderStyle="min-width: 200px;">
+                                        <HeaderTemplate>
+                                            <MudText Typo="Typo.button">Progress</MudText>
+                                        </HeaderTemplate>
+                                        <CellTemplate>
+                                            @{
+                                                var task = context.Item;
+                                            }
+                                            <WorkerTaskProgress Status="@task.Status" ObjectsToProcess="@task.ObjectsToProcess"
+                                                                ObjectsProcessed="@task.ObjectsProcessed" ProgressMessage="@task.ProgressMessage"
+                                                                Steps="@task.Steps" />
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="WorkerTaskHeader" Title="Initiated By" Sortable="false">
+                                        <HeaderTemplate>
+                                            <MudText Typo="Typo.button">Initiated By</MudText>
+                                        </HeaderTemplate>
+                                        <CellTemplate>
+                                            @{
+                                                var task = context.Item;
+                                            }
+                                            @if (task.InitiatedByType == ActivityInitiatorType.User)
+                                            {
+                                                <div class="d-flex align-center">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" />
+                                                    <AuditPrincipalLink PrincipalType="task.InitiatedByType" PrincipalId="task.InitiatedById"
+                                                                        PrincipalName="@task.InitiatedByName" />
+                                                </div>
+                                            }
+                                            else if (task.InitiatedByType == ActivityInitiatorType.ApiKey)
+                                            {
+                                                <div class="d-flex align-center">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" />
+                                                    <AuditPrincipalLink PrincipalType="task.InitiatedByType" PrincipalId="task.InitiatedById"
+                                                                        PrincipalName="@task.InitiatedByName" />
+                                                </div>
+                                            }
+                                            else if (task.InitiatedByType == ActivityInitiatorType.System)
+                                            {
+                                                <div class="d-flex align-center">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" />
+                                                    <span>@(task.InitiatedByName ?? "Scheduler")</span>
+                                                </div>
+                                            }
+                                            else if (!string.IsNullOrEmpty(task.InitiatedByName))
+                                            {
+                                                <span>@task.InitiatedByName</span>
+                                            }
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="WorkerTaskHeader" Title="Actions" Sortable="false" HeaderStyle="text-align: right;"
+                                                    CellStyle="text-align: right;">
+                                        <HeaderTemplate>
+                                            <MudText Typo="Typo.button">Actions</MudText>
+                                        </HeaderTemplate>
+                                        <CellTemplate>
+                                            @{
+                                                var task = context.Item;
+                                            }
+                                            @if (task.Status != WorkerTaskStatus.WaitingForPreviousStep)
+                                            {
+                                                <MudTooltip Text="Cancel Task" Arrow="true" Placement="Placement.Left">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
+                                                                   OnClick="() => HandleCancelTaskAsync(task)" Size="Size.Small" />
+                                                </MudTooltip>
+                                            }
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                </Columns>
+                            </VirtualisedDataGrid>
+                        }
+                    </div>
+                }
             }
-        </div>
-    }
-}
 
 @code {
     [CascadingParameter]
@@ -322,7 +355,8 @@ else
     /// than a second read. The group is looked up by key rather than captured, so a window loaded after a refresh
     /// cannot serve the rows of a group that has since been rebuilt.
     /// </summary>
-    private Task<VirtualisedWindow<WorkerTaskHeader>> LoadGroupWindowAsync(string groupKey, VirtualisedWindowRequest request)
+    private Task<VirtualisedWindow<WorkerTaskHeader>> LoadGroupWindowAsync(string groupKey, VirtualisedWindowRequest
+request)
     {
         var group = _queueGroups.FirstOrDefault(g => g.Key == groupKey);
         IEnumerable<WorkerTaskHeader> tasks = group?.Tasks ?? [];
@@ -431,7 +465,8 @@ else
             }
 
             // Look for removals
-            var workerTaskHeadersToRemove = _workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
+            var workerTaskHeadersToRemove = _workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id !=
+sth.Id)).ToList();
             foreach (var workerTaskHeaderToRemove in workerTaskHeadersToRemove)
             {
                 _workerTaskHeaders.Remove(workerTaskHeaderToRemove);
@@ -524,7 +559,8 @@ else
 
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        var task = SynchronisationWorkerTask.ForUser(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id, user.Id, user.NameOrId);
+        var task = SynchronisationWorkerTask.ForUser(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id,
+user.Id, user.NameOrId);
         var result = await jim.Tasking.CreateWorkerTaskAsync(task);
 
         if (!result.Success)

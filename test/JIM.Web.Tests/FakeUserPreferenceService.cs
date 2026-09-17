@@ -63,4 +63,8 @@ public sealed class FakeUserPreferenceService : IUserPreferenceService
         StoredCausalityView = view;
         return Task.CompletedTask;
     }
+
+    public Task<bool?> GetServiceHealthCollapsedAsync() => Task.FromResult<bool?>(null);
+
+    public Task SetServiceHealthCollapsedAsync(bool collapsed) => Task.CompletedTask;
 }

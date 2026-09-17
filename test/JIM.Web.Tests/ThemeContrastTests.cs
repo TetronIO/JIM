@@ -64,6 +64,222 @@ public class ThemeContrastTests
         Assert.That(failures, Is.Empty, () => BuildFailureMessage(failures));
     }
 
+    /// <summary>
+    /// The six semantic chip colours JIM restyles in <c>site.css</c>. Default and Dark are left to MudBlazor,
+    /// which paints them as near-black on light grey and measures far above the floor.
+    /// </summary>
+    private static readonly string[] ChipColours = ["primary", "secondary", "tertiary", "info", "success", "warning", "error"];
+
+    /// <summary>
+    /// A Text-variant chip's label sits on a tint of its own colour, and an Outlined chip's on the bare surface.
+    /// MudBlazor paints both labels in the raw palette colour, which is a fill colour chosen to sit behind white
+    /// text and was never meant to be text itself; measured that way, seven of the twelve themes shipped primary
+    /// chip labels below AA, the default dark theme at 2.80:1. This reads the actual chip rules out of
+    /// <c>site.css</c> (label colour, tint, and their <c>color-mix()</c> recipes) so the measurement tracks
+    /// whatever the stylesheet says rather than a copy of it kept here.
+    /// </summary>
+    [Test]
+    public void EveryTheme_EveryChipLabel_MeetsWcagAa()
+    {
+        var siteCss = File.ReadAllText(Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "wwwroot", "css", "site.css"));
+        var siteVariables = ReadVariables(siteCss);
+        var themeDirectory = Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "wwwroot", "css", "themes");
+        var themeFiles = Directory.EnumerateFiles(themeDirectory, "*.css").OrderBy(path => path, StringComparer.Ordinal).ToList();
+        Assert.That(themeFiles, Is.Not.Empty, "Expected at least one theme stylesheet to check.");
+
+        var failures = new List<string>();
+        foreach (var themeFile in themeFiles)
+        {
+            var themeName = Path.GetFileName(themeFile);
+            var themeVariables = ReadVariables(File.ReadAllText(themeFile));
+            var variables = siteVariables.Concat(themeVariables)
+                .GroupBy(pair => pair.Key, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.Ordinal);
+
+            var surface = Resolve(variables, "--mud-palette-surface");
+            if (surface is null)
+                continue;
+
+            var themeCss = File.ReadAllText(themeFile);
+            foreach (var colour in ChipColours)
+            {
+                if (Resolve(variables, $"--mud-palette-{colour}") is null)
+                    continue;
+
+                // MudBlazor's own defaults, which a site.css declaration overrides, which a theme's own
+                // html[lang]-prefixed rule (higher specificity, and every one of them !important) overrides again.
+                var mudDefaultLabel = $"var(--mud-palette-{colour})";
+                var textRule = ReadDeclarations(siteCss, $".mud-chip.mud-chip-text.mud-chip-color-{colour}");
+                foreach (var (property, value) in ReadDeclarations(themeCss, $"html[lang] .mud-chip-text.mud-chip-color-{colour}"))
+                    textRule[property] = value;
+                var outlinedRule = ReadDeclarations(siteCss, $".mud-chip.mud-chip-outlined.mud-chip-color-{colour}");
+                foreach (var (property, value) in ReadDeclarations(themeCss, $"html[lang] .mud-chip-outlined.mud-chip-color-{colour}"))
+                    outlinedRule[property] = value;
+
+                var textLabel = ResolveExpression(textRule.GetValueOrDefault("color", mudDefaultLabel), variables, surface.Value);
+                var textTint = ResolveExpression(textRule.GetValueOrDefault("background-color", "transparent"), variables, surface.Value);
+                var outlinedLabel = ResolveExpression(outlinedRule.GetValueOrDefault("color", mudDefaultLabel), variables, surface.Value);
+
+                Measure($"{colour} text chip label on its tint", textLabel, textTint);
+                Measure($"{colour} outlined chip label on surface", outlinedLabel, surface.Value);
+
+                void Measure(string description, (double R, double G, double B, double A)? foreground, (double R, double G, double B, double A)? background)
+                {
+                    if (foreground is null || background is null)
+                    {
+                        failures.Add($"  {themeName,-26} {description,-40} could not be resolved; the test's CSS reader needs extending");
+                        return;
+                    }
+
+                    var composedBackground = Composite(background.Value, surface.Value);
+                    var ratio = ContrastRatio(Composite(foreground.Value, composedBackground), composedBackground);
+                    if (ratio < AaFloor)
+                        failures.Add(string.Format(CultureInfo.InvariantCulture, "  {0,-26} {1,-40} {2:0.00} (needs {3})", themeName, description, ratio, AaFloor));
+                }
+            }
+        }
+
+        Assert.That(failures, Is.Empty, () => BuildFailureMessage(failures,
+            "Fix in site.css, not the theme: raise the --jim-chip-text-* blend's share of text colour, or, if one",
+            "theme's colour is the outlier, move that theme's palette colour a step further from its surface."));
+    }
+
+    /// <summary>
+    /// The four semantic severities JIM colours in <c>site.css</c>. Normal is MudBlazor's own primary text colour, and a
+    /// Filled alert pairs each fill with its palette <c>-text</c> colour, which the pairing test above already measures.
+    /// </summary>
+    private static readonly string[] AlertSeverities = ["info", "success", "warning", "error"];
+
+    /// <summary>
+    /// A Text or Outlined alert's message sits on a tint of its severity colour. MudBlazor paints it in
+    /// <c>--mud-palette-{severity}-darken</c>, which no JIM theme defines: MudBlazor generates that shade at runtime from
+    /// its own default palette, so the text ignored the theme's accessible colour altogether and Info, Success and
+    /// Warning read faint. This reads the alert rules out of <c>site.css</c> and each theme, as the chip test does, so the
+    /// measurement tracks the stylesheets. A tint no stylesheet sets is MudBlazor's default hover wash (the severity
+    /// colour at 6%) for a Text alert, and nothing at all for an Outlined one.
+    /// </summary>
+    [Test]
+    public void EveryTheme_EveryAlertMessage_MeetsWcagAa()
+    {
+        var siteCss = File.ReadAllText(Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "wwwroot", "css", "site.css"));
+        var siteVariables = ReadVariables(siteCss);
+        var themeDirectory = Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "wwwroot", "css", "themes");
+        var themeFiles = Directory.EnumerateFiles(themeDirectory, "*.css").OrderBy(path => path, StringComparer.Ordinal).ToList();
+        Assert.That(themeFiles, Is.Not.Empty, "Expected at least one theme stylesheet to check.");
+
+        var failures = new List<string>();
+        foreach (var themeFile in themeFiles)
+        {
+            var themeName = Path.GetFileName(themeFile);
+            var themeCss = File.ReadAllText(themeFile);
+            var variables = siteVariables.Concat(ReadVariables(themeCss))
+                .GroupBy(pair => pair.Key, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.Ordinal);
+
+            var surface = Resolve(variables, "--mud-palette-surface");
+            if (surface is null)
+                continue;
+
+            foreach (var severity in AlertSeverities)
+            {
+                if (Resolve(variables, $"--mud-palette-{severity}") is null)
+                    continue;
+
+                foreach (var variant in new[] { "text", "outlined" })
+                {
+                    // site.css first, then the theme's own rule for the same alert, which loads later and wins a tie;
+                    // a theme that recolours the message element itself overrides both.
+                    var rule = ReadDeclarations(siteCss, $"html[lang] .mud-alert-{variant}-{severity}");
+                    foreach (var (property, value) in ReadDeclarations(themeCss, $"html[lang] .mud-alert-{variant}-{severity}"))
+                        rule[property] = value;
+                    if (ReadDeclarations(themeCss, $"html[lang] .mud-alert-{variant}-{severity} .mud-alert-message").TryGetValue("color", out var messageColour))
+                        rule["color"] = messageColour;
+
+                    var defaultTint = variant == "text" ? $"color-mix(in srgb, var(--mud-palette-{severity}) 6%, transparent)" : "transparent";
+                    var text = ResolveExpression(rule.GetValueOrDefault("color", $"var(--mud-palette-{severity}-darken)"), variables, surface.Value);
+                    var tint = ResolveExpression(rule.GetValueOrDefault("background-color", defaultTint), variables, surface.Value);
+                    var description = $"{severity} {variant} alert text on its tint";
+
+                    if (text is null || tint is null)
+                    {
+                        failures.Add($"  {themeName,-26} {description,-40} could not be resolved; the alert takes a colour no stylesheet defines");
+                        continue;
+                    }
+
+                    var composedTint = Composite(tint.Value, surface.Value);
+                    var ratio = ContrastRatio(Composite(text.Value, composedTint), composedTint);
+                    if (ratio < AaFloor)
+                        failures.Add(string.Format(CultureInfo.InvariantCulture, "  {0,-26} {1,-40} {2:0.00} (needs {3})", themeName, description, ratio, AaFloor));
+                }
+            }
+        }
+
+        Assert.That(failures, Is.Empty, () => BuildFailureMessage(failures,
+            "Fix in site.css, not the theme: alert text takes the --jim-chip-text-* blend there, and a theme rule loads",
+            "after site.css, so a per-theme alert colour silently wins over it."));
+    }
+
+    /// <summary>
+    /// The declarations of the first rule block whose selector list is exactly <paramref name="selector"/>,
+    /// with any <c>!important</c> stripped. Empty when site.css has no such rule.
+    /// </summary>
+    private static Dictionary<string, string> ReadDeclarations(string css, string selector)
+    {
+        var block = Regex.Match(css, $@"(?<=^|\}}|\*/)\s*{Regex.Escape(selector)}\s*\{{([^}}]*)\}}", RegexOptions.Multiline);
+        var declarations = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (!block.Success)
+            return declarations;
+
+        foreach (var declaration in block.Groups[1].Value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var colon = declaration.IndexOf(':');
+            if (colon > 0)
+                declarations[declaration[..colon].Trim()] = declaration[(colon + 1)..].Replace("!important", string.Empty).Trim();
+        }
+
+        return declarations;
+    }
+
+    /// <summary>
+    /// Evaluates the subset of CSS colour syntax the chip rules use: a literal colour, <c>transparent</c>,
+    /// <c>var(--name)</c> (looked up in the merged site and theme variables, recursively), and
+    /// <c>color-mix(in srgb, X P%, Y)</c> with either side any of the above. <c>transparent</c> mixes as the
+    /// surface at zero alpha, so a tint of a colour over transparent composites the way the browser paints it.
+    /// </summary>
+    private static (double R, double G, double B, double A)? ResolveExpression(
+        string expression, Dictionary<string, string> variables, (double R, double G, double B, double A) surface)
+    {
+        expression = expression.Trim();
+        if (expression.Equals("transparent", StringComparison.OrdinalIgnoreCase))
+            return (surface.R, surface.G, surface.B, 0d);
+
+        var reference = Regex.Match(expression, @"^var\((--[\w-]+)\)$");
+        if (reference.Success)
+            return variables.TryGetValue(reference.Groups[1].Value, out var raw) ? ResolveExpression(raw, variables, surface) : null;
+
+        var mix = Regex.Match(expression, @"^color-mix\(\s*in\s+srgb\s*,\s*(.+?)\s+(\d+(?:\.\d+)?)%\s*,\s*(.+)\)$", RegexOptions.IgnoreCase);
+        if (mix.Success)
+        {
+            var first = ResolveExpression(mix.Groups[1].Value, variables, surface);
+            var second = ResolveExpression(mix.Groups[3].Value, variables, surface);
+            if (first is null || second is null)
+                return null;
+
+            // CSS color-mix in srgb interpolates premultiplied colour, then alpha, at the stated share.
+            var share = double.Parse(mix.Groups[2].Value, CultureInfo.InvariantCulture) / 100d;
+            var alpha = first.Value.A * share + second.Value.A * (1 - share);
+            if (alpha == 0)
+                return (surface.R, surface.G, surface.B, 0d);
+
+            return ((first.Value.R * first.Value.A * share + second.Value.R * second.Value.A * (1 - share)) / alpha,
+                (first.Value.G * first.Value.A * share + second.Value.G * second.Value.A * (1 - share)) / alpha,
+                (first.Value.B * first.Value.A * share + second.Value.B * second.Value.A * (1 - share)) / alpha,
+                alpha);
+        }
+
+        return ParseColour(expression);
+    }
+
     private static IEnumerable<string> CheckTheme(string path)
     {
         var variables = ReadVariables(File.ReadAllText(path));
@@ -83,7 +299,7 @@ public class ThemeContrastTests
                 variables[measured.pairing.Foreground], variables[measured.pairing.Background]));
     }
 
-    private static string BuildFailureMessage(List<string> failures)
+    private static string BuildFailureMessage(List<string> failures, params string[] advice)
     {
         var message = new StringBuilder();
         message.AppendLine(CultureInfo.InvariantCulture, $"{failures.Count} theme pairing(s) fall below WCAG AA ({AaFloor}:1):");
@@ -91,9 +307,18 @@ public class ThemeContrastTests
         foreach (var failure in failures)
             message.AppendLine(failure);
         message.AppendLine();
-        message.AppendLine("Fix by giving the label the opposite lightness (a bright fill takes #000000dd, not white),");
-        message.AppendLine("or, where the fill sits at the luminance that fails both label colours, by moving the fill");
-        message.AppendLine("one step darker or lighter. Keep the matching --mud-palette-*-rgb variable in step.");
+        if (advice.Length == 0)
+        {
+            advice =
+            [
+                "Fix by giving the label the opposite lightness (a bright fill takes #000000dd, not white),",
+                "or, where the fill sits at the luminance that fails both label colours, by moving the fill",
+                "one step darker or lighter. Keep the matching --mud-palette-*-rgb variable in step."
+            ];
+        }
+
+        foreach (var line in advice)
+            message.AppendLine(line);
         return message.ToString();
     }
 

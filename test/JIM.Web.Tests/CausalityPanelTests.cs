@@ -68,7 +68,7 @@ public class CausalityPanelTests
         Assert.That(cut.FindAll(".summary-sentence"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".tl"), Is.Empty);
-        Assert.That(cut.FindAll(".oc-pill"), Is.Not.Empty);
+        Assert.That(cut.FindAll(".outcome-strip .mud-chip"), Is.Not.Empty);
     }
 
     [Test]

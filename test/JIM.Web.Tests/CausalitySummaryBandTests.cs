@@ -98,12 +98,14 @@ public class CausalitySummaryBandTests
 
         var cut = RenderBand(context, CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        var pills = cut.FindAll(".oc-pill");
+        // The pills are ordinary Text-variant MudChips carrying a Color, so the tone shows as MudBlazor's own
+        // colour class; the panel's .oc-pill restyle was retired when the portal's chip took its shape.
+        var pills = cut.FindAll(".outcome-strip .mud-chip");
         Assert.That(pills, Has.Count.EqualTo(4));
-        Assert.That(pills[0].ClassList, Does.Contain("primary"));
+        Assert.That(pills[0].ClassList, Does.Contain("mud-chip-color-primary"));
         Assert.That(pills[0].TextContent.Trim(), Is.EqualTo("Projected to the Metaverse"));
-        Assert.That(pills[1].ClassList, Does.Contain("secondary"));
-        Assert.That(pills[3].ClassList, Does.Contain("info"));
+        Assert.That(pills[1].ClassList, Does.Contain("mud-chip-color-secondary"));
+        Assert.That(pills[3].ClassList, Does.Contain("mud-chip-color-info"));
         Assert.That(pills[3].TextContent.Trim(), Is.EqualTo("Export queued · 11 changes"));
     }
 
