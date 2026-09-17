@@ -52,7 +52,7 @@
 
                 @if (!ReadOnly && _isEdit && _schemaLocked)
                 {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    <MudAlert Severity="Severity.Info" Dense="true">
                         Data Type and Plurality are locked because @_valuesCount Metaverse Object(s) hold a stored value for this attribute. Clear the values first to change the schema.
                     </MudAlert>
                 }

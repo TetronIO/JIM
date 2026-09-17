@@ -32,7 +32,7 @@
         {
             @if (_fencedTask != null)
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" data-testid="jim-delete-cs-fenced-notice">
+                <MudAlert Severity="Severity.Info" data-testid="jim-delete-cs-fenced-notice">
                     A Synchronised Deprovisioning run for this system is already queued or running. Deprovision through
                     synchronisation attaches to it, resuming from its checkpoint; Delete immediately and keep contributed
                     data abandons the remaining deprovisioning and completes the deletion at once.
@@ -40,7 +40,7 @@
             }
             else
             {
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="jim-delete-cs-fenced-notice">
+                <MudAlert Severity="Severity.Warning" data-testid="jim-delete-cs-fenced-notice">
                     A previous Synchronised Deprovisioning run stopped before completing and this system remains fenced.
                     Deprovision through synchronisation resumes from where the run stopped; Delete immediately and keep
                     contributed data finishes the deletion at once, keeping the remaining contributed data.
@@ -70,7 +70,7 @@
                 </MudText>
                 @if (_deleteImmediately)
                 {
-                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 ms-12"
+                    <MudAlert Severity="Severity.Warning" Class="mt-2 ms-12"
                               data-testid="jim-delete-cs-immediate-warning">
                         Kept values become permanently unmanaged, and downstream systems keep whatever this system last
                         exported. This cannot be reversed.
@@ -93,7 +93,7 @@
            above already says so, so showing a bulk-delete estimate there would mislead. *@
         @if (_deleteImmediately && _preview is { WillRunAsBackgroundJob: true })
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            <MudAlert Severity="Severity.Info">
                 Due to the size of this system, deletion will run as a background job.
                 Estimated time: @_preview.EstimatedDeletionTime.ToString(@"hh\:mm\:ss")
             </MudAlert>

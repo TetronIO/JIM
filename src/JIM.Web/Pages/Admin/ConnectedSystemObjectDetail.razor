@@ -27,7 +27,7 @@
         <CsoDetailSkeleton />
     </Loading>
     <LongLoadMessage>
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        <MudAlert Severity="Severity.Info">
             Still loading. Large objects can take a few seconds to retrieve.
         </MudAlert>
     </LongLoadMessage>
@@ -367,7 +367,7 @@
             }
             else if (_changeCount == 0)
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">No change history recorded for this object.</MudAlert>
+                <MudAlert Severity="Severity.Info">No change history recorded for this object.</MudAlert>
             }
             else
             {

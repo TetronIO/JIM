@@ -35,7 +35,7 @@
 @* Tracking off is a global condition, so it is stated once here rather than repeated on every row. *@
 @if (_drift != null && _drift.Values.Any(d => d.TrackingDisabled))
 {
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+    <MudAlert Severity="Severity.Info" Class="mt-5">
         Configuration change tracking is switched off, so JIM cannot tell which Connected Systems have configuration
         changes waiting for a Full Synchronisation.
     </MudAlert>

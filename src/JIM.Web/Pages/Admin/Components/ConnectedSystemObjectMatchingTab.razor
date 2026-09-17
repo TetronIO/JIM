@@ -40,7 +40,7 @@
 @if (ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
 {
     @* Advanced Mode - matching rules are on Synchronisation Rules *@
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+    <MudAlert Severity="Severity.Info" Class="mt-4">
         In Advanced Mode, matching rules are configured on each individual Synchronisation Rule. This allows different
         matching logic for different scenarios.
     </MudAlert>
@@ -55,7 +55,7 @@
 }
 else if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
 {
-    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+    <MudAlert Severity="Severity.Warning">
         No object types have been configured. Import the schema first to configure Object Matching Rules.
     </MudAlert>
 }
@@ -65,7 +65,7 @@ else
 
     @if (selectedObjectTypes.Count == 0)
     {
-        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        <MudAlert Severity="Severity.Warning">
             No object types have been selected. Select object types in the Schema tab first.
         </MudAlert>
     }
@@ -102,7 +102,7 @@ else
             <MudText>
                 Switching to <strong>Advanced Mode</strong> will allow you to configure different matching rules for each Synchronisation Rule.
             </MudText>
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+            <MudAlert Severity="Severity.Info" Class="mt-4">
                 The current matching rules will be copied to all existing import Synchronisation Rules for this Connected System, giving you a starting point to customise.
             </MudAlert>
         }
@@ -111,7 +111,7 @@ else
             <MudText>
                 Switching to <strong>Simple Mode</strong> will configure matching rules here, shared across all Synchronisation Rules.
             </MudText>
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+            <MudAlert Severity="Severity.Warning" Class="mt-4">
                 <strong>Migration:</strong> Matching rules from Synchronisation Rules will be analysed and migrated to the object type level:
                 <ul class="mt-2 mb-0">
                     <li>If all Synchronisation Rules have the same matching rules, they will be used directly.</li>
@@ -662,7 +662,7 @@ else
 
         if (unworkableRules.Count > 0)
         {
-            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-2 mb-2"
+            <MudAlert Severity="Severity.Error" Class="mt-2 mb-2"
                       data-testid="jim-matching-rules-unworkable">
                 <strong>@unworkableRules.Count matching @(unworkableRules.Count == 1 ? "rule" : "rules") cannot match anything.</strong>
                 Objects that should join an existing Metaverse Object will project a new one instead. Remove and

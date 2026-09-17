@@ -165,7 +165,7 @@
         @if (_pendingExport.ErrorCount > 0 || !string.IsNullOrEmpty(_pendingExport.LastErrorMessage))
         {
             <MudItem xs="12">
-                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-0" Style="align-items: flex-start;">
+                <MudAlert Severity="Severity.Error" Class="mt-0" Style="align-items: flex-start;">
                     <MudText Typo="Typo.h6" Class="mb-3" Style="line-height: 1.5rem;">Error Information</MudText>
                     <MudSimpleTable Hover="true" Dense="true" Elevation="0" Style="background: transparent;">
                         <tbody>
@@ -399,7 +399,7 @@ else if (_notFound)
        is still queued. Saying "not found" implies something is wrong; almost always nothing is, the
        change simply reached its Connected System. Name the likely reasons rather than leave the
        reader wondering whether they have hit a bug. *@
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+    <MudAlert Severity="Severity.Info">
         This Pending Export is no longer queued. It has either been exported to the Connected System,
         or been superseded by a later change to the same Connected System Object. Pending Exports are
         removed once they are no longer waiting to be applied, so links to an individual one stop

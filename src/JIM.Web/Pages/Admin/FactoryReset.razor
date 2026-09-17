@@ -54,7 +54,7 @@
 
     @if (_includeAdministrators)
     {
-        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+        <MudAlert Severity="Severity.Warning" Class="mt-4">
             After this, the only ways to regain administrative access are:
             <ul class="mt-2 ml-4">
                 <li>the <strong>infrastructure API key</strong> (REST API / PowerShell module), and</li>
@@ -102,7 +102,7 @@
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4">
+        <MudAlert Severity="Severity.Error" Class="mb-4">
             This permanently wipes all data and configuration and <strong>cannot be undone</strong>.
             Make sure you have a database backup.
         </MudAlert>

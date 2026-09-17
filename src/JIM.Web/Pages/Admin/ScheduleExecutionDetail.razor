@@ -133,7 +133,7 @@
     @* ─── Failure ─── *@
     @if (_detail.Execution.Status == ScheduleExecutionStatus.Failed)
     {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-6">
+        <MudAlert Severity="Severity.Error" Class="mt-6">
             <MudText Typo="Typo.body1" Style="white-space: pre-wrap; word-break: break-word;">
                 @(string.IsNullOrWhiteSpace(_detail.Execution.ErrorMessage)
                     ? "The execution failed. No error message was recorded; the step statuses below show where it stopped."
@@ -283,7 +283,7 @@
 }
 else if (_notFound)
 {
-    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2">Schedule Execution not found.</MudAlert>
+    <MudAlert Severity="Severity.Warning" Class="mt-2">Schedule Execution not found.</MudAlert>
     <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
                Href="/admin/operations?t=schedules" Class="mt-4">
         Back to Operations

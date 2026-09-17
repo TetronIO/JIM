@@ -254,7 +254,7 @@
         @if (!IsSyncContext() && !IsHousekeepingContext()
              && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+            <MudAlert Severity="Severity.Info" Class="mb-5">
                 <MudText Typo="Typo.body1">
                     The Connected System Object has been detected as deleted from the source system and marked for
                     removal. When a Full Synchronisation or Delta Synchronisation Run Profile is executed, JIM will
@@ -385,7 +385,7 @@
                         }
 else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NoChange)
                         {
-                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                            <MudAlert Severity="Severity.Info" Class="mb-5">
                                 <MudText Typo="Typo.body1">No Changes Required</MudText>
                                 <MudText Typo="Typo.body1">
                                     @if (_activityRunProfileExecutionItem.NoChangeReason != null)
@@ -409,7 +409,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                 Error Details
                             </MudText>
 
-                            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3 jim-alert-error">
+                            <MudAlert Severity="Severity.Error" Class="mb-3 jim-alert-error">
                                 <MudText Typo="Typo.body1" Style="font-weight: 500;">
                                     @errorType.ToString().SplitOnCapitalLetters()
                                 </MudText>

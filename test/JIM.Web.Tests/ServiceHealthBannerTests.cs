@@ -153,7 +153,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(alert.Instance.Severity, Is.EqualTo(Severity.Error));
-                Assert.That(alert.Instance.Variant, Is.EqualTo(Variant.Outlined));
+                Assert.That(alert.Instance.Variant, Is.EqualTo(Variant.Text), "alerts take MudBlazor's default variant; no call site names one");
                 Assert.That(cut.Markup, Does.Contain("The Worker has not reported for 4 minutes. Nothing is being synchronised or delivered; queued work is safe and resumes when it returns."));
                 Assert.That(CountOf(cut.Markup, "Worker"), Is.EqualTo(1));
             }
