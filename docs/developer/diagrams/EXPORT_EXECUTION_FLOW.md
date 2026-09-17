@@ -105,12 +105,15 @@ flowchart TD
 
     CheckResult -->|Yes, Create| HandleCreate[Record Exported<br/>Capture new external ID<br/>from ExportResult<br/>Set Status = Exported]
     CheckResult -->|Yes, Update| HandleUpdate[Record Exported<br/>Set Status = Exported]
-    CheckResult -->|Yes, Delete| HandleDelete[Record Deprovisioned<br/>Delete Pending Export<br/>Delete CSO]
+    CheckResult -->|Yes, Delete| CsoStatus{CSO status =<br/>PendingProvisioning?}
+    CsoStatus -->|No, Normal| HandleDelete[Record Deprovisioned<br/>Set Status = Exported<br/>confirming import deletes PE and CSO]
+    CsoStatus -->|Yes: provisioning was<br/>never confirmed| HandleUnconfirmedDelete[Record Deprovisioned<br/>Remove Pending Export and CSO now:<br/>import deletion detection excludes<br/>PendingProvisioning objects, so a<br/>successful Delete is the only<br/>confirmation the object will ever get]
     CheckResult -->|Failed| HandleFail[Increment ErrorCount<br/>Set error message<br/>Calculate NextRetryAt<br/>with exponential backoff]
 
     HandleCreate --> Persist
     HandleUpdate --> Persist
     HandleDelete --> Persist
+    HandleUnconfirmedDelete --> Persist
     HandleFail --> CheckMaxRetries{ErrorCount >=<br/>MaxRetries?}
     CheckMaxRetries -->|Yes| MarkFailed[Set Status = Failed<br/>Permanent failure<br/>Requires manual intervention]
     CheckMaxRetries -->|No| SetRetry[Set Status = ExportNotConfirmed<br/>Set NextRetryAt = backoff time]

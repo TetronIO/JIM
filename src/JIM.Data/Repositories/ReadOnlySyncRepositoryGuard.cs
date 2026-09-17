@@ -443,6 +443,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportsByConnectedSystemObjectIdsAsync));
 
+    public Task<int> DeleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(DeleteConnectedSystemObjectsByIdsAsync));
+
     public Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
         => throw new PreviewWriteAttemptedException(nameof(DeleteUntrackedPendingExportsAsync));
 

@@ -900,6 +900,26 @@ public interface ISyncRepository
     Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
+    /// Deletes Connected System Objects by id, without requiring a tracked entity graph.
+    /// <para>
+    /// Used for a successful Delete export against a Connected System Object whose provisioning was never
+    /// confirmed (Status stayed PendingProvisioning): export batches load Pending Exports
+    /// <c>AsNoTracking()</c> with the Connected System Object graph included, so passing that graph to
+    /// <see cref="DeleteConnectedSystemObjectsAsync"/> (which does <c>RemoveRange</c> on a tracked
+    /// <c>DbSet</c>) can throw "another instance with the same key value is already being tracked".
+    /// Deleting by id avoids attaching the untracked graph at all.
+    /// </para>
+    /// <para>
+    /// Implementations must null incoming reference values from other rows before deleting (mirroring
+    /// <see cref="DeleteConnectedSystemObjectsAsync"/>'s reference-clearing step), and must detach any
+    /// tracked instances of the deleted rows and their attribute values from the change tracker, for the
+    /// same reason documented on <see cref="DeletePendingExportsByConnectedSystemObjectIdsAsync"/>.
+    /// </para>
+    /// </summary>
+    /// <returns>The number of Connected System Objects deleted.</returns>
+    Task<int> DeleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Gets a single Pending Export by its associated CSO ID.
     /// Used during export evaluation to check for existing Pending Exports in the database.
     /// </summary>

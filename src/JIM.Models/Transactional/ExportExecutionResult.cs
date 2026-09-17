@@ -284,4 +284,22 @@ public class ProcessedExportItem
     /// unresolved reference error, exactly as the import side reports its own.
     /// </summary>
     public string? UnresolvedReferenceMessage { get; set; }
+
+    /// <summary>
+    /// True when this item's Connected System Object row has already been removed by the export server
+    /// as part of processing this item: a successful Delete export of a Connected System Object whose
+    /// provisioning was never confirmed by an import (Status stayed PendingProvisioning throughout).
+    /// Such an object can never be obsoleted or deleted by a later import (deletion detection deliberately
+    /// excludes PendingProvisioning objects), so a successful export of its own Delete is the only
+    /// confirmation it will ever get, and the export server removes it immediately rather than leaving it
+    /// stranded.
+    /// <para>
+    /// <see cref="ConnectedSystemObject"/> is still populated on this item so callers can read its display
+    /// fields before the row is gone, but its database row no longer exists: a consumer that builds a
+    /// persisted record from this item (an RPEI, a change-history row) must not set that record's Connected
+    /// System Object navigation or foreign key when this flag is true, or the insert fails against a row
+    /// that is no longer there.
+    /// </para>
+    /// </summary>
+    public bool ConnectedSystemObjectRemoved { get; set; }
 }

@@ -338,6 +338,11 @@ This scenario tests the complete Identity Lifecycle Management (ILM) pattern:
    - Removes from CSV under a temporary zero grace period (restored afterwards), so the Metaverse Object is deleted immediately
    - Validates the provisioning was cancelled in every target (no Pending Exports, no Connected System Objects), that the full export/import/sync cycle is clean, and that the user never reached the directory
 
+7. **Withdrawn After Export Test** - Joiner leaves after the Create was exported but before any confirming import (`-Step WithdrawnAfterExport`):
+   - Creates `test.withdrawnlate`, runs the HR import and sync, then exports to both targets without importing from them, so the objects exist in the targets while JIM still holds them as Pending Provisioning
+   - Removes from CSV under a temporary zero grace period (restored afterwards), so the Metaverse Object is deleted immediately
+   - Validates a Delete is staged (a real object must be deprovisioned, not cancelled), that the full export/import/sync cycle removes the user from the directory, and that no Connected System Object is left behind in any target once its Delete has exported
+
 ### Running Individual Test Steps
 
 You can run specific tests from Scenario 1:

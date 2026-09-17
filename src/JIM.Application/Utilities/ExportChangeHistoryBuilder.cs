@@ -42,11 +42,16 @@ public static class ExportChangeHistoryBuilder
         // directly and does not trigger EF's automatic FK fix-up from the navigation. Without the
         // explicit assignment the column is inserted as NULL, breaking Causality Tree rendering for
         // export change history (#683).
+        //
+        // ConnectedSystemObjectRemoved (an unconfirmed-provisioning Delete): the export server has
+        // already removed the CSO row, so the navigation and FK must stay null or the insert fails
+        // against a row that no longer exists. DeletedObjectExternalId still reads from the in-memory
+        // CSO graph the item carries, which is unaffected by the row's removal.
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemId,
-            ConnectedSystemObject = exportItem.ConnectedSystemObject,
-            ConnectedSystemObjectId = exportItem.ConnectedSystemObject?.Id,
+            ConnectedSystemObject = exportItem.ConnectedSystemObjectRemoved ? null : exportItem.ConnectedSystemObject,
+            ConnectedSystemObjectId = exportItem.ConnectedSystemObjectRemoved ? null : exportItem.ConnectedSystemObject?.Id,
             ChangeType = changeType,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = executionItem,

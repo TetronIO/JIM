@@ -883,6 +883,31 @@ public class SyncRepository : ISyncRepository
         List<ActivityRunProfileExecutionItem> rpeis)
         => DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
 
+    public Task<int> DeleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return Task.FromResult(0);
+
+        var idSet = connectedSystemObjectIds as HashSet<Guid> ?? connectedSystemObjectIds.ToHashSet();
+
+        // Mirror the Postgres implementation's reference-clearing step: null any CSO attribute value's
+        // ReferenceValueId that points at a CSO about to be deleted.
+        var referencingValues = _csos.Values
+            .SelectMany(cso => cso.AttributeValues)
+            .Where(av => av.ReferenceValueId.HasValue && idSet.Contains(av.ReferenceValueId.Value));
+        foreach (var av in referencingValues)
+        {
+            av.ReferenceValueId = null;
+            av.ReferenceValue = null;
+        }
+
+        var toDelete = idSet.Where(_csos.ContainsKey).ToList();
+        foreach (var csoId in toDelete)
+            RemoveCso(_csos[csoId]);
+
+        return Task.FromResult(toDelete.Count);
+    }
+
     public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
     {
         var resolved = 0;

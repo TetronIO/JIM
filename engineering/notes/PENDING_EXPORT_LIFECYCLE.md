@@ -111,6 +111,20 @@ During confirming import:
 - Retry uses exponential backoff (`NextRetryAt`), max retries tracked via `ErrorCount`
 - After max retries → PE status → `Failed` (requires manual intervention)
 
+### Delete against an unconfirmed-provisioning CSO
+
+A CSO is created `PendingProvisioning` alongside a Create PE. If the Create is exported but the MVO is
+withdrawn before any confirming import, JIM stages a Delete PE for the still-`PendingProvisioning` CSO.
+A successful export of that Delete does **not** follow the ordinary "PE status → Exported, CSO cleaned
+up by the confirming import" path above: import deletion detection deliberately excludes
+`PendingProvisioning` CSOs (`ConnectedSystemRepository.BuildDeletionDetectionQuery`), so no confirming
+import would ever obsolete or delete it, and the CSO would otherwise be stranded forever with Status
+`PendingProvisioning`, JoinType `NotJoined`, and no PE to retry. `ExportExecutionServer` treats a
+successful Delete export of such a CSO as the only confirmation it will ever get: it removes the CSO and
+its PE immediately, across all three success paths (batched calls, file-based, single-export), by id via
+`SyncRepository.DeleteConnectedSystemObjectsByIdsAsync` rather than the tracked-graph delete. CSOs with
+Status `Normal` are unaffected; a failed Delete export never reaches this rule.
+
 ## Reference Resolution
 
 1. During PE creation, reference attributes store target MVO ID in `UnresolvedReferenceValue`
