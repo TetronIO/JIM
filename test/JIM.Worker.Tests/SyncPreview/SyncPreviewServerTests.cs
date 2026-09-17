@@ -582,6 +582,292 @@ public class SyncPreviewServerTests
 
     #endregion
 
+    #region Out-of-Scope Destructive Cascade (#288 Phase 1 of the Sync Preview Surface plan)
+
+    /// <summary>
+    /// Arranges a joined, out-of-scope Connected System Object whose Metaverse Object's type carries the
+    /// given Deletion Rule settings: the seeded user import Synchronisation Rule gets a scoping criterion
+    /// the object fails, and the object is joined directly (bypassing the join probe, which the preview's
+    /// out-of-scope branch never reaches).
+    /// </summary>
+    private (ConnectedSystemObject Cso, MetaverseObject Mvo, SyncRule ImportRule, ConnectedSystem SourceSystem)
+        ArrangeOutOfScopeCascadeFixture(
+            MetaverseObjectDeletionRule deletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            TimeSpan? gracePeriod = null)
+    {
+        var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
+        var sourceUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER");
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvUserType.DeletionRule = deletionRule;
+        mvUserType.DeletionGracePeriod = gracePeriod;
+        mvUserType.DeletionTriggerConnectedSystemIds = [];
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+
+        var importRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Import Synchronisation Rule 1");
+        importRule.MetaverseObjectType = mvUserType;
+        importRule.MetaverseObjectTypeId = mvUserType.Id;
+        importRule.ConnectedSystemId = sourceSystem.Id;
+        importRule.ConnectedSystemObjectTypeId = sourceUserType.Id;
+        importRule.ConnectedSystemObjectType = sourceUserType;
+        importRule.Direction = SyncRuleDirection.Import;
+        importRule.AttributeFlowRules.Clear();
+
+        var csEmployeeIdAttr = sourceUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID);
+        importRule.ObjectScopingCriteriaGroups.Clear();
+        importRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    ConnectedSystemAttribute = csEmployeeIdAttr,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "IN_SCOPE_VALUE"
+                }
+            }
+        });
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = sourceSystem.Id,
+            ConnectedSystem = sourceSystem,
+            Type = sourceUserType,
+            TypeId = sourceUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = csEmployeeIdAttr,
+            AttributeId = csEmployeeIdAttr.Id,
+            StringValue = "OUT_OF_SCOPE_VALUE" // fails the scoping criterion above
+        });
+
+        SyncRepo.SeedConnectedSystemObject(cso);
+        SyncRepo.SeedMetaverseObject(mvo);
+
+        return (cso, mvo, importRule, sourceSystem);
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithNoRemainingConnectors_ReportsMvoDeletedAndPersistsNothingAsync()
+    {
+        // Arrange - no other Connected System Object is joined to the Metaverse Object, so the last
+        // connector disconnecting deletes it immediately (zero/null grace period).
+        var (cso, mvo, _, _) = ArrangeOutOfScopeCascadeFixture(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
+        var mvoCountBefore = MetaverseObjectsData.Count;
+
+        // Act
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        // Assert - the warning and the cascade's MvoDeleted node both appear
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Warnings.Any(w => w.Code == SyncPreviewMessageCode.OutOfScope), Is.True);
+            Assert.That(result.OutcomeTree, Has.Count.EqualTo(1));
+            Assert.That(result.OutcomeTree[0].OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope));
+            Assert.That(result.OutcomeTree[0].Children.Any(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted), Is.True);
+        }
+
+        // Zero side effects: the join is untouched and nothing was deleted
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "A preview must never break the join");
+            Assert.That(SyncRepo.MetaverseObjects.ContainsKey(mvo.Id), Is.True, "A preview must never delete the Metaverse Object");
+            Assert.That(MetaverseObjectsData, Has.Count.EqualTo(mvoCountBefore));
+            Assert.That(PendingExportsData, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithAnotherConnectorJoined_StopsAtTheDisconnectRootAsync()
+    {
+        // Arrange - a second Connected System Object on the same system remains joined to the Metaverse
+        // Object, so it is still a connector once the previewed object disconnects.
+        var (cso, mvo, _, sourceSystem) = ArrangeOutOfScopeCascadeFixture(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
+        var otherCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = sourceSystem.Id,
+            ConnectedSystem = sourceSystem,
+            Type = cso.Type,
+            TypeId = cso.TypeId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Joined
+        };
+        SyncRepo.SeedConnectedSystemObject(otherCso);
+
+        // Act
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        // Assert - the cascade stops at the bare disconnect root; no deletion fate is recorded
+        Assert.That(result.OutcomeTree, Has.Count.EqualTo(1));
+        var root = result.OutcomeTree[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope));
+            Assert.That(root.Children, Is.Empty, "No remaining-connector deletion fate to record when a connector remains");
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithManualDeletionRule_StopsAtTheDisconnectRootAsync()
+    {
+        // Arrange - Deletion Rule Manual never fires, regardless of remaining connectors
+        var (cso, _, _, _) = ArrangeOutOfScopeCascadeFixture(MetaverseObjectDeletionRule.Manual);
+
+        // Act
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        // Assert
+        Assert.That(result.OutcomeTree, Has.Count.EqualTo(1));
+        Assert.That(result.OutcomeTree[0].Children, Is.Empty);
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithScheduledDeletion_ReportsMvoDeletionScheduledWithNoDownstreamNodesAsync()
+    {
+        // Arrange - a grace period schedules rather than immediately deletes
+        var (cso, _, _, _) = ArrangeOutOfScopeCascadeFixture(
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected, gracePeriod: TimeSpan.FromDays(7));
+
+        // Act
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        // Assert - scheduled, not immediate: no downstream deprovisioning is staged (mirrors
+        // SyncTaskProcessorBase.FindMvoDeletedOutcomeNodes, which only nests deprovisioning under MvoDeleted)
+        var deletionNode = result.OutcomeTree[0].Children.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletionNode.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled));
+            Assert.That(deletionNode.Children, Is.Empty);
+            Assert.That(result.Outbound.ProposedExports, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithDownstreamDisconnectOnlyTarget_ReportsWarningAndNoTreeNodeAsync()
+    {
+        // Arrange - a downstream target CSO whose export rule's Outbound Deprovision Action is Disconnect
+        // (the default): the real run would disconnect it without deprovisioning, so no tree node either.
+        // WhenAuthoritativeSourceDisconnected with the source as trigger, so deletion fires despite the
+        // target remaining joined (WhenLastConnectorDisconnected cannot: the target is still a connector).
+        var (cso, mvo, _, _) = ArrangeOutOfScopeCascadeFixture(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected);
+        mvo.Type!.DeletionTriggerConnectedSystemIds = [cso.ConnectedSystemId];
+
+        var targetSystem = ConnectedSystemsData.First(s => s.Id != cso.ConnectedSystemId);
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvo.Type!.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Disconnect;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>();
+
+        var targetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned
+        };
+        SyncRepo.SeedConnectedSystemObject(targetCso);
+
+        // Act
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        // Assert - warned, not a tree node: the real run records nothing for a disconnect-only downstream object
+        var deletionNode = result.OutcomeTree[0].Children.Single(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletionNode.Children, Is.Empty, "A disconnect-only downstream object gets no tree node");
+            Assert.That(result.Warnings.Any(w => w.Code == SyncPreviewMessageCode.DownstreamDisconnectOnly
+                && w.ConnectedSystemId == targetSystem.Id), Is.True,
+                "The disconnect-only downstream object must still be surfaced, as a warning");
+            Assert.That(result.Outbound.ProposedExports, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithDownstreamDeleteTarget_QueuesDeprovisioningAndProposesTheDeleteAsync()
+    {
+        // Arrange - a downstream target CSO whose export rule's Outbound Deprovision Action is Delete.
+        // WhenAuthoritativeSourceDisconnected with the source as trigger, so deletion fires despite the
+        // target remaining joined (WhenLastConnectorDisconnected cannot: the target is still a connector).
+        var (cso, mvo, _, _) = ArrangeOutOfScopeCascadeFixture(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected);
+        mvo.Type!.DeletionTriggerConnectedSystemIds = [cso.ConnectedSystemId];
+
+        var targetSystem = ConnectedSystemsData.First(s => s.Id != cso.ConnectedSystemId);
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvo.Type!.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>();
+
+        var targetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned
+        };
+        SyncRepo.SeedConnectedSystemObject(targetCso);
+
+        // Act
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        // Assert - a DeprovisionQueued node nested under MvoDeleted, and a proposed delete export
+        var deletionNode = result.OutcomeTree[0].Children.Single(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletionNode.Children, Has.Count.EqualTo(1));
+            Assert.That(deletionNode.Children[0].OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued));
+            Assert.That(deletionNode.Children[0].StagedChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+            Assert.That(result.Warnings.Any(w => w.Code == SyncPreviewMessageCode.DownstreamDisconnectOnly), Is.False);
+        }
+
+        Assert.That(result.Outbound.ProposedExports.Count(pe =>
+            pe.ChangeType == PendingExportChangeType.Delete && pe.ConnectedSystemObjectId == targetCso.Id), Is.EqualTo(1));
+
+        // Zero side effects
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(targetCso.MetaverseObjectId, Is.EqualTo(mvo.Id), "A preview must never disconnect the downstream object");
+            Assert.That(PendingExportsData, Is.Empty, "A preview must persist nothing");
+        }
+    }
+
+    #endregion
+
     #region Attribute Priority
 
     /// <summary>

@@ -32,6 +32,42 @@ The orchestration reinforces the structure:
 - **Probes never claim.** The join probe reads through the matching queries but never calls the claim path; export matching in the outbound preview likewise reports what a real run would claim without claiming it.
 - **A projection's Metaverse Object exists only in memory.** The outbound chain evaluates it through an internal materialised-object overload, never a persisted row.
 
+### The out-of-scope destructive cascade (#288 Phase 1 of the Sync Preview Surface plan)
+
+`PreviewCsoCoreAsync` no longer stops at the `OutOfScope` warning for a JOINED object whose out-of-scope
+action is Disconnect: it mirrors what `SyncTaskProcessorBase.HandleCsoOutOfScopeAsync` and
+`ExportEvaluationServer.EvaluateMvoDeletionsAsync` would do next (`SyncPreviewServer.BuildOutOfScopeCascadeAsync`).
+Every decision is put to the same pure engine methods the real run calls
+(`ISyncEngine.EvaluateMvoDeletionRule`, `ISyncEngine.DecideMvoDeletionExport`); nothing about *whether* the
+Metaverse Object dies or *whether* a downstream object is deprovisioned is reimplemented, only the node
+construction. The reads the cascade adds, all through the caller's guarded repository:
+
+| Read | Why it is safe |
+|------|-----------------|
+| `GetMetaverseObjectsByIdsNoTrackingAsync` (already used elsewhere in the file) | No-tracking read of the joined Metaverse Object; cloned via the existing `CloneForPreview` before anything touches it. |
+| `GetConnectedSystemObjectsForMvoDeletionAsync` | The lean-shape read the real deletion flush itself uses for the identical purpose: every Connected System Object still joined to the Metaverse Object, external-id and secondary-external-id values only. One dataset answers both cascade questions - the joined Connected Systems feed the remaining-connectors arithmetic, and the objects themselves are the downstream deprovisioning candidates - so the cascade issues it once, not twice. |
+| `ContributorReElectionService.ReElectSurvivingContributorsAsync` (its own reads: `GetConnectedSystemObjectsByMetaverseObjectIdAsync`, `GetConnectedSystemObjectAsync`) | The identical re-election core the real disconnect calls, over the guarded repository; it only ever mutates the working clone's `PendingAttributeValue*` lists and a survivor Connected System Object's own pending lists in memory, never persists. |
+| `RemainingImportSourceEvaluator.AnyImportSourceRemainsAsync` (its own read: `GetAllSyncRulesAsync`) | Read-only; the same evaluator the real disconnect uses, constructed fresh per cascade call (it caches nothing across previews). |
+
+None of these is a new write path: `ReadOnlySyncRepositoryGuard` classifies every one of them as a read, so
+the guard (Layer 2 below) and the rollback-only transaction (Layer 3) still stand as backstops exactly as
+they do for the rest of the preview. The cascade never calls `DisconnectConnectedSystemObjectsAsync`,
+`CreatePendingExportsAsync`, or any other write the real flush performs; it builds `SyncOutcomeNode`s and
+unpersisted `PendingExport` instances (added to `SyncPreviewResult.Outbound.ProposedExports`, exactly like
+every other proposed export in this file) that are discarded with the rest of the result.
+
+**Full-system previews** (`PreviewFullSyncAsync`) batch the `GetConnectedSystemObjectsForMvoDeletionAsync`
+read once per page, for every joined Metaverse Object the page touches
+(`CsoPreviewContext.JoinedCsosByMvoIdForDeletion`), the same way the outbound export cache is already
+refreshed once per page rather than once per object. Whichever of the page's objects turns out to be out of
+scope finds the answer already in memory; the single/few-object entry points
+(`PreviewSyncForCsoAsync`, `PreviewSyncForCsosAsync`) have no page to batch across and fall back to one read
+per cascade.
+
+The remaining-connector arithmetic itself (`RemainingConnectorsCalculator`, hoisted out of
+`PreviewDeletionEligibilityEvaluator` so both callers share it) is pure: a `List<int>` in, a `List<int>` out,
+no repository involved.
+
 ### Layer 2: the read-only guard (loud failure)
 
 Every repository read the preview performs goes through `ReadOnlySyncRepositoryGuard` (JIM.Data), which wraps `ISyncRepository` and throws `PreviewWriteAttemptedException` from every mutating member; reads delegate. The preview constructs a **guarded sibling** `ExportEvaluationServer` over the guard, so every reused read path (cache build, page refresh, matching probe) runs under it: a future edit that adds a write to any of those paths fails loudly in the first preview test rather than committing silently.
@@ -48,7 +84,7 @@ Callers can also pass a `repositoryFactory` (`ISyncRepositoryScope`) so the prev
 
 | Proof | Where | What it pins |
 |-------|-------|--------------|
-| Fidelity paired tests (release-blocking, PRD req. 9) | `SyncPreviewFidelityTests` (JIM.Worker.Tests, workflow harness) | Preview an object, really sync the same undisturbed data, map the recorded tree through the one shared `SyncOutcomeNode.FromSyncOutcome` mapping, diff the shapes node for node. A mismatch means the preview is lying. |
+| Fidelity paired tests (release-blocking, PRD req. 9) | `SyncPreviewFidelityTests` (JIM.Worker.Tests, workflow harness) | Preview an object, really sync the same undisturbed data, map the recorded tree through the one shared `SyncOutcomeNode.FromSyncOutcome` mapping, diff the shapes node for node. A mismatch means the preview is lying. Covers the out-of-scope destructive cascade (#288 Phase 1): immediate deletion with downstream deprovisioning, a scheduled (grace-period) deletion staging nothing yet, another connector remaining, a Manual Deletion Rule, and `InboundOutOfScopeAction.RemainJoined` (no cascade, no `DisconnectedOutOfScope` outcome either way). |
 | Isolation snapshots (PRD req. 10) | `SyncPreviewIsolationDatabaseTests`, `OutboundPreviewIsolationDatabaseTests`, `FullSyncPreviewScaleDatabaseTests` (RequiresPostgres) | `DatabaseIsolationSnapshot` (row counts **and content digests** per integrity table) captured before and after previews against live PostgreSQL, byte-identical; the scale test does it over a 2,000-object population and two full-system walks. |
 | Guard classification sweep | `ReadOnlySyncRepositoryGuard` tests (JIM.Worker.Tests) | Every `ISyncRepository` member is consciously classified; writes throw. |
 | Rollback proof | `OutboundPreviewIsolationDatabaseTests` | A write inside the rollback scope is discarded on disposal. |
