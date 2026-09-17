@@ -11,13 +11,14 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Create a Connected System</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected Systems:</span> <span class="mud-primary-text">New</span></MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    Provide some basic details here, and then we'll move on to configuring the Connected System.
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected Systems:</span> <span class="mud-primary-text">New</span>
+    <PageInfo Title="New Connected System">
+        Provide some basic details here, and then we'll move on to configuring the Connected System.
+    </PageInfo>
 </MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudPaper Class="pa-4 mt-4" Outlined="true">
+<MudPaper Class="pa-4 mt-2" Outlined="true">
     <MudForm @bind-IsValid="@_isFormValid" @bind-Errors="@_formErrors">
         <MudSelect T="string" Label="Connector" Placeholder="Please select a connector..." Required="true"
                    @bind-Value="_model.ConnectorId" AdornmentIcon="@Icons.Material.Filled.Power" Adornment="Adornment.Start"

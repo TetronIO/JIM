@@ -17,15 +17,15 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>@_pageTitle</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@_pageTitle</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@_pageTitle
+    <PageInfo Title="@_pageTitle">
+        @_pageDescription
+    </PageInfo>
+</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2 mb-0">
-    @_pageDescription
-</MudText>
-
 @* ─── Category quick-filter ─── *@
-<MudStack Row="true" Spacing="2" Class="mt-4 flex-wrap" AlignItems="AlignItems.Center">
+<MudStack Row="true" Spacing="2" Class="mt-2 flex-wrap" AlignItems="AlignItems.Center">
     <MudText Typo="Typo.button" Class="mud-text-secondary">Category:</MudText>
     <MudChip T="string" OnClick="() => OnCategorySelectedAsync(null)"
              Variant="@(IsAllCategorySelected ? Variant.Filled : Variant.Outlined)"

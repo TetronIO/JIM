@@ -11,13 +11,14 @@
 
 <PageTitle>Factory Reset</PageTitle>
 
-<MudText Typo="Typo.h3" Color="Color.Error"><MudIcon Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Factory Reset</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    Wipe all data and configuration to return JIM to a fresh state.
+<MudText Typo="Typo.h3" Color="Color.Error"><MudIcon Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Factory Reset
+    <PageInfo Title="Factory Reset">
+        Wipe all data and configuration to return JIM to a fresh state.
+    </PageInfo>
 </MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudPaper Outlined="true" Class="pa-4 mt-4 jim-paper-danger-zone">
+<MudPaper Outlined="true" Class="pa-4 mt-2 jim-paper-danger-zone">
     <MudText Typo="Typo.h6" Color="Color.Error">What a factory reset does</MudText>
     <MudText Class="mt-2">
         <strong>Take a database backup before continuing.</strong> This operation permanently deletes data and

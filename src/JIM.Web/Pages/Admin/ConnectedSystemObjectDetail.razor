@@ -33,17 +33,15 @@
     </LongLoadMessage>
     <Loaded>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Object:</span> <span class="mud-primary-text">@GetDisplayIdentifier()</span>
+    <PageInfo Title="Connected System Object">
+        A view of this object as staged within JIM. This includes any attribute values imported from the Connected System, as well as any Pending Export changes awaiting export.
+    </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="Breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    A view of this object as staged within JIM. This includes any attribute values imported from the Connected System,
-    as well as any Pending Export changes awaiting export.
-</MudText>
-
 @if (ConnectedSystemHeader != null && ConnectedSystemObject != null)
 {
-    <MudPaper Class="pa-4 mt-4" Outlined="true">
+    <MudPaper Class="pa-4 mt-2" Outlined="true">
         @* First row: Type, Status, Created, Updated, MVO Link *@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="3">
             @* Object Type *@

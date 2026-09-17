@@ -10,11 +10,12 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Operations</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.PendingActions" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Operations</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    What JIM is doing now, what it did, and what is scheduled. Identity synchronisation and password delivery both report here.
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.PendingActions" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Operations
+    <PageInfo Title="Operations">
+        What JIM is doing now, what it did, and what is scheduled. Identity synchronisation and password delivery both report here.
+    </PageInfo>
 </MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @* Whether the services doing all of the below are alive, before any of it. The first read completes before the
    first render (it is awaited in OnInitializedAsync), so the strip is never absent and the tabs never jump. Whether
@@ -22,7 +23,7 @@
    opening and animating shut. *@
 @if (_report != null)
 {
-    <ServiceHealthStrip Report="_report" Class="mt-4"
+    <ServiceHealthStrip Report="_report" Class="mt-2"
                         @bind-Collapsed="_healthCollapsed" @bind-Collapsed:after="SaveHealthCollapsedAsync" />
 }
 
