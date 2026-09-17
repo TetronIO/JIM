@@ -175,16 +175,6 @@ public interface ISyncEngine
         PendingExportAttributeValueChange attrChange);
 
     /// <summary>
-    /// Identifies Pending Export pairs (CREATE+DELETE or UPDATE+DELETE) targeting the same CSO
-    /// that cancel each other out and should not be exported.
-    /// Only reconciles pairs where both exports have Pending status — already-exported
-    /// operations are left untouched since the object may exist in the target system.
-    /// </summary>
-    /// <param name="pendingExports">All Pending Exports to scan for reconcilable pairs.</param>
-    /// <returns>Result describing which exports should be cancelled.</returns>
-    PreExportReconciliationResult ReconcileCreateDeletePairs(IReadOnlyList<PendingExportSummary> pendingExports);
-
-    /// <summary>
     /// Decides whether deleting a Metaverse Object stages a Delete export for one of its joined CSOs (#655:
     /// the matching export Synchronisation Rules' OutboundDeprovisionAction drives the verdict, Delete wins a
     /// conflict, and the one-Pending-Export-per-CSO collision policy chooses reuse, replace or create). The

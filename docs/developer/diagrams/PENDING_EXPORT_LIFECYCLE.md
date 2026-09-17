@@ -77,8 +77,7 @@ flowchart LR
     end
 
     subgraph "2. Export"
-        GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed<br/>NextRetryAt <= now] --> PreExportReconcile[Pre-export reconciliation:<br/>Catch CREATE+DELETE and<br/>UPDATE+DELETE pairs persisted<br/>across different sync runs]
-        PreExportReconcile --> MarkExec[Mark batch:<br/>Status = Executing]
+        GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed<br/>NextRetryAt <= now] --> MarkExec[Mark batch:<br/>Status = Executing]
         MarkExec --> ConnExport[Connector executes<br/>export operations]
         ConnExport --> Success{Success?}
         Success -->|Yes, Create| ProvResult[Status = Exported<br/>Capture new external ID<br/>RPEI: Exported]
@@ -204,7 +203,7 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
 - **Value-level drift merge**<br /> When merging drift corrections with export evaluation changes, the merge key is a composite of `AttributeId` + value identity (not just `AttributeId`). This prevents silent loss of multi-valued attribute drift corrections; e.g., 117 member removals would be dropped if merged by `AttributeId` alone.
 
-- **Pre-export CREATE→DELETE reconciliation** (#218)<br /> Dual-layer reconciliation cancels contradictory Pending Exports before they reach the connector. At **flush time** (during sync), deferred CREATE/UPDATE PEs are checked against persisted DELETE PEs for the same CSO: CREATE+DELETE pairs cancel both (no net change), UPDATE+DELETE cancels the UPDATE (deletion still needed). At **export time**, the same logic runs across all Pending Exports to catch pairs persisted in different sync runs. This prevents unnecessary export operations and connector errors.
+- **Flush-time CREATE→DELETE reconciliation** (#218)<br /> At flush time (during sync), deferred CREATE/UPDATE PEs still held in memory are checked against DELETE PEs already persisted for the same CSO earlier in the page: CREATE+DELETE pairs cancel both (no net change), UPDATE+DELETE cancels the UPDATE (deletion still needed). There is deliberately no export-time counterpart. One existed, scanning every executable PE for such pairs before each export, but `IX_PendingExports_ConnectedSystemObjectId_Unique` allows one PE per CSO, so two persisted PEs for the same CSO can never exist and it could never fire. Contradictions across sync runs are resolved where the second PE is staged instead: the one-PE-per-CSO collision policy replaces or reuses, and never-exported provisioning is cancelled outright (next note).
 
 - **Exponential backoff**<br /> Failed exports use increasing retry delays (`NextRetryAt`) to avoid hammering a target system that's experiencing issues.
 

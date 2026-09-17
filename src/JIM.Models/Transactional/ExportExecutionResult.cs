@@ -68,13 +68,6 @@ public class ExportExecutionResult
     public int UnresolvableReferenceCount { get; set; }
 
     /// <summary>
-    /// Number of Pending Exports cancelled by pre-export reconciliation.
-    /// CREATE+DELETE pairs and redundant UPDATE+DELETE pairs are detected and removed
-    /// before export execution to avoid unnecessary round-trips to the Connected System.
-    /// </summary>
-    public int ReconciledCount { get; set; }
-
-    /// <summary>
     /// IDs of the Pending Exports that were processed.
     /// Use these IDs to fetch the actual PendingExport records for detailed information.
     /// Note: These records may be deleted after successful export, use ProcessedExportItems instead.
