@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Servers;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Search;
@@ -124,7 +125,7 @@ public class NeverExportedProvisioningCancellationTests : WorkflowTestBase
         // Act: leave scope before any export has run.
         sourceStatusValue.StringValue = "Inactive";
         await ModifyCsoAsync(sourceCso);
-        await RunFullSyncAsync(sourceSystem, "Scope Out Full Sync");
+        var scopeOutActivity = await RunFullSyncAsync(sourceSystem, "Scope Out Full Sync");
 
         // Assert: nothing was ever in the target system, so nothing is left to export or to confirm away.
         using (Assert.EnterMultipleScope())
@@ -133,6 +134,16 @@ public class NeverExportedProvisioningCancellationTests : WorkflowTestBase
                 "No Pending Export may remain: not the unsent Create, and above all not a Delete for an object that was never created.");
             Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(provisionedCso!.Id), Is.False,
                 "The never-provisioned CSO must be removed; no import could ever confirm it away.");
+
+            // The cancellation must still be visible on the Activity (Synchronisation Integrity: nothing
+            // happens silently), as a root ProvisioningCancelled outcome naming the target Connected System.
+            var provisioningCancelledOutcome = scopeOutActivity.RunProfileExecutionItems
+                .SelectMany(rpei => rpei.SyncOutcomes)
+                .SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled);
+            Assert.That(provisioningCancelledOutcome, Is.Not.Null,
+                "The scope-out cancellation must be reported on the Activity as a ProvisioningCancelled outcome");
+            Assert.That(provisioningCancelledOutcome!.TargetEntityDescription, Is.EqualTo(targetSystem.Name),
+                "The outcome must name the target Connected System the cancelled provisioning targeted");
         }
     }
 
@@ -142,7 +153,7 @@ public class NeverExportedProvisioningCancellationTests : WorkflowTestBase
     /// <summary>
     /// Runs a Full Synchronisation on the given system with a fresh Run Profile and Activity.
     /// </summary>
-    private async Task RunFullSyncAsync(ConnectedSystem system, string runProfileName)
+    private async Task<Activity> RunFullSyncAsync(ConnectedSystem system, string runProfileName)
     {
         var runProfile = await CreateRunProfileAsync(system.Id, runProfileName, ConnectedSystemRunType.FullSynchronisation);
         system = await ReloadEntityAsync(system);
@@ -150,6 +161,7 @@ public class NeverExportedProvisioningCancellationTests : WorkflowTestBase
         await new SyncFullSyncTaskProcessor(
                 new SyncEngine(), new SyncServer(Jim), SyncRepo, system, runProfile, activity, new CancellationTokenSource())
             .PerformFullSyncAsync();
+        return activity;
     }
 
     /// <summary>

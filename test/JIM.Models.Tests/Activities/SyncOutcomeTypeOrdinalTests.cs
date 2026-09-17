@@ -100,7 +100,12 @@ public class SyncOutcomeTypeOrdinalTests
         // entering an export rule's scope was reported through the import-side values (20, 21) and labelled as
         // import scope, a direction an export rule does not have.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope] = 44,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = 45
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = 45,
+
+        // Provisioning withdrawn before it was ever exported: a Metaverse Object deletion or a
+        // scope exit cancelled a still-PendingProvisioning Connected System Object outright rather than
+        // deprovisioning it.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = 46
     };
 
     [Test]

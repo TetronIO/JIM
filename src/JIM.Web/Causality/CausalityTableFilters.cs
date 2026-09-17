@@ -24,6 +24,8 @@ public static class CausalityTableFilters
                 or CausalityTableChangeKind.Join,
             CausalityTableFilter.AttributeChanges => row.ChangeKind == CausalityTableChangeKind.AttributeChange,
             CausalityTableFilter.ObjectChanges => row.ChangeKind != CausalityTableChangeKind.AttributeChange,
+            // ProvisioningCancelled is deliberately excluded: nothing was ever created in the target system,
+            // so nothing is lost by the cancellation, unlike a genuine Deprovision.
             CausalityTableFilter.Destructive => row.ChangeKind is CausalityTableChangeKind.Delete
                 or CausalityTableChangeKind.Deprovision
                 or CausalityTableChangeKind.Disconnect

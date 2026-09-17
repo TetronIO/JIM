@@ -82,6 +82,14 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] =
             new OutcomeDisplay("Deprovision queued", CausalityTone.Error, Icons.Material.Filled.AutoDelete,
                 SpeculativeLabel: "Would be deprovisioned from its target Connected System"),
+        // Provisioning withdrawn before it was ever exported: nothing exists in the target
+        // system, so nothing was deleted there, which is why this is Warning rather than DeprovisionQueued's
+        // Error: a queued deprovision destroys a real (or possibly real) account, this destroys nothing.
+        // CancelScheduleSend (a send action struck through) reads as "this was going out, and now it is not",
+        // distinct from AutoDelete's "this will be removed".
+        [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] =
+            new OutcomeDisplay("Provisioning cancelled", CausalityTone.Warning, Icons.Material.Filled.CancelScheduleSend,
+                SpeculativeLabel: "Provisioning to its target Connected System would be cancelled"),
 
         // Export execution outcomes
         [ActivityRunProfileExecutionItemSyncOutcomeType.Exported] =
@@ -395,9 +403,10 @@ public static class OutcomeDisplayMap
             // failing an export is not itself an object operation),
             // DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled/MvoDeletionCancelled
             // (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
-            // (attribute-priority housekeeping, not an object operation) and anything unmapped all fall
-            // through here: null rather than a guess. PendingExportCreated never reaches this switch; it is
-            // handled above.
+            // (attribute-priority housekeeping, not an object operation), ProvisioningCancelled (nothing was
+            // ever created, updated or deleted anywhere: the whole point of a cancellation is that no
+            // operation reached the target system) and anything unmapped all fall through here: null rather
+            // than a guess. PendingExportCreated never reaches this switch; it is handled above.
             _ => null
         };
     }

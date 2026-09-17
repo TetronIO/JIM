@@ -3310,5 +3310,50 @@ public class ExportEvaluationTests
         }
     }
 
+    /// <summary>
+    /// The scope-out cancellation, mirrored in preview: a joined target CSO that is still
+    /// Pending Provisioning with no export ever sent has nothing to deprovision, so the real run cancels the
+    /// provisioning outright rather than staging a Delete. The preview must report the same verdict as its own
+    /// entry kind, not as an ordinary Deprovisioning decision, and must propose nothing and touch nothing.
+    /// </summary>
+    [Test]
+    public async Task EvaluateOutboundPreviewAsync_MvoOutOfScopeWithNeverExportedProvisioningCso_ReportsProvisioningCancelledAsync()
+    {
+        // Arrange - scope the rule so the MVO falls outside it; the joined CSO is still Pending Provisioning
+        // with an unsent Create Pending Export, so nothing was ever exported. The scope-out cancellation
+        // (unlike the Metaverse Object deletion path) needs the Pending Export itself as proof the CSO is
+        // persisted and safe to remove; see ScopeOutCancelsNeverExportedProvisioning.
+        var (mvo, _, exportRule, _, cso, _) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: null);
+        SyncRepo.SeedMetaverseObject(mvo);
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        ArrangePendingExport(cso, mvo, PendingExportChangeType.Create, PendingExportStatus.Pending);
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        var scopingGroup = new SyncRuleScopingCriteriaGroup();
+        scopingGroup.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = MetaverseObjectTypesData.Single(t => t.Name == "User").Attributes
+                .Single(a => a.Name == Constants.BuiltInAttributes.DisplayName),
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "a display name this Metaverse Object does not have"
+        });
+        exportRule.ObjectScopingCriteriaGroups.Add(scopingGroup);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutboundPreviewAsync([mvo.Id]);
+
+        // Assert - a ProvisioningCancelled decision record; the CSO is left exactly as it was
+        Assert.That(result.Entries, Has.Count.EqualTo(1));
+        var entry = result.Entries[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.Kind, Is.EqualTo(OutboundPreviewEntryKind.ProvisioningCancelled));
+            Assert.That(entry.ConnectedSystemId, Is.EqualTo(exportRule.ConnectedSystemId));
+            Assert.That(entry.ExistingTargetCsoId, Is.EqualTo(cso.Id));
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.True, "A preview must not remove the CSO");
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "A preview must not disconnect the CSO");
+            Assert.That(PendingExportsData, Has.Count.EqualTo(1), "A preview must not touch the seeded unsent Create");
+        }
+    }
+
     #endregion
 }

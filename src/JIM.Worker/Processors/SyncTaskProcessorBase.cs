@@ -1989,9 +1989,11 @@ public abstract class SyncTaskProcessorBase
         // of a system whose Rules split their Object Types across disjoint scopes.
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
+            var outOfScopeWorkingSet = new ExportEvaluationWorkingSet();
             var deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
                 mvo,
-                _exportEvaluationCache!);
+                _exportEvaluationCache!,
+                outOfScopeWorkingSet);
 
             // Track CSOs deprovisioned this page (newly staged or reused Delete Pending Exports; they
             // always reference a CSO) so the stale Delete Pending Export cancellation at the page flush
@@ -1999,6 +2001,30 @@ public abstract class SyncTaskProcessorBase
             foreach (var deprovisionPendingExport in deprovisionPendingExports)
             {
                 _deprovisionedCsoIdsThisPage.Add(deprovisionPendingExport.ConnectedSystemObjectId!.Value);
+            }
+
+            // Provisioning cancellations: a never-exported Pending Provisioning CSO this
+            // object fell out of scope for. There is no deletion outcome to nest under here (the Metaverse
+            // Object itself is not being deleted), so each is a root outcome on the object's own item,
+            // alongside the Pending Export outcomes above.
+            if (outOfScopeWorkingSet.CancelledProvisionings.Count > 0
+                && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None
+                && _mvoIdToRpei.TryGetValue(mvo.Id, out var scopeOutRpei))
+            {
+                var csNameLookup = _exportEvaluationCache!.ExportRulesByMvoTypeId.Values
+                    .SelectMany(rules => rules)
+                    .Where(sr => sr.ConnectedSystem != null)
+                    .GroupBy(sr => sr.ConnectedSystemId)
+                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name);
+
+                foreach (var cancellation in outOfScopeWorkingSet.CancelledProvisionings)
+                {
+                    csNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var targetSystemName);
+                    SyncOutcomeBuilder.AddRootOutcome(scopeOutRpei,
+                        ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+                        targetEntityDescription: targetSystemName,
+                        detailMessage: cancellation.ConnectedSystemId.ToString());
+                }
             }
         }
     }
@@ -3436,6 +3462,12 @@ public abstract class SyncTaskProcessorBase
         // the same Pending Export cannot be re-staged on a later page.
         await ReportDeletionCascadeExportsAsync(deletePendingExports, deletionCandidatesByCsoId, deletionCandidatesByMvoId);
 
+        // Provisioning cancellations: every never-exported Pending Provisioning CSO this
+        // flush's evaluation withdrew, reported as a child of the Metaverse Object deletion that caused it.
+        // Runs unconditionally, unlike the delete-export reporting above: a page can cancel provisioning for
+        // objects with zero delete exports staged.
+        ReportCancelledProvisionings(exportEvaluationWorkingSet);
+
         // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
         // that referenced the deleted objects. Without this, referencing groups' target CSOs never
         // change, the unchanged-skip means no sync re-evaluates them, and a target without
@@ -3666,6 +3698,62 @@ public abstract class SyncTaskProcessorBase
             reportableExports.Count, reportableExports.Select(e => e.PendingExport.ConnectedSystemId).Distinct().Count(),
             nestedCount, standaloneCount);
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Reports the provisioning cancellations <see cref="FlushPendingMvoDeletionsAsync"/>'s evaluation made:
+    /// a Connected System Object still Pending Provisioning with an unsent Create had that
+    /// Create and the Connected System Object itself removed, because nothing was ever exported. Each is
+    /// reported as a ProvisioningCancelled child of the deleted Metaverse Object's MvoDeleted outcome, so the
+    /// Causality Tree shows the deletion and every consequence of it in one place, exactly as the delete
+    /// Pending Export cascade does.
+    /// </summary>
+    /// <param name="workingSet">The flush's working set, carrying every cancellation the bulk evaluation and
+    /// (where it ran) the per-MVO fallback made.</param>
+    private void ReportCancelledProvisionings(ExportEvaluationWorkingSet workingSet)
+    {
+        if (workingSet.CancelledProvisionings.Count == 0)
+            return;
+        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            return;
+
+        var mvoDeletedNodes = FindMvoDeletedOutcomeNodes();
+
+        // Connected System id to name, matching how ReportDeletionCascadeExportsAsync resolves the same thing.
+        var csNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystem != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
+            ?? new Dictionary<int, string>();
+
+        var reportedCount = 0;
+        foreach (var cancellation in workingSet.CancelledProvisionings)
+        {
+            if (!mvoDeletedNodes.TryGetValue(cancellation.MetaverseObjectId, out var mvoDeletedNode))
+            {
+                // No MvoDeleted node exists to hang this off (outcome tracking recorded none for this MVO, or
+                // the deletion path that made it recorded none). Unlike a genuinely staged delete Pending
+                // Export, there is nothing here that must be visible even standalone: nothing was exported and
+                // nothing is queued, so a standalone item would only announce that a removal is not the case.
+                Log.Warning(
+                    "ReportCancelledProvisionings: No MvoDeleted outcome node found for MVO {MvoId}; the cancelled " +
+                    "provisioning of CSO {CsoId} in system {SystemId} will not be reported on the Activity",
+                    cancellation.MetaverseObjectId, cancellation.ConnectedSystemObjectId, cancellation.ConnectedSystemId);
+                continue;
+            }
+
+            csNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var targetSystemName);
+            SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
+                ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+                targetEntityDescription: targetSystemName,
+                detailMessage: cancellation.ConnectedSystemId.ToString());
+            reportedCount++;
+        }
+
+        Log.Information(
+            "FlushPendingMvoDeletionsAsync: Reported {Count} provisioning cancellation(s) on the Activity, nested under their MVO deletion",
+            reportedCount);
     }
 
     /// <summary>

@@ -279,6 +279,25 @@ public class SyncEngineExportEvaluationTests
         Assert.That(new ExportEvaluationWorkingSet().TryGetDeleteDecision(Guid.NewGuid(), out _), Is.False);
     }
 
+    [Test]
+    public void WorkingSet_ACancelledProvisioningIsRecorded_IsReturnedInCancelledProvisionings()
+    {
+        // The working set is what lets the worker report every provisioning cancellation an evaluation run made
+        // (real run or per-MVO fallback alike) as a ProvisioningCancelled outcome once the run finishes.
+        var workingSet = new ExportEvaluationWorkingSet();
+        var cancellation = new CancelledProvisioning(Guid.NewGuid(), ConnectedSystemId: 3, Guid.NewGuid());
+
+        workingSet.RecordCancelledProvisioning(cancellation);
+
+        Assert.That(workingSet.CancelledProvisionings, Is.EquivalentTo(new[] { cancellation }));
+    }
+
+    [Test]
+    public void WorkingSet_NoCancellationsRecorded_CancelledProvisioningsIsEmpty()
+    {
+        Assert.That(new ExportEvaluationWorkingSet().CancelledProvisionings, Is.Empty);
+    }
+
     private static ConnectedSystemObject Cso(string? secondaryExternalId = "cn=test,dc=corp")
     {
         var cso = new ConnectedSystemObject

@@ -66,6 +66,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, "Contributed values kept")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, "Leaves export scope, nothing to remove")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, "Provisioning cancelled")]
     public void GetOutcomeTypeDisplayName_EveryOutcomeType_ReturnsTheOutcomesOneLabel(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
     {
@@ -144,6 +145,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, Color.Info)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, Color.Warning)]
     public void GetOutcomeTypeMudBlazorColor_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, Color expected)
     {
@@ -200,7 +202,8 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues] = Icons.Material.Filled.Undo,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues] = Icons.Material.Filled.Inventory2,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope] = Icons.Material.Filled.FilterAltOff,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = Icons.Material.Filled.FilterAlt
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = Icons.Material.Filled.FilterAlt,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = Icons.Material.Filled.CancelScheduleSend
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

@@ -196,6 +196,11 @@ public static class CausalityTableModelBuilder
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.ExportQueued, null, effectiveVia, effectiveSyncRuleId),
 
+            // Nothing was ever exported, so this is the effective rule's own decision to provision, not an
+            // update it inherited; same Via resolution as the rest of the provisioning/export family.
+            ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled => Row(
+                causalityEvent, objectKey, CausalityTableChangeKind.ProvisioningCancelled, null, effectiveVia, effectiveSyncRuleId),
+
             ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.NoContributor, AttributeSubject(causalityEvent), null, null),
 

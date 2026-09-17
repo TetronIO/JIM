@@ -1050,7 +1050,11 @@ public class Worker : BackgroundService
                     // Evaluate export rules for the MVO deletion: delete Pending Exports are created for
                     // CSOs whose export Synchronisation Rule's OutboundDeprovisionAction is Delete (issue #655).
                     // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports.
-                    var deletePendingExports = await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);
+                    // The per-MVO working set also records any provisioning cancelled outright (a
+                    // target CSO still Pending Provisioning with no export ever sent), reported
+                    // below alongside the delete exports.
+                    var mvoWorkingSet = new ExportEvaluationWorkingSet();
+                    var deletePendingExports = await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache, mvoWorkingSet);
 
                     // Delete the MVO using the initiator info captured when it was marked for deletion
                     // This preserves the audit trail - the original initiator is recorded, not housekeeping
@@ -1098,6 +1102,17 @@ public class Worker : BackgroundService
                                 activity, csoChangeTrackingEnabled);
                             deletePendingExport.QueuedByRunProfileExecutionItemId = deletionItem.Id;
                             queueingStamps.Add((deletePendingExport.Id, deletionItem.Id));
+                        }
+
+                        // Provisioning cancellations: a target CSO cancelled outright rather
+                        // than deprovisioned, because nothing was ever exported for it. Reported the same way
+                        // as a genuinely staged delete export, nested beneath the deletion that caused it.
+                        foreach (var cancellation in mvoWorkingSet.CancelledProvisionings)
+                        {
+                            SyncOutcomeBuilder.AddChildOutcome(deletionItem, mvoDeletedOutcome,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+                                targetEntityDescription: csNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId),
+                                detailMessage: cancellation.ConnectedSystemId.ToString());
                         }
                     }
                     else

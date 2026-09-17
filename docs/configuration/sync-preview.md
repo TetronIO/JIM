@@ -36,7 +36,7 @@ When an object falls out of scope of every import Synchronisation Rule with Scop
 
 A downstream object that would only be disconnected (no matching export rule, or a matching rule whose Deprovisioning Action is Disconnect) is not deprovisioned, so it does not appear as its own node in the outcome tree; it is reported as a warning instead, naming the object and the Connected System it belongs to.
 
-The same goes for a downstream object whose provisioning was **never exported**: JIM has staged a Create for it, but no export has run, so nothing exists in the target system. Deleting the Metaverse Object cancels that provisioning outright (the unsent Create Pending Export and the Connected System Object are both removed, and nothing is exported), whatever the export rule's Deprovisioning Action. There is nothing to deprovision, so this too is reported as a warning rather than a node.
+The same goes for a downstream object whose provisioning was **never exported**: JIM has staged a Create for it, but no export has run, so nothing exists in the target system. Deleting the Metaverse Object cancels that provisioning outright (the unsent Create Pending Export and the Connected System Object are both removed, and nothing is exported), whatever the export rule's Deprovisioning Action. There is nothing to deprovision, so this appears in the outcome tree as its own **Provisioning cancelled** node under the deletion, naming the Connected System the cancelled provisioning targeted, rather than as a Deprovision Queued node or a warning.
 
 !!! warning "Provisioned targets are connectors too"
 
