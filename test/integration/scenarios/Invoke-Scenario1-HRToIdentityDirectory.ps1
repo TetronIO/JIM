@@ -1459,6 +1459,16 @@ try {
             $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
             Copy-CsvToConnectorFiles -SourcePath $csvPath
 
+            $withdrawnTargets = @(@{ Id = $config.LDAPSystemId; Name = $DirectoryConfig.ConnectedSystemName })
+            if ($config.CrossDomainSystemId) { $withdrawnTargets += @{ Id = $config.CrossDomainSystemId; Name = "Cross-Domain Export" } }
+
+            # Baseline per target. The withdrawal is later asserted by count, not by searching for the joiner:
+            # a Pending Export is found by its source Metaverse Object's name or its External ID, and this
+            # joiner's Metaverse Object is deleted and its objects never had an External ID.
+            foreach ($target in $withdrawnTargets) {
+                $target.PendingExportsBefore = [int](Get-JIMPendingExport -ConnectedSystemId $target.Id -Count)
+            }
+
             # Provision: the HR side only. No export runs, so both targets are left Pending Provisioning with
             # an unsent Create.
             Write-Host "  Provisioning (HR import and sync only; deliberately no export)..." -ForegroundColor Gray
@@ -1466,9 +1476,6 @@ try {
             Assert-ActivitySuccess -ActivityId $wbeImport1.activityId -Name "CSV Full Import (Withdrawn: joiner)"
             $wbeSync1 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $wbeSync1.activityId -Name "CSV Delta Sync (Withdrawn: joiner)"
-
-            $withdrawnTargets = @(@{ Id = $config.LDAPSystemId; Name = $DirectoryConfig.ConnectedSystemName })
-            if ($config.CrossDomainSystemId) { $withdrawnTargets += @{ Id = $config.CrossDomainSystemId; Name = "Cross-Domain Export" } }
 
             foreach ($target in $withdrawnTargets) {
                 $staged = @(Get-JIMPendingExport -ConnectedSystemId $target.Id -Search $withdrawnDisplayName -All -ErrorAction SilentlyContinue)
@@ -1494,9 +1501,9 @@ try {
             # Assert: the provisioning was cancelled in both targets. No Pending Export of any kind (above all
             # not a Delete), and no Connected System Object left behind.
             foreach ($target in $withdrawnTargets) {
-                $leftoverExports = @(Get-JIMPendingExport -ConnectedSystemId $target.Id -Search $withdrawnDisplayName -All -ErrorAction SilentlyContinue)
-                if ($leftoverExports.Count -gt 0) {
-                    throw "Found $($leftoverExports.Count) Pending Export(s) for '$withdrawnDisplayName' on $($target.Name) after the withdrawal; never-exported provisioning must be cancelled, not deprovisioned"
+                $pendingExportsAfter = [int](Get-JIMPendingExport -ConnectedSystemId $target.Id -Count)
+                if ($pendingExportsAfter -ne $target.PendingExportsBefore) {
+                    throw "$($target.Name) holds $pendingExportsAfter Pending Export(s) after the withdrawal, against $($target.PendingExportsBefore) before the joiner arrived; never-exported provisioning must be cancelled outright, leaving nothing staged"
                 }
                 $leftoverObjects = @(Get-JIMConnectedSystemObject -ConnectedSystemId $target.Id -Search "test.withdrawn" -PageSize 10 -ErrorAction SilentlyContinue)
                 if ($leftoverObjects.Count -gt 0) {
