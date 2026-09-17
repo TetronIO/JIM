@@ -21,6 +21,7 @@ public static class CausalityViewPreference
         return view switch
         {
             CausalityView.Lineage => "lineage",
+            CausalityView.Table => "table",
             _ => "timeline"
         };
     }
@@ -34,6 +35,7 @@ public static class CausalityViewPreference
         {
             "timeline" => CausalityView.Timeline,
             "lineage" => CausalityView.Lineage,
+            "table" => CausalityView.Table,
             _ => null
         };
     }

@@ -148,10 +148,18 @@ public static class CausalityModelBuilder
         CausalityPageContext context,
         IReadOnlyDictionary<int, OutboundPreviewEntry> entriesBySyncRuleId,
         List<PendingExport> unmatchedCascadeDeletes,
-        SyncPreviewInboundSummary? inbound)
+        SyncPreviewInboundSummary? inbound,
+        int? parentSyncRuleId = null,
+        string? parentSyncRuleName = null,
+        CausalityLane? parentLane = null)
     {
-        var display = ApplySpeculativeLabel(OutcomeDisplayMap.Get(node.OutcomeType), node.OutcomeType, isSpeculative: true);
+        // A queued-export child carries no rule of its own (the engine attributes the rule to the
+        // Provisioned parent), so the parent's rule is what keys its attribute changes. Inherited within
+        // a lane only; see ResolveEffectiveSyncRule.
         var lane = GetLane(node.OutcomeType);
+        var (effectiveSyncRuleId, effectiveSyncRuleName) = ResolveEffectiveSyncRule(
+            node.SyncRuleId, node.SyncRuleName, lane, parentSyncRuleId, parentSyncRuleName, parentLane);
+        var display = ApplySpeculativeLabel(OutcomeDisplayMap.Get(node.OutcomeType), node.OutcomeType, isSpeculative: true);
         var (systemId, systemName) = GetSpeculativeOwningSystem(node, lane, context);
 
         return new CausalityEvent
@@ -171,12 +179,14 @@ public static class CausalityModelBuilder
             DetailMessage = SyncOutcomeTypes.IsPendingExport(node.OutcomeType) ? null : node.DetailMessage,
             SyncRuleId = node.SyncRuleId,
             SyncRuleName = node.SyncRuleName,
+            EffectiveSyncRuleId = effectiveSyncRuleId,
+            EffectiveSyncRuleName = effectiveSyncRuleName,
             Links = BuildSpeculativeLinks(node, lane, systemId, systemName, context),
-            AttributeRows = GetSpeculativeAttributeRows(node, inbound, entriesBySyncRuleId, unmatchedCascadeDeletes),
+            AttributeRows = GetSpeculativeAttributeRows(node, effectiveSyncRuleId, inbound, entriesBySyncRuleId, unmatchedCascadeDeletes),
             Operation = OutcomeDisplayMap.GetEventOperation(node.OutcomeType, exportReasonCode: null, node.StagedChangeType),
             Children = node.Children
                 .OrderBy(c => c.Ordinal)
-                .Select(c => BuildSpeculativeEvent(c, context, entriesBySyncRuleId, unmatchedCascadeDeletes, inbound))
+                .Select(c => BuildSpeculativeEvent(c, context, entriesBySyncRuleId, unmatchedCascadeDeletes, inbound, effectiveSyncRuleId, effectiveSyncRuleName, lane))
                 .ToList()
         };
     }
@@ -257,6 +267,7 @@ public static class CausalityModelBuilder
     /// </summary>
     private static IReadOnlyList<CausalityAttributeRow> GetSpeculativeAttributeRows(
         SyncOutcomeNode node,
+        int? effectiveSyncRuleId,
         SyncPreviewInboundSummary? inbound,
         IReadOnlyDictionary<int, OutboundPreviewEntry> entriesBySyncRuleId,
         List<PendingExport> unmatchedCascadeDeletes)
@@ -268,7 +279,7 @@ public static class CausalityModelBuilder
             return [];
 
         List<PendingExportAttributeValueChange>? changes = null;
-        if (node.SyncRuleId is { } ruleId && entriesBySyncRuleId.TryGetValue(ruleId, out var entry))
+        if (effectiveSyncRuleId is { } ruleId && entriesBySyncRuleId.TryGetValue(ruleId, out var entry))
         {
             changes = entry.AttributeChanges;
         }
@@ -393,8 +404,19 @@ public static class CausalityModelBuilder
         IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
         IReadOnlyList<CausalityAttributeRow> identityAttributeRows,
         IReadOnlySet<Guid>? livePendingExportIds,
-        CausalChain? chain)
+        CausalChain? chain,
+        int? parentSyncRuleId = null,
+        string? parentSyncRuleName = null,
+        CausalityLane? parentLane = null)
     {
+        // A queued export staged beneath a Provisioned parent carries no rule of its own (the engine
+        // attributes the decision to the parent), so the parent's rule is what the Table view's
+        // Synchronisation Rule column falls back to for it and for its attribute-change rows (#1519).
+        // Inherited within a lane only; see ResolveEffectiveSyncRule.
+        var lane = GetLane(outcome.OutcomeType);
+        var (effectiveSyncRuleId, effectiveSyncRuleName) = ResolveEffectiveSyncRule(
+            outcome.SyncRuleId, outcome.SyncRuleName, lane, parentSyncRuleId, parentSyncRuleName, parentLane);
+
         // Resolved once and shared by the outcome's own title (decision-aware for Exported, #1495) and
         // its operation chip (#1495 follow-up), rather than each re-walking the chain independently.
         var exportReasonCode = outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported
@@ -403,7 +425,6 @@ public static class CausalityModelBuilder
         var display = GetEventDisplay(outcome, exportReasonCode, isSpeculative: false);
         var parsedDetail = OutcomeDetailMessageParser.Parse(outcome.DetailMessage);
         var usesIdChannel = UsesDetailMessageIdChannel(outcome.OutcomeType);
-        var lane = GetLane(outcome.OutcomeType);
 
         var childOutcomes = childrenByParentId.TryGetValue(outcome.Id, out var children)
             ? children
@@ -426,12 +447,14 @@ public static class CausalityModelBuilder
             DetailMessage = usesIdChannel ? parsedDetail.PlainMessage : outcome.DetailMessage,
             SyncRuleId = outcome.SyncRuleId,
             SyncRuleName = outcome.SyncRuleName,
+            EffectiveSyncRuleId = effectiveSyncRuleId,
+            EffectiveSyncRuleName = effectiveSyncRuleName,
             Links = links,
             AttributeRows = GetAttributeRows(outcome, recordAttributeRows, identityAttributeRows),
             Operation = OutcomeDisplayMap.GetEventOperation(outcome.OutcomeType, exportReasonCode, outcome.StagedChangeType),
             Children = childOutcomes
                 .Select(c => BuildEvent(c, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
-                    livePendingExportIds, chain))
+                    livePendingExportIds, chain, effectiveSyncRuleId, effectiveSyncRuleName, lane))
                 .ToList()
         };
     }
@@ -507,6 +530,22 @@ public static class CausalityModelBuilder
     {
         return outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
             || SyncOutcomeTypes.IsPendingExport(outcomeType);
+    }
+
+    /// <summary>
+    /// The Synchronisation Rule an event is credited with for the Table view: its own where it recorded
+    /// one, else its parent's effective rule when the parent sits in the same lane. A Provisioned parent
+    /// and its queued export child share the Downstream lane, so the child inherits the provisioning
+    /// rule; a Downstream deprovision beneath an Identity deletion beneath a Source scope exit inherits
+    /// nothing, because the import rule that scoped the exit made none of the decisions below it.
+    /// </summary>
+    private static (int? Id, string? Name) ResolveEffectiveSyncRule(
+        int? ownId, string? ownName, CausalityLane lane, int? parentId, string? parentName, CausalityLane? parentLane)
+    {
+        if (ownId.HasValue || !string.IsNullOrWhiteSpace(ownName))
+            return (ownId, ownName);
+
+        return parentLane == lane ? (parentId, parentName) : (null, null);
     }
 
     private static CausalityLane GetLane(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
@@ -612,9 +651,15 @@ public static class CausalityModelBuilder
 
                     if (outcome.TargetEntityId is { } provisionedCsoId && provisionedCsoId != Guid.Empty)
                     {
-                        var recordLabel = parsedDetail.CsoTypeName != null
-                            ? $"{parsedDetail.CsoTypeName}: {provisionedCsoId}"
-                            : provisionedCsoId.ToString();
+                        // A recorded run captured only what it knew at the time: a newly-created object had no
+                        // external id yet, so the fallback is "type: id". The context's name map, when supplied,
+                        // resolves the object's CURRENT display label instead, so the Timeline and Table view
+                        // stop showing the internal id once the object has since been exported and named.
+                        var recordLabel = context.ConnectedSystemObjectNames?.TryGetValue(provisionedCsoId, out var currentName) == true
+                            ? currentName
+                            : parsedDetail.CsoTypeName != null
+                                ? $"{parsedDetail.CsoTypeName}: {provisionedCsoId}"
+                                : provisionedCsoId.ToString();
                         links.Add(new CausalityEntityLink(
                             recordLabel,
                             JimUtilities.GetConnectedSystemObjectHref(provisioningSystemId, provisionedCsoId),
@@ -652,6 +697,22 @@ public static class CausalityModelBuilder
                         isLinkable ? "Pending Export" : "Pending Exports",
                         isLinkable ? $"{queueHref}/{outcome.TargetEntityId}" : queueHref,
                         CausalityEntityKind.PendingExport));
+
+                    // The object the export or deprovision is queued against, where the change record beneath
+                    // the outcome names it (an update to an existing object, or a cascade's deprovision). A
+                    // provisioning export's Provisioned parent names the new object itself, so a change with
+                    // no object id adds nothing here. Labelled by the object's current name when the page
+                    // resolved one (see CausalityPageContext.ConnectedSystemObjectNames), else by its id.
+                    if (outcome.ConnectedSystemObjectChange?.ConnectedSystemObjectId is { } targetCsoId && targetCsoId != Guid.Empty)
+                    {
+                        var targetLabel = context.ConnectedSystemObjectNames?.TryGetValue(targetCsoId, out var currentTargetName) == true
+                            ? currentTargetName
+                            : targetCsoId.ToString();
+                        links.Add(new CausalityEntityLink(
+                            targetLabel,
+                            JimUtilities.GetConnectedSystemObjectHref(targetSystemId, targetCsoId),
+                            CausalityEntityKind.Record));
+                    }
                 }
                 else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
                 {

@@ -102,14 +102,27 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void Render_ViewSwitcher_OffersLineageAndTimelineWithLineageOn()
+    public void Render_ViewSwitcher_OffersLineageTimelineAndTableWithLineageOn()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         var buttons = cut.FindAll(".seg button");
-        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Lineage", "Timeline" }));
+        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Lineage", "Timeline", "Table" }));
         Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
         Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Not.Contain("on"));
+        Assert.That(cut.FindAll(".seg button")[2].ClassList, Does.Not.Contain("on"));
+    }
+
+    [Test]
+    public void ViewSwitcher_SelectingTable_SwitchesToTheTableViewAndPersistsThePreference()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        cut.FindAll(".seg button")[2].Click();
+
+        Assert.That(cut.FindAll(".tv"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
+        Assert.That(_preferences.CausalityViewWrites, Is.EqualTo(new[] { "table" }));
     }
 
     [Test]

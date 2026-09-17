@@ -48,6 +48,17 @@ namespace JIM.Web.Causality;
 /// gone and offer its deletion record; null where the Identity is alive, or where nothing was looked up.
 /// Distinct from an unbuildable link: this is evidence of deletion, not an inability to address something.
 /// </param>
+/// <param name="ConnectedSystemObjectNames">
+/// The current display label (see <c>ConnectedSystemObject.NameOrId</c>-style resolution: display name,
+/// else external id) of every Connected System Object a Provisioned outcome in this item's tree created,
+/// keyed by the object's id. A recorded run's Provisioned/PendingExportCreated links are built from what
+/// the run captured at the time, which for a newly-created object is only its internal id (it had no
+/// external id yet); resolving the current label at view time keeps the Timeline and Table view from
+/// permanently showing "person: &lt;guid&gt;" once the object has since been exported and named. Optional
+/// and defaults to null so every existing caller compiles unchanged; a key missing from the map (the
+/// object has since been deleted) simply falls back to the recorded label. Never populated for a
+/// speculative Sync Preview, which creates nothing.
+/// </param>
 public sealed record CausalityPageContext(
     int? ConnectedSystemId,
     string? ConnectedSystemName,
@@ -60,7 +71,8 @@ public sealed record CausalityPageContext(
     string? CsoObjectTypeName,
     string? MvoTypeName,
     string? MvoTypePluralName,
-    Guid? DeletedMetaverseObjectId = null)
+    Guid? DeletedMetaverseObjectId = null,
+    IReadOnlyDictionary<Guid, string>? ConnectedSystemObjectNames = null)
 {
     /// <summary>
     /// The record's label for display: its name qualified by its external id, or whichever of the two

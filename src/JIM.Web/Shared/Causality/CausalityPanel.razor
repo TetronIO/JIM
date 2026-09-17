@@ -77,6 +77,9 @@
                     <CausalityLineageView Model="lineageModel"
                                         Timestamp="Timestamp" @bind-SelectedEvent="_selectedEvent" />
                     break;
+                case CausalityView.Table when _tableModel is { } tableModel:
+                    <CausalityTableView Model="tableModel" />
+                    break;
                 case CausalityView.Timeline:
                 default:
                     <CausalityTimelineView Model="_model"
@@ -113,16 +116,17 @@
     /// effect when its view appears here.
     /// </summary>
     private static readonly IReadOnlyList<CausalityView> RecordedViews =
-        [CausalityView.Lineage, CausalityView.Timeline];
+        [CausalityView.Lineage, CausalityView.Timeline, CausalityView.Table];
 
     /// <summary>
-    /// A speculative model offers Timeline only (#1519): <see cref="CausalityLineageModelBuilder.Build"/>
+    /// A speculative model offers Timeline and Table, never Lineage (#1519): <see cref="CausalityLineageModelBuilder.Build"/>
     /// needs a recorded item's <c>ObjectChangeType</c> to decide which side of the join the page's own
     /// record sits on, which a Sync Preview has no equivalent of. Rather than guess at one and risk
     /// drawing the join backwards (#1528 was exactly this class of bug), the Lineage is not offered at
-    /// all for a preview; the Timeline needs no such fact and renders the tree directly.
+    /// all for a preview; the Timeline and Table (#1519 Phase 3) need no such fact and render the tree
+    /// directly.
     /// </summary>
-    private static readonly IReadOnlyList<CausalityView> SpeculativeViews = [CausalityView.Timeline];
+    private static readonly IReadOnlyList<CausalityView> SpeculativeViews = [CausalityView.Timeline, CausalityView.Table];
 
     private IReadOnlyList<CausalityView> AvailableViews => _model?.IsSpeculative == true ? SpeculativeViews : RecordedViews;
 
@@ -200,6 +204,7 @@
     private CausalityModel? _model;
     private CausalitySummary? _summary;
     private CausalityLineageModel? _lineageModel;
+    private CausalityTableModel? _tableModel;
     private CausalityView _view = CausalityView.Lineage;
     private CausalityEvent? _expandedEvent;
     private CausalityEvent? _selectedEvent;
@@ -233,6 +238,7 @@
             _summary = CausalitySummaryBuilder.Build(_model);
             // No chain, no Lineage: see SpeculativeViews' doc comment.
             _lineageModel = null;
+            _tableModel = CausalityTableModelBuilder.Build(_model);
             _view = CausalityView.Timeline;
         }
         else if (Item != null)
@@ -241,12 +247,14 @@
                 DeletionPolicySnapshot, IsSynchronisationRun, Chain);
             _summary = CausalitySummaryBuilder.Build(_model);
             _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType);
+            _tableModel = CausalityTableModelBuilder.Build(_model);
         }
         else
         {
             _model = null;
             _summary = null;
             _lineageModel = null;
+            _tableModel = null;
         }
 
         _expandedEvent = null;
@@ -310,6 +318,7 @@
         return view switch
         {
             CausalityView.Lineage => "Lineage",
+            CausalityView.Table => "Table",
             _ => "Timeline"
         };
     }

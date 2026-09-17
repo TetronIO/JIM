@@ -630,6 +630,22 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Returns a MudBlazor colour for a Join Type chip. One mapping for every surface that chips the
+    /// value (the Connector Space list, a Metaverse Object's Connections tab), so a join type is the
+    /// same colour wherever it appears; Not Joined takes the default tone, a fact rather than a state.
+    /// </summary>
+    public static Color GetJoinTypeColor(ConnectedSystemObjectJoinType joinType)
+    {
+        return joinType switch
+        {
+            ConnectedSystemObjectJoinType.Projected => Color.Primary,
+            ConnectedSystemObjectJoinType.Provisioned => Color.Secondary,
+            ConnectedSystemObjectJoinType.Joined => Color.Info,
+            _ => Color.Default,
+        };
+    }
+
+    /// <summary>
     /// Returns a MudBlazor colour for the attribute data type chip.
     /// </summary>
     public static Color GetAttributeTypeChipColour(AttributeDataType type)

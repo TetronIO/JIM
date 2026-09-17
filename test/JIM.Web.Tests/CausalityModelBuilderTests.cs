@@ -181,6 +181,34 @@ public class CausalityModelBuilderTests
     }
 
     [Test]
+    public void Build_ProvisionedOutcome_RecordLinkPrefersTheContextsCurrentNameOverTheRecordedTypeAndId()
+    {
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [CausalityTestData.ProvisionedCsoId] = "liam.allen" }
+        };
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+        var provisioned = model.Roots[0].Children[0].Children[0];
+
+        var recordLink = provisioned.Links.Single(l => l.Kind == CausalityEntityKind.Record);
+        Assert.That(recordLink.Label, Is.EqualTo("liam.allen"));
+    }
+
+    [Test]
+    public void Build_ProvisionedOutcome_RecordLinkFallsBackToTypeAndIdWhenTheContextNamesNothing()
+    {
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string>()
+        };
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+        var provisioned = model.Roots[0].Children[0].Children[0];
+
+        var recordLink = provisioned.Links.Single(l => l.Kind == CausalityEntityKind.Record);
+        Assert.That(recordLink.Label, Is.EqualTo($"person: {CausalityTestData.ProvisionedCsoId}"));
+    }
+
+    [Test]
     public void Build_PendingExportCreatedOutcome_LinksConnectedSystemAndPendingExports()
     {
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
@@ -508,6 +536,128 @@ public class CausalityModelBuilderTests
         var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(model.Roots[0].Links.Any(l => l.Kind == CausalityEntityKind.SynchronisationRule), Is.False);
+    }
+
+    // ─── Effective Synchronisation Rule threading (#1519 Table view fix 4) ───
+
+    /// <summary>
+    /// A queued export staged beneath a Provisioned parent carries no Synchronisation Rule of its own
+    /// (the engine attributes the provisioning decision to the parent alone), so it must inherit the
+    /// parent's effective rule. <see cref="CausalityEvent.SyncRuleId"/> itself is untouched: the child's
+    /// own recorded attribution stays null, exactly as it always has.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportChildOfProvisionedParent_InheritsTheParentsEffectiveSyncRule()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var provisionedEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+        var exportEvent = provisionedEvent.Children.Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provisionedEvent.EffectiveSyncRuleId, Is.EqualTo(9));
+            Assert.That(provisionedEvent.EffectiveSyncRuleName, Is.EqualTo("Glitterband People - Outbound"));
+            Assert.That(exportEvent.SyncRuleId, Is.Null, "the outcome itself was never attributed a rule");
+            Assert.That(exportEvent.SyncRuleName, Is.Null);
+            Assert.That(exportEvent.EffectiveSyncRuleId, Is.EqualTo(9));
+            Assert.That(exportEvent.EffectiveSyncRuleName, Is.EqualTo("Glitterband People - Outbound"));
+        }
+    }
+
+    /// <summary>
+    /// A rule is inherited within a lane only. A leaver's cascade runs Source (out of scope, attributed to
+    /// the import rule that scoped it) to Identity (deleted) to Downstream (deprovision queued per target);
+    /// the import rule that decided the scope exit did not decide the deprovisioning, so the Downstream
+    /// events must not inherit it across the lane boundary.
+    /// </summary>
+    [Test]
+    public void Build_DeprovisionQueuedBeneathADeletedIdentity_DoesNotInheritTheImportRuleAcrossLanes()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+
+        var scopeExit = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
+        var deprovisions = model.AllEvents().Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(scopeExit.EffectiveSyncRuleId, Is.EqualTo(7), "the scope exit's own import rule");
+            Assert.That(deprovisions, Has.Count.EqualTo(2));
+            foreach (var deprovision in deprovisions)
+            {
+                Assert.That(deprovision.EffectiveSyncRuleId, Is.Null, $"{deprovision.SystemName} must not be credited to the import rule");
+                Assert.That(deprovision.EffectiveSyncRuleName, Is.Null);
+            }
+        }
+    }
+
+    /// <summary>
+    /// An export queued for an object that already exists names that object: the change record beneath
+    /// the outcome carries the Connected System Object's id, and the page supplies its current name.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_LinksThatObjectByItsCurrentName()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = targetCsoId;
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "liam.allen" }
+        };
+
+        var model = CausalityModelBuilder.Build(item, context);
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var recordLink = exportEvent.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.Record);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recordLink, Is.Not.Null);
+            Assert.That(recordLink!.Label, Is.EqualTo("liam.allen"));
+            Assert.That(recordLink.Href, Is.EqualTo($"/admin/connected-systems/2/connector-space/{targetCsoId}"));
+        }
+    }
+
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_FallsBackToTheObjectsIdWithoutAContextName()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = targetCsoId;
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var recordLink = exportEvent.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.Record);
+        Assert.That(recordLink?.Label, Is.EqualTo(targetCsoId.ToString()));
+    }
+
+    [Test]
+    public void Build_QueuedExportWhoseChangeNamesNoObject_AddsNoRecordLink()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        Assert.That(exportEvent.Links.Any(l => l.Kind == CausalityEntityKind.Record), Is.False,
+            "the fixture's export change names no object, so the Provisioned parent alone names it");
+    }
+
+    /// <summary>
+    /// Regression guard: EffectiveSyncRuleId/Name must never leak into the Links the Timeline and
+    /// Lineage views consume via <see cref="CausalityEntityKind.SynchronisationRule"/>. Those views keep
+    /// reading the outcome's own <see cref="CausalityEvent.SyncRuleId"/> directly and must be unaffected
+    /// by the Table view's ancestor fallback.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportChildWithNoOwnRule_GainsNoInheritedSynchronisationRuleLink()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+        Assert.That(exportEvent.Links.Any(l => l.Kind == CausalityEntityKind.SynchronisationRule), Is.False);
     }
 
     [Test]

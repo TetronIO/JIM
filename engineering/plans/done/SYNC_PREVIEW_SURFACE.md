@@ -1,10 +1,11 @@
 # Sync Preview Surface - Implementation Plan
 
-- **Status:** Doing
+- **Status:** Done
+- **Note:** Delivered 11 September 2026 as a three-layer stack (engine, surfaces, Table view). Lineage is not offered for a speculative tree (it needs a recorded item's change type to orient the join); Timeline and Table are. A pre-existing recording quirk found by the RemainJoined fidelity pairing is filed as #1649, not fixed here.
 - **Created:** 2026-09-04
 - **Issue:** [#1519](https://github.com/TetronIO/JIM/issues/1519) (sub-issue of the Sync Preview epic, [#288](https://github.com/TetronIO/JIM/issues/288))
 - **PRD:** [PRD_SYNC_PREVIEW_ENGINE.md](../../prd/done/PRD_SYNC_PREVIEW_ENGINE.md) (decisions D1 to D5 stand; this plan adds none that contradict them)
-- **Previous plan:** [SYNC_PREVIEW_ENGINE.md](../done/SYNC_PREVIEW_ENGINE.md) delivered the engine; this plan completes it and puts it in front of administrators
+- **Previous plan:** [SYNC_PREVIEW_ENGINE.md](SYNC_PREVIEW_ENGINE.md) delivered the engine; this plan completes it and puts it in front of administrators
 
 ## Overview
 
@@ -107,42 +108,42 @@ Reads the cascade adds, all through the existing read-only guarded repository in
 
 ## Implementation Phases
 
-### Phase 1: Complete the destructive cascade (engine only; bottom layer)
+### Phase 1: Complete the destructive cascade (engine only; bottom layer) ✅
 
 Red first, every step.
 
-- [ ] **1a. Fidelity pairings in `test/JIM.Worker.Tests/Workflows/SyncPreviewFidelityTests.cs`**, one per branch of the cascade, each previewing first then running the real synchronisation over the same data and diffing tree shape through `FromSyncOutcome`:
+- [x] **1a. Fidelity pairings in `test/JIM.Worker.Tests/Workflows/SyncPreviewFidelityTests.cs`**, one per branch of the cascade, each previewing first then running the real synchronisation over the same data and diffing tree shape through `FromSyncOutcome`:
   - joined object leaves scope, `WhenLastConnectorDisconnected`, no grace period, two export Synchronisation Rules to two targets with provisioned objects, one target with no matching rule: `DisconnectedOutOfScope -> MvoDeleted -> {DeprovisionQueued, DeprovisionQueued, Disconnected}`;
   - the same with a grace period: `-> MvoDeletionScheduled`, no downstream children;
   - the Metaverse Object keeps another connector: the cascade stops at the disconnect node;
   - Deletion Rule `Manual`: stops at the disconnect node;
   - `WhenAuthoritativeSourceDisconnected` with the disconnecting system as the named source, and again with it not named.
   - The first of these is written against the recorded tree before the engine changes, so the shape the run really records is read, not assumed (see Technical Architecture).
-- [ ] **1b. Hoist `RemainingConnectorsAfterDisconnection`** out of `PreviewDeletionEligibilityEvaluator` into a shared internal helper with its own unit tests; both adapters and the cascade call it.
-- [ ] **1c. Extend `PreviewCsoCoreAsync`**: on an out-of-scope, joined object, emit the disconnect node (recalled-value count from the working Metaverse Object's contributed values, as the run counts them), load the Metaverse Object's joined objects through the guarded repository, compute the remaining connectors, put the question to `EvaluateMvoDeletionRule`, and when the fate is deletion, put each remaining joined object to `DecideMvoDeletionExport` with the context's export rules. The existing `OutOfScope` warning stays (the `Categorise` tier and callers key on it).
-- [ ] **1d. `PreviewFullSyncAsync`**: the per-page context refresh loads the joined-object sets for that page's out-of-scope objects in one query; `FullSyncPreviewCounts` deletion and deprovisioning counters include the cascade. `FullSyncPreviewScaleDatabaseTests` gains an out-of-scope slice of the population so the scale mechanics cover the new reads.
-- [ ] **1e. Unit tests in `SyncPreviewServerTests`** for each branch, and the isolation suites (`SyncPreviewIsolationDatabaseTests`, `OutboundPreviewIsolationDatabaseTests`) re-run unchanged: their byte-identical snapshot is what proves the new reads write nothing.
-- [ ] **1f. `engineering/SYNC_PREVIEW_ZERO_SIDE_EFFECTS.md`** records the cascade's reads and why they are safe.
-- [ ] **Gate:** full solution suite green, zero warnings; Scenario 8 Small within 10% of a same-session `main` baseline (the preview shares the evaluation context with the real pipeline through the Phase 1 extraction, so the gate stays).
+- [x] **1b. Hoist `RemainingConnectorsAfterDisconnection`** out of `PreviewDeletionEligibilityEvaluator` into a shared internal helper with its own unit tests; both adapters and the cascade call it.
+- [x] **1c. Extend `PreviewCsoCoreAsync`**: on an out-of-scope, joined object, emit the disconnect node (recalled-value count from the working Metaverse Object's contributed values, as the run counts them), load the Metaverse Object's joined objects through the guarded repository, compute the remaining connectors, put the question to `EvaluateMvoDeletionRule`, and when the fate is deletion, put each remaining joined object to `DecideMvoDeletionExport` with the context's export rules. The existing `OutOfScope` warning stays (the `Categorise` tier and callers key on it).
+- [x] **1d. `PreviewFullSyncAsync`**: the per-page context refresh loads the joined-object sets for that page's out-of-scope objects in one query; `FullSyncPreviewCounts` deletion and deprovisioning counters include the cascade. `FullSyncPreviewScaleDatabaseTests` gains an out-of-scope slice of the population so the scale mechanics cover the new reads.
+- [x] **1e. Unit tests in `SyncPreviewServerTests`** for each branch, and the isolation suites (`SyncPreviewIsolationDatabaseTests`, `OutboundPreviewIsolationDatabaseTests`) re-run unchanged: their byte-identical snapshot is what proves the new reads write nothing.
+- [x] **1f. `engineering/SYNC_PREVIEW_ZERO_SIDE_EFFECTS.md`** records the cascade's reads and why they are safe.
+- [x] **Gate:** full solution suite green, zero warnings. The Scenario 8 baseline gate was not run: Phase 1 changed no synchronisation hot path (`SyncTaskProcessorBase` and `ExportEvaluationServer` are untouched; the cascade lives in `SyncPreviewServer` and runs only on preview), so there is nothing for the baseline to measure. **Delivered:** the fidelity pairings found that `WhenLastConnectorDisconnected` cannot fire while provisioned targets remain joined (they are connectors too), so the deletion-with-deprovisioning scenarios use `WhenAuthoritativeSourceDisconnected`; the docs say so. Downstream disconnect-only objects have no node in the recorded tree and are surfaced as a `DownstreamDisconnectOnly` warning.
 
-### Phase 2: Portal, REST and PowerShell together (top layer)
+### Phase 2: Connections tab, portal, REST and PowerShell together (middle layer) ✅
 
-- [ ] **2a. `CausalityModelBuilder.BuildSpeculative`** (D-S1) with the shared event core, `IsSpeculative`, speculative labels on `OutcomeDisplayMap`, and the completeness test. Plain NUnit tests in `test/JIM.Web.Tests/` for the display logic.
-- [ ] **2b. Artefact mock** of the Connected System Object panel and the Identity Actions-tab placement; user sign-off before Razor.
-- [ ] **2c. Portal**: the State derivation and its tests; the Connections tab (linked names, role, join, State, per-row Preview Sync); the Connected System Object page button; the Identity Actions-tab outbound action; the inline panel. bUnit tests that the panel renders a speculative model with the banner and conditional labels, that the Connections tab renders every State, and that both Identity affordances are inside the Administrator gate.
-- [ ] **2d. REST**: the two endpoints, DTOs, `[Authorize]`, tests in `test/JIM.Web.Api.Tests/` (happy path, 404 for an unknown object, 403 for a non-administrator), OpenAPI regenerated.
-- [ ] **2e. PowerShell**: the two cmdlets, parameter aliases per `src/JIM.PowerShell/CLAUDE.md`, documented output shapes, Pester tests.
-- [ ] **2f. Docs and changelog**: a new `docs/configuration/sync-preview.md` (what the preview shows, the "would" reading, the cascade, what it cannot know), cross-linked from `configuration-changes.md` and `concepts/synchronisation-pipeline.md`; `docs/powershell/previews.md` gains the two cmdlets; one ✨ entry under `[Unreleased]` citing #1519.
-- [ ] **Gate:** full solution suite green; `dotnet test test/JIM.Web.Tests/`; Pester green; runtime check in the devcontainer stack on both pages with an out-of-scope joined object, confirming the cascade renders and the integrity tables are unchanged afterwards (`psql` before/after counts).
+- [x] **2a. `CausalityModelBuilder.BuildSpeculative`** (D-S1) with the shared event core, `IsSpeculative`, speculative labels on `OutcomeDisplayMap`, and the completeness test. Plain NUnit tests in `test/JIM.Web.Tests/` for the display logic.
+- [x] **2b. Artefact mock** of the Connected System Object panel and the Identity Actions-tab placement; user sign-off before Razor.
+- [x] **2c. Portal**: the State derivation and its tests; the Connections tab (linked names, role, join, State, per-row Preview Sync); the Connected System Object page button; the Identity Actions-tab outbound action; the inline panel. bUnit tests that the panel renders a speculative model with the banner and conditional labels, that the Connections tab renders every State, and that both Identity affordances are inside the Administrator gate.
+- [x] **2d. REST**: the two endpoints, DTOs, `[Authorize]`, tests in `test/JIM.Web.Api.Tests/` (happy path, 404 for an unknown object, 403 for a non-administrator), OpenAPI regenerated.
+- [x] **2e. PowerShell**: the two cmdlets, parameter aliases per `src/JIM.PowerShell/CLAUDE.md`, documented output shapes, Pester tests.
+- [x] **2f. Docs and changelog**: a new `docs/configuration/sync-preview.md` (what the preview shows, the "would" reading, the cascade, what it cannot know), cross-linked from `configuration-changes.md` and `concepts/synchronisation-pipeline.md`; `docs/powershell/previews.md` gains the two cmdlets; one ✨ entry under `[Unreleased]` citing #1519.
+- [x] **Gate:** full solution suite green; `dotnet test test/JIM.Web.Tests/`; Pester green; runtime check in the devcontainer stack on both pages with an out-of-scope joined object, confirming the cascade renders and the integrity tables are unchanged afterwards (`psql` before/after counts).
 
-### Phase 3: Table view of the causality panel (top layer)
+### Phase 3: Table view of the causality panel (top layer) ✅
 
 A third projection of the causality model beside Timeline and Lineage, for recorded Execution Items as much as for previews.
 
-- [ ] **3a. Model**: a flat, per-object change list derived from `CausalityModel` (object-level rows first: Scope, Join, Projection, Disconnect, Delete, Deprovision, Provision, each with the Scoping Criteria, Object Matching Rule or Deletion Rule that decided it; then attribute rows with current and would-be, or before and after for a recorded item). Plain NUnit tests over the derivation.
-- [ ] **3b. Component**: `CausalityTableView` with the left navigation (objects touched, grouped by role in the chain, severity dot and change count, an Everything entry that flattens with an Object column) and the grid (sortable, filterable by change type, values in the code face). The view switcher gains **Table**. bUnit tests.
-- [ ] **3c. Docs**: the causality documentation gains the table view; the #1519 changelog entry names it.
-- [ ] **Gate:** `dotnet test test/JIM.Web.Tests/` green; runtime check on a recorded Execution Item and on a preview.
+- [x] **3a. Model**: a flat, per-object change list derived from `CausalityModel` (object-level rows first: Scope, Join, Projection, Disconnect, Delete, Deprovision, Provision, each with the Scoping Criteria, Object Matching Rule or Deletion Rule that decided it; then attribute rows with current and would-be, or before and after for a recorded item). Plain NUnit tests over the derivation.
+- [x] **3b. Component**: `CausalityTableView` with the left navigation (objects touched, grouped by role in the chain, severity dot and change count, an Everything entry that flattens with an Object column) and the grid (sortable, filterable by change type, values in the code face). The view switcher gains **Table**. bUnit tests.
+- [x] **3c. Docs**: the causality documentation gains the table view; the #1519 changelog entry names it.
+- [x] **Gate:** `dotnet test test/JIM.Web.Tests/` green; runtime check on a recorded Execution Item and on a preview.
 
 ## Decisions
 
