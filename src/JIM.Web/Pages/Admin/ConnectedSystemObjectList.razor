@@ -134,9 +134,7 @@
                 <CellTemplate>
                     @if (!string.IsNullOrEmpty(context.Item.PendingExternalId))
                     {
-                        <MudTooltip Text="Pending Export awaiting confirmation" Arrow="true" Placement="Placement.Top">
-                            <MudText Color="Color.Info">@context.Item.PendingExternalId</MudText>
-                        </MudTooltip>
+                        <PendingValue Value="@context.Item.PendingExternalId" Status="@context.Item.PendingExportStatus" />
                     }
                     else
                     {
@@ -159,9 +157,7 @@
                     }
                     else if (!string.IsNullOrEmpty(context.Item.PendingSecondaryExternalId))
                     {
-                        <MudTooltip Text="Pending Export awaiting confirmation" Arrow="true" Placement="Placement.Top">
-                            <MudText Color="Color.Info">@context.Item.PendingSecondaryExternalId</MudText>
-                        </MudTooltip>
+                        <PendingValue Value="@context.Item.PendingSecondaryExternalId" Status="@context.Item.PendingExportStatus" />
                     }
                 </CellTemplate>
             </TemplateColumn>
@@ -176,9 +172,7 @@
                     }
                     else if (!string.IsNullOrEmpty(context.Item.PendingDisplayName))
                     {
-                        <MudTooltip Text="Pending Export awaiting confirmation" Arrow="true" Placement="Placement.Top">
-                            <MudText Color="Color.Info">@context.Item.PendingDisplayName</MudText>
-                        </MudTooltip>
+                        <PendingValue Value="@context.Item.PendingDisplayName" Status="@context.Item.PendingExportStatus" />
                     }
                     else
                     {

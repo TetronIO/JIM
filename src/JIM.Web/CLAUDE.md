@@ -18,6 +18,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
 | `<WhitespaceValue Value="@x" />` | A value that is present but consists only of whitespace (the `<EmptyValue />` sibling) | "Empty values" below |
 | `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |
+| `<PendingValue Value="@x" Status="@s" />` | A value a Pending Export will write, shown where no confirmed value exists yet. Never colour one Info blue: it reads as a link | `Shared/PendingValue.razor` |
 | `<BooleanValue Value="@x" />` | Any Boolean attribute value: the tick or cross, and the word beside it | "Boolean values" below |
 | `<PrefilledFormValidator />` | Inside any `MudForm` prefilled with an existing entity, so validity-gated buttons enable on load | "Form action gating" below |
 | `<CollapsibleStackTrace StackTrace="@x" />` | Any place an error's stack trace is offered alongside its message | "Errors and stack traces" below |

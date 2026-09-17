@@ -9,6 +9,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.Worker.Processors;
 using Microsoft.EntityFrameworkCore;
@@ -225,6 +226,59 @@ public class ConnectedSystemObjectHeaderExternalIdDatabaseTests
     /// cover the halves a user notices most: typing an objectGUID into the search box, and clicking the
     /// External Id column header.
     /// </summary>
+    /// <summary>
+    /// The list tells a pending value that has merely been staged apart from one that has been exported and
+    /// awaits a confirming import, which needs the Pending Export's status on the row. A correlated scalar
+    /// subquery over a nullable enum is exactly the kind of projection the in-memory provider cannot vouch for.
+    /// </summary>
+    [TestCase(PendingExportStatus.Pending)]
+    [TestCase(PendingExportStatus.Exported)]
+    public async Task GetConnectedSystemObjectHeadersAsync_ObjectWithAPendingExport_ProjectsItsStatusAsync(PendingExportStatus status)
+    {
+        // Arrange
+        var systemId = await SeedImportedCsoAsync(
+            AttributeDataType.Text,
+            attribute => attribute.StringValues.Add("oscar.harper18"),
+            displayName: "Oscar Harper");
+        await using (var ctx = NewContext())
+        {
+            var csoId = await ctx.ConnectedSystemObjects.Where(c => c.ConnectedSystemId == systemId).Select(c => c.Id).SingleAsync();
+            ctx.PendingExports.Add(new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = systemId,
+                ConnectedSystemObjectId = csoId,
+                ChangeType = PendingExportChangeType.Update,
+                Status = status,
+                CreatedAt = DateTime.UtcNow
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        // Act
+        var header = await GetSingleHeaderAsync(systemId);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.HasPendingExport, Is.True);
+            Assert.That(header.PendingExportStatus, Is.EqualTo(status));
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectHeadersAsync_ObjectWithNoPendingExport_ProjectsNoStatusAsync()
+    {
+        var systemId = await SeedImportedCsoAsync(
+            AttributeDataType.Text,
+            attribute => attribute.StringValues.Add("jack.pearson2"),
+            displayName: "Jack Pearson");
+
+        var header = await GetSingleHeaderAsync(systemId);
+
+        Assert.That(header.PendingExportStatus, Is.Null);
+    }
+
     [Test]
     public async Task GetConnectedSystemObjectHeadersAsync_SearchByGuidAnchor_FindsTheObjectAsync()
     {

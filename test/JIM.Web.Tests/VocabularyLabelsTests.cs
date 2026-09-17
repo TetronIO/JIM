@@ -95,7 +95,8 @@ public class VocabularyLabelsTests : JimComponentTestContext
                         ConnectedSystemId = ConnectedSystemId,
                         TypeId = 1,
                         TypeName = "User",
-                        PendingExternalId = "CN=pending,DC=example,DC=com"
+                        PendingExternalId = "CN=pending,DC=example,DC=com",
+                        PendingExportStatus = JIM.Models.Transactional.PendingExportStatus.Pending
                     }
                 ],
                 TotalResults = 1
@@ -180,8 +181,11 @@ public class VocabularyLabelsTests : JimComponentTestContext
 
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(tooltipTexts, Has.Some.EqualTo("Pending Export awaiting confirmation"),
+                // The fixture's Pending Export has not been exported, so the tooltip must not claim it awaits
+                // confirmation (what it used to say of every pending value, sent or not).
+                Assert.That(tooltipTexts, Has.Some.EqualTo(JIM.Web.Shared.PendingValue.NotYetSentTooltip),
                     "the tooltip must say what a Pending Export on this cell means");
+                Assert.That(tooltipTexts, Has.None.EqualTo("Pending Export awaiting confirmation"));
                 Assert.That(tooltipTexts, Has.None.EqualTo("Pending Export - not yet confirmed"));
             }
         });
