@@ -314,7 +314,9 @@ public static class CausalityModelBuilder
                 c.AttributeName,
                 string.Empty,
                 c.Value,
-                null))
+                null,
+                c.SyncRuleId,
+                c.SyncRuleName))
             .ToList();
     }
 
@@ -829,7 +831,9 @@ public static class CausalityModelBuilder
                 ac.AttributeType,
                 ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
                 vc.ValueChangeType,
-                GetCsoValueText(vc)))));
+                GetCsoValueText(vc),
+                vc.SyncRuleId,
+                vc.SyncRuleName))));
         }
 
         if (mvoAttributeChanges != null)
@@ -839,7 +843,9 @@ public static class CausalityModelBuilder
                 ac.AttributeType,
                 ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
                 vc.ValueChangeType,
-                GetMvoValueText(vc)))));
+                GetMvoValueText(vc),
+                vc.ContributedBySyncRuleId,
+                vc.ContributedBySyncRuleName))));
         }
 
         if (flatChanges.Count == 0)
@@ -860,22 +866,23 @@ public static class CausalityModelBuilder
                 if (addChange != null && removeChange != null)
                 {
                     // Single-valued update: collapse the Add and Remove pair into one Set row with
-                    // the previous value
+                    // the previous value. Attribution follows the new (Add) value's contributor;
+                    // the removed value's own rule is not shown once collapsed.
                     rows.Add(new CausalityAttributeRow(CausalityAttributeOperation.Set, group.Key, typeAndPlurality,
-                        addChange.ValueText, removeChange.ValueText));
+                        addChange.ValueText, removeChange.ValueText, addChange.SyncRuleId, addChange.SyncRuleName));
                 }
                 else
                 {
                     rows.AddRange(changes.Select(change => new CausalityAttributeRow(
                         change.ChangeType == ValueChangeType.Add ? CausalityAttributeOperation.Set : CausalityAttributeOperation.Remove,
-                        group.Key, typeAndPlurality, change.ValueText, null)));
+                        group.Key, typeAndPlurality, change.ValueText, null, change.SyncRuleId, change.SyncRuleName)));
                 }
             }
             else
             {
                 rows.AddRange(changes.Select(change => new CausalityAttributeRow(
                     change.ChangeType == ValueChangeType.Add ? CausalityAttributeOperation.Add : CausalityAttributeOperation.Remove,
-                    group.Key, typeAndPlurality, change.ValueText, null)));
+                    group.Key, typeAndPlurality, change.ValueText, null, change.SyncRuleId, change.SyncRuleName)));
             }
         }
 
@@ -930,5 +937,7 @@ public static class CausalityModelBuilder
         AttributeDataType AttributeType,
         bool IsMultiValued,
         ValueChangeType ChangeType,
-        string? ValueText);
+        string? ValueText,
+        int? SyncRuleId = null,
+        string? SyncRuleName = null);
 }

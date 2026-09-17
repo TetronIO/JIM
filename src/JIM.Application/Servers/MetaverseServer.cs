@@ -17,6 +17,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
+using JIM.Application.Services;
 using JIM.Application.Utilities;
 using Serilog;
 namespace JIM.Application.Servers;
@@ -1313,15 +1314,23 @@ public class MetaverseServer
             ChangeInitiatorType = effectiveChangeInitiatorType
         };
 
+        // Contributor provenance (#1519 follow-up): a value being added here may be a value whose
+        // ContributedBySyncRule navigation was never loaded (e.g. a value handed in fresh from a portal
+        // edit that only set the FK), so resolve any unloaded names via a single batched lookup.
+        var syncRuleNameCache = new SyncRuleNameResolverCache(Application.SyncRepo);
+        await syncRuleNameCache.WarmAsync(additions.Concat(removals)
+            .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
+            .Select(av => av.ContributedBySyncRuleId!.Value));
+
         // Create attribute change records
         foreach (var addition in additions)
         {
-            change.AddAttributeValueChange(addition, ValueChangeType.Add);
+            change.AddAttributeValueChange(addition, ValueChangeType.Add, syncRuleNameCache.Resolve);
         }
 
         foreach (var removal in removals)
         {
-            change.AddAttributeValueChange(removal, ValueChangeType.Remove);
+            change.AddAttributeValueChange(removal, ValueChangeType.Remove, syncRuleNameCache.Resolve);
         }
 
         // Add to MVO's Changes collection
@@ -1526,11 +1535,19 @@ public class MetaverseServer
                 DeletedObjectDisplayName = displayName
             };
 
+            // Contributor provenance (#1519 follow-up): the sync processor path passes a snapshot taken
+            // before attribute recall, whose values may not have their ContributedBySyncRule navigation
+            // loaded; resolve any such ids via a single batched lookup rather than leaving the name null.
+            var syncRuleNameCache = new SyncRuleNameResolverCache(Application.SyncRepo);
+            await syncRuleNameCache.WarmAsync(attributesToCapture
+                .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
+                .Select(av => av.ContributedBySyncRuleId!.Value));
+
             // Capture final attribute values as removals so the deletion change
             // record preserves the final state of the object for audit purposes.
             foreach (var attributeValue in attributesToCapture)
             {
-                change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove);
+                change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove, syncRuleNameCache.Resolve);
             }
 
             // Delete the MVO first, then save the change record afterwards.

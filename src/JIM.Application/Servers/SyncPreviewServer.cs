@@ -979,7 +979,9 @@ public class SyncPreviewServer
                     Attribute = exportDecision.SecondaryExternalIdAttribute,
                     AttributeId = exportDecision.SecondaryExternalIdAttribute.Id,
                     StringValue = exportDecision.SecondaryExternalIdValue,
-                    ChangeType = PendingExportAttributeChangeType.Update
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    SyncRuleId = exportDecision.WinningRule?.Id,
+                    SyncRuleName = exportDecision.WinningRule?.Name
                 });
             }
 

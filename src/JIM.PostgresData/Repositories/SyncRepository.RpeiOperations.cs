@@ -674,6 +674,14 @@ public partial class SyncRepository
             else
                 await writer.WriteNullAsync();
             await writer.WriteAsync(v.IsPendingExportStub, NpgsqlTypes.NpgsqlDbType.Boolean);
+            if (v.SyncRuleId.HasValue)
+                await writer.WriteAsync(v.SyncRuleId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (v.SyncRuleName is not null)
+                await writer.WriteAsync(v.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();

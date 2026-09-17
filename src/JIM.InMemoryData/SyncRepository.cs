@@ -2079,6 +2079,23 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(_syncRules.Values.ToList());
     }
 
+    /// <summary>
+    /// Number of times <see cref="GetSyncRuleNamesByIdsAsync"/> has been called. Lets tests prove that
+    /// <c>SyncRuleNameResolverCache</c> makes at most one repository round trip for a batch of unresolved ids,
+    /// however many distinct ids or repeat lookups the batch actually contains (#1519 follow-up).
+    /// </summary>
+    public int GetSyncRuleNamesByIdsCallCount { get; private set; }
+
+    public Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        GetSyncRuleNamesByIdsCallCount++;
+        var distinctIds = syncRuleIds.Distinct().ToList();
+        var names = _syncRules.Values
+            .Where(r => distinctIds.Contains(r.Id))
+            .ToDictionary(r => r.Id, r => r.Name);
+        return Task.FromResult(names);
+    }
+
     public Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
     {
         var timestamps = _syncRules.Values

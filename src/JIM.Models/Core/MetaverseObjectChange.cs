@@ -116,12 +116,25 @@ public class MetaverseObjectChange
     /// </summary>
     /// <param name="value">The Metaverse Object attribute value being added or removed.</param>
     /// <param name="valueChangeType">Whether the value is being added or removed.</param>
+    /// <param name="syncRuleNameResolver">
+    /// Optional fallback used to resolve <see cref="MetaverseObjectAttributeValue.ContributedBySyncRuleId"/> to a
+    /// name when the <see cref="MetaverseObjectAttributeValue.ContributedBySyncRule"/> navigation is not loaded
+    /// (the common shape for a newly-created value during synchronisation, which carries only the FK). Resolution
+    /// order: the loaded navigation's <c>Name</c>, else this resolver applied to the id, else null. Never invoked
+    /// when there is no contributing Synchronisation Rule id, and never a trigger for a lazy load of the
+    /// navigation itself; callers that can hit an unloaded navigation should pass a resolver backed by an
+    /// in-memory or single-round-trip lookup (see <c>JIM.Application.Services.SyncRuleNameResolverCache</c>),
+    /// never one that queries per call.
+    /// </param>
     /// <exception cref="InvalidOperationException">
     /// The attribute has no data type configured (<see cref="AttributeDataType.NotSet"/>), or a known data type's
     /// value holder is null on a row that is not an asserted-null marker (a corrupt Metaverse Object Attribute Value).
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">The attribute's data type is not handled by this method.</exception>
-    public void AddAttributeValueChange(MetaverseObjectAttributeValue value, ValueChangeType valueChangeType)
+    public void AddAttributeValueChange(
+        MetaverseObjectAttributeValue value,
+        ValueChangeType valueChangeType,
+        Func<int, string?>? syncRuleNameResolver = null)
     {
         // Asserted-null markers (#91) carry no value; their addition/removal is an internal representation of
         // "asserted null", not a tracked value. The meaningful change (the real value being cleared) is recorded
@@ -143,43 +156,89 @@ public class MetaverseObjectChange
             AttributeChanges.Add(attributeChange);
         }
 
+        // Contributor provenance (#1519): copied from the live attribute value's own provenance so the change
+        // history row is self-describing even after the live value has moved on to a different contributor or
+        // the rule has been deleted. The name is read from the navigation when it is already loaded (a caller
+        // that has not Included ContributedBySyncRule must not trigger a lazy load here); otherwise the caller's
+        // resolver is consulted, falling back to null (e.g. a genuinely deleted rule, or a caller that passed
+        // no resolver at all).
+        var contributedBySyncRuleId = value.ContributedBySyncRuleId;
+        var contributedBySyncRuleName = value.ContributedBySyncRule?.Name
+            ?? (contributedBySyncRuleId.HasValue ? syncRuleNameResolver?.Invoke(contributedBySyncRuleId.Value) : null);
+
         switch (value.Attribute.Type)
         {
             case AttributeDataType.Text when value.StringValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
-                    attributeChange, valueChangeType, value.StringValue));
+                    attributeChange, valueChangeType, value.StringValue)
+                {
+                    ContributedBySyncRuleId = contributedBySyncRuleId,
+                    ContributedBySyncRuleName = contributedBySyncRuleName
+                });
                 break;
             case AttributeDataType.Number when value.IntValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
-                    attributeChange, valueChangeType, (int)value.IntValue));
+                    attributeChange, valueChangeType, (int)value.IntValue)
+                {
+                    ContributedBySyncRuleId = contributedBySyncRuleId,
+                    ContributedBySyncRuleName = contributedBySyncRuleName
+                });
                 break;
             case AttributeDataType.LongNumber when value.LongValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
-                    attributeChange, valueChangeType, value.LongValue.Value));
+                    attributeChange, valueChangeType, value.LongValue.Value)
+                {
+                    ContributedBySyncRuleId = contributedBySyncRuleId,
+                    ContributedBySyncRuleName = contributedBySyncRuleName
+                });
                 break;
             case AttributeDataType.Decimal when value.DecimalValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
-                    attributeChange, valueChangeType, value.DecimalValue.Value));
+                    attributeChange, valueChangeType, value.DecimalValue.Value)
+                {
+                    ContributedBySyncRuleId = contributedBySyncRuleId,
+                    ContributedBySyncRuleName = contributedBySyncRuleName
+                });
                 break;
             case AttributeDataType.Guid when value.GuidValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
-                    attributeChange, valueChangeType, (Guid)value.GuidValue));
+                    attributeChange, valueChangeType, (Guid)value.GuidValue)
+                {
+                    ContributedBySyncRuleId = contributedBySyncRuleId,
+                    ContributedBySyncRuleName = contributedBySyncRuleName
+                });
                 break;
             case AttributeDataType.Boolean when value.BoolValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
-                    attributeChange, valueChangeType, (bool)value.BoolValue));
+                    attributeChange, valueChangeType, (bool)value.BoolValue)
+                {
+                    ContributedBySyncRuleId = contributedBySyncRuleId,
+                    ContributedBySyncRuleName = contributedBySyncRuleName
+                });
                 break;
             case AttributeDataType.DateTime when value.DateTimeValue.HasValue:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
-                    attributeChange, valueChangeType, value.DateTimeValue.Value));
+                    attributeChange, valueChangeType, value.DateTimeValue.Value)
+                {
+                    ContributedBySyncRuleId = contributedBySyncRuleId,
+                    ContributedBySyncRuleName = contributedBySyncRuleName
+                });
                 break;
             case AttributeDataType.Binary when value.ByteValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
-                    attributeChange, valueChangeType, true, value.ByteValue.Length));
+                    attributeChange, valueChangeType, true, value.ByteValue.Length)
+                {
+                    ContributedBySyncRuleId = contributedBySyncRuleId,
+                    ContributedBySyncRuleName = contributedBySyncRuleName
+                });
                 break;
             case AttributeDataType.Reference when value.ReferenceValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
-                    attributeChange, valueChangeType, value.ReferenceValue));
+                    attributeChange, valueChangeType, value.ReferenceValue)
+                {
+                    ContributedBySyncRuleId = contributedBySyncRuleId,
+                    ContributedBySyncRuleName = contributedBySyncRuleName
+                });
                 break;
             case AttributeDataType.Reference when value.ReferenceValueId.HasValue:
                 // Navigation property not loaded but FK is set — record the FK directly on the
@@ -190,7 +249,9 @@ public class MetaverseObjectChange
                 {
                     MetaverseObjectChangeAttribute = attributeChange,
                     ValueChangeType = valueChangeType,
-                    ReferenceValueId = value.ReferenceValueId.Value
+                    ReferenceValueId = value.ReferenceValueId.Value,
+                    ContributedBySyncRuleId = contributedBySyncRuleId,
+                    ContributedBySyncRuleName = contributedBySyncRuleName
                 });
                 break;
             case AttributeDataType.Reference when value.UnresolvedReferenceValue != null:

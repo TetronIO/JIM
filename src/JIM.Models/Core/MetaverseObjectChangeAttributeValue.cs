@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Enums;
+using JIM.Models.Logic;
 namespace JIM.Models.Core;
 
 public class MetaverseObjectChangeAttributeValue
@@ -47,6 +48,24 @@ public class MetaverseObjectChangeAttributeValue
     /// and so the navigation can be materialised later via <c>.Include(x =&gt; x.ReferenceValue)</c>.
     /// </summary>
     public Guid? ReferenceValueId { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule whose mapping contributed this value at the time of the change.
+    /// Together with the parent attribute this identifies the winning mapping. Null when the value was not
+    /// contributed by a Synchronisation Rule, or when the contributing rule has since been deleted (the FK is
+    /// set null on rule deletion; <see cref="ContributedBySyncRuleName"/> is retained as the denormalised record).
+    /// Copied from <see cref="MetaverseObjectAttributeValue.ContributedBySyncRuleId"/> by
+    /// <see cref="MetaverseObjectChange.AddAttributeValueChange"/> so change history is self-describing even
+    /// after the live attribute value's provenance has moved on.
+    /// </summary>
+    public SyncRule? ContributedBySyncRule { get; set; }
+    public int? ContributedBySyncRuleId { get; set; }
+
+    /// <summary>
+    /// Snapshot of the contributing Synchronisation Rule's name at the time of the change. Denormalised so it
+    /// survives deletion of the rule, matching <see cref="MetaverseObjectChange.SyncRuleName"/>'s pattern.
+    /// </summary>
+    public string? ContributedBySyncRuleName { get; set; }
     #endregion
 
     public override string ToString()

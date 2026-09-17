@@ -42,7 +42,9 @@ public partial class SyncEngine
                 Attribute = flow.TargetAttribute,
                 AttributeId = flow.TargetAttribute.Id,
                 ChangeType = PendingExportAttributeChangeType.Remove,
-                StringValue = resolvedRemovalValue
+                StringValue = resolvedRemovalValue,
+                SyncRuleId = flow.ExportRule.Id,
+                SyncRuleName = flow.ExportRule.Name
             };
         }
 
@@ -53,7 +55,9 @@ public partial class SyncEngine
             Id = Guid.NewGuid(),
             Attribute = flow.TargetAttribute,
             AttributeId = flow.TargetAttribute.Id,
-            ChangeType = PendingExportAttributeChangeType.Update
+            ChangeType = PendingExportAttributeChangeType.Update,
+            SyncRuleId = flow.ExportRule.Id,
+            SyncRuleName = flow.ExportRule.Name
         };
     }
 
@@ -116,7 +120,9 @@ public partial class SyncEngine
                 BoolValue = existingChange.BoolValue,
                 UnresolvedReferenceValue = existingChange.UnresolvedReferenceValue,
                 ResolvedReferenceCsoId = existingChange.ResolvedReferenceCsoId,
-                ChangeType = existingChange.ChangeType
+                ChangeType = existingChange.ChangeType,
+                SyncRuleId = existingChange.SyncRuleId,
+                SyncRuleName = existingChange.SyncRuleName
             };
         }
 

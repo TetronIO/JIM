@@ -2777,7 +2777,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Flush this batch (same sequence as per-page processing)
                 await PersistPendingMetaverseObjectsAsync();
-                await CreatePendingMvoChangeObjectsAsync();
+                await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
                 EvaluateQueuedDrift();
                 await EvaluatePendingExportsAsync();
                 await FlushPendingExportOperationsAsync();
@@ -3941,7 +3941,11 @@ public abstract class SyncTaskProcessorBase
     /// Called at page boundary after MVOs are persisted (so IDs are available).
     /// Respects the MVO change tracking feature flag.
     /// </summary>
-    protected async Task CreatePendingMvoChangeObjectsAsync()
+    /// <param name="activeSyncRules">The active Synchronisation Rules for this Connected System (already
+    /// loaded by the caller). Seeds the contributor-name cache so resolving a value contributed by one of
+    /// them never reaches the database; a surviving contributor from another Connected System (after a
+    /// recall or re-election) falls back to one batched repository lookup instead (#1519 follow-up).</param>
+    protected async Task CreatePendingMvoChangeObjectsAsync(List<SyncRule> activeSyncRules)
     {
         if (_pendingMvoChanges.Count == 0)
             return;
@@ -3956,6 +3960,17 @@ public abstract class SyncTaskProcessorBase
 
         using var span = Diagnostics.Sync.StartSpan("CreatePendingMvoChangeObjects");
         span.SetTag("changeCount", _pendingMvoChanges.Count);
+
+        // Newly-created MetaverseObjectAttributeValue rows carry only ContributedBySyncRuleId (#1519 defect:
+        // the ContributedBySyncRule navigation is never populated for a value the engine just built), so
+        // AddAttributeValueChange cannot read a name from it. Seed the cache from the rules this run already
+        // holds in memory, then resolve whatever remains (typically nothing, occasionally a surviving
+        // contributor from another Connected System) with a single batched query for the whole page.
+        var syncRuleNameCache = new SyncRuleNameResolverCache(_syncRepo, activeSyncRules);
+        await syncRuleNameCache.WarmAsync(_pendingMvoChanges
+            .SelectMany(pending => pending.Additions.Concat(pending.Removals))
+            .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
+            .Select(av => av.ContributedBySyncRuleId!.Value));
 
         foreach (var (mvo, additions, removals, changeType, rpei, existingMvoChangeId) in _pendingMvoChanges)
         {
@@ -3980,13 +3995,13 @@ public abstract class SyncTaskProcessorBase
             // Create attribute change records for additions
             foreach (var addition in additions)
             {
-                change.AddAttributeValueChange(addition, ValueChangeType.Add);
+                change.AddAttributeValueChange(addition, ValueChangeType.Add, syncRuleNameCache.Resolve);
             }
 
             // Create attribute change records for removals
             foreach (var removal in removals)
             {
-                change.AddAttributeValueChange(removal, ValueChangeType.Remove);
+                change.AddAttributeValueChange(removal, ValueChangeType.Remove, syncRuleNameCache.Resolve);
             }
 
             // Route to the appropriate persistence queue based on whether the parent

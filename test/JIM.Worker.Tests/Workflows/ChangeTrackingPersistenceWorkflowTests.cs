@@ -96,6 +96,71 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
             "Projected change should record DisplayName and EmployeeId Attribute Flows");
     }
 
+    /// <summary>
+    /// The actual defect this guards (observed live after #1519 landed): a Full Synchronisation records
+    /// <c>ContributedBySyncRuleId</c> on a newly-added value's change record but left
+    /// <c>ContributedBySyncRuleName</c> null, because <c>AddAttributeValueChange</c> only ever read the name
+    /// off the <c>ContributedBySyncRule</c> navigation, and a freshly-created
+    /// <see cref="MetaverseObjectAttributeValue"/> never has that navigation populated (only the FK). The fix
+    /// is <c>CreatePendingMvoChangeObjectsAsync</c> building a name resolver from the run's own active
+    /// Synchronisation Rules; this proves the name survives end-to-end through a real Full Sync, not just
+    /// through the isolated unit test on <c>AddAttributeValueChange</c> itself.
+    /// </summary>
+    [Test]
+    public async Task FullSync_MvoAttributeValueChange_RecordsContributingSyncRuleNameAsync()
+    {
+        // Arrange: HR system with one user, one import rule flowing DisplayName
+        var hrSystem = await CreateConnectedSystemAsync("HR");
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "Person");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+
+        var hrDisplayNameAttr = hrType.Attributes.First(a => a.Name == "DisplayName");
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
+
+        var importRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+        importRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = importRule,
+            TargetMetaverseAttribute = mvDisplayNameAttr,
+            TargetMetaverseAttributeId = mvDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = hrDisplayNameAttr,
+                ConnectedSystemAttributeId = hrDisplayNameAttr.Id
+            }}
+        });
+
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "Alice Smith");
+
+        // Act: Full Sync projects the MVO and flows DisplayName from the import rule
+        var profile = await CreateRunProfileAsync(hrSystem.Id, "HR Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(hrSystem.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(
+            new SyncEngine(), new SyncServer(Jim), SyncRepo,
+            hrSystem, profile, activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        // Assert
+        hrCso = await ReloadEntityAsync(hrCso);
+        var mvo = SyncRepo.MetaverseObjects[hrCso.MetaverseObjectId!.Value];
+
+        var projectedChange = mvo.Changes.First(c =>
+            c.ChangeType == ObjectChangeType.Projected || c.ChangeType == ObjectChangeType.Joined);
+        var displayNameValueChange = projectedChange.AttributeChanges
+            .Single(ac => ac.Attribute?.Name == "DisplayName")
+            .ValueChanges.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(displayNameValueChange.ContributedBySyncRuleId, Is.EqualTo(importRule.Id),
+                "The value change should record which Synchronisation Rule contributed it");
+            Assert.That(displayNameValueChange.ContributedBySyncRuleName, Is.EqualTo("HR Import"),
+                "The rule's name should be resolved even though the newly-created attribute value never " +
+                "has its ContributedBySyncRule navigation populated");
+        }
+    }
+
     [Test]
     public async Task DeltaSync_MvoAttributeFlowChanges_PersistedAfterPageFlushAsync()
     {

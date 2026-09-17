@@ -1657,7 +1657,9 @@ public class MetaverseRepository : IMetaverseRepository
                                         DisplayName = vc.ReferenceValue.CachedDisplayName,
                                         TypeName = vc.ReferenceValue.Type.Name,
                                         TypePluralName = vc.ReferenceValue.Type.PluralName
-                                    }
+                                    },
+                                ContributedBySyncRuleId = vc.ContributedBySyncRuleId,
+                                ContributedBySyncRuleName = vc.ContributedBySyncRuleName
                             })
                             .ToList()
                     })
@@ -3300,7 +3302,7 @@ public class MetaverseRepository : IMetaverseRepository
               VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}})";
         var insertValueSql =
             $@"INSERT INTO ""MetaverseObjectChangeAttributeValues"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues)})
-              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}})";
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}})";
 
         // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChanges exactly.
         await Repository.Database.Database.ExecuteSqlRawAsync(
@@ -3352,7 +3354,9 @@ public class MetaverseRepository : IMetaverseRepository
                     BulkSqlHelpers.NullableParam(valueChange.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer),
                     BulkSqlHelpers.NullableParam(valueChange.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid),
                     BulkSqlHelpers.NullableParam(valueChange.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean),
-                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId ?? valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
+                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId ?? valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid),
+                    BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRule?.Id ?? valueChange.ContributedBySyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
+                    BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
             }
         }
     }

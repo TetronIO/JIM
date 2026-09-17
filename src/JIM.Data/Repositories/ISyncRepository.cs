@@ -1079,6 +1079,14 @@ public interface ISyncRepository
     Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false);
 
     /// <summary>
+    /// Gets just the <c>Name</c> of every requested Synchronisation Rule, keyed by id (#1519 follow-up). An id
+    /// with no corresponding row (the rule has been deleted) is simply absent from the result. Backs a
+    /// change-history attribution name lookup for ids not already known in memory.
+    /// </summary>
+    /// <param name="syncRuleIds">The Synchronisation Rule ids to resolve. Deduplicated internally.</param>
+    Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
     /// Gets the most recent configuration change instant across all Synchronisation Rules and their mappings
     /// (each entity's LastUpdated, falling back to Created), or null when no rules exist. Rule enable/disable,
     /// scoping and matching changes stamp the rule; mapping creation, attribute priority reordering and
