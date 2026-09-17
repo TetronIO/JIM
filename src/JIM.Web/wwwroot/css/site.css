@@ -384,6 +384,50 @@ html[lang] .mud-alert-close {
     padding-top: 7px;
 }
 
+/* Info popover (<InfoPopover />, behind <TermHint /> and <PageInfo />). MudMenu's list gives its content
+   vertical padding only, so unpadded text ran flush against the popover's left edge; the body carries the
+   horizontal padding itself, a measure that keeps an explanation to a readable width, and a title that
+   reads as a heading rather than as the first sentence. The Glossary link sits apart from the text it
+   follows, on its own line. */
+.jim-info-popover {
+    padding: 8px 16px;
+    max-width: 24rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-info-popover-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.jim-info-popover-body {
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-info-popover-link {
+    display: inline-block;
+    margin-top: 10px;
+    font-weight: 600;
+}
+
+/* The info button inline in a heading (a page title). MudMenu renders an inline-flex box, which on the
+   baseline rode well above the title and on vertical-align: middle alone sat a little below it; the
+   bottom margin lifts it by half its value. The target is the centre of the GLYPHS, not of the line box:
+   a line box carries empty space above the capitals, so centring on it (tried first, at 6px) leaves the
+   icon visibly high. Measured on a 24px title: baseline 46.2, capitals centre at 37.7, lowercase at 39.7,
+   so mixed-case text reads as centred near 38.7; 2px lands the 20px icon's centre on 39. Scoped to a
+   direct child of a MudText because everywhere else the button sits in an align-center flex row, where it
+   is already within a pixel and a margin would push it off. */
+.jim-info-button {
+    vertical-align: middle;
+}
+
+.mud-typography > .jim-info-button {
+    margin-bottom: 2px;
+}
+
 /* Alert text. A Text or Outlined alert of a semantic severity is coloured on the alert itself with the chip label
    blend (see :root), so the message, its links, any inheriting button and the close control read in one legible
    severity colour; MudBlazor colours the icon with a rule of its own, which keeps it on the palette colour. MudBlazor

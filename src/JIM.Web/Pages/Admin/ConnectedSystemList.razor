@@ -12,15 +12,16 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Connected Systems</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Connected Systems</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    JIM imports from and exports data to Connected Systems using Connectors.
-    @if (_connectedSystemHeaders == null || _connectedSystemHeaders.Count == 0)
-    {
-        <span>Configure at least one Connected System to get going.</span>
-    }
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Connected Systems
+    <PageInfo Title="Connected Systems">
+        JIM imports from and exports data to Connected Systems using Connectors.
+        @if (_connectedSystemHeaders == null || _connectedSystemHeaders.Count == 0)
+        {
+            <span>Configure at least one Connected System to get going.</span>
+        }
+    </PageInfo>
 </MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <div class="d-flex align-center mt-3">
     <MudButtonGroup OverrideStyles="false">
@@ -34,7 +35,7 @@
 @* Tracking off is a global condition, so it is stated once here rather than repeated on every row. *@
 @if (_drift != null && _drift.Values.Any(d => d.TrackingDisabled))
 {
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+    <MudAlert Severity="Severity.Info" Class="mt-5">
         Configuration change tracking is switched off, so JIM cannot tell which Connected Systems have configuration
         changes waiting for a Full Synchronisation.
     </MudAlert>

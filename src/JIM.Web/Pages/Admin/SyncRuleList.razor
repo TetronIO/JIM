@@ -10,22 +10,23 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Synchronisation Rules</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Synchronisation Rules</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    Synchronisation Rules are used to define the flow of information between JIM and Connected Systems.
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Synchronisation Rules
+    <PageInfo Title="Synchronisation Rules">
+        Synchronisation Rules are used to define the flow of information between JIM and Connected Systems.
+    </PageInfo>
 </MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (!_canCreateSyncRules)
 {
-    <MudAlert Class="mt-5" Severity="Severity.Warning" Variant="Variant.Outlined">Please create a <MudLink Href="/admin/connected-systems/">Connected
+    <MudAlert Class="mt-2" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected
         System</MudLink> first.</MudAlert>
 }
 
 @* ─── Filters ─── *@
 @if (_syncRuleHeaders is { Count: > 0 })
 {
-    <MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.End">
+    <MudStack Row="true" Spacing="3" Class="mt-2 flex-wrap" AlignItems="AlignItems.End">
         <MudItem Class="flex-grow-1">
             <MudSelect T="int" Label="Connected System" Variant="Variant.Outlined"
                        Dense="true" Clearable="true" MultiSelection="true"

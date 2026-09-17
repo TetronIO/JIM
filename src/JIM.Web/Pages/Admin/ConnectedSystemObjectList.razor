@@ -17,15 +17,12 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Connector Space: @_connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector Space:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span> <TermHint Term="Term.ConnectorSpace" /></MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-@if (_showIntro)
-{
-    <MudAlert Severity="Severity.Normal" Class="mt-3 mb-3" ShowCloseIcon="true" CloseIconClicked="() => _showIntro = false">
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector Space:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span>
+    <PageInfo Title="Connector Space" Term="Term.ConnectorSpace">
         The Connector Space holds this Connected System's Connected System Objects. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the Connected System.
-    </MudAlert>
-}
-
+    </PageInfo>
+</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 @if (_connectedSystemHeader != null)
 {
     @* Filter Chips *@
@@ -278,7 +275,7 @@
             </MudText>
         </TitleContent>
         <DialogContent>
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
                 This action will delete all Connected System Objects from JIM.
             </MudAlert>
 
@@ -351,7 +348,6 @@ else
     private VirtualisedDataGrid<ConnectedSystemObjectHeader>? _grid;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private List<BreadcrumbItem> _breadcrumbs = null!;
-    private bool _showIntro = true;
     private bool _clearDialogVisible;
     private bool _clearDeleteChangeHistory = true; // Default to true (recommended for re-import)
     private readonly DialogOptions _clearDialogOptions = new() { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };

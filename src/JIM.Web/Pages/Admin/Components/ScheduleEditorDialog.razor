@@ -30,7 +30,7 @@
                     <MudStack Spacing="3">
                         @if (_schedule.BuiltIn)
                         {
-                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                            <MudAlert Severity="Severity.Info" Dense="true">
                                 This is a built-in schedule. You can change when it runs and enable or disable it, but its name cannot be changed and it cannot be deleted.
                             </MudAlert>
                         }
@@ -124,7 +124,7 @@
                                             </MudStack>
                                             @if (_runTimes.Count == 0)
                                             {
-                                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                                <MudAlert Severity="Severity.Warning" Dense="true">
                                                     Add at least one run time
                                                 </MudAlert>
                                             }
@@ -170,7 +170,7 @@
                                                       HelperText="Format: minute hour day-of-month month day-of-week (e.g., 0 9,12,15,18 * * 1-5)" />
                                     }
 
-                                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-2">
+                                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
                                         <MudText Typo="Typo.body2">@GetSchedulePreview()</MudText>
                                     </MudAlert>
 
@@ -258,7 +258,7 @@
                         <MudStack Spacing="4">
                             @if (_schedule.BuiltIn)
                             {
-                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                                <MudAlert Severity="Severity.Info">
                                     This is a built-in schedule; its steps are managed by JIM and cannot be added, edited, reordered or removed.
                                 </MudAlert>
                             }
@@ -274,7 +274,7 @@
 
                             @if (_schedule.Steps.Count == 0)
                             {
-                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                                <MudAlert Severity="Severity.Info">
                                     No steps have been added yet. Click "Add Step" to create the first step.
                                 </MudAlert>
                             }

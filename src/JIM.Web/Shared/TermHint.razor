@@ -3,22 +3,13 @@
 
 @* An inline explanation for a JIM term, placed beside its label at the first point an administrator meets
    it (#1670): "Projection" on the switch that triggers it, "Connector Space" on the list page's own
-   heading, and so on. Opens on click rather than on hover, because the content carries a link out to the
-   docs glossary; MudMenu is JIM's existing pattern for an icon-triggered popover (see MvoDetailsPanel's
-   view-mode menu), so this reuses it rather than reaching for MudPopover directly. The wording is not
+   heading, and so on. The button and its popover are <InfoPopover />, shared with <PageInfo />, so this
+   component owns only which words appear. The wording is not
    authored here: TermDefinitions is the single source, kept in step with docs/reference/glossary.md by
    GlossaryTermConsistencyTests. *@
-<MudMenu Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Color="Color.Default"
-         AriaLabel="@($"About {_entry.DisplayName}")" Class="ms-1">
-    <div style="max-width: 20rem;">
-        <MudText Typo="Typo.body2"><strong>@_entry.DisplayName</strong></MudText>
-        <MudText Typo="Typo.body2" Class="mt-1">@_entry.Text</MudText>
-        <MudLink Href="@($"https://docs.junctional.io/reference/glossary/#{_entry.GlossaryAnchor}")"
-                 Target="_blank" rel="noopener" Underline="Underline.Always" Class="mt-1 d-inline-block">
-            Glossary
-        </MudLink>
-    </div>
-</MudMenu>
+<InfoPopover Title="@_entry.DisplayName" GlossaryAnchor="@_entry.GlossaryAnchor">
+    @_entry.Text
+</InfoPopover>
 
 @code {
     /// <summary>

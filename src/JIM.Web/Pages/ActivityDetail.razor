@@ -242,14 +242,14 @@
 
     @if (!string.IsNullOrEmpty(_activity.WarningMessage))
     {
-        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+        <MudAlert Severity="Severity.Warning" Class="mt-4">
             <MudText Typo="Typo.body1" Style="font-weight: 500;">@_activity.WarningMessage</MudText>
         </MudAlert>
     }
 
     @if (!string.IsNullOrEmpty(_activity.ErrorMessage) || !string.IsNullOrEmpty(_activity.ErrorStackTrace))
     {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4 jim-alert-error jim-exception-text">
+        <MudAlert Severity="Severity.Error" Class="mt-4 jim-alert-error jim-exception-text">
             @if (!string.IsNullOrEmpty(_activity.ErrorMessage))
             {
                 <MudText Typo="Typo.body1" Style="font-weight: 500;">@_activity.ErrorMessage</MudText>
@@ -293,7 +293,7 @@
         {
             <MudText Typo="Typo.body1" Class="mt-2" Style="font-style: italic;">&ldquo;@_activity.ChangeReason&rdquo;</MudText>
         }
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+        <MudAlert Severity="Severity.Info" Class="mt-3">
             No configuration snapshot was captured for this change, so what changed cannot be shown. This happens when
             the change was made before configuration change tracking was introduced, while it was disabled, or when the
             saved configuration was identical to the previous version.

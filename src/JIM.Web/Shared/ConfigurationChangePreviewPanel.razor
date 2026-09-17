@@ -67,7 +67,7 @@
         <Loaded>
             @if (_preview == null || _activity == null)
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+                <MudAlert Severity="Severity.Info" Class="mt-4">
                     This preview is no longer available. Previews are removed with their Activity under the retention
                     period configured for this system; run the preview again to see what the change would do now.
                 </MudAlert>
@@ -120,7 +120,7 @@
                 @* ─── Failure ─── *@
                 @if (preview.HasFailed)
                 {
-                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4">
+                    <MudAlert Severity="Severity.Error" Class="mt-4">
                         <MudText Typo="Typo.body1">
                             The preview did not finish, so it has seen only part of the objects the change would
                             affect. Nothing it recorded is shown, because a partial count read as a whole one is how a
@@ -134,7 +134,7 @@
                 }
                 else if (activity.Status == ActivityStatus.Cancelled)
                 {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+                    <MudAlert Severity="Severity.Info" Class="mt-4">
                         The preview was cancelled, so it covers only the objects it had reached. Run it again for a
                         complete answer.
                     </MudAlert>
@@ -144,7 +144,7 @@
                 @if (preview.StalenessBaseline.HasValue)
                 {
                     var baseline = preview.StalenessBaseline.Value;
-                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Class="mt-4" Dense="true">
+                    <MudAlert Severity="Severity.Normal" Class="mt-4" Dense="true">
                         <MudTooltip Arrow="true" Placement="Placement.Top" Text="@baseline.ToLocalTime().ToFriendlyDate()">
                             Evaluated against data as it stood @baseline.ToLocalTime().ToRelativeTime(). An import
                             since then may have moved the answer.
@@ -163,7 +163,7 @@
                     }
                     @foreach (var finding in _findings.OrderByDescending(f => f.Severity))
                     {
-                        <MudAlert Severity="@FindingSeverity(finding.Severity)" Variant="Variant.Outlined" Class="mt-4" Dense="true">
+                        <MudAlert Severity="@FindingSeverity(finding.Severity)" Class="mt-4" Dense="true">
                             @* a finding about one Metaverse Attribute names it separately so the quoted name in
                                the plain-text message renders as the standard Metaverse attribute chip here *@
                             @foreach (var part in FindingMessageParts(finding))
@@ -193,7 +193,7 @@
                     @* without ordering it by how much the consequence matters.                                     *@
                     @if (ConfigurationChangePreviewVerdict.Describe(_impactCounts) is { } verdict)
                     {
-                        <MudAlert Severity="@verdict.Severity" Variant="Variant.Outlined" Class="mt-4"
+                        <MudAlert Severity="@verdict.Severity" Class="mt-4"
                                   data-testid="jim-preview-verdict">
                             <MudText Typo="Typo.body1"><b>@verdict.Lead</b></MudText>
                             @if (!string.IsNullOrEmpty(verdict.Detail))
@@ -348,7 +348,7 @@
                     }
                     else if (NothingWouldChange)
                     {
-                        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mt-4">
+                        <MudAlert Severity="Severity.Success" Class="mt-4">
                             This change would not change anything: no object moves through any transition as a result
                             of it.
                         </MudAlert>
@@ -380,7 +380,7 @@
 
                         @if (selected.DeltasSampled)
                         {
-                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2" Dense="true">
+                            <MudAlert Severity="Severity.Warning" Class="mt-2" Dense="true">
                                 @selected.ObjectCount.ToString("N0") objects are in this group. The list below is a
                                 sample of the first @ConfigurationChangePreviewServer.MaximumDeltasPerGroup.ToString("N0")
                                 of them, so an object being absent from it does not mean it is unaffected.

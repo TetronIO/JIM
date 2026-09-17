@@ -14,9 +14,12 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>@PageTitle</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@PageTitle</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@PageTitle
+    <PageInfo Title="@(PageTitle!)">
+        Search, or browse for @ObjectTypeName.
+    </PageInfo>
+</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Search, or browse for @ObjectTypeName</MudText>
 
 @if (_isInitialised && PredefinedSearch != null)
 {
@@ -27,7 +30,7 @@
 
         @if (_hasAttributeUnknown)
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+            <MudAlert Severity="Severity.Info" Class="mt-2">
                 No Metaverse Attribute named "@_hasAttributeName" is defined, so no objects match. Clear the filter to browse all @MetaverseObjectType?.PluralName.
             </MudAlert>
         }
@@ -35,7 +38,7 @@
 
     @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
        shared grid; this page supplies the Predefined Search's columns, the window loader and the empty states. *@
-    <VirtualisedDataGrid @ref="_grid" T="MetaverseObjectHeader"
+    <VirtualisedDataGrid GridClass="mt-2" @ref="_grid" T="MetaverseObjectHeader"
                          ContainerId="metaverse-object-list"
                          StateKey="@($"{TypeNameUrlParam}/{PredefinedSearchUri}")"
                          DefaultSortBy="@Constants.BuiltInAttributes.DisplayName"

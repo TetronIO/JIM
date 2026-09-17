@@ -6,16 +6,15 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Loading Preview</PageTitle>
-<MudText Typo="Typo.h3">Loading Preview</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    A reference for the skeleton loading states JIM shows on detail pages while data is being retrieved.
-    Use the simulation controls below to compare how each timing window feels, including the long-load
-    message that appears for slow responses such as very large group memberships.
+<MudText Typo="Typo.h3">Loading Preview
+    <PageInfo Title="Loading Preview">
+        A reference for the skeleton loading states JIM shows on detail pages while data is being retrieved. Use the simulation controls below to compare how each timing window feels, including the long-load message that appears for slow responses such as very large group memberships.
+    </PageInfo>
 </MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @* ─── Live simulation ─── *@
-<MudPaper Class="pa-5 mt-5" Outlined="true" Elevation="0">
+<MudPaper Class="pa-5 mt-3" Outlined="true" Elevation="0">
     <MudText Typo="Typo.h5" Class="mb-4">Live simulation</MudText>
 
     <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-4">
@@ -74,7 +73,7 @@
                 }
             </Loading>
             <LongLoadMessage>
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                <MudAlert Severity="Severity.Info">
                     Still loading. Large objects can take a few seconds to retrieve.
                 </MudAlert>
             </LongLoadMessage>

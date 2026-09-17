@@ -9,7 +9,7 @@
 
 @if (SyncRule.MetaverseObjectType == null || SyncRule.ConnectedSystemObjectType == null)
 {
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+    <MudAlert Severity="Severity.Info">
         Choose the Connected System, direction and object types on the <strong>Details</strong> tab first; scoping then applies to objects of those types.
     </MudAlert>
 }
@@ -54,7 +54,7 @@ else
                         Remain joined (stop Attribute Flow)
                     </MudSelectItem>
                 </MudSelect>
-                <MudAlert Severity="Severity.Info" Class="mt-3" Variant="Variant.Outlined" Dense="true">
+                <MudAlert Severity="Severity.Info" Class="mt-3" Dense="true">
                     @if (SyncRule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect)
                     {
                         <text>Objects that fall out of scope will be disconnected from their Metaverse Object. Whether

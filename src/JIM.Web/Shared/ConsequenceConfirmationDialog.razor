@@ -25,7 +25,7 @@
                 {
                     @foreach (var blocker in Blockers)
                     {
-                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        <MudAlert Severity="Severity.Error">
                             <MudText Typo="Typo.subtitle2">@blocker.Headline</MudText>
                             @if (blocker.Items.Count > 0)
                             {
@@ -57,14 +57,14 @@
 
                     @if (!string.IsNullOrEmpty(IrreversibleWarning))
                     {
-                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        <MudAlert Severity="Severity.Error">
                             @IrreversibleWarning
                         </MudAlert>
                     }
 
                     @if (!string.IsNullOrEmpty(SafeMessage))
                     {
-                        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
+                        <MudAlert Severity="Severity.Success" Dense="true">
                             @SafeMessage
                         </MudAlert>
                     }
@@ -114,7 +114,7 @@
 
                     @if (Consequences is { } consequences)
                     {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                        <MudAlert Severity="Severity.Warning">
                             <MudText Typo="Typo.subtitle2">@consequences.Headline</MudText>
                             @if (!string.IsNullOrEmpty(consequences.Note))
                             {
@@ -141,7 +141,7 @@
 
                     @if (Warnings.Count > 0)
                     {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                        <MudAlert Severity="Severity.Warning">
                             <MudList T="string" Dense="true">
                                 @foreach (var warning in Warnings)
                                 {

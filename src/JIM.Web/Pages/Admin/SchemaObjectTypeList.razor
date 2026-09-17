@@ -17,14 +17,17 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Schema</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Schema" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Schema:</span> <span class="mud-primary-text">@TabTitle</span> <TermHint Term="Term.Metaverse" /></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Schema" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Schema:</span> <span class="mud-primary-text">@TabTitle</span>
+    <PageInfo Title="Schema" Term="Term.Metaverse">
+        Manage Metaverse Object Types and their attributes, and see how data flows into and out of them.
+    </PageInfo>
+</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Manage Metaverse Object Types and their attributes, and see how data flows into and out of them.</MudText>
 
 @* TabPanelsClass is pa-0 rather than pt-5 because both tabs host a virtualised grid, and the grid supplies its
    own mt-5 (see the tab content spacing rule in JIM.Web/CLAUDE.md: never stack panel padding on top of content
    margin). *@
-<NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" TabPanelsClass="pa-0" Class="mt-5">
+<NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" TabPanelsClass="pa-0" Class="mt-2">
     <MudTabPanel Text="Object Types" Icon="@Icons.Material.Filled.Category">
         @* Same shared grid as the Attributes tab, but windowed in memory: Object Types are a small configuration
            list, loaded whole once, so search and sort are applied in the page rather than each becoming a

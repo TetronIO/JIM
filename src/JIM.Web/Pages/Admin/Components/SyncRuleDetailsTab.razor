@@ -146,7 +146,7 @@
     @if (!SyncRule.Enabled && !string.IsNullOrWhiteSpace(SyncRule.DisabledReason))
     {
         var disabledReason = SyncRule.DisabledReason;
-        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 ms-12">
+        <MudAlert Severity="Severity.Warning" Class="mt-2 ms-12">
             @disabledReason
         </MudAlert>
     }

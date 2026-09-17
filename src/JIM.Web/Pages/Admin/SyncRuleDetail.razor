@@ -131,7 +131,7 @@ else if (_syncRule != null)
     <div class="mt-6">
         @if (validationIssues.Count > 0)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" NoIcon="true" Class="mb-4">
+            <MudAlert Severity="Severity.Warning" NoIcon="true" Class="mb-4">
                 <MudText Class="mb-3">There are issues:</MudText>
                 @foreach (var item in validationIssues)
                 {
@@ -207,7 +207,7 @@ else if (_syncRule != null)
 
             @if (DestructiveTogglePreviewIsStale)
             {
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                           data-testid="jim-preview-stale">
                     The Deprovisioning Action or Out-of-Scope Action has been edited since this preview ran, so it no
                     longer describes what saving would do. Preview again for an answer about the current settings.
@@ -227,7 +227,7 @@ else if (_syncRule != null)
 
             @if (ScopingPreviewIsStale)
             {
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                           data-testid="jim-scope-preview-stale">
                     The Scoping Criteria have been edited since this preview ran, so it no longer describes what
                     saving would do. Preview again for an answer about the current criteria.
@@ -247,7 +247,7 @@ else if (_syncRule != null)
 
             @if (BehaviourPreviewIsStale)
             {
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                           data-testid="jim-behaviour-preview-stale">
                     The behaviour toggles have been edited since this preview ran, so it no longer describes what
                     saving would do. Preview again for an answer about the current settings.
@@ -267,7 +267,7 @@ else if (_syncRule != null)
 
             @if (AttributeFlowPreviewIsStale)
             {
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                           data-testid="jim-attribute-flow-preview-stale">
                     The Attribute Flow has been edited since this preview ran, so it no longer describes what saving
                     would do. Preview again for an answer about the current mappings.

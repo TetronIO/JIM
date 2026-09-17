@@ -218,7 +218,7 @@
 
     @if (SettingsFormCustomErrors.Count > 0)
     {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-5">
+        <MudAlert Severity="Severity.Error" Class="mt-5">
             <MudText>There are issues with the settings:</MudText>
             <ul class="mt-5">
                 @foreach (var error in SettingsFormCustomErrors)
@@ -249,7 +249,7 @@
        nothing is stored until the trust action on the card below is confirmed. *@
     @if (_fetchedCertificate != null)
     {
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+        <MudAlert Severity="Severity.Info" Class="mt-5">
             @if (_fetchedCertificate.FailureReason == ServerCertificateFailureReason.None)
             {
                 <text>JIM already trusts this certificate. Nothing needs adding.</text>
