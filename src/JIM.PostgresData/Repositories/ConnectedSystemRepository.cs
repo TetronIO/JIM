@@ -903,7 +903,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// string (UnresolvedReferenceValue, for example the DN) is preserved on CSO rows, so the next
     /// confirming import still reconciles the value normally.
     /// </summary>
-    private async Task ClearReferencesToConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> csoIds)
+    /// <remarks>
+    /// Internal rather than private so <see cref="SyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/>
+    /// (JIM.PostgresData/Repositories/SyncRepository.CsOperations.cs) can reuse it ahead of its own raw-SQL
+    /// delete-by-id, instead of duplicating the restrict-FK nulling logic. Both repositories share the same
+    /// <see cref="JimDbContext"/> instance via <see cref="PostgresDataRepository"/>, so the tracked-instance
+    /// fix-up below is visible to either caller.
+    /// </remarks>
+    internal async Task ClearReferencesToConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> csoIds)
     {
         if (csoIds.Count == 0)
             return;

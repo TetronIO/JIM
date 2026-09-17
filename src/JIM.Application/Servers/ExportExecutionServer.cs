@@ -1507,6 +1507,81 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Decides whether a Delete export that just succeeded is the terminal step for a Connected System
+    /// Object whose provisioning was never confirmed by an import.
+    /// <para>
+    /// A Connected System Object is created <c>PendingProvisioning</c> alongside a Create Pending Export.
+    /// If the Create is exported (the target object now exists) but the Metaverse Object is withdrawn
+    /// before any confirming import, JIM stages a Delete Pending Export for the still-<c>PendingProvisioning</c>
+    /// object; when that Delete exports successfully, the target object is gone, but the Connected System
+    /// Object itself would otherwise be stranded forever: import deletion detection deliberately excludes
+    /// <c>PendingProvisioning</c> objects (<c>ConnectedSystemRepository.BuildDeletionDetectionQuery</c>), so
+    /// nothing ever obsoletes or deletes it, and it never gets another Pending Export to retry.
+    /// </para>
+    /// <para>
+    /// A successful export of the Delete is the only confirmation such an object can ever get, so callers
+    /// that see this return true must remove the Connected System Object and its Pending Export immediately
+    /// rather than leaving the export <c>Exported</c> (see <see cref="RemoveUnconfirmedProvisioningCsosAsync"/>).
+    /// Connected System Objects with Status <c>Normal</c> are unaffected: their existing lifecycle (import
+    /// marks Obsolete, sync deletes) still applies. A failed Delete export never reaches this check; callers
+    /// must only call it once a Delete has already succeeded.
+    /// </para>
+    /// </summary>
+    private static bool IsUnconfirmedProvisioningDeleteSuccess(PendingExport export)
+    {
+        return export.ChangeType == PendingExportChangeType.Delete
+            && export.ConnectedSystemObject != null
+            && export.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning;
+    }
+
+    /// <summary>
+    /// Removes the Connected System Objects (and their now-superfluous Pending Exports) for Delete exports
+    /// that succeeded against a Connected System Object whose provisioning was never confirmed; see
+    /// <see cref="IsUnconfirmedProvisioningDeleteSuccess"/> for the rule. Deletes by id via
+    /// <see cref="ISyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/> rather than the tracked-graph
+    /// <see cref="ISyncRepository.DeleteConnectedSystemObjectsAsync"/>: export batches load Pending Exports
+    /// <c>AsNoTracking()</c> with the Connected System Object graph included, and attaching that untracked
+    /// graph to a tracked <c>RemoveRange</c> can throw on the duplicate-key attach.
+    /// </summary>
+    /// <param name="qualifyingExports">
+    /// Delete exports that satisfy <see cref="IsUnconfirmedProvisioningDeleteSuccess"/>. Each caller is
+    /// responsible for flagging its own <see cref="ProcessedExportItem.ConnectedSystemObjectRemoved"/> and
+    /// for excluding these exports from its own Pending Export update batch, since the row is being deleted
+    /// here, not updated.
+    /// </param>
+    private static async Task RemoveUnconfirmedProvisioningCsosAsync(List<PendingExport> qualifyingExports, ISyncRepository repository)
+    {
+        if (qualifyingExports.Count == 0)
+            return;
+
+        // The FK scalar, not the navigation: export batches load these AsNoTracking, and the scalar is
+        // always populated from the row data regardless of Include shape (src/CLAUDE.md > "Prefer FK
+        // Scalars Over Navigation Checks Under AsNoTracking").
+        var csoIds = qualifyingExports
+            .Select(export => export.ConnectedSystemObjectId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        if (csoIds.Count == 0)
+            return;
+
+        // Delete the Pending Export(s) first: once the CSO is gone there is nothing left for it to
+        // describe, and DeleteConnectedSystemObjectsByIdsAsync does not touch PendingExports itself
+        // (its own FK to this table is SetNull, which would otherwise just orphan the row).
+        await repository.DeletePendingExportsByConnectedSystemObjectIdsAsync(csoIds);
+        var removedCount = await repository.DeleteConnectedSystemObjectsByIdsAsync(csoIds);
+
+        // Synchronisation Integrity: log summary statistics (count plus CSO ids) at the end of this batch
+        // operation, same as every other batch write in this server.
+        Log.Information("RemoveUnconfirmedProvisioningCsosAsync: {Count} Connected System Object(s) removed whose provisioning was " +
+            "never confirmed by an import (their Create was exported but the Metaverse Object was withdrawn before any confirming " +
+            "import); their Delete export has just succeeded, which is the only confirmation such an object can ever get: [{CsoIds}]",
+            removedCount, string.Join(", ", csoIds));
+    }
+
+    /// <summary>
     /// Processes a batch of exports with their corresponding ConnectedSystemExportResult data.
     /// Uses batch updates for efficiency - pre-fetches attribute definitions and performs
     /// a single SaveChanges for all CSO updates.
@@ -1531,6 +1606,7 @@ public class ExportExecutionServer
         var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
         var successfulNonDeleteExports = new List<PendingExport>();
         var provisionedAccounts = new List<PendingExport>();
+        var unconfirmedProvisioningCsoDeletes = new List<PendingExport>();
 
         for (var i = 0; i < batch.Count; i++)
         {
@@ -1566,6 +1642,11 @@ public class ExportExecutionServer
                 continue;
             }
 
+            // A Delete that just succeeded against a CSO whose provisioning was
+            // never confirmed by an import is the terminal step in that object's life; see
+            // IsUnconfirmedProvisioningDeleteSuccess for the full rationale.
+            var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export);
+
             // Capture export data for activity tracking (before deletion)
             result.ProcessedExportItems.Add(new ProcessedExportItem
             {
@@ -1575,8 +1656,24 @@ public class ExportExecutionServer
                 AttributeChangeCount = writtenChanges.Count,
                 AttributeValueChanges = writtenChanges,
                 Succeeded = true,
-                UnresolvedReferenceMessage = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null
+                UnresolvedReferenceMessage = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null,
+                ConnectedSystemObjectRemoved = isUnconfirmedProvisioningDelete
             }.WithCauseFrom(export));
+
+            if (isUnconfirmedProvisioningDelete)
+            {
+                // Remove the CSO and this Pending Export now, rather than leaving the export Exported:
+                // not added to exportsToUpdate because the row is about to be deleted, not updated.
+                // Removal itself is batched after the loop via RemoveUnconfirmedProvisioningCsosAsync.
+                unconfirmedProvisioningCsoDeletes.Add(export);
+                result.SuccessCount++;
+                // Issue #1079: Delete exports are always skipped by optimistic apply (D6); this one
+                // never reaches the shared skip-counting below because it continues past it.
+                result.OptimisticApplySkippedCount++;
+                Log.Debug("ProcessBatchSuccessAsync: Export {ExportId} deleted CSO {CsoId} whose provisioning was never confirmed by an import; " +
+                    "the Connected System Object will be removed", export.Id, export.ConnectedSystemObjectId);
+                continue;
+            }
 
             if (stillUnresolvedCount > 0)
             {
@@ -1637,6 +1734,13 @@ public class ExportExecutionServer
             {
                 await repository.UpdatePendingExportsAsync(exportsToUpdate);
             }
+        }
+
+        // Remove CSOs (and their now-superfluous Pending Exports) whose Delete just
+        // confirmed provisioning that was never otherwise confirmed.
+        if (unconfirmedProvisioningCsoDeletes.Count > 0)
+        {
+            await RemoveUnconfirmedProvisioningCsosAsync(unconfirmedProvisioningCsoDeletes, repository);
         }
 
         // Batch update CSOs that need external ID or status changes
@@ -2223,6 +2327,7 @@ public class ExportExecutionServer
             var exportsToUpdate = new List<PendingExport>();
             var exportsToDelete = new List<PendingExport>();
             var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
+            var unconfirmedProvisioningCsoDeletes = new List<PendingExport>();
 
             for (var i = 0; i < pendingExports.Count; i++)
             {
@@ -2250,6 +2355,11 @@ public class ExportExecutionServer
                     continue;
                 }
 
+                // A Delete that just succeeded against a CSO whose provisioning was
+                // never confirmed by an import is the terminal step in that object's life; see
+                // IsUnconfirmedProvisioningDeleteSuccess for the full rationale.
+                var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export);
+
                 // Capture export data for activity tracking (before deletion or status update)
                 result.ProcessedExportItems.Add(new ProcessedExportItem
                 {
@@ -2257,8 +2367,23 @@ public class ExportExecutionServer
                     ConnectedSystemObject = export.ConnectedSystemObject,
                     AttributeChangeCount = export.AttributeValueChanges.Count,
                     AttributeValueChanges = export.AttributeValueChanges.ToList(),
-                    Succeeded = true
+                    Succeeded = true,
+                    ConnectedSystemObjectRemoved = isUnconfirmedProvisioningDelete
                 }.WithCauseFrom(export));
+
+                if (isUnconfirmedProvisioningDelete)
+                {
+                    // Remove the CSO and this Pending Export now, rather than leaving the export Exported
+                    // (auto-confirm) or auto-confirmed-delete (standard). Neither exportsToUpdate nor
+                    // exportsToDelete gets this export: removal is batched after the loop via
+                    // RemoveUnconfirmedProvisioningCsosAsync, which deletes the Pending Export by CSO id
+                    // as part of removing the CSO itself.
+                    unconfirmedProvisioningCsoDeletes.Add(export);
+                    result.SuccessCount++;
+                    Log.Debug("ExecuteUsingFilesWithBatchingAsync: Export {ExportId} deleted CSO {CsoId} whose provisioning was never confirmed by an import; " +
+                        "the Connected System Object will be removed", export.Id, export.ConnectedSystemObjectId);
+                    continue;
+                }
 
                 // For Create exports, update the CSO status from PendingProvisioning to Normal
                 if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
@@ -2310,6 +2435,13 @@ public class ExportExecutionServer
                 {
                     await SyncRepo.DeletePendingExportsAsync(exportsToDelete);
                 }
+            }
+
+            // Remove CSOs (and their now-superfluous Pending Exports) whose Delete
+            // just confirmed provisioning that was never otherwise confirmed.
+            if (unconfirmedProvisioningCsoDeletes.Count > 0)
+            {
+                await RemoveUnconfirmedProvisioningCsosAsync(unconfirmedProvisioningCsoDeletes, SyncRepo);
             }
 
             // Batch update CSOs that need external ID or status changes
@@ -2646,6 +2778,11 @@ public class ExportExecutionServer
             return;
         }
 
+        // A Delete that just succeeded against a CSO whose provisioning was never
+        // confirmed by an import is the terminal step in that object's life; see
+        // IsUnconfirmedProvisioningDeleteSuccess for the full rationale.
+        var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export);
+
         // Capture export data for activity tracking (before deletion)
         result.ProcessedExportItems.Add(new ProcessedExportItem
         {
@@ -2653,8 +2790,19 @@ public class ExportExecutionServer
             ConnectedSystemObject = export.ConnectedSystemObject,
             AttributeChangeCount = export.AttributeValueChanges.Count,
             AttributeValueChanges = export.AttributeValueChanges.ToList(),
-            Succeeded = true
+            Succeeded = true,
+            ConnectedSystemObjectRemoved = isUnconfirmedProvisioningDelete
         }.WithCauseFrom(export));
+
+        if (isUnconfirmedProvisioningDelete)
+        {
+            // Remove the CSO and this Pending Export now, rather than leaving the export Exported.
+            await RemoveUnconfirmedProvisioningCsosAsync([export], SyncRepo);
+            result.SuccessCount++;
+            Log.Debug("ProcessExportSuccessAsync: Export {ExportId} deleted CSO {CsoId} whose provisioning was never confirmed by an import; " +
+                "the Connected System Object was removed", export.Id, export.ConnectedSystemObjectId);
+            return;
+        }
 
         export.Status = PendingExportStatus.Exported;
 

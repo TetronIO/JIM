@@ -436,10 +436,19 @@ public class SyncExportTaskProcessor
             // (BulkInsertRpeisRawAsync), which does not trigger EF's automatic FK fix-up from the
             // navigation. Without the explicit assignment the column is inserted as NULL, breaking
             // the audit-trail link from the Activity into the CSO detail page (#683).
+            //
+            // ConnectedSystemObjectRemoved (an unconfirmed-provisioning Delete): the export server has
+            // already removed the CSO row as part of processing this item, so the navigation and FK must
+            // stay null here or the RPEI insert fails against a row that no longer exists. The display
+            // snapshot is still taken from the in-memory CSO graph the item carries, so the item keeps its
+            // name and external id.
             if (exportItem.ConnectedSystemObject != null)
             {
-                executionItem.ConnectedSystemObject = exportItem.ConnectedSystemObject;
-                executionItem.ConnectedSystemObjectId = exportItem.ConnectedSystemObject.Id;
+                if (!exportItem.ConnectedSystemObjectRemoved)
+                {
+                    executionItem.ConnectedSystemObject = exportItem.ConnectedSystemObject;
+                    executionItem.ConnectedSystemObjectId = exportItem.ConnectedSystemObject.Id;
+                }
                 executionItem.SnapshotCsoDisplayFields(exportItem.ConnectedSystemObject);
             }
 

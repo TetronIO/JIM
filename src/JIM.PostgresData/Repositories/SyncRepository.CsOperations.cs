@@ -1021,6 +1021,59 @@ public partial class SyncRepository
         return deleted;
     }
 
+    /// <summary>
+    /// Deletes Connected System Objects by id (see <see cref="ISyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/>).
+    /// Used for a successful Delete export of a CSO whose provisioning was never confirmed
+    /// (<c>ExportExecutionServer</c>'s unconfirmed-provisioning-delete rule): the export batch that
+    /// loads the Pending Export loads the CSO graph <c>AsNoTracking()</c>, so this deletes by id rather than
+    /// attaching that graph to a <c>RemoveRange</c> call.
+    /// </summary>
+    public async Task<int> DeleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var csoIds = connectedSystemObjectIds.ToArray();
+        if (csoIds.Length == 0)
+            return 0;
+
+        // Null incoming reference values from other rows before deleting, exactly as
+        // DeleteConnectedSystemObjectsAsync does for its tracked-graph RemoveRange path. Both
+        // repositories share the same DbContext (via PostgresDataRepository), so the tracked-instance
+        // fix-up this performs is visible here too. Cast rather than widen IConnectedSystemRepository:
+        // the method is internal specifically so only same-assembly callers like this one can reach it.
+        await ((ConnectedSystemRepository)_repo.ConnectedSystems).ClearReferencesToConnectedSystemObjectsAsync(csoIds);
+
+        // Detach tracked instances of the rows raw SQL is about to delete. A tracked CSO or attribute
+        // value left behind causes EF's SetNull cascade fix-up (ActivityRunProfileExecutionItem,
+        // ConnectedSystemObjectChange, PendingExport all SetNull to this table) to issue an UPDATE
+        // against the already-deleted row on the next SaveChangesAsync, matching zero rows and throwing
+        // DbUpdateConcurrencyException; the same failure mode documented on
+        // DeletePendingExportsByConnectedSystemObjectIdsAsync above.
+        DetachTrackedEntities<ConnectedSystemObjectAttributeValue>(av =>
+            csoIds.Contains(EntityShadowConnectedSystemObjectId(av)));
+        DetachTrackedEntities<ConnectedSystemObject>(cso => csoIds.Contains(cso.Id));
+
+        // Raw DELETE by id. ConnectedSystemObjectAttributeValues cascade in the database; the
+        // ActivityRunProfileExecutionItem, ConnectedSystemObjectChange and PendingExport foreign keys to
+        // this table are all SetNull (JimDbContext.OnModelCreating), and PendingInitialPassword cascades.
+        // PendingPasswordChange's CSO foreign key is SetNull too. Nothing else references this table with
+        // Restrict/NoAction behaviour beyond the two reference columns cleared above.
+        var deleted = await _context.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemObjects"" WHERE ""Id"" = ANY({0})",
+            csoIds);
+
+        return deleted;
+    }
+
+    /// <summary>
+    /// Reads the <see cref="ConnectedSystemObjectAttributeValue"/> shadow foreign key to its owning
+    /// Connected System Object via the change tracker entry, mirroring <see cref="DetachTrackedChildEntities"/>'s
+    /// approach for <c>PendingExportAttributeValueChange.PendingExportId</c>.
+    /// </summary>
+    private Guid EntityShadowConnectedSystemObjectId(ConnectedSystemObjectAttributeValue attributeValue)
+    {
+        var entry = _context.Entry(attributeValue);
+        return entry.Property<Guid>("ConnectedSystemObjectId").CurrentValue;
+    }
+
     public async Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
     {
         var exportList = untrackedPendingExports.ToList();
