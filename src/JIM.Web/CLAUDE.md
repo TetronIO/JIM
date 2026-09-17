@@ -292,7 +292,7 @@ A single-sentence description needs none of this and renders unchanged. The site
 - **Never describe a page with a dismissible alert under the breadcrumbs.** The Connector Space list did: it cost a band of every visit's first screen until someone closed it, reappeared on the next visit because nothing remembered the dismissal, and said much the same as the info button already in the title above it. An alert is for something the reader needs to notice now; a description is for a reader who goes looking.
 - `<TermHint />` is the same affordance for a **term** rather than a page: it sits beside a label (the "Project Users to the Metaverse?" switch, a tab's heading) and its wording comes from `TermDefinitions`, held verbatim in step with `docs/reference/glossary.md` by `GlossaryTermConsistencyTests`. A page title takes a `<PageInfo />`, whose words are the page's own.
 - Both are `<InfoPopover />` underneath, so the popover's padding, measure, title and link treatment, and the button's alignment with the text beside it, are fixed once in `site.css` (`jim-info-popover`, `jim-info-button`). Do not restyle either at a call site, and do not hand-roll a third info button from a `MudMenu` or `MudTooltip`.
-- The button's alignment inside a heading is measured, not eyeballed (see the rule's comment in `site.css`); placed in an `align-center` flex row it needs nothing.
+- The button's alignment inside a heading is measured against the **glyphs**, not the line box (a line box carries empty space above the capitals, so centring on it leaves the icon visibly high; see the rule's comment in `site.css`). Placed in an `align-center` flex row it needs nothing.
 
 ## Alerts
 - ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components
