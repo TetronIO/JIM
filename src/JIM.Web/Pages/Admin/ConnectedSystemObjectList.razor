@@ -21,7 +21,7 @@
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 @if (_showIntro)
 {
-    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Class="mt-3 mb-3" ShowCloseIcon="true" CloseIconClicked="() => _showIntro = false">
+    <MudAlert Severity="Severity.Normal" Class="mt-3 mb-3" ShowCloseIcon="true" CloseIconClicked="() => _showIntro = false">
         The Connector Space holds this Connected System's Connected System Objects. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the Connected System.
     </MudAlert>
 }
@@ -194,7 +194,7 @@
                     <VirtualisedSortHeader Title="Type" Name="type" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    <MudChip T="string" Text="@context.Item.TypeName" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.Item.TypeName)" />
+                    <MudChip T="string" Text="@context.Item.TypeName" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.Item.TypeName)" Class="ma-0" />
                 </CellTemplate>
             </TemplateColumn>
             <TemplateColumn Sortable="false">
@@ -230,7 +230,7 @@
                     <VirtualisedSortHeader Title="Status" Name="status" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    <MudChip T="string" Text="@context.Item.Status.ToString().SplitOnCapitalLetters()" Variant="Variant.Text" />
+                    <MudChip T="string" Text="@context.Item.Status.ToString().SplitOnCapitalLetters()" Variant="Variant.Text" Class="ma-0" />
                 </CellTemplate>
             </TemplateColumn>
             <TemplateColumn Sortable="false">
@@ -238,7 +238,9 @@
                     <VirtualisedSortHeader Title="Join Type" Name="jointype" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    @context.Item.JoinType.ToString().SplitOnCapitalLetters()
+                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetJoinTypeColor(context.Item.JoinType)" Class="ma-0">
+                        @context.Item.JoinType.ToString().SplitOnCapitalLetters()
+                    </MudChip>
                 </CellTemplate>
             </TemplateColumn>
         </Columns>

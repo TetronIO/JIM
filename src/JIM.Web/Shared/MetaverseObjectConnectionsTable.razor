@@ -62,7 +62,7 @@ else if (IsLoaded)
                 </MudStack>
             </MudTd>
             <MudTd DataLabel="Join">
-                <MudChip T="string" Variant="Variant.Text" Color="GetJoinTypeColor(context.JoinType)" Class="ma-0">
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetJoinTypeColor(context.JoinType)" Class="ma-0">
                     @context.JoinType
                 </MudChip>
             </MudTd>
@@ -173,17 +173,6 @@ else if (IsLoaded)
             (false, true) => "2 target",
             _ => "3 none"
         };
-
-    private static MudBlazor.Color GetJoinTypeColor(ConnectedSystemObjectJoinType joinType)
-    {
-        return joinType switch
-        {
-            ConnectedSystemObjectJoinType.Projected => MudBlazor.Color.Primary,
-            ConnectedSystemObjectJoinType.Provisioned => MudBlazor.Color.Secondary,
-            ConnectedSystemObjectJoinType.Joined => MudBlazor.Color.Info,
-            _ => MudBlazor.Color.Default
-        };
-    }
 
     /// <summary>
     /// The State chip's colour (D-S7): success for in sync, info for an update in flight, warning for
