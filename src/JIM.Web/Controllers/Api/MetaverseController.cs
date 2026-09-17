@@ -1588,8 +1588,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// Preview what synchronising a Metaverse Object would do
     /// </summary>
     /// <remarks>
-    /// Nothing is changed: the preview evaluates the outbound decisions the Identity's current state would
-    /// produce, and returns what a real synchronisation would do without staging or persisting anything. A
+    /// Nothing is changed: the preview evaluates the outbound decisions the Metaverse Object's current state
+    /// would produce, and returns what a real synchronisation would do without staging or persisting anything. A
     /// Metaverse Object has no inbound chain of its own (it is never synchronised itself; its Connected
     /// System Objects are), so <c>inbound</c> in the response is always null.
     /// </remarks>

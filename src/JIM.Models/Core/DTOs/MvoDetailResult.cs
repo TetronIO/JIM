@@ -28,8 +28,8 @@ public class MvoDetailResult
 
     /// <summary>
     /// How many Connected System Objects are joined to this Metaverse Object. Surfaced as a count for the
-    /// same reason as <see cref="ChangeCount"/>: the Identity page badges its Connections tab without
-    /// loading the objects, which the tab reads on its own when opened (#1519).
+    /// same reason as <see cref="ChangeCount"/>: the Metaverse Object detail page badges its Connections tab
+    /// without loading the objects, which the tab reads on its own when opened (#1519).
     /// </summary>
     public int ConnectorCount { get; set; }
 

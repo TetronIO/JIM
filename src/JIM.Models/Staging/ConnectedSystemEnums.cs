@@ -27,7 +27,7 @@ public enum ConnectedSystemObjectStatus
 /// The state of a Connected System Object's connection to its Metaverse Object, derived from the
 /// object's <see cref="ConnectedSystemObjectStatus"/> combined with its Pending Export (if any):
 /// <see cref="JIM.Models.Transactional.PendingExportChangeType"/> and
-/// <see cref="JIM.Models.Transactional.PendingExportStatus"/>. Surfaced on the Identity's Connections
+/// <see cref="JIM.Models.Transactional.PendingExportStatus"/>. Surfaced on the Metaverse Object's Connections
 /// tab and the Connector Space list (D-S7: one derivation, reused by both).
 /// </summary>
 public enum ConnectedSystemObjectConnectionState

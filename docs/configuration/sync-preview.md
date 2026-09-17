@@ -11,8 +11,8 @@ Nothing you configure changes to ask it. JIM evaluates the object against the st
 ## Where to find it
 
 - **Connected System Object page**: a **Preview Sync** button beside **Set Password**, opening the preview inline below the object's header.
-- **Identity page, Connections tab**: every Connected System Object joined to the Identity is listed with a per-row **Preview Sync** action, previewing that one object's synchronisation.
-- **Identity page, Connections tab, below the table**: **Preview Outbound Synchronisation**, which previews what would export from the Identity as it stands now, with no inbound chain (see [Outbound-only preview](#outbound-only-preview-from-an-identity) below).
+- **Metaverse Object detail page, Connections tab**: every Connected System Object joined to the Metaverse Object is listed with a per-row **Preview Sync** action, previewing that one object's synchronisation.
+- **Metaverse Object detail page, Connections tab, below the table**: **Preview Outbound Synchronisation**, which previews what would export from the Metaverse Object as it stands now, with no inbound chain (see [Outbound-only preview](#outbound-only-preview-from-a-metaverse-object) below).
 
 Each panel names the Connected System whose Full Synchronisation is being previewed, so a preview reached from a Connected System Object's Connections row is never mistaken for a preview of a different system.
 
@@ -25,22 +25,22 @@ Every statement in the preview is conditional: "would project", "would join", "w
 When an object falls out of scope of every import Synchronisation Rule with Scoping Criteria, a real synchronisation does not stop at disconnecting it. Sync Preview walks the same chain:
 
 1. **Out of scope, joined**: the object would disconnect from its Metaverse Object.
-2. **Deletion Rule**: the Metaverse Object's type is put to its [Deletion Rule](metaverse.md#deletion-behaviour). Depending on the rule and whether other Connected System Objects still keep the identity joined, the Identity would be deleted immediately, scheduled for deletion after its grace period, or kept exactly as it stands (for example, because another system still holds a connector, or the type's rule is Manual).
-3. **Downstream deprovisioning**: if the Identity would be deleted, every other Connected System Object still joined to it is evaluated in turn. One with a matching export Synchronisation Rule would be deprovisioned (deleted from its target system, or merely disconnected, per that rule's Deprovisioning Action); one with **no** matching export rule at all is disconnected and left in place, because there is nothing to tell it to do otherwise.
+2. **Deletion Rule**: the Metaverse Object's type is put to its [Deletion Rule](metaverse.md#deletion-behaviour). Depending on the rule and whether other Connected System Objects still keep it joined, the Metaverse Object would be deleted immediately, scheduled for deletion after its grace period, or kept exactly as it stands (for example, because another system still holds a connector, or the type's rule is Manual).
+3. **Downstream deprovisioning**: if the Metaverse Object would be deleted, every other Connected System Object still joined to it is evaluated in turn. One with a matching export Synchronisation Rule would be deprovisioned (deleted from its target system, or merely disconnected, per that rule's Deprovisioning Action); one with **no** matching export rule at all is disconnected and left in place, because there is nothing to tell it to do otherwise.
 
 !!! note "A scheduled deletion stages nothing yet"
 
-    When the Deletion Rule's outcome is a *scheduled* deletion (a grace period applies), nothing downstream is evaluated: no target account is deprovisioned until the grace period actually elapses and the deletion happens for real. The preview reflects that: you see the Identity would be scheduled for deletion, and nothing more, which is exactly what a real synchronisation would do too.
+    When the Deletion Rule's outcome is a *scheduled* deletion (a grace period applies), nothing downstream is evaluated: no target account is deprovisioned until the grace period actually elapses and the deletion happens for real. The preview reflects that: you see the Metaverse Object would be scheduled for deletion, and nothing more, which is exactly what a real synchronisation would do too.
 
 A downstream object that would only be disconnected (no matching export rule, or a matching rule whose Deprovisioning Action is Disconnect) is not deprovisioned, so it does not appear as its own node in the outcome tree; it is reported as a warning instead, naming the object and the Connected System it belongs to.
 
 !!! warning "Provisioned targets are connectors too"
 
-    Under the **When Last Connector Disconnected** Deletion Rule, an account JIM has provisioned to a target system counts as a connector like any other. An Identity with target accounts is therefore **not** deleted just because its source system leaves scope; the target accounts keep it alive, holding their last known values. If you want a departing source to remove those target accounts, the Identity's type needs **When Authoritative Source Disconnected** with that source listed, which is the rule that actually deprovisions targets when an authoritative source disconnects. See [Deletion behaviour](metaverse.md#deletion-behaviour) for the full explanation, including the grace period and how a reconnection can cancel a scheduled deletion.
+    Under the **When Last Connector Disconnected** Deletion Rule, an account JIM has provisioned to a target system counts as a connector like any other. A Metaverse Object with target accounts is therefore **not** deleted just because its source system leaves scope; the target accounts keep it alive, holding their last known values. If you want a departing source to remove those target accounts, the Metaverse Object's type needs **When Authoritative Source Disconnected** with that source listed, which is the rule that actually deprovisions targets when an authoritative source disconnects. See [Deletion behaviour](metaverse.md#deletion-behaviour) for the full explanation, including the grace period and how a reconnection can cancel a scheduled deletion.
 
-## Outbound-only preview from an Identity
+## Outbound-only preview from a Metaverse Object
 
-An Identity is never synchronised itself; its Connected System Objects are. **Preview Outbound Synchronisation** below the Connections table therefore asks a narrower question than the Connections tab's per-object preview: given the Identity **as it stands right now**, what would export to each target Connected System? It carries no inbound chain at all (no scope, no join, no Attribute Flow), so it cannot tell you whether an inbound change is about to arrive first. Use it to check what an edit you have already made to the Identity would push outward; use the per-object preview on the Connections tab for the full inbound-then-outbound answer for one Connected System Object.
+A Metaverse Object is never synchronised itself; its Connected System Objects are. **Preview Outbound Synchronisation** below the Connections table therefore asks a narrower question than the Connections tab's per-object preview: given the Metaverse Object **as it stands right now**, what would export to each target Connected System? It carries no inbound chain at all (no scope, no join, no Attribute Flow), so it cannot tell you whether an inbound change is about to arrive first. Use it to check what an edit you have already made to the Metaverse Object would push outward; use the per-object preview on the Connections tab for the full inbound-then-outbound answer for one Connected System Object.
 
 There is no single preview covering every source at once: a Full Synchronisation always belongs to one Connected System, so a preview spanning several would not correspond to any run you could actually start.
 
@@ -55,7 +55,7 @@ Sync Preview is available over every surface:
 | Object | REST | PowerShell |
 |---|---|---|
 | Connected System Object | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{id}/sync-preview` | [`Get-JIMConnectedSystemObjectSyncPreview`](../powershell/previews.md#get-jimconnectedsystemobjectsyncpreview) |
-| Metaverse Object (Identity) | `GET /api/v1/metaverse/objects/{id}/sync-preview` | [`Get-JIMMetaverseObjectSyncPreview`](../powershell/previews.md#get-jimmetaverseobjectsyncpreview) |
+| Metaverse Object | `GET /api/v1/metaverse/objects/{id}/sync-preview` | [`Get-JIMMetaverseObjectSyncPreview`](../powershell/previews.md#get-jimmetaverseobjectsyncpreview) |
 
 Both require the Administrator role. Full endpoint detail is in the [interactive API reference](../../api/reference/).
 

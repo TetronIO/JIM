@@ -13,7 +13,8 @@ namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
 /// Real-PostgreSQL check that the Metaverse Object detail load reports how many Connected System Objects are
-/// joined (#1519): the Identity page badges its Connections tab from this count without loading the objects.
+/// joined (#1519): the Metaverse Object detail page badges its Connections tab from this count without
+/// loading the objects.
 /// </summary>
 /// <remarks>
 /// Opt-in via the same <c>JIM_TEST_RESET_*</c> environment variables as the other database-backed tests;
@@ -54,7 +55,7 @@ public class MvoDetailConnectorCountDatabaseTests
     [Test]
     public async Task GetMetaverseObjectDetailAsync_TwoJoinedObjectsAndOneUnjoined_ReportsTwoConnectorsAsync()
     {
-        // Arrange - one Identity with two joined objects across two systems, and an unjoined object that must not count
+        // Arrange - one Metaverse Object with two joined objects across two systems, and an unjoined object that must not count
         Guid joinedMvoId;
         Guid lonelyMvoId;
         await using (var seed = NewContext())

@@ -9,8 +9,8 @@ namespace JIM.Application.Utilities;
 /// <summary>
 /// Derives a Connected System Object's <see cref="ConnectedSystemObjectConnectionState"/> (D-S7) from
 /// its <see cref="ConnectedSystemObjectStatus"/> and its Pending Export, if any. Pure and side-effect
-/// free so it is reusable by both the Identity Connections tab and the Connector Space list, and unit
-/// testable one state at a time.
+/// free so it is reusable by both the Metaverse Object's Connections tab and the Connector Space list, and
+/// unit testable one state at a time.
 /// </summary>
 /// <remarks>
 /// <para>

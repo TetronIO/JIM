@@ -1334,8 +1334,8 @@ public class MetaverseServer
     }
 
     /// <summary>
-    /// Gets one row per Connected System Object joined to a Metaverse Object, for the Identity Connections
-    /// tab (#1519): the object's identity, its Connected System, its role (source/target, derived from
+    /// Gets one row per Connected System Object joined to a Metaverse Object, for the Metaverse Object's
+    /// Connections tab (#1519): the object's identity, its Connected System, its role (source/target, derived from
     /// enabled Synchronisation Rules for its Connected System Object Type), its join type, its derived
     /// connection state (D-S7) and when it was last synchronised. Returns an empty list for an unknown
     /// Metaverse Object rather than throwing; callers distinguish "no connections" from "no such object"
@@ -2163,7 +2163,7 @@ public class MetaverseServer
     /// <summary>
     /// Gets the deletion record for a Metaverse Object that no longer exists, keyed on the object's own id.
     /// Backs the Deleted Objects page's deep link, which is reached from a causality view holding the
-    /// deleted Identity's id rather than its change record's.
+    /// deleted Metaverse Object's id rather than its change record's.
     /// </summary>
     /// <param name="deletedMetaverseObjectId">The id the Metaverse Object had before it was deleted.</param>
     /// <returns>The Deleted change record, or null when there is none for that id.</returns>

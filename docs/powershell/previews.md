@@ -339,7 +339,7 @@ Both return the same shape: `OutcomeTree` (the raw, recursive tree), `Outcomes` 
 
 ## Get-JIMConnectedSystemObjectSyncPreview
 
-Previews what synchronising a Connected System Object would do: the inbound chain (scope, join or projection, Attribute Flow), the outbound decisions the resulting Metaverse Object state would produce, and, where the object would fall out of scope and disconnect, the destructive cascade (whether the Identity would be deleted or scheduled for deletion, and which downstream Connected System Objects would be deprovisioned).
+Previews what synchronising a Connected System Object would do: the inbound chain (scope, join or projection, Attribute Flow), the outbound decisions the resulting Metaverse Object state would produce, and, where the object would fall out of scope and disconnect, the destructive cascade (whether the Metaverse Object would be deleted or scheduled for deletion, and which downstream Connected System Objects would be deprovisioned).
 
 ### Syntax
 
@@ -381,7 +381,7 @@ $preview.Warnings | Where-Object Code -eq 'OutOfScope' | Select-Object Detail
 
 ## Get-JIMMetaverseObjectSyncPreview
 
-Previews what synchronising from a Metaverse Object's current state would do: the outbound decisions the Identity's current state would produce. An Identity is never synchronised itself; its Connected System Objects are, so this cmdlet evaluates the Identity **as it stands now**, outbound only, with no inbound chain of its own (`Inbound` is always `$null`). For the full inbound-then-outbound chain of one Connected System Object, use [`Get-JIMConnectedSystemObjectSyncPreview`](#get-jimconnectedsystemobjectsyncpreview) instead.
+Previews what synchronising from a Metaverse Object's current state would do: the outbound decisions that state would produce. A Metaverse Object is never synchronised itself; its Connected System Objects are, so this cmdlet evaluates the Metaverse Object **as it stands now**, outbound only, with no inbound chain of its own (`Inbound` is always `$null`). For the full inbound-then-outbound chain of one Connected System Object, use [`Get-JIMConnectedSystemObjectSyncPreview`](#get-jimconnectedsystemobjectsyncpreview) instead.
 
 ### Syntax
 
@@ -393,7 +393,7 @@ Get-JIMMetaverseObjectSyncPreview -Id <guid>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes | | The Metaverse Object (Identity) to preview. Accepts pipeline input by property name. |
+| `Id` | `guid` | Yes | | The Metaverse Object to preview. Accepts pipeline input by property name. |
 
 ### Output
 
@@ -401,7 +401,7 @@ Returns the same shape as [`Get-JIMConnectedSystemObjectSyncPreview`](#get-jimco
 
 ### Examples
 
-```powershell title="Preview what would export from an Identity as it stands now"
+```powershell title="Preview what would export from a Metaverse Object as it stands now"
 Get-JIMMetaverseObjectSyncPreview -Id "8f14e45f-ceea-467e-adde-3f8cbb1e4d28"
 ```
 

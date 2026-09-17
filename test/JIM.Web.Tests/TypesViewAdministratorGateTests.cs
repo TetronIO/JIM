@@ -7,7 +7,7 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Source-shape test over <c>Types/View.razor</c> for the Identity page's two Sync Preview
+/// Source-shape test over <c>Types/View.razor</c> for the Metaverse Object detail page's two Sync Preview
 /// affordances (#1519, D-S6): the Connections tab and its Preview Outbound
 /// Synchronisation card must each sit inside an <c>AuthorizeView Roles="Administrator"</c> gate, as
 /// the Password tab already does (#1172).

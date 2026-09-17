@@ -13,7 +13,7 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// bUnit tests for <see cref="MetaverseObjectConnectionsTable"/>: the Identity Connections tab's table
+/// bUnit tests for <see cref="MetaverseObjectConnectionsTable"/>: the Metaverse Object's Connections tab table
 /// (#1519), one row per joined Connected System Object, rendering every
 /// <see cref="ConnectedSystemObjectConnectionState"/>, the loading and empty states, and the per-row
 /// Preview Sync callback.
@@ -59,7 +59,7 @@ public class MetaverseObjectConnectionsTableTests : JimComponentTestContext
             .Add(c => c.IsLoaded, true)
             .Add(c => c.Connections, []));
 
-        Assert.That(cut.Markup, Does.Contain("This Identity has no Connected System Objects joined to it."));
+        Assert.That(cut.Markup, Does.Contain("This Metaverse Object has no Connected System Objects joined to it."));
         Assert.That(cut.FindAll("[data-testid='jim-mvo-connections-table']"), Is.Empty);
     }
 

@@ -7,14 +7,14 @@ function Get-JIMMetaverseObjectSyncPreview {
         Previews what synchronising from a Metaverse Object's current state would do.
 
     .DESCRIPTION
-        Nothing is changed: the preview evaluates the outbound decisions the Identity's
+        Nothing is changed: the preview evaluates the outbound decisions the Metaverse Object's
         current state would produce, and returns what a real synchronisation would do without
         staging or persisting anything.
 
-        An Identity is never synchronised itself; its Connected System Objects are. This
-        preview therefore evaluates the Identity as it stands now, outbound only: it has no
+        A Metaverse Object is never synchronised itself; its Connected System Objects are. This
+        preview therefore evaluates the Metaverse Object as it stands now, outbound only: it has no
         inbound chain of its own, so the response's Inbound is always null, and it carries no
-        knowledge of what an inbound synchronisation of one of the Identity's Connected System
+        knowledge of what an inbound synchronisation of one of the Metaverse Object's Connected System
         Objects might change first. For the full inbound-then-outbound chain of one Connected
         System Object, use Get-JIMConnectedSystemObjectSyncPreview instead.
 
@@ -34,7 +34,7 @@ function Get-JIMMetaverseObjectSyncPreview {
     .EXAMPLE
         Get-JIMMetaverseObjectSyncPreview -Id "8f14e45f-ceea-467e-adde-3f8cbb1e4d28"
 
-        Previews what would export from the Identity as it stands now.
+        Previews what would export from the Metaverse Object as it stands now.
 
     .EXAMPLE
         (Get-JIMMetaverseObjectSyncPreview -Id $mvoId).Outcomes |

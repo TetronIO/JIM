@@ -189,8 +189,8 @@
         </MudTabPanel>
 
         @* ─── Connections ─── *@
-        @* Every Connected System Object joined to this Identity, its role in synchronisation, its derived *@
-        @* State and a per-row Preview Sync, plus the outbound-only preview of the Identity as it stands  *@
+        @* Every Connected System Object joined to this Metaverse Object, its role in synchronisation, its  *@
+        @* derived State and a per-row Preview Sync, plus the outbound-only preview of it as it stands      *@
         @* (#1519, D-S6). Which systems hold data about someone is not something every signed-in user may *@
         @* see about every other person, so the tab carries its own Administrator gate, as Password does.  *@
         <AuthorizeView Roles="Administrator" Context="connectionsAuth">
@@ -208,19 +208,19 @@
                         </div>
                     }
 
-                    @* The secondary preview: what putting this Identity's current state to every enabled export
-                       Synchronisation Rule would do, with no inbound step (#1519, D-S6). Below the per-object
-                       table because the table's Preview Sync is the primary preview; this one answers a
-                       narrower question, and lives on this tab because it is the Identity's synchronisation tab. *@
+                    @* The secondary preview: what putting this Metaverse Object's current state to every enabled
+                       export Synchronisation Rule would do, with no inbound step (#1519, D-S6). Below the
+                       per-object table because the table's Preview Sync is the primary preview; this one answers
+                       a narrower question, and lives on this tab because it is this object's synchronisation tab. *@
                     <MudPaper Class="pa-4 mt-6" Outlined="true">
                         <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-preview-outbound">
                             <MudIcon Icon="@Icons.Material.Filled.Visibility" Color="Color.Primary" Class="mt-1" />
                             <MudStack Spacing="1" Class="flex-grow-1">
                                 <MudText Typo="Typo.h6">Preview Outbound Synchronisation</MudText>
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                    Puts this Identity's current state to every enabled export Synchronisation Rule:
+                                    Puts this Metaverse Object's current state to every enabled export Synchronisation Rule:
                                     accounts that would be provisioned where none exists, updated where one does, or
-                                    deprovisioned where the Identity has left a rule's scope. No object is
+                                    deprovisioned where the Metaverse Object has left a rule's scope. No object is
                                     synchronised first; use a connection's Preview Sync above for that.
                                 </MudText>
                             </MudStack>
@@ -297,8 +297,8 @@
     private bool _passwordTabLoading;
     private bool _passwordActionRunning;
 
-    // The Connections tab (#1519): this Identity's joined Connected System Objects, loaded when the tab is
-    // first opened, and the state of a per-row Sync Preview.
+    // The Connections tab (#1519): this Metaverse Object's joined Connected System Objects, loaded when the
+    // tab is first opened, and the state of a per-row Sync Preview.
     private List<MetaverseObjectConnection> _connections = [];
     private int _connectorCount;
     private bool _connectionsLoading;
@@ -307,8 +307,8 @@
     private SyncPreviewResult? _connectionPreviewResult;
     private CausalityPageContext? _connectionPreviewContext;
 
-    // The Connections tab's secondary preview (#1519, D-S6): this Identity as it stands, against every enabled
-    // export Synchronisation Rule.
+    // The Connections tab's secondary preview (#1519, D-S6): this Metaverse Object as it stands, against every
+    // enabled export Synchronisation Rule.
     private bool _outboundPreviewLoading;
     private SyncPreviewResult? _outboundPreviewResult;
 
@@ -738,7 +738,7 @@
     }
 
     /// <summary>
-    /// Evaluates this Identity's current state against every enabled export Synchronisation Rule
+    /// Evaluates this Metaverse Object's current state against every enabled export Synchronisation Rule
     /// (#1519, D-S6): the secondary preview on the Connections tab. No inbound step, unlike the Connections
     /// tab's per-object preview above.
     /// </summary>

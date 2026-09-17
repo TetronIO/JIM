@@ -62,7 +62,7 @@ public class SyncPreviewPanelTests
             .Add(c => c.Context, Context()));
 
         Assert.That(cut.Find(".preview-pill").TextContent.Trim(), Is.EqualTo("Preview"));
-        Assert.That(cut.Markup, Does.Contain("Identity would be created"));
+        Assert.That(cut.Markup, Does.Contain("A Metaverse Object would be projected"));
     }
 
     [Test]

@@ -6,7 +6,7 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* The Identity Connections tab's table (#1519): one row per Connected System Object joined to the
+@* The Metaverse Object's Connections tab table (#1519): one row per Connected System Object joined to the
    Metaverse Object, its role, its derived State and a per-row Preview Sync. A component of its own
    (rather than inline markup on Types/View.razor) so the State chip and colour mapping have exactly
    one definition, reusable on the Connector Space list per D-S7, and so the shape is bUnit-testable. *@
@@ -18,7 +18,7 @@
 else if (IsLoaded && Connections.Count == 0)
 {
     <TableEmptyState Icon="@Icons.Material.Filled.Hub"
-                     PrimaryText="This Identity has no Connected System Objects joined to it." />
+                     PrimaryText="This Metaverse Object has no Connected System Objects joined to it." />
 }
 else if (IsLoaded)
 {
@@ -163,7 +163,7 @@ else if (IsLoaded)
 
     /// <summary>
     /// Sort key for the Role column: sources before targets, and a connection that is both sorts with
-    /// the sources, so a sort by role reads as "where does this Identity come from, then where does it go".
+    /// the sources, so a sort by role reads as "where does this Metaverse Object come from, then where does it go".
     /// </summary>
     private static string GetRoleSortKey(MetaverseObjectConnection connection) =>
         (connection.IsSource, connection.IsTarget) switch

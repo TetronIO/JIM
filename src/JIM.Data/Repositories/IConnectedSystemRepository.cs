@@ -579,8 +579,8 @@ public interface IConnectedSystemRepository
 
     /// <summary>
     /// Gets every Connected System Object joined to a Metaverse Object, with its Connected System Object
-    /// Type and Connected System navigations loaded, for the Identity Connections tab (#1519). Core-weight
-    /// (see the entity retrieval taxonomy): the number of joined objects for one Identity is always small,
+    /// Type and Connected System navigations loaded, for the Metaverse Object's Connections tab (#1519).
+    /// Core-weight (see the entity retrieval taxonomy): the number of joined objects for one Metaverse Object is always small,
     /// so materialising the full entity plus its first-level Type/ConnectedSystem navigations (needed for
     /// the tab's Connected System name and object type name columns) costs nothing at this scale, unlike
     /// <see cref="GetConnectedSystemObjectsByMetaverseObjectIdAsync"/>'s callers, which do not need either.
