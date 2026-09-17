@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Transactional;
+
 namespace JIM.Models.Staging.DTOs;
 
 public class ConnectedSystemObjectHeader
@@ -74,6 +76,13 @@ public class ConnectedSystemObjectHeader
     /// The ID of the PendingExport associated with this CSO, if one exists.
     /// </summary>
     public Guid? PendingExportId { get; set; }
+
+    /// <summary>
+    /// The status of the Pending Export associated with this CSO, if one exists. Tells a pending value that has
+    /// merely been staged (Pending) apart from one that has been exported and awaits a confirming import
+    /// (Exported), which the pending values above cannot say on their own.
+    /// </summary>
+    public PendingExportStatus? PendingExportStatus { get; set; }
 
     #endregion
     #endregion
