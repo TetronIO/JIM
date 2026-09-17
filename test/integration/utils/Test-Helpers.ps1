@@ -3795,6 +3795,98 @@ function Stop-DockerEventsCapture {
     return 0
 }
 
+function Assert-SyncStateInvariants {
+    <#
+    .SYNOPSIS
+        Asserts that a finished scenario left no Connected System in a state JIM can never recover from.
+
+    .DESCRIPTION
+        Scenario assertions cover the Connected Systems a scenario cares about. This sweep covers ALL of
+        them, because a defect is happiest in the system nobody is looking at: Scenario 4 left nine
+        unremovable Connected System Objects in "Cross-Domain Export" on every run for months, a target it
+        provisions to and never asserts on. The runner calls this after every scenario, whatever the
+        scenario's own outcome.
+
+        Each invariant is a state that is wrong whatever the scenario was testing, read directly from the
+        database (same pattern as Get-MvoDeletionMarkers) so it needs no API surface and sees every system:
+
+        1. No stranded Pending Provisioning object. A Connected System Object that is Pending Provisioning,
+           not joined, and has no Create in flight (no Pending Export, or one that has never been attempted)
+           does not exist in the target system and has nothing left that would ever create or remove it.
+           Import deletion detection excludes Pending Provisioning objects, so it stays for ever.
+        2. No unexecutable Delete. A Pending-status Delete Pending Export that carries no attribute changes,
+           for a Connected System Object holding no attribute values, gives a Connector nothing to identify
+           the object by; the export fails with "Delete export has no External ID value".
+
+        Pending Exports that are merely waiting (a scenario that provisions to a target and never exports
+        to it) are deliberately NOT a violation: that is a legitimate resting state, and a useful one for
+        anyone wanting Pending Exports to look at.
+
+    .OUTPUTS
+        Nothing on success. Throws, naming every violation, when an invariant is broken.
+
+    .EXAMPLE
+        Assert-SyncStateInvariants
+    #>
+    [CmdletBinding()]
+    param()
+
+    # ConnectedSystemObjectStatus.PendingProvisioning = 2; ConnectedSystemObjectJoinType.NotJoined = 0;
+    # PendingExportChangeType.Create = 0, Delete = 2; PendingExportStatus.Pending = 0.
+    $invariants = @(
+        @{
+            Name  = "Stranded Pending Provisioning Connected System Object (not joined, no Create in flight)"
+            Query = @"
+SELECT cs."Name", cso."Id"::text
+FROM "ConnectedSystemObjects" cso
+JOIN "ConnectedSystems" cs ON cs."Id" = cso."ConnectedSystemId"
+LEFT JOIN "PendingExports" pe ON pe."ConnectedSystemObjectId" = cso."Id"
+WHERE cso."Status" = 2
+  AND cso."JoinType" = 0
+  AND (pe."Id" IS NULL
+       OR pe."ChangeType" <> 0
+       OR (pe."Status" = 0 AND pe."LastAttemptedAt" IS NULL))
+ORDER BY cs."Name", cso."Id";
+"@
+        },
+        @{
+            Name  = "Unexecutable Delete Pending Export (no attribute changes, and its Connected System Object holds no values to identify it by)"
+            Query = @"
+SELECT cs."Name", pe."Id"::text
+FROM "PendingExports" pe
+JOIN "ConnectedSystems" cs ON cs."Id" = pe."ConnectedSystemId"
+JOIN "ConnectedSystemObjects" cso ON cso."Id" = pe."ConnectedSystemObjectId"
+WHERE pe."ChangeType" = 2
+  AND pe."Status" = 0
+  AND NOT EXISTS (SELECT 1 FROM "PendingExportAttributeValueChanges" c WHERE c."PendingExportId" = pe."Id")
+  AND NOT EXISTS (SELECT 1 FROM "ConnectedSystemObjectAttributeValues" v WHERE v."ConnectedSystemObjectId" = cso."Id")
+ORDER BY cs."Name", pe."Id";
+"@
+        }
+    )
+
+    $violations = @()
+    foreach ($invariant in $invariants) {
+        $rows = docker compose exec -T jim.database psql -t -A -F '|' -U jim -d jim -c $invariant.Query 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Assert-SyncStateInvariants: psql query failed for invariant '$($invariant.Name)'. Output: $rows"
+        }
+
+        $offenders = @($rows | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+        if ($offenders.Count -eq 0) {
+            continue
+        }
+
+        $bySystem = $offenders | Group-Object { $_.Split('|')[0] } | ForEach-Object { "$($_.Name): $($_.Count)" }
+        $sample = ($offenders | Select-Object -First 5 | ForEach-Object { $_.Split('|')[1] }) -join ', '
+        $violations += "$($invariant.Name). $($offenders.Count) found ($($bySystem -join '; ')). First ids: $sample"
+    }
+
+    if ($violations.Count -gt 0) {
+        throw "Synchronisation state invariant(s) broken:`n  - $($violations -join "`n  - ")"
+    }
+}
+
 function Assert-NoWorkerErrors {
     <#
     .SYNOPSIS

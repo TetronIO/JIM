@@ -3438,6 +3438,18 @@ finally {
         Write-Host "${RED}✗ Post-scenario log scan failed: $_${NC}"
         $scenarioExitCode = 1
     }
+
+    # Invariant sweep across EVERY Connected System, not just the ones the scenario asserts on: a defect is
+    # happiest in the system nobody is looking at (see Assert-SyncStateInvariants). Always run, whatever the
+    # scenario's own outcome, so a scenario failure does not hide a state defect behind it.
+    try {
+        Assert-SyncStateInvariants
+        Write-Step "Synchronisation state invariants hold across all Connected Systems"
+    }
+    catch {
+        Write-Host "${RED}✗ Post-scenario invariant sweep failed: $_${NC}"
+        $scenarioExitCode = 1
+    }
 }
 $timings["5. Run Tests"] = (Get-Date) - $step5Start
 
