@@ -4,11 +4,15 @@
 namespace JIM.Web.Causality;
 
 /// <summary>
-/// The complete display mapping for a sync outcome type: the plain-language label shown first, the
-/// technical label demoted alongside it, the visual tone, and the Material icon.
+/// The complete display mapping for a sync outcome type: the single label shown for it, the visual
+/// tone, and the Material icon.
 /// </summary>
-/// <param name="PlainLabel">Plain-language label (e.g. "Identity created").</param>
-/// <param name="TechnicalLabel">Technical label (e.g. "MVO Projected").</param>
+/// <param name="Label">
+/// The outcome's one name, in the same vocabulary the rest of the portal uses ("Attributes flowed",
+/// "Projected to the Metaverse"). JIM does not rename its product nouns, and it does not offer a second,
+/// more technical name beside them either: "Metaverse Object" and "Connected System Object" are used in
+/// full where a noun is needed, and internal shorthands ("MVO", "CSO") never reach this label.
+/// </param>
 /// <param name="Tone">Visual tone for colour coding.</param>
 /// <param name="Icon">Material icon string.</param>
 /// <param name="SentenceForm">
@@ -20,8 +24,7 @@ namespace JIM.Web.Causality;
 /// beside the preview because an outcome's words belong in one place; splitting them is how two of them drift.
 /// </param>
 public sealed record OutcomeDisplay(
-    string PlainLabel,
-    string TechnicalLabel,
+    string Label,
     CausalityTone Tone,
     string Icon,
     string? SentenceForm = null);

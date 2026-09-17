@@ -907,8 +907,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations - affect Connected System Objects
-            ObjectChangeType.Added => "CSO Added",
-            ObjectChangeType.Updated => "CSO Updated",
+            ObjectChangeType.Added => "Connected System Object Added",
+            ObjectChangeType.Updated => "Connected System Object Updated",
             ObjectChangeType.Deleted => IsHousekeepingContext()
                 ? "Metaverse Object Deleted"
                 : IsSyncContext() ? "Deletion Processed" : "Deletion Detected",

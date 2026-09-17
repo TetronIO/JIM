@@ -8,15 +8,16 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The causality visualisation panel for a Run Profile Execution Item. Owns the current view, the
-   technical-names toggle, the Timeline's expanded event and the Lineage's selected event (whose
-   attribute detail renders in the shared bottom drawer); builds the causality and lineage models and
-   the summary once per (Item, Context, Chain) tuple and renders the summary band (whose head row
-   carries the view switcher and technical-names toggle in its Actions slot), the active view and
-   the drawer. Persisted view and technical-names preferences load on first render per the
-   TableDensityToggle idiom; the Lineage is the default, and a stored preference for an unknown or
-   retired view (the old Flow and Graph keys included) falls back to it without being overwritten.
-   The causal chain renders on the Lineage itself (#1495); the separate Caused by list retired with
-   the Flow and Graph views. *@
+   Timeline's expanded event and the Lineage's selected event (whose attribute detail renders in the
+   shared bottom drawer); builds the causality and lineage models and the summary once per
+   (Item, Context, Chain) tuple and renders the summary band (whose head row carries the view switcher
+   in its Actions slot), the active view and the drawer. The persisted view preference loads on first
+   render per the TableDensityToggle idiom; the Lineage is the default, and a stored preference for an
+   unknown or retired view (the old Flow and Graph keys included) falls back to it without being
+   overwritten. Every event is named once, in the portal's own vocabulary: JIM does not rename its
+   product nouns, and it does not carry a second, more technical name beside them either. The causal
+   chain renders on the Lineage itself (#1495); the separate Caused by list retired with the Flow and
+   Graph views. *@
 
 <div class="causality-panel">
     @if (Item.SyncOutcomes.Count == 0)
@@ -30,8 +31,7 @@
     }
     else if (_model != null && _summary != null)
     {
-        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()"
-                              TechnicalNames="_technicalNames">
+        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()">
             <Actions>
                 @if (AvailableViews.Count > 1)
                 {
@@ -44,11 +44,6 @@
                         }
                     </div>
                 }
-                <button type="button" class="toggle-line @(_technicalNames ? "on" : null)"
-                        aria-pressed="@(_technicalNames ? "true" : "false")"
-                        @onclick="ToggleTechnicalNamesAsync">
-                    <span class="track" aria-hidden="true"></span> Technical names
-                </button>
             </Actions>
         </CausalitySummaryBand>
 
@@ -56,12 +51,12 @@
             @switch (_view)
             {
                 case CausalityView.Lineage when _lineageModel is { } lineageModel:
-                    <CausalityLineageView Model="lineageModel" TechnicalNames="_technicalNames"
+                    <CausalityLineageView Model="lineageModel"
                                         Timestamp="Timestamp" @bind-SelectedEvent="_selectedEvent" />
                     break;
                 case CausalityView.Timeline:
                 default:
-                    <CausalityTimelineView Model="_model" TechnicalNames="_technicalNames"
+                    <CausalityTimelineView Model="_model"
                                            @bind-ExpandedEvent="_expandedEvent" />
                     break;
             }
@@ -73,7 +68,7 @@
             <div class="drawer">
                 <div class="drawer-inner">
                     <div class="drawer-head">
-                        <span class="drawer-title">@(_technicalNames ? selectedEvent.TechnicalLabel : selectedEvent.PlainLabel)</span>
+                        <span class="drawer-title">@selectedEvent.Label</span>
                         <span class="drawer-sub">@GetDrawerSubtitle(selectedEvent)</span>
                         <button type="button" class="drawer-close" aria-label="Close detail"
                                 @onclick="CloseDrawer">&#x2715;</button>
@@ -137,7 +132,7 @@
 
     /// <summary>
     /// The decision-time Metaverse Object deletion policy recorded on the item, where one was captured. Supplies
-    /// the synthetic "Identity not deleted" event, which is the one thing a Deletion Rule's decision leaves no
+    /// the synthetic "Metaverse Object not deleted" event, which is the one thing a Deletion Rule's decision leaves no
     /// outcome to render.
     /// </summary>
     [Parameter]
@@ -154,7 +149,6 @@
     private CausalitySummary? _summary;
     private CausalityLineageModel? _lineageModel;
     private CausalityView _view = CausalityView.Lineage;
-    private bool _technicalNames;
     private CausalityEvent? _expandedEvent;
     private CausalityEvent? _selectedEvent;
     private ActivityRunProfileExecutionItem? _builtItem;
@@ -192,14 +186,12 @@
 
         // No try/catch needed: the preference service swallows JS interop unavailability internally
         var storedView = CausalityViewPreference.FromKey(await PreferenceService.GetCausalityViewAsync());
-        var storedTechNames = await PreferenceService.GetCausalityTechNamesAsync();
 
         // A stored preference for an unknown or retired view keeps the default without overwriting
         // the stored value; the old Flow and Graph keys land here deliberately (#1495)
         if (storedView.HasValue && AvailableViews.Contains(storedView.Value))
             _view = storedView.Value;
 
-        _technicalNames = storedTechNames == true;
         StateHasChanged();
     }
 
@@ -208,12 +200,6 @@
         _view = view;
         _selectedEvent = null;
         await PreferenceService.SetCausalityViewAsync(CausalityViewPreference.ToKey(view));
-    }
-
-    private async Task ToggleTechnicalNamesAsync()
-    {
-        _technicalNames = !_technicalNames;
-        await PreferenceService.SetCausalityTechNamesAsync(_technicalNames);
     }
 
     private void CloseDrawer()

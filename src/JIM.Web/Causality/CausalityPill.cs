@@ -5,7 +5,7 @@ namespace JIM.Web.Causality;
 
 /// <summary>
 /// An outcome category pill for the summary band, colour-coded by tone
-/// (e.g. "Identity created", "11 attributes flowed", "Export queued · 11 changes").
+/// (e.g. "Projected to the Metaverse", "11 attributes flowed", "Export queued · 11 changes").
 /// </summary>
 /// <param name="Label">The pill text.</param>
 /// <param name="Tone">The visual tone.</param>

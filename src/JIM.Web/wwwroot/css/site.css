@@ -1975,6 +1975,14 @@ html[lang] .jim-schema-change-table td {
     margin-left: -12px;
 }
 
+/* The sub-line beneath an object chip naming its type and where it lives (#1669), e.g.
+   "user in Panoply AD" under a Connected System Object's chip. A row carrying this grows past the
+   table's usual 44px row height deliberately: the sub-line is new information, not decoration. */
+.jim-object-place {
+    display: block;
+    font-size: 0.8rem;
+}
+
 /* Blazor Server Reconnection UI */
 #components-reconnect-modal {
     display: none;

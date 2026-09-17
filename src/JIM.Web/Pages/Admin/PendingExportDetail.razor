@@ -102,16 +102,23 @@
                     <MudSimpleTable Hover="true" Dense="true" Elevation="0" Class="jim-detail-table">
                         <tbody>
                             <tr>
-                                <td><strong>Target CSO</strong></td>
+                                <td><strong>Target</strong></td>
                                 <td>
                                     @if (_pendingExport.ConnectedSystemObject != null)
                                     {
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
-                                                        TypeName="@_pendingExport.ConnectedSystemObject.Type.Name"
-                                                        Name="@GetCsoDisplayName()"
-                                                        Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")"
-                                                        Class="ma-0" />
+                                        <MudStack Spacing="0">
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                                            TypeName="@_pendingExport.ConnectedSystemObject.Type.Name"
+                                                            Name="@GetCsoDisplayName()"
+                                                            Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")"
+                                                            Class="ma-0" />
+                                            </MudStack>
+                                            @* Says where the object lives; the chip above already names what it is,
+                                               so the sub-line carries only the place (#1669 follow-up). *@
+                                            <span class="mud-text-secondary jim-object-place">
+                                                @ObjectDescription.ForConnectedSystemObjectPlace(_pendingExport.ConnectedSystem.Name)
+                                            </span>
                                         </MudStack>
                                     }
                                     else
@@ -121,16 +128,22 @@
                                 </td>
                             </tr>
                             <tr>
-                                <td><strong>Source MVO</strong></td>
+                                <td><strong>Source</strong></td>
                                 <td>
                                     @if (_pendingExport.SourceMetaverseObject != null)
                                     {
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <ObjectChip Kind="ObjectChipKind.Metaverse"
-                                                        TypeName="@_pendingExport.SourceMetaverseObject.Type.Name"
-                                                        Name="@GetMvoDisplayName()"
-                                                        Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)"
-                                                        Class="ma-0" />
+                                        <MudStack Spacing="0">
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                <ObjectChip Kind="ObjectChipKind.Metaverse"
+                                                            TypeName="@_pendingExport.SourceMetaverseObject.Type.Name"
+                                                            Name="@GetMvoDisplayName()"
+                                                            Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)"
+                                                            Class="ma-0" />
+                                            </MudStack>
+                                            @* Says where the object lives, matching the Target row's own sub-line (#1669 follow-up). *@
+                                            <span class="mud-text-secondary jim-object-place">
+                                                @ObjectDescription.ForMetaverseObjectPlace()
+                                            </span>
                                         </MudStack>
                                     }
                                     else if (_pendingExport.SourceMetaverseObjectId.HasValue)

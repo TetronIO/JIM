@@ -5,14 +5,13 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The causality Timeline view: a vertical narrative of tone-coloured dots on indented rails.
-   The source row (the processed record and its Connected System) comes first, then each causality
-   event as a plain-language verb with the technical label demoted alongside (swapped when the
-   technical-names toggle is on), an optional contextual detail message, entity chips (each entity
-   named once), badges, action links and an inline attribute detail expander. Child events nest
-   through indented rail containers. *@
+   The source row (the processed Connected System Object) comes first, then each causality event as
+   its one verb, an optional contextual detail message, entity chips (each entity named once),
+   badges, action links and an inline attribute detail expander. Child events nest through indented
+   rail containers. *@
 
 <div class="tl">
-    @* ─── Source row: the record that was processed ─── *@
+    @* ─── Source row: the Connected System Object that was processed ─── *@
     <div class="tl-row">
         <div class="tl-rail">
             <span class="tl-dot" style="--tone: var(--cz-secondary)">
@@ -20,7 +19,7 @@
             </span>
         </div>
         <div class="tl-body">
-            <div class="tl-line"><span class="verb">@CausalitySourceLabels.Verb(TechnicalNames)</span></div>
+            <div class="tl-line"><span class="verb">@CausalitySourceLabels.Verb()</span></div>
             <div class="tl-detail-line">
                 @if (!string.IsNullOrWhiteSpace(Model.Context.RunProfileName))
                 {
@@ -80,12 +79,6 @@
     public CausalityModel Model { get; set; } = null!;
 
     /// <summary>
-    /// When true, technical labels (MVO/CSO vocabulary) are emphasised and plain language demoted.
-    /// </summary>
-    [Parameter]
-    public bool TechnicalNames { get; set; }
-
-    /// <summary>
     /// The event whose attribute detail is expanded inline; null when none. Two-way bindable so the
     /// panel owns the state.
     /// </summary>
@@ -114,9 +107,9 @@
                body and the last of them already provides the trailing gap. *@
             <div class="tl-body @(causalityEvent.Children.Count > 0 ? "has-children" : null)">
                 <div class="tl-line">
-                    @* One vocabulary, the one the reader asked for: with the technical-names toggle off,
-                       no CSO or MVO wording appears at all. See CausalityEventCard.Title. *@
-                    <span class="verb">@(TechnicalNames ? causalityEvent.TechnicalLabel : causalityEvent.PlainLabel)</span>
+                    @* One vocabulary, and only one: no CSO or MVO wording appears anywhere on the panel.
+                       See CausalityEventCard.Title. *@
+                    <span class="verb">@causalityEvent.Label</span>
                     @if (causalityEvent.Badge != null)
                     {
                         <span class="evt-badge" style="--tone: @toneVar">@causalityEvent.Badge</span>
@@ -186,12 +179,12 @@
         var hasSystem = !string.IsNullOrWhiteSpace(system);
 
         if (hasProfile && hasSystem)
-            return $" on {system} picked up this record.";
+            return $" on {system} picked up this Connected System Object.";
         if (hasProfile)
-            return " picked up this record.";
+            return " picked up this Connected System Object.";
         if (hasSystem)
-            return $"A run on {system} picked up this record.";
-        return "This record was picked up for processing.";
+            return $"A run on {system} picked up this Connected System Object.";
+        return "This Connected System Object was picked up for processing.";
     }
 
     private Task ToggleExpandedAsync(CausalityEvent causalityEvent)

@@ -60,7 +60,12 @@ public static class CausalitySummaryBuilder
         var recordLabel = context.RecordName;
         if (recordLabel != null)
         {
-            segments.Add(new SummarySegment.Text(" processed the record for ", " processed the Connected System Object "));
+            // Named by its object type where the builder knows it ("processed person Baseline User"), so
+            // the sentence states what kind of object this is without a second clause; otherwise the name
+            // alone carries it ("processed Baseline User").
+            segments.Add(new SummarySegment.Text(!string.IsNullOrWhiteSpace(context.CsoObjectTypeName)
+                ? $" processed {context.CsoObjectTypeName} "
+                : " processed "));
             // The record's own Connected System, not the run's: they diverge for cross-system
             // cascades, and linking with the wrong system id 404s (ConnectedSystemObjectDetail looks
             // the record up by {connectedSystemId}+{id}).
@@ -71,7 +76,7 @@ public static class CausalitySummaryBuilder
         }
         else
         {
-            segments.Add(new SummarySegment.Text(" processed the record", " processed the Connected System Object"));
+            segments.Add(new SummarySegment.Text(" processed the Connected System Object"));
         }
 
         return segments;
@@ -130,7 +135,7 @@ public static class CausalitySummaryBuilder
 
         if (allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected))
         {
-            clauses.Add([new SummarySegment.Text("a new Identity was created", "a new Metaverse Object was projected")]);
+            clauses.Add([new SummarySegment.Text("a new Metaverse Object was projected")]);
         }
         else
         {
@@ -139,13 +144,13 @@ public static class CausalitySummaryBuilder
             if (identity != null)
             {
                 clauses.Add([
-                    new SummarySegment.Text("it was joined to the Identity ", "it was joined to the Metaverse Object "),
+                    new SummarySegment.Text("it was joined to the Metaverse Object "),
                     new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)
                 ]);
             }
             else
             {
-                clauses.Add([new SummarySegment.Text("it was joined to an existing Identity", "it was joined to an existing Metaverse Object")]);
+                clauses.Add([new SummarySegment.Text("it was joined to an existing Metaverse Object")]);
             }
         }
 
@@ -251,13 +256,13 @@ public static class CausalitySummaryBuilder
                 if (identity != null)
                 {
                     clauses.Add([
-                        new SummarySegment.Text("it was disconnected from the Identity ", "it was disconnected from the Metaverse Object "),
+                        new SummarySegment.Text("it was disconnected from the Metaverse Object "),
                         new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)
                     ]);
                 }
                 else
                 {
-                    clauses.Add([new SummarySegment.Text("it was disconnected from its Identity", "it was disconnected from its Metaverse Object")]);
+                    clauses.Add([new SummarySegment.Text("it was disconnected from its Metaverse Object")]);
                 }
             }
         }
@@ -277,14 +282,14 @@ public static class CausalitySummaryBuilder
                     ?? CausalityModelBuilder.GetDeletedMvoHref(null);
 
                 clauses.Add([
-                    new SummarySegment.Text("the Identity ", "the Metaverse Object "),
+                    new SummarySegment.Text("the Metaverse Object "),
                     new SummarySegment.Entity(identityName, deletionRecordHref, CausalityEntityKind.Identity),
                     new SummarySegment.Text(" was deleted")
                 ]);
             }
             else
             {
-                clauses.Add([new SummarySegment.Text("the Identity was deleted", "the Metaverse Object was deleted")]);
+                clauses.Add([new SummarySegment.Text("the Metaverse Object was deleted")]);
             }
         }
         else
@@ -296,14 +301,14 @@ public static class CausalitySummaryBuilder
                 if (identity != null)
                 {
                     clauses.Add([
-                        new SummarySegment.Text("the Identity ", "the Metaverse Object "),
+                        new SummarySegment.Text("the Metaverse Object "),
                         new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity),
                         new SummarySegment.Text(" was scheduled for deletion")
                     ]);
                 }
                 else
                 {
-                    clauses.Add([new SummarySegment.Text("the Identity was scheduled for deletion", "the Metaverse Object was scheduled for deletion")]);
+                    clauses.Add([new SummarySegment.Text("the Metaverse Object was scheduled for deletion")]);
                 }
             }
         }
@@ -381,12 +386,10 @@ public static class CausalitySummaryBuilder
     /// </summary>
     private static List<List<SummarySegment>> BuildGenericFallbackClauses(IReadOnlyList<CausalityEvent> allEvents)
     {
-        // Each event already carries both wordings, so the fallback honours the technical-names toggle
-        // exactly as the hand-written clauses above it do.
         return allEvents
-            .Select(e => (e.PlainLabel, e.TechnicalLabel))
+            .Select(e => e.Label)
             .Distinct()
-            .Select(labels => (List<SummarySegment>)[new SummarySegment.Text(labels.PlainLabel, labels.TechnicalLabel)])
+            .Select(label => (List<SummarySegment>)[new SummarySegment.Text(label)])
             .ToList();
     }
 
@@ -400,7 +403,7 @@ public static class CausalitySummaryBuilder
         var typeOrder = new List<ActivityRunProfileExecutionItemSyncOutcomeType>();
 
         // Synthetic events are excluded: the strip counts what the run recorded, and a synthetic event stands
-        // for something it decided not to do. A "1 Identity not deleted" pill would read as an outcome.
+        // for something it decided not to do. A "1 Metaverse Object not deleted" pill would read as an outcome.
         foreach (var causalityEvent in allEvents.Where(e => e.OutcomeType.HasValue))
         {
             var outcomeType = causalityEvent.OutcomeType!.Value;
@@ -442,7 +445,7 @@ public static class CausalitySummaryBuilder
                 $"Deprovisioning · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of scope",
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => "Deletion scheduled",
-            _ => display.PlainLabel
+            _ => display.Label
         };
 
         return new CausalityPill(label, display.Tone);

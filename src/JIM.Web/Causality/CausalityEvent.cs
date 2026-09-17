@@ -36,14 +36,9 @@ public sealed class CausalityEvent
     public bool IsSynthetic { get; init; }
 
     /// <summary>
-    /// Plain-language label (e.g. "Identity created").
+    /// The event's one label (e.g. "Projected to the Metaverse"), in the portal's own vocabulary.
     /// </summary>
-    public string PlainLabel { get; init; } = string.Empty;
-
-    /// <summary>
-    /// Technical label (e.g. "MVO Projected").
-    /// </summary>
-    public string TechnicalLabel { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
 
     /// <summary>
     /// Visual tone for colour coding.

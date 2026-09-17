@@ -3,17 +3,27 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* A causality entity chip: a glyph circle identifying the entity kind (CS, R, ID, SR, ...), an
-   optional demoted sub-label and the entity name with ellipsis overflow. Renders as a link when
+@* A causality entity chip: a glyph circle identifying the entity kind (CS, SR, PE, DR, RP), an
+   optional demoted sub-label and the entity name with ellipsis overflow. A Connected System Object
+   or Metaverse Object mention carries no glyph at all: its name (and, where SubLabel names its
+   object type) is enough, and the two-letter abbreviation gained nothing beside it. Where a
+   SubLabel is set, the visible text reads as ObjectDescription's "type: name" label form (#1669
+   follow-up), not the running-text mention with "in {system}": a chip is a tag, not a sentence, and
+   the Connected System already follows on its own linked sub-line beneath the row that carries this
+   chip. It is split into two spans purely for the type prefix's dimmed colour; the chip's title and
+   accessible text (AccessibleText, below) are the same "type: name" string as one piece, so the two
+   can never disagree on what the label actually says. The remaining glyph kinds keep theirs, with
+   the glyph's own title attribute spelling out the abbreviation ("Connected System",
+   "Synchronisation Rule", ...), since nothing else on the chip explains it. Renders as a link when
    Href is provided, otherwise as a plain chip. *@
 
 @if (!string.IsNullOrEmpty(Href))
 {
-    <a class="chip" href="@Href" title="@Label">@ChipContent</a>
+    <a class="chip" href="@Href" title="@AccessibleText">@ChipContent</a>
 }
 else
 {
-    <span class="chip" title="@Label">@ChipContent</span>
+    <span class="chip" title="@AccessibleText">@ChipContent</span>
 }
 
 @code {
@@ -36,32 +46,73 @@ else
     public CausalityEntityKind Kind { get; set; }
 
     /// <summary>
-    /// Optional demoted sub-label rendered before the name (e.g. the record's object type).
+    /// Optional demoted sub-label rendered before the name (e.g. the Connected System Object's own
+    /// type). Visible text is dimmed, display-only; <see cref="AccessibleText"/> is the single source
+    /// of what the combined "type: name" label actually says.
     /// </summary>
     [Parameter]
     public string? SubLabel { get; set; }
 
     private RenderFragment ChipContent => __builder =>
     {
-        <span class="glyph @GetGlyphClass()" aria-hidden="true">@GetGlyphText()</span>
+        @if (GetGlyphText() is { } glyphText)
+        {
+            <span class="glyph @GetGlyphClass()" aria-hidden="true" title="@GetGlyphFullName()">@glyphText</span>
+        }
         @if (!string.IsNullOrEmpty(SubLabel))
         {
-            <span class="sub">@SubLabel:</span>
+            @* Dimmed display-only prefix (#1669 follow-up): the visible reading matches
+               AccessibleText's "type: name" exactly, just split so the type can be demoted in colour.
+               The colon and trailing space are baked into this span's own text rather than left as
+               markup whitespace: Razor trims a literal space immediately before a closing tag, so
+               without it the two spans would render with nothing separating them. *@
+            <span class="sub">@($"{SubLabel}: ")</span>
         }
         <span class="name-ellip">@Label</span>
     };
 
-    private string GetGlyphText()
+    /// <summary>
+    /// The chip's title and accessible text: the name alone, or the shared "type: name" label
+    /// (<see cref="ObjectDescription.ForConnectedSystemObjectLabel"/>, #1669 follow-up) when a
+    /// SubLabel is set. This is the single source of what the label says; the visible two-span
+    /// rendering above is a display-only split of the identical text for the type prefix's dimmed
+    /// colour, and must always read the same as this.
+    /// </summary>
+    private string AccessibleText => string.IsNullOrEmpty(SubLabel)
+        ? Label
+        : ObjectDescription.ForConnectedSystemObjectLabel(SubLabel, Label);
+
+    /// <summary>
+    /// The glyph circle's text, or null for a Connected System Object or Metaverse Object mention,
+    /// which renders label-only.
+    /// </summary>
+    private string? GetGlyphText()
     {
         return Kind switch
         {
             CausalityEntityKind.ConnectedSystem => "CS",
-            CausalityEntityKind.Record => "R",
-            CausalityEntityKind.Identity => "ID",
+            CausalityEntityKind.Record => null,
+            CausalityEntityKind.Identity => null,
             CausalityEntityKind.SynchronisationRule => "SR",
             CausalityEntityKind.PendingExport => "PE",
             CausalityEntityKind.DeletionRecord => "DR",
             _ => "RP"
+        };
+    }
+
+    /// <summary>
+    /// The glyph's full name, for the abbreviation's own title attribute. Only called where
+    /// <see cref="GetGlyphText"/> is non-null.
+    /// </summary>
+    private string GetGlyphFullName()
+    {
+        return Kind switch
+        {
+            CausalityEntityKind.ConnectedSystem => "Connected System",
+            CausalityEntityKind.SynchronisationRule => "Synchronisation Rule",
+            CausalityEntityKind.PendingExport => "Pending Export",
+            CausalityEntityKind.DeletionRecord => "Deletion record",
+            _ => "Run Profile"
         };
     }
 
@@ -70,8 +121,6 @@ else
         return Kind switch
         {
             CausalityEntityKind.ConnectedSystem => "sys",
-            CausalityEntityKind.Record => "rec",
-            CausalityEntityKind.Identity => "idn",
             CausalityEntityKind.SynchronisationRule => "rule",
             _ => "other"
         };

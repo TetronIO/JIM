@@ -98,7 +98,7 @@ public class CausalityRecordLabelTests
             _ => string.Empty
         }));
 
-        Assert.That(sentence, Does.Contain($"processed the record for {entryUuid}:"));
+        Assert.That(sentence, Does.Contain($"processed jimGroup {entryUuid}:"));
         Assert.That(sentence, Does.Not.Contain($"{entryUuid} ({entryUuid})"));
     }
 

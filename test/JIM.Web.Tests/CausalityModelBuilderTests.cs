@@ -756,8 +756,7 @@ public class CausalityModelBuilderTests
         {
             Assert.That(synthetic!.Lane, Is.EqualTo(CausalityLane.Identity));
             Assert.That(synthetic!.OutcomeType, Is.Null, "nothing was recorded, so there is no outcome to name");
-            Assert.That(synthetic!.PlainLabel, Is.EqualTo("Identity not deleted"));
-            Assert.That(synthetic!.TechnicalLabel, Is.EqualTo("Metaverse Object not deleted"));
+            Assert.That(synthetic!.Label, Is.EqualTo("Metaverse Object not deleted"));
         }
     }
 
@@ -872,12 +871,12 @@ public class CausalityModelBuilderTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(projected.Operation?.PlainLabel, Is.EqualTo("Created"));
-            Assert.That(attributeFlow.Operation?.PlainLabel, Is.EqualTo("Updated"));
-            Assert.That(provisioned.Operation?.PlainLabel, Is.EqualTo("Created"));
+            Assert.That(projected.Operation?.Label, Is.EqualTo("Created"));
+            Assert.That(attributeFlow.Operation?.Label, Is.EqualTo("Updated"));
+            Assert.That(provisioned.Operation?.Label, Is.EqualTo("Created"));
             // The fixture's Pending Export was staged as a Create (#1561 follow-up); the outcome's
             // recorded StagedChangeType is what now tells Create and Update apart.
-            Assert.That(pendingExport.Operation?.PlainLabel, Is.EqualTo("Created"));
+            Assert.That(pendingExport.Operation?.Label, Is.EqualTo("Created"));
         }
     }
 
@@ -911,9 +910,9 @@ public class CausalityModelBuilderTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(mvoDeleted.Operation?.PlainLabel, Is.EqualTo("Deleted"));
+            Assert.That(mvoDeleted.Operation?.Label, Is.EqualTo("Deleted"));
             Assert.That(deprovisions, Has.Count.EqualTo(2));
-            Assert.That(deprovisions.Select(d => d.Operation?.PlainLabel), Has.All.EqualTo("Deleted"));
+            Assert.That(deprovisions.Select(d => d.Operation?.Label), Has.All.EqualTo("Deleted"));
             Assert.That(outOfScope.Operation, Is.Null, "leaving scope is not itself an object operation");
         }
     }
@@ -935,8 +934,7 @@ public class CausalityModelBuilderTests
         var exportedEvent = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(exportedEvent.Operation?.PlainLabel, Is.EqualTo("Created"));
-            Assert.That(exportedEvent.Operation?.TechnicalLabel, Is.EqualTo("Export Staged (Create)"));
+            Assert.That(exportedEvent.Operation?.Label, Is.EqualTo("Created"));
             Assert.That(exportedEvent.Operation?.Tone, Is.EqualTo(CausalityTone.Success));
         }
     }

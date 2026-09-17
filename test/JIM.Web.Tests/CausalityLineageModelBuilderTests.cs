@@ -757,7 +757,7 @@ public class CausalityLineageModelBuilderTests
             e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(exportedEvent.PlainLabel, Is.EqualTo("Record created"));
+            Assert.That(exportedEvent.Label, Is.EqualTo("Connected System Object created"));
             Assert.That(exportedEvent.Tone, Is.EqualTo(CausalityTone.Success));
         }
     }
@@ -773,7 +773,7 @@ public class CausalityLineageModelBuilderTests
 
         var exportedEvent = model.AllEvents().Single(e =>
             e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
-        Assert.That(exportedEvent.PlainLabel, Is.EqualTo("Exported"));
+        Assert.That(exportedEvent.Label, Is.EqualTo("Exported"));
     }
 
     // ─── Identity-creation cohort (#1495 follow-up) ───
@@ -883,7 +883,7 @@ public class CausalityLineageModelBuilderTests
     [TestCase(CausalReasonCode.ExportCreateStaged, "Created")]
     [TestCase(CausalReasonCode.ExportUpdateStaged, "Updated")]
     [TestCase(CausalReasonCode.ExportDeleteStaged, "Deleted")]
-    public void Build_QueueingHop_CarriesTheDecisionsOperationChip(CausalReasonCode reasonCode, string expectedPlainLabel)
+    public void Build_QueueingHop_CarriesTheDecisionsOperationChip(CausalReasonCode reasonCode, string expectedLabel)
     {
         var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
         CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
@@ -901,7 +901,7 @@ public class CausalityLineageModelBuilderTests
 
         var hop = lineage.Columns.SelectMany(c => c.Objects).SelectMany(o => o.Cards)
             .Single(c => !c.IsThisRun).Hop!;
-        Assert.That(hop.Operation!.PlainLabel, Is.EqualTo(expectedPlainLabel));
+        Assert.That(hop.Operation!.Label, Is.EqualTo(expectedLabel));
     }
 
     /// <summary>
@@ -1035,6 +1035,6 @@ public class CausalityLineageModelBuilderTests
 
         var exportedEvent = model.AllEvents().Single(e =>
             e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
-        Assert.That(exportedEvent.PlainLabel, Is.EqualTo("Changes applied"));
+        Assert.That(exportedEvent.Label, Is.EqualTo("Changes applied"));
     }
 }

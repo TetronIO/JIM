@@ -147,12 +147,12 @@ public class HousekeepingActivityWorkflowTests
         // Act
         await WorkerInstance.PerformHousekeepingAsync(Jim);
 
-        // Assert: the batch is recorded as a system-initiated Scheduled Identity Deletion Activity. The enum
-        // member keeps its original name (persisted by ordinal, append-only); only the display name changed.
+        // Assert: the batch is recorded as a system-initiated Scheduled Metaverse Object Deletion Activity. The
+        // enum member keeps its original name (persisted by ordinal, append-only); only the display name changed.
         var activity = _createdActivities.SingleOrDefault(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
         Assert.That(activity, Is.Not.Null,
-            "A housekeeping batch that deletes Metaverse Objects must record a Scheduled Identity Deletion Activity");
-        Assert.That(activity!.TargetName, Is.EqualTo("Scheduled Identity Deletion"));
+            "A housekeeping batch that deletes Metaverse Objects must record a Scheduled Metaverse Object Deletion Activity");
+        Assert.That(activity!.TargetName, Is.EqualTo(Constants.ActivityTargetNames.ScheduledMetaverseObjectDeletion));
         Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Execute));
         Assert.That(activity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
         Assert.That(activity.InitiatedByName, Is.EqualTo("System"));

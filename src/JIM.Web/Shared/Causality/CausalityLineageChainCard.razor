@@ -18,7 +18,7 @@
     {
         <span class="ln-op">
             <MudIcon Icon="@chipOperation.Icon" />
-            @(TechnicalNames ? chipOperation.TechnicalLabel : chipOperation.PlainLabel)
+            @chipOperation.Label
         </span>
     }
     <div class="ln-sentence">
@@ -108,13 +108,6 @@
     /// </summary>
     [Parameter, EditorRequired]
     public CausalityLineageChainHop Hop { get; set; } = null!;
-
-    /// <summary>
-    /// When true, technical labels (MVO/CSO vocabulary) are emphasised and plain language demoted, exactly
-    /// as the panel-wide toggle does for this-run event cards.
-    /// </summary>
-    [Parameter]
-    public bool TechnicalNames { get; set; }
 
     private bool _expanded;
 
