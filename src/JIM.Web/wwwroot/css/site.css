@@ -373,6 +373,17 @@ html[lang] .mud-alert-icon {
     padding-top: 8.5px;
 }
 
+/* Alert close button: MudBlazor centres it vertically in the alert (.mud-alert-close { align-items:
+   center }), so on a multi-line alert it floats mid-block while the icon on the left sits with the
+   first line, and the two ends of the alert read out of balance. Pin it to the top on the icon's own
+   centre line: the icon's centre is 8.5px + 12px = 20.5px down, the 26px button's is 7px + 13px = 20px,
+   so the two sit within half a pixel on every alert, whatever its height. A one-line alert is
+   unchanged to the eye, because centring in a one-line alert already landed the button there. */
+html[lang] .mud-alert-close {
+    align-items: flex-start;
+    padding-top: 7px;
+}
+
 /* Alert text. A Text or Outlined alert of a semantic severity is coloured on the alert itself with the chip label
    blend (see :root), so the message, its links, any inheriting button and the close control read in one legible
    severity colour; MudBlazor colours the icon with a rule of its own, which keeps it on the palette colour. MudBlazor
