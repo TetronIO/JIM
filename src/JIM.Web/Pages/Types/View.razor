@@ -5,8 +5,10 @@
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Enums
 @using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
 @using JIM.Models.Transactional.DTOs
+@using JIM.Web.Causality
 @using JIM.Web.Models
 @using JIM.Web.Shared
 @using JIM.Web.Services
@@ -186,6 +188,61 @@
             </MudPaper>
         </MudTabPanel>
 
+        @* ─── Connections ─── *@
+        @* Every Connected System Object joined to this Metaverse Object, its role in synchronisation, its  *@
+        @* derived State and a per-row Preview Sync, plus the outbound-only preview of it as it stands      *@
+        @* (#1519, D-S6). Which systems hold data about someone is not something every signed-in user may *@
+        @* see about every other person, so the tab carries its own Administrator gate, as Password does.  *@
+        <AuthorizeView Roles="Administrator" Context="connectionsAuth">
+            <MudTabPanel Text="Connections" Icon="@Icons.Material.Filled.Hub" BadgeColor="Color.Primary"
+                         BadgeData="@(_connectorCount > 0 ? _connectorCount.ToString("N0") : null)">
+                <div>
+                    <MetaverseObjectConnectionsTable IsLoading="_connectionsLoading" IsLoaded="_connectionsLoaded"
+                                                      Connections="_connections" PreviewLoading="_connectionPreviewLoading"
+                                                      OnPreview="PreviewConnectionAsync" />
+
+                    @if (_connectionPreviewResult != null)
+                    {
+                        <div class="mt-6">
+                            <SyncPreviewPanel PreviewResult="_connectionPreviewResult" Context="_connectionPreviewContext!" OnClose="CloseConnectionPreview" />
+                        </div>
+                    }
+
+                    @* The secondary preview: what putting this Metaverse Object's current state to every enabled
+                       export Synchronisation Rule would do, with no inbound step (#1519, D-S6). Below the
+                       per-object table because the table's Preview Sync is the primary preview; this one answers
+                       a narrower question, and lives on this tab because it is this object's synchronisation tab. *@
+                    <MudPaper Class="pa-4 mt-6" Outlined="true">
+                        <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-preview-outbound">
+                            <MudIcon Icon="@Icons.Material.Filled.Visibility" Color="Color.Primary" Class="mt-1" />
+                            <MudStack Spacing="1" Class="flex-grow-1">
+                                <MudText Typo="Typo.h6">Preview Outbound Synchronisation</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                    Puts this Metaverse Object's current state to every enabled export Synchronisation Rule:
+                                    accounts that would be provisioned where none exists, updated where one does, or
+                                    deprovisioned where the Metaverse Object has left a rule's scope. No object is
+                                    synchronised first; use a connection's Preview Sync above for that.
+                                </MudText>
+                            </MudStack>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                                       Disabled="@_outboundPreviewLoading"
+                                       OnClick="PreviewOutboundAsync"
+                                       data-testid="jim-mvo-preview-outbound">
+                                @(_outboundPreviewLoading ? "Previewing…" : "Preview")
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+
+                    @if (_outboundPreviewResult != null)
+                    {
+                        <div class="mt-6">
+                            <SyncPreviewPanel PreviewResult="_outboundPreviewResult" Context="BuildOutboundPreviewContext()" OnClose="CloseOutboundPreview" />
+                        </div>
+                    }
+                </div>
+            </MudTabPanel>
+        </AuthorizeView>
+
         @* ─── Password ─── *@
         @* Both a report and an action: what this person's password did on each of their systems, and the one    *@
         @* operation that sets it (#1635). Neither is something every signed-in user may see or do to every other *@
@@ -223,6 +280,11 @@
     /// </summary>
     private const string PasswordTabSlug = "password";
 
+    /// <summary>
+    /// The slug NavigableMudTabs gives the Connections tab (#1519): its text, lower-cased.
+    /// </summary>
+    private const string ConnectionsTabSlug = "connections";
+
     // The Password tab's data (#1635): this person's history, their outstanding queue work and their accounts,
     // loaded when the tab is first opened rather than with the page. Three reads that most visits to this page
     // never need, on a page every signed-in user opens. The badge count is the exception: it is read with the
@@ -234,6 +296,21 @@
     private bool _passwordTabLoaded;
     private bool _passwordTabLoading;
     private bool _passwordActionRunning;
+
+    // The Connections tab (#1519): this Metaverse Object's joined Connected System Objects, loaded when the
+    // tab is first opened, and the state of a per-row Sync Preview.
+    private List<MetaverseObjectConnection> _connections = [];
+    private int _connectorCount;
+    private bool _connectionsLoading;
+    private bool _connectionsLoaded;
+    private bool _connectionPreviewLoading;
+    private SyncPreviewResult? _connectionPreviewResult;
+    private CausalityPageContext? _connectionPreviewContext;
+
+    // The Connections tab's secondary preview (#1519, D-S6): this Metaverse Object as it stands, against every
+    // enabled export Synchronisation Rule.
+    private bool _outboundPreviewLoading;
+    private SyncPreviewResult? _outboundPreviewResult;
 
     /// <summary>
     /// Whether the reader may see another person's password history. The tab's own markup is gated the same
@@ -528,6 +605,7 @@
         MetaverseObject = detailResult.MetaverseObject;
         _attributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
         _changeCount = detailResult.ChangeCount;
+        _connectorCount = detailResult.ConnectorCount;
 
         // A navigation from one person to another reuses this component, so the Password tab's data is forgotten
         // here and read again on its next activation; the badge is re-read below with the rest of the page.
@@ -598,6 +676,118 @@
             await LoadChangeHistoryPageAsync();
     }
 
+    private async Task LoadConnectionsAsync()
+    {
+        if (MetaverseObject == null)
+            return;
+
+        _connectionsLoading = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            _connections = await jim.Metaverse.GetMetaverseObjectConnectionsAsync(MetaverseObject.Id);
+            _connectionsLoaded = true;
+            _connectorCount = _connections.Count; // the badge agrees with the table once the table has loaded
+        }
+        finally
+        {
+            _connectionsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PreviewConnectionAsync(MetaverseObjectConnection connection)
+    {
+        _connectionPreviewLoading = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            _connectionPreviewResult = await jim.SyncPreview.PreviewSyncForCsoAsync(connection.ConnectedSystemId, connection.ConnectedSystemObjectId);
+            _connectionPreviewContext = new CausalityPageContext(
+                ConnectedSystemId: connection.ConnectedSystemId,
+                ConnectedSystemName: connection.ConnectedSystemName,
+                RunProfileName: "Full Synchronisation",
+                CsoId: connection.ConnectedSystemObjectId,
+                CsoConnectedSystemId: connection.ConnectedSystemId,
+                CsoConnectedSystemName: connection.ConnectedSystemName,
+                CsoDisplayName: connection.DisplayName,
+                CsoExternalId: null,
+                CsoObjectTypeName: connection.ObjectTypeName,
+                MvoTypeName: MetaverseObjectType?.Name,
+                MvoTypePluralName: MetaverseObjectType?.PluralName);
+            if (_connectionPreviewResult.HasBlockingErrors)
+                Snackbar.Add("The Sync Preview could not complete; see the details below.", Severity.Warning);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"The Sync Preview failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _connectionPreviewLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseConnectionPreview()
+    {
+        _connectionPreviewResult = null;
+        _connectionPreviewContext = null;
+    }
+
+    /// <summary>
+    /// Evaluates this Metaverse Object's current state against every enabled export Synchronisation Rule
+    /// (#1519, D-S6): the secondary preview on the Connections tab. No inbound step, unlike the Connections
+    /// tab's per-object preview above.
+    /// </summary>
+    private async Task PreviewOutboundAsync()
+    {
+        if (MetaverseObject == null)
+            return;
+
+        _outboundPreviewLoading = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            _outboundPreviewResult = await jim.SyncPreview.PreviewSyncForMvoAsync(MetaverseObject.Id);
+            if (_outboundPreviewResult.HasBlockingErrors)
+                Snackbar.Add("The Sync Preview could not complete; see the details below.", Severity.Warning);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"The Sync Preview failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _outboundPreviewLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseOutboundPreview()
+    {
+        _outboundPreviewResult = null;
+    }
+
+    private CausalityPageContext BuildOutboundPreviewContext()
+    {
+        return new CausalityPageContext(
+            ConnectedSystemId: null,
+            ConnectedSystemName: null,
+            RunProfileName: "outbound evaluation",
+            CsoId: null,
+            CsoConnectedSystemId: null,
+            CsoConnectedSystemName: null,
+            CsoDisplayName: _displayName,
+            CsoExternalId: null,
+            CsoObjectTypeName: null,
+            MvoTypeName: MetaverseObjectType?.Name,
+            MvoTypePluralName: MetaverseObjectType?.PluralName);
+    }
+
     /// <summary>
     /// Loads the Password tab's data the first time it is opened, whether by a click, by arriving on
     /// <c>?t=password</c>, or by the browser's back button. Keyed on the slug because the tab's index differs
@@ -607,6 +797,11 @@
     {
         if (slug == PasswordTabSlug && !_passwordTabLoaded)
             await LoadPasswordTabAsync();
+
+        // The Connections tab (#1519) loads the same way, for the same reason: it is Administrator-gated,
+        // so its index differs between readers and the slug is the only stable key.
+        if (slug == ConnectionsTabSlug && !_connectionsLoaded && !_connectionsLoading)
+            await LoadConnectionsAsync();
     }
 
     private async Task LoadMoreChangeHistoryAsync()

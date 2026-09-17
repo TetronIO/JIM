@@ -20,6 +20,13 @@ public sealed class CausalityModel
     public required IReadOnlyList<CausalityEvent> Roots { get; init; }
 
     /// <summary>
+    /// True when this model was built from a Sync Preview (#1519, D-S1) rather than a recorded Run
+    /// Profile Execution Item: nothing here has happened, every label reads in the conditional mood,
+    /// and the panel renders a "Preview" band rather than an execution timestamp.
+    /// </summary>
+    public bool IsSpeculative { get; init; }
+
+    /// <summary>
     /// Enumerates every event in the tree, depth-first in display order.
     /// </summary>
     public IEnumerable<CausalityEvent> AllEvents()

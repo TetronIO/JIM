@@ -24,4 +24,15 @@ public class CausalitySourceLabelsTests
     {
         Assert.That(CausalitySourceLabels.Verb(), Does.Not.Contain("record").IgnoreCase);
     }
+
+    [Test]
+    public void Verb_Speculative_ReadsInTheConditionalMood()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CausalitySourceLabels.Verb(isSpeculative: true), Is.EqualTo("Connected System Object would be processed"));
+            Assert.That(CausalitySourceLabels.Verb(isSpeculative: false), Is.EqualTo("Connected System Object processed"),
+                "A recorded run keeps its past-tense verb");
+        }
+    }
 }

@@ -10,10 +10,12 @@
 @using JIM.Models.Enums
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Causality
 @using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -103,13 +105,19 @@
                 </MudStack>
             }
 
+            <MudSpacer />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                       StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewSyncAsync"
+                       Disabled="@_previewLoading" data-testid="jim-cso-preview-sync">
+                @(_previewLoading ? "Previewing…" : "Preview Sync")
+            </MudButton>
+
             @* Offered only where the Connector can actually set a password, so the action is never presented *@
             @* against a Connected System that could not carry it out (issue #1121), and only for an account   *@
             @* joined to a Metaverse Object: the password goes onto the queue against the person (#1635), and  *@
             @* an unjoined object has no person to queue it against.                                          *@
             @if (_supportedExpiryBehaviours.Count > 0 && ConnectedSystemObject.MetaverseObjectId.HasValue)
             {
-                <MudSpacer />
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
                            data-testid="jim-cso-set-password">Set Password</MudButton>
@@ -117,6 +125,13 @@
         </MudStack>
 
     </MudPaper>
+
+    @if (_previewResult != null)
+    {
+        <div class="mt-6">
+            <SyncPreviewPanel PreviewResult="_previewResult" Context="BuildPreviewContext()" OnClose="ClosePreview" />
+        </div>
+    }
 
     @if (PendingExport != null && _pendingExportTotalCount > 0)
     {
@@ -963,5 +978,65 @@
         return ExternalIdAttributeValue?.ToStringNoName()
         ?? ConnectedSystemObject?.Id.ToString()
         ?? CsoId;
+    }
+
+    private bool _previewLoading;
+    private SyncPreviewResult? _previewResult;
+
+    /// <summary>
+    /// Runs a Sync Preview for this Connected System Object and renders it inline below the header
+    /// (#1519, D-S5): synchronous, transient, in-process. Nothing is persisted; the preview is a read
+    /// over a rolled-back transaction.
+    /// </summary>
+    private async Task PreviewSyncAsync()
+    {
+        if (ConnectedSystemObject == null)
+            return;
+
+        _previewLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            _previewResult = await jim.SyncPreview.PreviewSyncForCsoAsync(CsId, ConnectedSystemObject.Id);
+            if (_previewResult.HasBlockingErrors)
+                Snackbar.Add("The Sync Preview could not complete; see the details below.", Severity.Warning);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"The Sync Preview failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _previewLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClosePreview()
+    {
+        _previewResult = null;
+    }
+
+    /// <summary>
+    /// The page context the speculative causality panel renders through: the record's own identity
+    /// and Connected System (never the run's, since a preview has no run of its own), with the Run
+    /// Profile named for the run chip (#1519: "Would run: {system} · Full Synchronisation").
+    /// </summary>
+    private CausalityPageContext BuildPreviewContext()
+    {
+        return new CausalityPageContext(
+            ConnectedSystemId: CsId,
+            ConnectedSystemName: ConnectedSystemHeader?.Name,
+            RunProfileName: "Full Synchronisation",
+            CsoId: ConnectedSystemObject?.Id,
+            CsoConnectedSystemId: CsId,
+            CsoConnectedSystemName: ConnectedSystemHeader?.Name,
+            CsoDisplayName: GetDisplayIdentifier(),
+            CsoExternalId: ExternalIdAttributeValue?.ToStringNoName(),
+            CsoObjectTypeName: ConnectedSystemObject?.Type.Name,
+            MvoTypeName: null,
+            MvoTypePluralName: null);
     }
 }

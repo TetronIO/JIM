@@ -24,6 +24,59 @@ public enum ConnectedSystemObjectStatus
 }
 
 /// <summary>
+/// The state of a Connected System Object's connection to its Metaverse Object, derived from the
+/// object's <see cref="ConnectedSystemObjectStatus"/> combined with its Pending Export (if any):
+/// <see cref="JIM.Models.Transactional.PendingExportChangeType"/> and
+/// <see cref="JIM.Models.Transactional.PendingExportStatus"/>. Surfaced on the Metaverse Object's Connections
+/// tab and the Connector Space list (D-S7: one derivation, reused by both).
+/// </summary>
+public enum ConnectedSystemObjectConnectionState
+{
+    /// <summary>
+    /// The object is Normal and carries no Pending Export: nothing is queued to change it.
+    /// </summary>
+    InSync = 0,
+
+    /// <summary>
+    /// An Update Pending Export is queued for this object.
+    /// </summary>
+    UpdatePending = 1,
+
+    /// <summary>
+    /// The object is PendingProvisioning and its Create Pending Export has not yet been exported.
+    /// </summary>
+    ProvisioningExportPending = 2,
+
+    /// <summary>
+    /// The object is PendingProvisioning and its Create Pending Export has been exported, but the
+    /// confirming import has not yet run (which is what flips the object to Normal).
+    /// </summary>
+    ProvisioningAwaitingConfirmation = 3,
+
+    /// <summary>
+    /// A confirming import ran but did not confirm one or more attribute values on the Pending
+    /// Export; it will be retried on the next export run.
+    /// </summary>
+    ExportNotConfirmed = 4,
+
+    /// <summary>
+    /// The Pending Export failed after its maximum retry attempts and needs manual intervention.
+    /// </summary>
+    ExportFailed = 5,
+
+    /// <summary>
+    /// A Delete Pending Export is queued or executing for this object.
+    /// </summary>
+    DeletePending = 6,
+
+    /// <summary>
+    /// The object was not returned by the last Full Import: it no longer exists in the Connected
+    /// System.
+    /// </summary>
+    Obsolete = 7
+}
+
+/// <summary>
 /// Determines where Object Matching Rules are configured for a Connected System.
 /// </summary>
 public enum ObjectMatchingRuleMode

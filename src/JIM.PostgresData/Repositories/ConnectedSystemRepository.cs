@@ -5251,6 +5251,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.ConnectedSystem)
+            // Only the identifying values: a group object can carry thousands of member values, and the
+            // Connections tab shows the external id and nothing else from the attribute graph. Filtering on
+            // the value's own Attribute navigation translates; filtering on the parent CSO's columns does
+            // not (see GetConnectedSystemObjectsForMvoDeletionAsync), which is why the flags are used.
+            .Include(cso => cso.AttributeValues.Where(av => av.Attribute.IsExternalId || av.Attribute.IsSecondaryExternalId))
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.MetaverseObjectId == metaverseObjectId)
+            .ToListAsync();
+    }
+
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
     {
         return await Repository.Database.ConnectedSystemObjects

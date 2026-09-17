@@ -96,17 +96,26 @@
     [Parameter]
     public RenderFragment? Actions { get; set; }
 
+    /// <summary>
+    /// Whether the run chip reads as a Sync Preview's hypothetical run ("Would run: {system} ·
+    /// {Run Profile}") rather than a recorded one (#1519, D-S9): nothing has executed.
+    /// </summary>
+    [Parameter]
+    public bool IsSpeculative { get; set; }
+
     private string? GetRunChipLabel()
     {
         var hasSystem = !string.IsNullOrWhiteSpace(Context.ConnectedSystemName);
         var hasProfile = !string.IsNullOrWhiteSpace(Context.RunProfileName);
 
-        if (hasSystem && hasProfile)
-            return $"{Context.ConnectedSystemName} · {Context.RunProfileName}";
-        if (hasSystem)
-            return Context.ConnectedSystemName;
-        if (hasProfile)
-            return Context.RunProfileName;
-        return null;
+        string? label = (hasSystem, hasProfile) switch
+        {
+            (true, true) => $"{Context.ConnectedSystemName} · {Context.RunProfileName}",
+            (true, false) => Context.ConnectedSystemName,
+            (false, true) => Context.RunProfileName,
+            _ => null
+        };
+
+        return label != null && IsSpeculative ? $"Would run: {label}" : label;
     }
 }

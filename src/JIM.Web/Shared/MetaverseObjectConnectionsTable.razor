@@ -1,0 +1,224 @@
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Utilities
+@inject IUserPreferenceService PreferenceService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Metaverse Object's Connections tab table (#1519): one row per Connected System Object joined to the
+   Metaverse Object, its role, its derived State and a per-row Preview Sync. A component of its own
+   (rather than inline markup on Types/View.razor) so the State chip and colour mapping have exactly
+   one definition, reusable on the Connector Space list per D-S7, and so the shape is bUnit-testable. *@
+
+@if (IsLoading)
+{
+    <MudProgressLinear Indeterminate="true" Class="my-3" />
+}
+else if (IsLoaded && Connections.Count == 0)
+{
+    <TableEmptyState Icon="@Icons.Material.Filled.Hub"
+                     PrimaryText="This Metaverse Object has no Connected System Objects joined to it." />
+}
+else if (IsLoaded)
+{
+    <MudTable Items="Connections" Hover="true" Dense="@_dense" Outlined="true" Elevation="0" data-testid="jim-mvo-connections-table">
+        <ToolBarContent>
+            <TableDensityToggle @bind-Dense="_dense" />
+            <TableObjectCount Count="@Connections.Count" SingularName="connection" PluralName="connections" ShowSeparator="true" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.ConnectedSystemName)" InitialDirection="SortDirection.Ascending">Connected System</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.DisplayName)">Object</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => GetRoleSortKey(c))">Role</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.JoinType)">Join</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.State)">State</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.LastSynchronised ?? DateTime.MinValue)">Last synchronised</MudTableSortLabel></MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Connected System">
+                <MudLink Href="@Utilities.GetConnectedSystemHref(context.ConnectedSystemId)">@context.ConnectedSystemName</MudLink>
+            </MudTd>
+            <MudTd DataLabel="Object">
+                <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ConnectedSystemId, context.ConnectedSystemObjectId)">
+                    @context.DisplayName
+                </MudLink>
+            </MudTd>
+            <MudTd DataLabel="Role">
+                <MudStack Row="true" Spacing="1">
+                    @if (context.IsSource)
+                    {
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="ma-0">Source</MudChip>
+                    }
+                    @if (context.IsTarget)
+                    {
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary" Class="ma-0">Target</MudChip>
+                    }
+                    @if (!context.IsSource && !context.IsTarget)
+                    {
+                        <EmptyValue />
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Join">
+                <MudChip T="string" Variant="Variant.Text" Color="GetJoinTypeColor(context.JoinType)" Class="ma-0">
+                    @context.JoinType
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="State">
+                <MudStack Spacing="0">
+                    <MudChip T="string" Variant="Variant.Text" Color="GetConnectionStateColor(context.State)"
+                             Class="jim-connection-state-chip ma-0" data-state="@context.State">
+                        @GetConnectionStateLabel(context.State)
+                    </MudChip>
+                    @if (context.State == ConnectedSystemObjectConnectionState.UpdatePending && context.PendingAttributeChangeCount is { } count)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @count attribute@(count == 1 ? "" : "s")
+                        </MudText>
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Last synchronised">
+                @if (context.LastSynchronised.HasValue)
+                {
+                    <MudTooltip Text="@context.LastSynchronised.Value.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <span>@context.LastSynchronised.Value.ToRelativeTime()</span>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudTd>
+            <MudTd>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                           StartIcon="@Icons.Material.Filled.Visibility"
+                           Disabled="@PreviewLoading"
+                           OnClick="@(() => OnPreview.InvokeAsync(context))"
+                           data-testid="jim-mvo-connection-preview">Preview Sync</MudButton>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    /// <summary>
+    /// Whether the connections are still loading (first open of the tab).
+    /// </summary>
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    /// <summary>
+    /// Whether the connections have finished loading at least once. Distinct from
+    /// <see cref="Connections"/> being empty, so a legitimate "no connections" result is not confused
+    /// with "not loaded yet".
+    /// </summary>
+    [Parameter]
+    public bool IsLoaded { get; set; }
+
+    /// <summary>
+    /// The rows to render.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<MetaverseObjectConnection> Connections { get; set; } = [];
+
+    /// <summary>
+    /// Whether a row's Preview Sync is currently running (disables every row's button, since only one
+    /// preview is shown at a time).
+    /// </summary>
+    [Parameter]
+    public bool PreviewLoading { get; set; }
+
+    /// <summary>
+    /// Raised with the row's connection when its Preview Sync button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<MetaverseObjectConnection> OnPreview { get; set; }
+
+    private bool _dense;
+    private bool _preferencesLoaded;
+
+    /// <summary>
+    /// Loads the saved row-density preference on first render, per the shared table convention
+    /// (src/JIM.Web/CLAUDE.md, "Row density"), so the table paints at the user's density straight away.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_preferencesLoaded)
+            return;
+
+        try
+        {
+            _dense = await PreferenceService.GetTableDenseAsync() == true;
+            _preferencesLoaded = true;
+            StateHasChanged();
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not yet available; the next render retries.
+        }
+    }
+
+    /// <summary>
+    /// Sort key for the Role column: sources before targets, and a connection that is both sorts with
+    /// the sources, so a sort by role reads as "where does this Metaverse Object come from, then where does it go".
+    /// </summary>
+    private static string GetRoleSortKey(MetaverseObjectConnection connection) =>
+        (connection.IsSource, connection.IsTarget) switch
+        {
+            (true, true) => "1 source and target",
+            (true, false) => "0 source",
+            (false, true) => "2 target",
+            _ => "3 none"
+        };
+
+    private static MudBlazor.Color GetJoinTypeColor(ConnectedSystemObjectJoinType joinType)
+    {
+        return joinType switch
+        {
+            ConnectedSystemObjectJoinType.Projected => MudBlazor.Color.Primary,
+            ConnectedSystemObjectJoinType.Provisioned => MudBlazor.Color.Secondary,
+            ConnectedSystemObjectJoinType.Joined => MudBlazor.Color.Info,
+            _ => MudBlazor.Color.Default
+        };
+    }
+
+    /// <summary>
+    /// The State chip's colour (D-S7): success for in sync, info for an update in flight, warning for
+    /// the provisioning states and an unconfirmed export (retryable, not yet a failure), error for a
+    /// failed export or a pending delete, and the default tone for Obsolete (a fact, not itself a
+    /// problem to fix).
+    /// </summary>
+    public static MudBlazor.Color GetConnectionStateColor(ConnectedSystemObjectConnectionState state)
+    {
+        return state switch
+        {
+            ConnectedSystemObjectConnectionState.InSync => MudBlazor.Color.Success,
+            ConnectedSystemObjectConnectionState.UpdatePending => MudBlazor.Color.Info,
+            ConnectedSystemObjectConnectionState.ProvisioningExportPending
+                or ConnectedSystemObjectConnectionState.ProvisioningAwaitingConfirmation
+                or ConnectedSystemObjectConnectionState.ExportNotConfirmed => MudBlazor.Color.Warning,
+            ConnectedSystemObjectConnectionState.ExportFailed
+                or ConnectedSystemObjectConnectionState.DeletePending => MudBlazor.Color.Error,
+            _ => MudBlazor.Color.Default
+        };
+    }
+
+    public static string GetConnectionStateLabel(ConnectedSystemObjectConnectionState state)
+    {
+        return state switch
+        {
+            ConnectedSystemObjectConnectionState.InSync => "In sync",
+            ConnectedSystemObjectConnectionState.UpdatePending => "Update pending",
+            ConnectedSystemObjectConnectionState.ProvisioningExportPending => "Pending export",
+            ConnectedSystemObjectConnectionState.ProvisioningAwaitingConfirmation => "Awaiting confirmation",
+            ConnectedSystemObjectConnectionState.ExportNotConfirmed => "Export not confirmed",
+            ConnectedSystemObjectConnectionState.ExportFailed => "Export failed",
+            ConnectedSystemObjectConnectionState.DeletePending => "Delete pending",
+            ConnectedSystemObjectConnectionState.Obsolete => "Obsolete",
+            _ => state.ToString()
+        };
+    }
+}

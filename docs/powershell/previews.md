@@ -1,10 +1,13 @@
 ---
-title: Configuration Change Previews
+title: Previews
 ---
 
-# Configuration Change Previews
+# Previews
 
-Preview cmdlets answer what a proposed configuration change would do, without making it. JIM evaluates the change against the objects already in the metaverse and reports which of them would be affected, changing nothing.
+JIM has two families of preview cmdlet, answering two different questions:
+
+- **Configuration Change Previews** (`New-JIMConfigurationChangePreview` and friends, below) answer what a *proposed edit* would do, across every object it would affect: JIM evaluates the change against the objects already in the metaverse and reports which of them would be affected, changing nothing.
+- **[Sync Preview](#get-jimconnectedsystemobjectsyncpreview)** cmdlets answer what synchronising *one object* would do **right now**, with the configuration you already have saved.
 
 Evaluation is asynchronous: `New-JIMConfigurationChangePreview` returns as soon as the proposal itself has been validated, with an Activity id to poll, or waits for the whole answer with `-Wait`. The concepts behind previews (what the stages mean, when a result should not be trusted, and how a preview is recorded against the change it informed) are in [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it).
 
@@ -328,9 +331,91 @@ Stop-JIMConfigurationChangePreview -ActivityId "019fc824-f8c6-7588-8d9a-24a295e7
 
 ---
 
+## Sync Preview
+
+Unlike the cmdlets above, a Sync Preview is synchronous and needs no Activity id: it evaluates one object against the Synchronisation Rules already saved and returns immediately. See [Sync Preview](../configuration/sync-preview.md) for what the outcome tree and the destructive cascade mean; the two cmdlets below are the PowerShell surface over its two REST endpoints.
+
+Both return the same shape: `OutcomeTree` (the raw, recursive tree), `Outcomes` (that tree flattened by depth for `Format-Table`), `Inbound`, `ProposedExports`, `Errors`, `Warnings`, `HasBlockingErrors` and `AffectedSyncRules`. Check `HasBlockingErrors` before reading anything else: a preview that surfaced a blocking error describes a synchronisation that would fail, not one that would succeed as shown.
+
+## Get-JIMConnectedSystemObjectSyncPreview
+
+Previews what synchronising a Connected System Object would do: the inbound chain (scope, join or projection, Attribute Flow), the outbound decisions the resulting Metaverse Object state would produce, and, where the object would fall out of scope and disconnect, the destructive cascade (whether the Metaverse Object would be deleted or scheduled for deletion, and which downstream Connected System Objects would be deprovisioned).
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId <int> -Id <guid>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | The Connected System that owns the object. Accepts pipeline input by property name. |
+| `Id` | `guid` | Yes | | The Connected System Object to preview. Accepts pipeline input by property name. |
+
+### Output
+
+Returns a `PSCustomObject` with `OutcomeTree`, `Outcomes`, `Inbound` (would the object project or join, and what would flow), `ProposedExports`, `Errors`, `Warnings`, `HasBlockingErrors` and `AffectedSyncRules`.
+
+Each row of `Outcomes` carries `Depth`, `OutcomeType`, `Target` (the outcome's description, falling back to its raw id), `SyncRule` (name, falling back to id), `DetailCount`, `DetailMessage` and `StagedChangeType`, in the tree's own display order.
+
+### Examples
+
+```powershell title="Preview synchronising an object, including any destructive cascade"
+Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId 1 -Id "3934ff12-4996-42c0-a396-41e17ac47af7"
+```
+
+```powershell title="Read the outcome tree as a flat table"
+$preview = Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId 1 -Id $csoId
+$preview.Outcomes | Format-Table Depth, OutcomeType, Target, SyncRule
+```
+
+```powershell title="Check what leaving scope would do to a candidate object"
+$objectId = (Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Search "jsmith").Id
+$preview = Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId 1 -Id $objectId
+$preview.Warnings | Where-Object Code -eq 'OutOfScope' | Select-Object Detail
+```
+
+---
+
+## Get-JIMMetaverseObjectSyncPreview
+
+Previews what synchronising from a Metaverse Object's current state would do: the outbound decisions that state would produce. A Metaverse Object is never synchronised itself; its Connected System Objects are, so this cmdlet evaluates the Metaverse Object **as it stands now**, outbound only, with no inbound chain of its own (`Inbound` is always `$null`). For the full inbound-then-outbound chain of one Connected System Object, use [`Get-JIMConnectedSystemObjectSyncPreview`](#get-jimconnectedsystemobjectsyncpreview) instead.
+
+### Syntax
+
+```powershell
+Get-JIMMetaverseObjectSyncPreview -Id <guid>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes | | The Metaverse Object to preview. Accepts pipeline input by property name. |
+
+### Output
+
+Returns the same shape as [`Get-JIMConnectedSystemObjectSyncPreview`](#get-jimconnectedsystemobjectsyncpreview), with `Inbound` always `$null`.
+
+### Examples
+
+```powershell title="Preview what would export from a Metaverse Object as it stands now"
+Get-JIMMetaverseObjectSyncPreview -Id "8f14e45f-ceea-467e-adde-3f8cbb1e4d28"
+```
+
+```powershell title="List the Connected Systems a pending edit would export to"
+$preview = Get-JIMMetaverseObjectSyncPreview -Id $mvoId
+$preview.ProposedExports | Format-Table ConnectedSystemId, ChangeType
+```
+
+---
+
 ## See also
 
 - [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it) -- what previews are and how to read them
+- [Sync Preview](../configuration/sync-preview.md) -- what `Get-JIMConnectedSystemObjectSyncPreview` and `Get-JIMMetaverseObjectSyncPreview` evaluate, including the destructive cascade
 - [Metaverse](../configuration/metaverse.md#previewing-a-deletion-settings-change) -- what a deletion settings preview evaluates
 - [Synchronisation Rules](../configuration/synchronisation-rules.md#previewing-a-destructive-toggle-change) -- what a destructive toggle preview evaluates
 - [Metaverse cmdlets](metaverse.md#set-jimmetaverseobjecttype) -- applying a previewed change with `-PreviewActivityId`

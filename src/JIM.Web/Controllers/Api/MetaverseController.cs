@@ -15,6 +15,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Preview;
+using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
@@ -1581,6 +1582,32 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
 
         return Ok(MetaverseObjectDto.FromEntity(obj));
+    }
+
+    /// <summary>
+    /// Preview what synchronising a Metaverse Object would do
+    /// </summary>
+    /// <remarks>
+    /// Nothing is changed: the preview evaluates the outbound decisions the Metaverse Object's current state
+    /// would produce, and returns what a real synchronisation would do without staging or persisting anything. A
+    /// Metaverse Object has no inbound chain of its own (it is never synchronised itself; its Connected
+    /// System Objects are), so <c>inbound</c> in the response is always null.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    /// <response code="200">The preview, including any blocking errors it surfaced.</response>
+    /// <response code="404">No such Metaverse Object.</response>
+    [HttpGet("objects/{id:guid}/sync-preview", Name = "GetMetaverseObjectSyncPreview")]
+    [ProducesResponseType(typeof(SyncPreviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMetaverseObjectSyncPreviewAsync(Guid id)
+    {
+        _logger.LogTrace("Requested Sync Preview for Metaverse Object: {Id}", id);
+        var result = await _application.SyncPreview.PreviewSyncForMvoAsync(id);
+        if (result.Errors.Any(e => e.Code == SyncPreviewMessageCode.ObjectNotFound))
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
+
+        return Ok(SyncPreviewResponse.FromModel(result));
     }
 
     /// <summary>

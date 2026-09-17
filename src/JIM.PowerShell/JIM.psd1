@@ -225,6 +225,10 @@
         'Get-JIMConfigurationChangePreviewDelta',
         'Stop-JIMConfigurationChangePreview',
 
+        # Sync Previews
+        'Get-JIMConnectedSystemObjectSyncPreview',
+        'Get-JIMMetaverseObjectSyncPreview',
+
         # Worker Tasks
         'Get-JIMWorkerTask',
         'Stop-JIMWorkerTask',

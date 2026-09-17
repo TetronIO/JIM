@@ -15,10 +15,12 @@ namespace JIM.Web.Causality;
 public static class CausalitySourceLabels
 {
     /// <summary>
-    /// The Timeline's opening verb, which reads as a sentence rather than as a card title.
+    /// The Timeline's opening verb, which reads as a sentence rather than as a card title. In the
+    /// conditional mood for a Sync Preview (#1519): nothing has been processed yet, so the root reads
+    /// as what a run would do.
     /// </summary>
-    public static string Verb()
+    public static string Verb(bool isSpeculative = false)
     {
-        return "Connected System Object processed";
+        return isSpeculative ? "Connected System Object would be processed" : "Connected System Object processed";
     }
 }

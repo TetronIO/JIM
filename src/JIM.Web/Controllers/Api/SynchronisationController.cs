@@ -784,6 +784,34 @@ public class SynchronisationController(
         return Ok(ConnectedSystemObjectDetailDto.FromDetailResult(result));
     }
 
+    /// <summary>
+    /// Preview what synchronising a Connected System Object would do
+    /// </summary>
+    /// <remarks>
+    /// Nothing is changed: the preview evaluates the inbound chain (scope, join or projection, Attribute
+    /// Flow) and the outbound decisions the resulting Metaverse Object state would produce, and returns
+    /// what a real synchronisation would do without staging or persisting anything. Where the object would
+    /// fall out of scope and disconnect, the preview also walks the destructive cascade: whether the
+    /// Metaverse Object would be deleted or scheduled for deletion, and which downstream Connected System
+    /// Objects would be deprovisioned.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="id">The unique identifier (GUID) of the Connected System Object.</param>
+    /// <response code="200">The preview, including any blocking errors it surfaced.</response>
+    /// <response code="404">No such Connected System Object.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/{id:guid}/sync-preview", Name = "GetConnectedSystemObjectSyncPreview")]
+    [ProducesResponseType(typeof(SyncPreviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectSyncPreviewAsync(int connectedSystemId, Guid id)
+    {
+        _logger.LogTrace("Requested Sync Preview for object {ObjectId} in Connected System: {SystemId}", id, connectedSystemId);
+        var result = await _application.SyncPreview.PreviewSyncForCsoAsync(connectedSystemId, id);
+        if (result.Errors.Any(e => e.Code == SyncPreviewMessageCode.ObjectNotFound))
+            return NotFound(ApiErrorResponse.NotFound($"Object with ID {id} not found in Connected System {connectedSystemId}."));
+
+        return Ok(SyncPreviewResponse.FromModel(result));
+    }
 
     /// <summary>
     /// Get the password policy JIM discovered on a Connected System

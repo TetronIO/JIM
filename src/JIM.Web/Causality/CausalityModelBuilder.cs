@@ -1,12 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Utilities;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
+using JIM.Models.Transactional;
 using MudBlazor;
 using JimUtilities = JIM.Utilities.Utilities;
 
@@ -90,6 +92,233 @@ public static class CausalityModelBuilder
     }
 
     /// <summary>
+    /// Builds the speculative causality model for a Sync Preview result (#1519, D-S1): the same event
+    /// shape <see cref="Build"/> produces for a recorded item, keyed on <see cref="SyncOutcomeNode"/>
+    /// instead of <see cref="ActivityRunProfileExecutionItemSyncOutcome"/>, with every label in the
+    /// conditional mood (<see cref="ApplySpeculativeLabel"/>) and no execution timestamp: nothing here
+    /// has happened.
+    /// </summary>
+    /// <remarks>
+    /// Attribute rows for the speculative tree come from the preview's own change records, which the
+    /// recorded tree has no equivalent of: <see cref="SyncPreviewInboundSummary.AttributeFlowChanges"/>
+    /// for the inbound Attribute Flow node, and each outbound staging or deprovisioning node's own
+    /// <see cref="OutboundPreviewEntry.AttributeChanges"/>, correlated back to its <see cref="SyncOutcomeNode"/>
+    /// by <see cref="SyncOutcomeNode.SyncRuleId"/> (unique per rule within one preview, since a preview
+    /// always evaluates a single object). The destructive cascade's downstream deprovisioning nodes
+    /// (<c>SyncPreviewServer.BuildOutOfScopeCascadeAsync</c>) are the one shape with no Synchronisation
+    /// Rule of their own (<c>ISyncEngine.DecideMvoDeletionExport</c> decides per remaining connector, not
+    /// per rule); those are matched instead by target Connected System id against
+    /// <see cref="SyncPreviewResult.Outbound"/>'s proposed exports, consumed as they are used so two
+    /// deletes to the same system are not both attributed to the first node.
+    /// </remarks>
+    public static CausalityModel BuildSpeculative(SyncPreviewResult preview, CausalityPageContext context)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        ArgumentNullException.ThrowIfNull(context);
+
+        // Keyed by SyncRuleId rather than by node identity: a SyncOutcomeNode carries no id of its own
+        // (see its class remarks: children only, no parent pointer, no keys), so the rule id is the only
+        // stable join between an outbound node and the decision record that produced it. Grouped
+        // defensively rather than a bare ToDictionary: a preview is a read, and a duplicate rule id
+        // (which should not occur; one rule evaluates an MVO at most once) must degrade to "use the
+        // first" rather than throw and blank the whole panel.
+        var entriesBySyncRuleId = preview.OutboundDecisions.Entries
+            .GroupBy(e => e.SyncRuleId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // The cascade's own deletes (added directly to ProposedExports by BuildOutOfScopeCascadeAsync,
+        // with no OutboundPreviewEntry and therefore no SyncRuleId); an ordinary out-of-scope
+        // deprovisioning's delete is also PendingExportChangeType.Delete here, but its node always
+        // carries a SyncRuleId and is matched via entriesBySyncRuleId above first, so it is never drawn
+        // from this pool.
+        var unmatchedCascadeDeletes = preview.Outbound.ProposedExports
+            .Where(pe => pe.ChangeType == PendingExportChangeType.Delete)
+            .ToList();
+
+        var roots = preview.OutcomeTree
+            .OrderBy(n => n.Ordinal)
+            .Select(n => BuildSpeculativeEvent(n, context, entriesBySyncRuleId, unmatchedCascadeDeletes, preview.Inbound))
+            .ToList();
+
+        return new CausalityModel { Context = context, Roots = roots, IsSpeculative = true };
+    }
+
+    private static CausalityEvent BuildSpeculativeEvent(
+        SyncOutcomeNode node,
+        CausalityPageContext context,
+        IReadOnlyDictionary<int, OutboundPreviewEntry> entriesBySyncRuleId,
+        List<PendingExport> unmatchedCascadeDeletes,
+        SyncPreviewInboundSummary? inbound)
+    {
+        var display = ApplySpeculativeLabel(OutcomeDisplayMap.Get(node.OutcomeType), node.OutcomeType, isSpeculative: true);
+        var lane = GetLane(node.OutcomeType);
+        var (systemId, systemName) = GetSpeculativeOwningSystem(node, lane, context);
+
+        return new CausalityEvent
+        {
+            OutcomeType = node.OutcomeType,
+            Label = display.Label,
+            Tone = display.Tone,
+            Icon = display.Icon,
+            Lane = lane,
+            SystemId = systemId,
+            SystemName = systemName,
+            Badge = GetBadge(node.OutcomeType),
+            DetailCount = node.DetailCount,
+            // DetailMessage on an outbound node carries the raw target Connected System id (decoded
+            // above into SystemId), not display text; every other node's DetailMessage is already plain
+            // contextual text, exactly as the recorded tree treats it.
+            DetailMessage = SyncOutcomeTypes.IsPendingExport(node.OutcomeType) ? null : node.DetailMessage,
+            SyncRuleId = node.SyncRuleId,
+            SyncRuleName = node.SyncRuleName,
+            Links = BuildSpeculativeLinks(node, lane, systemId, systemName, context),
+            AttributeRows = GetSpeculativeAttributeRows(node, inbound, entriesBySyncRuleId, unmatchedCascadeDeletes),
+            Operation = OutcomeDisplayMap.GetEventOperation(node.OutcomeType, exportReasonCode: null, node.StagedChangeType),
+            Children = node.Children
+                .OrderBy(c => c.Ordinal)
+                .Select(c => BuildSpeculativeEvent(c, context, entriesBySyncRuleId, unmatchedCascadeDeletes, inbound))
+                .ToList()
+        };
+    }
+
+    /// <summary>
+    /// The target Connected System for a Downstream-lane speculative node. Outbound nodes carry their
+    /// target's id as a bare int in <see cref="SyncOutcomeNode.DetailMessage"/> (see
+    /// <c>SyncPreviewServer.BuildOutboundOutcomeNodes</c>/<c>BuildOutOfScopeCascadeAsync</c>); unlike the
+    /// recorded tree's "csId|csoTypeName" channel there is no type name to also carry, since a preview
+    /// node describes no persisted record on that system. A Provisioned node's own DetailMessage is
+    /// unset (only its nested PendingExportCreated child's carries the id), so it falls back to its
+    /// TargetEntityDescription with no id: an honest unlinked mention rather than a wrong link.
+    /// </summary>
+    private static (int? SystemId, string? SystemName) GetSpeculativeOwningSystem(
+        SyncOutcomeNode node, CausalityLane lane, CausalityPageContext context)
+    {
+        if (lane != CausalityLane.Downstream)
+            return (null, null);
+
+        return int.TryParse(node.DetailMessage, out var systemId)
+            ? (systemId, node.TargetEntityDescription)
+            : (null, node.TargetEntityDescription ?? context.ConnectedSystemName);
+    }
+
+    /// <summary>
+    /// Entity links for a speculative event: an Identity or Connected System mention plus the
+    /// Synchronisation Rule attribution shared with the recorded tree (<see cref="AppendSyncRuleLink"/>).
+    /// Deliberately narrower than <see cref="BuildLinks"/>: a preview never destroys anything, so an
+    /// Identity mention always links the live object rather than a deletion record (the one behavioural
+    /// difference from the recorded tree's MvoDeleted link, which points at a deletion record because the
+    /// object genuinely no longer exists there); and no per-target-object "record" link is built for a
+    /// Create, since nothing exists yet to link, or for an Update/Delete, to avoid a second per-outcome-
+    /// type link shape for a page not yet written.
+    /// </summary>
+    private static List<CausalityEntityLink> BuildSpeculativeLinks(
+        SyncOutcomeNode node, CausalityLane lane, int? systemId, string? systemName, CausalityPageContext context)
+    {
+        var links = new List<CausalityEntityLink>();
+
+        if (lane == CausalityLane.Identity)
+        {
+            if (node.TargetEntityId is { } mvoId && mvoId != Guid.Empty)
+            {
+                links.Add(new CausalityEntityLink(
+                    node.TargetEntityDescription ?? "Identity", GetMetaverseObjectHref(mvoId, context), CausalityEntityKind.Identity));
+            }
+            else if (!string.IsNullOrEmpty(node.TargetEntityDescription))
+            {
+                links.Add(new CausalityEntityLink(node.TargetEntityDescription, null, CausalityEntityKind.Identity));
+            }
+        }
+        else if (lane == CausalityLane.Downstream)
+        {
+            if (systemId.HasValue)
+            {
+                links.Add(new CausalityEntityLink(
+                    systemName ?? "Connected System", JimUtilities.GetConnectedSystemHref(systemId.Value), CausalityEntityKind.ConnectedSystem));
+            }
+            else if (!string.IsNullOrEmpty(node.TargetEntityDescription))
+            {
+                links.Add(new CausalityEntityLink(node.TargetEntityDescription, null, CausalityEntityKind.ConnectedSystem));
+            }
+        }
+
+        AppendSyncRuleLink(links, node.SyncRuleId, node.SyncRuleName);
+
+        return links;
+    }
+
+    /// <summary>
+    /// Attribute rows for a speculative event: the inbound Attribute Flow node reads
+    /// <see cref="SyncPreviewInboundSummary.AttributeFlowChanges"/> directly; an outbound staging or
+    /// deprovisioning node's rows come from its correlated <see cref="OutboundPreviewEntry.AttributeChanges"/>
+    /// (or the cascade's own proposed export, for the rule-less downstream deprovisioning shape),
+    /// converted through <see cref="ExportChangeHistoryBuilder.BuildFromPendingExport"/> and
+    /// <see cref="NormaliseAttributeRows"/> so the same value-rendering and single-valued Set-collapsing
+    /// logic the recorded tree uses applies here too, rather than a second copy of it.
+    /// </summary>
+    private static IReadOnlyList<CausalityAttributeRow> GetSpeculativeAttributeRows(
+        SyncOutcomeNode node,
+        SyncPreviewInboundSummary? inbound,
+        IReadOnlyDictionary<int, OutboundPreviewEntry> entriesBySyncRuleId,
+        List<PendingExport> unmatchedCascadeDeletes)
+    {
+        if (node.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow)
+            return BuildInboundFlowAttributeRows(inbound?.AttributeFlowChanges);
+
+        if (!SyncOutcomeTypes.IsPendingExport(node.OutcomeType))
+            return [];
+
+        List<PendingExportAttributeValueChange>? changes = null;
+        if (node.SyncRuleId is { } ruleId && entriesBySyncRuleId.TryGetValue(ruleId, out var entry))
+        {
+            changes = entry.AttributeChanges;
+        }
+        else if (int.TryParse(node.DetailMessage, out var connectedSystemId))
+        {
+            var index = unmatchedCascadeDeletes.FindIndex(pe =>
+                pe.ConnectedSystemId == connectedSystemId && pe.ChangeType == (node.StagedChangeType ?? PendingExportChangeType.Delete));
+            if (index >= 0)
+            {
+                changes = unmatchedCascadeDeletes[index].AttributeValueChanges;
+                unmatchedCascadeDeletes.RemoveAt(index);
+            }
+        }
+
+        if (changes == null || changes.Count == 0)
+            return [];
+
+        var syntheticChange = ExportChangeHistoryBuilder.BuildFromPendingExport(
+            new PendingExport { AttributeValueChanges = changes },
+            ActivityInitiatorType.System,
+            initiatedById: null,
+            initiatedByName: null);
+        return NormaliseAttributeRows(syntheticChange.AttributeChanges, null);
+    }
+
+    /// <summary>
+    /// Maps the preview's inbound Attribute Flow deltas into display rows. Unlike
+    /// <see cref="NormaliseAttributeRows"/>, a <see cref="SyncPreviewAttributeFlowChange"/> carries no
+    /// attribute type or plurality (it is a display-ready delta, not a typed change record), so
+    /// <see cref="CausalityAttributeRow.TypeAndPlurality"/> is empty rather than guessed; a table
+    /// rendering it shows nothing in that column instead of a fabricated type.
+    /// </summary>
+    private static IReadOnlyList<CausalityAttributeRow> BuildInboundFlowAttributeRows(
+        List<SyncPreviewAttributeFlowChange>? changes)
+    {
+        if (changes == null || changes.Count == 0)
+            return [];
+
+        return changes
+            .OrderBy(c => c.AttributeName)
+            .Select(c => new CausalityAttributeRow(
+                c.IsAddition ? CausalityAttributeOperation.Set : CausalityAttributeOperation.Remove,
+                c.AttributeName,
+                string.Empty,
+                c.Value,
+                null))
+            .ToList();
+    }
+
+    /// <summary>
     /// The synthetic Identity-lane event saying the Deletion Rule evaluated and declined, or null where that is
     /// not what happened.
     /// </summary>
@@ -169,7 +398,7 @@ public static class CausalityModelBuilder
         var exportReasonCode = outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported
             ? FindQueueingReason(chain, outcome.Id)
             : null;
-        var display = GetEventDisplay(outcome, exportReasonCode);
+        var display = GetEventDisplay(outcome, exportReasonCode, isSpeculative: false);
         var parsedDetail = OutcomeDetailMessageParser.Parse(outcome.DetailMessage);
         var usesIdChannel = UsesDetailMessageIdChannel(outcome.OutcomeType);
         var lane = GetLane(outcome.OutcomeType);
@@ -213,14 +442,35 @@ public static class CausalityModelBuilder
     /// </summary>
     private static OutcomeDisplay GetEventDisplay(
         ActivityRunProfileExecutionItemSyncOutcome outcome,
-        CausalReasonCode? exportReasonCode)
+        CausalReasonCode? exportReasonCode,
+        bool isSpeculative)
     {
-        if (outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
-            return OutcomeDisplayMap.Get(outcome.OutcomeType);
+        var display = outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.Exported
+            ? OutcomeDisplayMap.Get(outcome.OutcomeType)
+            : (exportReasonCode is { } reasonCode
+                ? OutcomeDisplayMap.GetExportDecision(reasonCode)
+                : OutcomeDisplayMap.Get(outcome.OutcomeType));
 
-        return exportReasonCode is { } reasonCode
-            ? OutcomeDisplayMap.GetExportDecision(reasonCode)
-            : OutcomeDisplayMap.Get(outcome.OutcomeType);
+        return ApplySpeculativeLabel(display, outcome.OutcomeType, isSpeculative);
+    }
+
+    /// <summary>
+    /// Substitutes the conditional-mood label (D-S1/D-S9) for a speculative event's label, leaving the
+    /// tone and icon unchanged. A no-op for the recorded path (<paramref name="isSpeculative"/> false)
+    /// and for any outcome type the preview engine cannot emit
+    /// (<see cref="OutcomeDisplayMap.GetSpeculativeLabel"/> returns null), so an unanticipated type still
+    /// renders its ordinary past-tense label rather than nothing.
+    /// </summary>
+    private static OutcomeDisplay ApplySpeculativeLabel(
+        OutcomeDisplay display,
+        ActivityRunProfileExecutionItemSyncOutcomeType outcomeType,
+        bool isSpeculative)
+    {
+        if (!isSpeculative)
+            return display;
+
+        var speculativeLabel = OutcomeDisplayMap.GetSpeculativeLabel(outcomeType);
+        return speculativeLabel != null ? display with { Label = speculativeLabel } : display;
     }
 
     /// <summary>
@@ -461,19 +711,29 @@ public static class CausalityModelBuilder
 
         // Synchronisation Rule attribution (#1085) applies across outcome types. Fall back to an
         // unlinked name snapshot for pre-#1085 rows that recorded the name without the id.
-        if (outcome.SyncRuleId.HasValue)
-        {
-            links.Add(new CausalityEntityLink(
-                outcome.SyncRuleName ?? "Synchronisation Rule",
-                $"/admin/sync-rules/{outcome.SyncRuleId.Value}",
-                CausalityEntityKind.SynchronisationRule));
-        }
-        else if (!string.IsNullOrEmpty(outcome.SyncRuleName))
-        {
-            links.Add(new CausalityEntityLink(outcome.SyncRuleName, null, CausalityEntityKind.SynchronisationRule));
-        }
+        AppendSyncRuleLink(links, outcome.SyncRuleId, outcome.SyncRuleName);
 
         return links;
+    }
+
+    /// <summary>
+    /// Appends the Synchronisation Rule mention shared by the recorded and speculative link builders
+    /// (#1519 D-S1): linked when the id is known, an unlinked name snapshot otherwise, nothing when
+    /// neither is present.
+    /// </summary>
+    private static void AppendSyncRuleLink(List<CausalityEntityLink> links, int? syncRuleId, string? syncRuleName)
+    {
+        if (syncRuleId.HasValue)
+        {
+            links.Add(new CausalityEntityLink(
+                syncRuleName ?? "Synchronisation Rule",
+                $"/admin/sync-rules/{syncRuleId.Value}",
+                CausalityEntityKind.SynchronisationRule));
+        }
+        else if (!string.IsNullOrEmpty(syncRuleName))
+        {
+            links.Add(new CausalityEntityLink(syncRuleName, null, CausalityEntityKind.SynchronisationRule));
+        }
     }
 
     /// <summary>
