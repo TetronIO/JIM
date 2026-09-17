@@ -10,7 +10,7 @@
 <!-- expressed with <g> groups instead. -->
 <svg class="jim-diagram" viewBox="0 0 1160 640" role="img" aria-labelledby="jimdg-mv-title jimdg-mv-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-mv-title">Anatomy of the Metaverse</title>
-  <desc id="jimdg-mv-desc">Inside the Metaverse, a Schema layer holds administrator-defined Object Types such as person, group and device; the person type defines attributes like displayName, mail, manager and memberOf. Below it, the Objects layer holds the identity records themselves as instances of those types, such as a person named Ada Lovelace and a group named Engineering. Connector links join Metaverse Objects to their Connected System Objects in external systems such as Active Directory and an HR system; identity data flows across these links during synchronisation.</desc>
+  <desc id="jimdg-mv-desc">Inside the Metaverse, a Schema layer holds administrator-defined Object Types such as person, group and device; the person type defines attributes like displayName, mail, manager and memberOf. Below it, the Objects layer holds the Metaverse Objects themselves as instances of those types, such as a person named Ada Lovelace and a group named Engineering. Connector links join Metaverse Objects to their Connected System Objects in external systems such as Active Directory and an HR system; identity data flows across these links during synchronisation.</desc>
   <g id="jimdg-mv-boundary">
     <rect class="jimdg-hub" x="310" y="28" width="830" height="584" rx="8"/>
     <text class="jimdg-hub-title" x="725" y="66">Metaverse</text>

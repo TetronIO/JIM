@@ -97,8 +97,11 @@
     </MudForm>
     @if (SyncRule.Direction == SyncRuleDirection.Import)
     {
-        <MudSwitch Class="mt-5" @bind-Value="@SyncRule.ProjectToMetaverse" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
-                   Label="@($"Project {SyncRule.MetaverseObjectType?.PluralName ?? "objects"} to the Metaverse?")" />
+        <div class="d-flex align-center mt-5">
+            <MudSwitch @bind-Value="@SyncRule.ProjectToMetaverse" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
+                       Label="@($"Project {SyncRule.MetaverseObjectType?.PluralName ?? "objects"} to the Metaverse?")" />
+            <TermHint Term="Term.Projection" />
+        </div>
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, objects imported from this
             Connected System will not result in a Metaverse Object being projected if no match is found.
             Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within

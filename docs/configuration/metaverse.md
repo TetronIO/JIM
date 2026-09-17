@@ -4,13 +4,13 @@ title: Metaverse
 
 # Metaverse
 
-The **metaverse** is JIM's central identity store. It contains object types (the schema), attributes (the fields), and the identity objects themselves. All synchronisation flows through the metaverse: import rules bring data in from [Connected Systems](connected-systems.md), and export rules push data out.
+The **metaverse** is JIM's central identity store. It contains object types (the schema), attributes (the fields), and the Metaverse Objects themselves. All synchronisation flows through the metaverse: import rules bring data in from [Connected Systems](connected-systems.md), and export rules push data out.
 
 The metaverse schema is administrator-defined. JIM does not impose a fixed schema, so you can model any identity domain that fits your organisation, from the conventional `person` and `group` types through to bespoke types like `serviceAccount`, `mailbox`, or `device`.
 
 --8<-- "assets/diagrams/metaverse-anatomy.svg"
 
-<p class="jim-diagram-caption">An illustrative Metaverse. Object Types define the Attributes their Objects carry; Objects are the identity records, joined to their Connected System Objects by connector links.<span class="jimdg-caption-motion"> Moving dots trace identity data crossing the links during synchronisation.</span></p>
+<p class="jim-diagram-caption">An illustrative Metaverse. Object Types define the Attributes their Objects carry; Objects are Metaverse Objects, joined to their Connected System Objects by connector links.<span class="jimdg-caption-motion"> Moving dots trace identity data crossing the links during synchronisation.</span></p>
 
 ## Object types
 
@@ -22,7 +22,7 @@ Each object type has its own rules for when its objects should be deleted from t
 
 - **Manual**<br /> Objects are never automatically deleted; an administrator must remove them.
 - **When Last Connector Disconnected**<br /> Objects are deleted once no Connected System Objects remain linked to them.
-- **When Authoritative Source Disconnected**<br /> Objects are deleted when the authoritative source system(s) you select disconnect, even while target-system links remain. This is the usual choice for source-to-target topologies, where an HR system leaving should deprovision the identity everywhere.
+- **When Authoritative Source Disconnected**<br /> Objects are deleted when the authoritative source system(s) you select disconnect, even while target-system links remain. This is the usual choice for source-to-target topologies, where an HR system leaving should deprovision the Metaverse Object everywhere.
 
 An object can also reach zero connectors without any single disconnection event triggering the rule, most commonly after a [Connector Space clear](connected-systems.md#clearing-the-connector-space) whose objects never returned. JIM finds these on every stranded-value sweep, and applies the rule from state rather than from an event, for **When Last Connector Disconnected** and for **When Authoritative Source Disconnected** in **All sources disconnect** mode; **Specific source(s) disconnect** is event-only and is not reached this way, because state alone cannot tell a listed source's departure from one that never joined. The [Pending Deletions](#pending-deletions) list attributes these as "No connector remains" rather than naming a system.
 
@@ -40,11 +40,11 @@ Systems you do not select as sources (typically targets) never block or trigger 
 
 #### Grace period
 
-Rather than deleting immediately when the Deletion Rule triggers, a configurable **grace period** holds the object in a pending-deletion state first, giving administrators time to intervene if a deletion was triggered in error. The grace period is the right default for production: it protects against transient source-system glitches that would otherwise wipe identities out.
+Rather than deleting immediately when the Deletion Rule triggers, a configurable **grace period** holds the object in a pending-deletion state first, giving administrators time to intervene if a deletion was triggered in error. The grace period is the right default for production: it protects against transient source-system glitches that would otherwise wipe Metaverse Objects out.
 
-If the identity reappears during the grace period, the scheduled deletion is cancelled; but only when the reappearance undoes what triggered it. Under **When Last Connector Disconnected**, any system reconnecting cancels. Under **When Authoritative Source Disconnected**, a reconnection from any selected source cancels in All sources mode, while in Specific mode only the system whose disconnection scheduled the deletion cancels it. An unrelated system reconnecting never rescues an object whose trigger condition still holds.
+If the Metaverse Object reappears during the grace period, the scheduled deletion is cancelled; but only when the reappearance undoes what triggered it. Under **When Last Connector Disconnected**, any system reconnecting cancels. Under **When Authoritative Source Disconnected**, a reconnection from any selected source cancels in All sources mode, while in Specific mode only the system whose disconnection scheduled the deletion cancels it. An unrelated system reconnecting never rescues an object whose trigger condition still holds.
 
-When a reconnection cancels a scheduled deletion, JIM records it on the reconnecting record's [Lineage](activities.md#execution-items): the system that rejoined, when the deletion had been due, and the Deletion Rule that permitted the cancellation. Without this, an administrator reading the Lineage would see a deletion scheduled and then nothing, with no way to tell whether it was cancelled or simply has not run yet.
+When a reconnection cancels a scheduled deletion, JIM records it on the reconnecting Connected System Object's [Lineage](activities.md#execution-items): the system that rejoined, when the deletion had been due, and the Deletion Rule that permitted the cancellation. Without this, an administrator reading the Lineage would see a deletion scheduled and then nothing, with no way to tell whether it was cancelled or simply has not run yet.
 
 #### Previewing a deletion settings change
 
@@ -94,7 +94,7 @@ Attributes are scoped to the object types that use them: an attribute is **bound
 
 ### Built-in attributes
 
-JIM's built-in attributes use **friendly, standard-neutral names** (`First Name`, `Job Title`, `Email`) rather than adopting the naming conventions of any one directory or provisioning standard, so the same schema reads naturally whether your identities come from Active Directory, an HR system, or a SCIM client. The built-in set covers the common identity domain, and includes attributes that make SCIM 2.0 resources easy to map, for example the multi-valued `Emails`, the boolean `Account Enabled` (the natural home for SCIM's `active` flag), `Nickname`, `Preferred Language`, `Locale`, `Time Zone`, `Middle Name`, `Honorific Prefix`, and `Honorific Suffix`.
+JIM's built-in attributes use **friendly, standard-neutral names** (`First Name`, `Job Title`, `Email`) rather than adopting the naming conventions of any one directory or provisioning standard, so the same schema reads naturally whether your Metaverse Objects come from Active Directory, an HR system, or a SCIM client. The built-in set covers the common identity domain, and includes attributes that make SCIM 2.0 resources easy to map, for example the multi-valued `Emails`, the boolean `Account Enabled` (the natural home for SCIM's `active` flag), `Nickname`, `Preferred Language`, `Locale`, `Time Zone`, `Middle Name`, `Honorific Prefix`, and `Honorific Suffix`.
 
 Built-in attributes are read-only and cannot be deleted, and JIM looks after them for you: when an upgrade introduces new built-in attributes, they are added to your deployment automatically at service startup, with no administrator action needed.
 
@@ -125,7 +125,7 @@ When no values exist, the action is allowed even if configuration still referenc
 
 ## Objects
 
-**Objects** are the identity records: a single `person`, `group`, or whatever object types you have defined. Each object has a type, attribute values, and may be linked to one or more Connected System Objects in Connected Systems. Those links are how data flows between the external systems and the metaverse during synchronisation.
+**Objects** are Metaverse Objects: a single `person`, `group`, or whatever object types you have defined. Each object has a type, attribute values, and may be linked to one or more Connected System Objects in Connected Systems. Those links are how data flows between the external systems and the metaverse during synchronisation.
 
 ## Confirming a configuration change
 

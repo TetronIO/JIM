@@ -13,7 +13,7 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// bUnit tests for <see cref="CausalityEventCard"/>: the Flow event card's emphasis swap, badge,
+/// bUnit tests for <see cref="CausalityEventCard"/>: the event card's one-label title, badge,
 /// entity chips, footer (attribute count and action links) and keyboard-operable selection.
 /// </summary>
 [TestFixture]
@@ -28,7 +28,6 @@ public class CausalityEventCardTests
     private static IRenderedComponent<CausalityEventCard> RenderCard(
         BunitContext context,
         CausalityEvent causalityEvent,
-        bool technicalNames = false,
         bool selected = false,
         Microsoft.AspNetCore.Components.EventCallback<CausalityEvent> onSelect = default,
         OutcomeDisplay? operation = null,
@@ -36,7 +35,6 @@ public class CausalityEventCardTests
     {
         return context.Render<CausalityEventCard>(ps => ps
             .Add(c => c.Event, causalityEvent)
-            .Add(c => c.TechnicalNames, technicalNames)
             .Add(c => c.Selected, selected)
             .Add(c => c.OnSelect, onSelect)
             .Add(c => c.Operation, operation)
@@ -44,13 +42,10 @@ public class CausalityEventCardTests
     }
 
     [Test]
-    public async Task Render_PlainNames_ShowsNoTechnicalVocabularyAtAllAsync()
+    public async Task Render_Title_ShowsTheEventsOneLabelAndNoCsoOrMvoVocabularyAsync()
     {
-        // The toggle is labelled "Technical names"; off has to mean the technical vocabulary is not on
-        // screen. The card used to render both labels always and merely swap which was emphasised, so
-        // "CSO Joined" and "MVO Attribute Flow" sat on every card with the toggle off, contradicting the
-        // control that governs them. The summary band and the attribute drawer always showed one or the
-        // other; the cards were the odd ones out.
+        // The card names every outcome once, in the portal's own vocabulary; there is no second,
+        // more technical name to swap to.
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
         var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
@@ -60,26 +55,9 @@ public class CausalityEventCardTests
         var title = cut.Find(".evt-title");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(title.TextContent.Trim(), Is.EqualTo("Identity created"));
+            Assert.That(title.TextContent.Trim(), Is.EqualTo("Projected to the Metaverse"));
             Assert.That(cut.Markup, Does.Not.Contain("MVO"));
-            Assert.That(title.QuerySelector(".tech"), Is.Null);
-        }
-    }
-
-    [Test]
-    public async Task Render_TechnicalNames_ShowsTheTechnicalLabelInsteadAsync()
-    {
-        await using var context = CausalityBunitContext.Create();
-        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-        var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-
-        var cut = RenderCard(context, projected, technicalNames: true);
-
-        var title = cut.Find(".evt-title");
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(title.TextContent.Trim(), Is.EqualTo("MVO Projected"));
-            Assert.That(cut.Markup, Does.Not.Contain("Identity created"));
+            Assert.That(cut.Markup, Does.Not.Contain("CSO"));
         }
     }
 
@@ -215,7 +193,7 @@ public class CausalityEventCardTests
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
         var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add);
+        var operation = new OutcomeDisplay("Created", CausalityTone.Success, Icons.Material.Filled.Add);
 
         var cut = RenderCard(context, projected, operation: operation);
 
@@ -243,19 +221,6 @@ public class CausalityEventCardTests
         Assert.That(cut.FindAll(".ln-op"), Is.Empty);
     }
 
-    [Test]
-    public async Task Render_OperationWithTechnicalNames_SwapsTheChipsLabelTooAsync()
-    {
-        await using var context = CausalityBunitContext.Create();
-        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-        var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add);
-
-        var cut = RenderCard(context, projected, technicalNames: true, operation: operation);
-
-        Assert.That(cut.Find(".ln-op").TextContent.Trim(), Is.EqualTo("MVO Projected"));
-    }
-
     // ─── HideTitle (#1495 second follow-up) ───
 
     [Test]
@@ -264,7 +229,7 @@ public class CausalityEventCardTests
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
         var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add);
+        var operation = new OutcomeDisplay("Created", CausalityTone.Success, Icons.Material.Filled.Add);
 
         var cut = RenderCard(context, projected, operation: operation, hideTitle: false);
 
@@ -277,7 +242,7 @@ public class CausalityEventCardTests
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
         var projected = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-        var operation = new OutcomeDisplay("Created", "MVO Projected", CausalityTone.Success, Icons.Material.Filled.Add);
+        var operation = new OutcomeDisplay("Created", CausalityTone.Success, Icons.Material.Filled.Add);
 
         var cut = RenderCard(context, projected, operation: operation, hideTitle: true);
 

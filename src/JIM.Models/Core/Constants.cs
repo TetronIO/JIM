@@ -465,4 +465,18 @@ public static class Constants
         /// </summary>
         public const string PasswordChange = "jim_password_change";
     }
+
+    /// <summary>
+    /// Display names for Activities whose <c>TargetName</c> is a fixed, system-generated string rather than the
+    /// name of the configuration object involved. Shared between the writer (JIM.Worker) and the portal's
+    /// Activity category filter so the two cannot drift apart.
+    /// </summary>
+    public static class ActivityTargetNames
+    {
+        /// <summary>
+        /// The housekeeping batch that deletes Metaverse Objects once their deletion grace period expires
+        /// (<see cref="JIM.Models.Activities.ActivityTargetType.MetaverseObjectHousekeeping"/>).
+        /// </summary>
+        public const string ScheduledMetaverseObjectDeletion = "Scheduled Metaverse Object Deletion";
+    }
 }

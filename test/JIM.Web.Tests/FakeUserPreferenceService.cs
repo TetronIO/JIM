@@ -19,19 +19,9 @@ public sealed class FakeUserPreferenceService : IUserPreferenceService
     public string? StoredCausalityView { get; set; }
 
     /// <summary>
-    /// The technical-names value returned by <see cref="GetCausalityTechNamesAsync"/>.
-    /// </summary>
-    public bool? StoredCausalityTechNames { get; set; }
-
-    /// <summary>
     /// Every value passed to <see cref="SetCausalityViewAsync"/>, in call order.
     /// </summary>
     public List<string> CausalityViewWrites { get; } = [];
-
-    /// <summary>
-    /// Every value passed to <see cref="SetCausalityTechNamesAsync"/>, in call order.
-    /// </summary>
-    public List<bool> CausalityTechNamesWrites { get; } = [];
 
     public Task<int> GetRowsPerPageAsync() => Task.FromResult(10);
 
@@ -71,15 +61,6 @@ public sealed class FakeUserPreferenceService : IUserPreferenceService
     {
         CausalityViewWrites.Add(view);
         StoredCausalityView = view;
-        return Task.CompletedTask;
-    }
-
-    public Task<bool?> GetCausalityTechNamesAsync() => Task.FromResult(StoredCausalityTechNames);
-
-    public Task SetCausalityTechNamesAsync(bool enabled)
-    {
-        CausalityTechNamesWrites.Add(enabled);
-        StoredCausalityTechNames = enabled;
         return Task.CompletedTask;
     }
 }

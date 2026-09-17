@@ -26,15 +26,14 @@ public class OutcomeDisplayMapHopOperationTests
     {
         // Deliberate behaviour change (#1495 second follow-up): Projected used to chip Primary/AirlineStops,
         // the only operation with a look of its own. Every "Created" verb now shares one tone and icon
-        // (Success/Add) so a column scans on colour alone; the technical label is unchanged.
+        // (Success/Add) so a column scans on colour alone.
         var cohort = new CausalChainCohort { MetaverseChangeType = ObjectChangeType.Projected };
 
         var display = OutcomeDisplayMap.GetHopOperation(cohort);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Created"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("MVO Projected"));
+            Assert.That(display!.Label, Is.EqualTo("Created"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Success));
             Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Add));
         }
@@ -49,8 +48,7 @@ public class OutcomeDisplayMapHopOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Joined"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Joined"));
+            Assert.That(display!.Label, Is.EqualTo("Joined"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Secondary));
         }
     }
@@ -64,17 +62,16 @@ public class OutcomeDisplayMapHopOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Created"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("MVO Created"));
+            Assert.That(display!.Label, Is.EqualTo("Created"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Success));
         }
     }
 
-    [TestCase(ObjectChangeType.Added, "Created", "CSO Added", CausalityTone.Success)]
-    [TestCase(ObjectChangeType.Updated, "Updated", "CSO Updated", CausalityTone.Info)]
-    [TestCase(ObjectChangeType.Deleted, "Deleted", "CSO Deleted", CausalityTone.Error)]
+    [TestCase(ObjectChangeType.Added, "Created", CausalityTone.Success)]
+    [TestCase(ObjectChangeType.Updated, "Updated", CausalityTone.Info)]
+    [TestCase(ObjectChangeType.Deleted, "Deleted", CausalityTone.Error)]
     public void GetHopOperation_SourceImportChangeType_ReadsTheImportOutcome(
-        ObjectChangeType changeType, string plainLabel, string technicalLabel, CausalityTone tone)
+        ObjectChangeType changeType, string label, CausalityTone tone)
     {
         var cohort = new CausalChainCohort { SourceImportChangeType = changeType };
 
@@ -82,19 +79,18 @@ public class OutcomeDisplayMapHopOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo(plainLabel));
-            Assert.That(display.TechnicalLabel, Is.EqualTo(technicalLabel));
+            Assert.That(display!.Label, Is.EqualTo(label));
             Assert.That(display.Tone, Is.EqualTo(tone));
         }
     }
 
     // ExportCreateStaged's icon is a deliberate behaviour change (#1495 second follow-up): it used to chip
     // AddCircle; every "Created" verb now shares Add so a column scans on colour alone.
-    [TestCase(CausalReasonCode.ExportCreateStaged, "Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.Add)]
-    [TestCase(CausalReasonCode.ExportUpdateStaged, "Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit)]
-    [TestCase(CausalReasonCode.ExportDeleteStaged, "Deleted", "Export Staged (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete)]
+    [TestCase(CausalReasonCode.ExportCreateStaged, "Created", CausalityTone.Success, Icons.Material.Filled.Add)]
+    [TestCase(CausalReasonCode.ExportUpdateStaged, "Updated", CausalityTone.Info, Icons.Material.Filled.Edit)]
+    [TestCase(CausalReasonCode.ExportDeleteStaged, "Deleted", CausalityTone.Error, Icons.Material.Filled.Delete)]
     public void GetHopOperation_QueueingEdgeWithADecision_ReadsTheDecision(
-        CausalReasonCode reasonCode, string plainLabel, string technicalLabel, CausalityTone tone, string icon)
+        CausalReasonCode reasonCode, string label, CausalityTone tone, string icon)
     {
         var cohort = new CausalChainCohort
         {
@@ -106,8 +102,7 @@ public class OutcomeDisplayMapHopOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo(plainLabel));
-            Assert.That(display.TechnicalLabel, Is.EqualTo(technicalLabel));
+            Assert.That(display!.Label, Is.EqualTo(label));
             Assert.That(display.Tone, Is.EqualTo(tone));
             Assert.That(display.Icon, Is.EqualTo(icon));
         }
@@ -125,8 +120,7 @@ public class OutcomeDisplayMapHopOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Deleted"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("MVO Deleted"));
+            Assert.That(display!.Label, Is.EqualTo("Deleted"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Error));
             Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Delete));
         }

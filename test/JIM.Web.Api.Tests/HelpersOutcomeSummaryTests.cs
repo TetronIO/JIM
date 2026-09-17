@@ -102,31 +102,31 @@ public class HelpersOutcomeSummaryTests
     #region GetOutcomeTypeDisplayName
 
     [Test]
-    public void GetOutcomeTypeDisplayName_AttributeFlow_ReturnsMvoAttributeFlow()
+    public void GetOutcomeTypeDisplayName_AttributeFlow_ReturnsAttributesFlowed()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
-        Assert.That(result, Is.EqualTo("MVO Attribute Flow"));
+        Assert.That(result, Is.EqualTo("Attributes flowed"));
     }
 
     [Test]
-    public void GetOutcomeTypeDisplayName_PendingExportCreated_ReturnsCsoPendingExport()
+    public void GetOutcomeTypeDisplayName_PendingExportCreated_ReturnsExportQueued()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
-        Assert.That(result, Is.EqualTo("CSO Pending Export"));
+        Assert.That(result, Is.EqualTo("Export queued"));
     }
 
     [Test]
-    public void GetOutcomeTypeDisplayName_Projected_ReturnsMvoProjectedAsync()
+    public void GetOutcomeTypeDisplayName_Projected_ReturnsProjectedToTheMetaverseAsync()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-        Assert.That(result, Is.EqualTo("MVO Projected"));
+        Assert.That(result, Is.EqualTo("Projected to the Metaverse"));
     }
 
     [Test]
-    public void GetOutcomeTypeDisplayName_Provisioned_ReturnsCsoProvisionedAsync()
+    public void GetOutcomeTypeDisplayName_Provisioned_ReturnsProvisionedAsync()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
-        Assert.That(result, Is.EqualTo("CSO Provisioned"));
+        Assert.That(result, Is.EqualTo("Provisioned"));
     }
 
     #endregion
@@ -169,10 +169,10 @@ public class HelpersOutcomeSummaryTests
     }
 
     [Test]
-    public void GetOutcomeTypeDisplayName_MvoDeletionScheduled_ReturnsMvoDeletionScheduled()
+    public void GetOutcomeTypeDisplayName_MvoDeletionScheduled_ReturnsMetaverseObjectDeletionScheduled()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
-        Assert.That(result, Is.EqualTo("MVO Deletion Scheduled"));
+        Assert.That(result, Is.EqualTo("Metaverse Object deletion scheduled"));
     }
 
     [Test]
@@ -190,10 +190,10 @@ public class HelpersOutcomeSummaryTests
     }
 
     [Test]
-    public void GetOutcomeTypeDisplayName_MvoDeletionCancelled_ReturnsMvoDeletionCancelled()
+    public void GetOutcomeTypeDisplayName_MvoDeletionCancelled_ReturnsMetaverseObjectDeletionCancelled()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled);
-        Assert.That(result, Is.EqualTo("MVO Deletion Cancelled"));
+        Assert.That(result, Is.EqualTo("Metaverse Object deletion cancelled"));
     }
 
     [Test]

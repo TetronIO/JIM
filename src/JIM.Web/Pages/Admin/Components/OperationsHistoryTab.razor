@@ -190,7 +190,7 @@
                             {
                                 @if (activity.TotalAdded > 0)
                                 {
-                                    <MudTooltip Text="CSOs Added" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects added" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Added)" Class="jim-stat-chip">
                                             @activity.TotalAdded.ToString("N0")
@@ -199,7 +199,7 @@
                                 }
                                 @if (activity.TotalUpdated > 0)
                                 {
-                                    <MudTooltip Text="CSOs Updated" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects updated" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Updated)" Class="jim-stat-chip">
                                             @activity.TotalUpdated.ToString("N0")
@@ -208,7 +208,7 @@
                                 }
                                 @if (activity.TotalDeleted > 0)
                                 {
-                                    <MudTooltip Text="CSO Deletions Detected" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Object deletions detected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
                                             @activity.TotalDeleted.ToString("N0")
@@ -220,7 +220,7 @@
                             {
                                 @if (activity.TotalProjected > 0)
                                 {
-                                    <MudTooltip Text="MVOs Projected" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Metaverse Objects projected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Projected)" Class="jim-stat-chip">
                                             @activity.TotalProjected.ToString("N0")
@@ -229,7 +229,7 @@
                                 }
                                 @if (activity.TotalJoined > 0)
                                 {
-                                    <MudTooltip Text="CSOs Joined" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects joined" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Joined)" Class="jim-stat-chip">
                                             @activity.TotalJoined.ToString("N0")
@@ -238,7 +238,7 @@
                                 }
                                 @if (activity.TotalAttributeFlows > 0)
                                 {
-                                    <MudTooltip Text="MVOs with Attribute Flow" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Metaverse Objects with Attribute Flow" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.AttributeFlow)" Class="jim-stat-chip">
                                             @activity.TotalAttributeFlows.ToString("N0")
@@ -247,7 +247,7 @@
                                 }
                                 @if (activity.TotalDisconnected > 0)
                                 {
-                                    <MudTooltip Text="CSOs Disconnected" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects disconnected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Disconnected)" Class="jim-stat-chip">
                                             @activity.TotalDisconnected.ToString("N0")
@@ -256,7 +256,7 @@
                                 }
                                 @if (activity.TotalDisconnectedOutOfScope > 0)
                                 {
-                                    <MudTooltip Text="CSOs Disconnected (Out of Scope)" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects disconnected (out of scope)" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope)" Class="jim-stat-chip">
                                             @activity.TotalDisconnectedOutOfScope.ToString("N0")
@@ -265,7 +265,7 @@
                                 }
                                 @if (activity.TotalOutOfScopeRetainJoin > 0)
                                 {
-                                    <MudTooltip Text="CSOs Out of Scope (Join Retained)" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects out of scope (join retained)" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.OutOfScopeRetainJoin)" Class="jim-stat-chip">
                                             @activity.TotalOutOfScopeRetainJoin.ToString("N0")
@@ -274,7 +274,7 @@
                                 }
                                 @if (activity.TotalDeleted > 0)
                                 {
-                                    <MudTooltip Text="CSOs Deleted" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects deleted" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
                                             @activity.TotalDeleted.ToString("N0")
@@ -283,7 +283,7 @@
                                 }
                                 @if (activity.TotalDriftCorrections > 0)
                                 {
-                                    <MudTooltip Text="CSOs Drift Corrected" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects drift corrected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.DriftCorrection)" Class="jim-stat-chip">
                                             @activity.TotalDriftCorrections.ToString("N0")
@@ -292,7 +292,7 @@
                                 }
                                 @if (activity.TotalProvisioned > 0)
                                 {
-                                    <MudTooltip Text="CSOs Provisioned" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects provisioned" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)" Class="jim-stat-chip">
                                             @activity.TotalProvisioned.ToString("N0")
@@ -301,7 +301,7 @@
                                 }
                                 @if (activity.TotalPendingExports > 0)
                                 {
-                                    <MudTooltip Text="CSO Pending Exports" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Object Pending Exports" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.PendingExport)" Class="jim-stat-chip">
                                             @activity.TotalPendingExports.ToString("N0")
@@ -313,7 +313,7 @@
                             {
                                 @if (activity.TotalExported > 0)
                                 {
-                                    <MudTooltip Text="CSOs Exported" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects exported" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Exported)" Class="jim-stat-chip">
                                             @activity.TotalExported.ToString("N0")
@@ -322,7 +322,7 @@
                                 }
                                 @if (activity.TotalDeprovisioned > 0)
                                 {
-                                    <MudTooltip Text="CSOs Deprovisioned" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Connected System Objects deprovisioned" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deprovisioned)" Class="jim-stat-chip">
                                             @activity.TotalDeprovisioned.ToString("N0")
@@ -659,61 +659,61 @@
                             @if (sidebarRunType == "Import")
                             {
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSOs Added</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Objects Added</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Success">@_selectedActivity.TotalAdded.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSOs Updated</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Objects Updated</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalUpdated.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSO Deletions Detected</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Object Deletions Detected</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Error">@_selectedActivity.TotalDeleted.ToString("N0")</MudText></td>
                                 </tr>
                             }
                             else if (sidebarRunType == "Sync")
                             {
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSOs Joined</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Objects Joined</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Secondary">@_selectedActivity.TotalJoined.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">MVOs Projected</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Metaverse Objects Projected</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Primary">@_selectedActivity.TotalProjected.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">MVOs with Attribute Flow</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Metaverse Objects with Attribute Flow</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalAttributeFlows.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSOs Provisioned</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Objects Provisioned</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Primary">@_selectedActivity.TotalProvisioned.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSO Pending Exports</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Object Pending Exports</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalPendingExports.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSOs Disconnected</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Objects Disconnected</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Warning">@_selectedActivity.TotalDisconnected.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSOs Deleted</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Objects Deleted</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Error">@_selectedActivity.TotalDeleted.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSOs Drift Corrected</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Objects Drift Corrected</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Warning">@_selectedActivity.TotalDriftCorrections.ToString("N0")</MudText></td>
                                 </tr>
                             }
                             else if (sidebarRunType == "Export")
                             {
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSOs Exported</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Objects Exported</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalExported.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSOs Deprovisioned</MudText></td>
+                                    <td><MudText Typo="Typo.body2">Connected System Objects Deprovisioned</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Error">@_selectedActivity.TotalDeprovisioned.ToString("N0")</MudText></td>
                                 </tr>
                             }

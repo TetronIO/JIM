@@ -4,8 +4,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The shared event card (this run's events on the Lineage): a tone-accented card with an icon tile,
-   the plain-language title with the technical label demoted alongside (swapped when the
-   technical-names toggle is on), an optional contextual detail message, entity chips, an attention
+   the event's one title, an optional contextual detail message, entity chips, an attention
    badge, and a footer carrying the attribute count plus up to two action links. Each entity is
    named exactly once (as a chip or a footer link); a lineage column's head already names the owning
    system, so its cards suppress the system chip via HideSystemChip. Cards with attribute detail are
@@ -31,7 +30,7 @@
            and badge above. *@
         <span class="ln-op" style="--tone: @CausalityToneCss.CssVar(operation.Tone); --tone-text: @CausalityToneCss.TextCssVar(operation.Tone)">
             <MudIcon Icon="@operation.Icon" />
-            @(TechnicalNames ? operation.TechnicalLabel : operation.PlainLabel)
+            @operation.Label
         </span>
     }
     @if (!HideTitle || Operation is null)
@@ -112,12 +111,6 @@
     public CausalityEvent Event { get; set; } = null!;
 
     /// <summary>
-    /// When true, technical labels (MVO/CSO vocabulary) are emphasised and plain language demoted.
-    /// </summary>
-    [Parameter]
-    public bool TechnicalNames { get; set; }
-
-    /// <summary>
     /// Whether this card is the currently selected one.
     /// </summary>
     [Parameter]
@@ -162,13 +155,9 @@
     public EventCallback<CausalityEvent> OnSelect { get; set; }
 
     /// <summary>
-    /// The event's name in the vocabulary the reader has asked for, and only that one. The card used to
-    /// render both labels always and merely swap which was emphasised, so "CSO Joined" and "MVO Attribute
-    /// Flow" sat on every card with the technical-names toggle off: a control that governs a vocabulary
-    /// has to be able to remove it, or its label is not true. The summary band and the attribute drawer
-    /// already showed one or the other, so the cards were the anomaly rather than the design.
+    /// The event's one name, in the portal's own vocabulary: no CSO or MVO wording appears anywhere.
     /// </summary>
-    private string Title => TechnicalNames ? Event.TechnicalLabel : Event.PlainLabel;
+    private string Title => Event.Label;
 
     private bool IsClickable => Event.AttributeRows.Count > 0 && OnSelect.HasDelegate;
 

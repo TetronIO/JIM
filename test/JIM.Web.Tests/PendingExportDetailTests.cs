@@ -11,11 +11,13 @@ using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
+using JIM.Web;
 using JIM.Web.Models;
 using JIM.Web.Pages.Admin;
 using JIM.Web.Shared;
@@ -348,6 +350,121 @@ public class PendingExportDetailTests : JimComponentTestContext
                     "a search that matched nothing has a way out, and the empty state must offer it");
             }
         });
+    }
+
+    // ─── Naming the Target and Source objects (#1669) ───
+
+    /// <summary>
+    /// The Target and Source row labels stay short: the object's type is already named once, by the
+    /// chip beneath the label ("user: ...", "User: ..."), so restating "Connected System Object" /
+    /// "Metaverse Object" in the row label itself would say the same thing twice and wrap the label
+    /// onto three lines beside the chip (#1669 follow-up, found on a live check of the page).
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_TargetAndSourceRows_UseTheShortLabelsAsync()
+    {
+        SetupRelatedObjects(
+            cso: new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                Type = new ConnectedSystemObjectType { Name = "user" }
+            },
+            mvo: null);
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Markup, Does.Contain("<strong>Target</strong>"));
+                Assert.That(cut.Markup, Does.Contain("<strong>Source</strong>"));
+                Assert.That(cut.Markup, Does.Not.Contain("Target Connected System Object"));
+                Assert.That(cut.Markup, Does.Not.Contain("Source Metaverse Object"));
+            }
+        });
+    }
+
+    /// <summary>
+    /// The Target and Source rows' sub-lines carry only the place ("in Cross-Domain Export", "in the
+    /// Metaverse"), never the type: the chip above each already names the type once ("user: ...",
+    /// "User: ..."), so the sub-line repeating it would say it twice (#1669 follow-up, found on a live
+    /// check of the page: the old "user in Cross-Domain Export" sub-line duplicated the chip's own
+    /// "user: e6d5…").
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_TargetAndSourceObjects_SubLinesNameOnlyThePlaceAsync()
+    {
+        SetupRelatedObjects(
+            cso: new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                Type = new ConnectedSystemObjectType { Name = "user" }
+            },
+            mvo: new MetaverseObject
+            {
+                Id = Guid.NewGuid(),
+                Type = new MetaverseObjectType { Name = "User", PluralName = "Users" },
+                CachedDisplayName = "Baseline User"
+            });
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                var places = cut.FindAll(".jim-object-place");
+                Assert.That(places, Has.Count.EqualTo(2));
+                Assert.That(places[0].TextContent.Trim(), Is.EqualTo("in Directory"),
+                    "the Target sub-line must not repeat the chip's own type prefix");
+                Assert.That(places[1].TextContent.Trim(), Is.EqualTo("in the Metaverse"),
+                    "the Source sub-line must not repeat the chip's own type prefix");
+            }
+        });
+    }
+
+    /// <summary>
+    /// The Target sub-line never varies with the Connected System Object's type, known or not: it takes
+    /// no type argument at all, because the chip beside it is the one and only place that names the
+    /// type (#1669 follow-up).
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_TargetObjectSubLine_NeverNamesTheTypeRegardlessOfWhetherItIsKnownAsync()
+    {
+        SetupRelatedObjects(
+            cso: new ConnectedSystemObject { Id = Guid.NewGuid(), Type = new ConnectedSystemObjectType() },
+            mvo: null);
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.Find(".jim-object-place").TextContent.Trim(), Is.EqualTo("in Directory")));
+    }
+
+    /// <summary>
+    /// Sets the Target and Source objects on the Pending Export the page loads, keeping every other field
+    /// (attribute changes, counts) as the empty baseline <see cref="SetupChanges"/> establishes.
+    /// </summary>
+    private void SetupRelatedObjects(ConnectedSystemObject? cso, MetaverseObject? mvo)
+    {
+        _connectedSystems
+            .Setup(r => r.GetPendingExportDetailAsync(PendingExportId))
+            .ReturnsAsync(new PendingExportDetailResult
+            {
+                PendingExport = new PendingExport
+                {
+                    Id = PendingExportId,
+                    ConnectedSystemId = ConnectedSystemId,
+                    ConnectedSystem = new ConnectedSystem { Id = ConnectedSystemId, Name = "Directory" },
+                    ChangeType = PendingExportChangeType.Update,
+                    Status = PendingExportStatus.Pending,
+                    ConnectedSystemObject = cso,
+                    SourceMetaverseObject = mvo,
+                    AttributeValueChanges = []
+                },
+                AttributeChangeTotalCounts = new()
+            });
     }
 
     [Test]

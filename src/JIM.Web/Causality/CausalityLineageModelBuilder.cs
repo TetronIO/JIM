@@ -321,7 +321,7 @@ public static class CausalityLineageModelBuilder
             case CausalityLineageColumnKind.Identity:
                 head = GetIdentityHead(state, chain);
                 // A single-object Identity head carries the page's Metaverse Object Type name for
-                // its subtitle ("Identity · User"); a role head is already a type noun.
+                // its subtitle ("User · Metaverse"); a role head is already a type noun.
                 if (!head.IsRoleHead)
                     head = head with { ObjectTypeName = context.MvoTypeName };
                 break;
@@ -401,12 +401,12 @@ public static class CausalityLineageModelBuilder
             .Select(h => h.Hop.Cohort)
             .FirstOrDefault(c => c.MemberCount > 1);
         if (pluralCohort != null)
-            return new ColumnHead(pluralCohort.ObjectNoun ?? "Identities", IsRoleHead: true, Href: null, ObjectTypeName: null);
+            return new ColumnHead(pluralCohort.ObjectNoun ?? "Metaverse Objects", IsRoleHead: true, Href: null, ObjectTypeName: null);
 
         if (chain != null && FirstSoleMemberName(chain.Cohorts) is { } chainName)
             return new ColumnHead(chainName, IsRoleHead: false, Href: null, ObjectTypeName: null);
 
-        return new ColumnHead("Identity", IsRoleHead: false, Href: null, ObjectTypeName: null);
+        return new ColumnHead("Metaverse Object", IsRoleHead: false, Href: null, ObjectTypeName: null);
     }
 
     /// <summary>
@@ -422,7 +422,7 @@ public static class CausalityLineageModelBuilder
             string? href = context.CsoId is { } csoId && context.CsoConnectedSystemId is { } systemId
                 ? JimUtilities.GetConnectedSystemObjectHref(systemId, csoId)
                 : null;
-            return new ColumnHead(context.RecordName ?? "Record", IsRoleHead: false, href, context.CsoObjectTypeName);
+            return new ColumnHead(context.RecordName ?? "Connected System Object", IsRoleHead: false, href, context.CsoObjectTypeName);
         }
 
         var soleNames = state.Hops.OrderBy(h => h.Sequence)
@@ -435,19 +435,19 @@ public static class CausalityLineageModelBuilder
         if (soleNames.Count == 1)
             return new ColumnHead(soleNames[0], IsRoleHead: false, Href: null, ObjectTypeName: null);
         if (soleNames.Count > 1)
-            return new ColumnHead("Records", IsRoleHead: true, Href: null, ObjectTypeName: null);
+            return new ColumnHead("Connected System Objects", IsRoleHead: true, Href: null, ObjectTypeName: null);
 
         var pluralCohort = state.Hops.OrderBy(h => h.Sequence)
             .Select(h => h.Hop.Cohort)
             .FirstOrDefault(c => c.MemberCount > 1);
         if (pluralCohort != null)
-            return new ColumnHead(pluralCohort.ObjectNoun ?? "Records", IsRoleHead: true, Href: null, ObjectTypeName: null);
+            return new ColumnHead(pluralCohort.ObjectNoun ?? "Connected System Objects", IsRoleHead: true, Href: null, ObjectTypeName: null);
 
-        // A staging target holds this run's provisioning events and nothing chain-derived: the record
-        // is the story's subject arriving in the target system, linked where the run recorded it.
+        // A staging target holds this run's provisioning events and nothing chain-derived: the Connected
+        // System Object is the story's subject arriving in the target system, linked where the run recorded it.
         var recordLink = state.ThisRunEvents.SelectMany(e => e.Links)
             .FirstOrDefault(l => l.Kind == CausalityEntityKind.Record && l.Href != null);
-        return new ColumnHead(context.RecordName ?? state.SystemName ?? "Record", IsRoleHead: false,
+        return new ColumnHead(context.RecordName ?? state.SystemName ?? "Connected System Object", IsRoleHead: false,
             recordLink?.Href, ObjectTypeName: null);
     }
 

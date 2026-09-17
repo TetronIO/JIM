@@ -25,13 +25,12 @@ public class OutcomeDisplayMapEventOperationTests
     {
         // Deliberate behaviour change (#1495 second follow-up): Projected used to chip Primary/AirlineStops,
         // the only operation with a look of its own. Every "Created" verb now shares one tone and icon
-        // (Success/Add) so a column scans on colour alone; the technical label is unchanged.
+        // (Success/Add) so a column scans on colour alone.
         var display = OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Created"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("MVO Projected"));
+            Assert.That(display!.Label, Is.EqualTo("Created"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Success));
             Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Add));
         }
@@ -44,8 +43,7 @@ public class OutcomeDisplayMapEventOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Joined"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Joined"));
+            Assert.That(display!.Label, Is.EqualTo("Joined"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Secondary));
         }
     }
@@ -57,8 +55,7 @@ public class OutcomeDisplayMapEventOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Created"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Added"));
+            Assert.That(display!.Label, Is.EqualTo("Created"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Success));
         }
     }
@@ -70,8 +67,7 @@ public class OutcomeDisplayMapEventOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Updated"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Updated"));
+            Assert.That(display!.Label, Is.EqualTo("Updated"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Info));
         }
     }
@@ -83,43 +79,40 @@ public class OutcomeDisplayMapEventOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Deleted"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Deleted"));
+            Assert.That(display!.Label, Is.EqualTo("Deleted"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Error));
         }
     }
 
     [Test]
-    public void GetEventOperation_AttributeFlow_ReadsUpdatedInfoWithTheMapsTechnicalLabel()
+    public void GetEventOperation_AttributeFlow_ReadsUpdatedInfo()
     {
-        // "MVO Attribute Flow" is the technical label OutcomeDisplayMap.Get already uses for this
-        // outcome's own title; the chip stays consistent with that vocabulary rather than inventing
-        // a second one.
+        // "Updated" matches the operation vocabulary shared by every chip; AttributeFlow's own title
+        // ("Attributes flowed") is a different label entirely, carried by the card's head rather than
+        // by this chip.
         var display = OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Updated"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("MVO Attribute Flow"));
+            Assert.That(display!.Label, Is.EqualTo("Updated"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Info));
         }
     }
 
     [Test]
-    public void GetEventOperation_DriftCorrection_ReadsUpdatedInfoWithTheMapsTechnicalLabel()
+    public void GetEventOperation_DriftCorrection_ReadsUpdatedInfo()
     {
         var display = OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Updated"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Drift Corrected"));
+            Assert.That(display!.Label, Is.EqualTo("Updated"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Info));
         }
     }
 
     [Test]
-    public void GetEventOperation_Provisioned_ReadsCreatedSuccessWithTheMapsTechnicalLabel()
+    public void GetEventOperation_Provisioned_ReadsCreatedSuccess()
     {
         // Deliberate behaviour change (#1495 second follow-up): Provisioned used to chip its own AddCircle
         // icon; every "Created" verb now shares Success/Add so a column scans on colour alone.
@@ -127,15 +120,14 @@ public class OutcomeDisplayMapEventOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Created"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Provisioned"));
+            Assert.That(display!.Label, Is.EqualTo("Created"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Success));
             Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Add));
         }
     }
 
     [Test]
-    public void GetEventOperation_MvoDeleted_ReadsDeletedErrorWithTheMapsTechnicalLabel()
+    public void GetEventOperation_MvoDeleted_ReadsDeletedError()
     {
         // Deliberate behaviour change (#1495 second follow-up): MvoDeleted used to chip PersonRemove; every
         // "Deleted" verb now shares Error/Delete so a column scans on colour alone.
@@ -143,22 +135,20 @@ public class OutcomeDisplayMapEventOperationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Deleted"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("MVO Deleted"));
+            Assert.That(display!.Label, Is.EqualTo("Deleted"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Error));
             Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Delete));
         }
     }
 
     [Test]
-    public void GetEventOperation_Deprovisioned_ReadsDeletedErrorWithTheMapsTechnicalLabel()
+    public void GetEventOperation_Deprovisioned_ReadsDeletedError()
     {
         var display = OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Deleted"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("CSO Deprovisioned"));
+            Assert.That(display!.Label, Is.EqualTo("Deleted"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Error));
         }
     }
@@ -166,32 +156,30 @@ public class OutcomeDisplayMapEventOperationTests
     [Test]
     public void GetEventOperation_DeprovisionQueued_ReadsDeletedAsAStagedDeletePrecedent()
     {
-        // A queued deprovision is a staged delete: the chain's own "Export Staged (Delete)" chip is
-        // the precedent for how a staged (not-yet-executed) kind is marked.
+        // A queued deprovision is a staged delete: the chain's own queueing-decision chip for a staged
+        // delete is the precedent for how a staged (not-yet-executed) kind is marked.
         var display = OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo("Deleted"));
-            Assert.That(display.TechnicalLabel, Is.EqualTo("Export Staged (Delete)"));
+            Assert.That(display!.Label, Is.EqualTo("Deleted"));
             Assert.That(display.Tone, Is.EqualTo(CausalityTone.Error));
         }
     }
 
     // ExportCreateStaged's icon is a deliberate behaviour change (#1495 second follow-up): it used to chip
     // AddCircle; every "Created" verb now shares Add so a column scans on colour alone.
-    [TestCase(CausalReasonCode.ExportCreateStaged, "Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.Add)]
-    [TestCase(CausalReasonCode.ExportUpdateStaged, "Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit)]
-    [TestCase(CausalReasonCode.ExportDeleteStaged, "Deleted", "Export Staged (Delete)", CausalityTone.Error, Icons.Material.Filled.Delete)]
+    [TestCase(CausalReasonCode.ExportCreateStaged, "Created", CausalityTone.Success, Icons.Material.Filled.Add)]
+    [TestCase(CausalReasonCode.ExportUpdateStaged, "Updated", CausalityTone.Info, Icons.Material.Filled.Edit)]
+    [TestCase(CausalReasonCode.ExportDeleteStaged, "Deleted", CausalityTone.Error, Icons.Material.Filled.Delete)]
     public void GetEventOperation_ExportedWithAResolvedReason_ReadsTheDecision(
-        CausalReasonCode reasonCode, string plainLabel, string technicalLabel, CausalityTone tone, string icon)
+        CausalReasonCode reasonCode, string label, CausalityTone tone, string icon)
     {
         var display = OutcomeDisplayMap.GetEventOperation(ActivityRunProfileExecutionItemSyncOutcomeType.Exported, reasonCode);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo(plainLabel));
-            Assert.That(display.TechnicalLabel, Is.EqualTo(technicalLabel));
+            Assert.That(display!.Label, Is.EqualTo(label));
             Assert.That(display.Tone, Is.EqualTo(tone));
             Assert.That(display.Icon, Is.EqualTo(icon));
         }
@@ -215,20 +203,19 @@ public class OutcomeDisplayMapEventOperationTests
     /// PendingExportCreated collapses Create and Update into one outcome type (unlike DeprovisionQueued,
     /// which gets its own type for Delete): the staged kind recorded on the outcome (#1561 follow-up) is
     /// what tells them apart, routed through the same queueing-decision vocabulary a chain's queueing
-    /// edge uses (Export Staged (Create)/(Update)).
+    /// edge uses.
     /// </summary>
-    [TestCase(PendingExportChangeType.Create, "Created", "Export Staged (Create)", CausalityTone.Success, Icons.Material.Filled.Add)]
-    [TestCase(PendingExportChangeType.Update, "Updated", "Export Staged (Update)", CausalityTone.Info, Icons.Material.Filled.Edit)]
+    [TestCase(PendingExportChangeType.Create, "Created", CausalityTone.Success, Icons.Material.Filled.Add)]
+    [TestCase(PendingExportChangeType.Update, "Updated", CausalityTone.Info, Icons.Material.Filled.Edit)]
     public void GetEventOperation_PendingExportCreatedWithStagedChangeType_ReadsTheStagedKind(
-        PendingExportChangeType stagedChangeType, string plainLabel, string technicalLabel, CausalityTone tone, string icon)
+        PendingExportChangeType stagedChangeType, string label, CausalityTone tone, string icon)
     {
         var display = OutcomeDisplayMap.GetEventOperation(
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, stagedChangeType: stagedChangeType);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(display!.PlainLabel, Is.EqualTo(plainLabel));
-            Assert.That(display.TechnicalLabel, Is.EqualTo(technicalLabel));
+            Assert.That(display!.Label, Is.EqualTo(label));
             Assert.That(display.Tone, Is.EqualTo(tone));
             Assert.That(display.Icon, Is.EqualTo(icon));
         }
