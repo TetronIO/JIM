@@ -28,7 +28,7 @@
    once, so the window is sliced from memory rather than becoming a database range read. The Category that used to
    be a collapsible group header is now a sortable column: grouping is computed over the rows a grid is holding,
    and a virtualised grid holds one window, so a group header would describe the window rather than the list. *@
-<VirtualisedDataGrid @ref="_grid" T="ServiceSetting"
+<VirtualisedDataGrid GridClass="mt-2" @ref="_grid" T="ServiceSetting"
                      ContainerId="service-setting-list"
                      DefaultSortBy="category"
                      LoadWindow="LoadSettingWindowAsync"

@@ -23,7 +23,7 @@
 @* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
    and the toolbar count) lives in the shared grid; this page loads the full list once (Trusted Certificates are
    a small configuration list) and slices windows from it in memory. *@
-<VirtualisedDataGrid @ref="_grid" T="TrustedCertificate"
+<VirtualisedDataGrid GridClass="mt-2" @ref="_grid" T="TrustedCertificate"
                      ContainerId="certificate-list"
                      DefaultSortBy="name"
                      LoadWindow="LoadCertificateWindowAsync"

@@ -38,7 +38,7 @@
 
     @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
        shared grid; this page supplies the Predefined Search's columns, the window loader and the empty states. *@
-    <VirtualisedDataGrid @ref="_grid" T="MetaverseObjectHeader"
+    <VirtualisedDataGrid GridClass="mt-2" @ref="_grid" T="MetaverseObjectHeader"
                          ContainerId="metaverse-object-list"
                          StateKey="@($"{TypeNameUrlParam}/{PredefinedSearchUri}")"
                          DefaultSortBy="@Constants.BuiltInAttributes.DisplayName"
