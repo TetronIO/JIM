@@ -1,0 +1,43 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The portal's one info affordance: a small info button that opens a padded popover holding a title, a
+   short explanation and, where there is one, a link to the docs glossary. <TermHint /> (a JIM term, beside
+   the label where it is first met) and <PageInfo /> (what a page is for, in its title bar) are both this
+   component with different content, so the padding, measure, link treatment and the button's alignment
+   with the text beside it are fixed here once. Opens on click rather than on hover because the content
+   can carry a link; MudMenu is JIM's existing pattern for an icon-triggered popover. *@
+<MudMenu Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Color="Color.Default"
+         AriaLabel="@($"About {Title}")" Class="jim-info-button ms-1">
+    <div class="jim-info-popover">
+        <div class="jim-info-popover-title">@Title</div>
+        <div class="jim-info-popover-body">@ChildContent</div>
+        @if (!string.IsNullOrEmpty(GlossaryAnchor))
+        {
+            <MudLink Href="@($"https://docs.junctional.io/reference/glossary/#{GlossaryAnchor}")"
+                     Target="_blank" rel="noopener" Class="jim-info-popover-link">
+                Glossary
+            </MudLink>
+        }
+    </div>
+</MudMenu>
+
+@code {
+    /// <summary>
+    /// What is being explained: the popover's heading, and the button's accessible name ("About ...").
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The explanation. One or two plain sentences; this is a popover, not a help page.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// The docs glossary anchor to link to, without the leading hash. No link renders when null or empty.
+    /// </summary>
+    [Parameter]
+    public string? GlossaryAnchor { get; set; }
+}

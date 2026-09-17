@@ -384,6 +384,49 @@ html[lang] .mud-alert-close {
     padding-top: 7px;
 }
 
+/* Info popover (<InfoPopover />, behind <TermHint /> and <PageInfo />). MudMenu's list gives its content
+   vertical padding only, so unpadded text ran flush against the popover's left edge; the body carries the
+   horizontal padding itself, a measure that keeps an explanation to a readable width, and a title that
+   reads as a heading rather than as the first sentence. The Glossary link sits apart from the text it
+   follows, on its own line. */
+.jim-info-popover {
+    padding: 8px 16px;
+    max-width: 24rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-info-popover-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.jim-info-popover-body {
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-info-popover-link {
+    display: inline-block;
+    margin-top: 10px;
+    font-weight: 600;
+}
+
+/* The info button inline in a heading (a page title). MudMenu renders an inline-flex box, which on the
+   baseline rode above the title and on vertical-align: middle alone sat about 3px below its optical
+   centre (middle is measured from the x-height, and a title is mostly capitals). The bottom margin lifts
+   it by half its value; 6px is measured, not derived: it lands the icon within a quarter pixel of the
+   title text's centre on both the titles that carry a leading icon and those that do not. Scoped to a
+   direct child of a MudText because everywhere else the button sits in an align-center flex row, where it
+   is already within a pixel and a margin would push it off. */
+.jim-info-button {
+    vertical-align: middle;
+}
+
+.mud-typography > .jim-info-button {
+    margin-bottom: 6px;
+}
+
 /* Alert text. A Text or Outlined alert of a semantic severity is coloured on the alert itself with the chip label
    blend (see :root), so the message, its links, any inheriting button and the close control read in one legible
    severity colour; MudBlazor colours the icon with a rule of its own, which keeps it on the palette colour. MudBlazor

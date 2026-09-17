@@ -24,6 +24,8 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<SearchField @bind-Value="_searchString" />` | Every box that filters a list, table or dialog as the user types | "Search and filter boxes" below |
 | `<RunPhaseStepper Phases="@x" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
 | `<RunProgressMetrics ObjectsProcessed="@x" ObjectsToProcess="@y" ... />` | A running Activity's progress bar and its count, rate and time remaining | "Live progress figures" below |
+| `<PageInfo Title="Connector Space" Term="Term.ConnectorSpace">...</PageInfo>` | Saying what a page is for: the info button at the end of the page title | "Page descriptions" below |
+| `<TermHint Term="Term.Projection" />` | Explaining a JIM term beside the label where an administrator first meets it | "Page descriptions" below |
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
 | `<NavigableMudTabs>` | Top-level page tabs (syncs the active tab to `?t=slug`) | "Tabs" below |
 | `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
@@ -274,6 +276,23 @@ A single-sentence description needs none of this and renders unchanged. The site
 ## Configuration Change Preview panels
 
 **Every editing surface that opens a `<ConfigurationChangePreviewPanel />` passes `OnClose`.** Point it at the surface's existing `Discard...Preview()` method (the one that forgets the Activity id, the previewed proposal and the last read), so closing removes the panel and the save confirmation stops citing the preview. The panel renders the close control only when the callback is set, so the one surface that shows a preview as a record rather than as a question, the Activity page, leaves it unset. A running preview closed this way is not cancelled; it finishes as an Activity. The affordance itself is covered by `ConfigurationChangePreviewPanelTests`; the wiring is a convention, so check it by reading the panel's call sites (`grep -n "<ConfigurationChangePreviewPanel" -A4`).
+
+## Page descriptions
+
+**What a page is for is said once, from a `<PageInfo />` info button at the end of the page title.** It is the last child of the title's `MudText`, it opens a popover on click, and it carries one to three plain sentences plus, where the page is about a glossary term (`Term="..."`), a link to that entry.
+
+```razor
+<MudText Typo="Typo.h3"><span>Connector Space:</span> <span class="mud-primary-text">@name</span>
+    <PageInfo Title="Connector Space" Term="Term.ConnectorSpace">
+        The Connector Space holds this Connected System's Connected System Objects. ...
+    </PageInfo>
+</MudText>
+```
+
+- **Never describe a page with a dismissible alert under the breadcrumbs.** The Connector Space list did: it cost a band of every visit's first screen until someone closed it, reappeared on the next visit because nothing remembered the dismissal, and said much the same as the info button already in the title above it. An alert is for something the reader needs to notice now; a description is for a reader who goes looking.
+- `<TermHint />` is the same affordance for a **term** rather than a page: it sits beside a label (the "Project Users to the Metaverse?" switch, a tab's heading) and its wording comes from `TermDefinitions`, held verbatim in step with `docs/reference/glossary.md` by `GlossaryTermConsistencyTests`. A page title takes a `<PageInfo />`, whose words are the page's own.
+- Both are `<InfoPopover />` underneath, so the popover's padding, measure, title and link treatment, and the button's alignment with the text beside it, are fixed once in `site.css` (`jim-info-popover`, `jim-info-button`). Do not restyle either at a call site, and do not hand-roll a third info button from a `MudMenu` or `MudTooltip`.
+- The button's alignment inside a heading is measured, not eyeballed (see the rule's comment in `site.css`); placed in an `align-center` flex row it needs nothing.
 
 ## Alerts
 - ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components
