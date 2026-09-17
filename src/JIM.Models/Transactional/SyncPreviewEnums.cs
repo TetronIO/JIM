@@ -37,13 +37,7 @@ public enum SyncPreviewMessageCode
     /// Synchronisation Rule matches it, or a matching rule's Outbound Deprovision Action is Disconnect. The
     /// real run records no outcome node for a disconnect-only downstream object (#288 Phase 1 of the Sync
     /// Preview Surface plan); this warning is how the preview still surfaces it.</summary>
-    DownstreamDisconnectOnly,
-    /// <summary>The Metaverse Object's deletion (cascading from this object falling out of scope) would cancel a
-    /// downstream Connected System Object's provisioning, because it was never exported: the unsent Create
-    /// Pending Export and the Connected System Object are removed, and nothing is exported, since the object
-    /// does not exist in the target system. The real run records no outcome node for it; this warning is how
-    /// the preview still surfaces it.</summary>
-    DownstreamProvisioningCancelled
+    DownstreamDisconnectOnly
 }
 
 /// <summary>

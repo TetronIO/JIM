@@ -343,6 +343,54 @@ public class HousekeepingActivityWorkflowTests
     }
 
     /// <summary>
+    /// Deletion cascade: a grace-period-expired Metaverse Object whose target Connected
+    /// System Object is still Pending Provisioning with no Pending Export at all (nothing was ever exported)
+    /// has its provisioning cancelled outright rather than deprovisioned. The cancellation is a consequence of
+    /// the deletion, so it must be recorded on the housekeeping Activity as a ProvisioningCancelled outcome
+    /// nested beneath the deleted object's MvoDeleted outcome, exactly as a genuinely staged delete export is.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoWithNeverExportedProvisioningTargetCso_NestsProvisioningCancelledUnderMvoDeletedAsync()
+    {
+        // Arrange
+        var (personMvo, targetCso) = SeedEligiblePersonWithNeverExportedProvisioningTargetCso("Nadia NeverExported");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([personMvo]);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync(Jim);
+
+        // Assert: nothing exists in the target system, so nothing was staged and the never-provisioned CSO
+        // (and its unsent Create) are both gone.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.PendingExports.Values, Is.Empty, "Nothing exists in the target system, so nothing may be exported");
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(targetCso.Id), Is.False,
+                "The never-provisioned CSO must be removed, not left stranded in the connector space");
+        }
+
+        // Assert: the cancellation is still recorded as a consequence of the deletion on the deleted object's item.
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var rpeis = _persistedRpeis.Where(r => r.ActivityId == activity.Id).ToList();
+        var deletionRpei = rpeis.Single(r => r.ObjectChangeType == ObjectChangeType.Deleted);
+        var mvoDeletedOutcome = deletionRpei.SyncOutcomes
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        var cascadeOutcome = mvoDeletedOutcome.Children.SingleOrDefault();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cascadeOutcome, Is.Not.Null,
+                "The cancelled provisioning must be recorded as a consequence of the Metaverse Object deletion");
+            Assert.That(cascadeOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled),
+                "Nothing was ever exported, so this is a cancellation, not a queued deprovision");
+            Assert.That(cascadeOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName),
+                "The outcome must name the Connected System the cancelled provisioning targeted");
+            Assert.That(activity.TotalPendingExports, Is.EqualTo(0),
+                "A cancellation is not a Pending Export and must not count towards the total");
+        }
+    }
+
+    /// <summary>
     /// Decision-time policy snapshot carry-through (#119): when housekeeping deletes a Metaverse Object that
     /// carries a DeletionPolicySnapshotJson captured at mark-time, the snapshot must be copied onto the
     /// deletion record it writes, so the final record reflects the policy that scheduled the deletion, not
@@ -624,6 +672,53 @@ public class HousekeepingActivityWorkflowTests
             StringValue = "uid=dan.deprovisioned,ou=People,dc=glitterband,dc=local"
         });
         SyncRepo.SeedConnectedSystemObject(targetCso);
+
+        return (personMvo, targetCso);
+    }
+
+    /// <summary>
+    /// Seeds an eligible Person Metaverse Object joined to a target Connected System Object that is still
+    /// Pending Provisioning and still carries its unsent Create Pending Export (the only proof that nothing was
+    /// ever exported), so the deletion cascades into a cancellation rather than a delete Pending Export.
+    /// </summary>
+    private (MetaverseObject Mvo, ConnectedSystemObject TargetCso) SeedEligiblePersonWithNeverExportedProvisioningTargetCso(string displayName)
+    {
+        SyncRepo.SeedSyncRule(new SyncRule
+        {
+            Id = 911,
+            Name = "Target Export Users (Never Exported)",
+            Enabled = true,
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystemId = TargetSystemId,
+            ConnectedSystem = new ConnectedSystem { Id = TargetSystemId, Name = TargetSystemName },
+            ConnectedSystemObjectTypeId = CsUserTypeId,
+            MetaverseObjectTypeId = MvPersonTypeId,
+            OutboundDeprovisionAction = OutboundDeprovisionAction.Delete
+        });
+
+        var personMvo = CreateEligiblePersonMvo(displayName);
+        SyncRepo.SeedMetaverseObject(personMvo);
+
+        var targetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystemId,
+            TypeId = CsUserTypeId,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            MetaverseObjectId = personMvo.Id
+        };
+        SyncRepo.SeedConnectedSystemObject(targetCso);
+        SyncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystemId,
+            ConnectedSystemObjectId = targetCso.Id,
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = personMvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        });
 
         return (personMvo, targetCso);
     }

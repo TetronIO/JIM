@@ -962,13 +962,12 @@ public class SyncPreviewServer
             if (_syncEngine.IsProvisioningNeverExported(downstreamCso, existingPesByCsoId.GetValueOrDefault(downstreamCso.Id)))
             {
                 context.SystemNames.TryGetValue(downstreamCso.ConnectedSystemId, out var cancelledSystemName);
-                result.Warnings.Add(new SyncPreviewMessage
+                deletionNode.Children.Add(new SyncOutcomeNode
                 {
-                    Code = SyncPreviewMessageCode.DownstreamProvisioningCancelled,
-                    Detail = $"The Metaverse Object's deletion would cancel its provisioning to " +
-                        $"'{cancelledSystemName ?? downstreamCso.ConnectedSystemId.ToString()}': it was never exported, so the " +
-                        "unsent Create Pending Export and the Connected System Object are removed and nothing is exported.",
-                    ConnectedSystemId = downstreamCso.ConnectedSystemId
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+                    TargetEntityDescription = cancelledSystemName,
+                    DetailMessage = downstreamCso.ConnectedSystemId.ToString(),
+                    Ordinal = deletionNode.Children.Count
                 });
                 continue;
             }
@@ -1219,6 +1218,11 @@ public class SyncPreviewServer
                         SourceMetaverseObjectId = entry.MetaverseObjectId
                     });
                     break;
+
+                // A cancelled provisioning proposes no export: nothing exists in the target system, so there
+                // is nothing to stage. It is still surfaced in the outcome tree, by BuildOutboundOutcomeNodes.
+                case OutboundPreviewEntryKind.ProvisioningCancelled:
+                    break;
             }
         }
     }
@@ -1285,6 +1289,18 @@ public class SyncPreviewServer
                         SyncRuleName = entry.SyncRuleName,
                         DetailMessage = entry.ConnectedSystemId.ToString(),
                         StagedChangeType = PendingExportChangeType.Delete,
+                        Ordinal = siblings.Count
+                    });
+                    break;
+
+                case OutboundPreviewEntryKind.ProvisioningCancelled:
+                    siblings.Add(new SyncOutcomeNode
+                    {
+                        OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+                        TargetEntityDescription = systemName,
+                        SyncRuleId = entry.SyncRuleId,
+                        SyncRuleName = entry.SyncRuleName,
+                        DetailMessage = entry.ConnectedSystemId.ToString(),
                         Ordinal = siblings.Count
                     });
                     break;

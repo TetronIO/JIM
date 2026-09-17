@@ -50,4 +50,21 @@ public class ExportEvaluationWorkingSet
     /// </summary>
     public bool TryGetStagedDeleteExport(Guid connectedSystemObjectId, out PendingExport pendingExport) =>
         _stagedDeleteExportsByCsoId.TryGetValue(connectedSystemObjectId, out pendingExport!);
+
+    private readonly List<CancelledProvisioning> _cancelledProvisionings = [];
+
+    /// <summary>
+    /// Records a provisioning cancellation this run made (a still-PendingProvisioning CSO whose unsent Create
+    /// Pending Export and CSO were both removed because it was never exported). Record only after both deletes
+    /// succeed, so a failed batch write cannot leave the working set claiming a cancellation that never happened.
+    /// </summary>
+    public void RecordCancelledProvisioning(CancelledProvisioning cancelledProvisioning) =>
+        _cancelledProvisionings.Add(cancelledProvisioning);
+
+    /// <summary>
+    /// The provisioning cancellations this run has made so far, for the caller to report as
+    /// <see cref="JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled"/>
+    /// outcomes on the Activity.
+    /// </summary>
+    public IReadOnlyList<CancelledProvisioning> CancelledProvisionings => _cancelledProvisionings;
 }

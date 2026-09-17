@@ -313,7 +313,28 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// <see cref="WouldFallInScope"/>. Where the rule provisions and no target object exists, the entry is reported
     /// as <see cref="Provisioned"/> instead, because the account it creates is the consequence.
     /// </summary>
-    WouldEnterExportScope
+    WouldEnterExportScope,
+
+    /// <summary>
+    /// Provisioning was withdrawn before it was ever exported: a Metaverse Object was deleted, or fell out of an
+    /// export Synchronisation Rule's scope, while its target Connected System Object was still
+    /// <c>PendingProvisioning</c> with an unsent Create Pending Export. Nothing exists in the target system for
+    /// the object, so JIM cancels the provisioning outright, removing the unsent Create Pending Export and the
+    /// Connected System Object, rather than staging a Delete or leaving the Connected System Object behind
+    /// disconnected. See the sync engine's "provably never exported" test for the exact rule.
+    ///
+    /// Applies whatever the export Synchronisation Rule's Outbound Deprovision Action is: a Delete would ask a
+    /// Connector to remove an object it never created, carrying no identifier to remove it by, and the Connected
+    /// System Object, holding no external ID, would be invisible to import deletion detection, so nothing would
+    /// ever confirm it away. A Disconnect would leave the never-provisioned Connected System Object stranded in
+    /// the connector space.
+    ///
+    /// This is deliberately NOT a Pending Export and does not count towards an Activity's Pending Export totals:
+    /// nothing was ever exported and nothing is queued to be. It contrasts with <see cref="DeprovisionQueued"/>,
+    /// which reports a Delete that genuinely is staged for an object that exists (or may exist) in the target
+    /// system.
+    /// </summary>
+    ProvisioningCancelled
 }
 
 /// <summary>

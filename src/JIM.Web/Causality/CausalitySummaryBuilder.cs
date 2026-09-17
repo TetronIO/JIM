@@ -275,6 +275,20 @@ public static class CausalitySummaryBuilder
                 $"deprovisioning would be queued for {deprovisionSystemCount} system{(deprovisionSystemCount == 1 ? string.Empty : "s")}")]);
         }
 
+        // Provisioning cancellations are counted separately from deprovisioning: nothing
+        // would be staged for these systems at all, since nothing had ever been exported to them.
+        var provisioningCancelledSystemCount = allEvents
+            .Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled)
+            .Select(e => (e.SystemId, e.SystemName))
+            .Distinct()
+            .Count();
+        if (provisioningCancelledSystemCount > 0)
+        {
+            clauses.Add([new SummarySegment.Text(
+                $"provisioning would be cancelled for {provisioningCancelledSystemCount} " +
+                $"system{(provisioningCancelledSystemCount == 1 ? string.Empty : "s")}, since nothing had been exported yet")]);
+        }
+
         if (clauses.Count == 0)
             return BuildGenericFallbackClauses(allEvents);
 
@@ -480,6 +494,20 @@ public static class CausalitySummaryBuilder
                 $"deprovisioning is now queued for {deprovisionSystemCount} system{(deprovisionSystemCount == 1 ? string.Empty : "s")}")]);
         }
 
+        // Provisioning cancellations are counted separately from deprovisioning: nothing was
+        // staged for these systems at all, since nothing had ever been exported to them.
+        var provisioningCancelledSystemCount = allEvents
+            .Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled)
+            .Select(e => (e.SystemId, e.SystemName))
+            .Distinct()
+            .Count();
+        if (provisioningCancelledSystemCount > 0)
+        {
+            clauses.Add([new SummarySegment.Text(
+                $"provisioning was cancelled for {provisioningCancelledSystemCount} " +
+                $"system{(provisioningCancelledSystemCount == 1 ? string.Empty : "s")}, since nothing had been exported yet")]);
+        }
+
         if (clauses.Count == 0)
             return BuildGenericFallbackClauses(allEvents);
 
@@ -595,6 +623,10 @@ public static class CausalitySummaryBuilder
                 $"Deprovision queued · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned =>
                 $"Deprovisioning · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
+            // Same reasoning as the deprovisioning pills above: counts systems, never changes, since a
+            // cancellation carries no attribute changes at all (nothing was ever exported).
+            ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled =>
+                $"Provisioning cancelled · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of scope",
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => "Deletion scheduled",
             _ => display.Label

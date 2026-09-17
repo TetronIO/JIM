@@ -6,9 +6,9 @@ namespace JIM.Web.Causality;
 /// <summary>
 /// One row of the Table view (#1519 Phase 3): either an object-level fact derived from a causality
 /// event's outcome type (Scope, Projection, Join, Disconnect, Delete, Deprovision, Provision, Export
-/// queued, No contributor, Values preserved), or an individual attribute change carried by an event's
-/// own <see cref="CausalityAttributeRow"/>s. <see cref="CausalityTableModelBuilder"/> is the only
-/// place that derives rows; this type is a plain data carrier.
+/// queued, Provisioning cancelled, No contributor, Values preserved), or an individual attribute change
+/// carried by an event's own <see cref="CausalityAttributeRow"/>s. <see cref="CausalityTableModelBuilder"/>
+/// is the only place that derives rows; this type is a plain data carrier.
 /// </summary>
 /// <param name="ObjectKey">
 /// The key of the <see cref="CausalityTableObject"/> this row belongs to, matching
@@ -18,7 +18,7 @@ namespace JIM.Web.Causality;
 /// <param name="Attribute">
 /// The attribute name for an attribute-change row, or the attribute a No Contributor/Values Preserved
 /// fact names; null for every other object-level row (Scope, Projection, Join, Disconnect, Delete,
-/// Deprovision, Provision, Export queued), which states no attribute at all.
+/// Deprovision, Provision, Export queued, Provisioning cancelled), which states no attribute at all.
 /// </param>
 /// <param name="Current">The current (recorded: before) value or state text; null where there is none.</param>
 /// <param name="WouldBe">The would-be (recorded: after) value or state text; null where there is none.</param>
@@ -69,6 +69,7 @@ public sealed record CausalityTableRow(
         CausalityTableChangeKind.Deprovision => "Deprovision",
         CausalityTableChangeKind.Provision => "Provision",
         CausalityTableChangeKind.ExportQueued => "Export queued",
+        CausalityTableChangeKind.ProvisioningCancelled => "Provisioning cancelled",
         CausalityTableChangeKind.NoContributor => "No contributor",
         CausalityTableChangeKind.ValuesPreserved => "Values preserved",
         CausalityTableChangeKind.AttributeChange => "Attribute change",

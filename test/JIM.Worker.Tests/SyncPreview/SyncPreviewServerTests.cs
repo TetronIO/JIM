@@ -317,6 +317,62 @@ public class SyncPreviewServerTests
             Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
     }
 
+    /// <summary>
+    /// The scope-out cancellation, mirrored in the outbound-only preview: the Metaverse
+    /// Object is out of the export Synchronisation Rule's scope, and its target Connected System Object is
+    /// still Pending Provisioning with an unsent Create Pending Export (nothing was ever exported). The real
+    /// run cancels that provisioning outright; the preview must report a ProvisioningCancelled node, not a
+    /// Deprovision Queued one, and must propose no export.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForMvoAsync_TargetNeverExportedProvisioningOutOfScope_ReportsProvisioningCancelledNodeAsync()
+    {
+        // Arrange - a joined target object still Pending Provisioning, then scope the rule out. The scope-out
+        // cancellation needs the unsent Create Pending Export itself as proof the CSO is persisted and safe to
+        // remove; see ScopeOutCancelsNeverExportedProvisioning.
+        var (mvo, _, exportRule, _, cso) = ArrangeOutboundFixture(csoStoredEmployeeId: null);
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var unsentCreate = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = cso.ConnectedSystemId,
+            ConnectedSystemObjectId = cso.Id,
+            ConnectedSystemObject = cso,
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = mvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        PendingExportsData.Add(unsentCreate);
+        SyncRepo.SeedPendingExport(unsentCreate);
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        var scopingGroup = new SyncRuleScopingCriteriaGroup();
+        scopingGroup.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = MetaverseObjectTypesData.Single(t => t.Name == "User").Attributes
+                .Single(a => a.Name == Constants.BuiltInAttributes.DisplayName),
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "a display name this Metaverse Object does not have"
+        });
+        exportRule.ObjectScopingCriteriaGroups.Add(scopingGroup);
+
+        // Act
+        var result = await Jim.SyncPreview.PreviewSyncForMvoAsync(mvo.Id);
+
+        // Assert - a ProvisioningCancelled node, nothing proposed, and the CSO left exactly as it was
+        Assert.That(result.OutcomeTree, Has.Count.EqualTo(1));
+        var node = result.OutcomeTree[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(node.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled));
+            Assert.That(node.SyncRuleId, Is.EqualTo(exportRule.Id));
+            Assert.That(node.DetailMessage, Is.EqualTo(exportRule.ConnectedSystemId.ToString()));
+            Assert.That(result.Outbound.ProposedExports, Is.Empty, "Nothing exists in the target system to export");
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "A preview must not disconnect the CSO");
+            Assert.That(PendingExportsData, Has.Count.EqualTo(1), "A preview must not touch the seeded unsent Create");
+        }
+    }
+
     [Test]
     public async Task PreviewSyncForMvoAsync_UnknownMetaverseObject_ReturnsObjectNotFoundErrorWithoutThrowingAsync()
     {
@@ -786,7 +842,7 @@ public class SyncPreviewServerTests
             Type = targetUserType,
             TypeId = targetUserType.Id,
             // A live target: a Pending Provisioning one that was never exported has its provisioning cancelled
-            // instead (DownstreamProvisioningCancelled), whatever the rule's action.
+            // instead (a ProvisioningCancelled node under the deletion), whatever the rule's action.
             Status = ConnectedSystemObjectStatus.Normal,
             MetaverseObjectId = mvo.Id,
             JoinType = ConnectedSystemObjectJoinType.Provisioned

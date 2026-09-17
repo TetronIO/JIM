@@ -101,6 +101,44 @@ public class CausalitySummaryBuilderTests
             "and deprovisioning is now queued for 2 systems."));
     }
 
+    /// <summary>
+    /// A leaver whose downstream target was still Pending Provisioning with an unsent Create must be
+    /// summarised as a cancellation, distinct from the deprovisioning clause: nothing was ever exported to
+    /// that system, so nothing is being removed from it.
+    /// </summary>
+    [Test]
+    public void Build_LeaverScenarioWithNeverExportedTarget_NamesTheCancelledProvisioning()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var outOfScope = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Erin Byrne",
+            syncRuleId: 7, syncRuleName: "Yellowstone People - Inbound");
+        var mvoDeleted = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
+            parent: outOfScope, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Erin Byrne");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+            parent: mvoDeleted, ordinal: 0, targetEntityDescription: "Glitterband EMEA", detailMessage: "2");
+
+        var context = new CausalityPageContext(
+            ConnectedSystemId: 1,
+            ConnectedSystemName: "Yellowstone APAC",
+            RunProfileName: "Full Synchronisation",
+            CsoId: CausalityTestData.CsoId,
+            CsoConnectedSystemId: 1,
+            CsoConnectedSystemName: "Yellowstone APAC",
+            CsoDisplayName: "Erin Byrne",
+            CsoExternalId: "S8-100",
+            CsoObjectTypeName: "person",
+            MvoTypeName: "Person",
+            MvoTypePluralName: "People");
+
+        var summary = BuildSummary(item, context);
+
+        Assert.That(RenderSentence(summary.Segments), Does.Contain(
+            "provisioning was cancelled for 1 system, since nothing had been exported yet"));
+        Assert.That(summary.Pills.Select(p => (p.Label, p.Tone)), Has.Some.EqualTo(
+            ("Provisioning cancelled · 1 system", CausalityTone.Warning)));
+    }
+
     [Test]
     public void Build_LeaverScenario_LinksTheRuleAndTheDeletionRecord()
     {

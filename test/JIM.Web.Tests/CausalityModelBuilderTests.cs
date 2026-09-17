@@ -123,7 +123,10 @@ public class CausalityModelBuilderTests
             // An export rule's scope decides what reaches the target system, so its transitions sit beside the
             // other export-side previews rather than with the import-side scope pair above.
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope] = CausalityLane.Downstream,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = CausalityLane.Downstream
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = CausalityLane.Downstream,
+            // The same export-side event as DeprovisionQueued, minus the export: nothing was ever created in
+            // the target system, so it shares DeprovisionQueued's Downstream lane rather than Identity's.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = CausalityLane.Downstream
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

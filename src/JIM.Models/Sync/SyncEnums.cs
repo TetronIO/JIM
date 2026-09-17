@@ -102,5 +102,11 @@ public enum OutboundPreviewEntryKind
     /// <summary>An in-scope staging decision: what export, if any, would be staged against the rule's target.</summary>
     Staging,
     /// <summary>An out-of-scope deprovisioning decision for a joined target object.</summary>
-    Deprovisioning
+    Deprovisioning,
+    /// <summary>
+    /// The target object's provisioning was never exported (still PendingProvisioning, unsent Create), so the
+    /// real run would cancel it outright rather than deprovisioning it: nothing would be staged and nothing
+    /// exists in the target system to remove.
+    /// </summary>
+    ProvisioningCancelled
 }

@@ -273,7 +273,7 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
     /// an unsent Create). Nothing exists in the target systems, so the deletion cancels the provisioning rather
     /// than deprovisioning: no Delete is staged, no Deprovision Queued node is recorded, and the CSOs are
     /// removed. The preview must say the same: an identical tree, no proposed Deletes, and one
-    /// <see cref="SyncPreviewMessageCode.DownstreamProvisioningCancelled"/> warning per target.
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled"/> node per target.
     /// </summary>
     [Test]
     public async Task PreviewSyncForCsoAsync_ScopeExitWithImmediateDeletionOfNeverExportedTargets_TreeMatchesTheRealSyncOutcomeTreeAsync()
@@ -336,6 +336,8 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
             Assert.That(SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId), Is.Null, "The Metaverse Object should be deleted immediately");
             Assert.That(describedReal, Does.Contain("MvoDeleted"));
             Assert.That(describedReal, Does.Not.Contain("DeprovisionQueued"), "Nothing exists in the targets, so nothing is deprovisioned");
+            Assert.That(CountOccurrences(describedReal, "ProvisioningCancelled"), Is.EqualTo(2),
+                "One ProvisioningCancelled node per cancelled target, whichever deprovisioning action its rule carries");
             Assert.That(describedPreview, Is.EqualTo(describedReal),
                 $"The preview's outcome tree must match the real run's. Preview: {describedPreview} | Real: {describedReal}");
 
@@ -343,8 +345,6 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
             Assert.That(targetCsoIds.Any(SyncRepo.ConnectedSystemObjects.ContainsKey), Is.False, "The never-provisioned CSOs are removed");
 
             Assert.That(preview.Outbound.ProposedExports, Is.Empty);
-            Assert.That(preview.Warnings.Count(w => w.Code == SyncPreviewMessageCode.DownstreamProvisioningCancelled), Is.EqualTo(2),
-                "One warning per cancelled target, whichever deprovisioning action its rule carries");
             Assert.That(preview.Warnings.Any(w => w.Code == SyncPreviewMessageCode.DownstreamDisconnectOnly), Is.False);
         }
     }
@@ -681,6 +681,22 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
                 lines.Add(DescribeTree(node.Children.OrderBy(c => c.Ordinal), depth + 1));
         }
         return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>
+    /// Counts non-overlapping occurrences of a substring in a described tree, so a test can assert "exactly N
+    /// nodes of this outcome type" without parsing the description back into a tree.
+    /// </summary>
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = haystack.IndexOf(needle, index, StringComparison.Ordinal)) != -1)
+        {
+            count++;
+            index += needle.Length;
+        }
+        return count;
     }
 
     #endregion

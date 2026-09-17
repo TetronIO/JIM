@@ -529,6 +529,7 @@ public static class CausalityModelBuilder
     private static bool UsesDetailMessageIdChannel(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
         return outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+            or ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled
             || SyncOutcomeTypes.IsPendingExport(outcomeType);
     }
 
@@ -568,6 +569,9 @@ public static class CausalityModelBuilder
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
                 or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
                 or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
+                // Provisioning withdrawn before it was ever exported is the same export-side
+                // event as DeprovisionQueued, minus the export: it belongs beside it, not in the Identity lane.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed
@@ -713,6 +717,22 @@ public static class CausalityModelBuilder
                             JimUtilities.GetConnectedSystemObjectHref(targetSystemId, targetCsoId),
                             CausalityEntityKind.Record));
                     }
+                }
+                else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
+                {
+                    links.Add(new CausalityEntityLink(outcome.TargetEntityDescription, null, CausalityEntityKind.ConnectedSystem));
+                }
+                break;
+
+            case ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled:
+                // Nothing was ever exported: there is no Pending Export and no target Connected System Object
+                // to link (both were removed along with the cancellation), only the target system itself.
+                if (parsedDetail.ConnectedSystemId.HasValue)
+                {
+                    links.Add(new CausalityEntityLink(
+                        outcome.TargetEntityDescription ?? "Connected System",
+                        JimUtilities.GetConnectedSystemHref(parsedDetail.ConnectedSystemId.Value),
+                        CausalityEntityKind.ConnectedSystem));
                 }
                 else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
                 {

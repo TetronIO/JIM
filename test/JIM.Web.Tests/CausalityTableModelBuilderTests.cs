@@ -422,6 +422,52 @@ public class CausalityTableModelBuilderTests
     }
 
     /// <summary>
+    /// A downstream target whose provisioning was withdrawn before it was ever exported
+    /// must produce its own row, distinct from Deprovision: nothing was ever created in the target system,
+    /// so nothing is being removed from it, and the row must not be treated as Destructive.
+    /// </summary>
+    [Test]
+    public void Build_SpeculativeCascadeWithNeverExportedTarget_ProjectsAProvisioningCancelledRow()
+    {
+        var mvoId = Guid.NewGuid();
+        var provisioningCancelled = new SyncOutcomeNode
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+            TargetEntityDescription = "Glitterband EMEA",
+            DetailMessage = "2"
+        };
+        var mvoDeleted = new SyncOutcomeNode
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
+            TargetEntityId = mvoId,
+            TargetEntityDescription = "Liam Allen",
+            Children = [provisioningCancelled]
+        };
+        var root = new SyncOutcomeNode
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
+            TargetEntityId = mvoId,
+            TargetEntityDescription = "Liam Allen",
+            Children = [mvoDeleted]
+        };
+        var preview = new SyncPreviewResult { OutcomeTree = [root] };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, PreviewContext());
+        var table = CausalityTableModelBuilder.Build(model);
+
+        using (Assert.EnterMultipleScope())
+        {
+            var row = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.ProvisioningCancelled);
+            Assert.That(row.ChangeKindLabel, Is.EqualTo("Provisioning cancelled"));
+            Assert.That(row.Current, Is.Null, "object-level rows never carry a Before/After value");
+            Assert.That(row.WouldBe, Is.Null);
+            Assert.That(CausalityTableFilters.Matches(row, CausalityTableFilter.Destructive), Is.False,
+                "nothing was ever created in the target system, so nothing is destroyed by the cancellation");
+            Assert.That(CausalityTableFilters.Matches(row, CausalityTableFilter.ObjectChanges), Is.True);
+        }
+    }
+
+    /// <summary>
     /// A joined object's preview knows its Identity exists but not its name (no Identity-lane event links
     /// it), and the Identity entry must not borrow the object's own name, which read as though the two
     /// were one thing.

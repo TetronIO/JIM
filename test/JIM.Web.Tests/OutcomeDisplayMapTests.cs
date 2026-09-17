@@ -69,7 +69,8 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues, "Contributed values withdrawn", CausalityTone.Warning, Icons.Material.Filled.Undo),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, "Contributed values kept", CausalityTone.Info, Icons.Material.Filled.Inventory2),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, "Leaves export scope, nothing to remove", CausalityTone.Info, Icons.Material.Filled.FilterAltOff),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, "Provisioning cancelled", CausalityTone.Warning, Icons.Material.Filled.CancelScheduleSend)
     ];
 
     /// <summary>

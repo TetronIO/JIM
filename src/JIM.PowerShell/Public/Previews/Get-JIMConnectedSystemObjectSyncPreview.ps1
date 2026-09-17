@@ -18,9 +18,10 @@ function Get-JIMConnectedSystemObjectSyncPreview {
         would be deprovisioned as a result. A downstream object with no matching export
         Synchronisation Rule is disconnected rather than deprovisioned, and is reported as a
         warning (DownstreamDisconnectOnly) rather than as an outcome node. A downstream object
-        whose provisioning was never exported has that provisioning cancelled (the unsent Create
-        Pending Export and the Connected System Object are removed; nothing is exported), and is
-        likewise reported as a warning (DownstreamProvisioningCancelled).
+        whose provisioning was never exported has that provisioning cancelled instead (the unsent
+        Create Pending Export and the Connected System Object are removed; nothing is exported),
+        reported as its own ProvisioningCancelled outcome node nested under the deletion, not as a
+        warning.
 
         Read HasBlockingErrors before anything else: a preview that surfaced a blocking error
         (for example an Attribute Flow that could not be evaluated) describes a synchronisation
