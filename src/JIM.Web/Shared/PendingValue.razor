@@ -1,0 +1,41 @@
+@using JIM.Models.Transactional
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A value a Pending Export will write, shown where the Connected System Object holds no confirmed value yet *@
+@* (typically a Pending Provisioning object). Muted and italic with a clock, in the surrounding cell's own font: *@
+@* it must read as "not real yet", never as a link, which is what colouring it Info blue did. The tooltip states *@
+@* what has actually happened to the export. See JIM.Web/CLAUDE.md "Shared UI components". *@
+<MudTooltip Arrow="true" Placement="Placement.Top" Text="@TooltipText">
+    <span class="jim-pending-value">
+        <MudIcon Icon="@Icons.Material.Outlined.Schedule" Class="jim-pending-value-icon" />@Value
+    </span>
+</MudTooltip>
+
+@code {
+    public const string NotYetSentTooltip = "Staged for export, not yet sent";
+    public const string AwaitingConfirmationTooltip = "Exported, awaiting confirmation by import";
+    public const string FailedTooltip = "Export failed, value not written";
+    public const string UnknownStateTooltip = "Value from a Pending Export";
+
+    /// <summary>
+    /// The pending value to display.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string? Value { get; set; }
+
+    /// <summary>
+    /// The status of the Pending Export carrying the value, which decides what the tooltip may truthfully say.
+    /// Null when the caller does not know it; the tooltip then makes no claim about whether anything was sent.
+    /// </summary>
+    [Parameter]
+    public PendingExportStatus? Status { get; set; }
+
+    private string TooltipText => Status switch
+    {
+        PendingExportStatus.Pending or PendingExportStatus.Executing => NotYetSentTooltip,
+        PendingExportStatus.Exported or PendingExportStatus.ExportNotConfirmed => AwaitingConfirmationTooltip,
+        PendingExportStatus.Failed => FailedTooltip,
+        _ => UnknownStateTooltip
+    };
+}

@@ -945,6 +945,21 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     font-size: 0.9em !important;
 }
 
+/* A value a Pending Export will write, shown where no confirmed value exists yet (<PendingValue />). Muted and
+   italic in the surrounding cell's own font, so it reads as "not real yet" and never as a link. */
+.jim-pending-value {
+    font-style: italic;
+    color: var(--mud-palette-text-disabled);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.jim-pending-value .jim-pending-value-icon {
+    font-size: 0.95em;
+    flex: none;
+}
+
 /* Allow long unbroken strings (DNs, GUIDs, URLs) to wrap mid-word */
 .jim-text-break {
     word-break: break-all;
