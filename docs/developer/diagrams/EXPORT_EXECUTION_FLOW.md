@@ -36,8 +36,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Start([ExecuteExportsAsync]) --> Reconcile[Pre-export CREATE to DELETE<br/>reconciliation: cancel contradictory<br/>pairs persisted across sync runs<br/>CREATE+DELETE cancels both<br/>UPDATE+DELETE cancels UPDATE]
-    Reconcile --> GetExecutable[Establish whether there is executable work<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped<br/>The same filters drive the batch sweep below]
+    Start([ExecuteExportsAsync]) --> GetExecutable[Establish whether there is executable work<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped<br/>The same filters drive the batch sweep below]
     GetExecutable --> HasExports{Exports<br/>found?}
     HasExports -->|No| EmptyResult([Return empty result])
 
@@ -173,8 +172,6 @@ flowchart TD
 - **Connector instances** are created per-batch via factory to avoid shared connection state
 
 ## Key Design Decisions
-
-- **Pre-export CREATE→DELETE reconciliation** (#218)<br /> Before fetching executable exports, `ReconcileCreateDeletePairsAsync` scans all Pending Exports for contradictory pairs targeting the same CSO. CREATE+DELETE pairs cancel both (object was never exported), UPDATE+DELETE cancels the UPDATE (deletion makes it redundant). This catches pairs persisted across different sync runs; the flush-time reconciliation in `SyncTaskProcessorBase` handles same-page pairs.
 
 - **Two-pass export**<br /> Exports without unresolved references are executed first (immediate). Exports with unresolved MVO references are deferred, with references bulk-resolved in a single query, then executed in a second pass.
 

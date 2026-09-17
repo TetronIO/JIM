@@ -242,6 +242,12 @@ public class ExportEvaluationServer
             Log.Information("EvaluateOutOfScopeExportsAsync: MVO {MvoId} is out of scope for export rule {RuleName}. Handling deprovisioning for CSO {CsoId}",
                 mvo.Id, exportRule.Name, existingCso.Id);
 
+            // Provisioning that was never exported is cancelled outright, whichever recognised action the rule
+            // carries: the object does not exist in the target system, so there is nothing there to delete and
+            // nothing to leave behind disconnected.
+            if (await TryCancelNeverExportedProvisioningOnScopeOutAsync(mvo, existingCso, exportRule))
+                continue;
+
             // Handle based on OutboundDeprovisionAction
             var pendingExport = await HandleOutboundDeprovisioningAsync(mvo, existingCso, exportRule, workingSet);
             if (pendingExport != null)
@@ -503,6 +509,16 @@ public class ExportEvaluationServer
             Log.Information("EvaluateOutOfScopeExportsAsync: MVO {MvoId} is out of scope for export rule {RuleName}. Handling deprovisioning for CSO {CsoId}",
                 mvo.Id, exportRule.Name, existingCso.Id);
 
+            // Provisioning that was never exported is cancelled outright, whichever recognised action the rule
+            // carries: the object does not exist in the target system, so there is nothing there to delete and
+            // nothing to leave behind disconnected. The cache entry goes with the CSO, so nothing later in the
+            // page can reuse an object that no longer exists.
+            if (await TryCancelNeverExportedProvisioningOnScopeOutAsync(mvo, existingCso, exportRule))
+            {
+                cache.CsoLookup.Remove(lookupKey);
+                continue;
+            }
+
             // Handle based on OutboundDeprovisionAction
             var pendingExport = await HandleOutboundDeprovisioningAsync(mvo, existingCso, exportRule, workingSet);
             if (pendingExport != null)
@@ -571,6 +587,93 @@ public class ExportEvaluationServer
                     exportRule.OutboundDeprovisionAction, exportRule.Name);
                 return null;
         }
+    }
+
+    /// <summary>
+    /// Scope-out form of the never-exported cancellation. The CSO here comes from the per-page cache, which also
+    /// holds Pending Provisioning CSOs created earlier in the same page and not yet persisted (their Create is
+    /// deferred to the page flush alongside them). Those have no persisted Pending Export, so the engine's verdict
+    /// leaves them alone, and the flush's own reconciliation of deferred Creates against persisted Deletes unwinds
+    /// them as it always has. A persisted, unsent Create is the proof both that nothing was exported and that the
+    /// CSO itself is persisted and safe to remove here.
+    /// </summary>
+    /// <returns>True when the provisioning was cancelled and no further deprovisioning applies.</returns>
+    private async Task<bool> TryCancelNeverExportedProvisioningOnScopeOutAsync(
+        MetaverseObject mvo,
+        ConnectedSystemObject cso,
+        SyncRule exportRule)
+    {
+        if (cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+            return false;
+
+        var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id);
+        if (existingPe == null || !ScopeOutCancelsNeverExportedProvisioning(cso, exportRule, existingPe))
+            return false;
+
+        await SyncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync([cso.Id]);
+        mvo.ConnectedSystemObjects.Remove(cso);
+        cso.MetaverseObject = null;
+        await SyncRepo.DeleteConnectedSystemObjectsAsync([cso]);
+
+        Log.Information("TryCancelNeverExportedProvisioningOnScopeOutAsync: Cancelled never-exported provisioning of CSO {CsoId} in system {SystemId} for MVO {MvoId}: removed unsent Create Pending Export {PendingExportId} and the CSO; nothing was exported",
+            cso.Id, cso.ConnectedSystemId, mvo.Id, existingPe.Id);
+
+        // Was that the last connector? (Asked after the removal above, per the engine's contract.)
+        if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo))
+        {
+            mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+            Log.Information("TryCancelNeverExportedProvisioningOnScopeOutAsync: MVO {MvoId} has no more connectors. LastConnectorDisconnectedDate set to {Date}",
+                mvo.Id, mvo.LastConnectorDisconnectedDate);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The scope-out cancellation verdict, shared by the real run and the outbound preview so the two cannot
+    /// drift: the engine's never-exported verdict, and never under an unrecognised deprovisioning action, which
+    /// does nothing at all (deprovisioning semantics are never guessed at;
+    /// <see cref="HandleOutboundDeprovisioningAsync"/> surfaces the warning).
+    /// </summary>
+    private bool ScopeOutCancelsNeverExportedProvisioning(ConnectedSystemObject cso, SyncRule exportRule, PendingExport? existingPendingExport) =>
+        _syncEngine.IsProvisioningNeverExported(cso, existingPendingExport) &&
+        _syncEngine.DecideOutOfScopeDeprovisioning(exportRule, existingPendingExport: null).Action != OutOfScopeDeprovisioningAction.UnknownAction;
+
+    /// <summary>
+    /// Cancels the provisioning of every given CSO whose provisioning was provably never exported (per
+    /// <see cref="ISyncEngine.IsProvisioningNeverExported"/>): removes its unsent Create Pending Export and the
+    /// CSO itself, set-based. Callers must pass persisted CSOs only. The common case (no Pending Provisioning
+    /// CSO among them) costs no query.
+    /// </summary>
+    /// <returns>The ids of the CSOs cancelled, for the caller to exclude from any further deprovisioning.</returns>
+    private async Task<HashSet<Guid>> CancelNeverExportedProvisioningAsync(
+        IReadOnlyCollection<ConnectedSystemObject> csos,
+        string callerName)
+    {
+        var cancelledCsoIds = new HashSet<Guid>();
+        var pendingProvisioningCsos = csos
+            .Where(cso => cso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
+            .ToList();
+        if (pendingProvisioningCsos.Count == 0)
+            return cancelledCsoIds;
+
+        var existingPesByCsoId = await SyncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
+            pendingProvisioningCsos.Select(cso => cso.Id).ToList());
+        var csosToCancel = pendingProvisioningCsos
+            .Where(cso => _syncEngine.IsProvisioningNeverExported(cso, existingPesByCsoId.GetValueOrDefault(cso.Id)))
+            .ToList();
+        if (csosToCancel.Count == 0)
+            return cancelledCsoIds;
+
+        cancelledCsoIds.UnionWith(csosToCancel.Select(cso => cso.Id));
+        var cancelledPeCount = await SyncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(cancelledCsoIds);
+        await SyncRepo.DeleteConnectedSystemObjectsAsync(csosToCancel);
+
+        Log.Information("{Caller}: Cancelled never-exported provisioning of {CsoCount} CSO(s): removed {PeCount} unsent Create Pending Export(s) and the CSO(s); nothing was exported",
+            callerName, csosToCancel.Count, cancelledPeCount);
+        Log.Debug("{Caller}: Cancelled never-exported provisioning for CSO ids {CsoIds}", callerName, cancelledCsoIds);
+
+        return cancelledCsoIds;
     }
 
     /// <summary>
@@ -645,8 +748,17 @@ public class ExportEvaluationServer
         var csosToDelete = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
         var disconnectedByRuleCount = 0;
         var noMatchingRuleCount = 0;
-        foreach (var (mvoId, joinedCsos) in csosByMvo)
+
+        // Provisioning that was never exported is cancelled outright, ahead of and regardless of the rules
+        // below: the object does not exist in the target system, so neither a Delete nor a Disconnect means
+        // anything about it.
+        var cancelledCsoIds = await CancelNeverExportedProvisioningAsync(
+            csosByMvo.Values.SelectMany(joinedCsos => joinedCsos).ToList(), nameof(EvaluateMvoDeletionsAsync));
+
+        foreach (var (mvoId, allJoinedCsos) in csosByMvo)
         {
+            var joinedCsos = allJoinedCsos.Where(cso => !cancelledCsoIds.Contains(cso.Id)).ToList();
+
             if (!mvoTypeIdsByMvoId.TryGetValue(mvoId, out var mvoTypeId) || mvoTypeId == null)
             {
                 mvoTypeId = null;
@@ -2695,6 +2807,12 @@ public class ExportEvaluationServer
                     continue;
 
                 var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(existingCso.Id);
+
+                // Provisioning that was never exported is cancelled outright by the real run: nothing is
+                // staged and no outcome is recorded, so the preview proposes nothing either.
+                if (ScopeOutCancelsNeverExportedProvisioning(existingCso, exportRule, existingPe))
+                    continue;
+
                 result.Entries.Add(new OutboundPreviewEntry
                 {
                     Kind = OutboundPreviewEntryKind.Deprovisioning,

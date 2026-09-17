@@ -232,6 +232,8 @@ Provisioning's counterpart: each export rule's **Deprovisioning Action** determi
 
 The action applies regardless of how the object came to be joined: it makes no difference whether JIM provisioned it or matched (joined) a pre-existing object. If several export rules cover the same object with different actions, Delete wins.
 
+One case sits outside the action altogether: provisioning that was **never exported**. If JIM has staged a new object for the Connected System (a Connected System Object in **Pending Provisioning** status, carrying a Create Pending Export) and the Metaverse Object leaves scope or is deleted before any export has run, there is nothing in the Connected System for either action to apply to. JIM cancels the provisioning instead: the unsent Create Pending Export and the Connected System Object are removed together, and nothing is exported. Once a Create has been sent, confirmed or not, the object may exist in the Connected System and the Deprovisioning Action applies as described above.
+
 Configure the action in the export section of the Synchronisation Rule editor. To review the deprovisioning behaviour of every export rule for an object type in one place, use the **Downstream Deprovisioning** panel on the Metaverse Object Type page (Admin, Schema, then the object type), where the action can also be changed inline.
 
 ### Seeing what a run has deprovisioned

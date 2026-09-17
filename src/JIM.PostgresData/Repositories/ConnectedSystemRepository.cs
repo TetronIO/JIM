@@ -4253,47 +4253,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Gets lightweight summaries of executable exports for pre-export reconciliation.
-    /// Uses a .Select() projection — no Include chains, no entity tracking, ~3 MB at 100K
-    /// instead of ~150 MB for full entity graphs.
-    /// </summary>
-    public async Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
-    {
-        return await ExecutableExportsQuery(connectedSystemId)
-            .Select(pe => new PendingExportSummary
-            {
-                Id = pe.Id,
-                ChangeType = pe.ChangeType,
-                Status = pe.Status,
-                ConnectedSystemObjectId = pe.ConnectedSystemObjectId,
-                SourceMetaverseObjectId = pe.SourceMetaverseObjectId
-            })
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Deletes Pending Exports by their IDs using raw SQL.
-    /// Used by reconciliation which operates on lightweight summaries, not full entities.
-    /// </summary>
-    public async Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
-    {
-        if (pendingExportIds.Count == 0)
-            return;
-
-        var ids = pendingExportIds.ToArray();
-
-        // Delete child records first (FK constraint)
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""PendingExportId"" = ANY({0})",
-            ids);
-
-        // Delete parent records
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
-            ids);
-    }
-
-    /// <summary>
     /// Returns which of the supplied Pending Export ids still exist. Summary-tier: an id projection,
     /// with no entity materialised, because the caller only needs to know whether a row is still there.
     /// </summary>

@@ -180,6 +180,81 @@ public class SyncEngineExportEvaluationTests
     }
 
     [Test]
+    public void IsProvisioningNeverExported_PendingProvisioningCsoWithAnUnattemptedCreate_IsNeverExported()
+    {
+        // The object does not exist in the target system: the Create that would have made it has never been
+        // sent. Deprovisioning it must cancel the Create, not stage a Delete for an object that was never there.
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var unattemptedCreate = new PendingExport { ChangeType = PendingExportChangeType.Create, Status = PendingExportStatus.Pending };
+
+        Assert.That(_engine.IsProvisioningNeverExported(cso, unattemptedCreate), Is.True);
+    }
+
+    [Test]
+    public void IsProvisioningNeverExported_PendingProvisioningCsoWithNoPendingExport_HasBeenExportedSoIsNotNeverExported()
+    {
+        // No Pending Export does NOT mean nothing was sent; it means the opposite. Provisioning always stages a
+        // Create with the CSO, and an auto-confirming export (the file-based path) deletes that Create the moment
+        // it succeeds, while the CSO stays Pending Provisioning until an import sees the object. So a Pending
+        // Provisioning CSO with no Pending Export is one whose Create WAS exported: the object exists in the
+        // target system. Treating it as never exported cancelled the CSO and staged no Delete, orphaning a live
+        // object in the target (reproduced on the dev stack: export, withdraw before the confirming import).
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+
+        Assert.That(_engine.IsProvisioningNeverExported(cso, existingPendingExport: null), Is.False);
+    }
+
+    [TestCase(PendingExportStatus.Exported)]
+    [TestCase(PendingExportStatus.ExportNotConfirmed)]
+    [TestCase(PendingExportStatus.Executing)]
+    [TestCase(PendingExportStatus.Failed)]
+    public void IsProvisioningNeverExported_TheCreateHasLeftPendingStatus_MayExistInTheTargetSoIsNotNeverExported(PendingExportStatus status)
+    {
+        // Once a Create has been handed to a Connector the object may exist in the target system, confirmed or
+        // not. Cancelling would strand it there, so the ordinary deprovisioning path must run.
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var sentCreate = new PendingExport { ChangeType = PendingExportChangeType.Create, Status = status };
+
+        Assert.That(_engine.IsProvisioningNeverExported(cso, sentCreate), Is.False);
+    }
+
+    [Test]
+    public void IsProvisioningNeverExported_ThePendingCreateHasBeenAttempted_IsNotNeverExported()
+    {
+        // A Create that errored returns to Pending for retry, but the Connector was called: a partial success
+        // in the target system cannot be ruled out, so this is not provably "never exported".
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var attemptedCreate = new PendingExport
+        {
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            ErrorCount = 1,
+            LastAttemptedAt = DateTime.UtcNow
+        };
+
+        Assert.That(_engine.IsProvisioningNeverExported(cso, attemptedCreate), Is.False);
+    }
+
+    [Test]
+    public void IsProvisioningNeverExported_ACsoThatIsNotPendingProvisioning_IsNotNeverExported()
+    {
+        // A Normal CSO represents a live object in the target system, whatever Pending Export it carries.
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.Normal;
+        var create = new PendingExport { ChangeType = PendingExportChangeType.Create, Status = PendingExportStatus.Pending };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_engine.IsProvisioningNeverExported(cso, create), Is.False);
+            Assert.That(_engine.IsProvisioningNeverExported(cso, existingPendingExport: null), Is.False);
+        }
+    }
+
+    [Test]
     public void WorkingSet_ADecisionRecordedForACso_IsReturnedOnTheSecondAsk()
     {
         // The in-run working set is what replaces reading back this run's own staged decisions from the

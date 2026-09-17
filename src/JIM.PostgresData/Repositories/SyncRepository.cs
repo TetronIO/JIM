@@ -595,12 +595,6 @@ public partial class SyncRepository : ISyncRepository
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _repo.ConnectedSystems.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
 
-    public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.GetExecutableExportSummariesAsync(connectedSystemId);
-
-    public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
-        => _repo.ConnectedSystems.DeletePendingExportsByIdsAsync(pendingExportIds);
-
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => _repo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
 

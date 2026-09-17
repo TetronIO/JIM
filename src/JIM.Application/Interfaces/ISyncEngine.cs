@@ -175,16 +175,6 @@ public interface ISyncEngine
         PendingExportAttributeValueChange attrChange);
 
     /// <summary>
-    /// Identifies Pending Export pairs (CREATE+DELETE or UPDATE+DELETE) targeting the same CSO
-    /// that cancel each other out and should not be exported.
-    /// Only reconciles pairs where both exports have Pending status — already-exported
-    /// operations are left untouched since the object may exist in the target system.
-    /// </summary>
-    /// <param name="pendingExports">All Pending Exports to scan for reconcilable pairs.</param>
-    /// <returns>Result describing which exports should be cancelled.</returns>
-    PreExportReconciliationResult ReconcileCreateDeletePairs(IReadOnlyList<PendingExportSummary> pendingExports);
-
-    /// <summary>
     /// Decides whether deleting a Metaverse Object stages a Delete export for one of its joined CSOs (#655:
     /// the matching export Synchronisation Rules' OutboundDeprovisionAction drives the verdict, Delete wins a
     /// conflict, and the one-Pending-Export-per-CSO collision policy chooses reuse, replace or create). The
@@ -211,6 +201,19 @@ public interface ISyncEngine
     OutOfScopeDeprovisioningDecision DecideOutOfScopeDeprovisioning(
         SyncRule exportRule,
         PendingExport? existingPendingExport);
+
+    /// <summary>
+    /// Decides whether a CSO's provisioning was provably never exported: it is Pending Provisioning, and it still
+    /// carries its Create Pending Export, unsent (no Pending Export at all means the Create WAS exported and
+    /// auto-confirmed, so the object exists in the target system). Such an object does not
+    /// exist in the target system, so deprovisioning it means cancelling the provisioning (removing the Create
+    /// and the CSO), never staging a Delete or leaving the CSO behind disconnected. Asked ahead of both
+    /// deprovisioning decisions above, and independent of any rule's OutboundDeprovisionAction: there is
+    /// nothing in the target system for a Delete or a Disconnect to mean anything about.
+    /// </summary>
+    /// <param name="cso">The CSO being deprovisioned.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to the CSO, if any, from the caller's pre-read.</param>
+    bool IsProvisioningNeverExported(ConnectedSystemObject cso, PendingExport? existingPendingExport);
 
     /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp

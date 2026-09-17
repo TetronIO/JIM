@@ -226,6 +226,13 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
         Assert.That(SyncRepo.ConnectedSystemObjects.Values.Count(c => c.MetaverseObjectId == mvoId), Is.EqualTo(3),
             "Both targets must have been provisioned and joined to the same Metaverse Object");
 
+        // The targets are live accounts: their provisioning was exported and confirmed, so the Create Pending
+        // Exports are gone and the CSOs are Normal. (Left Pending Provisioning with unsent Creates, the deletion
+        // cancels the provisioning instead of deprovisioning; the sibling test below pins that.)
+        foreach (var targetCso in SyncRepo.ConnectedSystemObjects.Values.Where(c => c.MetaverseObjectId == mvoId && c.Id != cso.Id))
+            targetCso.Status = ConnectedSystemObjectStatus.Normal;
+        SyncRepo.ClearAllPendingExports();
+
         // Put the CSO out of scope.
         var empIdAttrValue = cso.AttributeValues.Single(av => av.Attribute?.Name == "EmployeeId");
         empIdAttrValue.StringValue = "OUT_OF_SCOPE";
@@ -259,6 +266,87 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
         var realDeleteExports = SyncRepo.PendingExports.Values.Count(pe => pe.ChangeType == PendingExportChangeType.Delete);
         Assert.That(realDeleteExports, Is.EqualTo(2));
         Assert.That(preview.Outbound.ProposedExports.Count(pe => pe.ChangeType == PendingExportChangeType.Delete), Is.EqualTo(2));
+    }
+
+    /// <summary>
+    /// The same cascade over targets whose provisioning was never exported (Pending Provisioning, each carrying
+    /// an unsent Create). Nothing exists in the target systems, so the deletion cancels the provisioning rather
+    /// than deprovisioning: no Delete is staged, no Deprovision Queued node is recorded, and the CSOs are
+    /// removed. The preview must say the same: an identical tree, no proposed Deletes, and one
+    /// <see cref="SyncPreviewMessageCode.DownstreamProvisioningCancelled"/> warning per target.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithImmediateDeletionOfNeverExportedTargets_TreeMatchesTheRealSyncOutcomeTreeAsync()
+    {
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var targetSystem1 = await CreateConnectedSystemAsync("AD Target 1");
+        var targetType1 = await CreateCsoTypeAsync(targetSystem1.Id, "user");
+        var targetSystem2 = await CreateConnectedSystemAsync("AD Target 2");
+        var targetType2 = await CreateCsoTypeAsync(targetSystem2.Id, "user");
+
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            gracePeriod: TimeSpan.Zero,
+            triggerConnectedSystemIds: [sourceSystem.Id]);
+
+        await CreateScopedImportSyncRuleAsync(sourceSystem, sourceType, mvType);
+        await CreateExportSyncRuleAsync(targetSystem1.Id, targetType1, mvType, "AD Export 1",
+            deprovisionAction: OutboundDeprovisionAction.Delete);
+        await CreateExportSyncRuleAsync(targetSystem2.Id, targetType2, mvType, "AD Export 2",
+            deprovisionAction: OutboundDeprovisionAction.Disconnect);
+
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+
+        // Full Sync 1 - projects the source object and provisions both targets. No export runs, so both stay
+        // Pending Provisioning with an unsent Create.
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        cso = await ReloadEntityAsync(cso);
+        var mvoId = cso.MetaverseObjectId!.Value;
+        var targetCsoIds = SyncRepo.ConnectedSystemObjects.Values
+            .Where(c => c.MetaverseObjectId == mvoId && c.Id != cso.Id)
+            .Select(c => c.Id)
+            .ToList();
+        Assert.That(targetCsoIds, Has.Count.EqualTo(2), "Both targets must have been provisioned");
+
+        // Put the CSO out of scope.
+        var empIdAttrValue = cso.AttributeValues.Single(av => av.Attribute?.Name == "EmployeeId");
+        empIdAttrValue.StringValue = "OUT_OF_SCOPE";
+        cso.LastUpdated = DateTime.UtcNow;
+
+        // Act 1 - preview, BEFORE the real sync, over identical data
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(sourceSystem.Id, cso.Id);
+
+        // Act 2 - the real synchronisation over the same (undisturbed) data
+        var fullSync2Profile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync 2", ConnectedSystemRunType.FullSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var fullSync2Activity = await CreateActivityAsync(sourceSystem.Id, fullSync2Profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSync2Profile, fullSync2Activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        var describedReal = DescribeTree(MapRealOutcomeTree(fullSync2Activity));
+        var describedPreview = DescribeTree(preview.OutcomeTree);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId), Is.Null, "The Metaverse Object should be deleted immediately");
+            Assert.That(describedReal, Does.Contain("MvoDeleted"));
+            Assert.That(describedReal, Does.Not.Contain("DeprovisionQueued"), "Nothing exists in the targets, so nothing is deprovisioned");
+            Assert.That(describedPreview, Is.EqualTo(describedReal),
+                $"The preview's outcome tree must match the real run's. Preview: {describedPreview} | Real: {describedReal}");
+
+            Assert.That(SyncRepo.PendingExports.Values, Is.Empty, "The unsent Creates are cancelled and no Delete is staged");
+            Assert.That(targetCsoIds.Any(SyncRepo.ConnectedSystemObjects.ContainsKey), Is.False, "The never-provisioned CSOs are removed");
+
+            Assert.That(preview.Outbound.ProposedExports, Is.Empty);
+            Assert.That(preview.Warnings.Count(w => w.Code == SyncPreviewMessageCode.DownstreamProvisioningCancelled), Is.EqualTo(2),
+                "One warning per cancelled target, whichever deprovisioning action its rule carries");
+            Assert.That(preview.Warnings.Any(w => w.Code == SyncPreviewMessageCode.DownstreamDisconnectOnly), Is.False);
+        }
     }
 
     /// <summary>

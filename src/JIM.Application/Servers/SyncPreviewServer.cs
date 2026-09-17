@@ -945,8 +945,34 @@ public class SyncPreviewServer
         // Object, from the same dataset already read above (the disconnecting CSO is excluded explicitly:
         // this preview never actually disconnects it, so it is still present in that joined set).
         var exportRulesByMvoTypeId = context.Cache.ExportRulesByMvoTypeId;
+
+        // Provisioning that was never exported is cancelled outright by the real run, ahead of and regardless
+        // of the rules (ExportEvaluationServer.EvaluateMvoDeletionsAsync), so it must be here too. The Pending
+        // Export read is paid only when a downstream object is Pending Provisioning, as in the real run.
+        var pendingProvisioningCsoIds = joinedCsos
+            .Where(c => c.Id != cso.Id && c.Status == ConnectedSystemObjectStatus.PendingProvisioning)
+            .Select(c => c.Id)
+            .ToList();
+        var existingPesByCsoId = pendingProvisioningCsoIds.Count > 0
+            ? await context.GuardedRepository.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(pendingProvisioningCsoIds)
+            : [];
+
         foreach (var downstreamCso in joinedCsos.Where(c => c.Id != cso.Id))
         {
+            if (_syncEngine.IsProvisioningNeverExported(downstreamCso, existingPesByCsoId.GetValueOrDefault(downstreamCso.Id)))
+            {
+                context.SystemNames.TryGetValue(downstreamCso.ConnectedSystemId, out var cancelledSystemName);
+                result.Warnings.Add(new SyncPreviewMessage
+                {
+                    Code = SyncPreviewMessageCode.DownstreamProvisioningCancelled,
+                    Detail = $"The Metaverse Object's deletion would cancel its provisioning to " +
+                        $"'{cancelledSystemName ?? downstreamCso.ConnectedSystemId.ToString()}': it was never exported, so the " +
+                        "unsent Create Pending Export and the Connected System Object are removed and nothing is exported.",
+                    ConnectedSystemId = downstreamCso.ConnectedSystemId
+                });
+                continue;
+            }
+
             var exportDecision = _syncEngine.DecideMvoDeletionExport(
                 downstreamCso, workingMvo.Type?.Id, exportRulesByMvoTypeId, existingPendingExport: null);
             context.SystemNames.TryGetValue(downstreamCso.ConnectedSystemId, out var targetSystemName);

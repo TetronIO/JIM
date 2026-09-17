@@ -309,9 +309,6 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _inner.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
 
-    public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
-        => _inner.GetExecutableExportSummariesAsync(connectedSystemId);
-
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
         => _inner.GetPendingExportsByIdsAsync(pendingExportIds);
 
@@ -511,9 +508,6 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(DisconnectConnectedSystemObjectsAsync));
-
-    public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
-        => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportsByIdsAsync));
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(MarkPendingExportsAsExecutingAsync));

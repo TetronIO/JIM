@@ -52,7 +52,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "InitialExportOnly", "ImportOnly", "SyncOnly", "All")]
+    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "WithdrawnBeforeExport", "InitialExportOnly", "ImportOnly", "SyncOnly", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -1404,6 +1404,140 @@ try {
             }
         }
         $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
+    }
+
+    # Test 4b: Withdrawn Before Export (never-exported provisioning is cancelled)
+    #
+    # A joiner is provisioned to both targets (the directory and the Cross-Domain CSV) and then leaves before
+    # ANY export has run, under an immediate Deletion Rule. Nothing exists in either target, so the
+    # provisioning must be cancelled outright: the unsent Create Pending Exports and their Pending Provisioning
+    # Connected System Objects are removed, and nothing is exported. JIM used to replace each unsent Create
+    # with a Delete that carried no identifier: the export then failed ("Delete export has no External ID
+    # value") and the Connected System Object could never be removed, because import deletion detection
+    # excludes Pending Provisioning objects. Every other step in this scenario exports straight after
+    # synchronising, which is exactly why that went unnoticed; this step deliberately does not.
+    if ($Step -eq "WithdrawnBeforeExport" -or $Step -eq "All") {
+        $stepWbeStart = Get-Date
+        Write-TestSection "Test 4b: Withdrawn Before Export (never-exported provisioning is cancelled)"
+
+        $withdrawnSuccess = $true
+        $withdrawnErrorMessage = ""
+        $withdrawnUserType = $null
+
+        try {
+            # Immediate deletion for this step only (the scenario's 7-day grace period would merely schedule
+            # it); restored in the finally block below, whatever happens.
+            $withdrawnUserType = Get-JIMMetaverseObjectType -Name "User"
+            if (-not $withdrawnUserType) { throw "Could not find the 'User' Metaverse Object Type" }
+            Set-JIMMetaverseObjectType -Id $withdrawnUserType.id -DeletionGracePeriod ([TimeSpan]::Zero) | Out-Null
+
+            $withdrawnUser = New-TestUser -Index 8877
+            $withdrawnUser.EmployeeId = "EMP887700"
+            $withdrawnUser.SamAccountName = "test.withdrawn"
+            $withdrawnUser.Email = "test.withdrawn@$($DirectoryConfig.Domain)"
+            $withdrawnUser.FirstName = "Test"
+            $withdrawnUser.LastName = "Withdrawn"
+            $withdrawnDisplayName = "Test Withdrawn"
+
+            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csv = Import-Csv $csvPath
+            $csv = @($csv) + [PSCustomObject]@{
+                employeeId = $withdrawnUser.EmployeeId
+                firstName = $withdrawnUser.FirstName
+                lastName = $withdrawnUser.LastName
+                email = $withdrawnUser.Email
+                department = "IT"
+                title = "Developer"
+                company = $withdrawnUser.Company
+                samAccountName = $withdrawnUser.SamAccountName
+                displayName = $withdrawnDisplayName
+                status = "Active"
+                userPrincipalName = "$($withdrawnUser.SamAccountName)@$($DirectoryConfig.Domain)"
+                employeeType = $withdrawnUser.EmployeeType
+                employeeEndDate = ""
+            }
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
+
+            # Provision: the HR side only. No export runs, so both targets are left Pending Provisioning with
+            # an unsent Create.
+            Write-Host "  Provisioning (HR import and sync only; deliberately no export)..." -ForegroundColor Gray
+            $wbeImport1 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $wbeImport1.activityId -Name "CSV Full Import (Withdrawn: joiner)"
+            $wbeSync1 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $wbeSync1.activityId -Name "CSV Delta Sync (Withdrawn: joiner)"
+
+            $withdrawnTargets = @(@{ Id = $config.LDAPSystemId; Name = $DirectoryConfig.ConnectedSystemName })
+            if ($config.CrossDomainSystemId) { $withdrawnTargets += @{ Id = $config.CrossDomainSystemId; Name = "Cross-Domain Export" } }
+
+            foreach ($target in $withdrawnTargets) {
+                $staged = @(Get-JIMPendingExport -ConnectedSystemId $target.Id -Search $withdrawnDisplayName -All -ErrorAction SilentlyContinue)
+                if ($staged.Count -eq 0) { throw "Arrange failed: no Pending Export staged for '$withdrawnDisplayName' on $($target.Name); the joiner was not provisioned" }
+            }
+            Write-Host "  OK Provisioned to $($withdrawnTargets.Count) target(s): unsent Create Pending Exports staged" -ForegroundColor Green
+
+            # Withdraw before any export has run.
+            Write-Host "  Withdrawing the joiner before any export..." -ForegroundColor Gray
+            $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test\.withdrawn" }
+            $csvContent | Set-Content $csvPath
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
+
+            $wbeImport2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $wbeImport2.activityId -Name "CSV Full Import (Withdrawn: leaver)"
+            $wbeSync2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $wbeSync2.activityId -Name "CSV Delta Sync (Withdrawn: leaver)"
+
+            $withdrawnMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Account Name" -AttributeValue "test.withdrawn" -ErrorAction SilentlyContinue) | Select-Object -First 1
+            if ($withdrawnMvo) { throw "Expected the Metaverse Object for test.withdrawn to be deleted immediately (zero grace period), but it still exists" }
+            Write-Host "  OK Metaverse Object deleted" -ForegroundColor Green
+
+            # Assert: the provisioning was cancelled in both targets. No Pending Export of any kind (above all
+            # not a Delete), and no Connected System Object left behind.
+            foreach ($target in $withdrawnTargets) {
+                $leftoverExports = @(Get-JIMPendingExport -ConnectedSystemId $target.Id -Search $withdrawnDisplayName -All -ErrorAction SilentlyContinue)
+                if ($leftoverExports.Count -gt 0) {
+                    throw "Found $($leftoverExports.Count) Pending Export(s) for '$withdrawnDisplayName' on $($target.Name) after the withdrawal; never-exported provisioning must be cancelled, not deprovisioned"
+                }
+                $leftoverObjects = @(Get-JIMConnectedSystemObject -ConnectedSystemId $target.Id -Search "test.withdrawn" -PageSize 10 -ErrorAction SilentlyContinue)
+                if ($leftoverObjects.Count -gt 0) {
+                    throw "Found $($leftoverObjects.Count) Connected System Object(s) for test.withdrawn on $($target.Name) after the withdrawal; the never-provisioned object must be removed"
+                }
+            }
+            Write-Host "  OK Provisioning cancelled in every target (no Pending Exports, no Connected System Objects)" -ForegroundColor Green
+
+            # The full cycle must now be clean end to end, and the joiner must never reach the directory.
+            Write-Host "  Running the full export/import/sync cycle (must be clean)..." -ForegroundColor Gray
+            Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
+
+            if (Test-LDAPUserExists -UserIdentifier "test.withdrawn" -DirectoryConfig $DirectoryConfig) {
+                throw "test.withdrawn was created in $($DirectoryConfig.ConnectedSystemName); a joiner withdrawn before export must never be provisioned"
+            }
+            Write-Host "  OK Full cycle clean; test.withdrawn never reached the directory" -ForegroundColor Green
+        }
+        catch {
+            $withdrawnSuccess = $false
+            $withdrawnErrorMessage = $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+        finally {
+            # Restore the scenario's 7-day grace period (Setup-Scenario1 Step 6d) for the steps that follow.
+            if ($withdrawnUserType) {
+                Set-JIMMetaverseObjectType -Id $withdrawnUserType.id -DeletionGracePeriod ([TimeSpan]::FromDays(7)) | Out-Null
+            }
+        }
+
+        if ($withdrawnSuccess) {
+            $testResults.Steps += @{ Name = "WithdrawnBeforeExport"; Success = $true }
+        }
+        else {
+            $testResults.Steps += @{ Name = "WithdrawnBeforeExport"; Success = $false; Error = $withdrawnErrorMessage }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
+        }
+        $stepTimings["4b. Withdrawn Before Export"] = (Get-Date) - $stepWbeStart
     }
 
     # Test 5: Initial Export Only Attribute Flows (#223)

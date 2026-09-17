@@ -333,6 +333,11 @@ This scenario tests the complete Identity Lifecycle Management (ILM) pattern:
    - Restores to CSV within grace period (simulating rehire)
    - Validates user preserved in AD (reconnection successful, not re-provisioned)
 
+6. **Withdrawn Before Export Test** - Joiner leaves before any export has run (`-Step WithdrawnBeforeExport`):
+   - Creates `test.withdrawn` and runs the HR import and sync only, so both targets hold a Pending Provisioning object with an unsent Create
+   - Removes from CSV under a temporary zero grace period (restored afterwards), so the Metaverse Object is deleted immediately
+   - Validates the provisioning was cancelled in every target (no Pending Exports, no Connected System Objects), that the full export/import/sync cycle is clean, and that the user never reached the directory
+
 ### Running Individual Test Steps
 
 You can run specific tests from Scenario 1:
