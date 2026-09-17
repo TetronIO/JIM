@@ -37,7 +37,7 @@
                 <span class="jim-nowrap"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Item.Id)">@context.Item.Name</MudLink></span>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Description" Sortable="false">
+        <TemplateColumn Title="Description" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Description" Name="description" />
             </HeaderTemplate>
@@ -63,9 +63,9 @@
                 @(context.Item.InUse ? "Yes" : "No")
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Version(s)" Sortable="false" HeaderStyle="width: 110px;">
+        <TemplateColumn Title="Version" Sortable="false" HeaderClass="jim-nowrap" HeaderStyle="width: 110px;">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Version(s)" Name="versions" />
+                <VirtualisedSortHeader Title="Version" Name="versions" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (string.IsNullOrEmpty(context.Item.Versions))

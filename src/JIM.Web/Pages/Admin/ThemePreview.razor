@@ -229,7 +229,12 @@
         <MudChip T="string" Variant="Variant.Outlined" Color="Color.Dark">Dark</MudChip>
     </MudStack>
 
-    <MudText Typo="Typo.h6" Class="mb-3">Text</MudText>
+    <MudText Typo="Typo.h6" Class="mb-1">Text</MudText>
+    <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">
+        The portal's standard chip: a compact pill with a semibold label, for status, state and any value that
+        reads as a label rather than as a control. Shape comes from the chip tokens in site.css and label colour
+        from the chip blend beside them, so every Text chip in JIM matches without a call site styling one.
+    </MudText>
     <MudStack Row="true" Spacing="2" Class="mb-4" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
         <MudChip T="string" Variant="Variant.Text" Color="Color.Primary">Primary</MudChip>
         <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary">Secondary</MudChip>

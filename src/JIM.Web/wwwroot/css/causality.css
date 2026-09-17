@@ -24,14 +24,16 @@
     --cz-error-soft: color-mix(in srgb, var(--mud-palette-error) 12%, transparent);
     --cz-secondary-soft: color-mix(in srgb, var(--mud-palette-secondary) 13%, transparent);
 
-    /* The palette primary is a saturated fill colour (intended behind white button text), so using it
-       raw as text on a *-soft pill fails WCAG AA: 2.88:1 in the default dark theme, below even the 3.0
-       large-text floor, and four of the six light themes fail too. Blending it toward the theme's text
-       colour keeps the hue but lifts it off the background, and adapts automatically per mode because
-       text-primary is near-white in dark themes and near-black in light ones. Every theme now passes AA
-       (dark >= 5.26, light >= 5.00). Use this for primary-toned TEXT; keep --cz-primary for fills,
-       borders and accent bars, where the contrast requirement is lower and the raw brand colour is right. */
-    --cz-primary-text: color-mix(in srgb, var(--mud-palette-primary) 60%, var(--mud-palette-text-primary));
+    /* A tone used AS TEXT on a tint of itself takes the portal's chip label blend (--jim-chip-text-*,
+       defined and explained in site.css), so an outcome pill here, a Text-variant MudChip anywhere else and
+       the Table view's change chip are one colour per tone rather than three readings of it. Keep --cz-<tone>
+       for fills, borders and accent bars, where the raw palette colour is right. */
+    --cz-primary-text: var(--jim-chip-text-primary);
+    --cz-secondary-text: var(--jim-chip-text-secondary);
+    --cz-info-text: var(--jim-chip-text-info);
+    --cz-success-text: var(--jim-chip-text-success);
+    --cz-warning-text: var(--jim-chip-text-warning);
+    --cz-error-text: var(--jim-chip-text-error);
 
     /* Text, lines and surfaces */
     --cz-text: var(--mud-palette-text-primary);
@@ -179,50 +181,12 @@
     margin-top: 12px;
 }
 
-/* Outcome pills are MudChips; restyle them to the mock-up's soft tone pills */
-.causality-panel .mud-chip.oc-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: auto;
+/* The outcome pills were this panel's own restyle of a MudChip, and are now simply Text-variant MudChips
+   carrying a Color: site.css gives every one of those the pill shape this panel arrived at first, and the
+   --jim-chip-text-* label blend these already used. All that is left is the spacing, because the strip
+   above lays them out on a flex gap and MudBlazor's own 4px chip margin would be added on top of it. */
+.causality-panel .outcome-strip .mud-chip {
     margin: 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    background: var(--cz-secondary-soft);
-    color: var(--cz-secondary);
-}
-
-.causality-panel .mud-chip.oc-pill.primary {
-    color: var(--cz-primary-text);
-    background: var(--cz-primary-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.success {
-    color: var(--cz-success);
-    background: var(--cz-success-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.info {
-    color: var(--cz-info);
-    background: var(--cz-info-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.warning {
-    color: var(--cz-warning);
-    background: var(--cz-warning-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.error {
-    color: var(--cz-error);
-    background: var(--cz-error-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.secondary {
-    color: var(--cz-secondary);
-    background: var(--cz-secondary-soft);
 }
 
 /* ─── View canvas ─── */
@@ -309,8 +273,8 @@
     text-transform: uppercase;
     padding: 2px 7px;
     border-radius: 5px;
-    color: var(--tone, var(--cz-secondary));
-    background: color-mix(in srgb, var(--tone, var(--cz-secondary)) 13%, transparent);
+    color: var(--tone-text, var(--cz-secondary-text));
+    background: color-mix(in srgb, var(--tone, var(--cz-secondary)) 12%, transparent);
 }
 
 .causality-panel .evt-entities {

@@ -57,7 +57,7 @@
         <div class="outcome-strip">
             @foreach (var pill in Summary.Pills)
             {
-                <MudChip T="string" Variant="Variant.Text" Class="@($"oc-pill {CausalityToneCss.CssClass(pill.Tone)}")">@pill.Label</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="@CausalityToneCss.MudColor(pill.Tone)">@pill.Label</MudChip>
             }
         </div>
     }

@@ -28,21 +28,34 @@
    the activity line's "· 12 min" and the condition line's "Heartbeat 3 seconds ago · up 54 s" were derived at the
    same instant and cannot disagree. Each poll brings a new report, so nothing goes stale. *@
 
-<MudPaper Outlined="true" Class="@($"pa-4 jim-service-health-strip {Class}".Trim())">
+<MudPaper Outlined="true" Class="@($"pa-4 jim-service-health-strip {Class}".Trim())" data-collapsed="@(Collapsed ? "true" : "false")">
     <div class="jim-service-health-header">
         <MudText Typo="Typo.h6" Class="jim-service-health-title">Service Health</MudText>
         <span class="jim-service-health-summary">@ServiceHealthDisplay.Summary(Report)</span>
-        @* The relay is not a service of JIM's but it decides whether this page moves on its own; while it is
-           reconnecting every live figure on the tabs below is on its polling fallback. *@
-        <MudTooltip Text="@(_realTimeAvailable ? "Database notifications reach open pages directly." : "The database notification listener is not connected; pages refresh on a timer meanwhile.")"
-                    Arrow="true" Placement="Placement.Top">
-            <span class="jim-service-health-live" data-testid="live-updates" data-connected="@_realTimeAvailable.ToString().ToLowerInvariant()">
-                <span class="@($"jim-status-dot jim-status-dot--{(_realTimeAvailable ? "ok" : "warn")}")"></span>
-                @(_realTimeAvailable ? "Live updates connected" : "Live updates reconnecting")
-            </span>
-        </MudTooltip>
+        <div class="jim-service-health-header-end">
+            @* The relay is not a service of JIM's but it decides whether this page moves on its own; while it is
+               reconnecting every live figure on the tabs below is on its polling fallback. *@
+            <MudTooltip Text="@(_realTimeAvailable ? "Database notifications reach open pages directly." : "The database notification listener is not connected; pages refresh on a timer meanwhile.")"
+                        Arrow="true" Placement="Placement.Top">
+                <span class="jim-service-health-live" data-testid="live-updates" data-connected="@_realTimeAvailable.ToString().ToLowerInvariant()">
+                    <span class="@($"jim-status-dot jim-status-dot--{(_realTimeAvailable ? "ok" : "warn")}")"></span>
+                    @(_realTimeAvailable ? "Updated live" : "Reconnecting live updates")
+                </span>
+            </MudTooltip>
+            @* Collapsing hides the cards and never the header, so the summary still says whether anything is wrong:
+               a collapsed panel cannot hide a failing service. The choice is remembered in this browser. *@
+            <MudTooltip Text="@(Collapsed ? "Show services" : "Hide services")" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
+                               Class="@($"jim-service-health-collapse-toggle{(Collapsed ? string.Empty : " jim-service-health-collapse-toggle--open")}")"
+                               aria-label="@(Collapsed ? "Show services" : "Hide services")" aria-expanded="@(Collapsed ? "false" : "true")"
+                               OnClick="ToggleCollapsedAsync"
+                               data-testid="service-health-collapse-toggle" />
+            </MudTooltip>
+        </div>
     </div>
 
+    @* The grid keeps its indentation inside the collapse, so wrapping it did not re-indent every card below. *@
+    <MudCollapse Expanded="@(!Collapsed)">
     <div class="jim-service-health-grid">
         @foreach (var service in Report.Services)
         {
@@ -61,7 +74,7 @@
                     @if (versionSkew)
                     {
                         <MudTooltip Text="@VersionSkewTooltip" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" Class="jim-service-health-skew ma-0">differs from portal</MudChip>
+                            <span class="jim-status-pill jim-status-pill--neutral jim-service-health-skew">differs from portal</span>
                         </MudTooltip>
                     }
                     <span class="@($"jim-status-pill jim-status-pill--{ServiceHealthDisplay.StatusModifier(service.Status)}")">
@@ -127,7 +140,7 @@
                                         @if (versionSkew)
                                         {
                                             <MudTooltip Text="@VersionSkewTooltip" Arrow="true" Placement="Placement.Top">
-                                                <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" Class="jim-service-health-skew ma-0">differs from portal</MudChip>
+                                                <span class="jim-status-pill jim-status-pill--neutral jim-service-health-skew">differs from portal</span>
                                             </MudTooltip>
                                         }
                                         @CopyButton("version", versionText)
@@ -148,6 +161,7 @@
             </MudPaper>
         }
     </div>
+    </MudCollapse>
 </MudPaper>
 
 @code {
@@ -168,6 +182,19 @@
     /// </summary>
     [Parameter]
     public string? Class { get; set; }
+
+    /// <summary>
+    /// Whether the cards are hidden, leaving the panel as its header. Bind it from a host that already knows the
+    /// choice when it renders the strip, so a collapsed strip is collapsed from its first paint.
+    /// </summary>
+    [Parameter]
+    public bool Collapsed { get; set; }
+
+    /// <summary>
+    /// Raised with the new value when the collapse control is used.
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> CollapsedChanged { get; set; }
 
     private bool _realTimeAvailable;
 
@@ -205,6 +232,12 @@
             // The circuit went away, or JS is not ready. Copying stays offered; the attempt itself reports failure
             // honestly, which is a better outcome than hiding the buttons over a transient condition.
         }
+    }
+
+    private async Task ToggleCollapsedAsync()
+    {
+        Collapsed = !Collapsed;
+        await CollapsedChanged.InvokeAsync(Collapsed);
     }
 
     private void ToggleDetails(JimService service)

@@ -167,10 +167,15 @@ public class ServiceHealthStripTests : JimComponentTestContext
     [Test]
     public void ServiceHealthStrip_Details_AreClosedByDefaultAndOpenToShowCopyableHostAndVersion()
     {
+        // The panel wraps the whole grid in a collapse of its own; the per-card details are the collapses that do
+        // not contain the grid.
+        static List<IRenderedComponent<MudCollapse>> DetailCollapses(IRenderedComponent<ServiceHealthStrip> strip) =>
+            strip.FindComponents<MudCollapse>().Where(c => c.FindAll(".jim-service-health-grid").Count == 0).ToList();
+
         var cut = RenderStrip(HealthyReport());
 
         var card = Card(cut, JimService.WorkerSync);
-        var collapse = cut.FindComponents<MudCollapse>();
+        var collapse = DetailCollapses(cut);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(collapse, Has.Count.EqualTo(3), "one expander per card");
@@ -186,7 +191,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Toggle(card).GetAttribute("aria-expanded"), Is.EqualTo("true"));
-            Assert.That(cut.FindComponents<MudCollapse>().Count(c => c.Instance.Expanded), Is.EqualTo(1), "opening one card's details leaves the other cards closed");
+            Assert.That(DetailCollapses(cut).Count(c => c.Instance.Expanded), Is.EqualTo(1), "opening one card's details leaves the other cards closed");
             Assert.That(details.QuerySelectorAll("dt").Select(t => t.TextContent.Trim()), Is.EqualTo(new[] { "Host", "Version", "Instance" }));
             Assert.That(details.QuerySelector("[data-testid='service-health-host']")!.TextContent.Trim(), Is.EqualTo("jim-worker-1"));
             Assert.That(details.QuerySelector("[data-testid='service-health-version']")!.TextContent.Trim(), Is.EqualTo("v0.15.0"));
@@ -387,6 +392,66 @@ public class ServiceHealthStripTests : JimComponentTestContext
         }
     }
 
+    private static IElement Strip(IRenderedComponent<ServiceHealthStrip> cut) => cut.Find(".jim-service-health-strip");
+
+    private static IElement CollapseToggle(IRenderedComponent<ServiceHealthStrip> cut) =>
+        cut.Find("[data-testid='service-health-collapse-toggle']");
+
+    [Test]
+    public void ServiceHealthStrip_CollapseToggle_HidesTheCardsAndKeepsTheHeaderInView()
+    {
+        var cut = RenderStrip(HealthyReport());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CollapseToggle(cut).GetAttribute("aria-expanded"), Is.EqualTo("true"));
+            Assert.That(Strip(cut).GetAttribute("data-collapsed"), Is.EqualTo("false"));
+        }
+
+        CollapseToggle(cut).Click();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CollapseToggle(cut).GetAttribute("aria-expanded"), Is.EqualTo("false"));
+            Assert.That(Strip(cut).GetAttribute("data-collapsed"), Is.EqualTo("true"));
+            // Collapsed to its header, the panel still says whether anything is wrong and whether it is live.
+            Assert.That(cut.Find(".jim-service-health-summary").TextContent.Trim(), Is.Not.Empty);
+            Assert.That(LiveIndicator(cut).TextContent.Trim(), Is.EqualTo("Updated live"));
+        }
+    }
+
+    [Test]
+    public void ServiceHealthStrip_CollapseToggle_RaisesCollapsedChanged()
+    {
+        var raised = new List<bool>();
+        var cut = Render<ServiceHealthStrip>(p => p
+            .Add(c => c.Report, HealthyReport())
+            .Add(c => c.CollapsedChanged, (bool collapsed) => raised.Add(collapsed)));
+
+        CollapseToggle(cut).Click();
+        CollapseToggle(cut).Click();
+
+        Assert.That(raised, Is.EqualTo(new[] { true, false }));
+    }
+
+    [Test]
+    public void ServiceHealthStrip_CollapsedParameter_RendersCollapsedFromTheFirstRender()
+    {
+        // The panel must never paint open and then animate shut, so whether it is collapsed is known before it renders
+        // at all. Asserted straight after rendering, without waiting, because a value that only arrives on a later
+        // render is exactly the flicker this guards against.
+        var cut = Render<ServiceHealthStrip>(p => p
+            .Add(c => c.Report, HealthyReport())
+            .Add(c => c.Collapsed, true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Strip(cut).GetAttribute("data-collapsed"), Is.EqualTo("true"));
+            Assert.That(CollapseToggle(cut).GetAttribute("aria-expanded"), Is.EqualTo("false"));
+            Assert.That(cut.FindComponents<MudCollapse>().Single(c => c.FindAll(".jim-service-health-grid").Count > 0).Instance.Expanded, Is.False);
+        }
+    }
+
     [Test]
     public void ServiceHealthStrip_LiveUpdatesIndicator_FollowsTheRelay()
     {
@@ -394,7 +459,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(LiveIndicator(cut).TextContent.Trim(), Is.EqualTo("Live updates connected"));
+            Assert.That(LiveIndicator(cut).TextContent.Trim(), Is.EqualTo("Updated live"));
             Assert.That(LiveIndicator(cut).QuerySelector(".jim-status-dot")!.ClassList, Does.Contain("jim-status-dot--ok"));
         }
 
@@ -403,7 +468,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.That(LiveIndicator(cut).TextContent.Trim(), Is.EqualTo("Live updates reconnecting"));
+            Assert.That(LiveIndicator(cut).TextContent.Trim(), Is.EqualTo("Reconnecting live updates"));
             Assert.That(LiveIndicator(cut).QuerySelector(".jim-status-dot")!.ClassList, Does.Contain("jim-status-dot--warn"));
         });
     }

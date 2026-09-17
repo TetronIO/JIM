@@ -4,6 +4,7 @@
 @attribute [Authorize(Roles = "Administrator")]
 @implements IDisposable
 @inject IJimApplicationFactory JimFactory
+@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -16,10 +17,13 @@
 </MudText>
 
 @* Whether the services doing all of the below are alive, before any of it. The first read completes before the
-   first render (it is awaited in OnInitializedAsync), so the strip is never absent and the tabs never jump. *@
+   first render (it is awaited in OnInitializedAsync), so the strip is never absent and the tabs never jump. Whether
+   the strip is collapsed is read in the same wait, so a collapsed strip is collapsed from its first paint rather than
+   opening and animating shut. *@
 @if (_report != null)
 {
-    <ServiceHealthStrip Report="_report" Class="mt-4" />
+    <ServiceHealthStrip Report="_report" Class="mt-4"
+                        @bind-Collapsed="_healthCollapsed" @bind-Collapsed:after="SaveHealthCollapsedAsync" />
 }
 
 @* TabPanelsClass is pa-0 rather than pt-5 because the Schedules tab opens straight onto a virtualised grid, which
@@ -73,17 +77,29 @@
     /// </summary>
     private int _passwordAttentionCount;
 
+    /// <summary>
+    /// Whether the Service Health strip is collapsed. Read here rather than by the strip: the strip only renders once
+    /// OnInitializedAsync has finished, so its first render already has the answer, whereas a strip reading it itself
+    /// could only do so after rendering and would paint open, then animate shut.
+    /// </summary>
+    private bool _healthCollapsed;
+
     private Timer? _pollTimer;
     private bool _disposed;
 
     protected override async Task OnInitializedAsync()
     {
+        // Started before the health read so the browser round trip runs alongside it rather than after it.
+        var healthCollapsed = PreferenceService.GetServiceHealthCollapsedAsync();
         await RefreshAsync();
+        _healthCollapsed = await healthCollapsed == true;
 
         // A one-shot timer re-armed after each read (the pattern ExampleDataTemplateDetail uses), so a slow read
         // can never overlap the next one.
         _pollTimer = new Timer(async _ => await OnPollTimerElapsedAsync(), null, PollInterval, Timeout.InfiniteTimeSpan);
     }
+
+    private Task SaveHealthCollapsedAsync() => PreferenceService.SetServiceHealthCollapsedAsync(_healthCollapsed);
 
     private async Task RefreshAsync()
     {
